@@ -1946,6 +1946,9 @@ func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forw
 		}
 		return response, validationIndeterminate, err
 	}
+	if len(forwarders) > 0 {
+		return handler.resolveForwardedDNSSEC(request, runtime, forwarders)
+	}
 	upstreamRequest := dnssecUpstreamRequest(request)
 	response, err := handler.resolveNetwork(upstreamRequest, runtime, forwarders)
 	if err != nil {
@@ -1964,6 +1967,68 @@ func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forw
 	}
 	state, validationErr := runtime.dnssec.validate(validationContext, response, request.Question[0], query)
 	return response, state, validationErr
+}
+
+func (handler *Handler) resolveForwardedDNSSEC(
+	request *dns.Msg,
+	runtime *Runtime,
+	forwarders []string,
+) (*dns.Msg, validationState, error) {
+	ordered := handler.rotatedForwarders(forwarders)
+	upstreamRequest := dnssecUpstreamRequest(request)
+	validationContext, cancel := context.WithTimeout(context.Background(), max(5*runtime.timeout, 3*time.Second))
+	defer cancel()
+
+	var failures []error
+	var bogusResponse *dns.Msg
+	for _, forwarder := range ordered {
+		response, err := handler.upstreamExchange(validationContext, upstreamRequest.Copy(), forwarder, runtime.timeout)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", forwarder, err))
+			continue
+		}
+		query := func(ctx context.Context, name string, recordType uint16) (*dns.Msg, error) {
+			message := new(dns.Msg)
+			message.SetQuestion(dns.Fqdn(name), recordType)
+			message.RecursionDesired = true
+			message.CheckingDisabled = true
+			message.SetEdns0(1232, true)
+			queryForwarders, _ := runtime.forwardersFor(name)
+			validationForwarder := forwarder
+			if !slices.Contains(queryForwarders, validationForwarder) {
+				if len(queryForwarders) == 0 {
+					return nil, fmt.Errorf("no forwarding endpoint is available for DNSSEC query %s", dns.Fqdn(name))
+				}
+				validationForwarder = queryForwarders[0]
+			}
+			return handler.upstreamExchange(ctx, message, validationForwarder, runtime.timeout)
+		}
+		state, validationErr := runtime.dnssec.validate(validationContext, response, request.Question[0], query)
+		if state != validationBogus {
+			return response, state, validationErr
+		}
+		bogusResponse = response
+		if validationErr == nil {
+			validationErr = errors.New("response is DNSSEC bogus")
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", forwarder, validationErr))
+	}
+	if bogusResponse != nil {
+		return bogusResponse, validationBogus, fmt.Errorf("DNSSEC validation failed through every forwarder: %w", errors.Join(failures...))
+	}
+	return nil, validationIndeterminate, fmt.Errorf("all forwarders failed: %w", errors.Join(failures...))
+}
+
+func (handler *Handler) rotatedForwarders(forwarders []string) []string {
+	if len(forwarders) < 2 {
+		return append([]string(nil), forwarders...)
+	}
+	start := handler.upstreamIndex.Add(1) - 1
+	ordered := make([]string, 0, len(forwarders))
+	for offset := range len(forwarders) {
+		ordered = append(ordered, forwarders[(start+uint64(offset))%uint64(len(forwarders))])
+	}
+	return ordered
 }
 
 func dnssecUpstreamRequest(request *dns.Msg) *dns.Msg {

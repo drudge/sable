@@ -727,8 +727,12 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	request.Header.Set("HX-Request", "true")
 	response := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Settings saved and applied") || !strings.Contains(response.Body.String(), `data-active-tab="blocking"`) {
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "Settings saved and applied") || !strings.Contains(body, `data-active-tab="blocking"`) {
 		t.Fatalf("settings update = %d %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(body, `data-certificate-issuance-progress`) || !strings.Contains(body, "Issuing certificate") {
+		t.Fatalf("settings response is missing certificate issuance feedback")
 	}
 	updated := configuration.Current()
 	if updated.Revision != 5 || updated.Config.Resolver.CacheSize != 2048 || updated.Config.Resolver.Timeout.Duration != 2*time.Second ||

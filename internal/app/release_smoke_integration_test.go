@@ -83,6 +83,7 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	}
 	waitForQueryLogEntry(t, first, client, ports.https, releaseSmokeCacheName)
 
+	client.CloseIdleConnections()
 	stopIntegrationNode(t, first)
 	upstream.stop(t)
 

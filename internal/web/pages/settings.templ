@@ -141,7 +141,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 		}
 		<div id="public-certificates">
 			@SettingsCard("shield", "Public TLS Certificate", "Certificate used by the Web, DNS-over-HTTPS, and DNS-over-TLS endpoints") {
-				<div class="isotope-card-content certificate-settings" data-certificate-settings>
+				<div class={ "isotope-card-content certificate-settings " + ifThen(view.ACMERenewing, "is-certificate-issuing", "") } data-certificate-settings data-certificate-renewing={ fmt.Sprint(view.ACMERenewing) } aria-busy={ fmt.Sprint(view.ACMERenewing) }>
 					<div class="certificate-mode-control" role="radiogroup" aria-label="Certificate source"><label class={ ifThen(view.CertificateMode != "acme", "active", "") }><input type="radio" name="certificate_mode" value="manual" checked?={ view.CertificateMode != "acme" }/><span>Manual Certificate</span></label><label class={ ifThen(view.CertificateMode == "acme", "active", "") }><input type="radio" name="certificate_mode" value="acme" checked?={ view.CertificateMode == "acme" }/><span>Let's Encrypt (ACME)</span></label></div>
 					<div class="manual-certificate-settings" data-certificate-manual hidden?={ view.CertificateMode == "acme" }>
 						<div class="field-grid two"><label class="field-control"><span>Certificate File</span><input name="certificate_file" value={ view.CertificateFile } placeholder="/etc/sable/tls/fullchain.pem"/></label><label class="field-control"><span>Private Key File</span><input name="private_key_file" value={ view.PrivateKeyFile } placeholder="/etc/sable/tls/privkey.pem"/></label></div>
@@ -150,6 +150,10 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 					</div>
 					<div class="acme-settings" data-certificate-acme hidden?={ view.CertificateMode != "acme" }>
 						<div class="certificate-status"><div><strong>Managed certificate</strong><span>{ ifThen(view.ACMEIssuer != "", view.ACMEIssuer + " · expires " + view.ACMEExpires, "No certificate has been issued yet") }</span></div><span class={ ifThen(view.ACMELastError != "", "badge danger", ifThen(view.ACMEIssuer != "", "badge success", "badge")) }>{ ifThen(view.ACMELastError != "", "Attention", ifThen(view.ACMEIssuer != "", "Active", "Not issued")) }</span></div>
+						<div class="certificate-issuance-progress" data-certificate-issuance-progress role="status" aria-live="polite">
+							<span class="certificate-issuance-spinner">@Icon("refresh")</span>
+							<div><strong>Issuing certificate…</strong><small>Sable is publishing and validating the DNS-01 challenge. DNS propagation may take several minutes.</small></div>
+						</div>
 						if view.ACMELastError != "" {
 							<div class="certificate-error" role="alert">@Icon("alert-triangle")<span>{ view.ACMELastError }</span></div>
 						}
@@ -166,7 +170,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 							<div class="field-grid two acme-credential-fields" data-acme-credentials="rfc2136" hidden?={ view.ACMEDNSProvider != "rfc2136" }><label class="field-control"><span>Authoritative Server</span><input name="rfc2136_server" placeholder="dns.example.com:53"/></label><label class="field-control"><span>TSIG Key Name</span><input name="rfc2136_tsig_name" placeholder="acme-update."/></label><label class="field-control"><span>TSIG Secret</span><input type="password" name="rfc2136_tsig_secret" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret") }/></label><label class="field-control"><span>TSIG Algorithm</span><select name="rfc2136_tsig_algorithm"><option value="hmac-sha256" selected?={ view.ACMETSIGAlgorithm == "" || view.ACMETSIGAlgorithm == "hmac-sha256" }>HMAC-SHA256</option><option value="hmac-sha384" selected?={ view.ACMETSIGAlgorithm == "hmac-sha384" }>HMAC-SHA384</option><option value="hmac-sha512" selected?={ view.ACMETSIGAlgorithm == "hmac-sha512" }>HMAC-SHA512</option></select></label></div>
 						</div>
 						<div class="field-grid two"><label class="field-control"><span>Certificate Storage</span><input name="acme_storage_dir" value={ view.ACMEStorageDirectory } placeholder="data/tls/acme"/><small>Account key, certificate, and private key stay node-local.</small></label></div>
-						<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" disabled?={ view.ACMERenewing }>@Icon("refresh")<span>{ ifThen(view.ACMERenewing, "Issuing…", "Issue / Renew Now") }</span></button>
+						<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" hx-disabled-elt="this" disabled?={ view.ACMERenewing }>@Icon("refresh")<span class="certificate-action-idle">Issue / Renew Now</span><span class="certificate-action-pending">Issuing…</span></button>
 					</div>
 					<label class="field-control narrow-control"><span>Minimum TLS Version</span><select name="minimum_tls_version"><option value="1.2" selected?={ view.MinimumTLSVersion == "1.2" }>TLS 1.2</option><option value="1.3" selected?={ view.MinimumTLSVersion == "1.3" }>TLS 1.3</option></select></label>
 				</div>
@@ -279,4 +283,6 @@ templ SettingsCard(icon, title, description string) {
 		{ children... }
 	</section>
 }
-templ SettingsSaveButton(tab string) { <div class="settings-panel-save"><button class="button" type="submit" name="settings_tab" value={ tab }>Save Settings</button></div> }
+templ SettingsSaveButton(tab string) {
+	<div class="settings-panel-save"><button class="button settings-save-button" type="submit" name="settings_tab" value={ tab }><span class="settings-save-idle">Save Settings</span><span class="settings-save-pending">@Icon("refresh")<span>Issuing certificate…</span></span></button></div>
+}

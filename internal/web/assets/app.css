@@ -1859,6 +1859,18 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .certificate-status > .badge.danger { color: var(--destructive); }
 .certificate-error { display: flex; align-items: flex-start; gap: .5rem; border: 1px solid color-mix(in srgb, var(--destructive) 50%, transparent); border-radius: .5rem; background: color-mix(in srgb, var(--destructive) 8%, transparent); padding: .75rem; color: var(--destructive); font-size: .72rem; line-height: 1.45; }
 .certificate-error .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.certificate-issuance-progress { display: none; align-items: flex-start; gap: .75rem; border: 1px solid color-mix(in srgb, var(--primary) 52%, transparent); border-radius: .5rem; background: color-mix(in srgb, var(--primary) 8%, transparent); padding: .875rem 1rem; }
+.certificate-settings.is-certificate-issuing .certificate-issuance-progress { display: flex; }
+.certificate-issuance-progress > div { display: grid; gap: .2rem; }
+.certificate-issuance-progress strong { font-size: .78rem; }
+.certificate-issuance-progress small { color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.certificate-issuance-spinner { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .45rem; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+.certificate-issuance-spinner .nav-icon, .certificate-settings.is-certificate-issuing .certificate-renew-button .nav-icon, .isotope-settings-form.is-certificate-issuing .settings-save-pending .nav-icon { animation: spin .8s linear infinite; }
+.certificate-action-pending, .settings-save-pending { display: none; }
+.certificate-settings.is-certificate-issuing .certificate-action-idle, .isotope-settings-form.is-certificate-issuing .settings-save-idle { display: none; }
+.certificate-settings.is-certificate-issuing .certificate-action-pending { display: inline; }
+.isotope-settings-form.is-certificate-issuing .settings-save-pending { display: inline-flex; align-items: center; gap: .45rem; }
+.settings-save-pending .nav-icon { width: 1rem; height: 1rem; }
 .acme-provider-card { display: grid; gap: 1rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
 .certificate-renew-button { justify-self: start; }
 .certificate-renew-button.htmx-request .nav-icon { animation: spin .8s linear infinite; }

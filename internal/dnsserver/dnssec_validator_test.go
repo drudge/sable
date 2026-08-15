@@ -116,6 +116,76 @@ func TestDNSSECValidatorRecognizesAuthenticatedInsecureDelegation(t *testing.T) 
 	}
 }
 
+func TestForwardedDNSSECValidationPinsAndRetriesCompleteUpstreamPath(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "test.")
+	configuration := testRuntimeConfig()
+	configuration.Forwarders = []string{"filtered.test:53", "complete.test:53"}
+	configuration.DNSSECValidation = true
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.dnssec = validatorWithAnchor(t, parent, now)
+
+	denial := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: "unsigned.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.test.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+	}
+	parentSOA := validatorSOA("test.")
+	completeDS := new(dns.Msg)
+	completeDS.SetQuestion("unsigned.test.", dns.TypeDS)
+	completeDS.SetReply(completeDS)
+	completeDS.Ns = []dns.RR{
+		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
+		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
+	}
+
+	handler := NewHandler(runtime)
+	var calls []string
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		calls = append(calls, endpoint+"/"+dns.TypeToString[request.Question[0].Qtype])
+		switch request.Question[0].Qtype {
+		case dns.TypeA:
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Answer = []dns.RR{validatorA("www.unsigned.test.", "192.0.2.20")}
+			return response, nil
+		case dns.TypeSOA:
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Answer = []dns.RR{validatorSOA("unsigned.test.")}
+			return response, nil
+		case dns.TypeDS:
+			if endpoint == "filtered.test:53" {
+				response := new(dns.Msg)
+				response.SetRcode(request, dns.RcodeNameError)
+				return response, nil
+			}
+			return completeDS.Copy(), nil
+		case dns.TypeDNSKEY:
+			return validatorDNSKEYResponse(t, now, parent), nil
+		default:
+			return nil, fmt.Errorf("unexpected query type %s", dns.TypeToString[request.Question[0].Qtype])
+		}
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("www.unsigned.test.", dns.TypeA)
+	response, state, err := handler.resolveUpstream(request, runtime, configuration.Forwarders)
+	if err != nil || state != validationInsecure || response == nil || len(response.Answer) != 1 {
+		t.Fatalf("resolveUpstream() = response %v, state %v, error %v; want insecure answer", response, state, err)
+	}
+	wantCalls := []string{
+		"filtered.test:53/A", "filtered.test:53/SOA", "filtered.test:53/DS",
+		"complete.test:53/A", "complete.test:53/SOA", "complete.test:53/DS", "complete.test:53/DNSKEY",
+	}
+	if strings.Join(calls, "\n") != strings.Join(wantCalls, "\n") {
+		t.Fatalf("upstream calls = %v, want %v", calls, wantCalls)
+	}
+}
+
 func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)

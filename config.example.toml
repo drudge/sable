@@ -11,7 +11,8 @@ dsn = "data/sable.db"
 # "forward" uses the upstreams below. "recursive" resolves directly from the
 # DNS root while still honoring conditional routes and forwarder zones.
 mode = "forward"
-forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+# Keep forwarders on equivalent filtering policies so answers remain consistent.
+forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
 # root_hints = ["198.41.0.4:53", "170.247.170.2:53"]
 timeout = "2s"
 cache_size = 65536

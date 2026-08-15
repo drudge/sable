@@ -482,6 +482,24 @@
 	  const modeInputs = [...root.querySelectorAll('input[name="certificate_mode"]')];
 	  const manual = root.querySelector("[data-certificate-manual]");
 	  const acme = root.querySelector("[data-certificate-acme]");
+	  const form = root.closest("form");
+	  const progress = root.querySelector("[data-certificate-issuance-progress]");
+	  const actionButtons = form ? [...form.querySelectorAll('button[type="submit"]')] : [];
+	  const setIssuing = (issuing) => {
+		root.classList.toggle("is-certificate-issuing", issuing);
+		form?.classList.toggle("is-certificate-issuing", issuing);
+		root.setAttribute("aria-busy", String(issuing));
+		progress?.setAttribute("aria-hidden", String(!issuing));
+		actionButtons.forEach((button) => {
+		  if (issuing) {
+			button.dataset.certificateWasDisabled = String(button.disabled);
+			button.disabled = true;
+		  } else if (button.dataset.certificateWasDisabled !== undefined) {
+			button.disabled = button.dataset.certificateWasDisabled === "true";
+			delete button.dataset.certificateWasDisabled;
+		  }
+		});
+	  };
 	  const syncMode = () => {
 		const managed = modeInputs.find((input) => input.checked)?.value === "acme";
 		if (manual) manual.hidden = managed;
@@ -496,8 +514,15 @@
 		});
 	  };
 	  provider?.addEventListener("change", syncProvider);
+	  form?.addEventListener("htmx:beforeRequest", (event) => {
+		const path = event.detail?.pathInfo?.requestPath || event.detail?.requestConfig?.path || "";
+		const managed = modeInputs.find((input) => input.checked)?.value === "acme";
+		if (managed && (path === "/ui/settings" || path === "/ui/certificates/renew")) setIssuing(true);
+	  });
+	  form?.addEventListener("htmx:afterRequest", () => setIssuing(false));
 	  syncMode();
 	  syncProvider();
+	  setIssuing(root.dataset.certificateRenewing === "true");
 	};
 
 	const setupClusterOnboarding = (root) => {

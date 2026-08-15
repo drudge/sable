@@ -92,7 +92,7 @@ To use upstream recursive services instead:
 ```toml
 [resolver]
 mode = "forward"
-forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
 timeout = "2s"
 cache_size = 65536
 cache_minimum_ttl = 10
@@ -120,6 +120,12 @@ forwarders = ["10.0.0.53:53", "10.0.1.53:53"]
 domain = "dev.corp.example"
 forwarders = ["10.2.0.53:53"]
 ```
+
+Use forwarders with equivalent filtering policies. Mixing a policy-filtering
+resolver with an unfiltered resolver can otherwise produce different answers
+for the same name. During DNSSEC validation, Sable keeps each validation chain
+on one forwarder and retries the complete chain through the next configured
+forwarder if that path is bogus or incomplete.
 
 Conditional routes match the requested name by longest DNS suffix. In the
 example, `api.dev.corp.example` uses `10.2.0.53`, while

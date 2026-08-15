@@ -147,7 +147,7 @@ dsn = %q
 
 [resolver]
 mode = "forward"
-forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
 
 [blocking]
 enabled = true

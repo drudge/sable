@@ -237,7 +237,7 @@ func Defaults() Config {
 		},
 		Resolver: Resolver{
 			Mode:                     "forward",
-			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
+			Forwarders:               []string{"1.1.1.1:53", "8.8.8.8:53"},
 			Timeout:                  Duration{Duration: defaultResolverTimeout},
 			CacheSize:                defaultCacheSize,
 			CacheMinimumTTL:          defaultCacheMinimumTTL,
