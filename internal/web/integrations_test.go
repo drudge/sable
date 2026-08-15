@@ -702,3 +702,25 @@ func TestUniFiCardOffersRemove(t *testing.T) {
 		t.Error("the remove dialog is missing")
 	}
 }
+
+// Servers commonly run on UTC, so the sync timestamps have to follow the
+// browser's clock rather than the process location.
+func TestUniFiStatusRendersSyncTimeInTheBrowserZone(t *testing.T) {
+	t.Parallel()
+	lastSuccess := time.Date(2026, time.August, 13, 1, 7, 6, 0, time.UTC)
+	controller := &testUniFiController{status: unifi.Status{Hosts: 4, LastSuccess: lastSuccess}}
+	server, _ := newIntegrationsTestServer(t, controller)
+
+	request := httptest.NewRequest(http.MethodGet, "/ui/integrations/unifi/status", nil)
+	request.AddCookie(&http.Cookie{Name: timeZoneCookie, Value: "America/New_York"})
+	request.AddCookie(&http.Cookie{Name: timeFormatCookie, Value: "24"})
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status panel = %d", response.Code)
+	}
+	if !strings.Contains(response.Body.String(), "8/12 21:07:06") {
+		t.Errorf("status panel did not render the sync time as eastern time")
+	}
+}

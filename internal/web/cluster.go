@@ -714,7 +714,7 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 			State: node.State, Version: node.Version, UpSince: uptime, SyncState: node.SyncState,
 			CurrentGeneration: node.CurrentGeneration, AppliedGeneration: node.AppliedGeneration, Lag: node.Lag,
 			LastContact: clusterRelativeTime(node.LastContact, state.ObservedAt), LastSync: clusterRelativeTime(node.LastSync, state.ObservedAt),
-			LastContactAt: clusterTimestamp(node.LastContact, view.Console.TimeFormat), LastSyncAt: clusterTimestamp(node.LastSync, view.Console.TimeFormat),
+			LastContactAt: clusterTimestamp(node.LastContact, view.Console.TimeDisplay), LastSyncAt: clusterTimestamp(node.LastSync, view.Console.TimeDisplay),
 			Local: node.ID == state.NodeID,
 		})
 	}
@@ -801,11 +801,11 @@ func clusterRelativeTime(value, observedAt time.Time) string {
 	}
 }
 
-func clusterTimestamp(value time.Time, timeFormat string) string {
+func clusterTimestamp(value time.Time, display pages.TimeDisplay) string {
 	if value.IsZero() {
 		return "No successful contact"
 	}
-	return pages.FormatShortDateTime(value, timeFormat, true)
+	return pages.FormatShortDateTime(value, display, true)
 }
 
 func firstNonEmpty(values ...string) string {

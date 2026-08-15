@@ -6,6 +6,7 @@ type SettingsPageView struct {
 	Console             DashboardView
 	Revision            uint64
 	TimeFormat          string
+	TimeZone            string
 	ActiveTab           string
 	Message             string
 	Error               string
@@ -129,7 +130,7 @@ templ SettingsWebPanel(view SettingsPageView) {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Session Lifetime</span><strong>{ view.SessionTTL }</strong></div><div class="read-only-field"><span>Default API Token Lifetime</span><strong>{ view.APITokenTTL }</strong></div></div>
 		}
 		@SettingsCard("clock", "Display Preferences", "Choose how times are shown in this browser") {
-			<div class="isotope-card-content"><label class="field-control narrow-control"><span>Time Format</span><select data-time-format-preference><option value="12" selected?={ view.TimeFormat != "24" }>12-hour (9:30 PM)</option><option value="24" selected?={ view.TimeFormat == "24" }>24-hour (21:30)</option></select><small>This preference applies throughout Sable and is stored in this browser.</small></label></div>
+			<div class="isotope-card-content field-grid two"><label class="field-control narrow-control"><span>Time Format</span><select data-time-format-preference><option value="12" selected?={ view.TimeFormat != "24" }>12-hour (9:30 PM)</option><option value="24" selected?={ view.TimeFormat == "24" }>24-hour (21:30)</option></select><small>This preference applies throughout Sable and is stored in this browser.</small></label><div class="read-only-field"><span>Time Zone</span><strong>{ view.TimeZone }</strong><small>Detected from this browser. Timestamps are shown in this zone regardless of the server clock.</small></div></div>
 		}
 	</div>
 }

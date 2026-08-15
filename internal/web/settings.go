@@ -391,6 +391,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 	view := pages.SettingsPageView{
 		Console: server.consoleView(request), Revision: snapshot.Revision,
 		TimeFormat: requestTimeFormat(request),
+		TimeZone:   requestTimeDisplay(request).Zone(),
 		ActiveTab:  activeTab,
 		Message:    message, Error: errorMessage,
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),

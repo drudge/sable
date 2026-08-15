@@ -60,7 +60,7 @@ func (history *statsHistory) view(
 	rangeName string,
 	now time.Time,
 	current dnsserver.Stats,
-	timeFormat string,
+	display pages.TimeDisplay,
 ) pages.QueryChartView {
 	duration, valid := chartDuration(rangeName)
 	if !valid {
@@ -78,10 +78,10 @@ func (history *statsHistory) view(
 		}
 	}
 	history.mu.RUnlock()
-	return buildChartView(rangeName, cutoff, now, selected, timeFormat)
+	return buildChartView(rangeName, cutoff, now, selected, display)
 }
 
-func (history *statsHistory) customView(start, end time.Time, current dnsserver.Stats, timeFormat string) pages.QueryChartView {
+func (history *statsHistory) customView(start, end time.Time, current dnsserver.Stats, display pages.TimeDisplay) pages.QueryChartView {
 	history.record(time.Now(), current)
 	history.mu.RLock()
 	selected := make([]statsSample, 0, len(history.samples))
@@ -91,26 +91,26 @@ func (history *statsHistory) customView(start, end time.Time, current dnsserver.
 		}
 	}
 	history.mu.RUnlock()
-	return buildChartView("custom", start, end, selected, timeFormat)
+	return buildChartView("custom", start, end, selected, display)
 }
 
-func buildChartView(rangeName string, start, end time.Time, selected []statsSample, timeFormat string) pages.QueryChartView {
-	format := chartTimeFormat(end.Sub(start), timeFormat)
+func buildChartView(rangeName string, start, end time.Time, selected []statsSample, display pages.TimeDisplay) pages.QueryChartView {
+	format := chartTimeFormat(end.Sub(start), display)
 	customStart := start
 	if rangeName != "custom" {
 		customStart = end.Add(-7 * 24 * time.Hour)
 	}
 	view := pages.QueryChartView{
 		ActiveRange: rangeName,
-		StartLabel:  start.Format(format),
-		EndLabel:    end.Format(format),
-		CustomStart: customStart.Format("2006-01-02T15:04"),
-		CustomEnd:   end.Format("2006-01-02T15:04"),
+		StartLabel:  display.In(start).Format(format),
+		EndLabel:    display.In(end).Format(format),
+		CustomStart: display.In(customStart).Format("2006-01-02T15:04"),
+		CustomEnd:   display.In(end).Format("2006-01-02T15:04"),
 	}
 	if len(selected) < 2 {
 		return view
 	}
-	view.StartLabel = selected[0].at.Format(format)
+	view.StartLabel = display.In(selected[0].at).Format(format)
 	points := compactChartPoints(chartDeltas(selected), maxChartPoints)
 	maximum := chartMaximum(points)
 	if maximum == 0 {
@@ -185,11 +185,11 @@ func chartDuration(rangeName string) (time.Duration, bool) {
 	}
 }
 
-func chartTimeFormat(duration time.Duration, timeFormat string) string {
+func chartTimeFormat(duration time.Duration, display pages.TimeDisplay) string {
 	if duration > 24*time.Hour {
 		return "Jan 2"
 	}
-	if timeFormat != pages.TimeFormat24 {
+	if !display.TwentyFourHour() {
 		if duration == 24*time.Hour {
 			return "3:04 PM"
 		}

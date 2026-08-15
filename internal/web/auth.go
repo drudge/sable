@@ -316,7 +316,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 	writer.Header().Set("HX-Trigger", "apiTokensChanged")
 	expiresLabel := ""
 	if !expires.IsZero() {
-		expiresLabel = pages.FormatDateTime(expires, requestTimeFormat(request))
+		expiresLabel = pages.FormatDateTime(expires, requestTimeDisplay(request))
 	}
 	_ = pages.APITokenResult(token, expiresLabel, "").Render(request.Context(), writer)
 }

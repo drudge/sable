@@ -94,7 +94,7 @@ templ UsersPanel(view AdministrationPageView) {
 						for _, role := range user.Roles {
 							<span>{ role }</span>
 						}
-					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeFormat) }</td><td>@Icon("chevron-right")</td></tr>
+					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td>@Icon("chevron-right")</td></tr>
 				}
 			</tbody></table></div>
 		}
@@ -174,7 +174,7 @@ templ SessionsPanel(view AdministrationPageView) {
 						if session.Current {
 							<span class="current-text">(current)</span>
 						}
-					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ adminTime(session.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ adminTime(session.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
+					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ adminTime(session.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(session.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
 				}
 			</tbody></table></div>
 		}
@@ -198,7 +198,7 @@ templ TokensPanel(view AdministrationPageView) {
 						for _, group := range token.Groups {
 							<span>{ group }</span>
 						}
-					</div></td><td class="muted-cell">{ adminTime(token.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ adminTime(token.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
+					</div></td><td class="muted-cell">{ adminTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
 				}
 			</tbody></table></div>
 		}
@@ -216,9 +216,9 @@ templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
 			<span class="current-text">(current)</span>
 		}
 		<form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) }>@Icon("log-out")</button></form>
-	</div><code>[{ session.HashPrefix }]</code><small>Expires { adminTime(session.ExpiresAt, view.Console.TimeFormat) }</small></article>
+	</div><code>[{ session.HashPrefix }]</code><small>Expires { adminTime(session.ExpiresAt, view.Console.TimeDisplay) }</small></article>
 }
-templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeFormat) }</small></article> }
+templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</small></article> }
 
 templ CreateTokenDialog(view AdministrationPageView) {
 	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog"><div class="dialog-header"><h2>Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
@@ -372,7 +372,7 @@ templ UserTokensContent(view AdministrationPageView, user auth.ManagedUser) {
 								<span>{ group }</span>
 							}
 						</div>
-						<div class="user-token-meta"><span><small>Created</small>{ adminTime(token.CreatedAt, view.Console.TimeFormat) }</span><span><small>Expires</small>{ adminTime(token.ExpiresAt, view.Console.TimeFormat) }</span><span><small>Last used</small>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</span></div>
+						<div class="user-token-meta"><span><small>Created</small>{ adminTime(token.CreatedAt, view.Console.TimeDisplay) }</span><span><small>Expires</small>{ adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</span><span><small>Last used</small>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</span></div>
 					</article>
 				}
 			}
@@ -398,8 +398,8 @@ func administrationUserName(user auth.ManagedUser) string { if user.DisplayName 
 func roleHasSurface(role auth.Role, surface auth.Surface) bool { for _, grant := range role.Grants { if grant.Surface == surface { return true } }; return false }
 func userHasWebAccess(view AdministrationPageView, user auth.ManagedUser) bool { for _, role := range view.Roles { if adminContains(user.Roles, role.Name) && roleHasSurface(role, auth.SurfaceWeb) { return true } }; return false }
 func adminContains(values []string, value string) bool { for _, item := range values { if item == value { return true } }; return false }
-func adminTime(value time.Time, timeFormat string) string { return FormatDateTime(value, timeFormat) }
-func tokenLastUsed(value time.Time, timeFormat string) string { if value.IsZero() { return "Never used" }; return adminTime(value, timeFormat) }
+func adminTime(value time.Time, display TimeDisplay) string { return FormatDateTime(value, display) }
+func tokenLastUsed(value time.Time, display TimeDisplay) string { if value.IsZero() { return "Never used" }; return adminTime(value, display) }
 func userTokenCount(view AdministrationPageView, userID int64) int { count := 0; for _, token := range view.Tokens { if token.UserID == userID { count++ } }; return count }
 
 func tokenLifetimeLabel(value time.Duration) string {

@@ -59,7 +59,7 @@ func (server *Server) runtimeLogsView(request *http.Request) pages.RuntimeLogsVi
 	view.Entries = make([]pages.RuntimeLogEntryView, 0, len(entries))
 	for _, entry := range entries {
 		view.Entries = append(view.Entries, pages.RuntimeLogEntryView{
-			OccurredAt: pages.FormatRuntimeLogTime(entry.OccurredAt, requestTimeFormat(request)),
+			OccurredAt: pages.FormatRuntimeLogTime(entry.OccurredAt, requestTimeDisplay(request)),
 			Level:      runtimeLevelName(entry.Level),
 			Message:    entry.Message,
 			Attributes: serverlog.AttributeText(entry.Attributes),
@@ -116,9 +116,9 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 	view.PageSize = result.PageSize
 	view.TotalEntries = result.TotalEntries
 	view.TotalPages = result.TotalPages
-	view.Entries = queryLogEntryViews(result.Entries, requestTimeFormat(request))
+	view.Entries = queryLogEntryViews(result.Entries, requestTimeDisplay(request))
 	for index := range view.Entries {
-		view.Entries[index].OccurredAt = pages.FormatShortDateTime(result.Entries[index].OccurredAt, requestTimeFormat(request), true)
+		view.Entries[index].OccurredAt = pages.FormatShortDateTime(result.Entries[index].OccurredAt, requestTimeDisplay(request), true)
 	}
 	view.CopyText = queryLogText(result.Entries)
 	view.FirstURL = queryLogPanelURL(raw, 1)

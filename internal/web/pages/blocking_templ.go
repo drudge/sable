@@ -470,9 +470,9 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var11 string
-			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.NextUpdate, view.Console.TimeFormat, false))
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.NextUpdate, view.Console.TimeDisplay, false))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 123, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 123, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -1841,7 +1841,7 @@ func blockingStatusDescription(view BlockingPageView) string {
 		return "DNS blocking is currently disabled"
 	}
 	if !view.PausedUntil.IsZero() {
-		return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeFormat, false)
+		return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeDisplay, false)
 	}
 	return "DNS blocking is active and protecting your network"
 }

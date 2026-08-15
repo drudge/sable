@@ -86,7 +86,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CanCreate:            !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
 			CanManagePermissions: console.CanAdministration,
 		}
-		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeFormat)
+		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeDisplay)
 		for _, record := range zone.Records {
 			expiryTTL := uint32(0)
 			if record.ExpiresAt.After(time.Now()) {
@@ -127,20 +127,20 @@ func durationOr(value, fallback time.Duration) string {
 	return value.String()
 }
 
-func (server *Server) populateZoneDNSSECView(ctx context.Context, zone zonemodel.Zone, view *pages.ZoneView, timeFormat string) {
+func (server *Server) populateZoneDNSSECView(ctx context.Context, zone zonemodel.Zone, view *pages.ZoneView, display pages.TimeDisplay) {
 	if server.dnssec != nil && zone.DNSSEC {
 		status, err := server.dnssec.KeyStatus(ctx, zone)
 		if err == nil {
-			populateManagedKeyView(status, view, timeFormat)
-			populateZoneSignatureExpiration(zone, view, timeFormat)
+			populateManagedKeyView(status, view, display)
+			populateZoneSignatureExpiration(zone, view, display)
 			return
 		}
 		server.logger.Warn("load DNSSEC key status", "zone", zone.Name, "error", err)
 	}
-	populateLegacyDNSSECView(zone, view, timeFormat)
+	populateLegacyDNSSECView(zone, view, display)
 }
 
-func populateManagedKeyView(status dnssecstate.Status, view *pages.ZoneView, timeFormat string) {
+func populateManagedKeyView(status dnssecstate.Status, view *pages.ZoneView, display pages.TimeDisplay) {
 	view.DNSSECNextAction = status.NextAction
 	view.DNSSECParentDSKeyTag = status.ParentDSKeyTag
 	for _, key := range status.Keys {
@@ -149,11 +149,11 @@ func populateManagedKeyView(status dnssecstate.Status, view *pages.ZoneView, tim
 			DNSKEY: key.DNSKEY, DS: key.DS,
 		}
 		if !key.ReadyAt.IsZero() {
-			item.Timing = "ready " + pages.FormatDateTimeZoned(key.ReadyAt, timeFormat)
+			item.Timing = "ready " + pages.FormatDateTimeZoned(key.ReadyAt, display)
 		} else if !key.RemoveAt.IsZero() {
-			item.Timing = "remove after " + pages.FormatDateTimeZoned(key.RemoveAt, timeFormat)
+			item.Timing = "remove after " + pages.FormatDateTimeZoned(key.RemoveAt, display)
 		} else if !key.ActivatedAt.IsZero() {
-			item.Timing = "active since " + pages.FormatDateTimeZoned(key.ActivatedAt, timeFormat)
+			item.Timing = "active since " + pages.FormatDateTimeZoned(key.ActivatedAt, display)
 		}
 		view.DNSSECKeys = append(view.DNSSECKeys, item)
 		if key.Role == dnssecstate.RoleKSK && key.State == dnssecstate.StateActive {
@@ -163,7 +163,7 @@ func populateManagedKeyView(status dnssecstate.Status, view *pages.ZoneView, tim
 	view.DNSSEC = len(view.DNSSECKeys) > 0
 }
 
-func populateZoneSignatureExpiration(zone zonemodel.Zone, view *pages.ZoneView, timeFormat string) {
+func populateZoneSignatureExpiration(zone zonemodel.Zone, view *pages.ZoneView, display pages.TimeDisplay) {
 	var expiration time.Time
 	for _, record := range zone.Records {
 		rr, err := zoneRecordRR(zone, record)
@@ -178,11 +178,11 @@ func populateZoneSignatureExpiration(zone zonemodel.Zone, view *pages.ZoneView, 
 		}
 	}
 	if !expiration.IsZero() {
-		view.DNSSECExpires = pages.FormatDateTimeZoned(expiration, timeFormat)
+		view.DNSSECExpires = pages.FormatDateTimeZoned(expiration, display)
 	}
 }
 
-func populateLegacyDNSSECView(zone zonemodel.Zone, view *pages.ZoneView, timeFormat string) {
+func populateLegacyDNSSECView(zone zonemodel.Zone, view *pages.ZoneView, display pages.TimeDisplay) {
 	var key *dns.DNSKEY
 	var expiration time.Time
 	hasSignature := false
@@ -212,7 +212,7 @@ func populateLegacyDNSSECView(zone zonemodel.Zone, view *pages.ZoneView, timeFor
 		view.DNSSECDS = ds.String()
 	}
 	if !expiration.IsZero() {
-		view.DNSSECExpires = pages.FormatDateTimeZoned(expiration, timeFormat)
+		view.DNSSECExpires = pages.FormatDateTimeZoned(expiration, display)
 	}
 }
 

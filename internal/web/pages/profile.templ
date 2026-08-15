@@ -99,7 +99,7 @@ templ ProfileTokens(view ProfilePageView) {
 						for _, group := range token.Groups {
 							<span>{ group }</span>
 						}
-					</div></td><td class="muted-cell">{ FormatDateTime(token.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell">@ProfileTokenRevoke(token)</td></tr>
+					</div></td><td class="muted-cell">{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell">@ProfileTokenRevoke(token)</td></tr>
 				}
 			</tbody></table></div>
 		}
@@ -111,7 +111,7 @@ templ ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) {
 		for _, group := range token.Groups {
 			<span>{ group }</span>
 		}
-	</div><dl><div><dt>Created</dt><dd>{ FormatDateTime(token.CreatedAt, view.Console.TimeFormat) }</dd></div><div><dt>Last used</dt><dd>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</dd></div><div><dt>Expires</dt><dd>{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat) }</dd></div></dl></article>
+	</div><dl><div><dt>Created</dt><dd>{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</dd></div><div><dt>Last used</dt><dd>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</dd></div><div><dt>Expires</dt><dd>{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay) }</dd></div></dl></article>
 }
 
 templ ProfileTokenRevoke(token auth.APIToken) {
@@ -136,4 +136,4 @@ templ ProfileCreateTokenDialog(view ProfilePageView) {
 }
 
 func profileDisplayName(user auth.ManagedUser) string { if user.DisplayName != "" { return user.DisplayName }; return user.Username }
-func profileTokenExpiration(value time.Time, format string) string { if value.IsZero() { return "Never" }; return FormatDateTime(value, format) }
+func profileTokenExpiration(value time.Time, display TimeDisplay) string { if value.IsZero() { return "Never" }; return FormatDateTime(value, display) }
