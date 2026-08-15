@@ -1933,11 +1933,13 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
    behind the caret so the row keeps one visible action. */
 .about-update-split { position: relative; display: inline-flex; }
 .about-update-split > .button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.about-update-menu > summary { display: inline-flex; width: 1.85rem; align-items: center; justify-content: center; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 0; list-style: none; cursor: pointer; }
-.about-update-menu > summary::-webkit-details-marker { display: none; }
-.about-update-menu > summary .nav-icon { width: .875rem; height: .875rem; transition: transform 120ms ease; }
-.about-update-menu[open] > summary { background: var(--accent); }
-.about-update-menu[open] > summary .nav-icon { transform: rotate(180deg); }
+/* summary.button, not summary: .button.compact carries its own inline padding
+   and icon size, and would otherwise win and squeeze the caret. */
+.about-update-menu > summary.button { display: inline-flex; width: 2rem; flex: 0 0 2rem; align-items: center; justify-content: center; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 0; list-style: none; cursor: pointer; }
+.about-update-menu > summary.button::-webkit-details-marker { display: none; }
+.about-update-menu > summary.button .nav-icon { width: .875rem; height: .875rem; flex: none; transition: transform 120ms ease; }
+.about-update-menu[open] > summary.button { background: var(--accent); }
+.about-update-menu[open] > summary.button .nav-icon { transform: rotate(180deg); }
 .about-update-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; max-width: 15rem; gap: .3rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground)); padding: .6rem .7rem; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .28), 0 .2rem .5rem rgb(0 0 0 / .18); }
 .about-update-menu > div small { color: var(--muted-foreground); font-size: .625rem; line-height: 1.4; }
 .about-update-channel { display: flex; align-items: center; gap: .45rem; font-size: .75rem; white-space: nowrap; cursor: pointer; }
