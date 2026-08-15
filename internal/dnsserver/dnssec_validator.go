@@ -105,6 +105,34 @@ func (validator *dnssecValidator) replaceManagedTrustPoint(owner string, values 
 	validator.mu.Unlock()
 }
 
+// managedTrustPointEqual reports whether the trust point already holds exactly
+// these anchors. RFC 5011 refreshes republish the active set on every poll, so
+// without this check an unchanged refresh would rebuild the runtime and throw
+// away the response cache built under it.
+func (validator *dnssecValidator) managedTrustPointEqual(owner string, values []string, deleted bool) bool {
+	owner = normalizeFQDN(owner)
+	candidate := make([]string, 0, len(values))
+	for _, value := range values {
+		record, err := parseRuntimeTrustAnchor(value)
+		if err != nil || normalizeFQDN(record.Header().Name) != owner {
+			return false
+		}
+		candidate = append(candidate, record.String())
+	}
+	slices.Sort(candidate)
+	validator.mu.RLock()
+	defer validator.mu.RUnlock()
+	if _, marked := validator.deletedTrustPoints[owner]; marked != deleted {
+		return false
+	}
+	current := make([]string, 0, len(validator.anchors[owner]))
+	for _, record := range validator.anchors[owner] {
+		current = append(current, record.String())
+	}
+	slices.Sort(current)
+	return slices.Equal(candidate, current)
+}
+
 func (validator *dnssecValidator) trustAnchors(owner string) []dns.RR {
 	validator.mu.RLock()
 	records := append([]dns.RR(nil), validator.anchors[normalizeFQDN(owner)]...)

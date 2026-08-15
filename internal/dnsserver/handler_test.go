@@ -1431,6 +1431,33 @@ func TestCompileSelectsRFC5011OnlyForBundledAnchors(t *testing.T) {
 	}
 }
 
+func TestApplyManagedTrustAnchorsKeepsCacheWhenAnchorsUnchanged(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.DNSSECValidation = true
+	configuration.DNSSECTrustAnchorUpdates = true
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	request := cacheRequest("example.com.", 1)
+	if !runtime.cache.Set(request, positiveResponse(request, 300)) {
+		t.Fatal("failed to seed the response cache")
+	}
+
+	anchors := []string{trustanchor.DefaultRootKSK2017, trustanchor.DefaultRootKSK2024}
+	handler.ApplyManagedTrustAnchors(anchors, false)
+	if entries := handler.Stats().CacheEntries; entries != 1 {
+		t.Fatalf("CacheEntries = %d after an unchanged refresh, want 1", entries)
+	}
+
+	handler.ApplyManagedTrustAnchors([]string{trustanchor.DefaultRootKSK2024}, false)
+	if entries := handler.Stats().CacheEntries; entries != 0 {
+		t.Fatalf("CacheEntries = %d after a changed anchor set, want 0", entries)
+	}
+}
+
 func BenchmarkSetReply(b *testing.B) {
 	request := new(dns.Msg)
 	request.SetQuestion("example.com.", dns.TypeA)
