@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -130,4 +131,37 @@ func awaitInstall(t *testing.T, manager *Manager) Status {
 	}
 	t.Fatal("the installation did not finish")
 	return Status{}
+}
+
+func TestManagerRefusesToInstallWhereItCannotWrite(t *testing.T) {
+	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
+	if err := os.Chmod(filepath.Dir(binaryPath), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Dir(binaryPath), 0o755) })
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through a read-only directory")
+	}
+	server := releaseServer(t, "v9.9.9", false, nil)
+	manager := NewManager(Options{APIBaseURL: server.URL, BinaryPath: binaryPath})
+	status, err := manager.Check(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Available || status.Blocked == "" {
+		t.Fatalf("a check should report the release and why it cannot be installed: %+v", status)
+	}
+	if err := manager.Install(false); err == nil {
+		t.Fatal("an installation should be refused where the executable cannot be replaced")
+	}
+	if status := manager.Status(); status.Phase != PhaseFailed || status.Error == "" {
+		t.Fatalf("status = %+v", status)
+	}
+	installed, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installed), "echo old") {
+		t.Fatalf("a refused installation replaced the executable: %q", installed)
+	}
 }

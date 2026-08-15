@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +47,10 @@ type Status struct {
 	// Installed reports that the executable was replaced and Sable is running
 	// the previous build until it restarts.
 	Installed bool
+	// Blocked explains why this process cannot replace its own executable,
+	// and is empty when it can. A hardened service unit or a read-only
+	// container image leaves the check working and the installation not.
+	Blocked   string
 	CheckedAt time.Time
 }
 
@@ -76,10 +81,15 @@ type Manager struct {
 
 // NewManager returns a manager that installs releases with the supplied
 // options. Restart and CheckOnly are managed per operation and are ignored.
+// PreRelease seeds the release channel the first check runs on.
 func NewManager(options Options) *Manager {
 	return &Manager{
 		options: options.withDefaults(),
-		status:  Status{Phase: PhaseIdle, CurrentVersion: version.Current().Release},
+		status: Status{
+			Phase:             PhaseIdle,
+			CurrentVersion:    version.Current().Release,
+			IncludePreRelease: options.PreRelease,
+		},
 	}
 }
 
@@ -112,6 +122,10 @@ func (manager *Manager) Check(ctx context.Context, includePreRelease bool) (Stat
 // build until it restarts.
 func (manager *Manager) Install(includePreRelease bool) error {
 	if err := manager.begin(PhaseInstalling, includePreRelease); err != nil {
+		return err
+	}
+	if err := Installable(manager.options.BinaryPath); err != nil {
+		manager.finish(Result{}, err)
 		return err
 	}
 	options := manager.options
@@ -161,7 +175,7 @@ func (manager *Manager) finish(result Result, err error) Status {
 	}
 	if err != nil {
 		status.Phase = PhaseFailed
-		status.Error = err.Error()
+		status.Error = blockedReason(err)
 		manager.status = status
 		return status
 	}
@@ -172,6 +186,11 @@ func (manager *Manager) finish(result Result, err error) Status {
 	status.PreRelease = result.PreRelease
 	status.Available = !result.UpToDate
 	status.Installed = result.Applied
+	// Probe only once a release is worth installing, so an idle console does
+	// not touch the directory holding the executable on every page load.
+	if status.Available && !status.Installed {
+		status.Blocked = blockedReason(Installable(manager.options.BinaryPath))
+	}
 	switch {
 	case result.Applied:
 		status.Phase = PhaseInstalled
@@ -181,6 +200,20 @@ func (manager *Manager) finish(result Result, err error) Status {
 	}
 	manager.status = status
 	return status
+}
+
+// blockedReason returns the operator-facing sentence for an installation that
+// cannot proceed, or an empty string when nothing is wrong.
+func blockedReason(err error) string {
+	var blocked *BlockedError
+	switch {
+	case err == nil:
+		return ""
+	case errors.As(err, &blocked):
+		return blocked.Reason
+	default:
+		return err.Error()
+	}
 }
 
 // record stores the most recent installer progress line.

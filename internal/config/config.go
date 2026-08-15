@@ -98,7 +98,17 @@ type Config struct {
 	UniFi        UniFi        `toml:"unifi"`
 	Security     Security     `toml:"security"`
 	Cluster      Cluster      `toml:"cluster"`
+	Updates      Updates      `toml:"updates"`
 	Reload       Reload       `toml:"config"`
+}
+
+// Updates holds how the console looks for new Sable releases.
+type Updates struct {
+	// PreRelease includes release candidates when resolving the newest
+	// release. The console writes the operator's choice here so it survives a
+	// restart, which matters because a server tracking release candidates
+	// finds nothing at all on a stable-only check.
+	PreRelease bool `toml:"pre_release"`
 }
 
 type TSIGKey struct {

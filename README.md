@@ -124,7 +124,25 @@ The **About** page in the console runs the same update path. It checks for a
 newer release, installs it after a confirmation, and then offers a controlled
 restart once the executable has been replaced. Sable keeps serving the running
 build until that restart, and the console says whether a service manager will
-start the new build again. Two permissions govern it:
+start the new build again.
+
+A service installed with `sable install` cannot install a release from the
+console. Its systemd unit sets `ProtectSystem=strict` and grants write access
+only to `/var/lib/sable` and `/etc/sable`, so the running server cannot
+replace its own executable in `/usr/local/bin`. The same is true of the
+container image, which runs as `nonroot`. In both cases the console still
+reports the available release and says to install it with `sudo sable update`
+or by pulling a newer image. Loosening the unit would let a compromised DNS
+server rewrite binaries on the system `PATH`, so it stays as it is.
+
+The release channel is remembered. Ticking **Include pre-releases** writes
+`updates.pre_release` to the configuration, so a server tracking release
+candidates keeps finding them after a restart instead of failing its next
+check with "no published release was found". Writing it needs `updates.apply`;
+an operator who may only check still gets the channel they picked for that
+check.
+
+Two permissions govern the console controls:
 
 | Permission | Effect |
 | --- | --- |

@@ -242,3 +242,62 @@ func TestUpdateViewSeparatesReadingFromApplying(t *testing.T) {
 		t.Fatalf("administrator view = %+v", view)
 	}
 }
+
+func TestAboutPageExplainsAnInstallationItCannotApply(t *testing.T) {
+	t.Parallel()
+	server := updateTestServer(t, &testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
+		ReleaseURL: "https://github.com/drudge/sable/releases/tag/v9.9.9",
+		Available:  true, CheckedAt: time.Now(),
+		Blocked: "/usr/local/bin is read-only for the running server, so it cannot replace its own executable. " +
+			"Install this release with sudo sable update, or by pulling a newer container image.",
+	}})
+	body := serveRequest(server, http.MethodGet, "/about").Body.String()
+	if !strings.Contains(body, "Sable v9.9.9 is available") {
+		t.Error("about page does not report the available release")
+	}
+	if !strings.Contains(body, "read-only for the running server") {
+		t.Error("about page does not explain why it cannot install the release")
+	}
+	if strings.Contains(body, `hx-post="/ui/updates/install"`) {
+		t.Error("about page offers an installation it cannot apply")
+	}
+}
+
+func TestCheckForUpdatesRemembersThePreReleaseChoice(t *testing.T) {
+	t.Parallel()
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
+		configuration, configuration.zoneStore(), "sqlite", testQueryLog{}, testQueryLog{},
+		func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetUpdateController(&testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0-rc.1", LatestVersion: "0.7.0-rc.1",
+		IncludePreRelease: true, CheckedAt: time.Now(),
+	}})
+	if configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("pre-releases should be off by default")
+	}
+	if response := serveUpdateForm(server, "/ui/updates/check", url.Values{"pre_release": {"true"}}); response.Code != http.StatusOK {
+		t.Fatalf("check status = %d", response.Code)
+	}
+	if !configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("the pre-release choice was not written to the configuration")
+	}
+	// A restarted server seeds its manager from the stored configuration.
+	restarted := update.NewManager(update.Options{PreRelease: configuration.snapshot.Config.Updates.PreRelease})
+	if !restarted.Status().IncludePreRelease {
+		t.Fatal("a restarted server did not resume checking pre-releases")
+	}
+	if response := serveUpdateForm(server, "/ui/updates/check", nil); response.Code != http.StatusOK {
+		t.Fatalf("check status = %d", response.Code)
+	}
+	if configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("clearing the checkbox did not return the server to stable releases")
+	}
+}

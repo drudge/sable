@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web/pages"
@@ -37,6 +38,7 @@ func (server *Server) checkForUpdates(writer http.ResponseWriter, request *http.
 		return
 	}
 	includePreRelease := updatePreReleaseRequested(writer, request)
+	server.rememberReleaseChannel(request, includePreRelease)
 	status, err := server.updates.Check(request.Context(), includePreRelease)
 	if err != nil && !errors.Is(err, update.ErrUpdateInProgress) {
 		server.logger.Warn("check for Sable updates", "error", err)
@@ -60,6 +62,30 @@ func (server *Server) installUpdate(writer http.ResponseWriter, request *http.Re
 	server.logger.Warn("Sable update requested from the console", "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, "update.install", "started installing a newer Sable release")
 	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
+}
+
+// rememberReleaseChannel stores the operator's pre-release choice so that a
+// restart does not silently drop a server back to stable-only checks. The
+// manager keeps it for the life of the process; only an operator who may
+// install a release writes it to the configuration.
+func (server *Server) rememberReleaseChannel(request *http.Request, includePreRelease bool) {
+	if server.config.Current().Config.Updates.PreRelease == includePreRelease {
+		return
+	}
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok &&
+		!auth.HasPermission(principal, auth.PermissionUpdatesApply) {
+		return
+	}
+	editor, ok := server.config.(settingsEditor)
+	if !ok {
+		return
+	}
+	if err := editor.Update(request.Context(), func(candidate *config.Config) error {
+		candidate.Updates.PreRelease = includePreRelease
+		return nil
+	}); err != nil {
+		server.logger.Warn("remember the update release channel", "error", err)
+	}
 }
 
 func (server *Server) updateStatus() update.Status {
@@ -97,6 +123,7 @@ func (server *Server) renderUpdatePanel(
 func (server *Server) updateView(request *http.Request, status update.Status) pages.UpdateView {
 	view := pages.UpdateView{
 		Available:         status.Available,
+		Blocked:           status.Blocked,
 		Busy:              status.Busy(),
 		Checked:           status.Checked(),
 		CurrentVersion:    status.CurrentVersion,

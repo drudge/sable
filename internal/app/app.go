@@ -265,7 +265,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetCertificateController(certificateManager)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetRuntimeLogs(runtimeLogs)
-	webServer.SetUpdateController(update.NewManager(update.Options{}))
+	webServer.SetUpdateController(update.NewManager(update.Options{PreRelease: initial.Updates.PreRelease}))
 	restartRequests := make(chan struct{}, 1)
 	webServer.SetRestartController(func() {
 		select {

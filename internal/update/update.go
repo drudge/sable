@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/drudge/sable/internal/version"
@@ -194,6 +195,61 @@ func targetBinaryPath(override string) (string, error) {
 	return executable, nil
 }
 
+// Installable reports whether this process can replace the installed
+// executable, and explains why it cannot when that is the case. Replacing the
+// executable renames a staged file over it, so the check is whether the
+// directory holding it accepts a new file.
+func Installable(binaryPath string) error {
+	path, err := targetBinaryPath(binaryPath)
+	if err != nil {
+		return err
+	}
+	directory := filepath.Dir(path)
+	probe, err := os.CreateTemp(directory, ".sable-update-probe-*")
+	if err != nil {
+		return describeStagingError(directory, err)
+	}
+	probe.Close()
+	return os.Remove(probe.Name())
+}
+
+// BlockedError reports that this process cannot replace its own executable.
+// Reason is a whole sentence written for an operator; the wrapped error keeps
+// the syscall detail for logs.
+type BlockedError struct {
+	Directory string
+	Reason    string
+	Err       error
+}
+
+func (blocked *BlockedError) Error() string { return blocked.Reason + " (" + blocked.Err.Error() + ")" }
+
+func (blocked *BlockedError) Unwrap() error { return blocked.Err }
+
+// describeStagingError turns a failure to stage the download into something an
+// operator can act on. Sable's own systemd unit mounts the filesystem
+// read-only outside its data and configuration directories, and container
+// images are commonly run the same way, so a running server often cannot
+// replace its own executable even though the release itself is fine.
+func describeStagingError(directory string, err error) error {
+	switch {
+	case errors.Is(err, syscall.EROFS):
+		return &BlockedError{Directory: directory, Err: err, Reason: fmt.Sprintf(
+			"%s is read-only for the running server, so it cannot replace its own executable. "+
+				"Install this release with sudo sable update, or by pulling a newer container image.",
+			directory,
+		)}
+	case errors.Is(err, os.ErrPermission):
+		return &BlockedError{Directory: directory, Err: err, Reason: fmt.Sprintf(
+			"The running server is not allowed to write to %s, so it cannot replace its own executable. "+
+				"Install this release with sudo sable update.",
+			directory,
+		)}
+	default:
+		return fmt.Errorf("stage the downloaded Sable executable: %w", err)
+	}
+}
+
 func isTemporaryBuild(executable string) bool {
 	temporaryRoot := os.TempDir()
 	if resolved, err := filepath.EvalSymlinks(temporaryRoot); err == nil {
@@ -212,10 +268,7 @@ func replaceExecutable(ctx context.Context, path string, contents []byte) error 
 	}
 	temporary, err := os.CreateTemp(directory, ".sable-update-*"+filepath.Ext(path))
 	if err != nil {
-		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("cannot write to %s; run sable update as root: %w", directory, err)
-		}
-		return fmt.Errorf("stage the downloaded Sable executable: %w", err)
+		return describeStagingError(directory, err)
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
