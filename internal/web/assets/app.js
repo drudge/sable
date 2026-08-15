@@ -500,6 +500,53 @@
 	  syncProvider();
 	};
 
+	// The UniFi setup wizard runs server-side because each step needs live data
+	// from the controller. These handlers only cover what does not need a round
+	// trip: which credential fields are relevant, and the sample name a template
+	// produces.
+	const setupUniFiAuthModes = (root) => {
+	  if (!root || root.dataset.unifiAuthReady === "true") return;
+	  root.dataset.unifiAuthReady = "true";
+	  const form = root.closest("form") || root;
+	  const modes = [...root.querySelectorAll("[data-unifi-auth]")];
+	  const syncMode = () => {
+		const mode = modes.find((input) => input.checked)?.value || "api-key";
+		modes.forEach((input) => input.closest("label")?.classList.toggle("active", input.checked));
+		form.querySelectorAll("[data-unifi-auth-panel]").forEach((panel) => {
+		  panel.hidden = panel.dataset.unifiAuthPanel !== mode;
+		});
+	  };
+	  modes.forEach((input) => input.addEventListener("change", syncMode));
+	  syncMode();
+	};
+
+	const setupUniFiZoneRows = (root) => {
+	  if (!root || root.dataset.unifiZoneRowsReady === "true") return;
+	  root.dataset.unifiZoneRowsReady = "true";
+	  root.querySelectorAll("[data-unifi-zone-row]").forEach((row) => {
+		const zone = row.querySelector("[data-unifi-zone]");
+		const template = row.querySelector("[data-unifi-template]");
+		const preview = row.querySelector(".unifi-zone-preview");
+		const network = row.querySelector('input[name^="network_name_"]')?.value || "";
+		const slug = (value) => value.toLowerCase().replace(/['\u2018\u2019]/g, "").replace(/[\s_.]+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+		const syncPreview = () => {
+		  const zoneName = zone?.value.trim().replace(/^\.+|\.+$/g, "").toLowerCase() || "";
+		  if (!preview || !zoneName) return;
+		  const parts = template?.value === "{{host}}.{{zone}}"
+			? ["macbook-pro", zoneName]
+			: ["macbook-pro", slug(network), zoneName].filter(Boolean);
+		  preview.innerHTML = "";
+		  preview.append("Example: ");
+		  const code = document.createElement("code");
+		  code.textContent = parts.join(".");
+		  preview.append(code);
+		};
+		zone?.addEventListener("input", syncPreview);
+		template?.addEventListener("change", syncPreview);
+		syncPreview();
+	  });
+	};
+
 	const setupClusterOnboarding = (root) => {
 	  if (!root || root.dataset.clusterOnboardingReady === "true") return;
 	  root.dataset.clusterOnboardingReady = "true";
@@ -953,6 +1000,10 @@
 	  root.querySelectorAll?.("[data-cluster-tls-accordion]").forEach(setupClusterTLSAccordion);
 	  if (root.matches?.("[data-create-user-form]")) setupCreateUserForm(root);
 	  root.querySelectorAll?.("[data-create-user-form]").forEach(setupCreateUserForm);
+	  if (root.matches?.("[data-unifi-auth-root]")) setupUniFiAuthModes(root);
+	  root.querySelectorAll?.("[data-unifi-auth-root]").forEach(setupUniFiAuthModes);
+	  if (root.matches?.("[data-unifi-zone-rows]")) setupUniFiZoneRows(root);
+	  root.querySelectorAll?.("[data-unifi-zone-rows]").forEach(setupUniFiZoneRows);
 	  if (root.matches?.("[data-log-live-panel]")) setupLogLivePanel(root);
 	  root.querySelectorAll?.("[data-log-live-panel]").forEach(setupLogLivePanel);
 	};

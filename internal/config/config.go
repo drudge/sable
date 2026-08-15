@@ -20,6 +20,7 @@ import (
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/unifi"
 )
 
 const (
@@ -53,6 +54,10 @@ const (
 	defaultACMEStorageDir      = "data/tls/acme"
 	defaultACMERenewBefore     = 30 * 24 * time.Hour
 	defaultHostTTL             = 300
+	defaultUniFiSite           = "default"
+	defaultUniFiInterval       = 2 * time.Minute
+	minimumUniFiInterval       = 30 * time.Second
+	defaultUniFiRecordTTL      = 300
 	defaultBlockListUpdate     = 24 * time.Hour
 	defaultBlockingTTL         = 30
 	defaultSessionTTL          = 12 * time.Hour
@@ -90,6 +95,7 @@ type Config struct {
 	Blocking     Blocking     `toml:"blocking"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
+	UniFi        UniFi        `toml:"unifi"`
 	Security     Security     `toml:"security"`
 	Cluster      Cluster      `toml:"cluster"`
 	Reload       Reload       `toml:"config"`
@@ -202,6 +208,67 @@ type ACME struct {
 	RenewBefore      Duration `toml:"renew_before"`
 }
 
+// UniFi configures the host synchronizer that publishes UniFi networks,
+// reservations, and connected clients as authoritative records. Controller
+// credentials are encrypted in the secret vault and are deliberately never
+// serialized to TOML.
+type UniFi struct {
+	Enabled       bool           `toml:"enabled"`
+	ControllerURL string         `toml:"controller_url"`
+	Site          string         `toml:"site"`
+	Interval      Duration       `toml:"interval"`
+	Sources       []string       `toml:"sources"`
+	CAFile        string         `toml:"tls_ca_file"`
+	Insecure      bool           `toml:"tls_insecure"`
+	Networks      []UniFiNetwork `toml:"networks"`
+}
+
+// UniFiNetwork maps one UniFi network onto a Sable zone. The identifier is the
+// controller's own network id, which survives renames; the name is cached for
+// display and for the {{network}} placeholder.
+type UniFiNetwork struct {
+	ID               string `toml:"id"`
+	Name             string `toml:"name"`
+	Zone             string `toml:"zone"`
+	HostnameTemplate string `toml:"hostname_template"`
+	TTL              uint32 `toml:"ttl"`
+	Reverse          bool   `toml:"reverse"`
+	Enabled          bool   `toml:"enabled"`
+}
+
+// DisplayName names the mapping in logs and console messages, falling back to
+// the controller identifier when the cached name is missing.
+func (network UniFiNetwork) DisplayName() string {
+	if network.Name != "" {
+		return network.Name
+	}
+	return network.ID
+}
+
+// SyncsReservations reports whether configured fixed-IP reservations are
+// published.
+func (unifi UniFi) SyncsReservations() bool { return slices.Contains(unifi.Sources, "reservations") }
+
+// SyncsActiveClients reports whether currently connected clients are published.
+func (unifi UniFi) SyncsActiveClients() bool { return slices.Contains(unifi.Sources, "active") }
+
+// ActiveNetworks returns the mappings that are switched on.
+func (unifi UniFi) ActiveNetworks() []UniFiNetwork {
+	networks := make([]UniFiNetwork, 0, len(unifi.Networks))
+	for _, network := range unifi.Networks {
+		if network.Enabled {
+			networks = append(networks, network)
+		}
+	}
+	return networks
+}
+
+// Runnable reports whether the synchronizer has enough configuration to do
+// anything at all.
+func (unifi UniFi) Runnable() bool {
+	return unifi.Enabled && unifi.ControllerURL != "" && len(unifi.ActiveNetworks()) > 0
+}
+
 type Security struct {
 	Enabled       bool     `toml:"enabled"`
 	SecureCookies bool     `toml:"secure_cookies"`
@@ -273,6 +340,11 @@ func Defaults() Config {
 				DirectoryURL: defaultACMEDirectoryURL, StorageDirectory: defaultACMEStorageDir,
 				RenewBefore: Duration{Duration: defaultACMERenewBefore},
 			},
+		},
+		UniFi: UniFi{
+			Site:     defaultUniFiSite,
+			Interval: Duration{Duration: defaultUniFiInterval},
+			Sources:  []string{"reservations", "active"},
 		},
 		Security: Security{
 			Enabled:       true,
@@ -597,7 +669,73 @@ func (configuration Config) Validate() error {
 			}
 		}
 	}
+	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	return errors.Join(validationErrors...)
+}
+
+// Validate reports every problem with the UniFi settings. The setup wizard
+// calls it before persisting so the operator sees the same rules the loader
+// enforces.
+func (settings UniFi) Validate() error {
+	return errors.Join(settings.validate()...)
+}
+
+func (settings UniFi) validate() []error {
+	var validationErrors []error
+	if settings.Interval.Duration < minimumUniFiInterval {
+		validationErrors = append(validationErrors, fmt.Errorf("unifi.interval must be at least %s", minimumUniFiInterval))
+	}
+	for _, source := range settings.Sources {
+		if source != "reservations" && source != "active" {
+			validationErrors = append(validationErrors, fmt.Errorf("unifi.sources contains unsupported source %q", source))
+		}
+	}
+	if settings.Enabled {
+		if settings.ControllerURL == "" {
+			validationErrors = append(validationErrors, errors.New("unifi.controller_url is required when unifi.enabled is true"))
+		} else if parsed, err := url.Parse(settings.ControllerURL); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			validationErrors = append(validationErrors, errors.New("unifi.controller_url must be an absolute http or https URL"))
+		}
+		if len(settings.Sources) == 0 {
+			validationErrors = append(validationErrors, errors.New("unifi.sources must contain reservations, active, or both"))
+		}
+	}
+	// A zone reached by more than one network needs the network in its names,
+	// or two devices with the same hostname on different VLANs overwrite one
+	// another every sync.
+	networksPerZone := make(map[string]int, len(settings.Networks))
+	for _, network := range settings.ActiveNetworks() {
+		networksPerZone[network.Zone]++
+	}
+	seenIDs := make(map[string]struct{}, len(settings.Networks))
+	for index, network := range settings.Networks {
+		field := fmt.Sprintf("unifi.networks[%d]", index)
+		if network.ID == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.id is required", field))
+		} else if _, duplicate := seenIDs[network.ID]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("duplicate unifi network mapping %q", network.ID))
+		}
+		seenIDs[network.ID] = struct{}{}
+		if network.Zone == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.zone is required", field))
+		} else if _, err := dnsname.Normalize(network.Zone); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.zone: %w", field, err))
+		}
+		template, err := unifi.ParseTemplate(network.HostnameTemplate)
+		if err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.hostname_template: %w", field, err))
+			continue
+		}
+		if !network.Enabled {
+			continue
+		}
+		if networksPerZone[network.Zone] > 1 && !template.UsesNetwork() {
+			validationErrors = append(validationErrors, fmt.Errorf(
+				"%s.hostname_template must contain {{network}} because more than one network publishes into %s",
+				field, network.Zone))
+		}
+	}
+	return validationErrors
 }
 
 // ValidateClusterAdvertiseURL validates the trusted endpoint used for cluster
@@ -703,6 +841,7 @@ func (configuration *Config) normalize() {
 	if configuration.EncryptedDNS.ACME.RenewBefore.Duration == 0 {
 		configuration.EncryptedDNS.ACME.RenewBefore.Duration = defaultACMERenewBefore
 	}
+	configuration.normalizeUniFi()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
 	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)
@@ -863,6 +1002,47 @@ func resolvePath(baseDirectory, path string) string {
 		path = filepath.Join(baseDirectory, path)
 	}
 	return filepath.Clean(path)
+}
+
+func (configuration *Config) normalizeUniFi() {
+	settings := &configuration.UniFi
+	settings.ControllerURL = strings.TrimRight(strings.TrimSpace(settings.ControllerURL), "/")
+	settings.Site = strings.TrimSpace(settings.Site)
+	if settings.Site == "" {
+		settings.Site = defaultUniFiSite
+	}
+	if settings.Interval.Duration <= 0 {
+		settings.Interval.Duration = defaultUniFiInterval
+	}
+	settings.CAFile = strings.TrimSpace(settings.CAFile)
+	sources := make([]string, 0, len(settings.Sources))
+	for _, source := range settings.Sources {
+		source = strings.ToLower(strings.TrimSpace(source))
+		if source != "" && !slices.Contains(sources, source) {
+			sources = append(sources, source)
+		}
+	}
+	slices.Sort(sources)
+	settings.Sources = sources
+	for index := range settings.Networks {
+		network := &settings.Networks[index]
+		network.ID = strings.TrimSpace(network.ID)
+		network.Name = strings.TrimSpace(network.Name)
+		network.Zone = normalizeDomain(network.Zone)
+		network.HostnameTemplate = strings.TrimSpace(network.HostnameTemplate)
+		if network.HostnameTemplate == "" {
+			network.HostnameTemplate = unifi.DefaultHostnameTemplate
+		}
+		if network.TTL == 0 {
+			network.TTL = defaultUniFiRecordTTL
+		}
+	}
+	slices.SortFunc(settings.Networks, func(left, right UniFiNetwork) int {
+		if compared := strings.Compare(left.Zone, right.Zone); compared != 0 {
+			return compared
+		}
+		return strings.Compare(left.ID, right.ID)
+	})
 }
 
 func normalizeDomain(domain string) string {

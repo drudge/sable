@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS sable_zone_records (
     comments TEXT NOT NULL,
     disabled BOOLEAN NOT NULL,
     expires_at_ns BIGINT,
+    source TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (zone_name, record_key)
 )`, `
 CREATE INDEX IF NOT EXISTS sable_zone_records_lookup_idx
@@ -86,6 +87,24 @@ func (store *Store) migrateZoneRecordSchema(ctx context.Context) error {
 CREATE UNIQUE INDEX IF NOT EXISTS sable_zone_records_key_idx
 ON sable_zone_records (zone_name, record_key)`); err != nil {
 		return fmt.Errorf("create zone record key index: %w", err)
+	}
+	return nil
+}
+
+// migrateZoneRecordSourceSchema adds the integration ownership marker to
+// databases created before records could be reconciled by a synchronizer. The
+// empty default leaves every existing record owned by its author.
+func (store *Store) migrateZoneRecordSourceSchema(ctx context.Context) error {
+	exists, err := store.tableHasColumn(ctx, "sable_zone_records", "source")
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	if _, err := store.database.ExecContext(ctx,
+		"ALTER TABLE sable_zone_records ADD COLUMN source TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("add zone record source: %w", err)
 	}
 	return nil
 }
@@ -343,7 +362,7 @@ func scanZone(row rowScanner) (zone.Zone, error) {
 
 func (store *Store) listAllZoneRecords(ctx context.Context) (map[string][]zone.Record, error) {
 	rows, err := store.database.QueryContext(ctx, `
-SELECT zone_name, owner_name, record_type, record_value, ttl, comments, disabled, expires_at_ns
+SELECT zone_name, owner_name, record_type, record_value, ttl, comments, disabled, expires_at_ns, source
 FROM sable_zone_records ORDER BY zone_name, ordinal`)
 	if err != nil {
 		return nil, fmt.Errorf("list zone records: %w", err)
@@ -355,7 +374,7 @@ FROM sable_zone_records ORDER BY zone_name, ordinal`)
 		var record zone.Record
 		var ttl int64
 		var expiresAt sql.NullInt64
-		if err := rows.Scan(&zoneName, &record.Name, &record.Type, &record.Value, &ttl, &record.Comments, &record.Disabled, &expiresAt); err != nil {
+		if err := rows.Scan(&zoneName, &record.Name, &record.Type, &record.Value, &ttl, &record.Comments, &record.Disabled, &expiresAt, &record.Source); err != nil {
 			return nil, fmt.Errorf("scan zone record: %w", err)
 		}
 		record.TTL = uint32(ttl)
@@ -569,13 +588,13 @@ func (store *Store) updateZoneRecords(ctx context.Context, transaction *sql.Tx, 
 		}
 		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_zone_records (
-    zone_name, record_key, ordinal, owner_name, record_type, record_value, ttl, comments, disabled, expires_at_ns
-) VALUES (`+store.placeholders(10)+`)
+    zone_name, record_key, ordinal, owner_name, record_type, record_value, ttl, comments, disabled, expires_at_ns, source
+) VALUES (`+store.placeholders(11)+`)
 ON CONFLICT(zone_name, record_key) DO UPDATE SET
     ordinal = excluded.ordinal, owner_name = excluded.owner_name, record_type = excluded.record_type,
     record_value = excluded.record_value, ttl = excluded.ttl, comments = excluded.comments,
-    disabled = excluded.disabled, expires_at_ns = excluded.expires_at_ns`, current.Name, key, ordinal, record.Name, record.Type, record.Value,
-			record.TTL, record.Comments, record.Disabled, expiresAt); err != nil {
+    disabled = excluded.disabled, expires_at_ns = excluded.expires_at_ns, source = excluded.source`, current.Name, key, ordinal, record.Name, record.Type, record.Value,
+			record.TTL, record.Comments, record.Disabled, expiresAt, record.Source); err != nil {
 			return fmt.Errorf("insert record %d for zone %q: %w", ordinal, current.Name, err)
 		}
 	}

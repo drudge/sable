@@ -98,7 +98,11 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			zoneView.Records = append(zoneView.Records, pages.ZoneRecordView{
 				ID: zonemodel.RecordID(record), Name: record.Name, Type: record.Type, Value: record.Value, TTL: record.TTL,
 				Comments: record.Comments, Disabled: record.Disabled, ExpiryTTL: expiryTTL,
-				Managed: strings.HasPrefix(record.Comments, "sable:dnssec"),
+				// Managed hides a record's editor entirely; DNSSEC material is the
+				// only thing that qualifies. Integration-owned records still open,
+				// read-only, so their contents can be inspected.
+				Managed:     strings.HasPrefix(record.Comments, "sable:dnssec"),
+				SourceLabel: zoneRecordSourceLabel(record.Source),
 			})
 		}
 		views = append(views, zoneView)
@@ -892,6 +896,9 @@ func (server *Server) deleteZoneRecord(writer http.ResponseWriter, request *http
 		if strings.HasPrefix(zone.Records[index].Comments, "sable:dnssec") {
 			return errors.New("DNSSEC records are managed automatically")
 		}
+		if err := recordSourceEditable(zone.Records[index]); err != nil {
+			return err
+		}
 		zone.Records = slices.Delete(zone.Records, index, index+1)
 		advanceSOASerial(zone, time.Now())
 		return nil
@@ -924,6 +931,9 @@ func (server *Server) updateZoneRecord(writer http.ResponseWriter, request *http
 		}
 		if strings.HasPrefix(zone.Records[index].Comments, "sable:dnssec") {
 			return errors.New("DNSSEC records are managed automatically")
+		}
+		if err := recordSourceEditable(zone.Records[index]); err != nil {
+			return err
 		}
 		newTTL, err := formTTL(request.FormValue("new_ttl"), zone.DefaultTTL)
 		if err != nil {
@@ -1831,44 +1841,23 @@ func formExpiry(value string, now time.Time) (time.Time, error) {
 }
 
 func soaResponsibleName(value string) (string, error) {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return "", errors.New("responsible email is required")
-	}
-	if at := strings.IndexByte(value, '@'); at >= 0 {
-		if at == 0 || at == len(value)-1 || strings.Contains(value[at+1:], "@") {
-			return "", errors.New("responsible email is invalid")
-		}
-		value = value[:at] + "." + value[at+1:]
-	}
-	normalized, err := dnsname.Normalize(value)
-	if err != nil {
-		return "", fmt.Errorf("responsible email: %w", err)
-	}
-	return dns.Fqdn(normalized), nil
+	return zonemodel.ResponsibleName(value)
 }
 
 func advanceSOASerial(zone *zonemodel.Zone, now time.Time) {
-	for index := range zone.Records {
-		record := &zone.Records[index]
-		if record.Name != "@" || record.Type != "SOA" {
-			continue
-		}
-		fields := strings.Fields(record.Value)
-		if len(fields) != 7 {
-			return
-		}
-		current, _ := strconv.ParseUint(fields[2], 10, 32)
-		fields[2] = strconv.FormatUint(uint64(nextSOASerial(uint32(current), now)), 10)
-		record.Value = strings.Join(fields, " ")
-		return
-	}
+	zonemodel.AdvanceSerial(zone, now)
 }
 
 func nextSOASerial(current uint32, now time.Time) uint32 {
-	dateSerial, _ := strconv.ParseUint(now.UTC().Format("20060102")+"01", 10, 32)
-	if current >= uint32(dateSerial) {
-		return current + 1
+	return zonemodel.NextSerial(current, now)
+}
+
+// recordSourceEditable refuses edits to records an integration owns. The next
+// synchronization would revert the change, so failing loudly here is kinder
+// than letting the edit disappear a minute later.
+func recordSourceEditable(record zonemodel.Record) error {
+	if record.Source == "" {
+		return nil
 	}
-	return uint32(dateSerial)
+	return fmt.Errorf("this record is published by %s synchronization; change it in Integrations or in UniFi", zoneRecordSourceLabel(record.Source))
 }

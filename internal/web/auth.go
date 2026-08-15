@@ -69,7 +69,8 @@ func requiredPermission(request *http.Request) string {
 	path := request.URL.Path
 	write := !safeMethod(request.Method)
 	switch {
-	case path == "/settings" || path == "/cache" || strings.HasPrefix(path, "/ui/settings") ||
+	case path == "/settings" || path == "/cache" || path == "/integrations" ||
+		strings.HasPrefix(path, "/ui/settings") || strings.HasPrefix(path, "/ui/integrations/") ||
 		strings.HasPrefix(path, "/ui/certificates/") ||
 		strings.HasPrefix(path, "/ui/cache/") || strings.HasPrefix(path, "/api/v1/config/") ||
 		strings.HasPrefix(path, "/api/v1/cache/"):

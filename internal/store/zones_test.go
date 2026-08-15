@@ -314,3 +314,75 @@ func TestZoneStoreAddsDNSSECValidationColumnToExistingDatabase(t *testing.T) {
 		t.Fatalf("updated zones = %#v, want validation re-enabled", reread)
 	}
 }
+
+func TestZoneStoreAddsRecordSourceColumnToExistingDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "source-zones.db")
+	storage, err := Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.database.ExecContext(ctx,
+		"ALTER TABLE sable_zone_records DROP COLUMN source"); err != nil {
+		storage.Close()
+		t.Fatalf("simulate pre-upgrade schema: %v", err)
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	storage, err = Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	synchronized := zone.Zone{
+		Name: "clients.example.test", Type: "primary", DefaultTTL: 300, ZoneTransfer: "deny",
+		Records: []zone.Record{
+			{Name: "@", Type: "SOA", Value: "ns1.clients.example.test. hostmaster.clients.example.test. 1 3600 600 1209600 300", TTL: 300},
+			{Name: "@", Type: "NS", Value: "ns1.clients.example.test.", TTL: 300},
+			{Name: "printer", Type: "A", Value: "192.0.2.10", TTL: 300, Source: zone.SourceUniFi},
+			{Name: "nas", Type: "A", Value: "192.0.2.20", TTL: 300},
+		},
+	}
+	if _, err := storage.ReplaceZones(ctx, nil, []zone.Zone{synchronized}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := make(map[string]string, len(stored[0].Records))
+	for _, record := range stored[0].Records {
+		sources[record.Name] = record.Source
+	}
+	if sources["printer"] != zone.SourceUniFi {
+		t.Fatalf("printer source = %q, want %q", sources["printer"], zone.SourceUniFi)
+	}
+	if sources["nas"] != "" {
+		t.Fatalf("hand-authored record carries source %q", sources["nas"])
+	}
+
+	// Handing a record back to its author must clear the marker, not keep the
+	// stale one from the previous row.
+	updated := zone.Clone(stored)
+	for index := range updated[0].Records {
+		if updated[0].Records[index].Name == "printer" {
+			updated[0].Records[index].Source = ""
+			updated[0].Records[index].Value = "192.0.2.11"
+		}
+	}
+	if _, err := storage.ReplaceZones(ctx, stored, updated); err != nil {
+		t.Fatal(err)
+	}
+	reread, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range reread[0].Records {
+		if record.Name == "printer" && record.Source != "" {
+			t.Fatalf("printer source = %q, want it cleared", record.Source)
+		}
+	}
+}

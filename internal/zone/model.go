@@ -84,14 +84,22 @@ type Zone struct {
 }
 
 type Record struct {
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	Value     string    `json:"value"`
-	TTL       uint32    `json:"ttl"`
-	Comments  string    `json:"comments,omitempty"`
-	Disabled  bool      `json:"disabled,omitempty"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Value    string `json:"value"`
+	TTL      uint32 `json:"ttl"`
+	Comments string `json:"comments,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
+	// Source names the integration that owns this record. An empty source means
+	// a human or a dynamic update created it. Integrations reconcile only the
+	// records carrying their own source, so a destructive resync can never
+	// remove hand-authored records from the same zone.
+	Source    string    `json:"source,omitempty"`
 	ExpiresAt time.Time `json:"expires_at,omitempty"`
 }
+
+// SourceUniFi marks records maintained by the UniFi host synchronizer.
+const SourceUniFi = "unifi"
 
 // RecordID returns the compact, deterministic identifier used by control-plane
 // URLs. TTL and presentation metadata are intentionally excluded so those
@@ -183,6 +191,7 @@ func Normalize(zone *Zone) {
 		record.Type = strings.ToUpper(strings.TrimSpace(record.Type))
 		record.Value = strings.TrimSpace(record.Value)
 		record.Comments = strings.TrimSpace(record.Comments)
+		record.Source = strings.ToLower(strings.TrimSpace(record.Source))
 		if record.TTL == 0 {
 			record.TTL = zone.DefaultTTL
 		}

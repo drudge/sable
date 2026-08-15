@@ -1,0 +1,662 @@
+package pages
+
+import "fmt"
+import "strconv"
+import "strings"
+
+type IntegrationsPageView struct {
+	Console DashboardView
+	Message string
+	Error   string
+	UniFi   UniFiAppView
+}
+
+type UniFiAppView struct {
+	Available             bool
+	Configured            bool
+	Enabled               bool
+	ControllerURL         string
+	Site                  string
+	Interval              string
+	SyncReservations      bool
+	SyncActive            bool
+	CAFile                string
+	Insecure              bool
+	CredentialsConfigured bool
+	AuthMode              string
+	Username              string
+	Mappings              []UniFiMappingView
+	Status                UniFiStatusView
+	Wizard                UniFiWizardView
+}
+
+type UniFiMappingView struct {
+	ID       string
+	Name     string
+	Zone     string
+	Template string
+	TTL      uint32
+	Reverse  bool
+	Enabled  bool
+	Preview  string
+}
+
+type UniFiStatusView struct {
+	Running      bool
+	LastSuccess  string
+	NextAttempt  string
+	Duration     string
+	LastError    string
+	Hosts        int
+	ZonesCreated int
+	Added        int
+	Updated      int
+	Removed      int
+}
+
+type UniFiWizardView struct {
+	Open                  bool
+	Step                  string
+	Error                 string
+	ControllerURL         string
+	Site                  string
+	AuthMode              string
+	Username              string
+	CAFile                string
+	Insecure              bool
+	Interval              string
+	SyncReservations      bool
+	SyncActive            bool
+	CredentialsConfigured bool
+	Selected              []string
+	Networks              []UniFiWizardNetworkView
+	ZoneOptions           []string
+	Plan                  UniFiPlanView
+}
+
+type UniFiWizardNetworkView struct {
+	ID           string
+	Name         string
+	Subnet       string
+	Hosts        int
+	Selected     bool
+	Zone         string
+	Template     string
+	TTL          uint32
+	Reverse      bool
+	ReverseZones []string
+	Preview      string
+}
+
+type UniFiPlanView struct {
+	CreatedZones []string
+	Publishing   []UniFiPlanRecordView
+	Added        []UniFiPlanRecordView
+	Updated      []UniFiPlanRecordView
+	Removed      []UniFiPlanRecordView
+	Skipped      []string
+	Hosts        int
+	Empty        bool
+}
+
+type UniFiPlanRecordView struct {
+	Name  string
+	Type  string
+	Value string
+}
+
+templ IntegrationsPage(view IntegrationsPageView) {
+	@AppDocument(view.Console, "Integrations", "integrations", IntegrationsContent(view))
+}
+
+templ IntegrationsContent(view IntegrationsPageView) {
+	<div class="integrations-page page-stack isotope-control-page" id="integrations-content">
+		<header class="page-heading"><h1>Integrations</h1><p>Connect Sable to the systems that already know your network, and publish what they know as DNS.</p></header>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		@UniFiCard(view.UniFi)
+		if view.UniFi.Available && view.UniFi.Configured {
+			@RemoveUniFiDialog()
+		}
+		if view.UniFi.Wizard.Open {
+			@UniFiWizardDialog(view.UniFi)
+		}
+	</div>
+}
+
+templ UniFiCard(view UniFiAppView) {
+	<section class="card integration-card">
+		<header>
+			<div class="integration-card-identity">
+				<span class="integration-card-glyph">@Icon("plug")</span>
+				<div>
+					<h2>UniFi Host Sync</h2>
+					<p>Publishes UniFi reservations and connected clients as A, AAAA, and PTR records.</p>
+				</div>
+			</div>
+			<span class={ unifiBadgeClass(view) }>{ unifiBadgeLabel(view) }</span>
+		</header>
+		if !view.Available {
+			<div class="integration-card-body"><p class="muted-cell">The synchronizer is not running on this node.</p></div>
+		} else if !view.Configured {
+			<div class="integration-card-body integration-card-empty">
+				<p>Point Sable at your UniFi controller, choose which networks to publish, and map each one to a zone. Sable creates the forward and reverse zones it needs and keeps them current.</p>
+				<a class="button" href="/integrations?setup=unifi">@Icon("plus")<span>Set Up UniFi Sync</span></a>
+			</div>
+		} else {
+			<div class="integration-card-body">
+				@UniFiStatusPanel(view)
+				<div class="unifi-connection cluster-details">
+					<dl>
+						<div><dt>Controller</dt><dd>{ view.ControllerURL }</dd></div>
+						<div><dt>Site</dt><dd>{ view.Site }</dd></div>
+						<div><dt>Interval</dt><dd>{ view.Interval }</dd></div>
+						<div><dt>Publishing</dt><dd>{ unifiSourceLabel(view) }</dd></div>
+					</dl>
+				</div>
+				@UniFiMappingTable(view)
+				@UniFiCardActions(view, false)
+			</div>
+		}
+	</section>
+}
+
+// UniFiCardActions is swapped out of band by the status poll so Sync Now can
+// disable itself while a synchronization is in flight.
+templ UniFiCardActions(view UniFiAppView, outOfBand bool) {
+	if outOfBand {
+		<div id="unifi-card-actions" class="integration-card-actions" hx-swap-oob="true">
+			@UniFiCardActionButtons(view)
+		</div>
+	} else {
+		<div id="unifi-card-actions" class="integration-card-actions">
+			@UniFiCardActionButtons(view)
+		</div>
+	}
+}
+
+templ UniFiCardActionButtons(view UniFiAppView) {
+	<button class="button outline destructive" type="button" data-dialog-open="remove-unifi-dialog">@Icon("trash")<span>Remove</span></button>
+	<div class="integration-card-actions-primary">
+		<a class="button outline" href="/integrations?setup=unifi">@Icon("settings-2")<span>Edit Setup</span></a>
+		if view.Enabled {
+			<form hx-post="/ui/integrations/unifi/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+				<input type="hidden" name="enabled" value="false"/>
+				<button class="button outline" type="submit" disabled?={ view.Status.Running }>@Icon("pause")<span>Pause</span></button>
+			</form>
+			<form hx-post="/ui/integrations/unifi/sync" hx-target="#integrations-content" hx-swap="outerHTML">
+				<button class={ "button", templ.KV("is-syncing", view.Status.Running) } type="submit" disabled?={ view.Status.Running }>@Icon("refresh")<span>{ ifThen(view.Status.Running, "Synchronizing…", "Sync Now") }</span></button>
+			</form>
+		} else {
+			<form hx-post="/ui/integrations/unifi/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+				<input type="hidden" name="enabled" value="true"/>
+				<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
+			</form>
+		}
+	</div>
+}
+
+templ RemoveUniFiDialog() {
+	<dialog class="custom-server-dialog confirmation-dialog" id="remove-unifi-dialog" aria-labelledby="remove-unifi-title">
+		<div class="dialog-header"><h2 id="remove-unifi-title">Remove UniFi Host Sync</h2><p>Start over with a clean slate</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="isotope-dialog-body">
+			<p>Sable will forget the controller, delete the stored credentials, and remove every record it published. Zones it created stay, along with anything you added to them by hand.</p>
+		</div>
+		<div class="dialog-footer">
+			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+			<form hx-post="/ui/integrations/unifi/remove" hx-target="#integrations-content" hx-swap="outerHTML">
+				<button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button>
+			</form>
+		</div>
+	</dialog>
+}
+
+templ UniFiStatusPanel(view UniFiAppView) {
+	<div id="unifi-status" hx-get="/ui/integrations/unifi/status" hx-trigger={ unifiStatusPoll(view.Status.Running) } hx-swap="outerHTML">
+		if view.Status.LastError != "" {
+			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last synchronization failed</strong><span>{ view.Status.LastError }</span></div></div>
+		}
+		<div class="unifi-status-metrics">
+			<div><span class="metric-value">{ fmt.Sprint(view.Status.Hosts) }</span><span class="metric-label">Hosts</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(view.Status.Added) }</span><span class="metric-label">Added</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(view.Status.Updated) }</span><span class="metric-label">Updated</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(view.Status.Removed) }</span><span class="metric-label">Removed</span></div>
+		</div>
+		if view.Status.Running {
+			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
+		}
+		<p class="unifi-status-line">
+			if view.Status.Running {
+				@Icon("refresh")
+				<span>Synchronizing now…</span>
+			} else if view.Status.LastSuccess != "" {
+				<span>Last synchronized { view.Status.LastSuccess }</span>
+				if view.Status.Duration != "" {
+					<span>· took { view.Status.Duration }</span>
+				}
+				if view.Enabled && view.Status.NextAttempt != "" {
+					<span>· next { view.Status.NextAttempt }</span>
+				}
+			} else if view.Enabled {
+				<span>Waiting for the first synchronization.</span>
+			} else {
+				<span>Synchronization is paused. Records already published are left in place.</span>
+			}
+		</p>
+	</div>
+}
+
+templ UniFiMappingTable(view UniFiAppView) {
+	<div class="admin-desktop-table">
+		<table class="isotope-table unifi-mapping-table">
+			<thead><tr><th>UniFi Network</th><th>Zone</th><th>Example Name</th><th>TTL</th><th>Reverse</th><th>State</th></tr></thead>
+			<tbody>
+				for _, mapping := range view.Mappings {
+					<tr>
+						<td><strong>{ mapping.Name }</strong></td>
+						<td><a href={ templ.SafeURL("/zones/" + mapping.Zone) }>{ mapping.Zone }</a></td>
+						<td><code class="muted-cell">{ mapping.Preview }</code></td>
+						<td>{ fmt.Sprint(mapping.TTL) }</td>
+						<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
+						<td><span class={ ifThen(mapping.Enabled, "status-badge success", "status-badge") }>{ ifThen(mapping.Enabled, "Active", "Paused") }</span></td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ UniFiWizardDialog(view UniFiAppView) {
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="unifi-setup-dialog" aria-labelledby="unifi-setup-title" data-dialog-auto-open="true">
+		<div class="dialog-header"><h2 id="unifi-setup-title">Set Up UniFi Host Sync</h2><p>Publish UniFi hosts into zones Sable is authoritative for</p></div>
+		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+		<form hx-post="/ui/integrations/unifi/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+			<div class="isotope-dialog-body">
+				@UniFiWizardProgress(view.Wizard.Step)
+				if view.Wizard.Error != "" {
+					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>{ unifiStepProblem(view.Wizard.Step) }</strong><span>{ view.Wizard.Error }</span></div></div>
+				}
+				switch view.Wizard.Step {
+					case "networks":
+						@UniFiWizardNetworksStep(view.Wizard)
+					case "zones":
+						@UniFiWizardZonesStep(view.Wizard)
+					case "review":
+						@UniFiWizardReviewStep(view.Wizard)
+					default:
+						@UniFiWizardConnectStep(view.Wizard)
+				}
+			</div>
+			@UniFiWizardFooter(view.Wizard)
+		</form>
+	</dialog>
+}
+
+templ UniFiWizardProgress(step string) {
+	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", unifiStepNumber(step)) }>
+		@UniFiWizardStepMarker(step, 1, "connect", "Connect")
+		<i></i>
+		@UniFiWizardStepMarker(step, 2, "networks", "Networks")
+		<i></i>
+		@UniFiWizardStepMarker(step, 3, "zones", "Zones")
+		<i></i>
+		@UniFiWizardStepMarker(step, 4, "review", "Review")
+	</div>
+}
+
+// UniFiWizardStepMarker renders a finished step as a button so the operator can
+// jump straight back to it. formnovalidate keeps a half-filled current step from
+// blocking the way back.
+templ UniFiWizardStepMarker(step string, position int, target, label string) {
+	if unifiStepNumber(step) > position {
+		<button class={ unifiStepClass(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
+			<span>&#10003;</span><small>{ label }</small>
+		</button>
+	} else {
+		<div class={ unifiStepClass(step, position) }><span>{ unifiStepMarker(step, position) }</span><small>{ label }</small></div>
+	}
+}
+
+templ UniFiWizardConnectStep(wizard UniFiWizardView) {
+	<input type="hidden" name="wizard_step" value="connect"/>
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact"><span>@Icon("server")</span><div><strong>Controller</strong><small>Sable reads networks, reservations, and connected clients. It never writes to UniFi.</small></div></div>
+		<div class="field-grid two">
+			<label class="field-control"><span>Controller URL</span><input name="controller_url" value={ wizard.ControllerURL } placeholder="https://192.168.1.1" required/></label>
+			<label class="field-control"><span>Site</span><input name="site" value={ wizard.Site } placeholder="default" required/></label>
+		</div>
+		<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault and never written to TOML.</small></div></div>
+		<div class="unifi-auth-modes" data-unifi-auth-root>
+			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode != "account") }><input type="radio" name="auth_mode" value="api-key" checked?={ wizard.AuthMode != "account" } data-unifi-auth/><span><strong>API Key</strong><small>Recommended</small></span></label>
+			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode == "account") }><input type="radio" name="auth_mode" value="account" checked?={ wizard.AuthMode == "account" } data-unifi-auth/><span><strong>Local Account</strong><small>Older controllers</small></span></label>
+		</div>
+		<div class="field-grid two" data-unifi-auth-panel="api-key" hidden?={ wizard.AuthMode == "account" }>
+			<label class="field-control"><span>API Key</span><input type="password" name="api_key" autocomplete="new-password" placeholder={ ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "UniFi API key") }/><small>Create one in UniFi under Settings → Admins, or Settings → Integrations.</small></label>
+		</div>
+		<div class="field-grid two" data-unifi-auth-panel="account" hidden?={ wizard.AuthMode != "account" }>
+			<label class="field-control"><span>Username</span><input name="username" value={ wizard.Username } autocomplete="off"/></label>
+			<label class="field-control"><span>Password</span><input type="password" name="password" autocomplete="new-password" placeholder={ ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "Local account password") }/></label>
+		</div>
+		<div class="wizard-heading compact"><span>@Icon("lock")</span><div><strong>Certificate Trust</strong><small>UniFi consoles ship a self-signed certificate.</small></div></div>
+		<div class="field-grid two">
+			<label class="field-control"><span>CA File (optional)</span><input name="tls_ca_file" value={ wizard.CAFile } placeholder="/etc/sable/unifi-ca.pem"/></label>
+			<label class="field-control checkbox"><input type="checkbox" name="tls_insecure" value="true" checked?={ wizard.Insecure }/><span>Skip certificate verification</span><small>Pin the issuer above, or accept it unverified on a trusted network.</small></label>
+		</div>
+	</section>
+}
+
+templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
+	<input type="hidden" name="wizard_step" value="networks"/>
+	@UniFiWizardCarriedConnection(wizard)
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact"><span>@Icon("hash")</span><div><strong>Networks</strong><small>Choose the UniFi networks whose hosts should appear in DNS.</small></div></div>
+		<div class="admin-desktop-table">
+			<table class="isotope-table unifi-network-table">
+				<thead><tr><th>Sync</th><th>Network</th><th>Subnet</th><th class="right-cell">Hosts</th></tr></thead>
+				<tbody>
+					for index, network := range wizard.Networks {
+						<tr>
+							<td><input id={ unifiNetworkFieldID(index) } type="checkbox" name="network" value={ network.ID } checked?={ network.Selected }/></td>
+							<td><label for={ unifiNetworkFieldID(index) }>{ network.Name }</label></td>
+							<td><code class="muted-cell">{ ifThen(network.Subnet != "", network.Subnet, "—") }</code></td>
+							<td class="right-cell">{ fmt.Sprint(network.Hosts) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<input type="hidden" name="sources_present" value="true"/>
+		<div class="wizard-heading compact"><span>@Icon("timer")</span><div><strong>What To Publish</strong><small>A reservation always wins when both describe the same device.</small></div></div>
+		<div class="field-grid two">
+			<label class="field-control checkbox"><input type="checkbox" name="source_reservations" value="true" checked?={ wizard.SyncReservations }/><span>Fixed-IP reservations</span></label>
+			<label class="field-control checkbox"><input type="checkbox" name="source_active" value="true" checked?={ wizard.SyncActive }/><span>Connected clients</span></label>
+			<label class="field-control"><span>Sync Interval</span><input name="interval" value={ wizard.Interval } placeholder="2m" required/><small>Go duration, at least 30s.</small></label>
+		</div>
+	</section>
+}
+
+templ UniFiWizardZonesStep(wizard UniFiWizardView) {
+	<input type="hidden" name="wizard_step" value="zones"/>
+	@UniFiWizardCarriedConnection(wizard)
+	@UniFiWizardCarriedPublishing(wizard)
+	for _, id := range wizard.Selected {
+		<input type="hidden" name="network" value={ id }/>
+	}
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>Zones</strong><small>Map each network to a zone. Sable creates any zone that does not exist yet, and <code>host.network.zone</code> keeps names apart when several networks share one.</small></div></div>
+		<div class="unifi-zone-rows" data-unifi-zone-rows>
+			for index, network := range wizard.Networks {
+				<article class="unifi-zone-row" data-unifi-zone-row>
+					<input type="hidden" name={ "network_id_" + strconv.Itoa(index) } value={ network.ID }/>
+					<input type="hidden" name={ "network_name_" + strconv.Itoa(index) } value={ network.Name }/>
+					<input type="hidden" name={ "network_subnet_" + strconv.Itoa(index) } value={ network.Subnet }/>
+					<header><strong>{ network.Name }</strong><code class="muted-cell">{ ifThen(network.Subnet != "", network.Subnet, "no subnet") }</code></header>
+					<div class="unifi-zone-fields">
+						<label class="field-control"><span>Zone</span><input name={ "zone_" + strconv.Itoa(index) } value={ network.Zone } list="unifi-zone-options" placeholder="clients.example.net" data-unifi-zone required/>
+							<small class="unifi-zone-preview">
+								if network.Preview != "" {
+									Example: <code>{ network.Preview }</code>
+								}
+							</small>
+						</label>
+						<label class="field-control"><span>Name Layout</span>
+							<select name={ "template_" + strconv.Itoa(index) } data-unifi-template>
+								<option value="{{host}}.{{network}}.{{zone}}" selected?={ network.Template != "{{host}}.{{zone}}" }>host.network.zone</option>
+								<option value="{{host}}.{{zone}}" selected?={ network.Template == "{{host}}.{{zone}}" }>host.zone</option>
+							</select>
+						</label>
+						<label class="field-control"><span>TTL</span><input type="number" name={ "ttl_" + strconv.Itoa(index) } value={ fmt.Sprint(unifiRowTTL(network.TTL)) } min="1" max="604800"/></label>
+					</div>
+					<label class="field-control checkbox"><input type="checkbox" name={ "reverse_" + strconv.Itoa(index) } value="true" checked?={ network.Reverse }/><span>Publish PTR records</span>
+						if len(network.ReverseZones) > 0 {
+							<small>Into { strings.Join(network.ReverseZones, ", ") }</small>
+						} else {
+							<small>This network reports no subnet, so no reverse zone can be derived.</small>
+						}
+					</label>
+				</article>
+			}
+		</div>
+		<datalist id="unifi-zone-options">
+			for _, name := range wizard.ZoneOptions {
+				<option value={ name }></option>
+			}
+		</datalist>
+	</section>
+}
+
+templ UniFiWizardReviewStep(wizard UniFiWizardView) {
+	<input type="hidden" name="wizard_step" value="review"/>
+	@UniFiWizardCarriedConnection(wizard)
+	@UniFiWizardCarriedPublishing(wizard)
+	for _, id := range wizard.Selected {
+		<input type="hidden" name="network" value={ id }/>
+	}
+	for index, network := range wizard.Networks {
+		<input type="hidden" name={ "network_id_" + strconv.Itoa(index) } value={ network.ID }/>
+		<input type="hidden" name={ "network_name_" + strconv.Itoa(index) } value={ network.Name }/>
+		<input type="hidden" name={ "network_subnet_" + strconv.Itoa(index) } value={ network.Subnet }/>
+		<input type="hidden" name={ "zone_" + strconv.Itoa(index) } value={ network.Zone }/>
+		<input type="hidden" name={ "template_" + strconv.Itoa(index) } value={ network.Template }/>
+		<input type="hidden" name={ "ttl_" + strconv.Itoa(index) } value={ fmt.Sprint(unifiRowTTL(network.TTL)) }/>
+		if network.Reverse {
+			<input type="hidden" name={ "reverse_" + strconv.Itoa(index) } value="true"/>
+		}
+	}
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact"><span>@Icon("list")</span><div><strong>Review</strong><small>This is exactly what the first synchronization will do.</small></div></div>
+		<div class="unifi-status-metrics">
+			<div><span class="metric-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span><span class="metric-label">Hosts</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span><span class="metric-label">Added</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span><span class="metric-label">Updated</span></div>
+			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span><span class="metric-label">Removed</span></div>
+		</div>
+		if len(wizard.Plan.CreatedZones) > 0 {
+			<div class="cluster-dialog-note compact">@Icon("plus")<p><strong>Zones Sable will create</strong><span>{ strings.Join(wizard.Plan.CreatedZones, ", ") }</span></p></div>
+		}
+		if wizard.Plan.Empty {
+			<div class="cluster-dialog-note compact">@Icon("info")<p><strong>Nothing to change</strong><span>Every record these networks produce already exists.</span></p></div>
+		}
+		@UniFiPlanRecords("Records to add", wizard.Plan.Added)
+		@UniFiPlanRecords("Records to update", wizard.Plan.Updated)
+		@UniFiPlanRecords("Records to remove", wizard.Plan.Removed)
+		@UniFiPlanRecords("Everything this mapping publishes", wizard.Plan.Publishing)
+		if len(wizard.Plan.Skipped) > 0 {
+			<details class="unifi-skipped"><summary>{ fmt.Sprintf("%d entries produced no record", len(wizard.Plan.Skipped)) }</summary><ul>
+				for _, entry := range wizard.Plan.Skipped {
+					<li>{ entry }</li>
+				}
+			</ul></details>
+		}
+		<div class="cluster-dialog-note">@Icon("info")<p><strong>Records Sable publishes are marked as UniFi-owned</strong><span>Synchronization only ever changes records it owns, so anything you add by hand in these zones is left alone.</span></p></div>
+	</section>
+}
+
+templ UniFiPlanRecords(title string, records []UniFiPlanRecordView) {
+	if len(records) > 0 {
+		<details class="unifi-plan-records" open?={ len(records) <= 12 }>
+			<summary>{ fmt.Sprintf("%s (%d)", title, len(records)) }</summary>
+			<div class="admin-desktop-table">
+				<table class="isotope-table">
+					<thead><tr><th>Name</th><th>Type</th><th>Value</th></tr></thead>
+					<tbody>
+						for _, record := range records {
+							<tr><td><code>{ record.Name }</code></td><td>{ record.Type }</td><td><code>{ record.Value }</code></td></tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</details>
+	}
+}
+
+// UniFiWizardCarriedConnection re-posts the connection choices on every step.
+// Secrets are deliberately absent: the connection step seals them in the vault
+// and later steps read them back from there.
+templ UniFiWizardCarriedConnection(wizard UniFiWizardView) {
+	<input type="hidden" name="controller_url" value={ wizard.ControllerURL }/>
+	<input type="hidden" name="site" value={ wizard.Site }/>
+	<input type="hidden" name="auth_mode" value={ wizard.AuthMode }/>
+	<input type="hidden" name="username" value={ wizard.Username }/>
+	<input type="hidden" name="tls_ca_file" value={ wizard.CAFile }/>
+	if wizard.Insecure {
+		<input type="hidden" name="tls_insecure" value="true"/>
+	}
+}
+
+// UniFiWizardCarriedPublishing re-posts the publishing choices on the steps
+// after the one that collects them.
+templ UniFiWizardCarriedPublishing(wizard UniFiWizardView) {
+	<input type="hidden" name="sources_present" value="true"/>
+	<input type="hidden" name="interval" value={ wizard.Interval }/>
+	if wizard.SyncReservations {
+		<input type="hidden" name="source_reservations" value="true"/>
+	}
+	if wizard.SyncActive {
+		<input type="hidden" name="source_active" value="true"/>
+	}
+}
+
+templ UniFiWizardFooter(wizard UniFiWizardView) {
+	<div class="dialog-footer wizard-footer">
+		<a class="button outline" href="/integrations">Cancel</a>
+		<div class="wizard-footer-advance">
+			if unifiPreviousStep(wizard.Step) != "" {
+				<button class="button outline" type="submit" name="wizard_target" value={ unifiPreviousStep(wizard.Step) } formnovalidate>@Icon("arrow-left")<span>Back</span></button>
+			}
+			if wizard.Step == "review" {
+				<button class="button" type="submit">@Icon("check")<span>Enable Synchronization</span></button>
+			} else {
+				<button class="button" type="submit">@Icon("arrow-right")<span>{ unifiNextLabel(wizard.Step) }</span></button>
+			}
+		</div>
+	</div>
+}
+
+func unifiStepNumber(step string) int {
+	switch step {
+	case "networks":
+		return 2
+	case "zones":
+		return 3
+	case "review":
+		return 4
+	default:
+		return 1
+	}
+}
+
+func unifiStepClass(step string, position int) string {
+	current := unifiStepNumber(step)
+	if current > position {
+		return "complete"
+	}
+	if current == position {
+		return "current"
+	}
+	return ""
+}
+
+func unifiStepMarker(step string, position int) string {
+	if unifiStepNumber(step) > position {
+		return "✓"
+	}
+	return strconv.Itoa(position)
+}
+
+func unifiNextLabel(step string) string {
+	switch step {
+	case "networks":
+		return "Map Zones"
+	case "zones":
+		return "Review Changes"
+	default:
+		return "Connect"
+	}
+}
+
+func unifiPreviousStep(step string) string {
+	switch step {
+	case "networks":
+		return "connect"
+	case "zones":
+		return "networks"
+	case "review":
+		return "zones"
+	default:
+		return ""
+	}
+}
+
+func unifiStepProblem(step string) string {
+	switch step {
+	case "networks":
+		return "Choose at least one network"
+	case "zones":
+		return "Check the zone mapping"
+	default:
+		return "Could not reach the controller"
+	}
+}
+
+// unifiStatusPoll tightens the refresh while a synchronization is in flight so
+// the spinner and progress bar clear promptly, and backs off when idle.
+func unifiStatusPoll(running bool) string {
+	if running {
+		return "every 1s"
+	}
+	return "every 10s"
+}
+
+func unifiNetworkFieldID(index int) string {
+	return "unifi-network-" + strconv.Itoa(index)
+}
+
+func unifiRowTTL(ttl uint32) uint32 {
+	if ttl == 0 {
+		return 300
+	}
+	return ttl
+}
+
+func unifiBadgeClass(view UniFiAppView) string {
+	switch {
+	case !view.Configured:
+		return "status-badge"
+	case view.Status.LastError != "":
+		return "status-badge danger"
+	case view.Enabled:
+		return "status-badge success"
+	default:
+		return "status-badge"
+	}
+}
+
+func unifiBadgeLabel(view UniFiAppView) string {
+	switch {
+	case !view.Available:
+		return "Unavailable"
+	case !view.Configured:
+		return "Not set up"
+	case view.Status.LastError != "":
+		return "Needs attention"
+	case view.Enabled:
+		return "Active"
+	default:
+		return "Paused"
+	}
+}
+
+func unifiSourceLabel(view UniFiAppView) string {
+	switch {
+	case view.SyncReservations && view.SyncActive:
+		return "Reservations and connected clients"
+	case view.SyncReservations:
+		return "Reservations only"
+	case view.SyncActive:
+		return "Connected clients only"
+	default:
+		return "Nothing selected"
+	}
+}

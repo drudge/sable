@@ -106,6 +106,35 @@ dns_zone = ""
 storage_dir = "data/tls/acme"
 renew_before = "720h"
 
+# UniFi host synchronization. Set this up from Apps in the console: the wizard
+# discovers the controller's networks, maps each one to a zone, and previews the
+# records before enabling. Controller credentials are encrypted in the secret
+# vault and are never written here.
+[unifi]
+enabled = false
+controller_url = "https://192.168.1.1"
+site = "default"
+interval = "2m"
+# "reservations" publishes configured fixed IPs, "active" publishes currently
+# connected clients. A reservation always wins when both describe one device.
+sources = ["reservations", "active"]
+# UniFi consoles ship a self-signed certificate. Pin its issuer here, or accept
+# the risk with tls_insecure.
+tls_ca_file = ""
+tls_insecure = false
+
+# One mapping per UniFi network. Records land in the mapped zone and are owned
+# by the synchronizer, so hand-authored records in the same zone are never
+# touched. Reverse zones are derived from the network's own subnet.
+# [[unifi.networks]]
+# id = "61f0c1a2b3c4d5e6f7a8b9c0"
+# name = "IoT"
+# zone = "iot.example.net"
+# hostname_template = "{{host}}.{{zone}}"
+# ttl = 300
+# reverse = true
+# enabled = true
+
 [security]
 enabled = true
 secure_cookies = false

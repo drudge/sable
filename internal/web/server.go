@@ -78,6 +78,7 @@ type Server struct {
 	blockLists       *blockcompiler.Updater
 	dnssec           dnssecController
 	cluster          clusterController
+	unifi            unifiController
 	certificates     certificateController
 	administrator    administrator
 	restart          func()
@@ -180,6 +181,12 @@ func New(
 	mux.HandleFunc("GET /zones/{zone}/records/{record}/edit", server.zonesPage)
 	mux.HandleFunc("GET /cache", server.cachePage)
 	mux.HandleFunc("GET /blocked", server.blockingPage)
+	mux.HandleFunc("GET /integrations", server.integrationsPage)
+	mux.HandleFunc("POST /ui/integrations/unifi/wizard", server.runUniFiWizard)
+	mux.HandleFunc("POST /ui/integrations/unifi/sync", server.syncUniFiNow)
+	mux.HandleFunc("POST /ui/integrations/unifi/enabled", server.setUniFiEnabled)
+	mux.HandleFunc("POST /ui/integrations/unifi/remove", server.removeUniFi)
+	mux.HandleFunc("GET /ui/integrations/unifi/status", server.unifiStatusPanel)
 	mux.HandleFunc("GET /dns-client", server.dnsClientPage)
 	mux.HandleFunc("GET /logs", server.logsPage)
 	mux.HandleFunc("GET /settings", server.settingsPage)
