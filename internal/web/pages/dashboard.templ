@@ -1,0 +1,902 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+)
+
+type DashboardView struct {
+	Version        string
+	TimeFormat     string
+	Username       string
+	DisplayName    string
+	CSRFToken      string
+	SecurityEnabled bool
+	CanSettings     bool
+	CanAdministration bool
+	CanZones        bool
+	CanBlocking     bool
+	CanLogs         bool
+	CanMetrics      bool
+	CanCluster      bool
+	ControlPlaneReadOnly bool
+	PrimaryURL      string
+	Database       string
+	DNSListeners   string
+	EncryptedDNS  string
+	QueryServer    string
+	CacheSize      int
+	ForwardRoutes  int
+	LocalHosts     int
+	QueryLogStatus string
+	DNSSECStatus   string
+	ConfigRevision uint64
+	Stats          StatsView
+	Chart          QueryChartView
+	Insights       DashboardInsightsView
+}
+
+type DashboardInsightsView struct {
+	Clients         int
+	TopClients      []RankedStatView
+	TopDomains      []RankedStatView
+	TopBlocked      []RankedStatView
+	QueryTypes      []DistributionItemView
+	ResponseSources []DistributionItemView
+	ResponseCodes   []DistributionItemView
+}
+
+type RankedStatView struct {
+	Name      string
+	Secondary string
+	Value     uint64
+}
+
+type DistributionItemView struct {
+	Name    string
+	Value   uint64
+	Percent float64
+	Offset  float64
+	Color   int
+}
+
+type QueryChartView struct {
+	ActiveRange string
+	Total       string
+	Successful  string
+	ServerFailure string
+	NXDomain    string
+	Refused     string
+	Recursive   string
+	Blocked     string
+	CacheHits   string
+	StartLabel  string
+	EndLabel    string
+	HasActivity bool
+	Maximum     uint64
+	CustomStart string
+	CustomEnd   string
+}
+
+type StatsView struct {
+	Queries        uint64
+	NoError        uint64
+	ServerFailures uint64
+	NXDomain       uint64
+	Refused        uint64
+	Recursive      uint64
+	Dropped        uint64
+	Clients        int
+	Blocked        uint64
+	Failures       uint64
+	UpstreamErrors uint64
+	CacheHits      uint64
+	CacheMisses    uint64
+	CacheEntries   int
+	CacheHitRatio  string
+	RoutedQueries  uint64
+	LocalAnswers   uint64
+	AuthoritativeAnswers uint64
+	DNSSECSecure         uint64
+	DNSSECInsecure       uint64
+	DNSSECBogus          uint64
+	LocalHosts     int
+	BlockedDomains int
+	BlockLists     int
+	Uptime         string
+}
+
+type QueryView struct {
+	Success    bool
+	Question   string
+	RecordType string
+	Server     string
+	Protocol   string
+	Elapsed    string
+	Size       string
+	RCode      string
+	Flags      []string
+	Answers    []RecordView
+	Authority  []RecordView
+	Additional []RecordView
+	Response   string
+	JSON       string
+	Error      string
+}
+
+type RecordView struct {
+	Name string
+	Type string
+	Data string
+	TTL  uint32
+}
+
+type ResolverOption struct {
+	Value string
+	Label string
+	Detail string
+	Search string
+}
+
+func (option ResolverOption) SearchText() string {
+	return strings.TrimSpace(option.Label + " " + option.Detail + " " + option.Value + " " + option.Search)
+}
+
+type DNSClientPageView struct {
+	Console      DashboardView
+	ClusterNodes []ResolverOption
+}
+
+var localResolverOptions = []ResolverOption{
+	{Value: "this-server", Label: "This Server"},
+	{Value: "recursive-resolver", Label: "Recursive Resolver"},
+	{Value: "system-dns", Label: "System DNS"},
+}
+
+var publicResolverOptions = []ResolverOption{
+	{Value: "cloudflare", Label: "Cloudflare (1.1.1.1)"},
+	{Value: "google", Label: "Google (8.8.8.8)"},
+	{Value: "quad9", Label: "Quad9 (9.9.9.9)"},
+	{Value: "opendns", Label: "OpenDNS (208.67.222.222)"},
+	{Value: "adguard", Label: "AdGuard (94.140.14.14)"},
+}
+
+var rootResolverOptions = []ResolverOption{
+	{Value: "root-a", Label: "a.root-servers.net (198.41.0.4)"},
+	{Value: "root-b", Label: "b.root-servers.net (170.247.170.2)"},
+	{Value: "root-c", Label: "c.root-servers.net (192.33.4.12)"},
+	{Value: "root-d", Label: "d.root-servers.net (199.7.91.13)"},
+	{Value: "root-e", Label: "e.root-servers.net (192.203.230.10)"},
+	{Value: "root-f", Label: "f.root-servers.net (192.5.5.241)"},
+	{Value: "root-g", Label: "g.root-servers.net (192.112.36.4)"},
+	{Value: "root-h", Label: "h.root-servers.net (198.97.190.53)"},
+	{Value: "root-i", Label: "i.root-servers.net (192.36.148.17)"},
+	{Value: "root-j", Label: "j.root-servers.net (192.58.128.30)"},
+	{Value: "root-k", Label: "k.root-servers.net (193.0.14.129)"},
+	{Value: "root-l", Label: "l.root-servers.net (199.7.83.42)"},
+	{Value: "root-m", Label: "m.root-servers.net (202.12.27.33)"},
+}
+
+type QueryLogEntryView struct {
+	OccurredAt string
+	ClientIP   string
+	Name       string
+	RecordType string
+	Status     string
+	Source     string
+	Protocol   string
+	Answers    []string
+	Duration   string
+}
+
+templ Dashboard(view DashboardView) {
+	@AppDocument(view, "Dashboard", "dashboard", Empty())
+}
+
+templ DNSClientPage(view DNSClientPageView) {
+	@AppDocument(view.Console, "DNS Client", "dns-client", DNSClientContent(view))
+}
+
+templ Empty() {}
+
+templ AppDocument(view DashboardView, pageTitle string, activePage string, page templ.Component) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>{ pageTitle } · Sable</title>
+			<script src="/assets/app.js"></script>
+			<link rel="stylesheet" href="/assets/app.css"/>
+			<script src="/assets/htmx.min.js" defer></script>
+		</head>
+		<body hx-headers={ fmt.Sprintf("{\"X-CSRF-Token\":%q}", view.CSRFToken) } data-control-plane-read-only={ fmt.Sprint(view.ControlPlaneReadOnly) } data-cluster-primary-url={ view.PrimaryURL }>
+			<div class="app-shell">
+				<aside class="sidebar" id="app-sidebar">
+					<div class="sidebar-header">
+						<a class="brand" href="/" aria-label="Sable dashboard">
+							@SableMark("")
+							<span class="brand-copy"><strong>Sable</strong><small>{ view.Version }</small></span>
+						</a>
+						<button class="sidebar-collapse" type="button" data-sidebar-toggle aria-label="Collapse sidebar" title="Collapse sidebar">@Icon("panel")</button>
+					</div>
+					<nav class="nav" aria-label="Primary navigation">
+						<div class="nav-group">
+							<div class="nav-label">Overview</div>
+							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
+							if view.CanZones {
+								@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
+							}
+							if view.CanSettings {
+								@NavItem("Cache", "/cache", "database", activePage == "cache", false)
+							}
+							if view.CanBlocking {
+								@NavItem("Allowed", "/blocked?tab=allowed", "shield-check", activePage == "allowed", false)
+								@NavItem("Blocked", "/blocked?tab=domains", "shield-x", activePage == "blocked", false)
+							}
+							@NavItem("Apps", "#", "apps", false, true)
+							@NavItem("DNS Client", "/dns-client", "tool", activePage == "dns-client", false)
+							if view.CanLogs {
+								@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
+							}
+						</div>
+						<div class="nav-group">
+							<div class="nav-label">System</div>
+							if view.CanSettings {
+								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
+							}
+							@NavItem("DHCP", "#", "server", false, true)
+							if view.CanAdministration {
+								@NavItem("Administration", "/administration", "users", activePage == "administration", false)
+							}
+							if view.CanCluster {
+								@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
+							}
+							@NavItem("About", "/about", "info", activePage == "about", false)
+						</div>
+					</nav>
+					<div class="sidebar-bottom">
+						<div class="sidebar-account" data-account-menu>
+							<button class="user-menu" type="button" data-account-trigger aria-haspopup="menu" aria-expanded="false">
+								<span class="avatar">{ userInitial(accountDisplayName(view)) }</span>
+								<span class="user-copy"><strong>{ accountDisplayName(view) }</strong><small>{ ifThen(view.SecurityEnabled, view.Username, "local console") }</small></span>
+								<span class="user-action">@Icon("chevron-up")</span>
+							</button>
+							<div class="account-popover" data-account-popover role="menu" hidden>
+								if view.SecurityEnabled {
+									<div class="account-popover-header"><span class="avatar">{ userInitial(accountDisplayName(view)) }</span><span><strong>{ accountDisplayName(view) }</strong><small>{ view.Username }</small></span></div>
+									<a class="account-menu-item" href="/profile" role="menuitem">@Icon("user")<span>Profile</span></a>
+									<a class="account-menu-item" href="/profile?tab=tokens" role="menuitem">@Icon("key")<span>API Tokens</span></a>
+									<div class="account-menu-separator"></div>
+								}
+								<div class="account-theme"><div class="account-theme-label">@Icon("sun")<span>Theme</span></div><div class="account-theme-options" role="radiogroup" aria-label="Theme"><button type="button" data-theme-value="system" role="radio">System</button><button type="button" data-theme-value="light" role="radio">Light</button><button type="button" data-theme-value="dark" role="radio">Dark</button></div></div>
+								if view.SecurityEnabled {
+									<div class="account-menu-separator"></div>
+									<button class="account-menu-item account-sign-out" hx-post="/logout" hx-swap="none" role="menuitem">@Icon("log-out")<span>Sign out</span></button>
+								}
+							</div>
+						</div>
+					</div>
+					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-label="Expand sidebar" title="Expand sidebar"></button>
+				</aside>
+				<div class="sidebar-scrim" data-sidebar-toggle></div>
+				<main class="main">
+					<header class="mobile-header">
+						<button type="button" data-sidebar-toggle aria-label="Open navigation">@Icon("menu")</button>
+						<strong>Sable</strong>
+					</header>
+					if view.ControlPlaneReadOnly {
+						<div class="replica-read-only-banner" role="status">
+							<div class="replica-read-only-copy">@Icon("lock")<span><strong>Replica · Read-only</strong><span>View and troubleshoot here. Make configuration changes on the primary.</span></span></div>
+							if view.PrimaryURL != "" {
+								<a class="replica-primary-link" href={ templ.SafeURL(view.PrimaryURL) } target="_blank" rel="noopener noreferrer"><span>Open Primary</span>@Icon("external-link")</a>
+							}
+						</div>
+					}
+					<div class="content">
+						if activePage == "dashboard" {
+							@DashboardHome(view)
+						} else {
+							@page
+						}
+					</div>
+				</main>
+			</div>
+		</body>
+	</html>
+}
+
+templ SableMark(extraClass string) {
+	<span class={ "brand-mark " + extraClass } aria-hidden="true">S</span>
+}
+
+templ DNSClientContent(view DNSClientPageView) {
+	<div class="dns-client-page page-stack">
+		<header class="page-heading">
+			<h1>DNS Client</h1>
+			<p>Resolve DNS records and diagnose name resolution issues</p>
+		</header>
+		<div class="page-columns">
+			<div class="page-main">
+				<section class="card emphasized query-composer">
+					<form id="dns-query-form" hx-post="/ui/query" hx-target="#dns-query-result" hx-swap="innerHTML">
+						<div class="query-primary-row">
+							<div class="search-field"><label class="sr-only" for="query-name">Domain name</label>@Icon("search")<input id="query-name" name="name" placeholder="Domain name" autocomplete="off" data-query-name required/><button class="query-clear" type="button" data-query-clear aria-label="Clear domain">@Icon("x")</button></div>
+							<label class="sr-only" for="record-type">Record type</label>
+							<select id="record-type" name="type" class="record-type-select">
+								<option>A</option><option>AAAA</option><option>ANY</option><option>CAA</option><option>CNAME</option><option>DNSKEY</option><option>DS</option><option>HTTPS</option><option>MX</option><option>NAPTR</option><option>NS</option><option>PTR</option><option>SOA</option><option>SRV</option><option>SVCB</option><option>TLSA</option><option>TXT</option>
+							</select>
+							<button class="button resolve-button" type="submit">@Icon("search")<span>Resolve</span></button>
+						</div>
+						<div class="query-options-row">
+							<input type="hidden" name="local_server" value={ view.Console.QueryServer }/>
+							<div class="resolver-combobox" data-resolver-combobox>
+								<input type="hidden" name="resolver" value="this-server" data-resolver-value/>
+								<input type="hidden" name="custom_name" data-custom-name/>
+								<input type="hidden" name="custom_ip" data-custom-ip/>
+								<button class="resolver-trigger" type="button" role="combobox" aria-expanded="false" aria-controls="resolver-command-list" data-resolver-trigger>
+									<span data-resolver-label>This Server</span>@Icon("chevrons")
+								</button>
+								<div class="resolver-popover" data-resolver-popover hidden>
+									<label class="resolver-search"><span class="sr-only">Search servers</span>@Icon("search")<input type="search" placeholder="Search servers..." autocomplete="off" data-resolver-search/></label>
+									<div class="resolver-command-list" id="resolver-command-list" role="listbox" data-resolver-list>
+										<div class="resolver-empty" data-resolver-empty hidden>No server found.</div>
+										@ResolverGroup("Local", localResolverOptions)
+										if len(view.ClusterNodes) > 0 {
+											@ResolverGroup("Cluster Nodes", view.ClusterNodes)
+										}
+										@ResolverGroup("Public Resolvers", publicResolverOptions)
+										@ResolverGroup("Root Servers", rootResolverOptions)
+										<div class="resolver-separator"></div>
+										<div class="resolver-group" data-resolver-group>
+											<div class="resolver-group-heading">Custom</div>
+											<button class="resolver-option" type="button" role="option" data-resolver-option="custom" data-resolver-label-value="" data-resolver-custom-option hidden>
+												<span class="resolver-check">@Icon("check")</span><span class="resolver-option-label" data-resolver-custom-label></span>
+											</button>
+											<button class="resolver-option resolver-custom-edit" type="button" data-resolver-custom-edit data-search="custom server address">
+												<span>Custom...</span>
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+							<label class="transport-picker"><span class="sr-only">Protocol</span><select name="transport" data-transport-picker><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tcp-tls">TLS</option><option value="doh">HTTPS</option><option value="quic" disabled>QUIC</option></select></label>
+							<label class="edns-subnet"><span class="sr-only">EDNS client subnet</span><input name="edns_subnet" placeholder="EDNS subnet" autocomplete="off"/></label>
+							<label class="checkbox-field"><input type="checkbox" name="dnssec" value="true"/><span>DNSSEC</span></label>
+						</div>
+						<dialog class="custom-server-dialog" data-custom-dialog aria-labelledby="custom-server-title" aria-describedby="custom-server-description">
+							<div class="dialog-header">
+								<h2 id="custom-server-title">Custom DNS Server</h2>
+								<p id="custom-server-description">Target a specific server by name, IP, or both. Providing both pins the hostname to that IP — matching how cluster nodes are addressed, and letting TLS/HTTPS/QUIC validate the certificate name.</p>
+							</div>
+							<button class="dialog-close" type="button" data-custom-cancel aria-label="Close">@Icon("x")</button>
+							<div class="custom-server-fields">
+								<label><span>Name <small>(optional)</small></span><input type="text" placeholder="dns.example.com" autocomplete="off" data-custom-name-draft/></label>
+								<label><span>IP Address <small>(optional)</small></span><input type="text" placeholder="10.0.7.22" autocomplete="off" data-custom-ip-draft/></label>
+								<div class="custom-server-preview" data-custom-preview hidden><span>Server address</span><code data-custom-preview-value></code></div>
+							</div>
+							<div class="dialog-footer"><button class="button outline" type="button" data-custom-cancel>Cancel</button><button class="button" type="button" data-custom-apply disabled>Use Server</button></div>
+						</dialog>
+					</form>
+				</section>
+				<div id="dns-query-result">
+					@DNSQueryEmpty()
+				</div>
+			</div>
+			<aside class="page-aside">
+				<section class="card guidance-card">
+					<div class="guidance-header"><h2>Quick Queries</h2><p data-quick-query-description>Enter a domain, then select a query type</p></div>
+					<div class="quick-query-list">
+						@QuickQuery("Mail Servers", "MX", "mail")
+						@QuickQuery("Name Servers", "NS", "globe")
+						@QuickQuery("Text Records", "TXT", "file-text")
+						@QuickQuery("IPv4 Address", "A", "hash")
+						@QuickQuery("IPv6 Address", "AAAA", "hash")
+						@QuickQuery("DNSSEC Keys", "DNSKEY", "shield-check")
+					</div>
+				</section>
+				<section class="card guidance-card">
+					<div class="guidance-header"><h2>Understanding Results</h2></div>
+					<div class="guidance-list">
+						@GuidanceItem("green", "Answer Section", "Direct answers to your query — the records you asked for")
+						@GuidanceItem("blue", "Authority Section", "Name servers authoritative for the domain")
+						@GuidanceItem("purple", "Additional Section", "Extra records such as name-server addresses")
+					</div>
+				</section>
+				<div class="tip-box"><strong>Tip:</strong> Use "Recursive Resolver" to see the full resolution path, or query external servers like Cloudflare (1.1.1.1) to compare results.</div>
+			</aside>
+		</div>
+	</div>
+}
+
+templ ResolverGroup(heading string, options []ResolverOption) {
+	<div class="resolver-group" data-resolver-group>
+		<div class="resolver-group-heading">{ heading }</div>
+		for _, option := range options {
+			<button class="resolver-option" type="button" role="option" aria-selected={ fmt.Sprint(option.Value == "this-server") } data-resolver-option={ option.Value } data-resolver-label-value={ option.Label } data-search={ option.SearchText() }>
+				<span class="resolver-check">@Icon("check")</span>
+				<span class="resolver-option-copy">
+					<span class="resolver-option-label">{ option.Label }</span>
+					if option.Detail != "" {
+						<small>{ option.Detail }</small>
+					}
+				</span>
+			</button>
+		}
+	</div>
+}
+
+templ QuickQuery(label string, recordType string, icon string) {
+	<button class="quick-query" type="button" data-query-type={ recordType } hx-post="/ui/query" hx-include="#dns-query-form" hx-vals={ fmt.Sprintf("{\"type\":%q}", recordType) } hx-target="#dns-query-result" hx-swap="innerHTML">
+		@Icon(icon)<span>{ label }</span><code>{ recordType }</code>
+	</button>
+}
+
+templ GuidanceItem(color string, title string, description string) {
+	<div class="guidance-item"><i class={ color }></i><div><strong>{ title }</strong><p>{ description }</p></div></div>
+}
+
+templ DNSQueryEmpty() {
+	<section class="card dns-query-empty">
+		@Icon("search")
+		<h2>Ready to Query</h2>
+		<p>Enter a domain name above and click Resolve to look up DNS records. Use Quick Queries for common lookups.</p>
+	</section>
+}
+
+templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo string) {
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="color-scheme" content="light dark"/>
+			<title>{ ifThen(setup, "Set up Sable", "Sign in to Sable") }</title>
+			<script src="/assets/app.js"></script>
+			<link rel="stylesheet" href="/assets/app.css"/>
+		</head>
+		<body class="auth-body">
+			<main class="auth-card">
+				<div class="auth-logo" aria-hidden="true"><span>S</span></div>
+				if setup {
+					<h1>Sable</h1>
+					<p>Create your administrator account</p>
+				} else {
+					<h1>Sable</h1>
+					<p>Sign in to your Sable DNS server</p>
+				}
+				if errorMessage != "" {
+					<div class="auth-error">{ errorMessage }</div>
+				}
+				<form class="auth-form" method="post" action={ ifThen(setup, "/setup", "/login") }>
+					<input type="hidden" name="csrf_token" value={ csrfToken }/>
+					if !setup {
+						<input type="hidden" name="return_to" value={ returnTo }/>
+					}
+					<label><span>Username</span><input name="username" minlength="3" maxlength="64" autocomplete="username" required/></label>
+					<label><span>Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete={ ifThen(setup, "new-password", "current-password") } required/></label>
+					if setup {
+						<label><span>Confirm password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
+					}
+					<button type="submit">{ ifThen(setup, "Create administrator", "Sign in") }</button>
+				</form>
+			</main>
+		</body>
+	</html>
+}
+
+templ APITokenResult(token string, expires string, errorMessage string) {
+	if errorMessage != "" {
+		<div class="query-error"><strong>Token creation failed</strong><span>{ errorMessage }</span></div>
+	} else {
+		<div class="token-created">
+			<strong>Copy this token now</strong>
+			<div class="copyable-text token-secret"><span id="created-api-token">{ token }</span><button type="button" data-copy-target="created-api-token" aria-label="Copy API token" title="Copy API token">@CopyIcons()</button></div>
+			if expires == "" {
+				<span>Never expires. Sable stores only its SHA-256 hash.</span>
+			} else {
+				<span>Expires { expires }. Sable stores only its SHA-256 hash.</span>
+			}
+		</div>
+	}
+}
+
+func ifThen(condition bool, whenTrue, whenFalse string) string {
+	if condition {
+		return whenTrue
+	}
+	return whenFalse
+}
+
+func successfulQueries(view StatsView) uint64 {
+	failed := view.Failures + view.UpstreamErrors + view.Blocked
+	if failed >= view.Queries {
+		return 0
+	}
+	return view.Queries - failed
+}
+
+func percent(value, total uint64) string {
+	if total == 0 {
+		return "0.00%"
+	}
+	return fmt.Sprintf("%.2f%%", float64(value)*100/float64(total))
+}
+
+func displayUsername(username string) string {
+	if username == "" {
+		return "Sable"
+	}
+	return username
+}
+
+func accountDisplayName(view DashboardView) string {
+	if strings.TrimSpace(view.DisplayName) != "" {
+		return view.DisplayName
+	}
+	return displayUsername(view.Username)
+}
+
+func userInitial(username string) string {
+	username = displayUsername(username)
+	return string([]rune(username)[0])
+}
+
+func rcodeClass(rcode string) string {
+	if strings.EqualFold(rcode, "NOERROR") {
+		return "success"
+	}
+	if strings.EqualFold(rcode, "NXDOMAIN") {
+		return "warning"
+	}
+	return "error"
+}
+
+func rcodeDisplay(rcode string) string {
+	if strings.EqualFold(rcode, "NOERROR") {
+		return "NoError"
+	}
+	if strings.EqualFold(rcode, "NXDOMAIN") {
+		return "NXDomain"
+	}
+	return rcode
+}
+
+templ RecentQueryLog(entries []QueryLogEntryView) {
+	if len(entries) == 0 {
+		<div class="query-log-empty">No persisted queries yet.</div>
+	} else {
+		<div class="table-scroll">
+			<table class="query-log-table">
+				<thead>
+					<tr><th>Time</th><th>Name</th><th>Type</th><th>Result</th><th>Source</th><th>Client</th><th>Latency</th></tr>
+				</thead>
+				<tbody>
+					for _, entry := range entries {
+						<tr>
+							<td>{ entry.OccurredAt }</td>
+							<td class="query-name">{ entry.Name }</td>
+							<td>{ entry.RecordType }</td>
+							<td>{ entry.Status }</td>
+							<td><span class="source-pill">{ entry.Source }</span></td>
+							<td>{ entry.ClientIP }</td>
+							<td>{ entry.Duration }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ Stats(view StatsView) {
+	<section id="runtime-stats" class="stats-grid primary-stats">
+		@StatCard("Total Queries", formatNumber(view.Queries), "100%", "blue")
+		@StatCard("No Error", formatNumber(view.NoError), percent(view.NoError, view.Queries), "green")
+		@StatCard("Server Failure", formatNumber(view.ServerFailures), percent(view.ServerFailures, view.Queries), "red")
+		@StatCard("NX Domain", formatNumber(view.NXDomain), percent(view.NXDomain, view.Queries), "slate")
+		@StatCard("Refused", formatNumber(view.Refused), percent(view.Refused, view.Queries), "teal")
+		@StatCard("Authoritative", formatNumber(view.AuthoritativeAnswers), percent(view.AuthoritativeAnswers, view.Queries), "sky")
+		@StatCard("Recursive", formatNumber(view.Recursive), percent(view.Recursive, view.Queries), "emerald")
+		@StatCard("Cached", formatNumber(view.CacheHits), percent(view.CacheHits, view.Queries), "amber")
+		@StatCard("Blocked", formatNumber(view.Blocked), percent(view.Blocked, view.Queries), "orange")
+		@StatCard("Dropped", formatNumber(view.Dropped), percent(view.Dropped, view.Queries), "rose")
+		@StatCard("Clients", formatNumber(uint64(view.Clients)), "Recent sample", "purple")
+		@StatCard("Cache Hit Rate", view.CacheHitRatio, compactNumber(view.CacheHits) + " hits", "cyan")
+	</section>
+}
+
+templ QueryChart(view QueryChartView) {
+	<section class="card chart-card" id="query-statistics" hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML">
+		<div class="card-header chart-header">
+			<h2>Query Statistics</h2>
+			if view.ActiveRange == "custom" {
+				<div class="chart-live">Custom range</div>
+			} else {
+				<div class="chart-live"><span></span>Live</div>
+			}
+			<div class="range-tabs" role="group" aria-label="Query statistics time range">
+				@RangeButton("Hour", "hour", view.ActiveRange)
+				@RangeButton("Day", "day", view.ActiveRange)
+				@RangeButton("Week", "week", view.ActiveRange)
+				@RangeButton("Month", "month", view.ActiveRange)
+				@RangeButton("Year", "year", view.ActiveRange)
+				<button type="button" class={ ifThen(view.ActiveRange == "custom", "active", "") } aria-pressed={ fmt.Sprint(view.ActiveRange == "custom") } aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
+			</div>
+			<label class="range-select"><span class="sr-only">Query statistics time range</span><select name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
+				@RangeOption("Hour", "hour", view.ActiveRange)
+				@RangeOption("Day", "day", view.ActiveRange)
+				@RangeOption("Week", "week", view.ActiveRange)
+				@RangeOption("Month", "month", view.ActiveRange)
+				@RangeOption("Year", "year", view.ActiveRange)
+			</select></label>
+			<button class="range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
+		</div>
+		<div class="chart-range-popover" id="chart-custom-range" role="dialog" aria-label="Custom query range" data-chart-range-popover hidden>
+			<form class="chart-range-form" hx-get="/ui/stats/chart" hx-target="#query-statistics" hx-swap="outerHTML" data-chart-range-form>
+				<input type="hidden" name="range" value="custom"/>
+				<input type="hidden" name="start" value={ view.CustomStart } data-chart-range-start required/>
+				<input type="hidden" name="end" value={ view.CustomEnd } data-chart-range-end required/>
+				<div class="calendar-caption">
+					<button type="button" aria-label="Previous month" data-calendar-previous>@Icon("chevron-left")</button>
+					<div class="calendar-dropdowns">
+						<label><span class="sr-only">Month</span><select aria-label="Month" data-calendar-month>
+							<option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option><option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option><option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option><option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
+						</select></label>
+						<label><span class="sr-only">Year</span><select aria-label="Year" data-calendar-year></select></label>
+					</div>
+					<button type="button" aria-label="Next month" data-calendar-next>@Icon("chevron-right")</button>
+				</div>
+				<div class="calendar-weekdays" aria-hidden="true"><span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span></div>
+				<div class="calendar-grid" role="grid" aria-label="Choose date range" data-calendar-grid></div>
+				<div class="chart-range-times">
+					<label><span>From</span><input class="time-field" id="custom-range-start-time" type="time" step="60" data-chart-range-start-time required/></label>
+					<label><span>To</span><input class="time-field" id="custom-range-end-time" type="time" step="60" data-chart-range-end-time required/></label>
+				</div>
+				<p class="chart-range-error" data-chart-range-error hidden></p>
+				<button class="button chart-range-apply" type="submit" data-chart-range-apply>Apply</button>
+			</form>
+		</div>
+		<div class="chart-wrap" aria-label="Query activity chart">
+			<svg viewBox="0 0 1200 320" preserveAspectRatio="none" role="img">
+				<g class="chart-lines"><line x1="58" y1="24" x2="1190" y2="24"/><line x1="58" y1="92" x2="1190" y2="92"/><line x1="58" y1="160" x2="1190" y2="160"/><line x1="58" y1="228" x2="1190" y2="228"/><line x1="58" y1="296" x2="1190" y2="296"/></g>
+				<g class="chart-y-labels"><text x="46" y="29">{ compactNumber(view.Maximum) }</text><text x="46" y="97">{ compactNumber(view.Maximum * 3 / 4) }</text><text x="46" y="165">{ compactNumber(view.Maximum / 2) }</text><text x="46" y="233">{ compactNumber(view.Maximum / 4) }</text><text x="46" y="301">0</text></g>
+				if view.HasActivity {
+					<polyline class="chart-series total" points={ view.Total }/>
+					<polyline class="chart-series success" points={ view.Successful }/>
+					<polyline class="chart-series server-failure" points={ view.ServerFailure }/>
+					<polyline class="chart-series nx-domain" points={ view.NXDomain }/>
+					<polyline class="chart-series refused" points={ view.Refused }/>
+					<polyline class="chart-series recursive" points={ view.Recursive }/>
+					<polyline class="chart-series blocked" points={ view.Blocked }/>
+					<polyline class="chart-series cache" points={ view.CacheHits }/>
+				}
+			</svg>
+			if !view.HasActivity {
+				<div class="chart-empty">Waiting for query samples</div>
+			}
+			<div class="chart-axis"><span>{ view.StartLabel }</span><span>{ view.EndLabel }</span></div>
+		</div>
+		<div class="chart-legend"><span class="blue">total</span><span class="green">noError</span><span class="pink">serverFailure</span><span class="gray">nxDomain</span><span class="teal">refused</span><span class="lime">recursive</span><span class="yellow">cached</span><span class="orange">blocked</span></div>
+	</section>
+}
+
+templ RangeButton(label string, value string, active string) {
+	<button
+		type="button"
+		class={ ifThen(value == active, "active", "") }
+		aria-pressed={ fmt.Sprint(value == active) }
+		data-range={ value }
+		hx-get={ templ.SafeURL("/ui/stats/chart?range=" + value) }
+		hx-target="#query-statistics"
+		hx-swap="outerHTML"
+	>{ label }</button>
+}
+
+templ RangeOption(label string, value string, active string) {
+	if value == active {
+		<option value={ value } selected>{ label }</option>
+	} else {
+		<option value={ value }>{ label }</option>
+	}
+}
+
+templ StatCard(label string, value string, subValue string, color string) {
+	<article class={ "stat-card " + color }>
+		<strong>{ value }</strong>
+		<span>{ subValue }</span>
+		<div>{ label }</div>
+	</article>
+}
+
+templ SummaryCard(label string, value string) {
+	<article class="summary-card"><strong>{ value }</strong><span>{ label }</span></article>
+}
+
+templ OperationalMetricCard(icon, label, value, description, color string) {
+	<article class={ "operational-metric " + color }>
+		<div class="operational-metric-label"><span>@Icon(icon)</span><strong>{ label }</strong></div>
+		<b>{ value }</b>
+		if description != "" {
+			<p>{ description }</p>
+		}
+	</article>
+}
+
+templ NavItem(label string, href string, icon string, active bool, disabled bool) {
+	if disabled {
+		<span class="nav-item disabled">@Icon(icon)<span>{ label }</span></span>
+	} else {
+		<a class={ ifThen(active, "nav-item active", "nav-item") } href={ templ.SafeURL(href) }>@Icon(icon)<span>{ label }</span></a>
+	}
+}
+
+templ Icon(kind string) {
+	<svg class={ "nav-icon icon-" + kind } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			switch kind {
+			case "dashboard": <rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>
+			case "globe": <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>
+			case "database": <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>
+			case "shield-check": <path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/>
+			case "shield-x": <path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9.5 9.5 5 5m0-5-5 5"/>
+			case "shield": <path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/>
+			case "shield-off": <path d="M4.7 4.7 12 2l8 3v8c0 2.1-.6 3.8-1.6 5.2M9.1 20.8C6 19.2 4 16.8 4 13V5l.5-.2M2 2l20 20"/>
+			case "apps": <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+			case "tool": <path d="M10 15h4M12 12v6M18 6V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v2"/><rect width="20" height="14" x="2" y="6" rx="2"/>
+			case "logs": <path d="M4 4h12v16H4zM8 8h4M8 12h4M8 16h4"/><path d="M16 8h4v12h-4"/>
+			case "settings": <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/>
+			case "settings-2": <path d="M20 7h-9M14 17H5"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/>
+			case "server": <rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>
+			case "users": <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>
+			case "user": <path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>
+			case "cluster": <circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="m7 11 10-5M7 13l10 5"/>
+			case "info": <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+			case "lock": <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>
+			case "panel": <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>
+			case "moon": <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/>
+			case "sun": <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/>
+			case "chevrons": <path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>
+			case "chevron-left": <path d="m15 18-6-6 6-6"/>
+			case "chevron-right": <path d="m9 18 6-6-6-6"/>
+			case "chevron-up": <path d="m18 15-6-6-6 6"/>
+			case "chevrons-left": <path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>
+			case "chevrons-right": <path d="m13 17 5-5-5-5M6 17l5-5-5-5"/>
+			case "chevron-down": <path d="m6 9 6 6 6-6"/>
+			case "arrow-left": <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+			case "arrow-right": <path d="m12 5 7 7-7 7"/><path d="M5 12h14"/>
+			case "more-vertical": <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/>
+			case "menu": <path d="M4 6h16M4 12h16M4 18h16"/>
+			case "plus": <path d="M12 5v14M5 12h14"/>
+			case "list": <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+			case "sliders": <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>
+			case "filter": <path d="M22 3H2l8 9.5V19l4 2v-8.5z"/>
+			case "clock": <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+			case "zap": <path d="M13 2 3 14h9l-1 8 10-12h-9z"/>
+			case "ban": <circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>
+			case "external-link": <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+			case "play": <path d="m5 3 14 9-14 9z"/>
+			case "pause": <rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>
+			case "upload": <path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14a2 2 0 0 0 2-2v-3M3 15v3a2 2 0 0 0 2 2"/>
+			case "download": <path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14a2 2 0 0 0 2-2"/>
+			case "send": <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
+			case "search": <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+			case "check": <path d="m20 6-11 11-5-5"/>
+			case "x": <path d="M18 6 6 18M6 6l12 12"/>
+			case "refresh": <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>
+			case "folder": <path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+			case "trash": <path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/>
+			case "log-in": <path d="m10 17 5-5-5-5M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+			case "log-out": <path d="m14 8 4 4-4 4M18 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+			case "sparkles": <path d="m12 3-1.4 3.6a2 2 0 0 1-1.2 1.2L6 9l3.4 1.2a2 2 0 0 1 1.2 1.2L12 15l1.4-3.6a2 2 0 0 1 1.2-1.2L18 9l-3.4-1.2a2 2 0 0 1-1.2-1.2z"/><path d="m5 16-.7 1.8a1 1 0 0 1-.6.6L2 19l1.7.6a1 1 0 0 1 .6.6L5 22l.7-1.8a1 1 0 0 1 .6-.6L8 19l-1.7-.6a1 1 0 0 1-.6-.6zM19 2v4M17 4h4"/>
+			case "copy": <rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+			case "key": <circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3M18.5 4.5l3 3"/>
+			case "power": <path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>
+			case "check-circle": <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+			case "alert-triangle": <path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"/><path d="M12 9v4M12 17h.01"/>
+			case "x-circle": <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>
+			case "hard-drive": <line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/>
+			case "timer": <line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>
+			case "flag": <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/>
+			case "file-text": <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/><line x1="8" x2="16" y1="13" y2="13"/><line x1="8" x2="16" y1="17" y2="17"/>
+			case "mail": <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+			case "hash": <line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/>
+			case "line-chart": <path d="M3 3v18h18"/><path d="m7 16 4-5 4 3 5-7"/>
+		}
+	</svg>
+}
+
+templ QueryResult(view QueryView) {
+	if view.Success {
+		<section class="card emphasized dns-result-card">
+			<div class="dns-result-header">
+				<div>
+					<div class="result-status">@RCodeIcon(view.RCode)<span class={ "rcode " + rcodeClass(view.RCode) }>{ rcodeDisplay(view.RCode) }</span><span>{ view.RecordType } via { view.Server }</span></div>
+					<h2>{ view.Question }</h2>
+				</div>
+				<button class="button outline copy-response" type="button" data-copy-target="dns-query-json">@CopyIcons()<span data-copy-label>Copy JSON</span></button>
+			</div>
+			<pre id="dns-query-json" hidden>{ view.JSON }</pre>
+			<div class="result-content">
+				<div class="result-metadata">
+					@MetadataCard("blue", "globe", "Protocol", view.Protocol)
+					@MetadataCard("purple", "hard-drive", "Size", view.Size)
+					@MetadataCard("green", "timer", "Round Trip", view.Elapsed)
+					<div class="metadata-card amber"><div class="metadata-label">@Icon("flag")<span>Flags</span></div><div class="flag-list">
+						if len(view.Flags) == 0 {
+							<small>None</small>
+						}
+						for _, flag := range view.Flags {
+							<code>{ flag }</code>
+						}
+					</div></div>
+				</div>
+				if len(view.Answers) > 0 {
+					@RecordSection("Answer", "file-text", view.Answers)
+				}
+				if len(view.Authority) > 0 {
+					@RecordSection("Authority", "shield-check", view.Authority)
+				}
+				if len(view.Additional) > 0 {
+					@RecordSection("Additional", "globe", view.Additional)
+				}
+				if len(view.Answers) == 0 && len(view.Authority) == 0 && len(view.Additional) == 0 {
+					<div class="no-records">@Icon("search")<h3>No Records Found</h3><p>The query returned no answer, authority, or additional records.</p></div>
+				}
+				<details class="raw-response"><summary>Raw DNS response</summary><pre id="raw-dns-response">{ view.Response }</pre></details>
+			</div>
+		</section>
+	} else {
+		<section class="card query-failure"><div class="query-error"><strong>Query failed</strong><span>{ view.Error }</span></div></section>
+	}
+}
+
+templ RCodeIcon(rcode string) {
+	if strings.EqualFold(rcode, "NOERROR") {
+		<span class="rcode-icon success">@Icon("check-circle")</span>
+	} else if strings.EqualFold(rcode, "NXDOMAIN") {
+		<span class="rcode-icon warning">@Icon("alert-triangle")</span>
+	} else {
+		<span class="rcode-icon error">@Icon("x-circle")</span>
+	}
+}
+
+templ CopyIcons() {
+	<span class="copy-icon-default">@Icon("copy")</span><span class="copy-icon-success">@Icon("check")</span>
+}
+
+templ MetadataCard(color string, icon string, label string, value string) {
+	<div class={ "metadata-card " + color }><div class="metadata-label">@Icon(icon)<span>{ label }</span></div><strong>{ value }</strong></div>
+}
+
+templ CopyableText(id string, text string, kind string) {
+	<div class={ "copyable-text " + kind }><span id={ id }>{ text }</span><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button></div>
+}
+
+templ RecordSection(title string, icon string, records []RecordView) {
+	<section class="record-section">
+		<h3>@Icon(icon)<span class="record-section-title">{ title }</span><span>{ fmt.Sprint(len(records)) }</span></h3>
+		<div class="record-list">
+			for index, record := range records {
+				<div class="record-row">
+					<code class="record-type">{ record.Type }</code>
+					<div class="record-value">
+						@CopyableText(fmt.Sprintf("record-%s-%d-name", strings.ToLower(title), index), record.Name, "record-name")
+						if record.Data != "" {
+							@CopyableText(fmt.Sprintf("record-%s-%d-data", strings.ToLower(title), index), record.Data, "record-data")
+						}
+					</div>
+					<div class="record-ttl"><span>TTL</span><strong>{ fmt.Sprintf("%ds", record.TTL) }</strong></div>
+				</div>
+			}
+		</div>
+	</section>
+}
+
+templ ActionResult(message string, failed bool) {
+	if failed {
+		<span class="action-message failed">{ message }</span>
+	} else {
+		<span class="action-message">{ message }</span>
+	}
+}

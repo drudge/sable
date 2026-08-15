@@ -1,0 +1,216 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+type BlockingPageView struct {
+	Console DashboardView
+	Enabled bool
+	PausedUntil time.Time
+	CompiledDomains int
+	BlockedQueries uint64
+	Domains []string
+	AllowedDomains []string
+	Lists []BlockListSourceView
+	RemoteListCount int
+	UpdateHours int
+	LastUpdate time.Time
+	NextUpdate time.Time
+	Updating bool
+	ActiveTab string
+	Message string
+	Error string
+}
+
+type BlockListSourceView struct {
+	Name string
+	ConfiguredPath string
+	Path string
+	URL string
+	Format string
+	Lines int
+	Accepted int
+	Invalid int
+}
+
+type BlockListCatalogItem struct { Name, Description, URL, Category string }
+
+var blockListCatalog = []BlockListCatalogItem{
+	{"OISD Big", "Comprehensive list blocking ads, trackers, and malware", "https://big.oisd.nl/", "popular"},
+	{"OISD Small", "Lightweight version with fewer false positives", "https://small.oisd.nl/", "popular"},
+	{"Steven Black Unified", "Unified hosts file with adware and malware extensions", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", "popular"},
+	{"Hagezi Pro", "Multi-source blocklist with strong protection", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt", "popular"},
+	{"AdGuard DNS Filter", "Official AdGuard DNS filter list", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", "ads"},
+	{"AdAway Default", "Default blocklist from the AdAway project", "https://adaway.org/hosts.txt", "ads"},
+	{"EasyList", "Primary advertising filter list", "https://easylist.to/easylist/easylist.txt", "ads"},
+	{"Peter Lowe Ad/Tracking", "Known advertising and tracking servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0", "ads"},
+	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch", "https://urlhaus.abuse.ch/downloads/hostfile/", "malware"},
+	{"Phishing Army", "Community phishing domain blocklist", "https://phishing.army/download/phishing_army_blocklist.txt", "malware"},
+	{"EasyPrivacy", "Tracking and privacy protection", "https://easylist.to/easylist/easyprivacy.txt", "privacy"},
+	{"Fanboy Annoyances", "Banners, pop-ups, and social widgets", "https://easylist.to/easylist/fanboy-annoyance.txt", "privacy"},
+	{"Steven Black + Social", "Base list with social media sites blocked", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts", "social"},
+	{"Fanboy Social", "Social media tracking and widgets", "https://easylist.to/easylist/fanboy-social.txt", "social"},
+}
+
+templ BlockingPage(view BlockingPageView) {
+	@AppDocument(view.Console, "DNS Blocking", blockingNavigationPage(view), BlockingContent(view))
+}
+
+templ BlockingContent(view BlockingPageView) {
+	<div class="blocking-page page-stack" id="blocking-content" data-blocking-root>
+		<header class="page-heading"><h1>DNS Blocking</h1><p>Block unwanted domains using block lists and custom rules</p></header>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		<div class="blocking-layout isotope-blocking-layout">
+			<div class="blocking-main-column">
+				@BlockingStatus(view)
+				<section class="blocking-workspace">
+					<div class="blocking-tabs" role="tablist" aria-label="Blocking configuration">
+						@BlockingTab("lists", "Block Lists", "list", view.ActiveTab)
+						@BlockingTab("domains", "Blocked", "shield-x", view.ActiveTab)
+						@BlockingTab("allowed", "Allowed", "shield-check", view.ActiveTab)
+					</div>
+					<div class="blocking-panel isotope-list-panel" role="tabpanel" data-blocking-panel="lists" hidden?={ view.ActiveTab != "lists" }>
+						<div class="blocking-list-toolbar">
+							<button class="button" type="button" data-dialog-open="add-block-list-dialog" data-replica-primary-action>@Icon("plus")<span>Add Block List</span></button>
+						</div>
+						<div class="blocking-source-list isotope-source-list">
+							if len(view.Lists) == 0 {
+								<div class="blocking-empty">@Icon("list")<h3>No block lists configured</h3><p>Add a curated list or custom URL to start blocking domains automatically.</p></div>
+							}
+							for _, list := range view.Lists {
+								@BlockListRow(list)
+							}
+						</div>
+					</div>
+					@DomainPanel("domains", view.Domains, view.ActiveTab, false)
+					@DomainPanel("allowed", view.AllowedDomains, view.ActiveTab, true)
+				</section>
+			</div>
+			<aside class="blocking-aside isotope-blocking-aside">
+				<section class="card blocking-guidance"><h2>How DNS Blocking Works</h2>@BlockingGuide("red", "Block Lists", "Subscribe to curated lists that automatically block ads, trackers, and malware")@BlockingGuide("red", "Custom Blocked Domains", "Manually add specific domains you want to block")@BlockingGuide("green", "Allowed Domains", "Override blocks for domains you need to access")</section>
+				<section class="card blocking-guidance popular-lists"><h2>Popular Block Lists</h2>@BlockingGuide("green", "Steven Black's Hosts", "Ads, malware, fakenews")@BlockingGuide("green", "OISD", "Comprehensive blocking")@BlockingGuide("green", "AdGuard DNS Filter", "Ads and tracking")</section>
+				<div class="tip-box"><strong>Tip:</strong> Block lists update automatically every { fmt.Sprint(view.UpdateHours) } hours. Change this in <a href="/settings?tab=blocking">Settings → Blocking</a>.</div>
+			</aside>
+		</div>
+		@AddBlockListDialog(view.Lists)
+		@DomainDialog("add-blocked-domain-dialog", "Add Blocked Domain", "/ui/blocking/domains/add", "Block Domain", "Enter a domain to block. Use a wildcard such as *.example.com to represent subdomains.")
+		@DomainDialog("add-allowed-domain-dialog", "Add Allowed Domain", "/ui/blocking/allowed/add", "Allow Domain", "Exact entries allow only that name. Use *.example.com to allow its subdomains.")
+		@FlushDomainDialog("flush-blocked-dialog", "Clear Custom Blocked Domains?", "/ui/blocking/domains/flush", len(view.Domains))
+		@FlushDomainDialog("flush-allowed-dialog", "Clear Allowed Domains?", "/ui/blocking/allowed/flush", len(view.AllowedDomains))
+	</div>
+}
+
+templ BlockingStatus(view BlockingPageView) {
+	<section class="card blocking-status-card emphasized">
+		<header><div><h2>@Icon(ifThen(view.Enabled && view.PausedUntil.IsZero(), "shield", "shield-off"))<span>Blocking Status</span></h2><p>{ blockingStatusDescription(view) }</p></div><div class="blocking-status-actions"><a class="icon-button" href="/settings?tab=blocking" aria-label="Blocking settings" title="Blocking settings">@Icon("settings")</a><button class="button outline" hx-post="/ui/blocking/toggle" hx-target="#blocking-content" hx-swap="outerHTML">@Icon(ifThen(view.Enabled, "shield-off", "shield"))<span>{ ifThen(view.Enabled, "Disable", "Enable") }</span></button></div></header>
+		<div class="operational-metric-grid blocking-status-stats">
+			@OperationalMetricCard("ban", "Blocked (Last Hour)", formatNumber(view.BlockedQueries), "Queries stopped by blocking policy", "red")
+			@OperationalMetricCard("list", "Domains in Block Lists", formatNumber(uint64(view.CompiledDomains)), "Unique compiled blocking entries", "blue")
+			@OperationalMetricCard("zap", "Active Block Lists", formatNumber(uint64(len(view.Lists))), "Enabled block list sources", "purple")
+		</div>
+		<footer class="blocking-quick-actions">
+			if !view.PausedUntil.IsZero() {
+				<button class="button outline" hx-post="/ui/blocking/resume" hx-target="#blocking-content" hx-swap="outerHTML">@Icon("play")<span>Resume Blocking</span></button>
+			} else {
+				<details class="pause-menu"><summary class="button outline" data-replica-primary-action>@Icon("clock")<span>Pause Blocking</span></summary><div><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"5"}' hx-target="#blocking-content" hx-swap="outerHTML">5 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"15"}' hx-target="#blocking-content" hx-swap="outerHTML">15 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"30"}' hx-target="#blocking-content" hx-swap="outerHTML">30 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"60"}' hx-target="#blocking-content" hx-swap="outerHTML">1 hour</button></div></details>
+			}
+			<button class={ ifThen(view.Updating, "button outline blocking-update-button is-updating", "button outline blocking-update-button") } hx-post="/ui/blocking/lists/update" hx-target="#blocking-content" hx-swap="outerHTML" hx-disabled-elt="this" disabled?={ view.RemoteListCount == 0 || view.Updating } aria-label={ ifThen(view.Updating, "Updating block lists", "Update block lists") }>@Icon("refresh")<span class="update-label">{ ifThen(view.Updating, "Updating…", "Update Block Lists") }</span></button>
+			if !view.NextUpdate.IsZero() && view.RemoteListCount > 0 {
+				<small>Next update: { FormatShortDateTime(view.NextUpdate, view.Console.TimeFormat, false) }</small>
+			}
+		</footer>
+	</section>
+}
+
+templ BlockListRow(list BlockListSourceView) {
+	<article class="blocking-source-row isotope-source-row">
+		<span class="blocking-source-icon">@Icon("list")</span>
+		<div><strong>{ list.Name }</strong><code title={ ifThen(list.URL != "", list.URL, list.ConfiguredPath) }>{ blockListLocation(list) }</code><small>{ strings.ToUpper(list.Format) } · { formatNumber(uint64(list.Accepted)) } domains · { formatNumber(uint64(list.Invalid)) } invalid</small></div>
+		if list.URL != "" {
+			<a class="icon-button" href={ templ.SafeURL(list.URL) } target="_blank" rel="noreferrer" aria-label={ "Open " + list.Name }>@Icon("external-link")</a>
+		}
+		<button class="icon-button danger" type="button" hx-post="/ui/blocking/lists/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", list.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + list.Name + "?" } aria-label={ "Remove " + list.Name }>@Icon("trash")</button>
+	</article>
+}
+
+templ DomainPanel(value string, domains []string, active string, allowed bool) {
+	<div class="blocking-panel isotope-domain-panel" role="tabpanel" data-blocking-panel={ value } hidden?={ active != value }>
+		<div class="domain-list-toolbar">
+			<button class="button" type="button" data-dialog-open={ ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog") } data-replica-primary-action>@Icon("plus")<span>Add Domain</span></button>
+			<form class="domain-import-form" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
+			if len(domains) > 0 {
+				<a class="button outline" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") } data-replica-primary-action>@Icon("download")<span>Export</span></a>
+			} else {
+				<span class="button outline disabled" aria-disabled="true">@Icon("download")<span>Export</span></span>
+			}
+			<button class="button destructive" type="button" data-dialog-open={ ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog") } data-replica-primary-action disabled?={ len(domains) == 0 }>@Icon("trash")<span>Clear All</span></button>
+		</div>
+		<label class="blocking-search">@Icon("search")<span class="sr-only">Search { domainPolicyKind(allowed) } domains</span><input type="search" placeholder={ "Search " + domainPolicyKind(allowed) + " domains..." } autocomplete="off" data-domain-search={ value }/></label>
+		<div class="blocked-domain-list">
+			if len(domains) == 0 {
+				<div class="blocking-empty domain-list-empty"><p>No { domainPolicyKind(allowed) } domains yet. Add your first domain to get started.</p></div>
+			}
+			for _, domain := range domains {
+				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
+			}
+			<div class="blocking-filter-empty" data-domain-empty={ value } hidden>No domains match your search.</div>
+		</div>
+		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { pluralizeDomain(len(domains)) } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
+	</div>
+}
+
+templ BlockingTab(value, label, icon, active string) { <button type="button" role="tab" class={ ifThen(value == active, "active", "") } aria-selected={ fmt.Sprint(value == active) } data-blocking-tab={ value }>@Icon(icon)<span>{ label }</span></button> }
+
+templ BlockingGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
+
+templ AddBlockListDialog(existing []BlockListSourceView) {
+	<dialog class="custom-server-dialog blocking-dialog catalog-dialog" id="add-block-list-dialog" aria-labelledby="add-block-list-title">
+		<div class="dialog-header"><h2 id="add-block-list-title">Add Block List</h2><p>Choose from popular block lists or enter a custom URL</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="catalog-tabs" role="tablist">
+			for _, category := range []string{"popular", "ads", "malware", "privacy", "social", "custom"} {
+				<button type="button" class={ ifThen(category == "popular", "active", "") } data-catalog-tab={ category }>{ strings.ToUpper(category[:1]) + category[1:] }</button>
+			}
+		</div>
+		<div class="catalog-scroll">
+			for _, category := range []string{"popular", "ads", "malware", "privacy", "social"} {
+				<div data-catalog-panel={ category } hidden?={ category != "popular" }>
+					for _, item := range blockListCatalog {
+						if item.Category == category {
+							@CatalogRow(item, blockListAdded(existing, item.URL))
+						}
+					}
+				</div>
+			}
+			<div class="catalog-custom" data-catalog-panel="custom" hidden><form hx-post="/ui/blocking/lists/add" hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Block List URL</span><div><input type="url" name="url" placeholder="https://example.com/blocklist.txt" required/><button class="button" type="submit">Add</button></div></label><input type="hidden" name="format" value="auto"/></form><div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div></div>
+		</div>
+	</dialog>
+}
+
+templ CatalogRow(item BlockListCatalogItem, added bool) {
+	<article class="catalog-row"><div><strong>{ item.Name }</strong>
+		if added {
+			<span>@Icon("check") Added</span>
+		}
+		<p>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(item.URL) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
+		if added {
+			<button class="button outline" type="button" disabled>@Icon("check")</button>
+		} else {
+			<button class="button" hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML">@Icon("plus")<span>Add</span></button>
+		}
+	</article>
+}
+
+templ DomainDialog(id, title, endpoint, action, description string) { <dialog class="custom-server-dialog blocking-dialog" id={ id }><div class="dialog-header"><h2>{ title }</h2><p>{ description }</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form class="blocking-dialog-form" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Domain</span><input name="domain" placeholder="telemetry.example" autocomplete="off" required/></label><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">{ action }</button></footer></form></dialog> }
+
+templ FlushDomainDialog(id, title, endpoint string, count int) { <dialog class="custom-server-dialog blocking-dialog" id={ id }><div class="dialog-header"><h2>{ title }</h2><p>This removes all { formatNumber(uint64(count)) } custom entries. Block-list subscriptions are not affected.</p></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="button" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML">Clear Domains</button></footer></dialog> }
+
+func blockListAdded(existing []BlockListSourceView, url string) bool { for _, list := range existing { if list.URL == url { return true } }; return false }
+func blockListLocation(list BlockListSourceView) string { if list.URL != "" { parsed := strings.TrimPrefix(strings.TrimPrefix(list.URL, "https://"), "http://"); return strings.TrimSuffix(parsed, "/") }; return ifThen(list.Path != "", list.Path, list.ConfiguredPath) }
+func blockingStatusDescription(view BlockingPageView) string { if !view.Enabled { return "DNS blocking is currently disabled" }; if !view.PausedUntil.IsZero() { return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeFormat, false) }; return "DNS blocking is active and protecting your network" }
+func pluralizeDomain(count int) string { if count == 1 { return "domain" }; return "domains" }
+func domainPolicyKind(allowed bool) string { if allowed { return "allowed" }; return "blocked" }
+func blockingNavigationPage(view BlockingPageView) string { if view.ActiveTab == "allowed" { return "allowed" }; return "blocked" }

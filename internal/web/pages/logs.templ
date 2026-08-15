@@ -1,0 +1,190 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
+type LogsPageView struct {
+	Console   DashboardView
+	ActiveTab string
+	Runtime   RuntimeLogsView
+	Queries   QueryLogsView
+}
+
+type RuntimeLogsView struct {
+	Entries  []RuntimeLogEntryView
+	Count    int
+	Search   string
+	Level    string
+	Live     bool
+	CopyText string
+	Error    string
+}
+
+type RuntimeLogEntryView struct {
+	OccurredAt string
+	Level      string
+	Message    string
+	Attributes string
+}
+
+type QueryLogsView struct {
+	Entries      []QueryLogEntryView
+	Page         int
+	PageSize     int
+	TotalEntries int
+	TotalPages   int
+	ClientIP     string
+	Name         string
+	RecordType   string
+	ResponseCode string
+	Source       string
+	Protocol     string
+	Live         bool
+	FiltersOpen  bool
+	CanBlocking  bool
+	CopyText     string
+	FirstURL     string
+	PreviousURL  string
+	NextURL      string
+	LastURL      string
+	ExportURL    string
+	Error        string
+}
+
+templ LogsPage(view LogsPageView) {
+	@AppDocument(view.Console, "Logs", "logs", LogsContent(view))
+}
+
+templ LogsContent(view LogsPageView) {
+	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab">
+		<header class="logs-heading"><div class="page-heading"><h1>Logs</h1><p>View server logs and DNS query history</p></div><a class="icon-button" href="/settings?tab=logging" aria-label="Logging settings" title="Logging settings">@Icon("settings")</a></header>
+		<div class="isotope-tab-list logs-tab-list" role="tablist" aria-label="Log sources">
+			<button class={ ifThen(view.ActiveTab == "server", "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab="server" aria-selected={ fmt.Sprint(view.ActiveTab == "server") }>Server Logs</button>
+			<button class={ ifThen(view.ActiveTab == "queries", "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab="queries" aria-selected={ fmt.Sprint(view.ActiveTab == "queries") }>Query Logs</button>
+		</div>
+		<div class="logs-tab-panel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
+		<div class="logs-tab-panel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
+	</div>
+}
+
+templ RuntimeLogsPanel(view RuntimeLogsView) {
+	<section class="card logs-card emphasized" id="runtime-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
+		<header class="logs-toolbar">
+			<div><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-count">{ fmt.Sprintf("%d entries", view.Count) }</span></div>
+			<div class="logs-toolbar-actions">
+				<button class={ ifThen(view.Live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(view.Live) }>@Icon(ifThen(view.Live, "pause", "play"))<span>{ ifThen(view.Live, "Pause", "Live") }</span></button>
+				<button class="button outline" type="button" data-copy-target="runtime-log-copy">@Icon("copy")<span data-copy-label>Copy</span></button>
+				<a class="button outline" href={ templ.SafeURL(runtimeExportURL(view)) }>@Icon("download")<span>Export</span></a>
+			</div>
+		</header>
+		<form class="logs-filter-bar" hx-get="/ui/logs/runtime" hx-target="#runtime-logs-panel" hx-swap="outerHTML">
+			<div class="search-field">@Icon("search")<input name="search" value={ view.Search } placeholder="Search server logs..." aria-label="Search server logs"/></div>
+			<select name="level" aria-label="Log level"><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select>
+			<input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/>
+			<button class="button outline" type="submit">@Icon("search")<span>Search</span></button>
+		</form>
+		<textarea class="sr-only" id="runtime-log-copy" readonly>{ view.CopyText }</textarea>
+		if view.Error != "" {
+			<div class="logs-empty error">{ view.Error }</div>
+		} else if len(view.Entries) == 0 {
+			<div class="logs-empty">No runtime log entries match these filters.</div>
+		} else {
+			<div class="runtime-log-viewer" role="log" aria-live="polite">
+				for _, entry := range view.Entries {
+					<div class={ "runtime-log-line level-" + entry.Level }><time>{ entry.OccurredAt }</time><span class="runtime-log-level">{ strings.ToUpper(entry.Level) }</span><span class="runtime-log-message">{ entry.Message }</span>if entry.Attributes != "" {
+						<span class="runtime-log-attributes">{ entry.Attributes }</span>
+					}</div>
+				}
+			</div>
+		}
+	</section>
+}
+
+templ QueryLogsPanel(view QueryLogsView) {
+	<section class="card logs-card emphasized" id="query-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
+		<header class="logs-toolbar query-logs-toolbar">
+			<div><h2>@Icon("logs")<span>DNS Query Log</span></h2><span class="query-log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
+			<div class="logs-toolbar-actions">
+				<button class={ ifThen(view.Live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(view.Live) }>@Icon(ifThen(view.Live, "pause", "play"))<span>{ ifThen(view.Live, "Pause", "Live") }</span></button>
+				<button class={ ifThen(view.FiltersOpen, "button outline active", "button outline") } type="button" data-query-filters-toggle aria-expanded={ fmt.Sprint(view.FiltersOpen) }>@Icon("filter")<span>Filters</span></button>
+			</div>
+		</header>
+		<div class="query-log-filters isotope-query-filters" data-query-filters hidden?={ !view.FiltersOpen }>
+			<form hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML">
+				<div class="query-filter-grid">
+					<label><span>Client IP</span><input name="client_ip" value={ view.ClientIP } placeholder="e.g. 10.0.7.168"/></label>
+					<label><span>Domain</span><input name="name" value={ view.Name } placeholder="e.g. example.com"/></label>
+					<label><span>Query Type</span><input name="record_type" value={ view.RecordType } placeholder="e.g. A, AAAA"/></label>
+					<label><span>Response Type</span><select name="source">@LogOption("", "All Types", view.Source)@LogOption("authoritative", "Authoritative", view.Source)@LogOption("upstream", "Recursive", view.Source)@LogOption("cache", "Cached", view.Source)@LogOption("blocked", "Blocked", view.Source)@LogOption("local", "Local", view.Source)@LogOption("error", "Error", view.Source)</select></label>
+					<label><span>Protocol</span><select name="protocol">@LogOption("", "All Protocols", view.Protocol)@LogOption("UDP", "UDP", view.Protocol)@LogOption("TCP", "TCP", view.Protocol)@LogOption("TLS", "TLS", view.Protocol)@LogOption("HTTPS", "HTTPS", view.Protocol)@LogOption("QUIC", "QUIC", view.Protocol)</select></label>
+					<label><span>RCODE</span><input name="response_code" value={ view.ResponseCode } placeholder="e.g. NoError"/></label>
+				</div>
+				<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/><input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/><input type="hidden" name="filters" value="1"/>
+				<div class="query-filter-actions"><button class="button" type="submit">@Icon("search")<span>Search</span></button>if queryFilterCount(view) > 0 {
+					<a class="button outline" href="/logs?tab=queries">@Icon("refresh")<span>Clear</span></a>
+				}</div>
+			</form>
+		</div>
+		<div class="query-result-search"><div class="search-field">@Icon("search")<input placeholder="Search in results..." data-query-result-search aria-label="Search in results"/></div><div class="query-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
+		<textarea class="sr-only" id="query-log-copy" readonly>{ view.CopyText }</textarea>
+		if view.Error != "" {
+			<div class="logs-empty error">{ view.Error }</div>
+		} else if len(view.Entries) == 0 {
+			<div class="logs-empty">No DNS queries match these filters.</div>
+		} else {
+			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th>Timestamp</th><th>Client IP</th><th>Domain</th><th>Type</th><th>Response</th><th>Status</th><th>Protocol</th><th>Answer</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+				for _, entry := range view.Entries {
+					@QueryLogTableRow(entry, view.CanBlocking)
+				}
+			</tbody></table></div>
+		}
+		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
+	</section>
+}
+
+templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
+	<tr data-query-result-row>
+		<td><time>{ entry.OccurredAt }</time></td><td><code>{ entry.ClientIP }</code></td><td class="query-name" title={ entry.Name }>{ entry.Name }</td><td><span class="pill query-type-pill">{ entry.RecordType }</span></td><td><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
+		<td class="query-answers">
+			if hasAnswers(entry.Answers) {
+				<div>
+					for _, answer := range entry.Answers {
+						if answer != "" {
+							<span title={ answer }>{ answer }</span>
+						}
+					}
+				</div>
+			} else {
+				<span class="muted-cell">—</span>
+			}
+		</td>
+		<td class="query-row-actions">
+			if canBlocking && entry.Name != "" {
+				if entry.Source != "blocked" {
+					@QueryPolicyAction(entry.Name, "block", "shield-x", "Block "+entry.Name)
+				}
+				@QueryPolicyAction(entry.Name, "allow", "shield-check", "Allow "+entry.Name)
+			}
+		</td>
+	</tr>
+}
+
+templ QueryPolicyAction(domain, action, icon, label string) {
+	<form hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ domain }/><input type="hidden" name="action" value={ action }/><button class={ "query-policy-action " + action } type="submit" aria-label={ label } title={ label }>@Icon(icon)</button></form>
+}
+
+templ LogOption(value, label, selected string) { <option value={ value } selected?={ strings.EqualFold(selected, value) }>{ label }</option> }
+
+func queryFiltersActive(view QueryLogsView) bool { return queryFilterCount(view) > 0 }
+func queryFilterCount(view QueryLogsView) int { count := 0; for _, value := range []string{view.ClientIP, view.Name, view.RecordType, view.ResponseCode, view.Source, view.Protocol} { if value != "" { count++ } }; return count }
+func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%d–%d of %d", first, last, view.TotalEntries) }
+func logSourceLabel(source string) string { switch source { case "cache": return "Cached"; case "upstream": return "Recursive"; case "authoritative": return "Authoritative"; case "local": return "Local"; case "blocked": return "Blocked"; case "error": return "Error"; default: return source } }
+func runtimePanelURL(view RuntimeLogsView) string { values := make([]string, 0, 3); if view.Search != "" { values = append(values, "search="+urlQueryEscape(view.Search)) }; if view.Level != "" { values = append(values, "level="+urlQueryEscape(view.Level)) }; if view.Live { values = append(values, "live=1") }; return "/ui/logs/runtime?"+strings.Join(values, "&") }
+func runtimeExportURL(view RuntimeLogsView) string { return strings.Replace(runtimePanelURL(view), "/ui/logs/runtime", "/api/v1/logs/runtime/export", 1) }
+func queryPanelLiveURL(view QueryLogsView) string { values := []string{"page=1", "page_size="+fmt.Sprint(view.PageSize), "live=1"}; for key, value := range map[string]string{"client_ip":view.ClientIP,"name":view.Name,"record_type":view.RecordType,"response_code":view.ResponseCode,"source":view.Source,"protocol":view.Protocol} { if value != "" { values = append(values, key+"="+urlQueryEscape(value)) } }; if view.FiltersOpen { values = append(values, "filters=1") }; return "/ui/logs/queries?"+strings.Join(values, "&") }
+func urlQueryEscape(value string) string { return url.QueryEscape(value) }
+func hasAnswers(answers []string) bool { for _, answer := range answers { if answer != "" { return true } }; return false }
+func formatCount(value int) string { if value < 1_000 { return fmt.Sprint(value) }; whole := fmt.Sprintf("%d", value); for index := len(whole)-3; index > 0; index -= 3 { whole = whole[:index]+","+whole[index:] }; return whole }

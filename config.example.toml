@@ -1,0 +1,123 @@
+[server]
+http_listen = "127.0.0.1:5380"
+dns_listen = ["127.0.0.1:8053"]
+shutdown_timeout = "15s"
+
+[database]
+driver = "sqlite"
+dsn = "data/sable.db"
+
+[resolver]
+# "forward" uses the upstreams below. "recursive" resolves directly from the
+# DNS root while still honoring conditional routes and forwarder zones.
+mode = "forward"
+forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+# root_hints = ["198.41.0.4:53", "170.247.170.2:53"]
+timeout = "2s"
+cache_size = 65536
+cache_minimum_ttl = 10
+cache_maximum_ttl = 604800
+cache_negative_ttl = 300
+cache_failure_ttl = 10
+save_cache = false
+serve_stale = false
+cache_stale_ttl = 259200
+cache_stale_answer_ttl = 30
+cache_stale_reset_ttl = 30
+cache_stale_max_wait = "1800ms"
+cache_prefetch_minimum_ttl = 2
+cache_prefetch_trigger_ttl = 9
+cache_prefetch_sample_interval = "5m"
+cache_prefetch_hits_per_hour = 30
+dnssec_validation = true
+dnssec_trust_anchor_updates = true
+# Empty trust anchors use Sable's bundled IANA root KSK set. Custom anchors
+# accept an owner followed by DS or DNSKEY RDATA.
+# dnssec_trust_anchors = [". DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"]
+# Negative trust anchors are explicit local exceptions for broken private zones.
+# dnssec_negative_trust_anchors = ["legacy.corp.example"]
+
+# [[resolver.routes]]
+# domain = "internal.example"
+# forwarders = ["192.0.2.53:53"]
+
+# [[resolver.hosts]]
+# name = "router.home.arpa"
+# addresses = ["192.168.1.1", "fd00::1"]
+# ttl = 300
+
+# Authoritative zones and records are managed through the Sable console or zone API.
+# They are stored transactionally in the configured SQLite or PostgreSQL database.
+# Zone files are used only for import and export. TSIG secrets remain node configuration.
+# [[tsig_keys]]
+# name = "transfer-example"
+# algorithm = "hmac-sha256"
+# secret = "BASE64_ENCODED_SECRET"
+
+[blocking]
+enabled = true
+domains = ["example.invalid"]
+allowed_domains = []
+update_interval = "24h"
+response_type = "nxdomain"
+response_ttl = 30
+custom_addresses = []
+bypass_clients = []
+allow_txt_report = true
+
+# [[blocking.lists]]
+# name = "local"
+# path = "lists/block.txt"
+# format = "auto"
+
+# Remote subscriptions are downloaded into Sable's data directory and updated
+# automatically. The path is optional for remote lists.
+# [[blocking.lists]]
+# name = "OISD Big"
+# url = "https://big.oisd.nl/"
+# format = "auto"
+
+[query_log]
+enabled = true
+buffer_size = 8192
+batch_size = 256
+flush_interval = "250ms"
+retention = "168h"
+
+[encrypted_dns]
+dot_listen = []
+doh_listen = []
+certificate_mode = "manual"
+certificate_file = ""
+private_key_file = ""
+minimum_tls_version = "1.3"
+
+# For managed certificates, switch certificate_mode to "acme" and configure
+# provider credentials in Settings → Protocols. Credentials are encrypted in
+# the secret vault and are never written here.
+[encrypted_dns.acme]
+email = ""
+domains = []
+directory_url = "https://acme-v02.api.letsencrypt.org/directory"
+dns_provider = ""
+dns_zone = ""
+storage_dir = "data/tls/acme"
+renew_before = "720h"
+
+[security]
+enabled = true
+secure_cookies = false
+session_ttl = "12h"
+api_token_ttl = "2160h"
+secret_key_file = "data/sable.key"
+
+# Node-local clustering identity. Membership and synchronized state are stored
+# in data_dir and are never embedded in this TOML file.
+[cluster]
+data_dir = "data/cluster"
+node_name = ""
+advertise_url = ""
+
+[config]
+watch = true
+debounce = "250ms"

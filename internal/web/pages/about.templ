@@ -1,0 +1,88 @@
+package pages
+
+type AboutPageView struct {
+	Console      DashboardView
+	Commit       string
+	BuiltAt      string
+	GoVersion    string
+	ScrapeConfig string
+}
+
+templ AboutPage(view AboutPageView) {
+	@AppDocument(view.Console, "About", "about", AboutContent(view))
+}
+
+templ AboutContent(view AboutPageView) {
+	<div class="about-page page-stack">
+		<header class="about-hero">
+			@SableMark("about-brand-mark")
+			<h1>Sable</h1>
+			<p>A modern, high-performance DNS platform built in Go</p>
+			<div class="about-runtime-meta">
+				<span>Sable v{ view.Console.Version }</span>
+				<span class="about-meta-divider">|</span>
+				<span>{ view.Console.DNSListeners }</span>
+				<span class="about-meta-divider">|</span>
+				<span>Uptime: { view.Console.Stats.Uptime }</span>
+			</div>
+		</header>
+
+		<section class="card about-card">
+			<header><h2>About</h2></header>
+			<div class="about-card-content">
+				<p>Sable is a modern authoritative and recursive DNS server built for speed, resilience, and straightforward operation. The DNS server, client, administrative API, and reactive web console ship together as one executable.</p>
+				<p>Its interface is built directly from Isotope's focused product language, while its Go-native core is designed for high-throughput DNS workloads.</p>
+			</div>
+		</section>
+
+		<section class="card about-card">
+			<header><h2>Sable DNS Server</h2></header>
+			<div class="about-card-content">
+				<p>An MIT-licensed DNS platform with authoritative zones, recursive resolution, DNSSEC, encrypted DNS, blocking, conditional forwarding, persistent query logs, and a built-in administrative console.</p>
+				<div class="about-links">
+					<a href="https://github.com/drudge/sable" target="_blank" rel="noopener noreferrer"><span>GitHub</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable#readme" target="_blank" rel="noopener noreferrer"><span>Documentation</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable/issues" target="_blank" rel="noopener noreferrer"><span>Issues</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable/discussions" target="_blank" rel="noopener noreferrer"><span>Community</span>@Icon("external-link")</a>
+				</div>
+				<div class="about-version-row">
+					<div class="about-version-copy">
+						<div><span>Installed version</span><strong>v{ view.Console.Version }</strong><span class="about-version-status">@Icon("check-circle")<span>Installed</span></span></div>
+						<small>Go { view.GoVersion } · commit { view.Commit } · built { view.BuiltAt }</small>
+					</div>
+					<a class="button outline compact" href="https://github.com/drudge/sable/releases/latest" target="_blank" rel="noopener noreferrer">@Icon("refresh")<span>Check for updates</span></a>
+				</div>
+			</div>
+		</section>
+
+		<section class="card about-card">
+			<header><h2 class="about-card-title">@Icon("line-chart")<span>Prometheus Metrics</span></h2></header>
+			<div class="about-card-content">
+				<p>Sable exposes lifetime query and runtime metrics in Prometheus text format. Create an API token in <a class="inline-link" href="/administration?tab=tokens">Administration</a> using a group with <code>metrics.read</code>, then add this scrape job to your Prometheus configuration:</p>
+				<div class="about-code-block">
+					<pre id="prometheus-scrape-config">{ view.ScrapeConfig }</pre>
+					<button class="about-copy-button" type="button" data-copy-target="prometheus-scrape-config" aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button>
+				</div>
+				if view.Console.CanMetrics {
+					<div class="about-metrics-preview">
+						<button class="button outline compact" type="button" hx-get="/metrics" hx-target="#metrics-preview" hx-swap="innerHTML" hx-disabled-elt="this">Preview metrics</button>
+						<pre id="metrics-preview" hidden></pre>
+					</div>
+				}
+			</div>
+		</section>
+
+		<section class="card about-card">
+			<header><h2>Support</h2></header>
+			<div class="about-card-content">
+				<p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p>
+				<div class="about-links">
+					<a href="https://github.com/drudge/sable" target="_blank" rel="noopener noreferrer"><span>Sable on GitHub</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable/issues/new" target="_blank" rel="noopener noreferrer"><span>Report an issue</span>@Icon("external-link")</a>
+				</div>
+			</div>
+		</section>
+
+		<footer class="about-footer"><a href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></footer>
+	</div>
+}

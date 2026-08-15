@@ -1,0 +1,41 @@
+[server]
+http_listen = "0.0.0.0:5380"
+dns_listen = ["0.0.0.0:8053"]
+shutdown_timeout = "15s"
+
+[database]
+driver = "sqlite"
+dsn = "/data/sable.db"
+
+[resolver]
+mode = "forward"
+forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+
+[blocking]
+enabled = true
+
+[query_log]
+enabled = true
+
+[encrypted_dns]
+dot_listen = []
+doh_listen = []
+certificate_mode = "manual"
+certificate_file = ""
+private_key_file = ""
+minimum_tls_version = "1.3"
+
+[encrypted_dns.acme]
+storage_dir = "/data/tls/acme"
+
+[security]
+enabled = true
+secure_cookies = true
+secret_key_file = "/data/sable.key"
+
+[cluster]
+data_dir = "/data/cluster"
+
+[config]
+watch = true
+debounce = "250ms"

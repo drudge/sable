@@ -1,0 +1,198 @@
+# Sable
+
+Sable is a modern, high-performance DNS platform written in Go. It is being
+built as one executable containing the DNS server, DNS client, administrative
+API, migrations, and reactive web console.
+
+The project is at an early foundation milestone. The current executable serves
+UDP, TCP, DNS-over-TLS, and DNS-over-HTTPS with direct iterative recursion or configured forwarders, supports exact and subdomain
+blocking, caches positive and negative responses, persists query events
+asynchronously, hot-reloads TOML configuration transactionally, exposes health
+and runtime information, and embeds its web interface.
+
+The console uses server-rendered `templ` components and vendored htmx. Its
+visual language is derived from Isotope's dark, product-focused interface
+without shipping a Node.js runtime or a separate frontend bundle.
+
+## Current foundation
+
+- One statically built `sable` executable
+- UDP, TCP, DoT, and RFC 8484 DoH listeners with TCP fallback for truncated replies
+- Transactional listener and TLS certificate hot reload with TLS 1.3 defaults
+- Longest-suffix conditional forwarding with round-robin failover pools
+- Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover, DS/DNSKEY chain validation, NSEC/NSEC3 denial proofs, AD/CD/DO handling, and Extended DNS Errors
+- Hot-reloadable local A/AAAA overrides with IDNA normalization
+- Primary and Secondary authoritative zones with AXFR/IXFR, automatic SOA refresh/retry/expiry, TSIG-authenticated transfers/NOTIFY and RFC 2136 dynamic updates, wildcard records, NSEC/NSEC3 negative proofs, transfer ACLs, and split KSK/ZSK signing with safe automated rollover
+- Automatically refreshed Stub zones and Forwarder zones with prioritized UDP/TCP/TLS subtree routing
+- Bounded sharded cache with TTL aging and RFC 2308 negative caching
+- Exact/subdomain blocking, allowed overrides, client bypasses, configurable responses, and temporary pause/resume
+- Curated or custom HTTP(S) block-list subscriptions with transactional scheduled and manual refresh
+- Built-in UDP, TCP, DNS-over-TLS, and DNS-over-HTTPS client
+- Strict TOML configuration with transactional hot reload
+- Transactional SQLite/PostgreSQL zone and record storage with retained per-zone revisions
+- Batched non-blocking query logging, retention, API, and live console table
+- Embedded reactive console and health API
+- Prometheus text metrics for DNS, cache, policy, query-log, and cluster health
+- First-run administrator setup, Argon2id passwords, server-side sessions, CSRF protection, and login throttling
+- Database-backed users, built-in/custom roles, least-privilege permissions, account disable/delete/password reset, session and token revocation, and persistent audit views
+- Group-authorized API bearer tokens with configurable or non-expiring lifetimes, Web/API permission separation, per-zone grants, and an AES-256-GCM secret vault
+- Revisioned Settings UI for cluster-scoped DNS runtime configuration with atomic persistence and hot application
+- Durable primary/replica membership, short-lived single-use enrollment, signed zone/policy/runtime/authorization snapshots, manual replica promotion, and real-time node sync telemetry
+- Live policy reload, cache purge, and policy status APIs
+- Managed ACME DNS-01 certificates with automatic renewal and nine built-in DNS providers
+- UI-generated/imported public certificate key pairs with protected node-local keys
+- Unit, integration, race, allocation, and microbenchmark coverage
+
+DNS-over-QUIC and automatic failover are planned and not represented as
+complete yet. See
+[the roadmap](docs/roadmap.md).
+
+## Requirements
+
+- Go 1.27 or newer
+- Mage 1.17.1 or newer for build and development targets
+
+Go 1.27 is currently in release-candidate status. Development uses the pinned
+release-candidate toolchain with the JSON v2 experiment until the stable
+toolchain is available.
+
+## Run
+
+```sh
+cp config.example.toml sable.toml
+go run ./cmd/sable serve --config sable.toml
+```
+
+## Linux service install
+
+Sable can install its running executable as a hardened systemd service. The
+command creates a dedicated `sable` account, preserves an existing
+configuration during upgrades, keeps mutable state in `/var/lib/sable`, binds
+DNS on port 53 with only `CAP_NET_BIND_SERVICE`, and generates an initial
+self-signed HTTPS certificate for first-run setup:
+
+```sh
+sudo ./sable install
+```
+
+The console starts at `https://HOSTNAME/` on port 443. The same TLS listener
+serves DNS-over-HTTPS at `/dns-query`. The initial certificate is self-signed,
+so the browser will require explicit trust until a managed or
+imported certificate is configured. Additional certificate names or addresses
+can be included during installation:
+
+```sh
+sudo ./sable install --certificate-name dns-1.example.net --certificate-name 192.0.2.53
+```
+
+For a fresh Debian LXC, the repository bootstrap downloads the latest release,
+verifies it against the published SHA-256 checksums, and invokes the same native
+installer:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
+```
+
+Set `SABLE_VERSION=0.6.0` to install a specific release. Re-running either
+installer updates the executable and service definition without replacing
+`/etc/sable/sable.toml` or `/var/lib/sable`.
+
+For live development, use the pinned Air workflow:
+
+```sh
+go install github.com/magefile/mage@v1.17.1
+mage dev
+```
+
+Air regenerates templ components, rebuilds and gracefully restarts Sable, and
+serves a browser-reloading development proxy at `http://127.0.0.1:5381`.
+The Sable process itself continues to listen on the configured port (5380 by
+default). Air is a development tool only and is not linked into release builds.
+
+Query the development listener:
+
+```sh
+go run ./cmd/sable query --server 127.0.0.1:8053 example.com A
+```
+
+For interactive two-node cluster testing, leave the primary running and start
+the persistent development replica in another terminal:
+
+```sh
+mage clusterReplica
+```
+
+The replica console listens at `http://127.0.0.1:5382` and its DNS service at
+`127.0.0.1:8054`. Its configuration, database, certificates, and cluster state
+remain isolated under `_work/cluster-dev/replica`. The launcher supervises
+controlled restarts requested by the cluster onboarding wizard.
+
+## Verify
+
+```sh
+mage verify
+mage race
+mage bench
+mage releaseSmoke
+```
+
+`releaseSmoke` builds `bin/sable`, launches that exact executable in isolated
+temporary workspaces, and verifies the release-critical standalone and
+two-node-cluster workflows without using public DNS or other internet services.
+
+The repository intentionally contains no YAML. Build and verification entry
+points live in `magefile.go`; Sable node/bootstrap configuration is TOML. Zones
+and records are operational data in SQLite or PostgreSQL, with zone text files
+used for import/export. Run `mage -l` to list the available targets.
+
+## Build and release
+
+```sh
+mage build
+mage releaseSmoke
+mage releaseCheck
+mage snapshot
+mage dockerSnapshot
+mage dockerSmoke
+```
+
+`mage build` writes the statically linked single binary to `bin/sable` with
+version, commit, and build-time metadata. Releases use GoReleaser to produce
+darwin, FreeBSD, Linux, and Windows archives for amd64 and arm64, plus SHA-256
+checksums. `dockerSnapshot` produces local amd64 and arm64 images, while
+`dockerSmoke` starts the native image and verifies its embedded executable and
+health endpoint. Archive snapshots remain usable without a running Docker
+daemon. Tagged releases also publish a multi-architecture image to
+`ghcr.io/drudge/sable`. GoReleaser requires YAML internally, so Mage creates its
+configuration as a temporary file outside the repository and removes it after
+each command; no YAML is checked in. See [the release guide](docs/releasing.md).
+
+## Container quick start
+
+The image runs as a non-root user and keeps its writable TOML configuration,
+database, certificates, cache, block lists, and cluster identity in `/data`.
+It listens for DNS on unprivileged container port 8053; publish that as standard
+host port 53:
+
+```sh
+docker volume create sable-data
+docker run --detach --name sable --restart unless-stopped \
+  --publish 53:8053/tcp \
+  --publish 53:8053/udp \
+  --publish 127.0.0.1:5380:5380/tcp \
+  --volume sable-data:/data \
+  ghcr.io/drudge/sable:0.6.0
+```
+
+Open `http://localhost:5380` to complete first-run setup. The console is bound
+to the host loopback interface in this example. Configure Sable HTTPS or place
+it behind a trusted HTTPS reverse proxy before exposing the console beyond the
+host. A newly created named volume receives the image's container-specific
+`sable.toml`; subsequent starts retain changes made through the console.
+
+See [the architecture](docs/architecture.md) and
+[configuration guide](docs/configuration.md) for runtime behavior. The
+[benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
+[Proxmox guide](docs/proxmox.md) covers native unprivileged LXC deployment.
+
+Sable is licensed under the MIT License.

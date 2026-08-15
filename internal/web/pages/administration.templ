@@ -1,0 +1,433 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/drudge/sable/internal/auth"
+)
+
+type AdministrationPageView struct {
+	Console       DashboardView
+	CurrentUserID int64
+	CanManageUsers bool
+	Users         []auth.ManagedUser
+	Roles         []auth.Role
+	Sessions      []auth.Session
+	Tokens        []auth.APIToken
+	Audit         []auth.AuditRecord
+	Permissions   []string
+	Zones         []AuthorizationZone
+	ActiveTab     string
+	Message       string
+	Error         string
+	DefaultTokenTTL time.Duration
+}
+
+type AuthorizationZone struct {
+	ID   string
+	Name string
+}
+
+templ AdministrationPage(view AdministrationPageView) {
+	@AppDocument(view.Console, "Administration", "administration", AdministrationContent(view))
+}
+
+templ AdministrationContent(view AdministrationPageView) {
+	<div class="administration-page page-stack isotope-control-page" id="administration-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab">
+		<header class="page-heading"><h1>Administration</h1><p>Manage users, groups, permissions, sessions, and API tokens</p></header>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		<div class="isotope-tab-list admin-tab-list" role="tablist" aria-label="Administration sections">
+			@ControlTab("users", "Users", len(view.Users), view.ActiveTab, false, "")
+			@ControlTab("groups", "Groups", len(view.Roles), view.ActiveTab, false, "")
+			@ControlTab("permissions", "Permissions", len(view.Permissions), view.ActiveTab, false, "")
+			@ControlTab("sessions", "Sessions", len(view.Sessions), view.ActiveTab, false, "")
+			@ControlTab("tokens", "API Tokens", len(view.Tokens), view.ActiveTab, false, "")
+		</div>
+		<div class="isotope-tab-panel" data-isotope-panel="users" hidden?={ view.ActiveTab != "users" }>@UsersPanel(view)</div>
+		<div class="isotope-tab-panel" data-isotope-panel="groups" hidden?={ view.ActiveTab != "groups" }>@GroupsPanel(view)</div>
+		<div class="isotope-tab-panel" data-isotope-panel="permissions" hidden?={ view.ActiveTab != "permissions" }>@PermissionsPanel(view)</div>
+		<div class="isotope-tab-panel" data-isotope-panel="sessions" hidden?={ view.ActiveTab != "sessions" }>@SessionsPanel(view)</div>
+		<div class="isotope-tab-panel" data-isotope-panel="tokens" hidden?={ view.ActiveTab != "tokens" }>@TokensPanel(view)</div>
+		@CreateUserDialog(view.Roles, view.Console.ControlPlaneReadOnly)
+		@CreateGroupDialog(view)
+		@CreateTokenDialog(view)
+		for _, user := range view.Users {
+			@EditUserDialog(view, user)
+		}
+		for _, role := range view.Roles {
+			if !role.BuiltIn {
+				@EditGroupDialog(view, role)
+			}
+		}
+	</div>
+}
+
+templ ControlTab(value, label string, count int, active string, disabled bool, icon string) {
+	<button class={ ifThen(active == value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ value } aria-selected={ fmt.Sprint(active == value) } disabled?={ disabled }>
+		if icon != "" {
+			@Icon(icon)
+		}
+		<span>{ label }</span>
+		if count >= 0 {
+			<span class="tab-count" id={ "administration-tab-count-" + value }>{ fmt.Sprint(count) }</span>
+		}
+	</button>
+}
+
+templ UsersPanel(view AdministrationPageView) {
+	<section class="card isotope-data-card">
+		<header class="isotope-data-header"><div><h2>Users</h2><span class="desktop-only">Total Users: { fmt.Sprint(len(view.Users)) }</span></div><button class="button compact" type="button" data-dialog-open="create-user-dialog">@Icon("plus")<span>Add User</span></button></header>
+		if len(view.Users) == 0 {
+			@AdminEmpty("No users found")
+		} else {
+			<div class="admin-mobile-list">
+				for _, user := range view.Users {
+					<button type="button" class="admin-mobile-row" data-dialog-open={ adminUserDialogID(user.ID) }><div><strong>{ user.Username }</strong><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span><small>{ administrationUserName(user) }</small><span class="mobile-role-list">{ adminRoles(user.Roles) }</span></div>@Icon("chevron-right")</button>
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th></th></tr></thead><tbody>
+				for _, user := range view.Users {
+					<tr data-dialog-open={ adminUserDialogID(user.ID) } tabindex="0"><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span></td><td><div class="table-badges">
+						for _, role := range user.Roles {
+							<span>{ role }</span>
+						}
+					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeFormat) }</td><td>@Icon("chevron-right")</td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ GroupsPanel(view AdministrationPageView) {
+	<section class="card isotope-data-card">
+		<header class="isotope-data-header"><div><h2>Groups</h2><span class="desktop-only">Total Groups: { fmt.Sprint(len(view.Roles)) }</span></div><button class="button compact" type="button" data-dialog-open="create-group-dialog">@Icon("plus")<span>Add Group</span></button></header>
+		if len(view.Roles) == 0 {
+			@AdminEmpty("No groups found")
+		} else {
+			<div class="admin-mobile-list">
+				for _, role := range view.Roles {
+					<button type="button" class="admin-mobile-row" disabled?={ role.BuiltIn } data-dialog-open={ adminGroupDialogID(role.ID) }><div><strong>{ role.Name }</strong><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span><small>{ role.Description }</small></div>@Icon("chevron-right")</button>
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Name</th><th>Members</th><th>Description</th><th></th></tr></thead><tbody>
+				for _, role := range view.Roles {
+					<tr><td><strong>{ role.Name }</strong>
+						if role.BuiltIn {
+							<span class="built-in-badge">Built in</span>
+						}
+					</td><td><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span></td><td class="muted-cell">{ role.Description }</td><td>
+						if !role.BuiltIn {
+							<div class="row-actions"><button class="icon-button" type="button" data-dialog-open={ adminGroupDialogID(role.ID) } aria-label={ "Edit " + role.Name }>@Icon("settings")</button><form hx-post="/ui/administration/roles/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete group " + role.Name + "?" }><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Delete " + role.Name }>@Icon("trash")</button></form></div>
+						}
+					</td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ PermissionsPanel(view AdministrationPageView) {
+	<section class="card isotope-data-card">
+		<header class="isotope-data-header"><div><h2>Permissions</h2><span class="desktop-only">Total Sections: { fmt.Sprint(len(view.Permissions)) }</span></div></header>
+		if len(view.Permissions) == 0 {
+			@AdminEmpty("No permissions found")
+		} else {
+			<div class="admin-mobile-list">
+				for _, permission := range view.Permissions {
+					<article class="admin-mobile-row static"><div><strong>{ permission }</strong><small>{ fmt.Sprint(permissionRoleCount(view.Roles, permission)) } groups</small></div>@Icon("chevron-right")</article>
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Permission</th><th>Web UI Groups</th><th>API Groups</th><th>Resource</th></tr></thead><tbody>
+				for _, permission := range view.Permissions {
+					<tr><td><strong>{ permission }</strong></td><td><div class="table-badges">
+						for _, role := range permissionRolesForSurface(view.Roles, permission, auth.SurfaceWeb) {
+							<span>{ role }</span>
+						}
+					</div></td><td><div class="table-badges">
+						for _, role := range permissionRolesForSurface(view.Roles, permission, auth.SurfaceAPI) {
+							<span>{ role }</span>
+						}
+					</div></td><td><span class="permission-access">{ permissionResourceLabel(permission) }</span></td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ SessionsPanel(view AdministrationPageView) {
+	<section class="card isotope-data-card">
+		<header class="isotope-data-header"><div><h2>Active Sessions</h2><span class="desktop-only">Total Sessions: { fmt.Sprint(len(view.Sessions)) }</span></div></header>
+		if len(view.Sessions) == 0 {
+			@AdminEmpty("No active sessions")
+		} else {
+			<div class="admin-mobile-list">
+				for _, session := range view.Sessions {
+					@SessionMobileRow(view, session)
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Session</th><th>Created</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+				for _, session := range view.Sessions {
+					<tr><td><strong>{ session.Username }</strong>
+						if session.Current {
+							<span class="current-text">(current)</span>
+						}
+					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ adminTime(session.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ adminTime(session.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ TokensPanel(view AdministrationPageView) {
+	<section class="card isotope-data-card" id="api-tokens-panel" hx-get="/ui/administration/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
+		<header class="isotope-data-header"><div><h2>API Tokens</h2><span class="desktop-only">Total Tokens: { fmt.Sprint(len(view.Tokens)) }</span></div><button class="button compact" type="button" data-dialog-open="create-token-dialog">@Icon("plus")<span>Create Token</span></button></header>
+		if len(view.Tokens) == 0 {
+			@AdminEmpty("No active API tokens")
+		} else {
+			<div class="admin-mobile-list">
+				for _, token := range view.Tokens {
+					@TokenMobileRow(view, token)
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+				for _, token := range view.Tokens {
+					<tr><td><strong>{ token.Username }</strong></td><td><code>{ token.Name }</code></td><td><div class="table-badges">
+						for _, group := range token.Groups {
+							<span>{ group }</span>
+						}
+					</div></td><td class="muted-cell">{ adminTime(token.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ adminTime(token.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ TokensPanelFragment(view AdministrationPageView) {
+	@TokensPanel(view)
+	<span class="tab-count" id="administration-tab-count-tokens" hx-swap-oob="true">{ fmt.Sprint(len(view.Tokens)) }</span>
+}
+
+templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
+	<article class="session-mobile-row"><div><strong>{ session.Username }</strong><span class="count-badge">Standard</span>
+		if session.Current {
+			<span class="current-text">(current)</span>
+		}
+		<form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) }>@Icon("log-out")</button></form>
+	</div><code>[{ session.HashPrefix }]</code><small>Expires { adminTime(session.ExpiresAt, view.Console.TimeFormat) }</small></article>
+}
+templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeFormat) }</small></article> }
+
+templ CreateTokenDialog(view AdministrationPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog"><div class="dialog-header"><h2>Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
+		<label><span>Expiration</span><select name="expiration" required>
+			<option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option>
+			<option value="24h">1 day</option>
+			<option value="168h">7 days</option>
+			<option value="720h">30 days</option>
+			<option value="2160h">90 days</option>
+			<option value="8760h">1 year</option>
+			<option value="never">Never</option>
+		</select><small>Non-expiring tokens remain valid until revoked.</small></label>
+		if view.CanManageUsers {
+			<label><span>Owner</span><select name="user_id" data-token-owner required>
+				for _, user := range view.Users {
+					if !user.Disabled {
+						<option value={ fmt.Sprint(user.ID) } selected?={ user.ID == view.CurrentUserID }>{ administrationUserName(user) } ({ user.Username })</option>
+					}
+				}
+			</select></label>
+		} else {
+			<input type="hidden" name="user_id" value={ fmt.Sprint(view.CurrentUserID) }/>
+		}
+		<fieldset><legend>Groups</legend><div class="role-checks">
+		for _, role := range tokenRoles(view) {
+			<label data-token-group-row hidden?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }><input type="checkbox" name="groups" value={ role.Name } data-token-group-users={ tokenRoleUserIDs(view, role.Name) } disabled?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }/><span><strong>{ role.Name }</strong><small>{ apiGrantSummary(role) }</small></span></label>
+		}
+	</div></fieldset><p class="field-help">Only groups assigned to the owner are shown. Removing the owner from a group immediately removes that token access.</p></div><div class="api-token-result" id="api-token-result">The token secret will be shown once.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form></dialog>
+}
+
+templ CreateUserDialog(roles []auth.Role, readOnly bool) {
+	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id="create-user-dialog" data-dialog-tabs>
+		<div class="dialog-header"><h2>Add User</h2><p>Create a user or API-only identity</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="dialog-tab-list" role="tablist" aria-label="New user settings"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Group Membership</button></div>
+		<form class="user-dialog-content" hx-post="/ui/administration/users" hx-target="#administration-content" hx-swap="outerHTML" data-create-user-form>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="info"><div class="field-grid two"><label class="field-control"><span>Display Name</span><input name="display_name" maxlength="128" autocomplete="name"/></label><label class="field-control"><span>Username</span><input name="username" minlength="3" maxlength="64" pattern="[a-z0-9._-]+" autocomplete="off" aria-describedby="create-user-username-help create-user-username-error" required data-user-username/><small id="create-user-username-help">3–64 lowercase letters, numbers, dots, underscores, or hyphens.</small><small class="field-error" id="create-user-username-error" data-username-error hidden></small></label></div><label class="field-control"><span>Email</span><input type="email" name="email" maxlength="254" placeholder="name@example.com" autocomplete="email"/></label><div class="field-grid two" data-web-access-passwords hidden><label class="field-control"><span>Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" aria-describedby="create-user-password-help create-user-password-error" disabled data-user-password/></label><label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" disabled data-user-password-confirm/></label><p class="field-help" id="create-user-password-help">A password of at least 12 characters is required because the selected groups grant Web UI access.</p><p class="field-error field-grid-message" id="create-user-password-error" data-password-error hidden></p></div></section>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="groups" hidden><div class="form-section-heading"><h3>Group Membership</h3><p>Choose at least one group. Groups determine Web UI and API permissions.</p></div><fieldset class="group-membership-fieldset" data-group-fieldset aria-describedby="create-user-group-status create-user-group-error"><legend class="sr-only">Member of groups</legend>@RoleChecks(roles, nil)</fieldset><div class="group-access-status" id="create-user-group-status" data-group-access-status aria-live="polite"><strong>Select at least one group</strong><span>Password requirements depend on the selected group permissions.</span></div><p class="field-error" id="create-user-group-error" data-group-error hidden>Select at least one group before adding the user.</p></section>
+			<footer class="dialog-footer user-dialog-footer"><div></div><div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ readOnly }>Add User</button></div></footer>
+		</form>
+	</dialog>
+}
+
+templ CreateGroupDialog(view AdministrationPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id="create-group-dialog"><div class="dialog-header"><h2>Add Group</h2><p>Create a group with separate Web UI and API permissions</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button></footer></form></dialog>
+}
+
+templ EditGroupDialog(view AdministrationPageView, role auth.Role) {
+	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id={ adminGroupDialogID(role.ID) }><div class="dialog-header"><h2>Edit Group</h2><p>{ role.Name } permissions and zone access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button></footer></form></dialog>
+}
+
+templ GroupGrantFields(view AdministrationPageView, role *auth.Role) {
+	<div class="permission-surface-grid">
+		@SurfaceGrantFields(view, role, auth.SurfaceWeb, "Web UI")
+		@SurfaceGrantFields(view, role, auth.SurfaceAPI, "API")
+	</div>
+}
+
+templ SurfaceGrantFields(view AdministrationPageView, role *auth.Role, surface auth.Surface, label string) {
+	<section class="permission-surface"><header><div><h3>{ label }</h3><p>{ ifThen(surface == auth.SurfaceWeb, "Access through the Sable console", "Access through bearer tokens") }</p></div><div class="permission-bulk-actions" role="group" aria-label={ label + " permission selection" }><button type="button" data-permission-select="all">Select all</button><button type="button" data-permission-select="none">Select none</button></div></header><div class="permission-checks">
+		for _, permission := range view.Permissions {
+			<label><input type="checkbox" name={ string(surface) + "_permissions" } value={ permission } checked?={ roleHasGrant(role, surface, permission) }/><span>{ permission }</span></label>
+		}
+	</div><fieldset class="zone-scope"><legend>Zone access</legend><label><input type="radio" name={ string(surface) + "_zone_scope" } value="all" checked?={ roleUsesAllZones(role, surface) || role == nil }/><span>All zones</span></label><label><input type="radio" name={ string(surface) + "_zone_scope" } value="selected" checked?={ roleUsesSelectedZones(role, surface) }/><span>Selected zones</span></label><div class="zone-grant-list">
+		for _, zone := range view.Zones {
+			<label><input type="checkbox" name={ string(surface) + "_zone_ids" } value={ zone.ID } checked?={ roleHasZone(role, surface, zone.ID) }/><span>{ zone.Name }</span></label>
+		}
+	</div></fieldset></section>
+}
+
+templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
+	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id={ adminUserDialogID(user.ID) } data-dialog-tabs>
+		<div class="dialog-header"><h2>Edit User</h2><p>Update user account details</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="dialog-tab-list three" role="tablist" aria-label="User settings">
+			<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button>
+			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Groups</button>
+			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="tokens">API Tokens <span class="tab-count" id={ adminUserTokenCountID(user.ID) }>{ fmt.Sprint(userTokenCount(view, user.ID)) }</span></button>
+		</div>
+		<div class="user-dialog-content">
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="info">
+				<form class="user-profile-form" id={ adminUserProfileFormID(user.ID) } hx-post="/ui/administration/users/profile" hx-target="#administration-content" hx-swap="outerHTML">
+					<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+					<div class="field-grid two">
+						<label class="field-control"><span>Display Name</span><input name="display_name" value={ administrationUserName(user) } maxlength="128" autocomplete="name"/></label>
+						<label class="field-control"><span>Username</span><input name="username" value={ user.Username } minlength="3" maxlength="64" autocomplete="username" required/></label>
+					</div>
+					<label class="field-control"><span>Email</span><input type="email" name="email" value={ user.Email } maxlength="254" placeholder="name@example.com" autocomplete="email"/></label>
+				</form>
+				if userHasWebAccess(view, user) {
+					<form class="password-update-form" hx-post="/ui/administration/users/password" hx-target="#administration-content" hx-swap="outerHTML">
+						<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+						<div class="form-section-heading"><h3>Password</h3><p>Resetting the password signs this user out everywhere.</p></div>
+						<div class="field-grid two">
+							<label class="field-control"><span>New Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
+							<label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
+						</div>
+						<div class="user-panel-action"><button class="button outline" type="submit">Reset Password</button></div>
+					</form>
+				} else {
+					<div class="group-access-status api-only"><strong>API-only identity</strong><span>This user has no Web UI grants, so no password is required.</span></div>
+				}
+			</section>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="groups" hidden>
+				<form class="group-membership-form" id={ adminUserGroupsFormID(user.ID) } hx-post="/ui/administration/users/roles" hx-target="#administration-content" hx-swap="outerHTML">
+					<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+					<div class="form-section-heading"><h3>Group Membership</h3><p>Groups determine the permissions assigned to this user.</p></div>
+					<fieldset><legend class="sr-only">Member of groups</legend>@RoleChecks(view.Roles, user.Roles)</fieldset>
+				</form>
+			</section>
+			@UserTokensPanel(view, user)
+		</div>
+		<footer class="dialog-footer user-dialog-footer">
+			<div class="user-danger-actions">
+				<form hx-post="/ui/administration/users/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete " + user.Username + " and revoke all credentials?" }><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/><button class="button destructive" type="submit" disabled?={ user.ID == view.CurrentUserID }>@Icon("trash")<span>Delete User</span></button></form>
+				<form hx-post="/ui/administration/users/status" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/><input type="hidden" name="disabled" value={ ifThen(user.Disabled, "false", "true") }/><button class="button outline" type="submit" disabled?={ user.ID == view.CurrentUserID && !user.Disabled }>{ ifThen(user.Disabled, "Enable User", "Disable User") }</button></form>
+			</div>
+			<div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" form={ adminUserProfileFormID(user.ID) } data-dialog-save="info" disabled?={ view.Console.ControlPlaneReadOnly }>Save User Info</button><button class="button" type="submit" form={ adminUserGroupsFormID(user.ID) } data-dialog-save="groups" disabled?={ view.Console.ControlPlaneReadOnly } hidden>Save Groups</button></div>
+		</footer>
+	</dialog>
+}
+
+templ UserTokensPanel(view AdministrationPageView, user auth.ManagedUser) {
+	<section class="dialog-tab-panel user-token-panel" role="tabpanel" data-dialog-panel="tokens" hx-get={ fmt.Sprintf("/ui/administration/tokens?user_id=%d", user.ID) } hx-trigger="dialogTabShown" hx-target="this" hx-swap="innerHTML" hidden>
+		@UserTokensContent(view, user)
+	</section>
+}
+
+templ UserTokensContent(view AdministrationPageView, user auth.ManagedUser) {
+	<div class="form-section-heading"><h3>API Tokens</h3><p>Tokens owned by { user.Username }. Their access is limited by this user’s current group memberships.</p></div>
+	if user.Disabled && userTokenCount(view, user.ID) > 0 {
+		<div class="user-token-warning" role="note">
+			@Icon("alert-triangle")
+			<div><strong>Tokens are currently inactive</strong><span>Authentication rejects every token owned by this disabled user. Existing tokens will work again if the user is re-enabled unless you revoke them.</span></div>
+		</div>
+	}
+	if userTokenCount(view, user.ID) == 0 {
+		<div class="admin-empty user-token-empty">No active API tokens for this user</div>
+	}
+	if userTokenCount(view, user.ID) > 0 {
+		<div class="user-token-list">
+			for _, token := range view.Tokens {
+				if token.UserID == user.ID {
+					<article class="user-token-row">
+						<div class="user-token-heading"><div><strong>{ token.Name }</strong><span class="token-type-badge">API Token</span></div>
+							if view.CanManageUsers {
+								<form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form>
+							}
+						</div>
+						<div class="table-badges">
+							for _, group := range token.Groups {
+								<span>{ group }</span>
+							}
+						</div>
+						<div class="user-token-meta"><span><small>Created</small>{ adminTime(token.CreatedAt, view.Console.TimeFormat) }</span><span><small>Expires</small>{ adminTime(token.ExpiresAt, view.Console.TimeFormat) }</span><span><small>Last used</small>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</span></div>
+					</article>
+				}
+			}
+		</div>
+	}
+}
+
+templ UserTokensFragment(view AdministrationPageView, user auth.ManagedUser) {
+	@UserTokensContent(view, user)
+	<span class="tab-count" id={ adminUserTokenCountID(user.ID) } hx-swap-oob="true">{ fmt.Sprint(userTokenCount(view, user.ID)) }</span>
+}
+
+templ RoleChecks(roles []auth.Role, selected []string) {
+	<div class="role-checks">
+		for _, role := range roles {
+			<label><input type="checkbox" name="roles" value={ role.Name } checked?={ adminContains(selected, role.Name) } data-role-web={ fmt.Sprint(roleHasSurface(role, auth.SurfaceWeb)) }/><span><strong>{ role.Name }</strong><small>{ role.Description }</small></span></label>
+		}
+	</div>
+}
+templ AdminEmpty(message string) { <div class="admin-empty">{ message }</div> }
+
+func administrationUserName(user auth.ManagedUser) string { if user.DisplayName != "" { return user.DisplayName }; return user.Username }
+func roleHasSurface(role auth.Role, surface auth.Surface) bool { for _, grant := range role.Grants { if grant.Surface == surface { return true } }; return false }
+func userHasWebAccess(view AdministrationPageView, user auth.ManagedUser) bool { for _, role := range view.Roles { if adminContains(user.Roles, role.Name) && roleHasSurface(role, auth.SurfaceWeb) { return true } }; return false }
+func adminContains(values []string, value string) bool { for _, item := range values { if item == value { return true } }; return false }
+func adminTime(value time.Time, timeFormat string) string { return FormatDateTime(value, timeFormat) }
+func tokenLastUsed(value time.Time, timeFormat string) string { if value.IsZero() { return "Never used" }; return adminTime(value, timeFormat) }
+func userTokenCount(view AdministrationPageView, userID int64) int { count := 0; for _, token := range view.Tokens { if token.UserID == userID { count++ } }; return count }
+
+func tokenLifetimeLabel(value time.Duration) string {
+	if value <= 0 { return "server default" }
+	if value%(24*time.Hour) == 0 {
+		days := int(value / (24*time.Hour))
+		if days == 1 { return "1 day" }
+		return fmt.Sprintf("%d days", days)
+	}
+	return value.String()
+}
+func adminPlural(count int, singular, plural string) string { if count == 1 { return singular }; return plural }
+func adminUserDialogID(id int64) string { return fmt.Sprintf("edit-user-%d-dialog", id) }
+func adminUserProfileFormID(id int64) string { return fmt.Sprintf("edit-user-%d-profile", id) }
+func adminUserGroupsFormID(id int64) string { return fmt.Sprintf("edit-user-%d-groups", id) }
+func adminUserTokenCountID(id int64) string { return fmt.Sprintf("edit-user-%d-token-count", id) }
+func adminGroupDialogID(id int64) string { return fmt.Sprintf("edit-group-%d-dialog", id) }
+func adminRoles(roles []string) string { if len(roles) == 0 { return "No groups" }; return strings.Join(roles, ", ") }
+func permissionRoleCount(roles []auth.Role, permission string) int { return len(permissionRoles(roles, permission)) }
+func permissionRoles(roles []auth.Role, permission string) []string { result := make([]string, 0); for _, role := range roles { if adminContains(role.Permissions, auth.PermissionAll) || adminContains(role.Permissions, permission) { result = append(result, role.Name) } }; return result }
+func permissionRolesForSurface(roles []auth.Role, permission string, surface auth.Surface) []string { result := make([]string, 0); for _, role := range roles { for _, grant := range role.Grants { if grant.Surface == surface && (grant.Permission == permission || grant.Permission == auth.PermissionAll) { result = append(result, role.Name); break } } }; return result }
+func permissionResourceLabel(permission string) string { if strings.HasPrefix(permission, "zones.") && permission != auth.PermissionZonesCreate { return "All or selected zones" }; return "Global" }
+func roleHasGrant(role *auth.Role, surface auth.Surface, permission string) bool { if role == nil { return false }; for _, grant := range role.Grants { if grant.Surface == surface && (grant.Permission == permission || grant.Permission == auth.PermissionAll) { return true } }; return false }
+func roleUsesAllZones(role *auth.Role, surface auth.Surface) bool { if role == nil { return false }; for _, grant := range role.Grants { if grant.Surface == surface && grant.ResourceType == auth.ResourceZone && grant.ResourceID == auth.ResourceAll { return true } }; return false }
+func roleUsesSelectedZones(role *auth.Role, surface auth.Surface) bool { if role == nil || roleUsesAllZones(role, surface) { return false }; for _, grant := range role.Grants { if grant.Surface == surface && grant.ResourceType == auth.ResourceZone && grant.ResourceID != "" { return true } }; return false }
+func roleHasZone(role *auth.Role, surface auth.Surface, zoneID string) bool { if role == nil { return false }; for _, grant := range role.Grants { if grant.Surface == surface && grant.ResourceType == auth.ResourceZone && grant.ResourceID == zoneID { return true } }; return false }
+func roleHasAPIAccess(role auth.Role) bool { for _, grant := range role.Grants { if grant.Surface == auth.SurfaceAPI { return true } }; return false }
+func tokenRoleAssigned(view AdministrationPageView, userID int64, roleName string) bool { for _, user := range view.Users { if user.ID == userID { return adminContains(user.Roles, roleName) } }; return false }
+func tokenRoleUserIDs(view AdministrationPageView, roleName string) string { result := make([]string, 0); for _, user := range view.Users { if !user.Disabled && adminContains(user.Roles, roleName) { result = append(result, fmt.Sprint(user.ID)) } }; return strings.Join(result, ",") }
+func tokenRoles(view AdministrationPageView) []auth.Role { result := make([]auth.Role, 0); for _, role := range view.Roles { if roleHasAPIAccess(role) { result = append(result, role) } }; return result }
+func apiGrantSummary(role auth.Role) string { count := 0; allZones := false; selectedZones := map[string]struct{}{}; for _, grant := range role.Grants { if grant.Surface != auth.SurfaceAPI { continue }; count++; if grant.ResourceType == auth.ResourceZone { if grant.ResourceID == auth.ResourceAll { allZones = true } else { selectedZones[grant.ResourceID] = struct{}{} } } }; scope := "global permissions"; if allZones { scope = "all zones" } else if len(selectedZones) > 0 { scope = fmt.Sprintf("%d selected zones", len(selectedZones)) }; return fmt.Sprintf("%d API grants · %s", count, scope) }

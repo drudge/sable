@@ -1,0 +1,153 @@
+package pages
+
+import "fmt"
+
+type CachePageView struct {
+	Console      DashboardView
+	Entries      int
+	HitsLastHour uint64
+	Domains      []CacheDomainView
+	Message      string
+}
+
+type CacheDomainView struct {
+	Name       string
+	Responses  int
+	Records    int
+	MinimumTTL uint32
+	Items      []CacheResponseView
+}
+
+type CacheResponseView struct {
+	RecordType   string
+	RemainingTTL uint32
+	Records      []CacheRecordView
+}
+
+type CacheRecordView struct {
+	Section string
+	Value   string
+	TTL     uint32
+}
+
+templ CachePage(view CachePageView) {
+	@AppDocument(view.Console, "DNS Cache", "cache", CacheContent(view))
+}
+
+templ CacheContent(view CachePageView) {
+	<div class="cache-page page-stack" id="cache-content">
+		<div class="page-heading">
+			<h1>DNS Cache</h1>
+			<p>Manage cached DNS records for faster query responses</p>
+		</div>
+		@Toast(view.Message, "success")
+		<div class="cache-layout">
+			<section class="card cache-status-card">
+				<div class="cache-card-header">
+					<div class="cache-title">
+						@Icon("database")
+						<div><h2>Cache Status</h2><p>Real-time cache statistics and management</p></div>
+					</div>
+					<div class="cache-header-actions">
+						<a class="icon-button" href="/settings?tab=cache" aria-label="Cache settings" title="Cache settings">@Icon("settings")</a>
+						<button class="icon-button" type="button" hx-get="/ui/cache/status" hx-target="#cache-content" hx-swap="outerHTML" aria-label="Refresh cache status" title="Refresh cache status">@Icon("refresh")</button>
+					</div>
+				</div>
+				<div class="cache-card-body">
+					<div class="operational-metric-grid cache-stat-grid">
+						@OperationalMetricCard("hard-drive", "Cached Entries", formatNumber(uint64(view.Entries)), "Total DNS responses in cache", "blue")
+						@OperationalMetricCard("sparkles", "Cache Hits (Last Hour)", formatNumber(view.HitsLastHour), "Queries served from cache", "amber")
+					</div>
+					<div class="cache-explainer">
+						<h3>@Icon("database")<span>How DNS Caching Works</span></h3>
+						<p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p>
+					</div>
+					<div class="cache-actions">
+						<div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class="button outline cache-action-button" type="button" data-dialog-open="cache-browser-dialog">@Icon("folder")<span>Open Cache Browser</span></button></div>
+						<div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p><button class="button destructive cache-action-button" type="button" data-dialog-open="cache-flush-dialog">@Icon("trash")<span>Flush DNS Cache</span></button></div>
+					</div>
+				</div>
+			</section>
+			<aside class="cache-aside">
+				<section class="card cache-guidance">
+					<h2>When should I clear the cache?</h2>
+					<ul>
+						<li><div><strong>DNS records have changed</strong><p>If you've updated DNS records and need them to take effect immediately</p></div></li>
+						<li><div><strong>Troubleshooting DNS issues</strong><p>Clear stale or incorrect cached entries that may be causing problems</p></div></li>
+						<li><div><strong>After configuration changes</strong><p>Ensure your DNS server uses fresh data after making configuration updates</p></div></li>
+					</ul>
+				</section>
+				<div class="cache-warning"><strong>Note:</strong> After clearing the cache, query response times will temporarily increase as the server rebuilds its cache through new upstream queries.</div>
+			</aside>
+		</div>
+		@CacheBrowserDialog(view.Domains)
+		@CacheFlushDialog(view.Entries)
+	</div>
+}
+
+templ CacheBrowserDialog(domains []CacheDomainView) {
+	<dialog class="cache-dialog cache-browser-dialog" id="cache-browser-dialog" aria-labelledby="cache-browser-title">
+		<header class="cache-dialog-header">
+			<div><h2 id="cache-browser-title">@Icon("folder")<span>Cache Browser</span></h2><p>Browse and inspect cached DNS responses by domain</p></div>
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		</header>
+		<div class="cache-browser-body">
+			<label class="cache-browser-search">@Icon("search")<span class="sr-only">Search cached domains</span><input type="search" placeholder="Enter domain name or search..." autocomplete="off" data-cache-search/></label>
+			<div class="cache-domain-list">
+				<div class="cache-domain-list-header"><strong>Cached Domains</strong><span>{ fmt.Sprint(len(domains)) }</span></div>
+				if len(domains) == 0 {
+					<div class="cache-domain-empty">No cached domains yet. DNS responses will appear here after they are resolved.</div>
+				}
+				for domainIndex, domain := range domains {
+					<details class="cache-domain-entry" data-cache-domain={ domain.Name }>
+						<summary class="cache-domain-row">
+							@Icon("database")
+							<div><strong>{ domain.Name }</strong><small>{ fmt.Sprintf("%d response(s) · %d record(s) · TTL %ds", domain.Responses, domain.Records, domain.MinimumTTL) }</small></div>
+							<span>cached</span>
+						</summary>
+						<div class="cache-domain-detail">
+							for responseIndex, response := range domain.Items {
+								<div class="cache-response-block">
+									<div class="cache-response-heading"><code>{ response.RecordType }</code><span>{ fmt.Sprintf("TTL %ds", response.RemainingTTL) }</span></div>
+									if len(response.Records) == 0 {
+										<p>No answer records are stored for this response.</p>
+									}
+									for recordIndex, record := range response.Records {
+										<div class="cache-record-row">
+											<span>{ record.Section }</span>
+											<code id={ fmt.Sprintf("cache-record-%d-%d-%d", domainIndex, responseIndex, recordIndex) }>{ record.Value }</code>
+											<small>{ fmt.Sprintf("TTL %ds", record.TTL) }</small>
+							<button type="button" data-copy-target={ fmt.Sprintf("cache-record-%d-%d-%d", domainIndex, responseIndex, recordIndex) } aria-label="Copy cached record" title="Copy cached record">@CopyIcons()</button>
+										</div>
+									}
+								</div>
+							}
+						</div>
+					</details>
+				}
+				<div class="cache-domain-empty" data-cache-empty hidden>No cached domains match your search.</div>
+			</div>
+		</div>
+		<footer class="cache-dialog-footer"><button class="button outline" type="button" data-dialog-close>Close</button></footer>
+	</dialog>
+}
+
+templ CacheFlushDialog(entries int) {
+	<dialog class="cache-dialog cache-flush-dialog" id="cache-flush-dialog" aria-labelledby="cache-flush-title">
+		<div class="cache-flush-content">
+			<h2 id="cache-flush-title">Clear DNS Cache?</h2>
+			<p>This will remove all { formatNumber(uint64(entries)) } cached DNS responses from the server.</p>
+			<div><p>After clearing the cache:</p><ul><li>All DNS queries will require fresh lookups</li><li>Response times will temporarily increase</li><li>The cache will automatically rebuild over time</li></ul></div>
+			<strong>This action cannot be undone.</strong>
+		</div>
+		<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="button" hx-post="/ui/cache/flush" hx-target="#cache-content" hx-swap="outerHTML">Clear Cache</button></footer>
+	</dialog>
+}
+
+func formatNumber(value uint64) string {
+	text := fmt.Sprint(value)
+	for index := len(text) - 3; index > 0; index -= 3 {
+		text = text[:index] + "," + text[index:]
+	}
+	return text
+}

@@ -1,0 +1,17 @@
+package pages
+
+templ Toast(message string, variant string) {
+	if message != "" {
+		<div class="toast-region" aria-live={ ifThen(variant == "error", "assertive", "polite") } aria-atomic="true">
+			<div class={ "toast", "toast-" + variant } data-toast data-toast-duration={ ifThen(variant == "error", "6500", "4500") } role={ ifThen(variant == "error", "alert", "status") }>
+				<span class="toast-icon" aria-hidden="true">@Icon(ifThen(variant == "error", "x-circle", "check-circle"))</span>
+				<div class="toast-content">
+					<strong>{ ifThen(variant == "error", "Error", "Success") }</strong>
+					<p>{ message }</p>
+				</div>
+				<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
+				<span class="toast-timer" aria-hidden="true"></span>
+			</div>
+		</div>
+	}
+}

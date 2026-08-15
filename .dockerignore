@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!linux/
+!linux/**
+!docker/
+!docker/data/
+!docker/data/sable.toml

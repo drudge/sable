@@ -1,0 +1,148 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
+templ DashboardHome(view DashboardView) {
+	<div class="dashboard-page isotope-dashboard">
+		@Stats(view.Stats)
+		@QueryChart(view.Chart)
+		<section class="dashboard-rankings" aria-label="Query rankings">
+			@RankedPanel("Top Clients", "clients", view.Insights.TopClients)
+			@RankedPanel("Top Domains", "domains", view.Insights.TopDomains)
+			@RankedPanel("Top Blocked Domains", "blocked", view.Insights.TopBlocked)
+		</section>
+		<section class="dashboard-distributions" aria-label="Query distributions">
+			@DistributionPanel("Query Types", view.Insights.QueryTypes)
+			@DistributionPanel("Response Sources", view.Insights.ResponseSources)
+			@DistributionPanel("Response Codes", view.Insights.ResponseCodes)
+		</section>
+		<footer class="dashboard-footer">
+			<span><i></i>Sable operational</span>
+			<span>{ view.DNSSECStatus }</span>
+			<span>{ view.Database }</span>
+			<span>{ view.DNSListeners }</span>
+			<span>Revision { fmt.Sprint(view.ConfigRevision) }</span>
+			<span>v{ view.Version }</span>
+		</footer>
+	</div>
+}
+
+templ RankedPanel(title string, kind string, items []RankedStatView) {
+	<article class="card ranking-card">
+		<header>
+			<h2>{ title }</h2>
+			<button class="ranking-view-all" type="button" data-dialog-open={ "top-stats-" + kind + "-dialog" }>
+				<span>View all</span>
+				@Icon("chevron-right")
+			</button>
+		</header>
+		<div class="ranking-list">
+			if len(items) == 0 {
+				<div class="dashboard-empty">No query data yet</div>
+			}
+			for _, item := range firstRanked(items, 5) {
+				<a class="ranking-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name)) }>
+					<div>
+						<strong title={ item.Name }>{ item.Name }</strong>
+						if item.Secondary != "" {
+							<small title={ item.Secondary }>{ item.Secondary }</small>
+						}
+					</div>
+					<span>{ compactNumber(item.Value) }</span>
+				</a>
+			}
+		</div>
+	</article>
+	@TopStatsDialog(title, kind, items)
+}
+
+templ TopStatsDialog(title string, kind string, items []RankedStatView) {
+	<dialog class="custom-server-dialog top-stats-dialog" id={ "top-stats-" + kind + "-dialog" } aria-labelledby={ "top-stats-" + kind + "-title" } data-top-stats-dialog>
+		<header class="top-stats-header">
+			<h2 id={ "top-stats-" + kind + "-title" }>{ title }</h2>
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		</header>
+		<div class="top-stats-toolbar">
+			<label class="top-stats-search">@Icon("search")<span class="sr-only">Filter { strings.ToLower(title) }</span><input type="search" placeholder={ topStatsPlaceholder(kind) } data-top-stats-search/></label>
+			<label class="top-stats-limit"><span class="sr-only">Number of results</span><select data-top-stats-limit><option value="25">Top 25</option><option value="100" selected>Top 100</option><option value="250">Top 250</option><option value="1000">Top 1000</option></select></label>
+		</div>
+		<div class="top-stats-list">
+			if len(items) == 0 {
+				<div class="top-stats-empty">No data for this period</div>
+			}
+			for index, item := range items {
+				<a class="top-stats-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name)) } data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
+					<span class="top-stats-rank">{ fmt.Sprint(index + 1) }</span>
+					<div>
+						<strong title={ item.Name }>{ item.Name }</strong>
+						if item.Secondary != "" {
+							<small title={ item.Secondary }>{ item.Secondary }</small>
+						}
+					</div>
+					<span class="top-stats-hits">{ formatNumber(item.Value) }</span>
+				</a>
+			}
+			<div class="top-stats-empty" data-top-stats-empty hidden>No entries match your filter</div>
+		</div>
+		<footer class="top-stats-footer" hidden?={ len(items) == 0 }><span data-top-stats-count>{ fmt.Sprint(min(len(items), 100)) } { topStatsNoun(kind) }</span><span data-top-stats-total>{ formatNumber(rankedTotal(firstRanked(items, 100))) } hits</span></footer>
+	</dialog>
+}
+
+templ DistributionPanel(title string, items []DistributionItemView) {
+	<article class="card distribution-card">
+		<header><h2>{ title }</h2></header>
+		<div class="distribution-content">
+			<div class="donut-wrap" aria-label={ title + " chart" }>
+				<svg viewBox="0 0 120 120" role="img">
+					<circle class="donut-track" cx="60" cy="60" r="44" pathLength="100"/>
+					for _, item := range items {
+						<circle
+							class={ fmt.Sprintf("donut-segment donut-color-%d", item.Color) }
+							cx="60" cy="60" r="44" pathLength="100"
+							stroke-dasharray={ fmt.Sprintf("%.3f %.3f", item.Percent, 100-item.Percent) }
+							stroke-dashoffset={ fmt.Sprintf("%.3f", item.Offset) }
+						/>
+					}
+				</svg>
+				if len(items) == 0 {
+					<span>No data</span>
+				}
+			</div>
+			<div class="distribution-legend">
+				if len(items) == 0 {
+					<div class="dashboard-empty compact">Waiting for queries</div>
+				}
+				for _, item := range items {
+					<div><i class={ fmt.Sprintf("donut-color-%d", item.Color) }></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>
+				}
+			</div>
+		</div>
+	</article>
+}
+
+func compactNumber(value uint64) string {
+	switch {
+	case value >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(value)/1_000_000)
+	case value >= 1_000:
+		return fmt.Sprintf("%.1fK", float64(value)/1_000)
+	default:
+		return fmt.Sprint(value)
+	}
+}
+
+func firstRanked(items []RankedStatView, limit int) []RankedStatView { return items[:min(len(items), limit)] }
+func rankedTotal(items []RankedStatView) uint64 { var total uint64; for _, item := range items { total += item.Value }; return total }
+func topStatsNoun(kind string) string { if kind == "clients" { return "clients" }; return "domains" }
+func topStatsPlaceholder(kind string) string { if kind == "clients" { return "Filter clients..." }; return "Filter domains..." }
+func topStatsEntryURL(kind string, name string) string {
+	key := "name"
+	if kind == "clients" { key = "client_ip" }
+	value := "/logs?tab=queries&" + key + "=" + url.QueryEscape(name)
+	if kind == "blocked" { value += "&source=blocked" }
+	return value
+}

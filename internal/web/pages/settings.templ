@@ -1,0 +1,282 @@
+package pages
+
+import "fmt"
+
+type SettingsPageView struct {
+	Console             DashboardView
+	Revision            uint64
+	TimeFormat          string
+	ActiveTab           string
+	Message             string
+	Error               string
+	HTTPListen          string
+	HTTPSListen         string
+	DNSListen           string
+	DatabaseDriver      string
+	DatabaseDSN         string
+	ResolverMode        string
+	Forwarders          string
+	RootHints           string
+	ResolverTimeout     string
+	CacheSize           int
+	CacheMinimumTTL     uint32
+	CacheMaximumTTL     uint32
+	CacheNegativeTTL    uint32
+	CacheFailureTTL     uint32
+	SaveCache           bool
+	ServeStale          bool
+	CacheStaleTTL       uint32
+	CacheStaleAnswerTTL uint32
+	CacheStaleResetTTL  uint32
+	CacheStaleMaxWaitMS int64
+	CachePrefetchMinimumTTL uint32
+	CachePrefetchTriggerTTL uint32
+	CachePrefetchSample string
+	CachePrefetchHitsPerHour uint32
+	DNSSECValidation    bool
+	TrustAnchorUpdates  bool
+	DoTListen           string
+	DoHListen           string
+	CertificateFile     string
+	PrivateKeyFile      string
+	CertificateMode     string
+	ACMEEmail           string
+	ACMEDomains         string
+	ACMEDirectoryURL    string
+	ACMEDNSProvider     string
+	ACMEDNSZone         string
+	ACMEStorageDirectory string
+	ACMERenewBefore     string
+	ACMECredentialsConfigured bool
+	ACMEIssuer          string
+	ACMEExpires         string
+	ACMELastError       string
+	ACMERenewing        bool
+	ACMEProviderEndpoint string
+	ACMETSIGAlgorithm    string
+	MinimumTLSVersion   string
+	QueryLogEnabled     bool
+	QueryLogRetention   string
+	SessionTTL          string
+	APITokenTTL         string
+	ConfigWatch         bool
+	BlockingUpdateHours int
+	BlockingResponseType string
+	BlockingResponseTTL uint32
+	BlockingCustomAddresses string
+	BlockingBypassClients string
+	BlockingAllowTXTReport bool
+}
+
+templ SettingsPage(view SettingsPageView) {
+	@AppDocument(view.Console, "Settings", "settings", SettingsContent(view))
+}
+
+templ SettingsContent(view SettingsPageView) {
+	<div class="settings-page page-stack isotope-control-page" id="settings-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab">
+		<header class="page-heading"><h1>Settings</h1><p>Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect.</p></header>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		<section class="card server-configuration-card emphasized"><header><div><h2>@Icon("settings-2")<span>Server Configuration</span></h2><p>Sable v{ view.Console.Version } · Revision { fmt.Sprint(view.Revision) }</p></div><button class="icon-button" type="button" onclick="window.location.reload()" aria-label="Refresh settings">@Icon("refresh")</button></header></section>
+		<div class="isotope-tab-list settings-tab-list" role="tablist" aria-label="Settings sections">
+			@SettingsTab("general", "General", "server", view.ActiveTab, false)
+			@SettingsTab("web-service", "Web", "globe", view.ActiveTab, false)
+			@SettingsTab("protocols", "Protocols", "cluster", view.ActiveTab, false)
+			@SettingsTab("tsig", "TSIG", "key", view.ActiveTab, true)
+			@SettingsTab("recursion", "Recursion", "refresh", view.ActiveTab, false)
+			@SettingsTab("cache", "Cache", "database", view.ActiveTab, false)
+			@SettingsTab("blocking", "Blocking", "shield", view.ActiveTab, false)
+			@SettingsTab("proxy", "Proxy", "cluster", view.ActiveTab, false)
+			@SettingsTab("logging", "Logging", "file-text", view.ActiveTab, false)
+			@SettingsTab("backup", "Backup", "hard-drive", view.ActiveTab, true)
+		</div>
+		<form class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
+			<div class="settings-tab-panel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="web-service" hidden?={ view.ActiveTab != "web-service" }>@SettingsWebPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="protocols" hidden?={ view.ActiveTab != "protocols" }>@SettingsProtocolsPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="recursion" hidden?={ view.ActiveTab != "recursion" }>@SettingsRecursionPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="cache" hidden?={ view.ActiveTab != "cache" }>@SettingsCachePanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>@SettingsBlockingPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="proxy" hidden?={ view.ActiveTab != "proxy" }>@SettingsProxyPanel(view)</div>
+			<div class="settings-tab-panel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
+		</form>
+		@ManualCertificateDialogs()
+	</div>
+}
+
+templ SettingsTab(value, label, icon, active string, disabled bool) {
+	<button class={ ifThen(active == value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ value } aria-selected={ fmt.Sprint(active == value) } disabled?={ disabled } title={ ifThen(disabled, label + " settings are not available yet", "") }>@Icon(icon)<span>{ label }</span></button>
+}
+
+templ SettingsGeneralPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("server", "Server Identity", "Configure the DNS server's identity and listening endpoints") {
+			<div class="isotope-card-content"><label class="field-control"><span>Local End Points</span><textarea name="dns_listen" rows="3" spellcheck="false" required>{ view.DNSListen }</textarea><small>Network interface addresses and ports to listen on (one per line, format: IP:port).</small></label></div>
+		}
+		@SettingsCard("database", "Storage", "Persistent configuration and DNS data backend") {
+			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Database Driver</span><strong>{ view.DatabaseDriver }</strong></div><div class="read-only-field"><span>Data Source</span><strong>{ view.DatabaseDSN }</strong></div></div>
+		}
+		@SettingsSaveButton("general")
+	</div>
+}
+
+templ SettingsWebPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("globe", "Web Service Settings", "Configure the web interface and API service") {
+			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>HTTP Listen Address</span><strong>{ view.HTTPListen }</strong><small>The local setup and recovery listener is configured in <code>sable.toml</code>.</small></div><label class="field-control"><span>HTTPS Listen Address</span><input name="https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/><small>Uses the public certificate configured under Protocols. Changing this address requires a restart.</small></label></div>
+		}
+		@SettingsCard("shield", "Session Security", "Configure authentication lifetimes for the web service") {
+			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Session Lifetime</span><strong>{ view.SessionTTL }</strong></div><div class="read-only-field"><span>Default API Token Lifetime</span><strong>{ view.APITokenTTL }</strong></div></div>
+		}
+		@SettingsCard("clock", "Display Preferences", "Choose how times are shown in this browser") {
+			<div class="isotope-card-content"><label class="field-control narrow-control"><span>Time Format</span><select data-time-format-preference><option value="12" selected?={ view.TimeFormat != "24" }>12-hour (9:30 PM)</option><option value="24" selected?={ view.TimeFormat == "24" }>24-hour (21:30)</option></select><small>This preference applies throughout Sable and is stored in this browser.</small></label></div>
+		}
+	</div>
+}
+
+templ SettingsProtocolsPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("cluster", "Secure DNS Protocols", "Enable encrypted DNS protocols for enhanced privacy") {
+			<div class="isotope-card-content protocol-grid"><div class="protocol-setting"><div><strong>DNS-over-TLS (DoT)</strong><small>Port 853</small></div><textarea name="dot_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:853">{ view.DoTListen }</textarea></div><div class="protocol-setting"><div><strong>DNS-over-HTTPS (DoH)</strong><small>HTTPS endpoint</small></div><textarea name="doh_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:443">{ view.DoHListen }</textarea></div></div>
+		}
+		<div id="public-certificates">
+			@SettingsCard("shield", "Public TLS Certificate", "Certificate used by the Web, DNS-over-HTTPS, and DNS-over-TLS endpoints") {
+				<div class="isotope-card-content certificate-settings" data-certificate-settings>
+					<div class="certificate-mode-control" role="radiogroup" aria-label="Certificate source"><label class={ ifThen(view.CertificateMode != "acme", "active", "") }><input type="radio" name="certificate_mode" value="manual" checked?={ view.CertificateMode != "acme" }/><span>Manual Certificate</span></label><label class={ ifThen(view.CertificateMode == "acme", "active", "") }><input type="radio" name="certificate_mode" value="acme" checked?={ view.CertificateMode == "acme" }/><span>Let's Encrypt (ACME)</span></label></div>
+					<div class="manual-certificate-settings" data-certificate-manual hidden?={ view.CertificateMode == "acme" }>
+						<div class="field-grid two"><label class="field-control"><span>Certificate File</span><input name="certificate_file" value={ view.CertificateFile } placeholder="/etc/sable/tls/fullchain.pem"/></label><label class="field-control"><span>Private Key File</span><input name="private_key_file" value={ view.PrivateKeyFile } placeholder="/etc/sable/tls/privkey.pem"/></label></div>
+						<div class="certificate-manual-actions"><button class="button secondary" type="button" data-dialog-open="generate-certificate-dialog" data-replica-primary-action>@Icon("key")<span>Generate Self-Signed</span></button><button class="button outline" type="button" data-dialog-open="import-certificate-dialog" data-replica-primary-action>@Icon("upload")<span>Import PEM</span></button></div>
+						<div class="certificate-manual-note">@Icon("info")<span>Generated certificates are useful for private deployments but remain untrusted until their identity is added to client trust stores.</span></div>
+					</div>
+					<div class="acme-settings" data-certificate-acme hidden?={ view.CertificateMode != "acme" }>
+						<div class="certificate-status"><div><strong>Managed certificate</strong><span>{ ifThen(view.ACMEIssuer != "", view.ACMEIssuer + " · expires " + view.ACMEExpires, "No certificate has been issued yet") }</span></div><span class={ ifThen(view.ACMELastError != "", "badge danger", ifThen(view.ACMEIssuer != "", "badge success", "badge")) }>{ ifThen(view.ACMELastError != "", "Attention", ifThen(view.ACMEIssuer != "", "Active", "Not issued")) }</span></div>
+						if view.ACMELastError != "" {
+							<div class="certificate-error" role="alert">@Icon("alert-triangle")<span>{ view.ACMELastError }</span></div>
+						}
+						<div class="field-grid two"><label class="field-control"><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/><small>Used by the certificate authority for expiry and account notices.</small></label><label class="field-control"><span>DNS Names</span><textarea name="acme_domains" rows="3" spellcheck="false" placeholder="dns.example.com&#10;*.example.com">{ view.ACMEDomains }</textarea><small>One name per line. Wildcards are supported through DNS-01.</small></label><label class="field-control"><span>Certificate Authority</span><select name="acme_directory_url"><option value="https://acme-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" }>Let's Encrypt Production</option><option value="https://acme-staging-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-staging-v02.api.letsencrypt.org/directory" }>Let's Encrypt Staging</option></select><small>Use staging while testing to avoid production rate limits.</small></label><label class="field-control"><span>Renew Before Expiry</span><input name="acme_renew_before" value={ view.ACMERenewBefore } placeholder="720h"/><small>Between 24h and 1440h.</small></label></div>
+						<div class="acme-provider-card" data-acme-provider-root><header><div><strong>DNS-01 Provider</strong><small>Credentials are encrypted in Sable's secret vault and never written to TOML.</small></div><span class={ ifThen(view.ACMECredentialsConfigured, "badge success", "badge") }>{ ifThen(view.ACMECredentialsConfigured, "Configured", "Credentials required") }</span></header><div class="field-grid two"><label class="field-control"><span>Provider</span><select name="acme_dns_provider" data-acme-provider><option value="" selected?={ view.ACMEDNSProvider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.ACMEDNSProvider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.ACMEDNSProvider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.ACMEDNSProvider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.ACMEDNSProvider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.ACMEDNSProvider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.ACMEDNSProvider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.ACMEDNSProvider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.ACMEDNSProvider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.ACMEDNSProvider == "rfc2136" }>RFC 2136 Dynamic Update</option></select></label><label class="field-control"><span>DNS Zone (optional)</span><input name="acme_dns_zone" value={ view.ACMEDNSZone } placeholder="example.com"/><small>Set this for delegated subzones; otherwise Sable detects the registrable zone.</small></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="cloudflare" hidden?={ view.ACMEDNSProvider != "cloudflare" }><label class="field-control"><span>API Token</span><input type="password" name="cloudflare_api_token" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Cloudflare API token") }/></label><label class="field-control"><span>Zone ID (optional)</span><input name="cloudflare_zone_id" placeholder="Detected from the zone when blank"/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="porkbun" hidden?={ view.ACMEDNSProvider != "porkbun" }><label class="field-control"><span>API Key</span><input type="password" name="porkbun_api_key" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Porkbun API key") }/></label><label class="field-control"><span>Secret API Key</span><input type="password" name="porkbun_secret" autocomplete="new-password" placeholder="Secret API key"/></label></div>
+							<div class="field-grid three acme-credential-fields" data-acme-credentials="namecheap" hidden?={ view.ACMEDNSProvider != "namecheap" }><label class="field-control"><span>API Username</span><input name="namecheap_username" autocomplete="off"/></label><label class="field-control"><span>API Key</span><input type="password" name="namecheap_api_key" autocomplete="new-password"/></label><label class="field-control"><span>Allow-listed Client IP</span><input name="namecheap_client_ip" placeholder="203.0.113.10"/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="godaddy" hidden?={ view.ACMEDNSProvider != "godaddy" }><label class="field-control"><span>Production API Token</span><input type="password" name="godaddy_api_token" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "GoDaddy API token") }/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="digitalocean" hidden?={ view.ACMEDNSProvider != "digitalocean" }><label class="field-control"><span>API Token</span><input type="password" name="digitalocean_api_token" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "DigitalOcean API token") }/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="hetzner" hidden?={ view.ACMEDNSProvider != "hetzner" }><label class="field-control"><span>API Token</span><input type="password" name="hetzner_api_token" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Hetzner API token") }/></label><label class="field-control"><span>Zone ID (optional)</span><input name="hetzner_zone_id" placeholder="Uses the DNS zone name when blank"/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="route53" hidden?={ view.ACMEDNSProvider != "route53" }><label class="field-control"><span>Access Key ID</span><input name="route53_access_key_id" autocomplete="off" placeholder="AKIA…"/></label><label class="field-control"><span>Secret Access Key</span><input type="password" name="route53_secret_access_key" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "AWS secret access key") }/></label><label class="field-control"><span>Hosted Zone ID</span><input name="route53_zone_id" placeholder="Z0123456789EXAMPLE"/></label><label class="field-control"><span>Session Token (optional)</span><input type="password" name="route53_session_token" autocomplete="new-password" placeholder="For temporary AWS credentials"/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="ovh" hidden?={ view.ACMEDNSProvider != "ovh" }><label class="field-control"><span>API Endpoint</span><select name="ovh_endpoint"><option value="ovh-eu" selected?={ view.ACMEProviderEndpoint == "" || view.ACMEProviderEndpoint == "ovh-eu" }>Europe</option><option value="ovh-ca" selected?={ view.ACMEProviderEndpoint == "ovh-ca" }>Canada</option><option value="ovh-us" selected?={ view.ACMEProviderEndpoint == "ovh-us" }>United States</option></select></label><label class="field-control"><span>Application Key</span><input name="ovh_application_key" autocomplete="off"/></label><label class="field-control"><span>Application Secret</span><input type="password" name="ovh_application_secret" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "OVHcloud application secret") }/></label><label class="field-control"><span>Consumer Key</span><input type="password" name="ovh_consumer_key" autocomplete="new-password"/></label></div>
+							<div class="field-grid two acme-credential-fields" data-acme-credentials="rfc2136" hidden?={ view.ACMEDNSProvider != "rfc2136" }><label class="field-control"><span>Authoritative Server</span><input name="rfc2136_server" placeholder="dns.example.com:53"/></label><label class="field-control"><span>TSIG Key Name</span><input name="rfc2136_tsig_name" placeholder="acme-update."/></label><label class="field-control"><span>TSIG Secret</span><input type="password" name="rfc2136_tsig_secret" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret") }/></label><label class="field-control"><span>TSIG Algorithm</span><select name="rfc2136_tsig_algorithm"><option value="hmac-sha256" selected?={ view.ACMETSIGAlgorithm == "" || view.ACMETSIGAlgorithm == "hmac-sha256" }>HMAC-SHA256</option><option value="hmac-sha384" selected?={ view.ACMETSIGAlgorithm == "hmac-sha384" }>HMAC-SHA384</option><option value="hmac-sha512" selected?={ view.ACMETSIGAlgorithm == "hmac-sha512" }>HMAC-SHA512</option></select></label></div>
+						</div>
+						<div class="field-grid two"><label class="field-control"><span>Certificate Storage</span><input name="acme_storage_dir" value={ view.ACMEStorageDirectory } placeholder="data/tls/acme"/><small>Account key, certificate, and private key stay node-local.</small></label></div>
+						<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" disabled?={ view.ACMERenewing }>@Icon("refresh")<span>{ ifThen(view.ACMERenewing, "Issuing…", "Issue / Renew Now") }</span></button>
+					</div>
+					<label class="field-control narrow-control"><span>Minimum TLS Version</span><select name="minimum_tls_version"><option value="1.2" selected?={ view.MinimumTLSVersion == "1.2" }>TLS 1.2</option><option value="1.3" selected?={ view.MinimumTLSVersion == "1.3" }>TLS 1.3</option></select></label>
+				</div>
+			}
+		</div>
+		@SettingsSaveButton("protocols")
+	</div>
+}
+
+templ ManualCertificateDialogs() {
+	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="generate-certificate-dialog" aria-labelledby="generate-certificate-title">
+		<div class="dialog-header"><h2 id="generate-certificate-title">Generate Self-Signed Certificate</h2><p>Create and configure a node-local certificate for Web, DoH, and DoT</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form hx-post="/ui/certificates/generate" hx-target="#settings-content" hx-swap="outerHTML">
+			<input type="hidden" name="settings_tab" value="protocols"/>
+			<div class="isotope-dialog-body">
+				<label><span>DNS Names and IP Addresses</span><textarea class="mono-input" name="manual_certificate_names" rows="5" placeholder={ "dns.example.com\n*.example.com\n192.0.2.10" } required></textarea><small>Enter one subject alternative name per line. Include every address clients use.</small></label>
+				<div class="field-grid two"><label><span>Validity (days)</span><input type="number" name="manual_certificate_valid_days" value="365" min="1" max="3650" required/></label><label><span>Protected Storage Directory</span><input class="mono-input" name="manual_certificate_storage_dir" value="data/tls/manual" required/><small>Must remain inside the Sable configuration directory.</small></label></div>
+				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>ECDSA P-256 identity</strong><span>The private key is written with owner-only permissions and is never stored in TOML or returned by the API.</span></p></div>
+			</div>
+			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Generate &amp; Use Certificate</button></div>
+		</form>
+	</dialog>
+	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="import-certificate-dialog" aria-labelledby="import-certificate-title">
+		<div class="dialog-header"><h2 id="import-certificate-title">Import Certificate</h2><p>Validate and store an existing PEM certificate chain and private key</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form hx-post="/ui/certificates/import" hx-target="#settings-content" hx-swap="outerHTML">
+			<input type="hidden" name="settings_tab" value="protocols"/>
+			<div class="isotope-dialog-body">
+				<label><span>Certificate Chain (PEM)</span><textarea class="mono-input" name="manual_certificate_pem" rows="7" spellcheck="false" autocomplete="off" placeholder="-----BEGIN CERTIFICATE-----" required></textarea></label>
+				<label><span>Private Key (PEM)</span><textarea class="mono-input" name="manual_private_key_pem" rows="7" spellcheck="false" autocomplete="off" placeholder="-----BEGIN PRIVATE KEY-----" required></textarea></label>
+				<label><span>Protected Storage Directory</span><input class="mono-input" name="manual_import_storage_dir" value="data/tls/manual" required/></label>
+				<div class="cluster-dialog-note">@Icon("lock")<p><strong>Validated before activation</strong><span>Sable verifies the key pair and validity period before committing either file. The private key is never rendered back into the UI.</span></p></div>
+			</div>
+			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Import &amp; Use Certificate</button></div>
+		</form>
+	</dialog>
+}
+
+templ SettingsRecursionPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("refresh", "Recursive Resolver", "Configure recursive resolution behavior and DNSSEC validation") {
+			<div class="isotope-card-content">
+				<div class="blocking-radio-list settings-blocking-radio-list"><label><input type="radio" name="resolver_mode" value="recursive" checked?={ view.ResolverMode == "recursive" }/><span><strong>Iterative Recursion</strong><small>Resolve directly from the DNS root with QNAME minimization. Conditional routes still use their configured forwarders.</small></span></label><label><input type="radio" name="resolver_mode" value="forward" checked?={ view.ResolverMode == "forward" }/><span><strong>Forwarding</strong><small>Send unmatched queries to the upstream servers configured under Proxy.</small></span></label></div>
+				<div class="field-grid two"><label class="field-control"><span>Resolution Timeout</span><input name="resolver_timeout" value={ view.ResolverTimeout } required/><small>End-to-end deadline, such as <code>3s</code>.</small></label><label class="field-control switch-row"><span><strong>Validate DNSSEC</strong><small>Reject bogus signatures during recursive resolution.</small></span><input type="checkbox" name="dnssec_validation" value="true" checked?={ view.DNSSECValidation }/></label></div>
+				<label class="field-control switch-row"><span><strong>Automatic Trust-Anchor Updates</strong><small>Maintain RFC 5011 root trust anchors without manual intervention.</small></span><input type="checkbox" name="trust_anchor_updates" value="true" checked?={ view.TrustAnchorUpdates }/></label>
+				<details class="settings-advanced"><summary>@Icon("sliders")<span>Advanced root hints</span>@Icon("chevron-down")</summary><label class="field-control"><span>Root Server Addresses</span><textarea name="root_hints" rows="5" spellcheck="false" placeholder="Use Sable's bundled IANA root hints">{ view.RootHints }</textarea><small>Optional IP:port seed addresses, one per line. Leave empty to use the bundled root hints.</small></label></details>
+			</div>
+		}
+		@SettingsSaveButton("recursion")
+	</div>
+}
+
+templ SettingsCachePanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("database", "Cache Settings", "Configure DNS cache behavior, limits, and TTL policy") {
+			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Save Cache to Disk</strong><small>Persist warm cache entries in the configured database during a controlled shutdown and restore them at startup.</small></span><input type="checkbox" name="save_cache" value="true" checked?={ view.SaveCache }/></label><label class="field-control narrow-control"><span>Maximum Cache Entries</span><input type="number" name="cache_size" min="1" value={ fmt.Sprint(view.CacheSize) } required/><small>Maximum number of DNS responses held in the bounded, sharded LRU cache.</small></label><div class="field-grid four cache-ttl-grid"><label class="field-control"><span>Minimum TTL (sec)</span><input type="number" name="cache_minimum_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CacheMinimumTTL) } required/><small>Raises shorter upstream TTLs.</small></label><label class="field-control"><span>Maximum TTL (sec)</span><input type="number" name="cache_maximum_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheMaximumTTL) } required/><small>Caps longer upstream TTLs.</small></label><label class="field-control"><span>Negative TTL (sec)</span><input type="number" name="cache_negative_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CacheNegativeTTL) } required/><small>NXDOMAIN and negative answers.</small></label><label class="field-control"><span>Failure TTL (sec)</span><input type="number" name="cache_failure_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CacheFailureTTL) } required/><small>SERVFAIL caching; 0 disables it.</small></label></div></div>
+		}
+		@SettingsCard("refresh", "Serve Stale Records", "Serve recently expired records when upstream resolution fails") {
+			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Enable Serve Stale</strong><small>Improve availability during upstream outages without serving stale data during normal operation.</small></span><input type="checkbox" name="serve_stale" value="true" checked?={ view.ServeStale }/></label><div class="field-grid four"><label class="field-control"><span>Maximum Stale Age (sec)</span><input type="number" name="cache_stale_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleTTL) } required/><small>Maximum age for retained stale records.</small></label><label class="field-control"><span>Answer TTL (sec)</span><input type="number" name="cache_stale_answer_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleAnswerTTL) } required/><small>TTL returned in stale responses.</small></label><label class="field-control"><span>Retry TTL (sec)</span><input type="number" name="cache_stale_reset_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleResetTTL) } required/><small>Delay before retrying a failed upstream.</small></label><label class="field-control"><span>Max Wait (ms)</span><input type="number" name="cache_stale_max_wait_ms" min="1" max="60000" value={ fmt.Sprint(view.CacheStaleMaxWaitMS) } required/><small>Wait before returning stale data.</small></label></div></div>
+		}
+		@SettingsCard("refresh", "Cache Prefetching", "Refresh popular records in the background before they expire") {
+			<div class="isotope-card-content field-grid four"><label class="field-control"><span>Eligibility TTL (sec)</span><input type="number" name="cache_prefetch_minimum_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchMinimumTTL) } required/><small>Minimum original TTL for prefetch.</small></label><label class="field-control"><span>Trigger TTL (sec)</span><input type="number" name="cache_prefetch_trigger_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchTriggerTTL) } required/><small>Refresh at this remaining TTL; 0 disables.</small></label><label class="field-control"><span>Sample Interval</span><input name="cache_prefetch_sample_interval" value={ view.CachePrefetchSample } required/><small>Go duration, such as <code>5m</code>.</small></label><label class="field-control"><span>Sample Hits/Hour</span><input type="number" name="cache_prefetch_hits_per_hour" min="1" max="4294967295" value={ fmt.Sprint(view.CachePrefetchHitsPerHour) } required/><small>Minimum popularity for prefetch.</small></label></div>
+		}
+		@SettingsSaveButton("cache")
+	</div>
+}
+
+templ SettingsBlockingPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("shield", "Blocking Response", "Configure how Sable responds to blocked DNS requests") {
+			<div class="isotope-card-content">
+				<div class="blocking-radio-list settings-blocking-radio-list"><label><input type="radio" name="blocking_response_type" value="zero" checked?={ view.BlockingResponseType == "zero" }/><span><strong>Any Address</strong><small>Respond with 0.0.0.0 and :: for blocked domains.</small></span></label><label><input type="radio" name="blocking_response_type" value="nxdomain" checked?={ view.BlockingResponseType == "nxdomain" }/><span><strong>NX Domain</strong><small>Respond with NXDOMAIN (domain does not exist).</small></span></label><label><input type="radio" name="blocking_response_type" value="custom" checked?={ view.BlockingResponseType == "custom" }/><span><strong>Custom Address</strong><small>Respond with the IP addresses specified below.</small></span></label></div>
+				<label class="blocking-textarea" data-custom-addresses hidden?={ view.BlockingResponseType != "custom" }><span>Custom Blocking Addresses</span><textarea name="blocking_custom_addresses" rows="3" placeholder={ "127.0.0.1\n::1" }>{ view.BlockingCustomAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line.</small></label>
+				<label class="blocking-number"><span>Response TTL (seconds)</span><input type="number" name="blocking_response_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.BlockingResponseTTL) } required/><small>How long clients should cache a blocking response.</small></label>
+			</div>
+		}
+		@SettingsCard("refresh", "Block List Updates", "Configure automatic refreshes for remote block lists") {
+			<div class="isotope-card-content"><label class="field-control narrow-control"><span>Update Interval (hours)</span><input type="number" name="blocking_update_hours" min="1" max="8760" value={ fmt.Sprint(view.BlockingUpdateHours) } required/><small>Remote block lists are downloaded and compiled on this schedule.</small></label></div>
+		}
+		@SettingsCard("server", "Bypass Clients", "Exclude trusted clients and networks from DNS blocking") {
+			<div class="isotope-card-content"><label class="field-control"><span>IP Addresses and Networks</span><textarea name="blocking_bypass_clients" rows="4" placeholder={ "192.168.1.100\n10.0.0.0/8" }>{ view.BlockingBypassClients }</textarea><small>Enter one IP address or CIDR network per line.</small></label></div>
+		}
+		@SettingsCard("sliders", "Advanced Options", "Additional blocking response behavior") {
+			<div class="isotope-card-content"><label class="blocking-check"><input type="checkbox" name="blocking_allow_txt_report" value="true" checked?={ view.BlockingAllowTXTReport }/><span><strong>Allow TXT Blocking Report</strong><small>Return blocking information when a blocked name is queried for TXT records.</small></span></label></div>
+		}
+		<div class="settings-blocking-actions"><a class="button outline" href="/blocked">@Icon("shield")<span>Manage Block Lists and Domains</span></a><button class="button" type="submit" name="settings_tab" value="blocking">Save Settings</button></div>
+	</div>
+}
+
+templ SettingsProxyPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("cluster", "DNS Forwarders", "Forward queries to upstream DNS servers instead of recursive resolution") {
+			<div class="isotope-card-content"><label class="field-control"><span>Forwarder Addresses</span><textarea name="forwarders" rows="4" spellcheck="false" placeholder={ "8.8.8.8\n1.1.1.1" }>{ view.Forwarders }</textarea><small>Required in forwarding mode. Conditional routes and forwarder zones remain active in iterative mode.</small></label></div>
+		}
+		@SettingsSaveButton("proxy")
+	</div>
+}
+
+templ SettingsLoggingPanel(view SettingsPageView) {
+	<div class="settings-panel-stack">
+		@SettingsCard("file-text", "Logging Configuration", "Configure query logs and audit trail") {
+			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Log DNS Queries</strong><small>Persist DNS queries for logs, metrics, and dashboard insights.</small></span><input type="checkbox" name="query_log_enabled" value="true" checked?={ view.QueryLogEnabled }/></label><div class="read-only-field narrow-control"><span>Query Log Retention</span><strong>{ view.QueryLogRetention }</strong></div></div>
+		}
+		@SettingsSaveButton("logging")
+	</div>
+}
+
+templ SettingsCard(icon, title, description string) {
+	<section class="card settings-source-card">
+		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
+		{ children... }
+	</section>
+}
+templ SettingsSaveButton(tab string) { <div class="settings-panel-save"><button class="button" type="submit" name="settings_tab" value={ tab }>Save Settings</button></div> }

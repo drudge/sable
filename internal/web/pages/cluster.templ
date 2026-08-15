@@ -1,0 +1,388 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+type ClusterPageView struct {
+	Console DashboardView
+	Initialized bool
+	NetworkReady bool
+	NodeID string
+	ClusterID string
+	ClusterDomain string
+	Generation uint64
+	Mode string
+	LocalRole string
+	PrimaryID string
+	PrimaryURL string
+	ObservedAt time.Time
+	Connected int
+	Synchronized int
+	Nodes []ClusterNodeView
+	Message string
+	Error string
+	EnrollmentToken string
+	EnrollmentExpiresAt time.Time
+	DataDirectory string
+	NodeName string
+	AdvertiseURL string
+	RestartRequired bool
+	OnboardingMode string
+	OnboardingStep int
+	ConfigureNode bool
+	CertificateSource string
+	HTTPSListen string
+	CertificateMode string
+	CertificateFile string
+	PrivateKeyFile string
+	ACMEEmail string
+	ACMEDomains string
+	ACMEDirectoryURL string
+	ACMEDNSProvider string
+	ACMEDNSZone string
+	ACMEStorageDirectory string
+	ACMERenewBefore string
+	ACMECredentialsConfigured bool
+	JoinPrimaryURL string
+	JoinToken string
+	JoinAddresses string
+}
+
+type ClusterNodeView struct {
+	ID string
+	Name string
+	AdvertiseURL string
+	Addresses []string
+	Role string
+	State string
+	Version string
+	UpSince string
+	SyncState string
+	CurrentGeneration uint64
+	AppliedGeneration uint64
+	Lag uint64
+	LastContact string
+	LastSync string
+	LastContactAt string
+	LastSyncAt string
+	Local bool
+}
+
+templ ClusterPage(view ClusterPageView) {
+	@AppDocument(view.Console, "Cluster", "cluster", ClusterContent(view))
+}
+
+templ ClusterContent(view ClusterPageView) {
+	<div class="cluster-page page-stack" id="cluster-content">
+		<header class="page-heading"><h1>Cluster</h1><p>Synchronize Sable across independent DNS servers</p></header>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		<div class="cluster-layout">
+			<div class="cluster-main-column">
+				if !view.Initialized {
+					<section class="card cluster-status-card emphasized">
+						<header><div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>This server is operating independently</p></div><span class="status-badge">Not configured</span></header>
+						<div class="cluster-empty-state">
+							<span class="cluster-empty-icon">@Icon("server")</span>
+							<h3>No Cluster Configured</h3>
+							<p>Create a primary or join this server to an existing Sable primary as a replica.</p>
+							if view.RestartRequired {
+								<div class="cluster-restart-notice">@Icon("refresh")<span>Restart Sable to activate the saved node identity.</span></div>
+							}
+							<div class="cluster-empty-actions">
+								<button class="button" type="button" data-dialog-open="initialize-cluster-dialog">@Icon("plus")<span>Initialize Primary</span></button>
+								<button class="button outline" type="button" data-dialog-open="join-cluster-dialog">@Icon("log-in")<span>Join Existing Cluster</span></button>
+							</div>
+						</div>
+					</section>
+				} else {
+					@ClusterLiveStatus(view)
+					if view.LocalRole == "Replica" {
+						<section class="card cluster-danger-card"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post="/ui/cluster/leave" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" hx-confirm="Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently." data-confirm-title="Leave cluster?" data-confirm-action="Leave Cluster"><button class="button destructive" type="submit">@Icon("log-out")<span>Leave Cluster</span></button></form></section>
+					} else if view.LocalRole == "Primary" {
+						<section class="card cluster-danger-card">
+							<div>
+								<h2>Delete Cluster</h2>
+								if len(view.Nodes) > 1 {
+									<p>Dissolve this cluster and return every member to standalone operation.</p>
+									if len(view.Nodes) == 2 {
+										<small>1 replica will leave automatically on its next synchronization.</small>
+									} else {
+										<small>{ fmt.Sprintf("%d replicas will leave automatically on their next synchronization.", len(view.Nodes)-1) }</small>
+									}
+								} else {
+									<p>Return this server to standalone operation. Its DNS data and stable node identity are preserved.</p>
+								}
+							</div>
+							<form hx-post="/ui/cluster/delete" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" hx-confirm="Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization." data-confirm-title="Delete cluster?" data-confirm-action="Delete Cluster"><button class="button destructive" type="submit">@Icon("trash")<span>Delete Cluster</span></button></form>
+						</section>
+					}
+				}
+			</div>
+			<aside class="cluster-aside">
+				<section class="card cluster-configuration-card">
+					<div><h2>@Icon("settings")<span>Node Identity</span></h2><p>Name and HTTPS endpoint advertised to other nodes</p></div>
+					if view.RestartRequired {
+						<span class="status-badge warning">Restart required</span>
+					} else if view.NetworkReady {
+						<span class="status-badge active">Ready</span>
+					}
+					<button class="button outline" type="button" data-dialog-open="cluster-settings-dialog">@Icon("settings")<span>Configure Node</span></button>
+				</section>
+				<section class="card cluster-guidance">
+					<h2>How Clustering Works</h2>
+					@ClusterGuide("blue", "One Primary", "Configuration changes are made on the primary and synchronized to every replica.")
+					@ClusterGuide("green", "Independent DNS", "Every node answers DNS from local state even when the primary is unavailable.")
+					@ClusterGuide("purple", "Manual Promotion", "A replica can be explicitly promoted when the primary is offline. No third voting node is required.")
+				</section>
+				if !view.NetworkReady {
+					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
+				}
+				<section class="card cluster-details"><h2>Local Node</h2><dl><div><dt>Node ID</dt><dd><code>{ view.NodeID }</code></dd></div><div><dt>Role</dt><dd>{ view.LocalRole }</dd></div><div><dt>Endpoint</dt><dd><code>{ endpointLabel(view.AdvertiseURL) }</code></dd></div><div><dt>Replication</dt><dd>HTTPS + signed requests</dd></div></dl></section>
+			</aside>
+		</div>
+		@ClusterSettingsDialog(view)
+		if !view.Initialized {
+			@InitializeClusterDialog(view)
+			@JoinClusterDialog(view)
+		} else if view.LocalRole == "Primary" && view.NetworkReady {
+			@EnrollmentTokenDialog(view)
+		}
+	</div>
+}
+
+templ ClusterSettingsDialog(view ClusterPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog" id="cluster-settings-dialog" aria-labelledby="cluster-settings-title">
+		<div class="dialog-header"><h2 id="cluster-settings-title">Cluster Node Configuration</h2><p>Configure how this server identifies itself to other nodes</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form hx-post="/ui/cluster/settings" hx-target="#cluster-content" hx-swap="outerHTML">
+			<div class="isotope-dialog-body">
+				<label><span>Node Name</span><input name="node_name" value={ view.NodeName } placeholder="dns-1" autocomplete="off" required/><small>A human-readable name shown to cluster administrators.</small></label>
+				<label><span>HTTPS Console / API URL</span><input name="advertise_url" value={ view.AdvertiseURL } type="url" pattern="https://.*" data-https-url placeholder="https://dns-1.example.com:5380" autocomplete="off" required/><small>Replicas use this endpoint for enrollment, synchronization, and status.</small></label>
+				<label><span>Local Cluster State Directory</span><input class="mono-input" name="data_dir" value={ view.DataDirectory } placeholder="data/cluster" autocomplete="off" required disabled?={ view.Initialized }/><small>{ ifThen(view.Initialized, "The state directory cannot be moved while this node belongs to a cluster.", "Stores the stable node identity and synchronized generation manifest.") }</small></label>
+				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>Use the public certificate settings</strong><span>The advertised URL must use the Sable HTTPS endpoint with a certificate trusted by the other nodes.</span></p></div>
+			</div>
+			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save &amp; Restart Later</button></div>
+		</form>
+	</dialog>
+}
+
+templ ClusterLiveStatus(view ClusterPageView) {
+	<div class="cluster-live-status" id="cluster-live-status" hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
+		<section class="card cluster-status-card emphasized">
+			<header>
+				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>
+				<div class="cluster-header-actions">
+					if view.LocalRole == "Primary" && view.NetworkReady {
+						<button class="button outline compact" type="button" data-dialog-open="enrollment-token-dialog">@Icon("plus")<span>Add Replica</span></button>
+					}
+					<div class="cluster-live-indicator"><i></i><span>Live</span></div>
+				</div>
+			</header>
+			<div class="operational-metric-grid cluster-metrics">
+				@OperationalMetricCard("server", "This Node", view.LocalRole, "Local cluster role", "blue")
+				@OperationalMetricCard("cluster", "Total Nodes", fmt.Sprint(len(view.Nodes)), "Primary and replicas", "purple")
+				@OperationalMetricCard("check-circle", "Connected", fmt.Sprintf("%d / %d", view.Connected, len(view.Nodes)), "Nodes currently reachable", "green")
+				@OperationalMetricCard("refresh", "In Sync", fmt.Sprintf("%d / %d", view.Synchronized, len(view.Nodes)), "Nodes at current generation", "cyan")
+			</div>
+			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div><div><span>Primary</span><code>{ view.PrimaryID }</code></div><div><span>Generation</span><strong>{ fmt.Sprint(view.Generation) }</strong></div></footer>
+		</section>
+		<section class="card cluster-nodes-card">
+			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><div class="cluster-observed"><span class="count-badge">{ fmt.Sprint(len(view.Nodes)) }</span><small>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeFormat, true) }</small></div></header>
+			<div class="cluster-node-list">
+				for _, node := range view.Nodes {
+					<article class="cluster-node-row">
+						<div class="cluster-node-heading">
+							<span class="cluster-node-icon">@Icon("server")</span>
+							<div class="cluster-node-copy">
+								<div><strong>{ node.Name }</strong>
+									if node.Local {
+										<span class="current-badge">This node</span>
+									}
+									<span class={ nodeStateBadge(node.State) }>{ nodeStateLabel(node.State) }</span><span class={ nodeSyncBadge(node.SyncState) }>{ syncStateLabel(node.SyncState) }</span>
+								</div>
+								<code>{ node.ID }</code><small>{ clusterNodeEndpoint(node) }</small>
+							</div>
+							<div class="cluster-node-meta">
+								<span>{ node.Role }</span><strong>{ node.Version }</strong><small>{ nodeUptimeLabel(node) }</small>
+							</div>
+						</div>
+						<div class="cluster-sync-progress">
+							if node.SyncState == "unverified" {
+								<div class="cluster-sync-indeterminate" role="progressbar" aria-label={ "Synchronization progress for " + node.Name } aria-valuetext="Awaiting primary verification"></div>
+							} else {
+								<progress value={ fmt.Sprint(node.AppliedGeneration) } max={ fmt.Sprint(syncProgressMaximum(node.CurrentGeneration)) } aria-label={ "Synchronization progress for " + node.Name }></progress>
+							}
+							<span>{ syncProgressLabel(node) }</span>
+						</div>
+						<div class="cluster-sync-grid"><div><span>Applied / Current</span><strong>{ fmt.Sprintf("%d / %d", node.AppliedGeneration, node.CurrentGeneration) }</strong></div><div><span>Generation Lag</span><strong>{ nodeLagLabel(node) }</strong></div><div><span>Last Contact</span><strong title={ node.LastContactAt }>{ node.LastContact }</strong></div><div><span>Last Successful Sync</span><strong title={ node.LastSyncAt }>{ node.LastSync }</strong></div></div>
+						if (node.Local && node.Role == "Replica") || (!node.Local && view.LocalRole == "Primary") {
+							<div class="cluster-node-actions">
+								if node.Local && node.Role == "Replica" {
+									<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm="Promote this replica for recovery? Ensure the former primary is offline to avoid two writable primaries." data-confirm-title="Promote for recovery?" data-confirm-action="Promote"><button class="button outline compact" type="submit">@Icon("arrow-right")<span>Promote This Replica</span></button></form>
+								}
+								if !node.Local && view.LocalRole == "Primary" {
+									if node.State == "online" && node.SyncState == "current" {
+										<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm={ "Hand the writable primary role to " + node.Name + "? This server will become a read-only replica." } data-confirm-title="Promote replica to primary?" data-confirm-action="Promote Replica"><button class="button outline compact" type="submit">@Icon("arrow-right")<span>Promote to Primary</span></button></form>
+									} else {
+										<button class="button outline compact" type="button" disabled title="The replica must be online and fully synchronized before handoff">@Icon("arrow-right")<span>Promote to Primary</span></button>
+									}
+									<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/remove" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm={ "Remove " + node.Name + " from this cluster? This only removes its membership; it does not erase data on that server." } data-confirm-title="Remove replica?" data-confirm-action="Remove Replica"><button class="button outline compact cluster-remove-node" type="submit">@Icon("trash")<span>Remove Replica</span></button></form>
+								}
+							</div>
+						}
+					</article>
+				}
+			</div>
+		</section>
+	</div>
+}
+
+templ InitializeClusterDialog(view ClusterPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog cluster-onboarding-dialog" id="initialize-cluster-dialog" aria-labelledby="initialize-cluster-title" data-dialog-auto-open={ fmt.Sprint(view.OnboardingMode == "primary") }>
+		<div class="dialog-header"><h2 id="initialize-cluster-title">Initialize Primary</h2><p>Create a cluster with this server as its writable primary</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		if view.RestartRequired {
+			@ClusterRestartStep(view, "primary")
+		} else if !view.NetworkReady || view.ConfigureNode {
+			@ClusterNodeOnboardingForm(view, "primary")
+		} else {
+			<form hx-post="/ui/cluster/initialize" hx-target="#cluster-content" hx-swap="outerHTML"><input type="hidden" name="workflow" value="primary"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "primary")<div class="cluster-wizard-heading"><span>@Icon("cluster")</span><div><strong>Create the cluster</strong><small>Set the identity and DNS addresses for this primary.</small></div></div><label><span>Cluster Domain</span><input name="domain" placeholder="cluster.example.com" autocomplete="off" required/><small>A stable DNS name that identifies this cluster.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.10\n[2001:db8::10]:53" } required></textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=primary&amp;configure=https" hx-get="/cluster?onboarding=primary&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button" type="submit">Initialize Primary</button></div></form>
+		}
+	</dialog>
+}
+
+templ JoinClusterDialog(view ClusterPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog cluster-onboarding-dialog" id="join-cluster-dialog" aria-labelledby="join-cluster-title" data-dialog-auto-open={ fmt.Sprint(view.OnboardingMode == "join") }><div class="dialog-header"><h2 id="join-cluster-title">Join Existing Cluster</h2><p>Enroll this server as an independently serving replica</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		if view.RestartRequired {
+			@ClusterRestartStep(view, "join")
+		} else if !view.NetworkReady || view.ConfigureNode {
+			@ClusterNodeOnboardingForm(view, "join")
+		} else {
+			<form hx-post="/ui/cluster/join" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" data-cluster-join-form><input type="hidden" name="workflow" value="join"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "join")<div class="cluster-wizard-heading"><span>@Icon("log-in")</span><div><strong>Connect to the primary</strong><small>Use the enrollment token created on the existing primary.</small></div></div>
+				if view.Error != "" {
+					<div class="cluster-join-error" role="alert">@Icon("alert-triangle")<div><strong>Could not join the cluster</strong><span>{ view.Error }</span></div></div>
+				}
+				<label><span>Primary URL</span><input name="primary_url" type="url" value={ view.JoinPrimaryURL } placeholder="https://dns-1.example.com:5380" autocomplete="off" required/></label><label><span>Enrollment Token</span><input class="mono-input" name="token" type="password" value={ view.JoinToken } autocomplete="off" required/><small>Short-lived, single-use token created on the primary.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.11\n127.0.0.1:8054" } required>{ view.JoinAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=join&amp;configure=https" hx-get="/cluster?onboarding=join&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button cluster-join-submit" type="submit"><span class="cluster-join-submit-idle">@Icon("log-in")<span>Join as Replica</span></span><span class="cluster-join-submit-pending" aria-live="polite">@Icon("refresh")<span>Joining &amp; syncing…</span></span></button></div></form>
+		}
+	</dialog>
+}
+
+templ ClusterRestartStep(view ClusterPageView, workflow string) {
+	<div data-sable-restart data-restart-url="/ui/cluster/restart" data-health-url="/api/v1/health" data-continue-url={ fmt.Sprintf("/cluster?onboarding=%s", workflow) } data-csrf-token={ view.Console.CSRFToken }>
+		<div class="isotope-dialog-body">@ClusterWizardProgress(2, workflow)<div class="cluster-restart-step"><span>@Icon("refresh")</span><h3>Restart Sable to continue</h3><p data-restart-status aria-live="polite">The node and HTTPS configuration are saved. Sable can restart cleanly and continue this wizard automatically.</p></div></div><div class="dialog-footer"><a class="button outline" href="/cluster" data-restart-exit>Exit Setup</a><button class="button" type="button" data-sable-restart-button>@Icon("refresh")<span>Restart &amp; Continue</span></button></div>
+	</div>
+}
+
+templ ClusterWizardProgress(step int, workflow string) {
+	<div class="cluster-wizard-progress" aria-label={ fmt.Sprintf("Step %d of 3", step) }>
+		<div class={ clusterWizardStepClass(step, 1) }><span>
+			if step > 1 {
+				@Icon("check")
+			} else {
+				1
+			}
+		</span><small>Node</small></div><i></i>
+		<div class={ clusterWizardStepClass(step, 2) }><span>
+			if step > 2 {
+				@Icon("check")
+			} else {
+				2
+			}
+		</span><small>HTTPS</small></div><i></i>
+		<div class={ clusterWizardStepClass(step, 3) }><span>3</span><small>{ clusterWizardLastLabel(workflow) }</small></div>
+	</div>
+}
+
+templ ClusterNodeOnboardingForm(view ClusterPageView, workflow string) {
+	<form hx-post="/ui/cluster/onboarding" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" data-cluster-onboarding data-initial-step={ fmt.Sprint(view.OnboardingStep) }>
+		<input type="hidden" name="workflow" value={ workflow }/>
+		<input type="hidden" name="wizard_step" value="https"/>
+		<div class="isotope-dialog-body">
+			@ClusterWizardProgress(max(view.OnboardingStep, 1), workflow)
+			<section class="cluster-wizard-panel" data-cluster-wizard-panel="1" hidden?={ view.OnboardingStep == 2 }>
+				<div class="cluster-wizard-heading"><span>@Icon("server")</span><div><strong>Name this node</strong><small>Choose how it appears to cluster administrators.</small></div></div>
+				<label><span>Node Name</span><input name="node_name" value={ clusterWizardNodeName(view.NodeName, view.OnboardingMode) } placeholder="dns-1" autocomplete="off" required/><small>Use a short, recognizable name such as <code>dns-home</code> or <code>dns-nyc-1</code>.</small></label>
+				<details class="cluster-wizard-advanced"><summary>Advanced</summary><label><span>Local Cluster State Directory</span><input class="mono-input" name="data_dir" value={ view.DataDirectory } placeholder="data/cluster" autocomplete="off" required/><small>Node identity and synchronization metadata are stored here.</small></label></details>
+			</section>
+			<section class="cluster-wizard-panel" data-cluster-wizard-panel="2" hidden?={ view.OnboardingStep != 2 }>
+				<div class="cluster-wizard-heading"><span>@Icon("shield-check")</span><div><strong>{ clusterWizardHTTPSHeading(workflow) }</strong><small>{ clusterWizardHTTPSDescription(workflow) }</small></div></div>
+				<label><span>{ clusterWizardAdvertiseLabel(workflow) }</span><input name="advertise_url" value={ clusterWizardAdvertiseURL(view.AdvertiseURL, view.OnboardingMode) } type="url" pattern="https://.*" data-https-url placeholder={ clusterWizardAdvertisePlaceholder(workflow) } autocomplete="off" required/><small>{ clusterWizardAdvertiseHelp(workflow) }</small></label>
+				<div class="cluster-certificate-section"><div class="cluster-certificate-choices" role="radiogroup" aria-label="HTTPS source"><label class={ ifThen(view.CertificateSource == "external", "active", "") }><input type="radio" name="certificate_source" value="external" checked?={ view.CertificateSource == "external" }/><span>@Icon("globe")<strong>Existing HTTPS</strong><small>Reverse proxy</small></span></label><label class={ ifThen(view.CertificateSource == "acme", "active", "") }><input type="radio" name="certificate_source" value="acme" checked?={ view.CertificateSource == "acme" }/><span>@Icon("key")<strong>Let's Encrypt</strong><small>Managed DNS-01</small></span></label><label class={ ifThen(view.CertificateSource == "generated", "active", "") }><input type="radio" name="certificate_source" value="generated" checked?={ view.CertificateSource == "generated" }/><span>@Icon("shield-check")
+				if workflow == "primary" {
+					<strong>Sable Private CA</strong><small>Self-signed cluster trust</small>
+				} else {
+					<strong>Self-Signed</strong><small>Local HTTPS</small>
+				}
+			</span></label><label class={ ifThen(view.CertificateSource == "import", "active", "") }><input type="radio" name="certificate_source" value="import" checked?={ view.CertificateSource == "import" }/><span>@Icon("upload")<strong>Import PEM</strong><small>Certificate + key</small></span></label></div>
+			<div class="cluster-certificate-panel" data-cluster-certificate-panel="external" hidden?={ view.CertificateSource != "external" }><div class="cluster-dialog-note">@Icon("globe")<p><strong>Reverse proxy or HTTPS already configured</strong><span>Sable keeps the current listener settings. The advertised URL must already route to this node with a certificate trusted by every cluster member.</span></p></div></div>
+			<div class="cluster-certificate-panel" data-cluster-certificate-panel="acme" hidden?={ view.CertificateSource != "acme" }><div class="field-grid two"><label><span>HTTPS Listen Address</span><input name="https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/></label><label><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/></label><label><span>DNS Names</span><textarea name="acme_domains" rows="2" placeholder="dns-1.example.com">{ view.ACMEDomains }</textarea></label><label><span>DNS Provider</span><select name="acme_dns_provider" data-acme-provider><option value="" selected?={ view.ACMEDNSProvider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.ACMEDNSProvider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.ACMEDNSProvider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.ACMEDNSProvider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.ACMEDNSProvider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.ACMEDNSProvider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.ACMEDNSProvider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.ACMEDNSProvider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.ACMEDNSProvider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.ACMEDNSProvider == "rfc2136" }>RFC 2136</option></select></label><label><span>DNS Zone (optional)</span><input name="acme_dns_zone" value={ view.ACMEDNSZone } placeholder="example.com"/></label></div><input type="hidden" name="acme_storage_dir" value={ firstNonEmptyPage(view.ACMEStorageDirectory, "data/tls/acme") }/><input type="hidden" name="acme_directory_url" value={ firstNonEmptyPage(view.ACMEDirectoryURL, "https://acme-v02.api.letsencrypt.org/directory") }/><input type="hidden" name="acme_renew_before" value={ firstNonEmptyPage(view.ACMERenewBefore, "720h") }/>@ClusterACMECredentialFields(view)</div>
+			<div class="cluster-certificate-panel" data-cluster-certificate-panel="generated" hidden?={ view.CertificateSource != "generated" }>
+				<label><span>HTTPS Listen Address</span><input name="generated_https_listen" value={ clusterWizardHTTPSListen(view.HTTPSListen, workflow) } placeholder={ clusterWizardHTTPSListen("", workflow) }/><small>{ clusterWizardHTTPSListenHelp(workflow) }</small></label>
+				<input type="hidden" name="generated_storage_dir" value={ ifThen(workflow == "primary", "data/cluster/pki", "data/tls/self-signed") }/>
+				if workflow == "primary" {
+					<div class="cluster-dialog-note compact">@Icon("shield-check")<p><strong>Automatic private trust</strong><span>Sable includes the public CA in enrollment tokens so replicas trust this node automatically.</span></p></div>
+				} else {
+					<div class="cluster-dialog-note compact">@Icon("info")<p><strong>This is ns2's endpoint</strong><span>The primary URL and enrollment token are entered on the next step. The primary's CA trust is carried in that token.</span></p></div>
+				}
+				<details class="cluster-certificate-advanced">
+					<summary>@Icon("sliders")<span>Advanced certificate options</span>@Icon("chevron-down")</summary>
+					<div class="cluster-certificate-advanced-content"><label><span>Validity (days)</span><input type="number" name="generated_valid_days" value="365" min="1" max="3650"/></label><label><span>Additional DNS Names and IPs (optional)</span><textarea name="generated_additional_names" rows="2" placeholder={ "localhost\n127.0.0.1" }></textarea><small>The hostname or IP from the advertised HTTPS URL is included automatically.</small></label></div>
+				</details>
+			</div>
+			<div class="cluster-certificate-panel" data-cluster-certificate-panel="import" hidden?={ view.CertificateSource != "import" }><input type="hidden" name="manual_import_storage_dir" value="data/tls/manual"/><label><span>HTTPS Listen Address</span><input name="import_https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/></label><label><span>Certificate Chain (PEM)</span><textarea name="manual_certificate_pem" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label><label><span>Private Key (PEM)</span><textarea name="manual_private_key_pem" rows="5" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label></div>
+		</div></section></div><div class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-cluster-wizard-cancel>Cancel</button><button class="button outline" type="button" data-cluster-wizard-back hidden>Back</button><button class="button" type="button" data-cluster-wizard-next>Continue</button><button class="button" type="submit" data-cluster-wizard-submit hidden>Save &amp; Continue</button></div></form>
+}
+
+templ ClusterACMECredentialFields(view ClusterPageView) {
+	<div class="cluster-acme-credentials"><div class="field-grid two" data-acme-credentials="cloudflare" hidden><label><span>API Token</span><input type="password" name="cloudflare_api_token" autocomplete="new-password"/></label><label><span>Zone ID (optional)</span><input name="cloudflare_zone_id"/></label></div><div class="field-grid two" data-acme-credentials="porkbun" hidden><label><span>API Key</span><input type="password" name="porkbun_api_key"/></label><label><span>Secret API Key</span><input type="password" name="porkbun_secret"/></label></div><div class="field-grid three" data-acme-credentials="namecheap" hidden><label><span>API Username</span><input name="namecheap_username"/></label><label><span>API Key</span><input type="password" name="namecheap_api_key"/></label><label><span>Allow-listed Client IP</span><input name="namecheap_client_ip"/></label></div><div class="field-grid two" data-acme-credentials="godaddy" hidden><label><span>API Token</span><input type="password" name="godaddy_api_token"/></label></div><div class="field-grid two" data-acme-credentials="digitalocean" hidden><label><span>API Token</span><input type="password" name="digitalocean_api_token"/></label></div><div class="field-grid two" data-acme-credentials="hetzner" hidden><label><span>API Token</span><input type="password" name="hetzner_api_token"/></label><label><span>Zone ID (optional)</span><input name="hetzner_zone_id"/></label></div><div class="field-grid two" data-acme-credentials="route53" hidden><label><span>Access Key ID</span><input name="route53_access_key_id"/></label><label><span>Secret Access Key</span><input type="password" name="route53_secret_access_key"/></label><label><span>Hosted Zone ID</span><input name="route53_zone_id"/></label><label><span>Session Token (optional)</span><input type="password" name="route53_session_token"/></label></div><div class="field-grid two" data-acme-credentials="ovh" hidden><label><span>API Endpoint</span><select name="ovh_endpoint"><option value="ovh-eu">Europe</option><option value="ovh-ca">Canada</option><option value="ovh-us">United States</option></select></label><label><span>Application Key</span><input name="ovh_application_key"/></label><label><span>Application Secret</span><input type="password" name="ovh_application_secret"/></label><label><span>Consumer Key</span><input type="password" name="ovh_consumer_key"/></label></div><div class="field-grid two" data-acme-credentials="rfc2136" hidden><label><span>Authoritative Server</span><input name="rfc2136_server" placeholder="dns.example.com:53"/></label><label><span>TSIG Key Name</span><input name="rfc2136_tsig_name"/></label><label><span>TSIG Secret</span><input type="password" name="rfc2136_tsig_secret"/></label><label><span>TSIG Algorithm</span><select name="rfc2136_tsig_algorithm"><option value="hmac-sha256">HMAC-SHA256</option><option value="hmac-sha384">HMAC-SHA384</option><option value="hmac-sha512">HMAC-SHA512</option></select></label></div></div>
+}
+
+templ EnrollmentTokenDialog(view ClusterPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog" id="enrollment-token-dialog" aria-labelledby="enrollment-token-title" data-dialog-auto-open={ fmt.Sprint(view.EnrollmentToken != "") }>
+		<div class="dialog-header"><h2 id="enrollment-token-title">Add Replica</h2><p>Create a short-lived, single-use enrollment token</p></div>
+		if view.EnrollmentToken == "" {
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		} else {
+			<button class="dialog-close" type="button" hx-get="/cluster" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" data-enrollment-token-dismiss aria-label="Close and clear enrollment token">@Icon("x")</button>
+		}
+		if view.EnrollmentToken == "" {
+			<form hx-post="/ui/cluster/enrollment-tokens" hx-target="#cluster-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Token Lifetime</span><select name="ttl"><option value="5m">5 minutes</option><option value="15m" selected>15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Replica enrollment</strong><span>The joining server receives cluster membership and begins pulling the current generation from this primary.</span></p></div></div><div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Create Token</button></div></form>
+		} else {
+			<div class="isotope-dialog-body"><label><span>Enrollment Token</span><div class="cluster-token-value"><code id="cluster-enrollment-token">{ view.EnrollmentToken }</code><button class="button outline compact cluster-copy-token" type="button" data-copy-target="cluster-enrollment-token" aria-label="Copy enrollment token" title="Copy enrollment token">@CopyIcons()<span data-copy-label>Copy token</span></button></div><small>Expires { FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeFormat, true) }. This secret includes the primary's private CA trust and will not be shown again.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class="dialog-footer"><button class="button" type="button" hx-get="/cluster" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" data-enrollment-token-dismiss>Done</button></div>
+		}
+	</dialog>
+}
+
+templ ClusterGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
+
+func clusterStatusDescription(view ClusterPageView) string {
+	if view.LocalRole == "Primary" { return "This server accepts configuration changes and synchronizes replicas" }
+	if view.LocalRole == "Replica" { return "This server answers DNS locally and synchronizes from the primary" }
+	return "This server is operating independently"
+}
+func endpointLabel(value string) string { if value == "" { return "Not configured" }; return value }
+func clusterFinalStepTitle(workflow string) string { if workflow == "join" { return "Join cluster" }; return "Initialize primary" }
+func clusterWizardLastLabel(workflow string) string { if workflow == "join" { return "Join" }; return "Cluster" }
+func clusterWizardStepClass(current, step int) string { if current > step { return "complete" }; if current == step { return "current" }; return "" }
+func clusterWizardNodeName(value, mode string) string { if mode == "" { return strings.SplitN(value, ".", 2)[0] }; return value }
+func clusterWizardAdvertiseURL(value, mode string) string { if mode == "" && !strings.HasPrefix(value, "https://") { return "" }; return value }
+func clusterWizardHTTPSHeading(workflow string) string { if workflow == "join" { return "Configure this replica's HTTPS" }; return "Secure cluster communication" }
+func clusterWizardHTTPSDescription(workflow string) string { if workflow == "join" { return "Give this replica its own HTTPS endpoint before connecting it to the primary." }; return "Every node must reach this server through trusted HTTPS." }
+func clusterWizardAdvertiseLabel(workflow string) string { if workflow == "join" { return "This Replica's HTTPS URL" }; return "Primary HTTPS Console / API URL" }
+func clusterWizardAdvertisePlaceholder(workflow string) string { if workflow == "join" { return "https://localhost:5444" }; return "https://dns-1.example.com:5443" }
+func clusterWizardAdvertiseHelp(workflow string) string { if workflow == "join" { return "The address recorded for this replica—not the primary URL. Enter the primary URL and enrollment token on the next step." }; return "The public URL replicas use for enrollment, synchronization, and status." }
+func clusterWizardHTTPSListen(value, workflow string) string { if value != "" { return value }; if workflow == "join" { return "127.0.0.1:5444" }; return "127.0.0.1:5443" }
+func clusterWizardHTTPSListenHelp(workflow string) string { if workflow == "join" { return "When testing both nodes on one machine, use a different port from the primary (normally 5444 instead of 5443)." }; return "The local address where Sable serves this HTTPS endpoint." }
+func firstNonEmptyPage(value, fallback string) string { if value != "" { return value }; return fallback }
+func clusterNodeEndpoint(node ClusterNodeView) string { if node.AdvertiseURL != "" { return node.AdvertiseURL }; if len(node.Addresses) > 0 { return node.Addresses[0] }; return "No advertised endpoint" }
+func nodeStateBadge(state string) string { if state == "online" { return "status-badge active" }; if state == "unreachable" { return "status-badge disabled" }; return "status-badge" }
+func nodeStateLabel(state string) string { if state == "online" { return "Online" }; if state == "unreachable" { return "Unreachable" }; return "Unknown" }
+func nodeSyncBadge(state string) string { return "cluster-sync-badge " + state }
+func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; default: return "Sync unknown" } }
+func syncProgressMaximum(generation uint64) uint64 { if generation == 0 { return 1 }; return generation }
+func syncProgressLabel(node ClusterNodeView) string { if node.SyncState == "current" { return "Fully synchronized" }; if node.SyncState == "unverified" { return "Awaiting primary verification" }; if node.Lag > 0 { return fmt.Sprintf("%d generations behind", node.Lag) }; return "Synchronization unavailable" }
+func nodeUptimeLabel(node ClusterNodeView) string { if node.UpSince == "" { return "Uptime unavailable" }; if node.State == "unreachable" { return "Last reported up " + node.UpSince }; return "Up " + node.UpSince }
+func nodeLagLabel(node ClusterNodeView) string { if node.SyncState == "unknown" || node.SyncState == "unverified" { return "Unknown" }; return lagLabel(node.Lag) }
+func lagLabel(lag uint64) string { if lag == 0 { return "No lag" }; if lag == 1 { return "1 generation" }; return fmt.Sprintf("%d generations", lag) }

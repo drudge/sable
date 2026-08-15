@@ -1,0 +1,139 @@
+package pages
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/drudge/sable/internal/auth"
+)
+
+type ProfilePageView struct {
+	Console         DashboardView
+	User            auth.ManagedUser
+	Roles           []auth.Role
+	Tokens          []auth.APIToken
+	ActiveTab       string
+	DefaultTokenTTL time.Duration
+	Message         string
+	Error           string
+}
+
+templ ProfilePage(view ProfilePageView) {
+	@AppDocument(view.Console, "Profile", "profile", ProfileContent(view))
+}
+
+templ ProfileContent(view ProfilePageView) {
+	<div class="profile-page" id="profile-content" data-isotope-tabs data-tab-param="tab">
+		<header class="page-heading"><h1>Profile</h1><p>Manage your account, password, and API tokens</p></header>
+		<nav class="isotope-tab-list profile-tabs" aria-label="Profile sections">
+			<a class={ ifThen(view.ActiveTab == "profile", "isotope-tab active", "isotope-tab") } href="/profile?tab=profile">@Icon("user")<span>Account</span></a>
+			<a class={ ifThen(view.ActiveTab == "tokens", "isotope-tab active", "isotope-tab") } href="/profile?tab=tokens">@Icon("key")<span>API Tokens</span><span class="tab-count">{ fmt.Sprint(len(view.Tokens)) }</span></a>
+		</nav>
+		if view.Message != "" {
+			@Toast(view.Message, "success")
+		}
+		if view.Error != "" {
+			@Toast(view.Error, "error")
+		}
+		if view.ActiveTab == "tokens" {
+			@ProfileTokenSettings(view)
+		} else {
+			@ProfileAccountSettings(view)
+		}
+	</div>
+}
+
+templ ProfileAccountSettings(view ProfilePageView) {
+	<div class="profile-account-stack">
+		<section class="card isotope-data-card profile-settings-card">
+			<header class="isotope-data-header"><div><h2>Account details</h2><span>Your name and contact information</span></div></header>
+			<form class="profile-settings-form" hx-post="/ui/profile" hx-target="#profile-content" hx-swap="outerHTML">
+				<div class="profile-settings-body">
+					<div class="profile-username"><span>Username</span><strong>{ view.User.Username }</strong><small>Usernames are managed by an administrator.</small></div>
+					<div class="profile-field-grid">
+						<label class="field-control"><span>Display Name</span><input name="display_name" value={ profileDisplayName(view.User) } maxlength="128" autocomplete="name" required/></label>
+						<label class="field-control"><span>Email</span><input type="email" name="email" value={ view.User.Email } maxlength="254" placeholder="name@example.com" autocomplete="email"/></label>
+					</div>
+				</div>
+				<footer class="profile-card-footer"><button class="button" type="submit">Save Changes</button></footer>
+			</form>
+		</section>
+		<section class="card isotope-data-card profile-settings-card">
+			<header class="isotope-data-header"><div><h2>Password</h2><span>Update the password used to sign in to Sable</span></div></header>
+			<form class="profile-settings-form" hx-post="/ui/profile/password" hx-target="#profile-content" hx-swap="outerHTML">
+				<div class="profile-settings-body">
+					<label class="field-control"><span>Current Password</span><input type="password" name="current_password" autocomplete="current-password" required/></label>
+					<div class="profile-field-grid">
+						<label class="field-control"><span>New Password</span><input type="password" name="new_password" minlength="12" maxlength="1024" autocomplete="new-password" required/><small>Use at least 12 characters.</small></label>
+						<label class="field-control"><span>Confirm New Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
+					</div>
+					<div class="profile-security-note">@Icon("info")<span>Changing your password signs out all active browser sessions.</span></div>
+				</div>
+				<footer class="profile-card-footer"><button class="button" type="submit">Change Password</button></footer>
+			</form>
+		</section>
+	</div>
+}
+
+templ ProfileTokenSettings(view ProfilePageView) {
+	<div class="profile-token-page">
+		@ProfileTokens(view)
+		@ProfileCreateTokenDialog(view)
+	</div>
+}
+
+templ ProfileTokens(view ProfilePageView) {
+	<section class="card isotope-data-card profile-token-list" id="profile-token-list" hx-get="/ui/profile/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
+		<header class="isotope-data-header"><div><h2>API Tokens</h2><span>{ fmt.Sprintf("%d active", len(view.Tokens)) }</span></div><button class="button compact" type="button" data-dialog-open="create-token-dialog">@Icon("plus")<span>Create Token</span></button></header>
+		if len(view.Tokens) == 0 {
+			<div class="admin-empty profile-token-empty"><div>@Icon("key")</div><strong>No API tokens yet</strong><span>Create a token for scripts, integrations, and other API clients.</span></div>
+		} else {
+			<div class="admin-mobile-list profile-token-mobile-list">
+				for _, token := range view.Tokens {
+					@ProfileTokenMobileRow(view, token)
+				}
+			</div>
+			<div class="admin-desktop-table"><table class="isotope-table profile-token-table"><thead><tr><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+				for _, token := range view.Tokens {
+					<tr><td><strong>{ token.Name }</strong></td><td><div class="table-badges">
+						for _, group := range token.Groups {
+							<span>{ group }</span>
+						}
+					</div></td><td class="muted-cell">{ FormatDateTime(token.CreatedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</td><td class="muted-cell">{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat) }</td><td class="right-cell">@ProfileTokenRevoke(token)</td></tr>
+				}
+			</tbody></table></div>
+		}
+	</section>
+}
+
+templ ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) {
+	<article class="profile-token-mobile-row"><div class="profile-token-mobile-heading"><strong>{ token.Name }</strong>@ProfileTokenRevoke(token)</div><div class="table-badges">
+		for _, group := range token.Groups {
+			<span>{ group }</span>
+		}
+	</div><dl><div><dt>Created</dt><dd>{ FormatDateTime(token.CreatedAt, view.Console.TimeFormat) }</dd></div><div><dt>Last used</dt><dd>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat) }</dd></div><div><dt>Expires</dt><dd>{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat) }</dd></div></dl></article>
+}
+
+templ ProfileTokenRevoke(token auth.APIToken) {
+	<form hx-post="/ui/profile/tokens/revoke" hx-target="#profile-token-list" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke " + token.Name } title="Revoke token">@Icon("trash")</button></form>
+}
+
+templ ProfileCreateTokenDialog(view ProfilePageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog profile-token-dialog" id="create-token-dialog" aria-labelledby="profile-create-token-title">
+		<div class="dialog-header"><h2 id="profile-create-token-title">Create API Token</h2><p>Create a credential for an application or command-line client</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields>
+			<label><span>Name</span><input name="name" maxlength="100" placeholder="Home Assistant" autocomplete="off" required/><small>Use a name that identifies where this token will be used.</small></label>
+			<label><span>Expiration</span><select name="expiration" required><option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option><option value="24h">1 day</option><option value="168h">7 days</option><option value="720h">30 days</option><option value="2160h">90 days</option><option value="8760h">1 year</option><option value="never">Never</option></select><small>Non-expiring tokens remain valid until revoked.</small></label>
+			<fieldset><legend>Groups</legend><div class="role-checks">
+				for _, role := range view.Roles {
+					if roleHasAPIAccess(role) {
+						<label><input type="checkbox" name="groups" value={ role.Name }/><span><strong>{ role.Name }</strong><small>{ apiGrantSummary(role) }</small></span></label>
+					}
+				}
+			</div></fieldset><p class="field-help">Tokens can use only groups currently assigned to your account.</p>
+		</div><div class="api-token-result" id="api-token-result">The token secret will be shown once. Store it somewhere safe.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form>
+	</dialog>
+}
+
+func profileDisplayName(user auth.ManagedUser) string { if user.DisplayName != "" { return user.DisplayName }; return user.Username }
+func profileTokenExpiration(value time.Time, format string) string { if value.IsZero() { return "Never" }; return FormatDateTime(value, format) }

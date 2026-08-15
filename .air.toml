@@ -1,0 +1,31 @@
+root = "."
+tmp_dir = "_work/air"
+
+[build]
+cmd = "go run -mod=mod github.com/a-h/templ/cmd/templ generate -path internal/web/pages && CGO_ENABLED=0 go build -trimpath -o ./_work/air/sable ./cmd/sable"
+entrypoint = ["./_work/air/sable", "serve", "--config", "sable.toml"]
+include_ext = ["go", "templ", "css", "js"]
+exclude_dir = ["_work", "bin", "data", "outputs", "work", ".git"]
+exclude_file = ["mage_output_file.go"]
+exclude_regex = ["_test\\.go$", "_templ\\.go$"]
+exclude_unchanged = true
+delay = 150
+stop_on_error = true
+send_interrupt = true
+kill_delay = "2s"
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true
+
+[proxy]
+enabled = true
+proxy_port = 5381
+app_port = 5380
+app_start_timeout = 5000

@@ -1,0 +1,831 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/miekg/dns"
+)
+
+type ZonesPageView struct {
+	Console  DashboardView
+	Zones    []ZoneView
+	Selected string
+	Message  string
+	Error    string
+	CanCreate bool
+}
+
+type ZoneView struct {
+	ID           string
+	Name         string
+	Type         string
+	DefaultTTL   uint32
+	Disabled     bool
+	ZoneTransfer string
+	TransferACL  []string
+	Notify       []string
+	PrimaryServers []string
+	PrimaryProtocol string
+	TSIGKey      string
+	DynamicUpdates bool
+	DNSSEC       bool
+	DNSSECAlgorithm string
+	DNSSECDenial string
+	NSEC3Iterations uint16
+	NSEC3Salt string
+	ZSKLifetime string
+	KSKLifetime string
+	KeyPrepublish string
+	KeyRetireAfter string
+	DNSSECKeyTag uint16
+	DNSSECDNSKEY string
+	DNSSECDS     string
+	DNSSECExpires string
+	DNSSECParentDSKeyTag uint16
+	DNSSECNextAction string
+	DNSSECKeys []DNSSECKeyView
+	Records      []ZoneRecordView
+	CanSettings  bool
+	CanRecords   bool
+	CanTransfer  bool
+	CanDNSSEC    bool
+	CanImport    bool
+	CanExport    bool
+	CanDelete    bool
+	CanCreate    bool
+	CanManagePermissions bool
+}
+
+type DNSSECKeyView struct {
+	Role   string
+	State  string
+	KeyTag uint16
+	DNSKEY string
+	DS     string
+	Timing string
+}
+
+type ZoneRecordView struct {
+	ID        string
+	Name      string
+	Type      string
+	Value     string
+	TTL       uint32
+	Comments  string
+	Disabled  bool
+	ExpiryTTL uint32
+	Managed   bool
+}
+
+func selectedZone(view ZonesPageView) (ZoneView, bool) {
+	for _, zone := range view.Zones {
+		if zone.Name == view.Selected {
+			return zone, true
+		}
+	}
+	return ZoneView{}, false
+}
+
+func zoneHref(name string) templ.SafeURL {
+	return templ.SafeURL("/zones/" + url.PathEscape(name))
+}
+
+func zoneRecordEditPath(zone ZoneView, record ZoneRecordView) string {
+	return "/zones/" + url.PathEscape(zone.Name) +
+		"/records/" + url.PathEscape(record.ID) + "/edit"
+}
+
+func zoneTypeLabel(value string) string {
+	if strings.EqualFold(value, "primary") {
+		return "Primary"
+	}
+	if value == "" {
+		return "Primary"
+	}
+	return strings.ToUpper(value[:1]) + strings.ToLower(value[1:])
+}
+
+func zoneTypeClass(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "primary"
+	}
+	return value
+}
+
+func zoneCanEditRecords(zone ZoneView) bool { return zone.Type == "" || zone.Type == "primary" || zone.Type == "forwarder" }
+func zoneCanResync(zone ZoneView) bool { return zone.Type == "secondary" || zone.Type == "stub" }
+
+func zoneRecordOwner(zone ZoneView, record ZoneRecordView) string {
+	name := strings.TrimSpace(record.Name)
+	if name == "" || name == "@" {
+		return zone.Name
+	}
+	if strings.HasSuffix(name, ".") {
+		return strings.TrimSuffix(name, ".")
+	}
+	return name + "." + zone.Name
+}
+
+func zoneElementID(prefix string, index int) string {
+	return fmt.Sprintf("zone-%s-%d", prefix, index)
+}
+
+func primaryZoneRecordTypes() []string {
+	return []string{"A", "AAAA", "CNAME", "MX", "TXT", "NS"}
+}
+
+func additionalZoneRecordTypes() []string {
+	return []string{"CAA", "PTR", "SRV", "ANAME", "DNAME", "DS", "SSHFP", "TLSA", "SVCB", "HTTPS", "URI", "NAPTR", "FWD"}
+}
+
+func editableZoneRecordTypes() []string {
+	return append(primaryZoneRecordTypes(), additionalZoneRecordTypes()...)
+}
+
+func zoneRecordDescription(recordType string) string {
+	descriptions := map[string]string{
+		"A": "Maps a domain to an IPv4 address",
+		"AAAA": "Maps a domain to an IPv6 address",
+		"CNAME": "Creates an alias pointing to another domain",
+		"NS": "Delegates a zone to a name server",
+		"MX": "Specifies mail servers for the domain",
+		"TXT": "Stores text data (SPF, DKIM, verification)",
+		"PTR": "Maps an IP address to a domain name",
+		"SRV": "Specifies service location",
+		"CAA": "Specifies which CAs can issue certificates",
+		"ANAME": "Flattens an alias target into authoritative A and AAAA answers",
+		"DNAME": "Aliases an entire subtree to another domain",
+		"DS": "Delegation signer digest for a DNSSEC-signed child zone",
+		"SSHFP": "Publishes SSH host key fingerprints",
+		"TLSA": "Associates a TLS certificate with a service (DANE)",
+		"SVCB": "Service binding with connection parameters",
+		"HTTPS": "HTTPS service binding with connection parameters",
+		"URI": "Maps a domain to a URI",
+		"NAPTR": "Rule-based rewrite record (ENUM/SIP)",
+		"SOA": "Defines the authoritative zone identity and refresh timers",
+		"FWD": "Forwards this name and its subtree to designated DNS servers",
+	}
+	return descriptions[recordType]
+}
+
+func zoneRecordParsedField(recordType, value, field string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	if recordType == "ANAME" && field == "value" {
+		return strings.TrimSuffix(strings.TrimSpace(value), ".")
+	}
+	if recordType == "FWD" {
+		parts := strings.Fields(value)
+		if len(parts) == 3 {
+			switch field {
+			case "fwd_protocol": return parts[0]
+			case "fwd_priority": return parts[1]
+			case "fwd_address": return parts[2]
+			}
+		}
+		return ""
+	}
+	rr, err := dns.NewRR("record.invalid. 300 IN " + recordType + " " + value)
+	if err != nil {
+		return ""
+	}
+	switch record := rr.(type) {
+	case *dns.A:
+		if field == "value" { return record.A.String() }
+	case *dns.AAAA:
+		if field == "value" { return record.AAAA.String() }
+	case *dns.CNAME:
+		if field == "value" { return strings.TrimSuffix(record.Target, ".") }
+	case *dns.DNAME:
+		if field == "value" { return strings.TrimSuffix(record.Target, ".") }
+	case *dns.NS:
+		if field == "value" { return strings.TrimSuffix(record.Ns, ".") }
+	case *dns.PTR:
+		if field == "value" { return strings.TrimSuffix(record.Ptr, ".") }
+	case *dns.MX:
+		if field == "preference" { return strconv.FormatUint(uint64(record.Preference), 10) }
+		if field == "exchange" { return strings.TrimSuffix(record.Mx, ".") }
+	case *dns.TXT:
+		if field == "text" { return strings.Join(record.Txt, "") }
+	case *dns.SRV:
+		switch field {
+		case "priority": return strconv.FormatUint(uint64(record.Priority), 10)
+		case "weight": return strconv.FormatUint(uint64(record.Weight), 10)
+		case "port": return strconv.FormatUint(uint64(record.Port), 10)
+		case "target": return strings.TrimSuffix(record.Target, ".")
+		}
+	case *dns.CAA:
+		switch field {
+		case "flags": return strconv.FormatUint(uint64(record.Flag), 10)
+		case "tag": return record.Tag
+		case "ca_domain": return record.Value
+		}
+	case *dns.DS:
+		switch field {
+		case "key_tag": return strconv.FormatUint(uint64(record.KeyTag), 10)
+		case "algorithm": return strconv.FormatUint(uint64(record.Algorithm), 10)
+		case "digest_type": return strconv.FormatUint(uint64(record.DigestType), 10)
+		case "digest": return record.Digest
+		}
+	case *dns.SSHFP:
+		switch field {
+		case "algorithm": return strconv.FormatUint(uint64(record.Algorithm), 10)
+		case "fingerprint_type": return strconv.FormatUint(uint64(record.Type), 10)
+		case "fingerprint": return record.FingerPrint
+		}
+	case *dns.TLSA:
+		switch field {
+		case "certificate_usage": return strconv.FormatUint(uint64(record.Usage), 10)
+		case "selector": return strconv.FormatUint(uint64(record.Selector), 10)
+		case "matching_type": return strconv.FormatUint(uint64(record.MatchingType), 10)
+		case "certificate": return record.Certificate
+		}
+	case *dns.URI:
+		switch field {
+		case "uri_priority": return strconv.FormatUint(uint64(record.Priority), 10)
+		case "uri_weight": return strconv.FormatUint(uint64(record.Weight), 10)
+		case "uri": return record.Target
+		}
+	case *dns.NAPTR:
+		switch field {
+		case "naptr_order": return strconv.FormatUint(uint64(record.Order), 10)
+		case "naptr_preference": return strconv.FormatUint(uint64(record.Preference), 10)
+		case "naptr_flags": return record.Flags
+		case "naptr_services": return record.Service
+		case "naptr_regexp": return record.Regexp
+		case "naptr_replacement": return strings.TrimSuffix(record.Replacement, ".")
+		}
+	case *dns.SOA:
+		switch field {
+		case "primary_ns": return strings.TrimSuffix(record.Ns, ".")
+		case "responsible": return strings.TrimSuffix(record.Mbox, ".")
+		case "serial": return strconv.FormatUint(uint64(record.Serial), 10)
+		case "refresh": return strconv.FormatUint(uint64(record.Refresh), 10)
+		case "retry": return strconv.FormatUint(uint64(record.Retry), 10)
+		case "expire": return strconv.FormatUint(uint64(record.Expire), 10)
+		case "minimum": return strconv.FormatUint(uint64(record.Minttl), 10)
+		}
+	}
+	parts := strings.Fields(value)
+	if (recordType == "SVCB" || recordType == "HTTPS") && len(parts) >= 2 {
+		if field == "svc_priority" { return parts[0] }
+		if field == "svc_target" { return strings.TrimSuffix(parts[1], ".") }
+		if field == "svc_params" && len(parts) > 2 { return strings.Join(parts[2:], " ") }
+	}
+	return ""
+}
+
+func zoneRecordGlue(zone ZoneView, record ZoneRecordView) string {
+	target := strings.TrimSuffix(strings.ToLower(zoneRecordParsedField("NS", record.Value, "value")), ".")
+	if target == "" {
+		return ""
+	}
+	addresses := make([]string, 0, 2)
+	for _, candidate := range zone.Records {
+		if candidate.Type != "A" && candidate.Type != "AAAA" {
+			continue
+		}
+		if strings.EqualFold(zoneRecordOwner(zone, candidate), target) {
+			addresses = append(addresses, candidate.Value)
+		}
+	}
+	return strings.Join(addresses, ", ")
+}
+
+templ ZonesPage(view ZonesPageView) {
+	@AppDocument(view.Console, "Zones", "zones", ZonesContent(view))
+}
+
+templ ZonesContent(view ZonesPageView) {
+	<div class="zones-page" id="zones-content" data-zone-root>
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		if zone, found := selectedZone(view); found {
+			@ZoneDetailView(zone)
+		} else {
+			@ZoneListView(view)
+		}
+		if view.CanCreate {
+			@CreateZoneDialog()
+			@ImportNewZoneDialog()
+		}
+	</div>
+}
+
+templ ZoneListView(view ZonesPageView) {
+	<div class="isotope-zone-stack">
+		<header class="isotope-zone-heading">
+			<div><h1>Zones</h1><p>{ fmt.Sprint(len(view.Zones)) } zones configured</p></div>
+			if view.CanCreate {
+				<div class="zone-heading-actions">
+					<button class="button outline zone-primary-action" type="button" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("upload")<span>Import Zone</span></button>
+					<button class="button zone-primary-action" type="button" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
+				</div>
+			}
+		</header>
+		<div class="zone-filter-bar">
+			<label class="zone-search"><span>@Icon("search")</span><input type="search" placeholder="Search zones..." autocomplete="off" data-zone-search/></label>
+			<div class="zone-filter-selects">
+				<label><span class="sr-only">Zone type</span><select data-zone-type-filter><option value="all">All Types</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="stub">Stub</option><option value="forwarder">Forwarder</option></select></label>
+				<label><span class="sr-only">Zone status</span><select data-zone-status-filter><option value="all">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
+			</div>
+		</div>
+		<section class="card isotope-zone-list" aria-label="Configured zones">
+			if len(view.Zones) == 0 {
+				<div class="isotope-zone-empty" data-zone-empty><p>{ ifThen(view.CanCreate, "No zones found. Create your first zone to get started.", "No zones are available to this account.") }</p></div>
+		}
+			for index, zone := range view.Zones {
+				<div class={ ifThen(zone.Disabled, "isotope-zone-row disabled", "isotope-zone-row") } data-zone-row data-zone-name={ strings.ToLower(zone.Name) } data-zone-type={ strings.ToLower(zone.Type) } data-zone-status={ ifThen(zone.Disabled, "disabled", "active") }>
+					<a class="isotope-zone-row-link" href={ zoneHref(zone.Name) }>
+						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
+						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
+					</a>
+					@ZoneActionMenu(zone, "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
+					<a class="zone-row-chevron" href={ zoneHref(zone.Name) } aria-label={ "Open " + zone.Name }>@Icon("chevron-right")</a>
+				</div>
+				if zone.CanSettings {
+					@ZoneSettingsDialog(zone, zoneElementID("settings", index))
+				}
+				if zone.CanDNSSEC {
+					@ZoneDNSSECDialog(zone, zoneElementID("dnssec", index))
+				}
+				if zone.CanCreate {
+					@CloneZoneDialog(zone, zoneElementID("clone", index))
+				}
+				if zone.CanDelete {
+					@DeleteZoneDialog(zone, zoneElementID("delete", index))
+				}
+			}
+			<div class="isotope-zone-empty zone-filter-empty" hidden data-zone-filter-empty><p>No zones match your search</p></div>
+		</section>
+	</div>
+}
+
+templ ZoneDetailView(zone ZoneView) {
+	<div class="isotope-zone-stack">
+		<header class="zone-records-heading">
+			<a class="icon-button zone-back-button" href="/zones" aria-label="Back to zones">@Icon("arrow-left")</a>
+			<div class="zone-records-title">
+				<h1>{ zone.Name }</h1>
+				<div><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span><span class={ "zone-dnssec-badge " + ifThen(zone.DNSSEC, "signed", "unsigned") }>{ ifThen(zone.DNSSEC, "DNSSEC: Signed", "DNSSEC: Unsigned") }</span></div>
+				<p>{ fmt.Sprint(len(zone.Records)) } { ifThen(len(zone.Records) == 1, "record", "records") }</p>
+			</div>
+			<div class="zone-records-actions">
+				<a class="icon-button" href={ zoneHref(zone.Name) } aria-label="Refresh records" title="Refresh records">@Icon("refresh")</a>
+				@ZoneActionMenu(zone, "detail-menu", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
+				if zoneCanResync(zone) && zone.CanTransfer {
+					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit">@Icon("refresh")<span>Resync</span></button></form>
+				}
+				if zoneCanEditRecords(zone) && zone.CanRecords {
+					<button class="button zone-primary-action" type="button" data-dialog-open="add-zone-record-dialog" data-replica-primary-action>@Icon("plus")<span>Add Record</span></button>
+				}
+			</div>
+		</header>
+		<div class="zone-filter-bar zone-record-filter-bar">
+			<label class="zone-search"><span>@Icon("search")</span><input type="search" placeholder="Filter records..." autocomplete="off" data-record-search/></label>
+			<label class="zone-record-type-filter"><span class="sr-only">Record type</span><select data-record-type-filter><option value="all">All Types</option>@RecordTypeOptions(true)</select></label>
+		</div>
+		<section class="card isotope-record-list" aria-label={ "Records for " + zone.Name }>
+			if len(zone.Records) == 0 {
+				<div class="isotope-zone-empty" data-record-empty><p>No records found</p></div>
+			}
+			for index, record := range zone.Records {
+				<div class={ ifThen(record.Disabled, "isotope-record-row disabled", ifThen(record.Type == "SOA", "isotope-record-row managed", "isotope-record-row")) } data-record-row data-record-name={ strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value) } data-record-type={ strings.ToLower(record.Type) }>
+					<span class="record-type-badge">{ record.Type }</span>
+					@ZoneCopyableText(zoneElementID("owner", index), zoneRecordOwner(zone, record), "record-owner-copy")
+					@ZoneCopyableText(zoneElementID("value", index), record.Value, "record-value-copy")
+					<span class="record-ttl">{ fmt.Sprint(record.TTL) }s</span>
+					if zoneCanEditRecords(zone) && zone.CanRecords && !record.Managed {
+						<button class="record-open-button" type="button" data-dialog-open={ zoneElementID("record", index) } data-dialog-url={ zoneRecordEditPath(zone, record) } aria-label={ "Edit " + record.Type + " record" }>@Icon("chevron-right")</button>
+					} else {
+						<span class="record-open-placeholder"></span>
+					}
+				</div>
+				if zoneCanEditRecords(zone) && zone.CanRecords && !record.Managed {
+					@EditZoneRecordDialog(zone, record, zoneElementID("record", index))
+				}
+			}
+			<div class="isotope-zone-empty zone-filter-empty" hidden data-record-filter-empty><p>No records match your filter</p></div>
+		</section>
+		if zoneCanEditRecords(zone) && zone.CanRecords {
+			@AddZoneRecordDialog(zone)
+		}
+		if zone.CanSettings {
+			@ZoneSettingsDialog(zone, "settings-selected-zone-dialog")
+		}
+		if zone.CanDNSSEC {
+			@ZoneDNSSECDialog(zone, "dnssec-selected-zone-dialog")
+		}
+		if zone.CanCreate {
+			@CloneZoneDialog(zone, "clone-selected-zone-dialog")
+		}
+		if zone.CanDelete {
+			@DeleteZoneDialog(zone, "delete-selected-zone-dialog")
+		}
+	</div>
+}
+
+templ ZoneActionMenu(zone ZoneView, className, settingsID, dnssecID, cloneID, deleteID string) {
+	<details class={ "zone-action-menu " + className }>
+		<summary class={ ifThen(className == "", "icon-button zone-more-button", "icon-button") } aria-label={ "Actions for " + zone.Name }>@Icon("more-vertical")</summary>
+		<div class="zone-menu-content">
+			if zone.CanSettings {
+				<button type="button" data-dialog-open={ settingsID }>@Icon("sliders")<span>Zone Settings</span></button>
+			}
+			if zone.CanManagePermissions {
+				<a href="/administration?tab=groups" title="Manage zone access through groups">@Icon("key")<span>Permissions</span></a>
+			}
+			if zone.Type == "primary" && zone.CanDNSSEC {
+				<button type="button" data-dialog-open={ dnssecID }>@Icon("shield-check")<span>DNSSEC</span></button>
+			} else if zone.Type != "primary" {
+				<button type="button" disabled title="Signing is managed by the primary server">@Icon("shield-check")<span>DNSSEC</span></button>
+			}
+			<hr/>
+			if zone.CanExport {
+				<a href={ templ.SafeURL("/api/v1/zones/export?zone=" + url.QueryEscape(zone.Name)) }>@Icon("download")<span>Export Zone File</span></a>
+			}
+			if zoneCanResync(zone) && zone.CanTransfer {
+				<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button type="submit">@Icon("refresh")<span>Resync Zone</span></button></form>
+			}
+			if zoneCanEditRecords(zone) && zone.CanCreate {
+				<button type="button" data-dialog-open={ cloneID } data-replica-primary-action>@Icon("copy")<span>Clone Zone</span></button>
+			}
+			<hr/>
+			if zone.CanSettings {
+				<form hx-post="/ui/zones/toggle" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><input type="hidden" name="action" value={ ifThen(zone.Disabled, "enable", "disable") }/><button type="submit">@Icon("power")<span>{ ifThen(zone.Disabled, "Enable Zone", "Disable Zone") }</span></button></form>
+			}
+			if zone.CanDelete {
+				<button class="danger" type="button" data-dialog-open={ deleteID } data-replica-primary-action>@Icon("trash")<span>Delete Zone</span></button>
+			}
+		</div>
+	</details>
+}
+
+templ ZoneCopyableText(id, text, className string) {
+	<span class={ "zone-copyable " + className }><code id={ id }>{ text }</code><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button></span>
+}
+
+templ CreateZoneDialog() {
+	<dialog class="custom-server-dialog isotope-zone-dialog" id="create-zone-dialog" aria-labelledby="create-zone-title">
+		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
+			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
+			<label><span>Zone Type</span><select name="type" data-zone-create-type><option value="primary">Primary Zone</option><option value="secondary">Secondary Zone</option><option value="stub">Stub Zone</option><option value="forwarder">Forwarder Zone</option></select></label>
+			<label><span>TSIG Key (optional)</span><input class="mono-input" name="tsig_key" placeholder="transfer-key." autocomplete="off"/><small>References a key configured in <code>[[tsig_keys]]</code>.</small></label>
+			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
+				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
+				<label><span>Protocol</span><select name="primary_protocol" data-zone-primary-protocol disabled><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option><option value="udp" data-stub-protocol>UDP</option></select></label>
+			</section>
+			<section class="zone-create-options" data-zone-create-options="forwarder" hidden>
+				<label><span>Forwarder Address</span><input class="mono-input" name="forwarder_address" placeholder="1.1.1.1 or dns.example:53" disabled required/></label>
+				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" disabled><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option></select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
+			</section>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Create Zone</button></footer>
+		</form>
+	</dialog>
+}
+
+templ AddZoneRecordDialog(zone ZoneView) {
+	<dialog class="custom-server-dialog isotope-record-dialog" id="add-zone-record-dialog" aria-labelledby="add-zone-record-title">
+		<header class="dialog-header isotope-record-dialog-header"><h2 id="add-zone-record-title">Add DNS Record</h2><p>Add a new DNS record to { zone.Name }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+		<form class="isotope-record-form" hx-post="/ui/zones/records/add" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<div class="isotope-record-dialog-body">
+				if zone.Type == "forwarder" {
+					<input type="hidden" name="type" value="FWD"/>
+					<div class="edit-record-type"><span class="record-type-badge">FWD</span><small>{ zoneRecordDescription("FWD") }</small></div>
+				} else {
+					@RecordTypePicker()
+				}
+				<label class="record-field"><span>Name</span><input class="mono-input" name="name" placeholder="@ for zone apex, or subdomain" required/></label>
+				if zone.Type == "forwarder" {
+					@ZoneRecordFields("FWD", "", "", "", false)
+				} else {
+					for _, recordType := range editableZoneRecordTypes() {
+						<div class="record-specific-fields" data-record-fields={ recordType } hidden?={ recordType != "A" }>
+							@ZoneRecordFields(recordType, "", "", "", recordType != "A")
+						</div>
+					}
+				}
+				@RecordAdvancedOptions("", zone.DefaultTTL, 0, "", false)
+			</div>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Add Record</button></footer>
+		</form>
+	</dialog>
+}
+
+templ RecordTypePicker() {
+	<fieldset class="record-type-fieldset">
+		<legend>Record Type</legend>
+		<input type="hidden" name="type" value="A" data-record-type-value/>
+		<div class="record-type-grid">
+			for index, recordType := range primaryZoneRecordTypes() {
+				<button class={ ifThen(index == 0, "record-type-choice active", "record-type-choice") } type="button" data-record-type-choice={ recordType } data-record-description={ zoneRecordDescription(recordType) } aria-pressed={ ifThen(index == 0, "true", "false") }>{ recordType }</button>
+			}
+		</div>
+		<label class="record-more-types"><span class="sr-only">More record types</span><select data-record-more-types><option value="">More types...</option>
+			for _, recordType := range additionalZoneRecordTypes() {
+				<option value={ recordType } data-description={ zoneRecordDescription(recordType) }>{ recordType }</option>
+			}
+		</select></label>
+		<p data-record-type-description>{ zoneRecordDescription("A") }</p>
+	</fieldset>
+}
+
+templ RecordTypeOptions(includeAll bool) {
+	for _, recordType := range append(editableZoneRecordTypes(), "SOA") {
+		<option value={ strings.ToLower(recordType) }>{ recordType }</option>
+	}
+}
+
+templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
+	<dialog class="custom-server-dialog isotope-record-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-url={ zoneRecordEditPath(zone, record) } data-dialog-base-url={ "/zones/" + url.PathEscape(zone.Name) }>
+		<header class="dialog-header isotope-record-dialog-header"><h2 id={ id + "-title" }>Edit DNS Record</h2><p>Update the DNS record for { zone.Name }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+		<form class="isotope-record-form" hx-post="/ui/zones/records/update" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/><input type="hidden" name="name" value={ record.Name }/><input type="hidden" name="type" value={ record.Type }/><input type="hidden" name="value" value={ record.Value }/><input type="hidden" name="ttl" value={ fmt.Sprint(record.TTL) }/>
+			<div class="isotope-record-dialog-body">
+				<div class="edit-record-type"><span class="record-type-badge">{ record.Type }</span><small>{ zoneRecordDescription(record.Type) }</small><label class="record-enabled"><span class="switch">
+					if record.Type == "SOA" {
+						<input type="hidden" name="enabled" value="true"/><input type="checkbox" checked disabled/>
+					} else {
+						<input type="checkbox" name="enabled" value="true" checked?={ !record.Disabled } data-replica-primary-control/>
+					}
+					<span></span></span><b>Enabled</b></label></div>
+				<label class="record-field"><span>Name</span><input class="mono-input" name="new_name" value={ zoneRecordOwner(zone, record) } readonly?={ record.Type == "SOA" } required/></label>
+				@ZoneRecordFields(record.Type, "new_", record.Value, zoneRecordGlue(zone, record), false)
+				@RecordAdvancedOptions("new_", record.TTL, record.ExpiryTTL, record.Comments, record.Type == "NS")
+			</div>
+			<footer class="dialog-footer edit-record-footer">
+				if record.Type != "SOA" {
+					<button class="button destructive edit-record-delete" type="submit" formaction="/ui/zones/records/delete">@Icon("trash")<span>Delete Record</span></button>
+				}
+				<button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Update Record</button>
+			</footer>
+		</form>
+	</dialog>
+}
+
+templ RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string, hideComments bool) {
+	<details class="record-advanced">
+		<summary>@Icon("settings-2")<span>Advanced Options</span><span class="record-advanced-chevron" aria-hidden="true"></span></summary>
+		<div class="record-advanced-content">
+			<div class="record-advanced-grid"><label class="record-field"><span>TTL (seconds)</span><input name={ prefix + "ttl" } type="number" min="1" max="4294967295" value={ fmt.Sprint(ttl) } required/></label><label class="record-field"><span>Auto-expire (seconds)</span><input name={ prefix + "expiry_ttl" } type="number" min="0" max="4294967295" value={ fmt.Sprint(expiryTTL) } placeholder="0 = never"/></label></div>
+			<label class="record-field" data-record-comments hidden?={ hideComments }><span>Comments</span><input name={ prefix + "comments" } value={ comments } placeholder="Optional notes about this record" disabled?={ hideComments }/></label>
+		</div>
+	</details>
+}
+
+templ ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) {
+	switch recordType {
+		case "A":
+			<label class="record-field"><span>IPv4 Address</span><input class="mono-input" name={ prefix + "value" } value={ zoneRecordParsedField(recordType, value, "value") } placeholder="192.168.1.1" autocomplete="off" disabled?={ disabled } required/></label>
+		case "AAAA":
+			<label class="record-field"><span>IPv6 Address</span><input class="mono-input" name={ prefix + "value" } value={ zoneRecordParsedField(recordType, value, "value") } placeholder="2001:db8::1" autocomplete="off" disabled?={ disabled } required/></label>
+		case "CNAME", "ANAME", "DNAME":
+			<label class="record-field"><span>Target Host</span><input class="mono-input" name={ prefix + "value" } value={ zoneRecordParsedField(recordType, value, "value") } placeholder="target.example.com" autocomplete="off" disabled?={ disabled } required/></label>
+		case "NS":
+			<label class="record-field"><span>Name Server</span><input class="mono-input" name={ prefix + "value" } value={ zoneRecordParsedField(recordType, value, "value") } placeholder="ns1.example.com" autocomplete="off" disabled?={ disabled } required/></label>
+			<label class="record-field secondary"><span>Glue Addresses (optional)</span><input class="mono-input" name={ prefix + "glue_addresses" } value={ glue } placeholder="192.168.1.1, 2001:db8::1" autocomplete="off" disabled?={ disabled }/><small>Required if name server is within this zone</small></label>
+		case "PTR":
+			<label class="record-field"><span>Domain Name</span><input class="mono-input" name={ prefix + "value" } value={ zoneRecordParsedField(recordType, value, "value") } placeholder="example.com" autocomplete="off" disabled?={ disabled } required/></label>
+		case "MX":
+			<div class="record-field-grid mx"><label class="record-field"><span>Mail Server</span><input class="mono-input" name={ prefix + "exchange" } value={ zoneRecordParsedField(recordType, value, "exchange") } placeholder="mail.example.com" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "preference" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "preference") == "", "10", zoneRecordParsedField(recordType, value, "preference")) } disabled?={ disabled } required/></label></div>
+		case "TXT":
+			<label class="record-field"><span>Text Value</span><textarea class="record-text-value" name={ prefix + "text" } placeholder="v=spf1 include:_spf.google.com ~all" disabled?={ disabled } required>{ zoneRecordParsedField(recordType, value, "text") }</textarea></label>
+		case "SRV":
+			<label class="record-field"><span>Target Host</span><input class="mono-input" name={ prefix + "target" } value={ zoneRecordParsedField(recordType, value, "target") } placeholder="server.example.com" autocomplete="off" disabled?={ disabled } required/></label>
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "priority") == "", "0", zoneRecordParsedField(recordType, value, "priority")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Weight</span><input type="number" name={ prefix + "weight" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "weight") == "", "0", zoneRecordParsedField(recordType, value, "weight")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Port</span><input type="number" name={ prefix + "port" } min="0" max="65535" value={ zoneRecordParsedField(recordType, value, "port") } placeholder="80" disabled?={ disabled } required/></label></div>
+		case "CAA":
+			<div class="record-field-grid caa"><label class="record-field"><span>CA Domain</span><input class="mono-input" name={ prefix + "ca_domain" } value={ zoneRecordParsedField(recordType, value, "ca_domain") } placeholder="letsencrypt.org" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Tag</span><select name={ prefix + "tag" } disabled?={ disabled }><option value="issue" selected?={ zoneRecordParsedField(recordType, value, "tag") == "" || zoneRecordParsedField(recordType, value, "tag") == "issue" }>issue</option><option value="issuewild" selected?={ zoneRecordParsedField(recordType, value, "tag") == "issuewild" }>issuewild</option><option value="iodef" selected?={ zoneRecordParsedField(recordType, value, "tag") == "iodef" }>iodef</option></select></label><label class="record-field secondary"><span>Flags</span><input type="number" name={ prefix + "flags" } min="0" max="255" value={ ifThen(zoneRecordParsedField(recordType, value, "flags") == "", "0", zoneRecordParsedField(recordType, value, "flags")) } disabled?={ disabled } required/></label></div>
+		case "DS":
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Key Tag</span><input type="number" name={ prefix + "key_tag" } min="0" max="65535" value={ zoneRecordParsedField(recordType, value, "key_tag") } placeholder="12345" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Algorithm</span>@DNSSECAlgorithmSelect(prefix + "algorithm", zoneRecordParsedField(recordType, value, "algorithm"), disabled)</label><label class="record-field secondary"><span>Digest Type</span>@DSDigestSelect(prefix + "digest_type", zoneRecordParsedField(recordType, value, "digest_type"), disabled)</label></div>
+			<label class="record-field"><span>Digest</span><input class="mono-input" name={ prefix + "digest" } value={ zoneRecordParsedField(recordType, value, "digest") } placeholder="Hex digest of the child zone's KSK DNSKEY" autocomplete="off" disabled?={ disabled } required/></label>
+		case "SSHFP":
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Algorithm</span><select name={ prefix + "algorithm" } disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "1" }>RSA</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "2" }>DSA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "3" }>ECDSA</option><option value="4" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "" || zoneRecordParsedField(recordType, value, "algorithm") == "4" }>Ed25519</option><option value="6" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "6" }>Ed448</option></select></label><label class="record-field secondary"><span>Fingerprint Type</span><select name={ prefix + "fingerprint_type" } disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "1" }>SHA-1</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "" || zoneRecordParsedField(recordType, value, "fingerprint_type") == "2" }>SHA-256</option></select></label></div>
+			<label class="record-field"><span>Fingerprint</span><input class="mono-input" name={ prefix + "fingerprint" } value={ zoneRecordParsedField(recordType, value, "fingerprint") } placeholder="Hex fingerprint of the host key" autocomplete="off" disabled?={ disabled } required/></label>
+		case "TLSA":
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Certificate Usage</span><select name={ prefix + "certificate_usage" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "0" }>PKIX-TA</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "1" }>PKIX-EE</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "2" }>DANE-TA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "" || zoneRecordParsedField(recordType, value, "certificate_usage") == "3" }>DANE-EE</option></select></label><label class="record-field secondary"><span>Selector</span><select name={ prefix + "selector" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "selector") == "0" }>Full Certificate</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "selector") == "" || zoneRecordParsedField(recordType, value, "selector") == "1" }>SPKI</option></select></label><label class="record-field secondary"><span>Matching Type</span><select name={ prefix + "matching_type" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "0" }>Exact</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "" || zoneRecordParsedField(recordType, value, "matching_type") == "1" }>SHA2-256</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "2" }>SHA2-512</option></select></label></div>
+			<label class="record-field"><span>Certificate Association Data</span><textarea class="record-text-value short" name={ prefix + "certificate" } placeholder="Hex digest, or a PEM certificate to hash" disabled?={ disabled } required>{ zoneRecordParsedField(recordType, value, "certificate") }</textarea></label>
+		case "SVCB", "HTTPS":
+			<div class="record-field-grid mx"><label class="record-field"><span>Target Name</span><input class="mono-input" name={ prefix + "svc_target" } value={ zoneRecordParsedField(recordType, value, "svc_target") } placeholder="svc.example.com, or . for this name" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "svc_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "svc_priority") == "", "1", zoneRecordParsedField(recordType, value, "svc_priority")) } disabled?={ disabled } required/></label></div>
+			<label class="record-field secondary"><span>Service Parameters</span><input class="mono-input" name={ prefix + "svc_params" } value={ zoneRecordParsedField(recordType, value, "svc_params") } placeholder="alpn|h2,h3|port|443" autocomplete="off" disabled?={ disabled }/><small>Pipe-separated key and value pairs. Priority 0 makes this an alias record.</small></label>
+		case "URI":
+			<label class="record-field"><span>URI</span><input class="mono-input" name={ prefix + "uri" } value={ zoneRecordParsedField(recordType, value, "uri") } placeholder="https://www.example.com/" autocomplete="off" disabled?={ disabled } required/></label>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "uri_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "uri_priority") == "", "0", zoneRecordParsedField(recordType, value, "uri_priority")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Weight</span><input type="number" name={ prefix + "uri_weight" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "uri_weight") == "", "0", zoneRecordParsedField(recordType, value, "uri_weight")) } disabled?={ disabled } required/></label></div>
+		case "NAPTR":
+			<div class="record-field-grid four"><label class="record-field secondary"><span>Order</span><input type="number" name={ prefix + "naptr_order" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "naptr_order") == "", "0", zoneRecordParsedField(recordType, value, "naptr_order")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Preference</span><input type="number" name={ prefix + "naptr_preference" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "naptr_preference") == "", "0", zoneRecordParsedField(recordType, value, "naptr_preference")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Flags</span><input class="mono-input" name={ prefix + "naptr_flags" } value={ zoneRecordParsedField(recordType, value, "naptr_flags") } placeholder="S, A, U, P" disabled?={ disabled }/></label><label class="record-field secondary"><span>Services</span><input class="mono-input" name={ prefix + "naptr_services" } value={ zoneRecordParsedField(recordType, value, "naptr_services") } placeholder="E2U+sip" disabled?={ disabled }/></label></div>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Regexp</span><input class="mono-input" name={ prefix + "naptr_regexp" } value={ zoneRecordParsedField(recordType, value, "naptr_regexp") } placeholder="!^.*$!sip:info@example.com!" disabled?={ disabled }/></label><label class="record-field secondary"><span>Replacement</span><input class="mono-input" name={ prefix + "naptr_replacement" } value={ zoneRecordParsedField(recordType, value, "naptr_replacement") } placeholder="Domain, or empty when regexp is set" disabled?={ disabled }/></label></div>
+		case "SOA":
+			<div class="record-field-grid two"><label class="record-field"><span>Primary Name Server</span><input class="mono-input" name={ prefix + "primary_ns" } value={ zoneRecordParsedField(recordType, value, "primary_ns") } placeholder="ns1.example.com" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field"><span>Responsible Person</span><input class="mono-input" name={ prefix + "responsible" } value={ zoneRecordParsedField(recordType, value, "responsible") } placeholder="hostmaster.example.com" autocomplete="off" disabled?={ disabled } required/></label></div>
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Serial</span><input type="number" name={ prefix + "serial" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "serial") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Refresh</span><input type="number" name={ prefix + "refresh" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "refresh") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Retry</span><input type="number" name={ prefix + "retry" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "retry") } disabled?={ disabled } required/></label></div>
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Expire</span><input type="number" name={ prefix + "expire" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "expire") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Minimum TTL</span><input type="number" name={ prefix + "minimum" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "minimum") } disabled?={ disabled } required/></label></div>
+		case "FWD":
+			<label class="record-field"><span>Forwarder Address</span><input class="mono-input" name={ prefix + "fwd_address" } value={ zoneRecordParsedField(recordType, value, "fwd_address") } placeholder="8.8.8.8, dns.example, or host:port" autocomplete="off" disabled?={ disabled } required/><small>This record applies to the owner name and every name below it.</small></label>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Protocol</span><select name={ prefix + "fwd_protocol" } disabled?={ disabled }><option value="udp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "" || zoneRecordParsedField(recordType, value, "fwd_protocol") == "udp" }>UDP</option><option value="tcp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tcp" }>TCP</option><option value="tls" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tls" }>DNS-over-TLS</option></select></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "fwd_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")) } disabled?={ disabled } required/></label></div>
+		default:
+			<label class="record-field"><span>Value</span><input class="mono-input" name={ prefix + "value" } value={ value } placeholder="Record value" autocomplete="off" disabled?={ disabled } required/></label>
+	}
+}
+
+templ DNSSECAlgorithmSelect(name, selected string, disabled bool) {
+	<select name={ name } disabled?={ disabled }><option value="5" selected?={ selected == "5" }>RSA/SHA-1</option><option value="8" selected?={ selected == "8" }>RSA/SHA-256</option><option value="10" selected?={ selected == "10" }>RSA/SHA-512</option><option value="13" selected?={ selected == "" || selected == "13" }>ECDSA P-256/SHA-256</option><option value="14" selected?={ selected == "14" }>ECDSA P-384/SHA-384</option><option value="15" selected?={ selected == "15" }>Ed25519</option><option value="16" selected?={ selected == "16" }>Ed448</option></select>
+}
+
+templ DSDigestSelect(name, selected string, disabled bool) {
+	<select name={ name } disabled?={ disabled }><option value="1" selected?={ selected == "1" }>SHA-1</option><option value="2" selected?={ selected == "" || selected == "2" }>SHA-256</option><option value="3" selected?={ selected == "3" }>GOST R 34.11-94</option><option value="4" selected?={ selected == "4" }>SHA-384</option></select>
+}
+
+templ ZoneDNSSECDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-dialog zone-dnssec-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<div class="dialog-header"><h2 id={ id + "-title" }>DNSSEC</h2><p>Sign <code>{ zone.Name }</code> and publish authenticated denial of existence.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form zone-dnssec-form" hx-post="/ui/zones/dnssec" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<label class="zone-dynamic-toggle">
+				<span><strong>Sign this zone</strong><small>Sable maintains DNSKEY, authenticated-denial, and RRSIG records and refreshes signatures automatically.</small></span>
+				<span class="switch"><input type="checkbox" name="enabled" value="true" checked?={ zone.DNSSEC }/><span></span></span>
+			</label>
+			<label><span>Signing Algorithm</span><select name="algorithm"><option value="ed25519" selected?={ zone.DNSSECAlgorithm == "" || zone.DNSSECAlgorithm == "ed25519" }>Ed25519 (recommended)</option><option value="ecdsa-p256-sha256" selected?={ zone.DNSSECAlgorithm == "ecdsa-p256-sha256" }>ECDSA P-256 / SHA-256</option><option value="ecdsa-p384-sha384" selected?={ zone.DNSSECAlgorithm == "ecdsa-p384-sha384" }>ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault and never written to TOML.</small></label>
+			<div class="record-field-grid two zone-dnssec-policy">
+				<label><span>ZSK Lifetime</span><input class="mono-input" name="zsk_lifetime" value={ zone.ZSKLifetime } required/><small>Automatic zone-signing-key rotation interval.</small></label>
+				<label><span>KSK Lifetime</span><input class="mono-input" name="ksk_lifetime" value={ zone.KSKLifetime } required/><small>Starts a parent-coordinated KSK rollover.</small></label>
+				<label><span>Prepublication Window</span><input class="mono-input" name="key_prepublish" value={ zone.KeyPrepublish } required/><small>Must cover the maximum DNSKEY/zone TTL.</small></label>
+				<label><span>Retirement Window</span><input class="mono-input" name="key_retire_after" value={ zone.KeyRetireAfter } required/><small>Old keys remain published for cached signatures and DS records.</small></label>
+			</div>
+			<label><span>Authenticated Denial</span><select name="denial" data-dnssec-denial><option value="nsec" selected?={ zone.DNSSECDenial == "" || zone.DNSSECDenial == "nsec" }>NSEC</option><option value="nsec3" selected?={ zone.DNSSECDenial == "nsec3" }>NSEC3</option></select><small>NSEC3 hashes owner names in denial proofs. NSEC is faster and simpler.</small></label>
+			<section class="zone-dnssec-nsec3" data-dnssec-nsec3 hidden?={ zone.DNSSECDenial != "nsec3" }>
+				<label><span>NSEC3 Iterations</span><input type="number" name="nsec3_iterations" min="0" max="0" value={ fmt.Sprint(zone.NSEC3Iterations) } disabled?={ zone.DNSSECDenial != "nsec3" }/><small>Modern DNSSEC guidance requires zero extra iterations to avoid validator and CPU costs.</small></label>
+				<label><span>NSEC3 Salt <small>(optional)</small></span><input class="mono-input" name="nsec3_salt" value={ zone.NSEC3Salt } maxlength="64" placeholder="Empty (recommended)" disabled?={ zone.DNSSECDenial != "nsec3" }/><small>Up to 32 bytes encoded as hexadecimal. An empty salt avoids unnecessary re-signing.</small></label>
+			</section>
+			if len(zone.DNSSECKeys) > 0 {
+				<section class="zone-dnssec-status">
+					<header><span class="zone-settings-section-icon signed">@Icon("shield-check")</span><span><strong>Managed KSK/ZSK Signing</strong><small>Signatures expire { zone.DNSSECExpires }</small></span></header>
+					<div class="zone-dnssec-key-list">
+						for index, key := range zone.DNSSECKeys {
+							<section class="zone-dnssec-key">
+								<header><span><strong>{ key.Role }</strong><small>Key tag { fmt.Sprint(key.KeyTag) }</small></span><span class={ "zone-dnssec-key-state " + key.State }>{ key.State }</span></header>
+								if key.Timing != "" {
+									<small>{ key.Timing }</small>
+								}
+								if key.DS != "" {
+									<div class="zone-dnssec-copy"><span>DS Record (SHA-256)</span>@ZoneCopyableText(id + "-ds-" + fmt.Sprint(index), key.DS, "dnssec-record-copy")</div>
+									<div class="zone-dnssec-actions"><a class="button outline" href={ templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name) + "&key_tag=" + fmt.Sprint(key.KeyTag)) }>@Icon("download")<span>Download DS</span></a>
+										if (key.State == "active" && zone.DNSSECParentDSKeyTag != key.KeyTag) || key.State == "ready" {
+											<button class="button" type="submit" name="key_tag" value={ fmt.Sprint(key.KeyTag) } formaction="/ui/zones/dnssec/confirm-ds" formmethod="post">@Icon("check")<span>Confirm Parent DS</span></button>
+										}
+									</div>
+								}
+							</section>
+						}
+					</div>
+					<div class="zone-dnssec-actions"><button class="button outline" type="submit" name="role" value="zsk" formaction="/ui/zones/dnssec/rollover" formmethod="post">@Icon("refresh")<span>Roll ZSK</span></button><button class="button outline" type="submit" name="role" value="ksk" formaction="/ui/zones/dnssec/rollover" formmethod="post">@Icon("refresh")<span>Roll KSK</span></button></div>
+				</section>
+				<div class="zone-dnssec-warning"><strong>Next action</strong><span>{ zone.DNSSECNextAction }</span></div>
+			} else if zone.DNSSECDS != "" {
+				<section class="zone-dnssec-status">
+					<header><span class="zone-settings-section-icon signed">@Icon("shield-check")</span><span><strong>Zone Signed</strong><small>Key tag { fmt.Sprint(zone.DNSSECKeyTag) } · signatures expire { zone.DNSSECExpires }</small></span></header>
+					<div class="zone-dnssec-copy"><span>DS Record (SHA-256)</span>@ZoneCopyableText(id + "-ds", zone.DNSSECDS, "dnssec-record-copy")</div>
+					<div class="zone-dnssec-copy"><span>DNSKEY Record</span>@ZoneCopyableText(id + "-dnskey", zone.DNSSECDNSKEY, "dnssec-record-copy")</div>
+					<div class="zone-dnssec-actions"><a class="button outline" href={ templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name)) }>@Icon("download")<span>Download DS Record</span></a></div>
+				</section>
+			} else {
+				<div class="zone-dnssec-note">Separate KSK and ZSK material will be generated when you save. Publish the KSK DS at the parent only after confirming the signed zone is serving correctly.</div>
+			}
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save DNSSEC</button></footer>
+		</form>
+	</dialog>
+}
+
+templ ZoneSettingsDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-dialog zone-settings-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-tabs>
+		<div class="dialog-header"><h2 id={ id + "-title" }>Zone Settings</h2><p>Configure serving and transfer policy for <code>{ zone.Name }</code>.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="dialog-tab-list zone-settings-tabs" role="tablist" aria-label="Zone settings sections"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="general">General</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="transfers">Transfers &amp; Updates</button></div>
+		<form class="blocking-dialog-form zone-settings-form" hx-post="/ui/zones/settings" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="general">
+				<label><span>Zone Name</span><input class="mono-input" value={ zone.Name } readonly/></label>
+				<label><span>Zone Type</span><input value={ zoneTypeLabel(zone.Type) } readonly/></label>
+				<label><span>Default TTL (seconds)</span><input type="number" name="default_ttl" min="1" max="4294967295" value={ fmt.Sprint(zone.DefaultTTL) } required/></label>
+				<section class="zone-settings-section">
+					<div><span class="zone-settings-section-icon">@Icon("key")</span><span><strong>TSIG Authentication</strong><small>Authenticate NOTIFY, AXFR, IXFR, and dynamic updates for this zone.</small></span></div>
+					<label><span>Key Name</span><input class="mono-input" name="tsig_key" value={ zone.TSIGKey } placeholder="transfer-key." autocomplete="off"/><small>Leave empty for source-IP and transfer-policy authorization only.</small></label>
+				</section>
+			</section>
+			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="transfers" hidden>
+				if zone.Type == "secondary" || zone.Type == "stub" {
+					<section class="zone-settings-section first">
+						<div><span class="zone-settings-section-icon">@Icon("server")</span><span><strong>Primary Name Servers</strong><small>Servers used to refresh this { zoneTypeLabel(zone.Type) } zone.</small></span></div>
+						<label><span>Server Addresses</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } required>{ strings.Join(zone.PrimaryServers, "\n") }</textarea><small>One address per line, tried in order.</small></label>
+						<label><span>Protocol</span><select name="primary_protocol">
+							if zone.Type == "stub" {
+								<option value="udp" selected?={ zone.PrimaryProtocol == "udp" }>UDP</option>
+							}
+							<option value="tcp" selected?={ zone.PrimaryProtocol == "" || zone.PrimaryProtocol == "tcp" }>TCP</option><option value="tls" selected?={ zone.PrimaryProtocol == "tls" }>DNS-over-TLS</option>
+						</select></label>
+					</section>
+				}
+				if zone.Type == "primary" {
+				<section class="zone-settings-section first">
+					<div><span class="zone-settings-section-icon">@Icon("refresh")</span><span><strong>Dynamic DNS Updates</strong><small>Accept authenticated RFC 2136 record changes for this primary zone.</small></span></div>
+					<label class="zone-dynamic-toggle"><span><strong>Allow Dynamic Updates</strong><small>Every update must be signed by the TSIG key configured above. Changes persist transactionally to the zone database, advance the SOA serial, and notify secondary servers.</small></span><span class="switch"><input type="checkbox" name="dynamic_updates" value="true" checked?={ zone.DynamicUpdates }/><span></span></span></label>
+				</section>
+				}
+				if zone.Type != "stub" {
+					<section class={ ifThen(zone.Type == "primary" || zone.Type == "secondary", "zone-settings-section", "zone-settings-section first") }>
+						<div><span class="zone-settings-section-icon">@Icon("download")</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div>
+						<label><span>Transfer Policy</span><select name="zone_transfer"><option value="deny" selected?={ zone.ZoneTransfer == "" || zone.ZoneTransfer == "deny" }>Deny transfers</option><option value="private" selected?={ zone.ZoneTransfer == "private" }>Private networks only</option><option value="acl" selected?={ zone.ZoneTransfer == "acl" }>Specified networks</option><option value="allow" selected?={ zone.ZoneTransfer == "allow" }>Allow any client</option></select></label>
+						<label><span>Allowed Networks</span><textarea class="mono-input" name="transfer_acl" placeholder={ "192.0.2.10\n2001:db8::/64" }>{ strings.Join(zone.TransferACL, "\n") }</textarea><small>One IP address or CIDR network per line. Used by the specified-networks policy.</small></label>
+					</section>
+					<section class="zone-settings-section">
+						<div><span class="zone-settings-section-icon">@Icon("send")</span><span><strong>Notify</strong><small>Notify secondary name servers after this zone changes.</small></span></div>
+						<label><span>Secondary Servers</span><textarea class="mono-input" name="notify" placeholder={ "192.0.2.53\nsecondary.example.net:53" }>{ strings.Join(zone.Notify, "\n") }</textarea><small>One DNS server per line. Port 53 is used when no port is provided.</small></label>
+					</section>
+				}
+			</section>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save Settings</button></footer>
+		</form>
+	</dialog>
+}
+
+templ CloneZoneDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<div class="dialog-header"><h2 id={ id + "-title" }>Clone Zone</h2><p>Copy all records and settings from <code>{ zone.Name }</code>.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form" hx-post="/ui/zones/clone" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<label><span>New Zone Name</span><input class="mono-input" name="name" placeholder="clone.example.com" autocomplete="off" required/></label>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Clone Zone</button></footer>
+		</form>
+	</dialog>
+}
+
+templ DeleteZoneDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<div class="dialog-header"><h2 id={ id + "-title" }>Delete Zone?</h2><p>Are you sure you want to delete “{ zone.Name }”? This will permanently delete all records in this zone. This action cannot be undone.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form hx-post="/ui/zones/delete" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit">Delete Zone</button></footer></form>
+	</dialog>
+}
+
+templ ImportZoneDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-import-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<div class="dialog-header">
+			<h2 id={ id + "-title" }>Import Zone File</h2>
+			<p>Paste or upload records to import into <code>{ zone.Name }</code>.</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<label class="zone-import-source">
+				<span>Zone File Contents</span>
+				<textarea name="zone_text" data-zone-import-text placeholder={ "$ORIGIN " + zone.Name + ".\n@  3600  IN  A  192.0.2.1" } spellcheck="false"></textarea>
+			</label>
+			<div class="zone-file-picker">
+				<input class="sr-only" id={ id + "-file" } type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file/>
+				<label class="button outline" for={ id + "-file" }>@Icon("upload")<span>Load from file</span></label>
+				<span data-zone-file-name>No file selected</span>
+			</div>
+			<div class="zone-import-options">
+				<label class="zone-import-option">
+					<input type="checkbox" name="overwrite" value="true" checked/>
+					<span><strong>Overwrite existing record sets</strong><small>Replace records with the same name and type.</small></span>
+				</label>
+				<label class="zone-import-option">
+					<input type="checkbox" name="overwrite_soa_serial" value="true"/>
+					<span><strong>Overwrite SOA serial</strong><small>Use the serial from the imported zone file.</small></span>
+				</label>
+				<label class="zone-import-option danger">
+					<input type="checkbox" name="overwrite_zone" value="true"/>
+					<span><strong>Overwrite entire zone</strong><small>Delete every existing record before importing. The imported file must contain a valid SOA and NS record.</small></span>
+				</label>
+			</div>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Records</button></footer>
+		</form>
+	</dialog>
+}
+
+templ ImportNewZoneDialog() {
+	<dialog class="custom-server-dialog isotope-zone-import-dialog" id="import-new-zone-dialog" aria-labelledby="import-new-zone-title">
+		<div class="dialog-header">
+			<h2 id="import-new-zone-title">Import Zone</h2>
+			<p>Create a primary zone from a BIND or Technitium zone file.</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import-new" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
+			<label><span>Zone Name <small>(optional)</small></span><input class="mono-input" name="zone" placeholder="Inferred from $ORIGIN or SOA" autocomplete="off"/></label>
+			<label class="zone-import-source">
+				<span>Zone File Contents</span>
+				<textarea name="zone_text" data-zone-import-text placeholder="$ORIGIN example.com.&#10;@  3600  IN  SOA  ns1.example.com. hostmaster.example.com. 1 3600 600 1209600 300" spellcheck="false"></textarea>
+			</label>
+			<div class="zone-file-picker">
+				<input class="sr-only" id="import-new-zone-file" type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file/>
+				<label class="button outline" for="import-new-zone-file">@Icon("upload")<span>Load from file</span></label>
+				<span data-zone-file-name>No file selected</span>
+			</div>
+			<p class="zone-import-help">Zone Name is only required when the file does not include <code>$ORIGIN</code> or an absolute SOA owner.</p>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button></footer>
+		</form>
+	</dialog>
+}

@@ -1,0 +1,1014 @@
+package config
+
+import (
+	"crypto/tls"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/netip"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/miekg/dns"
+	"github.com/pelletier/go-toml/v2"
+
+	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/dnsname"
+)
+
+const (
+	defaultHTTPListen          = "127.0.0.1:5380"
+	defaultDNSListen           = "127.0.0.1:8053"
+	defaultDatabaseDriver      = "sqlite"
+	defaultDatabaseDSN         = "data/sable.db"
+	defaultResolverTimeout     = 2 * time.Second
+	defaultShutdownTimeout     = 15 * time.Second
+	defaultReloadDebounce      = 250 * time.Millisecond
+	defaultCacheSize           = 65_536
+	defaultCacheMinimumTTL     = 10
+	defaultCacheMaximumTTL     = 7 * 24 * 60 * 60
+	defaultCacheNegativeTTL    = 300
+	defaultCacheFailureTTL     = 10
+	defaultCacheStaleTTL       = 3 * 24 * 60 * 60
+	defaultCacheStaleAnswerTTL = 30
+	defaultCacheStaleResetTTL  = 30
+	defaultCacheStaleMaxWait   = 1800 * time.Millisecond
+	defaultCachePrefetchMinTTL = 2
+	defaultCachePrefetchAtTTL  = 9
+	defaultCachePrefetchSample = 5 * time.Minute
+	defaultCachePrefetchHits   = 30
+	defaultQueryLogBuffer      = 8_192
+	defaultQueryLogBatch       = 256
+	defaultQueryLogFlush       = 250 * time.Millisecond
+	defaultQueryLogKeep        = 7 * 24 * time.Hour
+	defaultTLSVersion          = "1.3"
+	defaultCertificateMode     = "manual"
+	defaultACMEDirectoryURL    = "https://acme-v02.api.letsencrypt.org/directory"
+	defaultACMEStorageDir      = "data/tls/acme"
+	defaultACMERenewBefore     = 30 * 24 * time.Hour
+	defaultHostTTL             = 300
+	defaultBlockListUpdate     = 24 * time.Hour
+	defaultBlockingTTL         = 30
+	defaultSessionTTL          = 12 * time.Hour
+	defaultAPITokenTTL         = 90 * 24 * time.Hour
+	defaultSecretKeyFile       = "data/sable.key"
+	defaultClusterDataDir      = "data/cluster"
+	defaultZSKLifetime         = 30 * 24 * time.Hour
+	defaultKSKLifetime         = 365 * 24 * time.Hour
+	defaultKeyPrepublish       = 24 * time.Hour
+	defaultKeyRetireAfter      = 7 * 24 * time.Hour
+)
+
+type Duration struct {
+	time.Duration
+}
+
+func (duration *Duration) UnmarshalText(value []byte) error {
+	parsed, err := time.ParseDuration(string(value))
+	if err != nil {
+		return fmt.Errorf("parse duration %q: %w", value, err)
+	}
+	duration.Duration = parsed
+	return nil
+}
+
+func (duration Duration) MarshalText() ([]byte, error) {
+	return []byte(duration.String()), nil
+}
+
+type Config struct {
+	Server       Server       `toml:"server"`
+	Database     Database     `toml:"database"`
+	Resolver     Resolver     `toml:"resolver"`
+	TSIGKeys     []TSIGKey    `toml:"tsig_keys"`
+	Blocking     Blocking     `toml:"blocking"`
+	QueryLog     QueryLog     `toml:"query_log"`
+	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
+	Security     Security     `toml:"security"`
+	Cluster      Cluster      `toml:"cluster"`
+	Reload       Reload       `toml:"config"`
+}
+
+type TSIGKey struct {
+	Name      string `toml:"name" json:"name"`
+	Algorithm string `toml:"algorithm" json:"algorithm"`
+	Secret    string `toml:"secret" json:"-"`
+}
+
+type Server struct {
+	HTTPListen      string   `toml:"http_listen"`
+	HTTPSListen     string   `toml:"https_listen"`
+	DNSListen       []string `toml:"dns_listen"`
+	ShutdownTimeout Duration `toml:"shutdown_timeout"`
+}
+
+type Database struct {
+	Driver string `toml:"driver"`
+	DSN    string `toml:"dsn"`
+}
+
+type Resolver struct {
+	Mode                       string         `toml:"mode"`
+	Forwarders                 []string       `toml:"forwarders"`
+	RootHints                  []string       `toml:"root_hints"`
+	Routes                     []ForwardRoute `toml:"routes"`
+	Hosts                      []HostOverride `toml:"hosts"`
+	Timeout                    Duration       `toml:"timeout"`
+	CacheSize                  int            `toml:"cache_size"`
+	CacheMinimumTTL            uint32         `toml:"cache_minimum_ttl"`
+	CacheMaximumTTL            uint32         `toml:"cache_maximum_ttl"`
+	CacheNegativeTTL           uint32         `toml:"cache_negative_ttl"`
+	CacheFailureTTL            uint32         `toml:"cache_failure_ttl"`
+	SaveCache                  bool           `toml:"save_cache"`
+	ServeStale                 bool           `toml:"serve_stale"`
+	CacheStaleTTL              uint32         `toml:"cache_stale_ttl"`
+	CacheStaleAnswerTTL        uint32         `toml:"cache_stale_answer_ttl"`
+	CacheStaleResetTTL         uint32         `toml:"cache_stale_reset_ttl"`
+	CacheStaleMaxWait          Duration       `toml:"cache_stale_max_wait"`
+	CachePrefetchMinimumTTL    uint32         `toml:"cache_prefetch_minimum_ttl"`
+	CachePrefetchTriggerTTL    uint32         `toml:"cache_prefetch_trigger_ttl"`
+	CachePrefetchSample        Duration       `toml:"cache_prefetch_sample_interval"`
+	CachePrefetchHitsPerHour   uint32         `toml:"cache_prefetch_hits_per_hour"`
+	DNSSECValidation           bool           `toml:"dnssec_validation"`
+	DNSSECTrustAnchorUpdates   bool           `toml:"dnssec_trust_anchor_updates"`
+	DNSSECTrustAnchors         []string       `toml:"dnssec_trust_anchors"`
+	DNSSECNegativeTrustAnchors []string       `toml:"dnssec_negative_trust_anchors"`
+}
+
+type ForwardRoute struct {
+	Domain     string   `toml:"domain"`
+	Forwarders []string `toml:"forwarders"`
+}
+
+type HostOverride struct {
+	Name      string   `toml:"name"`
+	Addresses []string `toml:"addresses"`
+	TTL       uint32   `toml:"ttl"`
+}
+
+type Blocking struct {
+	Enabled         bool        `toml:"enabled"`
+	Domains         []string    `toml:"domains"`
+	AllowedDomains  []string    `toml:"allowed_domains"`
+	Lists           []BlockList `toml:"lists"`
+	UpdateInterval  Duration    `toml:"update_interval"`
+	ResponseType    string      `toml:"response_type"`
+	ResponseTTL     uint32      `toml:"response_ttl"`
+	CustomAddresses []string    `toml:"custom_addresses"`
+	BypassClients   []string    `toml:"bypass_clients"`
+	AllowTXTReport  bool        `toml:"allow_txt_report"`
+}
+
+type BlockList struct {
+	Name   string `toml:"name"`
+	Path   string `toml:"path"`
+	URL    string `toml:"url"`
+	Format string `toml:"format"`
+}
+
+type QueryLog struct {
+	Enabled       bool     `toml:"enabled"`
+	BufferSize    int      `toml:"buffer_size"`
+	BatchSize     int      `toml:"batch_size"`
+	FlushInterval Duration `toml:"flush_interval"`
+	Retention     Duration `toml:"retention"`
+}
+
+type EncryptedDNS struct {
+	DoTListen       []string `toml:"dot_listen"`
+	DoHListen       []string `toml:"doh_listen"`
+	CertificateMode string   `toml:"certificate_mode"`
+	CertificateFile string   `toml:"certificate_file"`
+	PrivateKeyFile  string   `toml:"private_key_file"`
+	MinimumVersion  string   `toml:"minimum_tls_version"`
+	ACME            ACME     `toml:"acme"`
+}
+
+// ACME contains public certificate policy. Provider credentials are encrypted
+// in the secret vault and are deliberately never serialized to TOML.
+type ACME struct {
+	Email            string   `toml:"email"`
+	Domains          []string `toml:"domains"`
+	DirectoryURL     string   `toml:"directory_url"`
+	DNSProvider      string   `toml:"dns_provider"`
+	DNSZone          string   `toml:"dns_zone"`
+	StorageDirectory string   `toml:"storage_dir"`
+	RenewBefore      Duration `toml:"renew_before"`
+}
+
+type Security struct {
+	Enabled       bool     `toml:"enabled"`
+	SecureCookies bool     `toml:"secure_cookies"`
+	SessionTTL    Duration `toml:"session_ttl"`
+	APITokenTTL   Duration `toml:"api_token_ttl"`
+	SecretKeyFile string   `toml:"secret_key_file"`
+}
+
+// Cluster contains node-local identity settings. Membership and synchronized
+// state are stored in the cluster data directory, not in TOML.
+type Cluster struct {
+	DataDirectory   string `toml:"data_dir"`
+	NodeName        string `toml:"node_name"`
+	AdvertiseURL    string `toml:"advertise_url"`
+	TrustAnchorFile string `toml:"trust_anchor_file"`
+}
+
+type Reload struct {
+	Watch    bool     `toml:"watch"`
+	Debounce Duration `toml:"debounce"`
+}
+
+func Defaults() Config {
+	return Config{
+		Server: Server{
+			HTTPListen:      defaultHTTPListen,
+			DNSListen:       []string{defaultDNSListen},
+			ShutdownTimeout: Duration{Duration: defaultShutdownTimeout},
+		},
+		Database: Database{
+			Driver: defaultDatabaseDriver,
+			DSN:    defaultDatabaseDSN,
+		},
+		Resolver: Resolver{
+			Mode:                     "forward",
+			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
+			Timeout:                  Duration{Duration: defaultResolverTimeout},
+			CacheSize:                defaultCacheSize,
+			CacheMinimumTTL:          defaultCacheMinimumTTL,
+			CacheMaximumTTL:          defaultCacheMaximumTTL,
+			CacheNegativeTTL:         defaultCacheNegativeTTL,
+			CacheFailureTTL:          defaultCacheFailureTTL,
+			CacheStaleTTL:            defaultCacheStaleTTL,
+			CacheStaleAnswerTTL:      defaultCacheStaleAnswerTTL,
+			CacheStaleResetTTL:       defaultCacheStaleResetTTL,
+			CacheStaleMaxWait:        Duration{Duration: defaultCacheStaleMaxWait},
+			CachePrefetchMinimumTTL:  defaultCachePrefetchMinTTL,
+			CachePrefetchTriggerTTL:  defaultCachePrefetchAtTTL,
+			CachePrefetchSample:      Duration{Duration: defaultCachePrefetchSample},
+			CachePrefetchHitsPerHour: defaultCachePrefetchHits,
+			DNSSECValidation:         true,
+			DNSSECTrustAnchorUpdates: true,
+		},
+		Blocking: Blocking{
+			Enabled: true, UpdateInterval: Duration{Duration: defaultBlockListUpdate},
+			ResponseType: "nxdomain", ResponseTTL: defaultBlockingTTL, AllowTXTReport: true,
+		},
+		QueryLog: QueryLog{
+			Enabled:       true,
+			BufferSize:    defaultQueryLogBuffer,
+			BatchSize:     defaultQueryLogBatch,
+			FlushInterval: Duration{Duration: defaultQueryLogFlush},
+			Retention:     Duration{Duration: defaultQueryLogKeep},
+		},
+		EncryptedDNS: EncryptedDNS{
+			MinimumVersion:  defaultTLSVersion,
+			CertificateMode: defaultCertificateMode,
+			ACME: ACME{
+				DirectoryURL: defaultACMEDirectoryURL, StorageDirectory: defaultACMEStorageDir,
+				RenewBefore: Duration{Duration: defaultACMERenewBefore},
+			},
+		},
+		Security: Security{
+			Enabled:       true,
+			SessionTTL:    Duration{Duration: defaultSessionTTL},
+			APITokenTTL:   Duration{Duration: defaultAPITokenTTL},
+			SecretKeyFile: defaultSecretKeyFile,
+		},
+		Cluster: Cluster{DataDirectory: defaultClusterDataDir},
+		Reload: Reload{
+			Watch:    true,
+			Debounce: Duration{Duration: defaultReloadDebounce},
+		},
+	}
+}
+
+func Load(path string) (Config, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("open configuration: %w", err)
+	}
+	defer file.Close()
+
+	loaded, err := Decode(file)
+	if err != nil {
+		return Config{}, fmt.Errorf("load %s: %w", path, err)
+	}
+	return loaded, nil
+}
+
+func Decode(reader io.Reader) (Config, error) {
+	loaded := Defaults()
+	decoder := toml.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&loaded); err != nil {
+		return Config{}, fmt.Errorf("decode TOML: %w", err)
+	}
+	loaded.normalize()
+	if err := loaded.Validate(); err != nil {
+		return Config{}, err
+	}
+	return loaded, nil
+}
+
+func (configuration Config) Validate() error {
+	var validationErrors []error
+	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
+	if configuration.Server.HTTPSListen != "" {
+		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
+	}
+	for index, address := range configuration.Server.DNSListen {
+		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("server.dns_listen[%d]", index), address))
+	}
+	for index, address := range configuration.Resolver.Forwarders {
+		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("resolver.forwarders[%d]", index), address))
+	}
+	for index, address := range configuration.Resolver.RootHints {
+		validationErrors = append(validationErrors, validateRootHint(fmt.Sprintf("resolver.root_hints[%d]", index), address))
+	}
+	for index, anchor := range configuration.Resolver.DNSSECTrustAnchors {
+		if _, err := parseDNSSECTrustAnchor(anchor); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("resolver.dnssec_trust_anchors[%d]: %w", index, err))
+		}
+	}
+	for index, anchor := range configuration.Resolver.DNSSECNegativeTrustAnchors {
+		if anchor == "." {
+			continue
+		}
+		if _, err := dnsname.Normalize(anchor); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("resolver.dnssec_negative_trust_anchors[%d]: %w", index, err))
+		}
+	}
+	tsigKeys := make(map[string]struct{}, len(configuration.TSIGKeys))
+	for index, key := range configuration.TSIGKeys {
+		field := fmt.Sprintf("tsig_keys[%d]", index)
+		if key.Name == "" || key.Name == "." {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
+		}
+		if _, duplicate := tsigKeys[key.Name]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("duplicate TSIG key %q", key.Name))
+		}
+		tsigKeys[key.Name] = struct{}{}
+		if key.Algorithm != dns.HmacSHA256 && key.Algorithm != dns.HmacSHA384 && key.Algorithm != dns.HmacSHA512 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.algorithm must be hmac-sha256, hmac-sha384, or hmac-sha512", field))
+		}
+		secret, err := base64.StdEncoding.DecodeString(key.Secret)
+		if err != nil || len(secret) < 16 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.secret must be base64 encoding at least 128 bits", field))
+		}
+	}
+	seenRouteDomains := make(map[string]struct{}, len(configuration.Resolver.Routes))
+	for index, route := range configuration.Resolver.Routes {
+		field := fmt.Sprintf("resolver.routes[%d]", index)
+		if route.Domain == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.domain is required", field))
+		}
+		if _, err := dnsname.Normalize(route.Domain); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.domain: %w", field, err))
+		}
+		if len(route.Forwarders) == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.forwarders must contain at least one address", field))
+		}
+		if _, duplicate := seenRouteDomains[route.Domain]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("duplicate conditional forwarding domain %q", route.Domain))
+		}
+		seenRouteDomains[route.Domain] = struct{}{}
+		for forwarderIndex, address := range route.Forwarders {
+			validationErrors = append(validationErrors, validateAddress(
+				fmt.Sprintf("%s.forwarders[%d]", field, forwarderIndex),
+				address,
+			))
+		}
+	}
+	seenHostNames := make(map[string]struct{}, len(configuration.Resolver.Hosts))
+	for index, host := range configuration.Resolver.Hosts {
+		field := fmt.Sprintf("resolver.hosts[%d]", index)
+		if host.Name == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
+		}
+		if _, err := dnsname.Normalize(host.Name); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name: %w", field, err))
+		}
+		if _, duplicate := seenHostNames[host.Name]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("duplicate local host override %q", host.Name))
+		}
+		seenHostNames[host.Name] = struct{}{}
+		if len(host.Addresses) == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.addresses must contain at least one IP address", field))
+		}
+		for addressIndex, address := range host.Addresses {
+			parsed, err := netip.ParseAddr(address)
+			if err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.addresses[%d] must be an IP address: %w", field, addressIndex, err))
+			} else if parsed.Zone() != "" {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.addresses[%d] must not contain an IPv6 zone", field, addressIndex))
+			}
+		}
+		if host.TTL == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.ttl must be positive", field))
+		}
+	}
+	if len(configuration.Server.DNSListen) == 0 {
+		validationErrors = append(validationErrors, errors.New("server.dns_listen must contain at least one address"))
+	}
+	if configuration.Resolver.Mode != "forward" && configuration.Resolver.Mode != "recursive" {
+		validationErrors = append(validationErrors, errors.New("resolver.mode must be forward or recursive"))
+	}
+	if configuration.Resolver.Mode == "forward" && len(configuration.Resolver.Forwarders) == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.forwarders must contain at least one address in forward mode"))
+	}
+	if configuration.Resolver.Timeout.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.timeout must be positive"))
+	}
+	if configuration.Resolver.CacheSize <= 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_size must be positive"))
+	}
+	if configuration.Resolver.CacheMaximumTTL == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_maximum_ttl must be positive"))
+	}
+	if configuration.Resolver.CacheMinimumTTL > configuration.Resolver.CacheMaximumTTL {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_minimum_ttl must not exceed cache_maximum_ttl"))
+	}
+	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleTTL == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_ttl must be positive when serve_stale is enabled"))
+	}
+	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleAnswerTTL == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_answer_ttl must be positive when serve_stale is enabled"))
+	}
+	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleResetTTL == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_reset_ttl must be positive when serve_stale is enabled"))
+	}
+	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleMaxWait.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_max_wait must be positive when serve_stale is enabled"))
+	}
+	if configuration.Resolver.CachePrefetchSample.Duration <= 0 || configuration.Resolver.CachePrefetchSample.Duration > 24*time.Hour {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_prefetch_sample_interval must be between 1ns and 24h"))
+	}
+	if configuration.Resolver.CachePrefetchTriggerTTL > 0 && configuration.Resolver.CachePrefetchHitsPerHour == 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.cache_prefetch_hits_per_hour must be positive when prefetching is enabled"))
+	}
+	if configuration.Server.ShutdownTimeout.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("server.shutdown_timeout must be positive"))
+	}
+	if configuration.Reload.Debounce.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("config.debounce must be positive"))
+	}
+	if configuration.Database.Driver != "sqlite" && configuration.Database.Driver != "postgres" {
+		validationErrors = append(validationErrors, fmt.Errorf("database.driver must be sqlite or postgres, got %q", configuration.Database.Driver))
+	}
+	if configuration.Database.DSN == "" {
+		validationErrors = append(validationErrors, errors.New("database.dsn is required"))
+	}
+	if configuration.QueryLog.BufferSize <= 0 {
+		validationErrors = append(validationErrors, errors.New("query_log.buffer_size must be positive"))
+	}
+	if configuration.QueryLog.BatchSize <= 0 || configuration.QueryLog.BatchSize > configuration.QueryLog.BufferSize {
+		validationErrors = append(validationErrors, errors.New("query_log.batch_size must be positive and no larger than buffer_size"))
+	}
+	if configuration.QueryLog.FlushInterval.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("query_log.flush_interval must be positive"))
+	}
+	if configuration.QueryLog.Retention.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("query_log.retention must be positive"))
+	}
+	for index, address := range configuration.EncryptedDNS.DoTListen {
+		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
+	}
+	for index, address := range configuration.EncryptedDNS.DoHListen {
+		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.doh_listen[%d]", index), address))
+	}
+	validationErrors = append(validationErrors, validateTCPListenerConflicts(configuration))
+	if configuration.EncryptedDNS.CertificateMode != "manual" && configuration.EncryptedDNS.CertificateMode != "acme" {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_mode must be manual or acme"))
+	}
+	if (len(configuration.EncryptedDNS.DoTListen)+len(configuration.EncryptedDNS.DoHListen) > 0 || configuration.Server.HTTPSListen != "") && configuration.EncryptedDNS.CertificateMode == "manual" {
+		if configuration.EncryptedDNS.CertificateFile == "" {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_file is required for encrypted listeners"))
+		}
+		if configuration.EncryptedDNS.PrivateKeyFile == "" {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.private_key_file is required for encrypted listeners"))
+		}
+	}
+	if configuration.EncryptedDNS.CertificateMode == "acme" {
+		acmeConfiguration := configuration.EncryptedDNS.ACME
+		if len(acmeConfiguration.Domains) == 0 {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.domains requires at least one domain"))
+		}
+		for index, domain := range acmeConfiguration.Domains {
+			name := strings.TrimPrefix(domain, "*.")
+			if name == "" || name == "." {
+				validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d] is invalid", index))
+			} else if _, err := dnsname.Normalize(name); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d]: %w", index, err))
+			}
+		}
+		if acmeConfiguration.Email == "" || !strings.Contains(acmeConfiguration.Email, "@") {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.email must be a valid contact email"))
+		}
+		if directory, err := url.Parse(acmeConfiguration.DirectoryURL); err != nil || directory.Scheme != "https" || directory.Host == "" {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.directory_url must be an HTTPS URL"))
+		}
+		if !slices.Contains([]string{"cloudflare", "porkbun", "namecheap", "godaddy", "digitalocean", "hetzner", "rfc2136", "route53", "ovh"}, acmeConfiguration.DNSProvider) {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.dns_provider is not supported"))
+		}
+		if acmeConfiguration.StorageDirectory == "" {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.storage_dir is required"))
+		}
+		if acmeConfiguration.RenewBefore.Duration < 24*time.Hour || acmeConfiguration.RenewBefore.Duration > 60*24*time.Hour {
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.renew_before must be between 24h and 1440h"))
+		}
+	}
+	if configuration.EncryptedDNS.MinimumVersion != "1.2" && configuration.EncryptedDNS.MinimumVersion != "1.3" {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.minimum_tls_version must be 1.2 or 1.3"))
+	}
+	if configuration.Security.SessionTTL.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("security.session_ttl must be positive"))
+	}
+	if configuration.Security.APITokenTTL.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("security.api_token_ttl must be positive"))
+	}
+	if configuration.Security.SecretKeyFile == "" {
+		validationErrors = append(validationErrors, errors.New("security.secret_key_file is required"))
+	}
+	if configuration.Cluster.DataDirectory == "" {
+		validationErrors = append(validationErrors, errors.New("cluster.data_dir is required"))
+	}
+	if err := ValidateClusterAdvertiseURL(configuration.Cluster.AdvertiseURL); err != nil {
+		validationErrors = append(validationErrors, err)
+	}
+	if configuration.Security.Enabled && !configuration.Security.SecureCookies && !isLoopbackListener(configuration.Server.HTTPListen) {
+		validationErrors = append(validationErrors, errors.New("security.secure_cookies must be true when server.http_listen is not loopback"))
+	}
+	seenBlockLists := make(map[string]struct{}, len(configuration.Blocking.Lists))
+	for index, domain := range configuration.Blocking.Domains {
+		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("blocking.domains[%d]: %w", index, err))
+		}
+	}
+	for index, list := range configuration.Blocking.Lists {
+		field := fmt.Sprintf("blocking.lists[%d]", index)
+		if list.Name == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
+		}
+		if list.Path == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.path is required", field))
+		}
+		if list.URL != "" {
+			if err := blockcompiler.ValidateURL(list.URL); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.url: %w", field, err))
+			}
+		}
+		if err := blockcompiler.ValidateFormat(list.Format); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.format: %w", field, err))
+		}
+		if _, duplicate := seenBlockLists[list.Name]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("duplicate block list name %q", list.Name))
+		}
+		seenBlockLists[list.Name] = struct{}{}
+	}
+	for index, domain := range configuration.Blocking.AllowedDomains {
+		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("blocking.allowed_domains[%d]: %w", index, err))
+		}
+	}
+	if configuration.Blocking.UpdateInterval.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("blocking.update_interval must be positive"))
+	}
+	if configuration.Blocking.ResponseType != "nxdomain" && configuration.Blocking.ResponseType != "zero" && configuration.Blocking.ResponseType != "custom" {
+		validationErrors = append(validationErrors, errors.New("blocking.response_type must be nxdomain, zero, or custom"))
+	}
+	if configuration.Blocking.ResponseType == "custom" && len(configuration.Blocking.CustomAddresses) == 0 {
+		validationErrors = append(validationErrors, errors.New("blocking.custom_addresses must not be empty for a custom response"))
+	}
+	for index, address := range configuration.Blocking.CustomAddresses {
+		if parsed, err := netip.ParseAddr(address); err != nil || parsed.Zone() != "" {
+			validationErrors = append(validationErrors, fmt.Errorf("blocking.custom_addresses[%d] must be an IP address", index))
+		}
+	}
+	for index, client := range configuration.Blocking.BypassClients {
+		if _, err := netip.ParsePrefix(client); err != nil {
+			if address, addressErr := netip.ParseAddr(client); addressErr != nil || address.Zone() != "" {
+				validationErrors = append(validationErrors, fmt.Errorf("blocking.bypass_clients[%d] must be an IP address or CIDR network", index))
+			}
+		}
+	}
+	return errors.Join(validationErrors...)
+}
+
+// ValidateClusterAdvertiseURL validates the trusted endpoint used for cluster
+// enrollment and synchronization. An empty URL leaves clustering disabled.
+func ValidateClusterAdvertiseURL(value string) error {
+	if value == "" {
+		return nil
+	}
+	advertiseURL, err := url.Parse(value)
+	if err != nil || !strings.EqualFold(advertiseURL.Scheme, "https") || advertiseURL.Host == "" ||
+		advertiseURL.User != nil || advertiseURL.RawQuery != "" || advertiseURL.Fragment != "" {
+		return errors.New("cluster.advertise_url must be an absolute https URL without credentials, query, or fragment")
+	}
+	return nil
+}
+
+func validateTCPListenerConflicts(configuration Config) error {
+	targets := make(map[string]string)
+	var conflicts []error
+	listeners := []struct {
+		field     string
+		addresses []string
+	}{
+		{field: "server.http_listen", addresses: []string{configuration.Server.HTTPListen}},
+		{field: "server.https_listen", addresses: []string{configuration.Server.HTTPSListen}},
+		{field: "server.dns_listen", addresses: configuration.Server.DNSListen},
+		{field: "encrypted_dns.dot_listen", addresses: configuration.EncryptedDNS.DoTListen},
+		{field: "encrypted_dns.doh_listen", addresses: configuration.EncryptedDNS.DoHListen},
+	}
+	for _, listener := range listeners {
+		for _, address := range listener.addresses {
+			if address == "" {
+				continue
+			}
+			if existing, duplicate := targets[address]; duplicate {
+				if listener.field == "encrypted_dns.doh_listen" && existing == "server.https_listen" {
+					// The public console/API and DoH intentionally share one TLS
+					// listener. The web server dispatches /dns-query directly to
+					// the DNS handler while keeping every other route protected.
+					continue
+				}
+				conflicts = append(conflicts, fmt.Errorf("TCP listener %s conflicts with %s at %s", listener.field, existing, address))
+				continue
+			}
+			targets[address] = listener.field
+		}
+	}
+	return errors.Join(conflicts...)
+}
+
+// SharesHTTPSWithDoH reports whether the public HTTPS console listener also
+// serves the standard DNS-over-HTTPS endpoint at /dns-query.
+func (configuration Config) SharesHTTPSWithDoH() bool {
+	if configuration.Server.HTTPSListen == "" {
+		return false
+	}
+	return slices.Contains(configuration.EncryptedDNS.DoHListen, configuration.Server.HTTPSListen)
+}
+
+// DedicatedDoHListeners returns DoH endpoints that need their own listener.
+// An endpoint shared with the HTTPS console is opened by the web server.
+func (configuration Config) DedicatedDoHListeners() []string {
+	listeners := make([]string, 0, len(configuration.EncryptedDNS.DoHListen))
+	for _, address := range configuration.EncryptedDNS.DoHListen {
+		if address != configuration.Server.HTTPSListen {
+			listeners = append(listeners, address)
+		}
+	}
+	return listeners
+}
+
+func (configuration *Config) normalize() {
+	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
+	configuration.Server.HTTPSListen = strings.TrimSpace(configuration.Server.HTTPSListen)
+	configuration.Server.DNSListen = uniqueTrimmed(configuration.Server.DNSListen)
+	configuration.Resolver.Forwarders = uniqueTrimmed(configuration.Resolver.Forwarders)
+	configuration.Resolver.Mode = strings.ToLower(strings.TrimSpace(configuration.Resolver.Mode))
+	if configuration.Resolver.Mode == "" {
+		configuration.Resolver.Mode = "forward"
+	}
+	configuration.Resolver.RootHints = uniqueTrimmed(configuration.Resolver.RootHints)
+	configuration.EncryptedDNS.DoTListen = uniqueTrimmed(configuration.EncryptedDNS.DoTListen)
+	configuration.EncryptedDNS.DoHListen = uniqueTrimmed(configuration.EncryptedDNS.DoHListen)
+	configuration.EncryptedDNS.CertificateMode = strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.CertificateMode))
+	if configuration.EncryptedDNS.CertificateMode == "" {
+		configuration.EncryptedDNS.CertificateMode = defaultCertificateMode
+	}
+	configuration.EncryptedDNS.CertificateFile = strings.TrimSpace(configuration.EncryptedDNS.CertificateFile)
+	configuration.EncryptedDNS.PrivateKeyFile = strings.TrimSpace(configuration.EncryptedDNS.PrivateKeyFile)
+	configuration.EncryptedDNS.MinimumVersion = strings.TrimSpace(configuration.EncryptedDNS.MinimumVersion)
+	configuration.EncryptedDNS.ACME.Email = strings.TrimSpace(configuration.EncryptedDNS.ACME.Email)
+	configuration.EncryptedDNS.ACME.Domains = uniqueTrimmed(configuration.EncryptedDNS.ACME.Domains)
+	configuration.EncryptedDNS.ACME.DirectoryURL = strings.TrimSpace(configuration.EncryptedDNS.ACME.DirectoryURL)
+	configuration.EncryptedDNS.ACME.DNSProvider = strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.ACME.DNSProvider))
+	configuration.EncryptedDNS.ACME.DNSZone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.ACME.DNSZone)), ".")
+	configuration.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(configuration.EncryptedDNS.ACME.StorageDirectory)
+	if configuration.EncryptedDNS.ACME.DirectoryURL == "" {
+		configuration.EncryptedDNS.ACME.DirectoryURL = defaultACMEDirectoryURL
+	}
+	if configuration.EncryptedDNS.ACME.StorageDirectory == "" {
+		configuration.EncryptedDNS.ACME.StorageDirectory = defaultACMEStorageDir
+	}
+	if configuration.EncryptedDNS.ACME.RenewBefore.Duration == 0 {
+		configuration.EncryptedDNS.ACME.RenewBefore.Duration = defaultACMERenewBefore
+	}
+	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
+	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
+	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)
+	configuration.Cluster.AdvertiseURL = strings.TrimRight(strings.TrimSpace(configuration.Cluster.AdvertiseURL), "/")
+	configuration.Cluster.TrustAnchorFile = strings.TrimSpace(configuration.Cluster.TrustAnchorFile)
+	for index := range configuration.TSIGKeys {
+		key := &configuration.TSIGKeys[index]
+		key.Name = strings.ToLower(dns.Fqdn(strings.TrimSpace(key.Name)))
+		key.Algorithm = canonicalTSIGAlgorithm(key.Algorithm)
+		key.Secret = strings.TrimSpace(key.Secret)
+	}
+	slices.SortFunc(configuration.TSIGKeys, func(left, right TSIGKey) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+	for index := range configuration.Resolver.Routes {
+		route := &configuration.Resolver.Routes[index]
+		route.Domain = normalizeDomain(route.Domain)
+		route.Forwarders = uniqueTrimmed(route.Forwarders)
+	}
+	configuration.Resolver.DNSSECTrustAnchors = uniqueTrimmed(configuration.Resolver.DNSSECTrustAnchors)
+	configuration.Resolver.DNSSECNegativeTrustAnchors = uniqueDomainsAllowRoot(configuration.Resolver.DNSSECNegativeTrustAnchors)
+	slices.SortFunc(configuration.Resolver.Routes, func(left, right ForwardRoute) int {
+		return strings.Compare(left.Domain, right.Domain)
+	})
+	for index := range configuration.Resolver.Hosts {
+		host := &configuration.Resolver.Hosts[index]
+		host.Name = normalizeDomain(host.Name)
+		host.Addresses = uniqueAddresses(host.Addresses)
+		if host.TTL == 0 {
+			host.TTL = defaultHostTTL
+		}
+	}
+	slices.SortFunc(configuration.Resolver.Hosts, func(left, right HostOverride) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+
+	normalizedDomains := make([]string, 0, len(configuration.Blocking.Domains))
+	for _, domain := range configuration.Blocking.Domains {
+		normalized := normalizePolicyDomain(domain)
+		if normalized != "" {
+			normalizedDomains = append(normalizedDomains, normalized)
+		}
+	}
+	slices.Sort(normalizedDomains)
+	configuration.Blocking.Domains = slices.Compact(normalizedDomains)
+	normalizedAllowed := make([]string, 0, len(configuration.Blocking.AllowedDomains))
+	for _, domain := range configuration.Blocking.AllowedDomains {
+		normalized := normalizePolicyDomain(domain)
+		if normalized != "" {
+			normalizedAllowed = append(normalizedAllowed, normalized)
+		}
+	}
+	slices.Sort(normalizedAllowed)
+	configuration.Blocking.AllowedDomains = slices.Compact(normalizedAllowed)
+	configuration.Blocking.ResponseType = strings.ToLower(strings.TrimSpace(configuration.Blocking.ResponseType))
+	if configuration.Blocking.ResponseType == "" {
+		configuration.Blocking.ResponseType = "nxdomain"
+	}
+	if configuration.Blocking.UpdateInterval.Duration == 0 {
+		configuration.Blocking.UpdateInterval.Duration = defaultBlockListUpdate
+	}
+	configuration.Blocking.CustomAddresses = uniqueAddresses(configuration.Blocking.CustomAddresses)
+	configuration.Blocking.BypassClients = uniqueTrimmed(configuration.Blocking.BypassClients)
+	for index := range configuration.Blocking.Lists {
+		list := &configuration.Blocking.Lists[index]
+		list.Name = strings.TrimSpace(list.Name)
+		list.Path = strings.TrimSpace(list.Path)
+		list.URL = strings.TrimSpace(list.URL)
+		if list.Path == "" && list.URL != "" {
+			list.Path = blockcompiler.CachePath(list.URL)
+		}
+		list.Format = strings.ToLower(strings.TrimSpace(list.Format))
+		if list.Format == "" {
+			list.Format = string(blockcompiler.FormatAuto)
+		}
+	}
+	slices.SortFunc(configuration.Blocking.Lists, func(left, right BlockList) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+}
+
+func canonicalTSIGAlgorithm(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return dns.HmacSHA256
+	}
+	return dns.Fqdn(value)
+}
+
+func (configuration Config) BlockListPaths(baseDirectory string) []string {
+	paths := make([]string, 0, len(configuration.Blocking.Lists))
+	for _, list := range configuration.Blocking.Lists {
+		path := list.Path
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDirectory, path)
+		}
+		paths = append(paths, filepath.Clean(path))
+	}
+	return paths
+}
+
+func (configuration Config) ReloadDependencyPaths(baseDirectory string) []string {
+	paths := configuration.BlockListPaths(baseDirectory)
+	if configuration.EncryptedDNS.CertificateMode == "acme" {
+		certificate, privateKey := configuration.EncryptedDNSCertificatePaths(baseDirectory)
+		paths = append(paths, certificate, privateKey)
+	}
+	for _, path := range []string{
+		configuration.EncryptedDNS.CertificateFile,
+		configuration.EncryptedDNS.PrivateKeyFile,
+		configuration.Cluster.TrustAnchorFile,
+	} {
+		if path == "" {
+			continue
+		}
+		paths = append(paths, resolvePath(baseDirectory, path))
+	}
+	return paths
+}
+
+func (configuration Config) EncryptedDNSCertificatePaths(baseDirectory string) (string, string) {
+	if configuration.EncryptedDNS.CertificateMode == "acme" {
+		directory := resolvePath(baseDirectory, configuration.EncryptedDNS.ACME.StorageDirectory)
+		return filepath.Join(directory, "certificate.pem"), filepath.Join(directory, "private-key.pem")
+	}
+	return resolveOptionalPath(baseDirectory, configuration.EncryptedDNS.CertificateFile),
+		resolveOptionalPath(baseDirectory, configuration.EncryptedDNS.PrivateKeyFile)
+}
+
+func (configuration Config) SecuritySecretKeyPath(baseDirectory string) string {
+	return resolveOptionalPath(baseDirectory, configuration.Security.SecretKeyFile)
+}
+
+func (configuration Config) ClusterDataPath(baseDirectory string) string {
+	return resolvePath(baseDirectory, configuration.Cluster.DataDirectory)
+}
+
+func (configuration Config) ClusterTrustAnchorPath(baseDirectory string) string {
+	return resolveOptionalPath(baseDirectory, configuration.Cluster.TrustAnchorFile)
+}
+
+func (encrypted EncryptedDNS) MinimumTLSVersion() uint16 {
+	if encrypted.MinimumVersion == "1.2" {
+		return tls.VersionTLS12
+	}
+	return tls.VersionTLS13
+}
+
+func resolveOptionalPath(baseDirectory, path string) string {
+	if path == "" {
+		return ""
+	}
+	return resolvePath(baseDirectory, path)
+}
+
+func resolvePath(baseDirectory, path string) string {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDirectory, path)
+	}
+	return filepath.Clean(path)
+}
+
+func normalizeDomain(domain string) string {
+	domain = strings.TrimPrefix(strings.TrimSpace(domain), "*.")
+	normalized, err := dnsname.Normalize(domain)
+	if err != nil {
+		return strings.Trim(strings.ToLower(strings.TrimSpace(domain)), ".")
+	}
+	return normalized
+}
+
+func normalizePolicyDomain(domain string) string {
+	domain = strings.TrimSpace(domain)
+	wildcard := strings.HasPrefix(domain, "*.")
+	domain = strings.TrimPrefix(domain, "*.")
+	normalized, err := dnsname.Normalize(domain)
+	if err != nil {
+		normalized = strings.Trim(strings.ToLower(domain), ".")
+	}
+	if wildcard && normalized != "" {
+		return "*." + normalized
+	}
+	return normalized
+}
+
+func parseDNSSECTrustAnchor(value string) (dns.RR, error) {
+	fields := strings.Fields(value)
+	if len(fields) < 5 {
+		return nil, errors.New("must be an owner name followed by a DS or DNSKEY record")
+	}
+	owner := strings.ToLower(strings.TrimSpace(fields[0]))
+	if owner != "." {
+		normalized, err := dnsname.Normalize(owner)
+		if err != nil {
+			return nil, fmt.Errorf("owner: %w", err)
+		}
+		owner = normalized
+	}
+	recordType := strings.ToUpper(fields[1])
+	if recordType != "DS" && recordType != "DNSKEY" {
+		return nil, errors.New("record type must be DS or DNSKEY")
+	}
+	record, err := dns.NewRR(fmt.Sprintf("%s 0 IN %s", dns.Fqdn(owner), strings.Join(fields[1:], " ")))
+	if err != nil {
+		return nil, fmt.Errorf("parse record: %w", err)
+	}
+	return record, nil
+}
+
+func validateAddress(field, address string) error {
+	if strings.TrimSpace(address) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		return fmt.Errorf("%s must be host:port: %w", field, err)
+	}
+	return nil
+}
+
+func validateRootHint(field, address string) error {
+	if err := validateAddress(field, address); err != nil {
+		return err
+	}
+	host, _, _ := net.SplitHostPort(address)
+	parsed, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil || parsed.Zone() != "" {
+		return fmt.Errorf("%s must use an IPv4 or IPv6 address", field)
+	}
+	return nil
+}
+
+func isLoopbackListener(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	parsed := net.ParseIP(host)
+	return parsed != nil && parsed.IsLoopback()
+}
+
+func uniqueTrimmed(values []string) []string {
+	unique := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := unique[trimmed]; exists {
+			continue
+		}
+		unique[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
+}
+
+func uniqueDomainsAllowRoot(values []string) []string {
+	unique := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := "."
+		if strings.TrimSpace(value) != "." {
+			normalized = normalizeDomain(value)
+		}
+		if normalized == "" {
+			continue
+		}
+		if _, exists := unique[normalized]; exists {
+			continue
+		}
+		unique[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+	return result
+}
+
+func uniqueAddresses(values []string) []string {
+	unique := make(map[netip.Addr]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		address, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err != nil {
+			trimmed := strings.TrimSpace(value)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+			continue
+		}
+		address = address.Unmap()
+		if _, exists := unique[address]; exists {
+			continue
+		}
+		unique[address] = struct{}{}
+		result = append(result, address.String())
+	}
+	return result
+}
+
+func AbsolutePath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve configuration path: %w", err)
+	}
+	return absolute, nil
+}

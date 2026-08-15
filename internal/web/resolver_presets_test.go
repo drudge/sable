@@ -1,0 +1,142 @@
+package web
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/drudge/sable/internal/cluster"
+)
+
+func TestResolveDNSClientServer(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		preset     string
+		custom     string
+		customName string
+		customIP   string
+		local      string
+		transport  string
+		want       resolvedDNSServer
+	}{
+		{name: "this server UDP", preset: "this-server", local: "127.0.0.1:5353", transport: "udp", want: resolvedDNSServer{address: "127.0.0.1:5353"}},
+		{name: "recursive resolver", preset: "recursive-resolver", local: "127.0.0.1:5353", transport: "tcp", want: resolvedDNSServer{address: "127.0.0.1:5353"}},
+		{name: "Cloudflare UDP", preset: "cloudflare", transport: "udp", want: resolvedDNSServer{address: "1.1.1.1:53"}},
+		{name: "Cloudflare TLS", preset: "cloudflare", transport: "tcp-tls", want: resolvedDNSServer{address: "one.one.one.one:853"}},
+		{name: "Cloudflare HTTPS", preset: "cloudflare", transport: "doh", want: resolvedDNSServer{address: "https://cloudflare-dns.com/dns-query"}},
+		{name: "Google TLS", preset: "google", transport: "tcp-tls", want: resolvedDNSServer{address: "dns.google:853"}},
+		{name: "Google HTTPS", preset: "google", transport: "doh", want: resolvedDNSServer{address: "https://dns.google/dns-query"}},
+		{name: "Quad9 HTTPS", preset: "quad9", transport: "doh", want: resolvedDNSServer{address: "https://dns.quad9.net/dns-query"}},
+		{name: "OpenDNS UDP", preset: "opendns", transport: "udp", want: resolvedDNSServer{address: "208.67.222.222:53"}},
+		{name: "AdGuard TLS", preset: "adguard", transport: "tcp-tls", want: resolvedDNSServer{address: "dns.adguard-dns.com:853"}},
+		{name: "root server", preset: "root-k", transport: "tcp", want: resolvedDNSServer{address: "193.0.14.129:53"}},
+		{name: "legacy custom", preset: "custom", custom: "192.0.2.53:9953", transport: "udp", want: resolvedDNSServer{address: "192.0.2.53:9953"}},
+		{name: "custom IP UDP", preset: "custom", customIP: "192.0.2.53", transport: "udp", want: resolvedDNSServer{address: "192.0.2.53:53"}},
+		{name: "custom name TCP", preset: "custom", customName: "dns.example", transport: "tcp", want: resolvedDNSServer{address: "dns.example:53"}},
+		{name: "pinned custom TLS", preset: "custom", customName: "dns.example", customIP: "192.0.2.53", transport: "tcp-tls", want: resolvedDNSServer{address: "192.0.2.53:853", tlsName: "dns.example"}},
+		{name: "pinned custom HTTPS", preset: "custom", customName: "dns.example", customIP: "192.0.2.53", transport: "doh", want: resolvedDNSServer{address: "https://dns.example/dns-query", dialIP: "192.0.2.53"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := resolveDNSClientServer(test.preset, test.custom, test.customName, test.customIP, test.local, test.transport)
+			if err != nil {
+				t.Fatalf("resolveDNSClientServer() error = %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("resolveDNSClientServer() = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveClusterDNSClientServer(t *testing.T) {
+	t.Parallel()
+	state := cluster.State{
+		Initialized: true,
+		NodeID:      "node-local",
+		Nodes: []cluster.Node{
+			{ID: "node-local", Name: "ns1", Role: cluster.RolePrimary, Addresses: []string{"192.0.2.10"}},
+			{ID: "node-standard", Name: "ns2", Role: cluster.RoleReplica, Addresses: []string{"192.0.2.11"}},
+			{ID: "node-dev", Name: "ns-dev", Role: cluster.RoleReplica, Addresses: []string{"127.0.0.1:8054"}},
+			{ID: "node-v6", Name: "ns-v6", Role: cluster.RoleReplica, Addresses: []string{"[2001:db8::53]:5353"}},
+		},
+	}
+	tests := []struct {
+		name      string
+		resolver  string
+		transport string
+		want      string
+	}{
+		{name: "local listener", resolver: "cluster-node:node-local", transport: "udp", want: "127.0.0.1:8053"},
+		{name: "standard DNS port", resolver: "cluster-node:node-standard", transport: "tcp", want: "192.0.2.11:53"},
+		{name: "development port", resolver: "cluster-node:node-dev", transport: "udp", want: "127.0.0.1:8054"},
+		{name: "IPv6 development port", resolver: "cluster-node:node-v6", transport: "udp", want: "[2001:db8::53]:5353"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			resolved, err := resolveClusterDNSClientServer(test.resolver, state, "127.0.0.1:8053", test.transport)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.address != test.want {
+				t.Fatalf("address = %q, want %q", resolved.address, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveClusterDNSClientServerRejectsInvalidSelection(t *testing.T) {
+	t.Parallel()
+	state := cluster.State{NodeID: "local", Nodes: []cluster.Node{{ID: "remote", Name: "ns2", Addresses: []string{"192.0.2.2"}}}}
+	for _, test := range []struct {
+		name, resolver, transport, want string
+	}{
+		{name: "removed node", resolver: "cluster-node:gone", transport: "udp", want: "no longer a member"},
+		{name: "encrypted endpoint", resolver: "cluster-node:remote", transport: "doh", want: "do not advertise"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := resolveClusterDNSClientServer(test.resolver, state, "127.0.0.1:8053", test.transport)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveDNSClientServerRejectsUnsupportedSelections(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		preset     string
+		customName string
+		customIP   string
+		local      string
+		transport  string
+		wantError  string
+	}{
+		{name: "missing custom", preset: "custom", transport: "udp", wantError: "custom DNS server is required"},
+		{name: "invalid custom IP", preset: "custom", customIP: "not-an-ip", transport: "udp", wantError: "IP address is invalid"},
+		{name: "invalid custom name", preset: "custom", customName: "https://dns.example", transport: "doh", wantError: "must be a hostname"},
+		{name: "unknown resolver", preset: "bogus", transport: "udp", wantError: "unknown DNS resolver"},
+		{name: "system DNS encrypted", preset: "system-dns", transport: "doh", wantError: "System DNS does not have a known DNS-over-HTTPS endpoint"},
+		{name: "local encrypted", preset: "this-server", local: "127.0.0.1:5353", transport: "doh", wantError: "does not have a known DNS-over-HTTPS endpoint"},
+		{name: "OpenDNS encrypted", preset: "opendns", transport: "tcp-tls", wantError: "does not publish a supported DNS-over-TLS endpoint"},
+		{name: "root encrypted", preset: "root-a", transport: "doh", wantError: "does not publish a supported DNS-over-HTTPS endpoint"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := resolveDNSClientServer(test.preset, "", test.customName, test.customIP, test.local, test.transport)
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("resolveDNSClientServer() error = %v, want containing %q", err, test.wantError)
+			}
+		})
+	}
+}
