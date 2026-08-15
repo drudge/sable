@@ -1505,7 +1505,10 @@
 		const form = event.target.closest("[data-zone-create-form]");
 		const type = event.target.value;
 		form?.querySelectorAll("[data-zone-create-options]").forEach((section) => {
-		  const shown = section.dataset.zoneCreateOptions === (type === "forwarder" ? "forwarder" : (type === "secondary" || type === "stub" ? "transfer" : ""));
+		  const key = section.dataset.zoneCreateOptions;
+		  const shown = key === "resolution"
+			? (type === "forwarder" || type === "stub")
+			: key === (type === "forwarder" ? "forwarder" : (type === "secondary" || type === "stub" ? "transfer" : ""));
 		  section.hidden = !shown;
 		  section.querySelectorAll("input, textarea, select").forEach((field) => { field.disabled = !shown; });
 		});

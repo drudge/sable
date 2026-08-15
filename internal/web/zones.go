@@ -70,7 +70,8 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			ZoneTransfer: zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
 			PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
 			TSIGKey: zone.TSIGKey, DynamicUpdates: zone.DynamicUpdates,
-			DNSSEC: zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
+			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
+			DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
 			DNSSECDenial: zone.DNSSECDenial, NSEC3Iterations: zone.NSEC3Iterations, NSEC3Salt: zone.NSEC3Salt,
 			ZSKLifetime: durationOr(zone.ZSKLifetime.Duration, 30*24*time.Hour), KSKLifetime: durationOr(zone.KSKLifetime.Duration, 365*24*time.Hour),
 			KeyPrepublish: durationOr(zone.KeyPrepublish.Duration, 24*time.Hour), KeyRetireAfter: durationOr(zone.KeyRetireAfter.Duration, 7*24*time.Hour),
@@ -442,6 +443,9 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 			Name: name, Type: zoneType, DefaultTTL: ttl,
 			TSIGKey: strings.TrimSpace(request.FormValue("tsig_key")),
 		}
+		if (zoneType == "forwarder" || zoneType == "stub") && request.Form.Has("dnssec_validation_present") {
+			zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
+		}
 		soa := zonemodel.Record{Name: "@", Type: "SOA", TTL: ttl, Value: fmt.Sprintf("%s %s %d 3600 600 1209600 %d", dns.Fqdn(primaryNS), responsible, serial, ttl)}
 		switch zoneType {
 		case "primary":
@@ -550,6 +554,12 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 		zone.DefaultTTL = defaultTTL
 		zone.TSIGKey = strings.TrimSpace(request.FormValue("tsig_key"))
 		zone.DynamicUpdates = zone.Type == "primary" && request.FormValue("dynamic_updates") == "true"
+		// The paired hidden field distinguishes an unchecked switch from a form
+		// that never rendered one, so an unrelated submission cannot silently
+		// turn validation off.
+		if (zone.Type == "forwarder" || zone.Type == "stub") && request.Form.Has("dnssec_validation_present") {
+			zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
+		}
 		if request.Form.Has("zone_transfer") {
 			zone.ZoneTransfer = strings.ToLower(strings.TrimSpace(request.FormValue("zone_transfer")))
 		}

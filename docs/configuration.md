@@ -185,7 +185,9 @@ dnssec_negative_trust_anchors = ["broken.private.example"]
 ```
 
 Negative trust anchors disable validation for the named subtree and should be
-temporary, narrowly scoped exceptions. Changing validation mode, anchors, or
+temporary, narrowly scoped exceptions. Forwarder and stub zones carry their own
+switch, so a private forwarder does not need a configuration-file exception; see
+[Authoritative zones](#authoritative-zones). Changing validation mode, anchors, or
 exceptions hot-reloads transactionally and starts with a clean response cache.
 Validation and managed-anchor state are included in `/api/v1/health`,
 `/api/v1/policy`, the dashboard footer, and the `sable_dnssec_*` Prometheus
@@ -223,6 +225,15 @@ TSIG keys remain in sable.toml because their secret material is node-level boots
 Primary zones require one apex SOA and at least one apex NS record. Console and RFC 2136 mutations commit one zone transaction, advance the SOA serial, re-sign DNSSEC zones when needed, atomically activate the new in-memory runtime, and send NOTIFY after activation. Zone transfers, ACLs, DNSSEC policy, rollover state references, comments, disabled records, and record expiry metadata are all durable database fields.
 
 Secondary zones perform AXFR ingestion and SOA-driven IXFR refresh. Stub zones retain their authority metadata and route queries to their primary pool. Forwarder zones use FWD records whose value is protocol, priority, and address. All four types remain linkable and editable through the zone UI.
+
+Forwarder and stub zones validate upstream answers by default. Turn off **DNSSEC
+Validation** in the zone's settings when the upstream servers answer for a
+signed delegation without serving its signatures, which is normal for a private
+split-horizon copy of a public zone. Without the exception those answers are
+bogus, and Sable reports EDE 6 with a DS denial that carries no RRSIG. The switch
+makes the zone and everything under it insecure rather than bogus, and applies
+only to that subtree. The equivalent server-wide setting is
+`resolver.dnssec_negative_trust_anchors`.
 
 DNSSEC private keys remain encrypted in the database-backed secret vault. Public DNSKEY, denial, and RRSIG records live with the zone records. Sable supports managed KSK/ZSK lifecycles, NSEC and NSEC3, scheduled re-signing, parent DS confirmation, and atomic activation of signed revisions.
 

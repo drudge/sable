@@ -38,6 +38,10 @@ type dnssecValidator struct {
 	now                func() time.Time
 	mu                 sync.RWMutex
 	zones              map[string]validatedZone
+	// zoneInsecure holds negative trust anchors derived from forwarder and stub
+	// zones rather than from configuration, so operators can scope the
+	// exception to the zone that needs it.
+	zoneInsecure []string
 }
 
 func newDNSSECValidator(anchorValues, negativeAnchors []string) (*dnssecValidator, error) {
@@ -450,7 +454,37 @@ func (validator *dnssecValidator) hasNegativeTrustAnchor(name string) bool {
 			return true
 		}
 	}
+	validator.mu.RLock()
+	defer validator.mu.RUnlock()
+	for _, anchor := range validator.zoneInsecure {
+		if dns.IsSubDomain(anchor, name) {
+			return true
+		}
+	}
 	return false
+}
+
+// setZoneInsecure replaces the zone-derived negative trust anchors. Cached zone
+// keys are discarded when the set changes so a zone that was previously
+// validated does not keep its old security state until the entries expire.
+func (validator *dnssecValidator) setZoneInsecure(names []string) {
+	normalized := make([]string, 0, len(names))
+	for _, name := range names {
+		normalized = append(normalized, normalizeFQDN(name))
+	}
+	validator.mu.Lock()
+	defer validator.mu.Unlock()
+	if slices.Equal(validator.zoneInsecure, normalized) {
+		return
+	}
+	validator.zoneInsecure = normalized
+	validator.zones = make(map[string]validatedZone)
+}
+
+func (validator *dnssecValidator) zoneInsecureDomains() []string {
+	validator.mu.RLock()
+	defer validator.mu.RUnlock()
+	return append([]string(nil), validator.zoneInsecure...)
 }
 
 func (validator *dnssecValidator) cachedZone(name string) (validatedZone, bool) {

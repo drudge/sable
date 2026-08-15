@@ -365,3 +365,54 @@ func mapValidatorQuery(responses map[string]*dns.Msg) dnssecQuery {
 func validatorQueryKey(name string, recordType uint16) string {
 	return normalizeFQDN(name) + "/" + fmt.Sprint(recordType)
 }
+
+// TestDNSSECValidatorZoneInsecureCoversUnsignedForwarder reproduces a private
+// forwarder that answers authoritatively for a delegated name without serving
+// any signatures. The validator can only call that bogus until the zone opts
+// out of validation.
+func TestDNSSECValidatorZoneInsecureCoversUnsignedForwarder(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "test.")
+	validator := validatorWithAnchor(t, parent, now)
+	splitHorizonSOA := validatorSOA("private.test.")
+	dsResponse := new(dns.Msg)
+	dsResponse.SetQuestion("private.test.", dns.TypeDS)
+	dsResponse.SetReply(dsResponse)
+	dsResponse.Ns = []dns.RR{splitHorizonSOA}
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("test.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("private.test.", dns.TypeDS): dsResponse,
+	})
+	response := new(dns.Msg)
+	response.SetQuestion("host.private.test.", dns.TypeA)
+	response.SetReply(response)
+	response.Answer = []dns.RR{validatorA("host.private.test.", "10.2.0.245")}
+
+	state, err := validator.validate(context.Background(), response, response.Question[0], query)
+	if err == nil || state != validationBogus {
+		t.Fatalf("validate() = %v, %v; want bogus", state, err)
+	}
+
+	validator.setZoneInsecure([]string{"private.test"})
+	state, err = validator.validate(context.Background(), response, response.Question[0], query)
+	if err != nil || state != validationInsecure {
+		t.Fatalf("validate() after zone opt-out = %v, %v; want insecure", state, err)
+	}
+}
+
+func TestDNSSECValidatorSetZoneInsecureDropsCachedZoneState(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	validator := validatorWithAnchor(t, newValidatorTestKey(t, "test."), now)
+	validator.cacheZone("private.test.", validatedZone{state: validationSecure, expiresAt: now.Add(time.Hour)})
+	validator.setZoneInsecure([]string{"private.test"})
+	if _, found := validator.cachedZone("private.test."); found {
+		t.Fatal("cached zone state survived a validation policy change")
+	}
+	validator.cacheZone("private.test.", validatedZone{state: validationInsecure, expiresAt: now.Add(time.Hour)})
+	validator.setZoneInsecure([]string{"private.test."})
+	if _, found := validator.cachedZone("private.test."); !found {
+		t.Fatal("unchanged validation policy discarded cached zone state")
+	}
+}

@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS sable_zones (
     key_prepublish_ns BIGINT NOT NULL,
     key_retire_after_ns BIGINT NOT NULL,
     parent_ds_key_tag BIGINT NOT NULL,
+    dnssec_validation_disabled BOOLEAN NOT NULL DEFAULT FALSE,
     revision BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL
@@ -85,6 +86,24 @@ func (store *Store) migrateZoneRecordSchema(ctx context.Context) error {
 CREATE UNIQUE INDEX IF NOT EXISTS sable_zone_records_key_idx
 ON sable_zone_records (zone_name, record_key)`); err != nil {
 		return fmt.Errorf("create zone record key index: %w", err)
+	}
+	return nil
+}
+
+// migrateZoneValidationSchema adds the per-zone DNSSEC validation switch to
+// databases created before forwarder and stub zones could opt out. The default
+// keeps every existing zone validating.
+func (store *Store) migrateZoneValidationSchema(ctx context.Context) error {
+	exists, err := store.tableHasColumn(ctx, "sable_zones", "dnssec_validation_disabled")
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	if _, err := store.database.ExecContext(ctx,
+		"ALTER TABLE sable_zones ADD COLUMN dnssec_validation_disabled BOOLEAN NOT NULL DEFAULT FALSE"); err != nil {
+		return fmt.Errorf("add zone DNSSEC validation switch: %w", err)
 	}
 	return nil
 }
@@ -252,7 +271,8 @@ SELECT id, name, zone_type, default_ttl, disabled, zone_transfer, transfer_acl,
        notify_targets, primary_servers, primary_protocol, tsig_key,
        dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
        nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
-       key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag, revision
+       key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
+       dnssec_validation_disabled, revision
 FROM sable_zones ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list zones: %w", err)
@@ -296,7 +316,8 @@ func scanZone(row rowScanner) (zone.Zone, error) {
 		&transferACL, &notifyTargets, &primaryServers, &current.PrimaryProtocol, &current.TSIGKey,
 		&current.DynamicUpdates, &current.DNSSEC, &current.DNSSECAlgorithm, &current.DNSSECDenial,
 		&nsec3Iterations, &current.NSEC3Salt, &zskLifetime, &kskLifetime,
-		&keyPrepublish, &keyRetireAfter, &parentDSKeyTag, &revision,
+		&keyPrepublish, &keyRetireAfter, &parentDSKeyTag,
+		&current.DNSSECValidationDisabled, &revision,
 	); err != nil {
 		return zone.Zone{}, fmt.Errorf("scan zone: %w", err)
 	}
@@ -457,15 +478,17 @@ INSERT INTO sable_zones (
     notify_targets, primary_servers, primary_protocol, tsig_key,
     dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
     nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
-    key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag, revision,
+    key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
+    dnssec_validation_disabled, revision,
     created_at, updated_at
-) VALUES (`+store.placeholders(25)+`)`,
+) VALUES (`+store.placeholders(26)+`)`,
 		current.ID, current.Name, current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL,
 		notifyTargets, primaryServers, current.PrimaryProtocol, current.TSIGKey,
 		current.DynamicUpdates, current.DNSSEC, current.DNSSECAlgorithm, current.DNSSECDenial,
 		current.NSEC3Iterations, current.NSEC3Salt, current.ZSKLifetime.Duration.Nanoseconds(),
 		current.KSKLifetime.Duration.Nanoseconds(), current.KeyPrepublish.Duration.Nanoseconds(),
-		current.KeyRetireAfter.Duration.Nanoseconds(), current.ParentDSKeyTag, current.Revision, now, now,
+		current.KeyRetireAfter.Duration.Nanoseconds(), current.ParentDSKeyTag,
+		current.DNSSECValidationDisabled, current.Revision, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("insert zone %q: %w", current.Name, err)
@@ -495,14 +518,15 @@ UPDATE sable_zones SET
     dnssec_denial = `+store.placeholder(13)+`, nsec3_iterations = `+store.placeholder(14)+`, nsec3_salt = `+store.placeholder(15)+`,
     zsk_lifetime_ns = `+store.placeholder(16)+`, ksk_lifetime_ns = `+store.placeholder(17)+`,
     key_prepublish_ns = `+store.placeholder(18)+`, key_retire_after_ns = `+store.placeholder(19)+`,
-    parent_ds_key_tag = `+store.placeholder(20)+`, revision = `+store.placeholder(21)+`, updated_at = `+store.placeholder(22)+`
-WHERE name = `+store.placeholder(23),
+    parent_ds_key_tag = `+store.placeholder(20)+`, dnssec_validation_disabled = `+store.placeholder(21)+`,
+    revision = `+store.placeholder(22)+`, updated_at = `+store.placeholder(23)+`
+WHERE name = `+store.placeholder(24),
 		current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL, notifyTargets,
 		primaryServers, current.PrimaryProtocol, current.TSIGKey, current.DynamicUpdates, current.DNSSEC,
 		current.DNSSECAlgorithm, current.DNSSECDenial, current.NSEC3Iterations, current.NSEC3Salt,
 		current.ZSKLifetime.Duration.Nanoseconds(), current.KSKLifetime.Duration.Nanoseconds(),
 		current.KeyPrepublish.Duration.Nanoseconds(), current.KeyRetireAfter.Duration.Nanoseconds(),
-		current.ParentDSKeyTag, current.Revision, now, current.Name,
+		current.ParentDSKeyTag, current.DNSSECValidationDisabled, current.Revision, now, current.Name,
 	)
 	if err != nil {
 		return fmt.Errorf("update zone %q: %w", current.Name, err)

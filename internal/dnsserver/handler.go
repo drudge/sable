@@ -50,6 +50,7 @@ type Runtime struct {
 	tsigKeys            map[string]tsigKey
 	zoneCount           int
 	dnssec              *dnssecValidator
+	zoneInsecure        []string
 	managedTrustAnchors bool
 }
 
@@ -129,7 +130,11 @@ type AuthoritativeZone struct {
 	PrimaryProtocol string
 	TSIGKey         string
 	DynamicUpdates  bool
-	Records         []ZoneRecord
+	// DNSSECValidationDisabled marks the zone subtree insecure for the
+	// validator. Forwarder and stub zones frequently point at private servers
+	// that serve an unsigned copy of a signed delegation.
+	DNSSECValidationDisabled bool
+	Records                  []ZoneRecord
 }
 
 type ZoneRecord struct {
@@ -406,6 +411,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		tsigKeys[name] = tsigKey{algorithm: algorithm, secret: key.Secret}
 	}
 	zoneCount := 0
+	zoneInsecure := make([]string, 0)
 	for _, configuredZone := range configuration.Zones {
 		if configuredZone.Disabled {
 			continue
@@ -421,6 +427,12 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		zoneType := strings.ToLower(strings.TrimSpace(configuredZone.Type))
 		if zoneType == "" {
 			zoneType = "primary"
+		}
+		if configuredZone.DNSSECValidationDisabled {
+			if zoneType != "forwarder" && zoneType != "stub" {
+				return nil, fmt.Errorf("authoritative zone %q may not disable DNSSEC validation for a %s zone", zoneName, zoneType)
+			}
+			zoneInsecure = append(zoneInsecure, zoneName)
 		}
 		zoneTSIGKey := ""
 		if strings.TrimSpace(configuredZone.TSIGKey) != "" {
@@ -569,6 +581,10 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		}
 		zones[zoneName] = zone
 	}
+	slices.Sort(zoneInsecure)
+	if validator != nil {
+		validator.setZoneInsecure(zoneInsecure)
+	}
 	return &Runtime{
 		mode:            mode,
 		forwarders:      append([]string(nil), configuration.Forwarders...),
@@ -603,6 +619,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		tsigKeys:            tsigKeys,
 		zoneCount:           zoneCount,
 		dnssec:              validator,
+		zoneInsecure:        zoneInsecure,
 		managedTrustAnchors: configuration.DNSSECValidation && configuration.DNSSECTrustAnchorUpdates && len(configuration.DNSSECTrustAnchors) == 0,
 	}, nil
 }
@@ -667,8 +684,13 @@ func (handler *Handler) ActivateZones(zones []AuthoritativeZone, keys []TSIGKey)
 	candidate.managedZones = compiled.managedZones
 	candidate.tsigKeys = compiled.tsigKeys
 	candidate.zoneCount = compiled.zoneCount
-	if !forwardingRouteMapsEqual(active.routes, candidate.routes) {
-		candidate.upstreams = active.upstreams + "|zone-routes=" + upstreamSignature(nil, candidate.routes)
+	candidate.zoneInsecure = compiled.zoneInsecure
+	if candidate.dnssec != nil {
+		candidate.dnssec.setZoneInsecure(compiled.zoneInsecure)
+	}
+	if !forwardingRouteMapsEqual(active.routes, candidate.routes) || !slices.Equal(active.zoneInsecure, candidate.zoneInsecure) {
+		candidate.upstreams = active.upstreams + "|zone-routes=" + upstreamSignature(nil, candidate.routes) +
+			"|zone-insecure=" + strings.Join(candidate.zoneInsecure, ",")
 	}
 	handler.Activate(&candidate)
 	return nil
@@ -720,6 +742,7 @@ func (handler *Handler) ApplyManagedTrustAnchors(anchors []string, deleted bool)
 		if err != nil {
 			return
 		}
+		validator.setZoneInsecure(active.dnssec.zoneInsecureDomains())
 		if deleted {
 			validator.replaceManagedTrustPoint(".", nil, true)
 		}
