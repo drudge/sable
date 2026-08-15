@@ -35,6 +35,8 @@ dnssec_trust_anchor_updates = true
 # accept an owner followed by DS or DNSKEY RDATA.
 # dnssec_trust_anchors = [". DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"]
 # Negative trust anchors are explicit local exceptions for broken private zones.
+# Forwarder and stub zones carry their own DNSSEC validation switch, so prefer
+# that when only one forwarded zone is unsigned.
 # dnssec_negative_trust_anchors = ["legacy.corp.example"]
 
 # [[resolver.routes]]

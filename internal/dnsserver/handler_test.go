@@ -1440,3 +1440,85 @@ func BenchmarkSetReply(b *testing.B) {
 		response.SetReply(request)
 	}
 }
+
+func TestCompileAppliesZoneDNSSECValidationOptOut(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.DNSSECValidation = true
+	configuration.Zones = []AuthoritativeZone{
+		{
+			Name: "private.test", Type: "forwarder", DNSSECValidationDisabled: true,
+			Records: []ZoneRecord{
+				{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.private.test. hostmaster.private.test. 1 3600 600 1209600 300"},
+				{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 10.2.0.245"},
+			},
+		},
+		{
+			Name: "validated.test", Type: "forwarder",
+			Records: []ZoneRecord{
+				{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.validated.test. hostmaster.validated.test. 1 3600 600 1209600 300"},
+				{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 192.0.2.53"},
+			},
+		},
+	}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !runtime.dnssec.hasNegativeTrustAnchor("host.private.test.") {
+		t.Fatal("forwarder zone opt-out did not reach the validator")
+	}
+	if runtime.dnssec.hasNegativeTrustAnchor("host.validated.test.") {
+		t.Fatal("validation was disabled for a zone that did not ask for it")
+	}
+}
+
+func TestCompileRejectsDNSSECValidationOptOutOnPrimaryZone(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{
+		{
+			Name: "example.test", Type: "primary", DNSSECValidationDisabled: true,
+			Records: []ZoneRecord{
+				{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300"},
+				{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+			},
+		},
+	}
+	if _, err := Compile(configuration); err == nil {
+		t.Fatal("Compile() accepted a DNSSEC validation opt-out on a primary zone")
+	}
+}
+
+func TestActivateZonesUpdatesDNSSECValidationOptOut(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.DNSSECValidation = true
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	zones := []AuthoritativeZone{{
+		Name: "private.test", Type: "forwarder", DNSSECValidationDisabled: true,
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.private.test. hostmaster.private.test. 1 3600 600 1209600 300"},
+			{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 10.2.0.245"},
+		},
+	}}
+	if err := handler.ActivateZones(zones, nil); err != nil {
+		t.Fatal(err)
+	}
+	active := handler.runtime.Load()
+	if !active.dnssec.hasNegativeTrustAnchor("host.private.test.") {
+		t.Fatal("zone activation did not apply the DNSSEC validation opt-out")
+	}
+	zones[0].DNSSECValidationDisabled = false
+	if err := handler.ActivateZones(zones, nil); err != nil {
+		t.Fatal(err)
+	}
+	active = handler.runtime.Load()
+	if active.dnssec.hasNegativeTrustAnchor("host.private.test.") {
+		t.Fatal("re-enabling validation left the zone marked insecure")
+	}
+}

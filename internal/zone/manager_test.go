@@ -75,3 +75,30 @@ func validManagerZone() Zone {
 		},
 	}
 }
+
+func TestValidateAllRestrictsDNSSECValidationOptOutToForwardingZones(t *testing.T) {
+	t.Parallel()
+	forwarder := Zone{
+		Name: "private.test", Type: "forwarder", DefaultTTL: 300, ZoneTransfer: "deny",
+		DNSSECValidationDisabled: true,
+		Records: []Record{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.private.test. hostmaster.private.test. 1 3600 600 1209600 300"},
+			{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 10.2.0.245:53"},
+		},
+	}
+	if err := ValidateAll([]Zone{forwarder}, nil); err != nil {
+		t.Fatalf("ValidateAll() rejected a forwarder zone opt-out: %v", err)
+	}
+	primary := Zone{
+		Name: "example.test", Type: "primary", DefaultTTL: 300, ZoneTransfer: "deny",
+		DNSSECValidationDisabled: true,
+		Records: []Record{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+		},
+	}
+	err := ValidateAll([]Zone{primary}, nil)
+	if err == nil || !regexp.MustCompile(`only be disabled for forwarder or stub zones`).MatchString(err.Error()) {
+		t.Fatalf("ValidateAll() = %v, want a primary zone opt-out rejection", err)
+	}
+}

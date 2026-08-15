@@ -260,3 +260,57 @@ func testStoredZone(addressRecords int) zone.Zone {
 		Records: records,
 	}
 }
+
+func TestZoneStoreAddsDNSSECValidationColumnToExistingDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "validation-zones.db")
+	storage, err := Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.database.ExecContext(ctx,
+		"ALTER TABLE sable_zones DROP COLUMN dnssec_validation_disabled"); err != nil {
+		storage.Close()
+		t.Fatalf("simulate pre-upgrade schema: %v", err)
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	storage, err = Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	forwarder := zone.Zone{
+		Name: "private.test", Type: "forwarder", DefaultTTL: 300, ZoneTransfer: "deny",
+		DNSSECValidationDisabled: true,
+		Records: []zone.Record{
+			{Name: "@", Type: "SOA", Value: "ns1.private.test. hostmaster.private.test. 1 3600 600 1209600 300", TTL: 300},
+			{Name: "@", Type: "FWD", Value: "udp 0 10.2.0.245:53", TTL: 300},
+		},
+	}
+	if _, err := storage.ReplaceZones(ctx, nil, []zone.Zone{forwarder}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || !stored[0].DNSSECValidationDisabled {
+		t.Fatalf("stored zones = %#v, want the DNSSEC validation opt-out preserved", stored)
+	}
+	updated := zone.Clone(stored)
+	updated[0].DNSSECValidationDisabled = false
+	if _, err := storage.ReplaceZones(ctx, stored, updated); err != nil {
+		t.Fatal(err)
+	}
+	reread, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reread) != 1 || reread[0].DNSSECValidationDisabled {
+		t.Fatalf("updated zones = %#v, want validation re-enabled", reread)
+	}
+}

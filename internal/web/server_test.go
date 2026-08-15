@@ -2382,3 +2382,56 @@ func authenticationFormToken(t *testing.T, body string) string {
 	}
 	return token
 }
+
+func TestZoneEditorTogglesForwarderDNSSECValidation(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	stats := &synchronizingTestStats{testStats: testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)), stats, configuration, configuration.zoneStore(), "sqlite",
+		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	post := func(path string, form url.Values) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+
+	created := post("/ui/zones/add", url.Values{
+		"name": {"private.test"}, "type": {"forwarder"}, "forwarder_address": {"10.2.0.245"},
+		"forwarder_protocol": {"udp"}, "forwarder_priority": {"0"},
+		"dnssec_validation_present": {"1"},
+	})
+	forwarderZone := findZone(configuration.zoneSnapshot.Zones, "private.test")
+	if created.Code != http.StatusOK || forwarderZone == nil || !forwarderZone.DNSSECValidationDisabled {
+		t.Fatalf("create with validation unchecked = %d zone=%#v", created.Code, forwarderZone)
+	}
+
+	enabled := post("/ui/zones/settings", url.Values{
+		"zone": {"private.test"}, "default_ttl": {"300"},
+		"dnssec_validation_present": {"1"}, "dnssec_validation": {"true"},
+	})
+	forwarderZone = findZone(configuration.zoneSnapshot.Zones, "private.test")
+	if enabled.Code != http.StatusOK || forwarderZone.DNSSECValidationDisabled {
+		t.Fatalf("settings re-enable = %d zone=%#v", enabled.Code, forwarderZone)
+	}
+
+	// A submission without the paired marker must leave the switch untouched.
+	unrelated := post("/ui/zones/settings", url.Values{"zone": {"private.test"}, "default_ttl": {"600"}})
+	forwarderZone = findZone(configuration.zoneSnapshot.Zones, "private.test")
+	if unrelated.Code != http.StatusOK || forwarderZone.DNSSECValidationDisabled || forwarderZone.DefaultTTL != 600 {
+		t.Fatalf("settings without the validation field = %d zone=%#v", unrelated.Code, forwarderZone)
+	}
+
+	detail := serveRequest(server, http.MethodGet, "/zones/private.test")
+	if !strings.Contains(detail.Body.String(), `name="dnssec_validation"`) {
+		t.Fatal("forwarder zone settings do not expose the DNSSEC validation switch")
+	}
+}

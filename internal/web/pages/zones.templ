@@ -31,6 +31,7 @@ type ZoneView struct {
 	PrimaryProtocol string
 	TSIGKey      string
 	DynamicUpdates bool
+	DNSSECValidationDisabled bool
 	DNSSEC       bool
 	DNSSECAlgorithm string
 	DNSSECDenial string
@@ -485,6 +486,10 @@ templ CreateZoneDialog() {
 				<label><span>Forwarder Address</span><input class="mono-input" name="forwarder_address" placeholder="1.1.1.1 or dns.example:53" disabled required/></label>
 				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" disabled><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option></select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
 			</section>
+			<section class="zone-create-options" data-zone-create-options="resolution" hidden>
+				<input type="hidden" name="dnssec_validation_present" value="1" disabled/>
+				<label class="zone-dynamic-toggle"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked disabled/><span></span></span></label>
+			</section>
 			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Create Zone</button></footer>
 		</form>
 	</dialog>
@@ -714,6 +719,13 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 					<div><span class="zone-settings-section-icon">@Icon("key")</span><span><strong>TSIG Authentication</strong><small>Authenticate NOTIFY, AXFR, IXFR, and dynamic updates for this zone.</small></span></div>
 					<label><span>Key Name</span><input class="mono-input" name="tsig_key" value={ zone.TSIGKey } placeholder="transfer-key." autocomplete="off"/><small>Leave empty for source-IP and transfer-policy authorization only.</small></label>
 				</section>
+				if zone.Type == "forwarder" || zone.Type == "stub" {
+					<section class="zone-settings-section">
+						<div><span class="zone-settings-section-icon">@Icon("shield")</span><span><strong>DNSSEC Validation</strong><small>Validate answers returned by this zone's upstream servers.</small></span></div>
+						<input type="hidden" name="dnssec_validation_present" value="1"/>
+						<label class="zone-dynamic-toggle"><span><strong>Validate Responses</strong><small>Turn this off when the upstream answers for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone. The zone and everything under it is then treated as insecure instead of bogus.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked?={ !zone.DNSSECValidationDisabled }/><span></span></span></label>
+					</section>
+				}
 			</section>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="transfers" hidden>
 				if zone.Type == "secondary" || zone.Type == "stub" {

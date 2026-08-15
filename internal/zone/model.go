@@ -64,17 +64,23 @@ type Zone struct {
 	TSIGKey         string   `json:"tsig_key,omitempty"`
 	DynamicUpdates  bool     `json:"dynamic_updates,omitempty"`
 	DNSSEC          bool     `json:"dnssec,omitempty"`
-	DNSSECAlgorithm string   `json:"dnssec_algorithm,omitempty"`
-	DNSSECDenial    string   `json:"dnssec_denial,omitempty"`
-	NSEC3Iterations uint16   `json:"dnssec_nsec3_iterations,omitempty"`
-	NSEC3Salt       string   `json:"dnssec_nsec3_salt,omitempty"`
-	ZSKLifetime     Duration `json:"dnssec_zsk_lifetime,omitempty"`
-	KSKLifetime     Duration `json:"dnssec_ksk_lifetime,omitempty"`
-	KeyPrepublish   Duration `json:"dnssec_key_prepublish,omitempty"`
-	KeyRetireAfter  Duration `json:"dnssec_key_retire_after,omitempty"`
-	ParentDSKeyTag  uint16   `json:"dnssec_parent_ds_key_tag,omitempty"`
-	Records         []Record `json:"records"`
-	Revision        uint64   `json:"revision"`
+	// DNSSECValidationDisabled turns the zone subtree into a local negative
+	// trust anchor. Private forwarders commonly serve an unsigned split-horizon
+	// copy of a delegated name, which a validator can only report as bogus
+	// because the upstream never returns the RRSIGs that prove insecurity.
+	// The flag is stored inverted so existing zones keep validating.
+	DNSSECValidationDisabled bool     `json:"dnssec_validation_disabled,omitempty"`
+	DNSSECAlgorithm          string   `json:"dnssec_algorithm,omitempty"`
+	DNSSECDenial             string   `json:"dnssec_denial,omitempty"`
+	NSEC3Iterations          uint16   `json:"dnssec_nsec3_iterations,omitempty"`
+	NSEC3Salt                string   `json:"dnssec_nsec3_salt,omitempty"`
+	ZSKLifetime              Duration `json:"dnssec_zsk_lifetime,omitempty"`
+	KSKLifetime              Duration `json:"dnssec_ksk_lifetime,omitempty"`
+	KeyPrepublish            Duration `json:"dnssec_key_prepublish,omitempty"`
+	KeyRetireAfter           Duration `json:"dnssec_key_retire_after,omitempty"`
+	ParentDSKeyTag           uint16   `json:"dnssec_parent_ds_key_tag,omitempty"`
+	Records                  []Record `json:"records"`
+	Revision                 uint64   `json:"revision"`
 }
 
 type Record struct {
@@ -230,6 +236,9 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}) []er
 	}
 	if current.DynamicUpdates && (current.Type != "primary" || current.TSIGKey == "") {
 		result = append(result, fmt.Errorf("%s dynamic updates require a primary zone and TSIG key", field))
+	}
+	if current.DNSSECValidationDisabled && current.Type != "forwarder" && current.Type != "stub" {
+		result = append(result, fmt.Errorf("%s DNSSEC validation can only be disabled for forwarder or stub zones", field))
 	}
 	result = append(result, validateDNSSEC(field, current)...)
 	for index, value := range current.TransferACL {

@@ -611,7 +611,8 @@ func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZo
 			ZoneTransfer: configuredZone.ZoneTransfer, TransferACL: configuredZone.TransferACL,
 			PrimaryServers: configuredZone.PrimaryServers, PrimaryProtocol: configuredZone.PrimaryProtocol,
 			TSIGKey: configuredZone.TSIGKey, DynamicUpdates: configuredZone.DynamicUpdates,
-			Records: make([]dnsserver.ZoneRecord, 0, len(configuredZone.Records)),
+			DNSSECValidationDisabled: configuredZone.DNSSECValidationDisabled,
+			Records:                  make([]dnsserver.ZoneRecord, 0, len(configuredZone.Records)),
 		}
 		for _, record := range configuredZone.Records {
 			zone.Records = append(zone.Records, dnsserver.ZoneRecord{
