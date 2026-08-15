@@ -25,6 +25,12 @@ type certificateGenerator interface {
 	GenerateClusterPKI(context.Context, certificates.ClusterPKIOptions) (certificates.GeneratedCertificate, error)
 }
 
+const publicCertificateOperationTimeout = 15 * time.Minute
+
+func publicCertificateOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), publicCertificateOperationTimeout)
+}
+
 func (server *Server) settingsPage(writer http.ResponseWriter, request *http.Request) {
 	view := server.settingsView(request, "", "")
 	if err := pages.SettingsPage(view).Render(request.Context(), writer); err != nil {
@@ -126,6 +132,12 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Certificate mode must be manual or managed ACME.")
 		return
 	}
+	operationContext := request.Context()
+	cancelOperation := func() {}
+	if certificateMode == "acme" {
+		operationContext, cancelOperation = publicCertificateOperationContext(request.Context())
+	}
+	defer cancelOperation()
 	acmeRenewBefore := 30 * 24 * time.Hour
 	if certificateMode == "acme" {
 		acmeRenewBefore, err = time.ParseDuration(strings.TrimSpace(request.FormValue("acme_renew_before")))
@@ -140,13 +152,13 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		provider := strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
 		credentials := certificateCredentialsFromForm(request, provider)
 		if credentials != (certificates.Credentials{}) {
-			if err := server.certificates.PutCredentials(request.Context(), provider, credentials); err != nil {
+			if err := server.certificates.PutCredentials(operationContext, provider, credentials); err != nil {
 				server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 				return
 			}
 		}
 	}
-	err = editor.Update(request.Context(), func(candidate *config.Config) error {
+	err = editor.Update(operationContext, func(candidate *config.Config) error {
 		dnsListeners := formLines(request.FormValue("dns_listen"))
 		resolverMode := strings.ToLower(strings.TrimSpace(request.FormValue("resolver_mode")))
 		if resolverMode == "" {
@@ -247,14 +259,16 @@ func (server *Server) renewCertificate(writer http.ResponseWriter, request *http
 		server.renderSettingsMutation(writer, request, http.StatusConflict, "", "Managed ACME mode is not enabled.")
 		return
 	}
-	changed, err := server.certificates.Ensure(request.Context(), configuration, true)
+	operationContext, cancelOperation := publicCertificateOperationContext(request.Context())
+	defer cancelOperation()
+	changed, err := server.certificates.Ensure(operationContext, configuration, true)
 	if err != nil {
 		server.logger.Warn("renew public TLS certificate", "client", requestClientIP(request), "error", err)
 		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
 	if changed && server.reload != nil {
-		if err := server.reload(request.Context()); err != nil {
+		if err := server.reload(operationContext); err != nil {
 			server.logger.Error("activate renewed public TLS certificate", "error", err)
 			server.renderSettingsMutation(writer, request, http.StatusInternalServerError, "", "The certificate was issued, but activating it failed: "+err.Error())
 			return

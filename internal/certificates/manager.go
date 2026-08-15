@@ -26,7 +26,11 @@ import (
 	"github.com/drudge/sable/internal/config"
 )
 
-const credentialSecretPrefix = "public-tls/acme/"
+const (
+	credentialSecretPrefix       = "public-tls/acme/"
+	dnsChallengePropagationLimit = 2 * time.Minute
+	dnsChallengePollingInterval  = 5 * time.Second
+)
 
 type Vault interface {
 	Put(context.Context, string, []byte) error
@@ -213,6 +217,12 @@ func (manager *Manager) Ensure(ctx context.Context, encrypted config.EncryptedDN
 		manager.recordError(err)
 		return false, err
 	}
+	manager.logger.Info(
+		"public TLS certificate issuance started",
+		"provider", encrypted.ACME.DNSProvider,
+		"domains", encrypted.ACME.Domains,
+		"forced", force,
+	)
 	certificate, privateKey, leaf, err := manager.issue(ctx, encrypted.ACME, provider, manager.baseDirectory)
 	if err != nil {
 		manager.recordError(err)
@@ -279,15 +289,24 @@ func (manager *Manager) issue(ctx context.Context, configuration config.ACME, pr
 			return nil, nil, nil, fmt.Errorf("publish DNS-01 challenge for %s: %w", authorization.Identifier.Value, err)
 		}
 		cleanups = append(cleanups, cleanup)
+		manager.logger.Info(
+			"ACME DNS-01 challenge published",
+			"provider", configuration.DNSProvider,
+			"domain", authorization.Identifier.Value,
+			"zone", zone,
+			"record", name,
+		)
 		if err := waitForTXT(ctx, name, value); err != nil {
 			return nil, nil, nil, err
 		}
+		manager.logger.Info("ACME DNS-01 challenge propagated", "domain", authorization.Identifier.Value, "record", name)
 		if _, err := client.Accept(ctx, challenge); err != nil {
 			return nil, nil, nil, fmt.Errorf("accept DNS-01 challenge: %w", err)
 		}
 		if _, err := client.WaitAuthorization(ctx, authorizationURL); err != nil {
 			return nil, nil, nil, fmt.Errorf("validate DNS-01 challenge: %w", err)
 		}
+		manager.logger.Info("ACME DNS-01 authorization validated", "domain", authorization.Identifier.Value)
 	}
 	ready, err := client.WaitOrder(ctx, order.URI)
 	if err != nil {
@@ -373,9 +392,9 @@ func challengeZone(configured, domain string) (string, error) {
 }
 
 func waitForTXT(ctx context.Context, name, expected string) error {
-	deadline := time.NewTimer(2 * time.Minute)
+	deadline := time.NewTimer(dnsChallengePropagationLimit)
 	defer deadline.Stop()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(dnsChallengePollingInterval)
 	defer ticker.Stop()
 	for {
 		for _, resolver := range []string{"1.1.1.1:53", "8.8.8.8:53"} {
@@ -395,7 +414,7 @@ func waitForTXT(ctx context.Context, name, expected string) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline.C:
-			return fmt.Errorf("DNS-01 record %s did not propagate within 2 minutes", name)
+			return fmt.Errorf("DNS-01 record %s did not propagate within %s", name, dnsChallengePropagationLimit)
 		case <-ticker.C:
 		}
 	}

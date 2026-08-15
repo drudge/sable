@@ -84,6 +84,27 @@ func TestBlockingOperationLogsFailuresAndSuccesses(t *testing.T) {
 	}
 }
 
+func TestPublicCertificateOperationContextSurvivesRequestCancellation(t *testing.T) {
+	t.Parallel()
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+
+	operationContext, cancelOperation := publicCertificateOperationContext(requestContext)
+	defer cancelOperation()
+
+	if err := operationContext.Err(); err != nil {
+		t.Fatalf("certificate operation context inherited request cancellation: %v", err)
+	}
+	deadline, ok := operationContext.Deadline()
+	if !ok {
+		t.Fatal("certificate operation context has no deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 || remaining > publicCertificateOperationTimeout {
+		t.Fatalf("certificate operation deadline remaining = %v", remaining)
+	}
+}
+
 type testStats struct{ snapshot dnsserver.Stats }
 
 type testResolverStats struct{ testStats }
