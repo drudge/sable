@@ -18,6 +18,9 @@ type UpdateView struct {
 	ReleaseURL     string
 	Progress       string
 	Error          string
+	// Blocked explains why this installation cannot replace its own
+	// executable, and is empty when it can.
+	Blocked string
 	CheckedAt      string
 	CSRFToken      string
 	// PreRelease reports that the resolved release is a pre-release, and
@@ -202,7 +205,7 @@ func updateAction(view UpdateView) string {
 		return ""
 	case view.Installed:
 		return ifThen(view.CanRestart, "restart", "")
-	case view.Available && view.CanApply:
+	case view.Available && view.CanApply && view.Blocked == "":
 		return "install"
 	case view.CanCheck:
 		return "check"
@@ -284,6 +287,8 @@ func updateDetail(view UpdateView) string {
 		return "Still serving v" + view.CurrentVersion + ". Sable stays down after a restart unless a supervisor starts it."
 	case view.Error != "":
 		return view.Error
+	case view.Available && view.Blocked != "":
+		return view.Blocked
 	case view.Available:
 		return "Verified against the published checksums before it replaces the executable."
 	case view.UpToDate:

@@ -26,8 +26,11 @@ type UpdateView struct {
 	ReleaseURL     string
 	Progress       string
 	Error          string
-	CheckedAt      string
-	CSRFToken      string
+	// Blocked explains why this installation cannot replace its own
+	// executable, and is empty when it can.
+	Blocked   string
+	CheckedAt string
+	CSRFToken string
 	// PreRelease reports that the resolved release is a pre-release, and
 	// IncludePreRelease that the operator asked for pre-release builds.
 	PreRelease        bool
@@ -118,7 +121,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 59, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 62, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -131,7 +134,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.DNSListeners)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 61, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 64, Col: 37}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -144,7 +147,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Stats.Uptime)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 63, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 66, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -189,7 +192,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 87, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 90, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -202,7 +205,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(view.GoVersion)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 91, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -215,7 +218,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(view.Commit)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 91, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -228,7 +231,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(view.BuiltAt)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 91, Col: 84}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -257,7 +260,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(view.ScrapeConfig)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 100, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 103, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -365,7 +368,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.CSRFToken)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 145, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 148, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -378,7 +381,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateRestartConfirmation(view))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 146, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 149, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 			if templ_7745c5c3_Err != nil {
@@ -414,7 +417,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(updateHeadline(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 161, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 164, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -427,7 +430,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(updateDetail(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 163, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 166, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
@@ -445,7 +448,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var18 templ.SafeURL
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(view.ReleaseURL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 165, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 168, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -490,7 +493,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateInstallConfirmation(view))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 176, Col: 189}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 179, Col: 189}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 			if templ_7745c5c3_Err != nil {
@@ -503,7 +506,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.IncludePreRelease, "true", "false"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 177, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 180, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 			if templ_7745c5c3_Err != nil {
@@ -524,7 +527,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(view.LatestVersion)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 178, Col: 102}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 181, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -550,7 +553,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Checked, "Check Again", "Check for Updates"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 183, Col: 139}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 186, Col: 139}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -595,7 +598,7 @@ func updateAction(view UpdateView) string {
 		return ""
 	case view.Installed:
 		return ifThen(view.CanRestart, "restart", "")
-	case view.Available && view.CanApply:
+	case view.Available && view.CanApply && view.Blocked == "":
 		return "install"
 	case view.CanCheck:
 		return "check"
@@ -677,6 +680,8 @@ func updateDetail(view UpdateView) string {
 		return "Still serving v" + view.CurrentVersion + ". Sable stays down after a restart unless a supervisor starts it."
 	case view.Error != "":
 		return view.Error
+	case view.Available && view.Blocked != "":
+		return view.Blocked
 	case view.Available:
 		return "Verified against the published checksums before it replaces the executable."
 	case view.UpToDate:

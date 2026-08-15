@@ -242,3 +242,24 @@ func TestUpdateViewSeparatesReadingFromApplying(t *testing.T) {
 		t.Fatalf("administrator view = %+v", view)
 	}
 }
+
+func TestAboutPageExplainsAnInstallationItCannotApply(t *testing.T) {
+	t.Parallel()
+	server := updateTestServer(t, &testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
+		ReleaseURL: "https://github.com/drudge/sable/releases/tag/v9.9.9",
+		Available:  true, CheckedAt: time.Now(),
+		Blocked: "/usr/local/bin is read-only for the running server, so it cannot replace its own executable. " +
+			"Install this release with sudo sable update, or by pulling a newer container image.",
+	}})
+	body := serveRequest(server, http.MethodGet, "/about").Body.String()
+	if !strings.Contains(body, "Sable v9.9.9 is available") {
+		t.Error("about page does not report the available release")
+	}
+	if !strings.Contains(body, "read-only for the running server") {
+		t.Error("about page does not explain why it cannot install the release")
+	}
+	if strings.Contains(body, `hx-post="/ui/updates/install"`) {
+		t.Error("about page offers an installation it cannot apply")
+	}
+}

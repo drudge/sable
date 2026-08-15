@@ -97,6 +97,7 @@ func (server *Server) renderUpdatePanel(
 func (server *Server) updateView(request *http.Request, status update.Status) pages.UpdateView {
 	view := pages.UpdateView{
 		Available:         status.Available,
+		Blocked:           status.Blocked,
 		Busy:              status.Busy(),
 		Checked:           status.Checked(),
 		CurrentVersion:    status.CurrentVersion,
