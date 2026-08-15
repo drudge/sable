@@ -71,3 +71,10 @@ version, commit, and commit timestamp used for the release. The same release
 publishes Linux amd64 and arm64 images under one
 `ghcr.io/drudge/sable:<version>` manifest. The image is non-root, contains the
 same static `sable` executable, and persists all mutable state in `/data`.
+
+`sable update` installs these artifacts on running appliances, so the release
+pipeline must keep the `sable_<version>_<os>_<arch>.tar.gz` archive names, the
+`sable` executable inside each archive, and the published `checksums.txt`.
+Tags must remain semantic versions, because the update command compares the
+published tag against the embedded version to decide whether a newer release
+exists. Pre-release tags are only offered to `sable update --pre-release`.

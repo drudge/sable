@@ -51,11 +51,11 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 	if err := run(ctx, "systemctl", "daemon-reload"); err != nil {
 		return Result{}, fmt.Errorf("reload systemd: %w", err)
 	}
-	if err := run(ctx, "systemctl", "enable", serviceName); err != nil {
+	if err := run(ctx, "systemctl", "enable", ServiceName); err != nil {
 		return Result{}, fmt.Errorf("enable Sable service: %w", err)
 	}
 	if options.Start {
-		if err := run(ctx, "systemctl", "restart", serviceName); err != nil {
+		if err := run(ctx, "systemctl", "restart", ServiceName); err != nil {
 			return Result{}, fmt.Errorf("start Sable service: %w", err)
 		}
 	}

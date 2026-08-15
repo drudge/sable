@@ -15,6 +15,7 @@ import (
 	"github.com/drudge/sable/internal/app"
 	"github.com/drudge/sable/internal/dnsclient"
 	serviceinstall "github.com/drudge/sable/internal/install"
+	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -25,6 +26,7 @@ Usage:
   sable query [options] <name> [type]
   sable config check [--config sable.toml]
   sable install [--no-start] [--certificate-name name-or-ip]
+  sable update [--pre-release] [--check] [--version tag] [--no-restart]
   sable version
 `
 
@@ -52,6 +54,8 @@ func run(arguments []string) error {
 		return configCommand(arguments[1:])
 	case "install":
 		return installCommand(arguments[1:])
+	case "update":
+		return updateCommand(arguments[1:])
 	case "version":
 		info := version.Current()
 		fmt.Printf("Sable %s (%s, %s, %s)\n", info.Release, info.Commit, info.BuiltAt, info.Go)
@@ -91,6 +95,60 @@ func installCommand(arguments []string) error {
 		fmt.Println("The initial HTTPS certificate is self-signed; replace or trust it after first-run setup.")
 	} else {
 		fmt.Println("Start Sable with: systemctl start sable")
+	}
+	return nil
+}
+
+func updateCommand(arguments []string) error {
+	flags := flag.NewFlagSet("update", flag.ContinueOnError)
+	preRelease := flags.Bool("pre-release", false, "consider pre-release builds when selecting the newest release")
+	check := flags.Bool("check", false, "report the available release without installing it")
+	requested := flags.String("version", "", "install a specific release tag instead of the newest one")
+	noRestart := flags.Bool("no-restart", false, "replace the executable without restarting the Sable service")
+	if err := flags.Parse(arguments); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("usage: sable update [--pre-release] [--check] [--version tag] [--no-restart]")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	result, err := update.Apply(ctx, update.Options{
+		Version:    *requested,
+		PreRelease: *preRelease,
+		CheckOnly:  *check,
+		Restart:    !*noRestart,
+		Output:     os.Stdout,
+	})
+	if err != nil {
+		return err
+	}
+	switch {
+	case result.UpToDate:
+		fmt.Printf("Sable %s is the newest release.\n", result.CurrentVersion)
+	case !result.Applied:
+		install := "sable update"
+		if *preRelease {
+			install += " --pre-release"
+		}
+		if *requested != "" {
+			install += " --version " + *requested
+		}
+		fmt.Printf("Sable %s is available (running %s).\n%s\nInstall it with: %s\n",
+			result.LatestVersion, result.CurrentVersion, result.ReleaseURL, install)
+	default:
+		fmt.Printf("Sable updated: %s -> %s (%s)\n", result.CurrentVersion, result.LatestVersion, result.BinaryPath)
+		switch {
+		case result.Restarted:
+			fmt.Printf("Restarted %s.\n", serviceinstall.ServiceName)
+		case result.ServiceManaged:
+			fmt.Printf("The Sable service is not running; start it with: systemctl start %s\n", serviceinstall.ServiceName)
+		default:
+			fmt.Println("Restart Sable to run the new version.")
+		}
 	}
 	return nil
 }
