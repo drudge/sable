@@ -738,6 +738,9 @@ func (handler *Handler) ApplyManagedTrustAnchors(anchors []string, deleted bool)
 		if active == nil || !active.managedTrustAnchors || active.dnssec == nil {
 			return
 		}
+		if active.dnssec.managedTrustPointEqual(".", anchors, deleted) {
+			return
+		}
 		validator, err := newDNSSECValidator(anchors, active.dnssec.negativeAnchors)
 		if err != nil {
 			return

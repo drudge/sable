@@ -423,6 +423,43 @@ func TestResponseCacheSkipsEDNSOptionsAndTransientFailures(t *testing.T) {
 	}
 }
 
+func TestResponseCacheIgnoresHopByHopEDNSOptions(t *testing.T) {
+	t.Parallel()
+
+	cache := NewResponseCache(4)
+	padded := cacheRequest("example.com.", 1)
+	padded.IsEdns0().Option = append(padded.IsEdns0().Option,
+		&dns.EDNS0_PADDING{Padding: make([]byte, 32)},
+		&dns.EDNS0_COOKIE{Code: dns.EDNS0COOKIE, Cookie: "2436313a4d7a5f21"},
+	)
+	response := positiveResponse(padded, 60)
+	response.SetEdns0(dns.DefaultMsgSize, true)
+	response.IsEdns0().Option = append(response.IsEdns0().Option,
+		&dns.EDNS0_COOKIE{Code: dns.EDNS0COOKIE, Cookie: "2436313a4d7a5f215365727665724330"},
+	)
+
+	if !cache.Set(padded, response) {
+		t.Fatal("Set() = false for a padded request, want it cached")
+	}
+	cached, found := cache.Get(padded)
+	if !found {
+		t.Fatal("Get() found = false for a padded request, want a cache hit")
+	}
+	if option := cached.IsEdns0(); option != nil && len(option.Option) != 0 {
+		t.Fatalf("cached response carries hop-scoped options %v, want them stripped", option.Option)
+	}
+
+	plain := cacheRequest("example.com.", 2)
+	if _, found := cache.Get(plain); !found {
+		t.Fatal("Get() found = false for a plain request, want the padded entry to serve it")
+	}
+	cookied := cacheRequest("example.com.", 3)
+	cookied.IsEdns0().Option = append(cookied.IsEdns0().Option, &dns.EDNS0_COOKIE{Code: dns.EDNS0COOKIE, Cookie: "1111111111111111"})
+	if _, found := cache.Get(cookied); !found {
+		t.Fatal("Get() found = false for a differently cookied request, want a cache hit")
+	}
+}
+
 func BenchmarkResponseCacheHit(b *testing.B) {
 	cache := NewResponseCache(65_536)
 	request := cacheRequest("example.com.", 1)
