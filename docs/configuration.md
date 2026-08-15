@@ -226,9 +226,9 @@ Primary zones require one apex SOA and at least one apex NS record. Console and 
 
 Secondary zones perform AXFR ingestion and SOA-driven IXFR refresh. Stub zones retain their authority metadata and route queries to their primary pool. Forwarder zones use FWD records whose value is protocol, priority, and address. All four types remain linkable and editable through the zone UI.
 
-Forwarder and stub zones validate upstream answers by default. Turn off **DNSSEC
-Validation** in the zone's settings when the upstream servers answer for a
-signed delegation without serving its signatures, which is normal for a private
+Forwarder and stub zones validate upstream answers by default. Turn off
+**Validate Responses** in the zone's DNSSEC dialog when the upstream servers
+answer for a signed delegation without serving its signatures, which is normal for a private
 split-horizon copy of a public zone. Without the exception those answers are
 bogus, and Sable reports EDE 6 with a DS denial that carries no RRSIG. The switch
 makes the zone and everything under it insecure rather than bogus, and applies

@@ -554,12 +554,6 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 		zone.DefaultTTL = defaultTTL
 		zone.TSIGKey = strings.TrimSpace(request.FormValue("tsig_key"))
 		zone.DynamicUpdates = zone.Type == "primary" && request.FormValue("dynamic_updates") == "true"
-		// The paired hidden field distinguishes an unchecked switch from a form
-		// that never rendered one, so an unrelated submission cannot silently
-		// turn validation off.
-		if (zone.Type == "forwarder" || zone.Type == "stub") && request.Form.Has("dnssec_validation_present") {
-			zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
-		}
 		if request.Form.Has("zone_transfer") {
 			zone.ZoneTransfer = strings.ToLower(strings.TrimSpace(request.FormValue("zone_transfer")))
 		}
@@ -598,6 +592,17 @@ func (server *Server) updateZoneDNSSEC(writer http.ResponseWriter, request *http
 		zone := findZone(*zones, selected)
 		if zone == nil {
 			return errors.New("zone was not found")
+		}
+		// Forwarder and stub zones are answered upstream rather than signed, so
+		// their DNSSEC dialog carries the validation switch instead. The paired
+		// hidden field distinguishes an unchecked switch from a form that never
+		// rendered one, so an unrelated submission cannot silently turn
+		// validation off.
+		if zone.Type == "forwarder" || zone.Type == "stub" {
+			if request.Form.Has("dnssec_validation_present") {
+				zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
+			}
+			return nil
 		}
 		if zone.Type != "primary" {
 			return errors.New("only primary zones can be signed by Sable")
