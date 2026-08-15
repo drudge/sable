@@ -285,6 +285,7 @@ func (cache *ResponseCache) Set(request, response *dns.Msg) bool {
 		return false
 	}
 	storedResponse := response.Copy()
+	stripHopByHopEDNS(storedResponse)
 	ttl, cacheable := cache.responseTTL(storedResponse)
 	if !cacheable {
 		return false
@@ -530,13 +531,41 @@ func responseCacheKey(request *dns.Msg) (cacheKey, bool) {
 		checkingDisabled: request.CheckingDisabled,
 	}
 	if option := request.IsEdns0(); option != nil {
-		if len(option.Option) != 0 {
-			return cacheKey{}, false
+		for _, edns := range option.Option {
+			if !hopByHopEDNSOption(edns.Option()) {
+				return cacheKey{}, false
+			}
 		}
 		key.udpSize = option.UDPSize()
 		key.dnssecOK = option.Do()
 	}
 	return key, true
+}
+
+// hopByHopEDNSOption reports whether an EDNS option describes the transport hop
+// rather than the answer. Cookies and padding are rewritten by every hop, so
+// keying on them would leave every DoH, DoT, and cookie-aware stub permanently
+// uncacheable. Options that vary the answer, such as client subnet, still
+// bypass the cache entirely.
+func hopByHopEDNSOption(code uint16) bool {
+	switch code {
+	case dns.EDNS0COOKIE, dns.EDNS0PADDING, dns.EDNS0TCPKEEPALIVE:
+		return true
+	default:
+		return false
+	}
+}
+
+// stripHopByHopEDNS removes hop-scoped options from a response before it is
+// shared, so one client's cookie or padding is never replayed to another.
+func stripHopByHopEDNS(message *dns.Msg) {
+	option := message.IsEdns0()
+	if option == nil {
+		return
+	}
+	option.Option = slices.DeleteFunc(option.Option, func(edns dns.EDNS0) bool {
+		return hopByHopEDNSOption(edns.Option())
+	})
 }
 
 func (cache *ResponseCache) responseTTL(response *dns.Msg) (uint32, bool) {
