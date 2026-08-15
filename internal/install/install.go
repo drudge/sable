@@ -10,12 +10,15 @@ import (
 )
 
 const (
-	serviceName             = "sable.service"
+	// ServiceName is the systemd unit that runs Sable.
+	ServiceName = "sable.service"
+	// ServiceUnitPath is where the systemd unit is installed.
+	ServiceUnitPath = "/etc/systemd/system/sable.service"
+
 	serviceUser             = "sable"
 	defaultBinaryPath       = "/usr/local/bin/sable"
 	defaultConfigurationDir = "/etc/sable"
 	defaultDataDirectory    = "/var/lib/sable"
-	defaultServicePath      = "/etc/systemd/system/sable.service"
 )
 
 type Options struct {
@@ -45,7 +48,7 @@ func defaultLayout() layout {
 		configurationDir:  defaultConfigurationDir,
 		configurationPath: filepath.Join(defaultConfigurationDir, "sable.toml"),
 		dataDirectory:     defaultDataDirectory,
-		servicePath:       defaultServicePath,
+		servicePath:       ServiceUnitPath,
 	}
 }
 

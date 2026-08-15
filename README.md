@@ -98,6 +98,28 @@ Set `SABLE_VERSION=0.6.0` to install a specific release. Re-running either
 installer updates the executable and service definition without replacing
 `/etc/sable/sable.toml` or `/var/lib/sable`.
 
+## Updating
+
+An installed Sable updates itself from the published GitHub releases. The
+command picks the archive for the running operating system and architecture,
+verifies it against `checksums.txt`, replaces the running executable in place,
+and restarts the systemd service when one is installed:
+
+```sh
+sudo sable update
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--check` | Report the available release without installing it |
+| `--pre-release` | Consider pre-release builds when selecting the newest release |
+| `--version v0.6.0` | Install a specific release tag, including older ones |
+| `--no-restart` | Replace the executable but leave the service running the old build |
+
+The previous executable is kept until the downloaded build has been run once,
+so a corrupt or unrunnable download leaves the installation untouched. Set
+`SABLE_GITHUB_TOKEN` if the unauthenticated GitHub API rate limit is a problem.
+
 For live development, use the pinned Air workflow:
 
 ```sh
