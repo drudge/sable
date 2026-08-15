@@ -544,9 +544,10 @@ func cachedDomainViews(responses []dnsserver.CachedResponse) []pages.CacheDomain
 func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	snapshot := server.config.Current()
 	dnsStats := server.stats.Stats()
+	display := requestTimeDisplay(request)
 	view := pages.DashboardView{
 		Version:           version.Current().Release,
-		TimeFormat:        requestTimeFormat(request),
+		TimeDisplay:       display,
 		SecurityEnabled:   server.securityEnabled,
 		CanSettings:       !server.securityEnabled,
 		CanAdministration: !server.securityEnabled,
@@ -566,7 +567,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		DNSSECStatus:      dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
 		ConfigRevision:    snapshot.Revision,
 		Stats:             statsView(dnsStats),
-		Chart:             server.history.view("hour", time.Now(), dnsStats, requestTimeFormat(request)),
+		Chart:             server.history.view("hour", time.Now(), dnsStats, display),
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
@@ -627,7 +628,7 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 		http.Error(writer, "query log unavailable", http.StatusInternalServerError)
 		return
 	}
-	if err := pages.RecentQueryLog(queryLogEntryViews(entries, requestTimeFormat(request))).Render(request.Context(), writer); err != nil {
+	if err := pages.RecentQueryLog(queryLogEntryViews(entries, requestTimeDisplay(request))).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render recent query log", "error", err)
 	}
 }
@@ -640,14 +641,19 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 
 func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {
 	rangeName := request.URL.Query().Get("range")
+	display := requestTimeDisplay(request)
+	location := display.Location
+	if location == nil {
+		location = time.Local
+	}
 	if rangeName == "custom" {
-		start, startErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("start"), time.Local)
-		end, endErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("end"), time.Local)
+		start, startErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("start"), location)
+		end, endErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("end"), location)
 		if startErr != nil || endErr != nil || !start.Before(end) {
 			http.Error(writer, "custom range must contain valid start and end times", http.StatusBadRequest)
 			return
 		}
-		view := server.history.customView(start, end, server.stats.Stats(), requestTimeFormat(request))
+		view := server.history.customView(start, end, server.stats.Stats(), display)
 		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 			server.logger.Error("render custom query statistics", "error", err)
 		}
@@ -657,7 +663,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		http.Error(writer, "range must be hour, day, week, month, or year", http.StatusBadRequest)
 		return
 	}
-	view := server.history.view(rangeName, time.Now(), server.stats.Stats(), requestTimeFormat(request))
+	view := server.history.view(rangeName, time.Now(), server.stats.Stats(), display)
 	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render query statistics", "error", err)
 	}
@@ -961,7 +967,7 @@ func queryLogStatus(enabled bool, stats querylog.Stats) string {
 	return fmt.Sprintf("Active · %d dropped", stats.Dropped)
 }
 
-func queryLogEntryViews(entries []querylog.Entry, timeFormat string) []pages.QueryLogEntryView {
+func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []pages.QueryLogEntryView {
 	views := make([]pages.QueryLogEntryView, 0, len(entries))
 	for _, entry := range entries {
 		recordType := dns.TypeToString[entry.RecordType]
@@ -973,7 +979,7 @@ func queryLogEntryViews(entries []querylog.Entry, timeFormat string) []pages.Que
 			status = strconv.Itoa(entry.ResponseCode)
 		}
 		views = append(views, pages.QueryLogEntryView{
-			OccurredAt: pages.FormatClock(entry.OccurredAt, timeFormat, true),
+			OccurredAt: pages.FormatClock(entry.OccurredAt, display, true),
 			ClientIP:   entry.ClientIP,
 			Name:       entry.Name,
 			RecordType: recordType,

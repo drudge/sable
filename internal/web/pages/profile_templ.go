@@ -417,9 +417,9 @@ func ProfileTokens(view ProfilePageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var17 string
-				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(FormatDateTime(token.CreatedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(FormatDateTime(token.CreatedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 97}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -430,9 +430,9 @@ func ProfileTokens(view ProfilePageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var18 string
-				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 185}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 187}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -443,9 +443,9 @@ func ProfileTokens(view ProfilePageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 string
-				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 281}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 102, Col: 284}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -547,9 +547,9 @@ func ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 string
-		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(FormatDateTime(token.CreatedAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(FormatDateTime(token.CreatedAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 95}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -560,9 +560,9 @@ func ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
-		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 192}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 194}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -573,9 +573,9 @@ func ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var25 string
-		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(profileTokenExpiration(token.ExpiresAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 296}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `profile.templ`, Line: 114, Col: 299}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -772,11 +772,11 @@ func profileDisplayName(user auth.ManagedUser) string {
 	}
 	return user.Username
 }
-func profileTokenExpiration(value time.Time, format string) string {
+func profileTokenExpiration(value time.Time, display TimeDisplay) string {
 	if value.IsZero() {
 		return "Never"
 	}
-	return FormatDateTime(value, format)
+	return FormatDateTime(value, display)
 }
 
 var _ = templruntime.GeneratedTemplate
