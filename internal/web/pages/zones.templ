@@ -120,6 +120,12 @@ func zoneTypeClass(value string) string {
 func zoneCanEditRecords(zone ZoneView) bool { return zone.Type == "" || zone.Type == "primary" || zone.Type == "forwarder" }
 func zoneCanResync(zone ZoneView) bool { return zone.Type == "secondary" || zone.Type == "stub" }
 
+// Primary zones manage signing here; forwarder and stub zones manage upstream
+// validation. Secondary zones inherit both from the primary and have no dialog.
+func zoneCanDNSSECDialog(zone ZoneView) bool {
+	return zone.Type == "" || zone.Type == "primary" || zone.Type == "forwarder" || zone.Type == "stub"
+}
+
 func zoneRecordOwner(zone ZoneView, record ZoneRecordView) string {
 	name := strings.TrimSpace(record.Name)
 	if name == "" || name == "@" {
@@ -352,7 +358,7 @@ templ ZoneListView(view ZonesPageView) {
 				if zone.CanSettings {
 					@ZoneSettingsDialog(zone, zoneElementID("settings", index))
 				}
-				if zone.CanDNSSEC {
+				if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 					@ZoneDNSSECDialog(zone, zoneElementID("dnssec", index))
 				}
 				if zone.CanCreate {
@@ -419,7 +425,7 @@ templ ZoneDetailView(zone ZoneView) {
 		if zone.CanSettings {
 			@ZoneSettingsDialog(zone, "settings-selected-zone-dialog")
 		}
-		if zone.CanDNSSEC {
+		if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 			@ZoneDNSSECDialog(zone, "dnssec-selected-zone-dialog")
 		}
 		if zone.CanCreate {
@@ -441,9 +447,9 @@ templ ZoneActionMenu(zone ZoneView, className, settingsID, dnssecID, cloneID, de
 			if zone.CanManagePermissions {
 				<a href="/administration?tab=groups" title="Manage zone access through groups">@Icon("key")<span>Permissions</span></a>
 			}
-			if zone.Type == "primary" && zone.CanDNSSEC {
+			if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 				<button type="button" data-dialog-open={ dnssecID }>@Icon("shield-check")<span>DNSSEC</span></button>
-			} else if zone.Type != "primary" {
+			} else if zone.Type == "secondary" {
 				<button type="button" disabled title="Signing is managed by the primary server">@Icon("shield-check")<span>DNSSEC</span></button>
 			}
 			<hr/>
@@ -646,6 +652,30 @@ templ DSDigestSelect(name, selected string, disabled bool) {
 }
 
 templ ZoneDNSSECDialog(zone ZoneView, id string) {
+	if zone.Type == "forwarder" || zone.Type == "stub" {
+		@ZoneValidationDNSSECDialog(zone, id)
+	} else {
+		@ZoneSigningDNSSECDialog(zone, id)
+	}
+}
+
+templ ZoneValidationDNSSECDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog isotope-zone-dialog zone-dnssec-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<div class="dialog-header"><h2 id={ id + "-title" }>DNSSEC</h2><p>Validate the answers <code>{ zone.Name }</code> receives from its upstream servers.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form zone-dnssec-form" hx-post="/ui/zones/dnssec" hx-target="#zones-content" hx-swap="outerHTML">
+			<input type="hidden" name="zone" value={ zone.Name }/>
+			<input type="hidden" name="dnssec_validation_present" value="1"/>
+			<label class="zone-dynamic-toggle">
+				<span><strong>Validate Responses</strong><small>Turn this off when the upstream answers for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone. The zone and everything under it is then treated as insecure instead of bogus.</small></span>
+				<span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked?={ !zone.DNSSECValidationDisabled }/><span></span></span>
+			</label>
+			<div class="zone-dnssec-note">Sable answers this zone from its upstream servers rather than signing it, so there are no keys to manage here.</div>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save DNSSEC</button></footer>
+		</form>
+	</dialog>
+}
+
+templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 	<dialog class="custom-server-dialog isotope-zone-dialog zone-dnssec-dialog" id={ id } aria-labelledby={ id + "-title" }>
 		<div class="dialog-header"><h2 id={ id + "-title" }>DNSSEC</h2><p>Sign <code>{ zone.Name }</code> and publish authenticated denial of existence.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form zone-dnssec-form" hx-post="/ui/zones/dnssec" hx-target="#zones-content" hx-swap="outerHTML">
@@ -719,13 +749,6 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 					<div><span class="zone-settings-section-icon">@Icon("key")</span><span><strong>TSIG Authentication</strong><small>Authenticate NOTIFY, AXFR, IXFR, and dynamic updates for this zone.</small></span></div>
 					<label><span>Key Name</span><input class="mono-input" name="tsig_key" value={ zone.TSIGKey } placeholder="transfer-key." autocomplete="off"/><small>Leave empty for source-IP and transfer-policy authorization only.</small></label>
 				</section>
-				if zone.Type == "forwarder" || zone.Type == "stub" {
-					<section class="zone-settings-section">
-						<div><span class="zone-settings-section-icon">@Icon("shield")</span><span><strong>DNSSEC Validation</strong><small>Validate answers returned by this zone's upstream servers.</small></span></div>
-						<input type="hidden" name="dnssec_validation_present" value="1"/>
-						<label class="zone-dynamic-toggle"><span><strong>Validate Responses</strong><small>Turn this off when the upstream answers for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone. The zone and everything under it is then treated as insecure instead of bogus.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked?={ !zone.DNSSECValidationDisabled }/><span></span></span></label>
-					</section>
-				}
 			</section>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="transfers" hidden>
 				if zone.Type == "secondary" || zone.Type == "stub" {
