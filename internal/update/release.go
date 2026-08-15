@@ -39,7 +39,7 @@ func resolveRelease(ctx context.Context, options Options) (release, error) {
 	if !options.PreRelease {
 		selected, err := fetchRelease(ctx, options, "/releases/latest")
 		if errors.Is(err, errReleaseNotFound) {
-			return release{}, errors.New("no published release was found; pass --pre-release to include pre-releases")
+			return release{}, errors.New("no published release was found; include pre-release builds to see the newest one")
 		}
 		return selected, err
 	}

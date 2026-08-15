@@ -649,6 +649,35 @@
 	  syncStep();
 	};
 
+	// Shared confirmation dialog. htmx actions reach it through hx-confirm, and
+	// the managed restart button calls it directly because it issues its own
+	// request instead of an htmx one.
+	const confirmAction = (question, options = {}) =>
+	  new Promise((resolve) => {
+		const dialog = document.createElement("dialog");
+		dialog.className = "custom-server-dialog confirmation-dialog";
+		dialog.innerHTML = `<div class="dialog-header"><h2></h2><p></p></div><footer class="dialog-footer"><button class="button outline" type="button" data-confirm-cancel>Cancel</button><button class="button" type="button" data-confirm-accept></button></footer>`;
+		dialog.querySelector("h2").textContent = options.title || "Confirm action";
+		dialog.querySelector("p").textContent = question;
+		const accept = dialog.querySelector("[data-confirm-accept]");
+		// Red is reserved for actions that destroy or interrupt something.
+		if (options.tone !== "neutral") accept.classList.add("destructive");
+		accept.textContent = options.action || "Continue";
+		let accepted = false;
+		dialog.addEventListener("close", () => {
+		  dialog.remove();
+		  resolve(accepted);
+		}, {once: true});
+		dialog.querySelector("[data-confirm-cancel]").addEventListener("click", () => dialog.close());
+		accept.addEventListener("click", () => {
+		  accepted = true;
+		  dialog.close();
+		});
+		document.body.append(dialog);
+		dialog.showModal();
+		dialog.querySelector("[data-confirm-cancel]").focus();
+	  });
+
 	const setupManagedRestart = (root) => {
 	  if (!root || root.dataset.sableRestartReady === "true") return;
 	  root.dataset.sableRestartReady = "true";
@@ -703,6 +732,13 @@
 	  };
 
 	  button?.addEventListener("click", async () => {
+		if (!previousInstance && root.dataset.restartConfirm) {
+		  const accepted = await confirmAction(root.dataset.restartConfirm, {
+			title: root.dataset.restartConfirmTitle || "Restart Sable?",
+			action: root.dataset.restartConfirmAction || "Restart",
+		  });
+		  if (!accepted) return;
+		}
 		if (previousInstance) {
 		  button.disabled = true;
 		  root.classList.add("is-restarting");
@@ -1408,23 +1444,13 @@
 	  event.preventDefault();
 	  const source = event.detail?.elt;
 	  const confirmation = source?.closest?.("[data-confirm-title]") || source;
-	  const dialog = document.createElement("dialog");
-	  dialog.className = "custom-server-dialog confirmation-dialog";
-	  dialog.innerHTML = `<div class="dialog-header"><h2></h2><p></p></div><footer class="dialog-footer"><button class="button outline" type="button" data-confirm-cancel>Cancel</button><button class="button destructive" type="button" data-confirm-accept></button></footer>`;
-	  dialog.querySelector("h2").textContent = confirmation?.dataset.confirmTitle || "Confirm action";
-	  dialog.querySelector("p").textContent = question;
-	  const accept = dialog.querySelector("[data-confirm-accept]");
-	  accept.textContent = confirmation?.dataset.confirmAction || "Continue";
-	  const cleanup = () => dialog.remove();
-	  dialog.addEventListener("close", cleanup, {once: true});
-	  dialog.querySelector("[data-confirm-cancel]").addEventListener("click", () => dialog.close());
-	  accept.addEventListener("click", () => {
-		dialog.close();
-		event.detail.issueRequest(true);
+	  confirmAction(question, {
+		title: confirmation?.dataset.confirmTitle,
+		action: confirmation?.dataset.confirmAction,
+		tone: confirmation?.dataset.confirmTone,
+	  }).then((accepted) => {
+		if (accepted) event.detail.issueRequest(true);
 	  });
-	  document.body.append(dialog);
-	  dialog.showModal();
-	  dialog.querySelector("[data-confirm-cancel]").focus();
 	});
 
 	const updateTopStatsDialog = (dialog) => {
@@ -1617,21 +1643,15 @@
 	  }
 	});
 
+	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open]";
 	document.addEventListener("pointerdown", (event) => {
-	  document.querySelectorAll(".pause-menu[open]").forEach((menu) => {
-		if (!menu.contains(event.target)) menu.removeAttribute("open");
-	  });
-	  document.querySelectorAll(".zone-action-menu[open]").forEach((menu) => {
+	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");
 	  });
 	});
 	document.addEventListener("keydown", (event) => {
 	  if (event.key !== "Escape") return;
-	  document.querySelectorAll(".pause-menu[open]").forEach((menu) => {
-		menu.removeAttribute("open");
-		menu.querySelector("summary")?.focus();
-	  });
-	  document.querySelectorAll(".zone-action-menu[open]").forEach((menu) => {
+	  document.querySelectorAll(openMenus).forEach((menu) => {
 		menu.removeAttribute("open");
 		menu.querySelector("summary")?.focus();
 	  });

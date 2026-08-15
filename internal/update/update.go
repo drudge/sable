@@ -28,6 +28,9 @@ const (
 
 var errMissingExecutable = errors.New("release archive does not contain the Sable executable")
 
+// ErrUpdateInProgress reports that another check or installation is running.
+var ErrUpdateInProgress = errors.New("an update is already running")
+
 type Options struct {
 	// Repository is the GitHub owner/name pair that publishes Sable releases.
 	Repository string

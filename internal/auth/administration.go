@@ -32,6 +32,8 @@ const (
 	PermissionClusterRead   = "cluster.read"
 	PermissionClusterWrite  = "cluster.write"
 	PermissionMetricsRead   = "metrics.read"
+	PermissionUpdatesRead   = "updates.read"
+	PermissionUpdatesApply  = "updates.apply"
 )
 
 var AllPermissions = []string{
@@ -41,6 +43,7 @@ var AllPermissions = []string{
 	PermissionBlockingRead, PermissionBlockingWrite,
 	PermissionLogsRead, PermissionUsersRead, PermissionUsersWrite,
 	PermissionClusterRead, PermissionClusterWrite, PermissionMetricsRead,
+	PermissionUpdatesRead, PermissionUpdatesApply,
 }
 
 type Surface string
@@ -73,15 +76,16 @@ var BuiltInRoles = []RoleDefinition{
 		PermissionSettingsRead, PermissionSettingsWrite, PermissionZonesRead, PermissionZonesCreate, PermissionZonesSettings,
 		PermissionZonesRecords, PermissionZonesTransfer, PermissionZonesDNSSEC, PermissionZonesImport, PermissionZonesExport, PermissionZonesDelete,
 		PermissionBlockingRead, PermissionBlockingWrite, PermissionLogsRead,
-		PermissionClusterRead, PermissionClusterWrite,
+		PermissionClusterRead, PermissionClusterWrite, PermissionUpdatesRead,
 	}},
 	{Name: "Operator", Description: "Operate zones and blocking without changing server settings", Permissions: []string{
 		PermissionSettingsRead, PermissionZonesRead, PermissionZonesSettings, PermissionZonesRecords, PermissionZonesTransfer, PermissionZonesImport, PermissionZonesExport,
 		PermissionBlockingRead, PermissionBlockingWrite, PermissionLogsRead,
-		PermissionClusterRead,
+		PermissionClusterRead, PermissionUpdatesRead,
 	}},
 	{Name: "Auditor", Description: "Read-only access to DNS state, settings, and logs", Permissions: []string{
 		PermissionSettingsRead, PermissionZonesRead, PermissionBlockingRead, PermissionLogsRead, PermissionClusterRead,
+		PermissionUpdatesRead,
 	}},
 }
 

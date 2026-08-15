@@ -6,6 +6,43 @@ type AboutPageView struct {
 	BuiltAt      string
 	GoVersion    string
 	ScrapeConfig string
+	Update       UpdateView
+}
+
+// UpdateView describes what the console knows about published Sable releases
+// and what the signed-in operator is allowed to do about it.
+type UpdateView struct {
+	Phase          string
+	CurrentVersion string
+	LatestVersion  string
+	ReleaseURL     string
+	Progress       string
+	Error          string
+	CheckedAt      string
+	CSRFToken      string
+	// PreRelease reports that the resolved release is a pre-release, and
+	// IncludePreRelease that the operator asked for pre-release builds.
+	PreRelease        bool
+	IncludePreRelease bool
+	// Supported reports whether this Sable process can install releases.
+	Supported bool
+	// Checked reports that a release check has completed at least once.
+	Checked bool
+	// Busy reports that a check or installation is still running.
+	Busy bool
+	// Available reports that a newer release can be installed.
+	Available bool
+	// UpToDate reports that the last check found nothing newer.
+	UpToDate bool
+	// Installed reports that the executable was replaced and Sable is still
+	// serving the previous build until it restarts.
+	Installed bool
+	// ServiceManaged reports that a service manager starts Sable again after
+	// it exits for a restart.
+	ServiceManaged bool
+	CanCheck       bool
+	CanApply       bool
+	CanRestart     bool
 }
 
 templ AboutPage(view AboutPageView) {
@@ -47,11 +84,11 @@ templ AboutContent(view AboutPageView) {
 				</div>
 				<div class="about-version-row">
 					<div class="about-version-copy">
-						<div><span>Installed version</span><strong>v{ view.Console.Version }</strong><span class="about-version-status">@Icon("check-circle")<span>Installed</span></span></div>
+						<div><span>Installed version</span><strong>v{ view.Console.Version }</strong></div>
 						<small>Go { view.GoVersion } · commit { view.Commit } · built { view.BuiltAt }</small>
 					</div>
-					<a class="button outline compact" href="https://github.com/drudge/sable/releases/latest" target="_blank" rel="noopener noreferrer">@Icon("refresh")<span>Check for updates</span></a>
 				</div>
+				@UpdatePanel(view.Update)
 			</div>
 		</section>
 
@@ -85,4 +122,185 @@ templ AboutContent(view AboutPageView) {
 
 		<footer class="about-footer"><a href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></footer>
 	</div>
+}
+
+// UpdatePanel renders the release check, the installation, and the restart
+// that finishes it. The panel replaces itself while an operation runs so the
+// console reports progress without holding a request open for the download.
+templ UpdatePanel(view UpdateView) {
+	<div
+		id="about-update"
+		class={ "about-update", "about-update-" + updateVariant(view) }
+		if view.Busy {
+			hx-get="/ui/updates"
+			hx-trigger="every 2s"
+			hx-target="this"
+			hx-swap="outerHTML"
+		}
+		if view.Installed && view.CanRestart {
+			data-sable-restart
+			data-restart-url="/ui/updates/restart"
+			data-health-url="/api/v1/health"
+			data-continue-url="/about"
+			data-csrf-token={ view.CSRFToken }
+			data-restart-confirm={ updateRestartConfirmation(view) }
+			data-restart-confirm-title="Restart Sable?"
+			data-restart-confirm-action="Restart Sable"
+		}
+	>
+		<div class="about-update-summary">
+			<span class="about-update-icon" aria-hidden="true">
+				@Icon(updateIcon(view))
+				if view.Installed && view.CanRestart {
+					// Swapped in while the restart runs; a spinning power symbol
+					// would read as a control, not as progress.
+					@Icon("refresh")
+				}
+			</span>
+			<div class="about-update-copy">
+				<strong aria-live="polite">{ updateHeadline(view) }</strong>
+				<small data-restart-status>
+					{ updateDetail(view) }
+					if view.Available && !view.Installed && view.ReleaseURL != "" {
+						<a class="inline-link about-update-notes" href={ templ.SafeURL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+					}
+				</small>
+			</div>
+		</div>
+		switch updateAction(view) {
+			case "restart":
+				<div class="about-update-actions">
+					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
+				</div>
+			case "install":
+				<form class="about-update-actions" hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disabled-elt="find button" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
+					<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
+					<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
+				</form>
+			case "check":
+				<form class="about-update-actions" hx-post="/ui/updates/check" hx-target="#about-update" hx-swap="outerHTML" hx-disabled-elt="find button">
+					<div class="about-update-split">
+						<button class="button outline compact" type="submit">@Icon("refresh")<span>{ ifThen(view.Checked, "Check Again", "Check for Updates") }</span></button>
+						<details class="about-update-menu">
+							<summary class="button outline compact" aria-label="Release channel options" title="Release channel options">@Icon("chevron-down")</summary>
+							<div>
+								<label class="about-update-channel"><input type="checkbox" name="pre_release" value="true" checked?={ view.IncludePreRelease }/><span>Include pre-releases</span></label>
+								<small>Release candidates as well as stable builds.</small>
+							</div>
+						</details>
+					</div>
+				</form>
+		}
+	</div>
+}
+
+// updateAction names the one control the panel offers. Showing a single
+// action keeps the row from filling with competing buttons.
+func updateAction(view UpdateView) string {
+	switch {
+	case !view.Supported || view.Busy:
+		return ""
+	case view.Installed:
+		return ifThen(view.CanRestart, "restart", "")
+	case view.Available && view.CanApply:
+		return "install"
+	case view.CanCheck:
+		return "check"
+	default:
+		return ""
+	}
+}
+
+// updateVariant names the state the panel is reporting so that the stylesheet
+// can tint it without repeating the state rules.
+func updateVariant(view UpdateView) string {
+	switch {
+	case view.Busy:
+		return "busy"
+	case view.Installed:
+		return "installed"
+	case view.Error != "":
+		return "failed"
+	case view.Available:
+		return "available"
+	case view.UpToDate:
+		return "current"
+	default:
+		return "idle"
+	}
+}
+
+func updateIcon(view UpdateView) string {
+	switch updateVariant(view) {
+	case "busy":
+		return "refresh"
+	case "installed":
+		return "power"
+	case "failed":
+		return "alert-triangle"
+	case "available":
+		return "download"
+	case "current":
+		return "check-circle"
+	default:
+		return "refresh"
+	}
+}
+
+func updateHeadline(view UpdateView) string {
+	switch {
+	case !view.Supported:
+		return "Update checks are unavailable"
+	case view.Phase == "checking":
+		return "Checking for a newer release…"
+	case view.Phase == "installing":
+		return "Installing Sable v" + view.LatestVersion + "…"
+	case view.Installed:
+		return "Sable v" + view.LatestVersion + " is installed"
+	case view.Error != "":
+		return "The update could not be completed"
+	case view.Available:
+		return "Sable v" + view.LatestVersion + " is available"
+	case view.UpToDate:
+		return "Sable is up to date"
+	default:
+		return "Check for updates"
+	}
+}
+
+func updateDetail(view UpdateView) string {
+	switch {
+	case !view.Supported:
+		return "Update this installation with sable update."
+	case view.Phase == "checking":
+		return "Asking GitHub for the newest release."
+	case view.Phase == "installing" && view.Progress != "":
+		return view.Progress
+	case view.Phase == "installing":
+		return "Downloading and verifying the release archive."
+	case view.Installed && view.ServiceManaged:
+		return "Still serving v" + view.CurrentVersion + ". The service manager starts the new build after a restart."
+	case view.Installed:
+		return "Still serving v" + view.CurrentVersion + ". Sable stays down after a restart unless a supervisor starts it."
+	case view.Error != "":
+		return view.Error
+	case view.Available:
+		return "Verified against the published checksums before it replaces the executable."
+	case view.UpToDate:
+		return "Checked " + view.CheckedAt + ifThen(view.IncludePreRelease, ", including pre-releases.", ".")
+	default:
+		return "Releases are published on GitHub for this platform."
+	}
+}
+
+func updateInstallConfirmation(view UpdateView) string {
+	return "Download Sable v" + view.LatestVersion + " and replace the installed executable? Sable keeps serving v" +
+		view.CurrentVersion + " until you restart it."
+}
+
+func updateRestartConfirmation(view UpdateView) string {
+	if view.ServiceManaged {
+		return "Restart Sable to run v" + view.LatestVersion + "? DNS and the console are unavailable for a few seconds while the service manager starts the new build."
+	}
+	return "Restart Sable to run v" + view.LatestVersion + "? Sable stops serving DNS and will only come back if a service manager or container restart policy starts it again."
 }

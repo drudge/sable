@@ -1919,6 +1919,44 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-metrics-preview { display: grid; justify-items: start; gap: .75rem; }
 .about-metrics-preview pre { width: 100%; max-height: 14rem; font-size: .6875rem; }
 .about-metrics-preview pre:not(:empty) { display: block !important; }
+.about-update { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.about-update-summary { display: flex; min-width: 0; flex: 1 1 20rem; align-items: center; gap: .75rem; }
+.about-update-icon { display: grid; width: 2.15rem; height: 2.15rem; flex: 0 0 2.15rem; place-items: center; border-radius: .55rem; background: color-mix(in oklch, currentColor 13%, transparent); color: var(--muted-foreground); }
+.about-update-icon .nav-icon { width: 1.1rem; height: 1.1rem; }
+.about-update-copy { display: grid; min-width: 0; gap: .2rem; }
+.about-update-copy strong { font-size: .8125rem; }
+.about-update-copy small { overflow-wrap: anywhere; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
+.about-update-notes { display: inline-flex; align-items: center; gap: .3rem; margin-left: .75rem; white-space: nowrap; }
+.about-update-notes .nav-icon { width: .75rem; height: .75rem; }
+.about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .9rem; margin: 0; }
+/* Split control: the check runs on the left half, the release channel lives
+   behind the caret so the row keeps one visible action. */
+.about-update-split { position: relative; display: inline-flex; }
+.about-update-split > .button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.about-update-menu > summary { display: inline-flex; width: 1.85rem; align-items: center; justify-content: center; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 0; list-style: none; cursor: pointer; }
+.about-update-menu > summary::-webkit-details-marker { display: none; }
+.about-update-menu > summary .nav-icon { width: .875rem; height: .875rem; transition: transform 120ms ease; }
+.about-update-menu[open] > summary { background: var(--accent); }
+.about-update-menu[open] > summary .nav-icon { transform: rotate(180deg); }
+.about-update-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; max-width: 15rem; gap: .3rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground)); padding: .6rem .7rem; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .28), 0 .2rem .5rem rgb(0 0 0 / .18); }
+.about-update-menu > div small { color: var(--muted-foreground); font-size: .625rem; line-height: 1.4; }
+.about-update-channel { display: flex; align-items: center; gap: .45rem; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+.about-update-channel input { width: .9rem; height: .9rem; accent-color: var(--primary); }
+.about-update-available { border-color: color-mix(in oklch, #2563eb 45%, var(--border)); }
+.about-update-available .about-update-icon { color: #2563eb; }
+.about-update-current .about-update-icon { color: #22c55e; }
+.about-update-installed { border-color: color-mix(in oklch, #22c55e 45%, var(--border)); }
+.about-update-installed .about-update-icon { color: #22c55e; }
+.about-update-failed { border-color: color-mix(in oklch, var(--destructive) 45%, var(--border)); }
+.about-update-failed .about-update-icon { color: var(--destructive); }
+.about-update-installed .about-update-icon .icon-refresh { display: none; }
+.about-update.is-restarting .about-update-icon .icon-power { display: none; }
+.about-update.is-restarting .about-update-icon .icon-refresh { display: block; }
+.about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
+@keyframes about-update-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: none; }
+}
 .about-footer { padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
 @media (max-width: 640px) {
   .about-hero { padding: 1rem .5rem; }
@@ -1929,6 +1967,11 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .about-card-content { padding-inline: 1rem; }
   .about-version-row { align-items: stretch; }
   .about-version-row .button { width: 100%; justify-content: center; }
+  .about-update { align-items: stretch; }
+  .about-update-actions { width: 100%; }
+  .about-update-actions > .button, .about-update-split { flex: 1 1 100%; }
+  .about-update-actions > .button { justify-content: center; }
+  .about-update-split > .button { flex: 1; justify-content: center; }
 }
 .settings-link-button { display: inline-flex; width: fit-content; align-items: center; gap: .5rem; }
 .settings-link-button .nav-icon { width: 1rem; height: 1rem; }

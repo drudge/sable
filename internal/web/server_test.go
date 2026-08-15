@@ -32,6 +32,7 @@ import (
 	dnssecstate "github.com/drudge/sable/internal/dnssec"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
+	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -369,6 +370,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.SetClusterController(clusterService)
+	server.SetUpdateController(&testUpdateController{status: update.Status{Phase: update.PhaseIdle, CurrentVersion: "dev"}})
 	dashboardResponse := serveRequest(server, "GET", "/")
 	dashboard := dashboardResponse.Body.String()
 	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
@@ -440,7 +442,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if aboutResponse.Code != http.StatusOK {
 		t.Fatalf("about page status = %d", aboutResponse.Code)
 	}
-	for _, expected := range []string{"About", "Sable DNS Server", "Prometheus Metrics", "Installed version", "Check for updates", "MIT License", `class="nav-item active" href="/about"`, `job_name: &#34;sable-dns&#34;`} {
+	for _, expected := range []string{"About", "Sable DNS Server", "Prometheus Metrics", "Installed version", "Check for Updates", "MIT License", `class="nav-item active" href="/about"`, `job_name: &#34;sable-dns&#34;`} {
 		if !strings.Contains(aboutResponse.Body.String(), expected) {
 			t.Errorf("about page does not contain %q", expected)
 		}
@@ -764,6 +766,10 @@ func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
 		{http.MethodPost, "/ui/administration/users", auth.PermissionUsersWrite},
 		{http.MethodPost, "/ui/administration/users/profile", auth.PermissionUsersWrite},
 		{http.MethodGet, "/api/v1/query-log?limit=1", auth.PermissionLogsRead},
+		{http.MethodGet, "/ui/updates", auth.PermissionUpdatesRead},
+		{http.MethodPost, "/ui/updates/check", auth.PermissionUpdatesRead},
+		{http.MethodPost, "/ui/updates/install", auth.PermissionUpdatesApply},
+		{http.MethodPost, "/ui/updates/restart", auth.PermissionUpdatesApply},
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(test.method, test.path, nil)

@@ -11,3 +11,7 @@ import (
 func restartService(context.Context, io.Writer) (bool, bool, error) {
 	return false, false, nil
 }
+
+// ServiceManaged reports whether an installed Sable service starts the server
+// again after it exits. Sable only installs a service on Linux.
+func ServiceManaged() bool { return false }
