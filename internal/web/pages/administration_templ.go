@@ -671,9 +671,9 @@ func UsersPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var28 string
-				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(user.UpdatedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(user.UpdatedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 97, Col: 91}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 97, Col: 92}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 				if templ_7745c5c3_Err != nil {
@@ -1309,9 +1309,9 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var57 string
-				templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.CreatedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.CreatedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 134}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 135}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 				if templ_7745c5c3_Err != nil {
@@ -1322,9 +1322,9 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var58 string
-				templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.ExpiresAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.ExpiresAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 219}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 221}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 				if templ_7745c5c3_Err != nil {
@@ -1337,7 +1337,7 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var59 string
 				templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue("Sign " + session.Username + " out of this session?")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 421}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 423}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 				if templ_7745c5c3_Err != nil {
@@ -1350,7 +1350,7 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var60 string
 				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(session.HashPrefix)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 556}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 558}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 				if templ_7745c5c3_Err != nil {
@@ -1373,7 +1373,7 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var61 string
 				templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(session.Current, "Current session", "Sign out "+session.Username))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 717}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 719}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 				if templ_7745c5c3_Err != nil {
@@ -1386,7 +1386,7 @@ func SessionsPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var62 string
 				templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(session.Current, "This is your current session", "Sign out this session"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 808}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 177, Col: 810}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 				if templ_7745c5c3_Err != nil {
@@ -1539,9 +1539,9 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var68 string
-				templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.CreatedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.CreatedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 92}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 93}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 				if templ_7745c5c3_Err != nil {
@@ -1552,9 +1552,9 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var69 string
-				templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 180}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 182}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 				if templ_7745c5c3_Err != nil {
@@ -1565,9 +1565,9 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var70 string
-				templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeFormat))
+				templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeDisplay))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 263}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 266}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 				if templ_7745c5c3_Err != nil {
@@ -1580,7 +1580,7 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var71 string
 				templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.ResolveAttributeValue("Revoke API token " + token.Name + "? Applications using it will immediately lose access.")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 501}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 504}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var71)
 				if templ_7745c5c3_Err != nil {
@@ -1593,7 +1593,7 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var72 string
 				templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(token.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 643}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 646}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 				if templ_7745c5c3_Err != nil {
@@ -1606,7 +1606,7 @@ func TokensPanel(view AdministrationPageView) templ.Component {
 				var templ_7745c5c3_Var73 string
 				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.ResolveAttributeValue("Revoke API token " + token.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 741}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 201, Col: 744}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
 				if templ_7745c5c3_Err != nil {
@@ -1803,9 +1803,9 @@ func SessionMobileRow(view AdministrationPageView, session auth.Session) templ.C
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var82 string
-		templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.ExpiresAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(session.ExpiresAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 219, Col: 114}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 219, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 		if templ_7745c5c3_Err != nil {
@@ -1918,9 +1918,9 @@ func TokenMobileRow(view AdministrationPageView, token auth.APIToken) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var89 string
-		templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 221, Col: 785}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 221, Col: 786}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 		if templ_7745c5c3_Err != nil {
@@ -1931,9 +1931,9 @@ func TokenMobileRow(view AdministrationPageView, token auth.APIToken) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var90 string
-		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeFormat))
+		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeDisplay))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 221, Col: 852}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 221, Col: 854}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 		if templ_7745c5c3_Err != nil {
@@ -3208,9 +3208,9 @@ func UserTokensContent(view AdministrationPageView, user auth.ManagedUser) templ
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var148 string
-					templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.CreatedAt, view.Console.TimeFormat))
+					templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.CreatedAt, view.Console.TimeDisplay))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 116}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 117}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
 					if templ_7745c5c3_Err != nil {
@@ -3221,9 +3221,9 @@ func UserTokensContent(view AdministrationPageView, user auth.ManagedUser) templ
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var149 string
-					templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeFormat))
+					templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(adminTime(token.ExpiresAt, view.Console.TimeDisplay))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 206}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 208}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
 					if templ_7745c5c3_Err != nil {
@@ -3234,9 +3234,9 @@ func UserTokensContent(view AdministrationPageView, user auth.ManagedUser) templ
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var150 string
-					templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeFormat))
+					templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinStringErrs(tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 303}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `administration.templ`, Line: 375, Col: 306}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var150))
 					if templ_7745c5c3_Err != nil {
@@ -3489,12 +3489,12 @@ func adminContains(values []string, value string) bool {
 	}
 	return false
 }
-func adminTime(value time.Time, timeFormat string) string { return FormatDateTime(value, timeFormat) }
-func tokenLastUsed(value time.Time, timeFormat string) string {
+func adminTime(value time.Time, display TimeDisplay) string { return FormatDateTime(value, display) }
+func tokenLastUsed(value time.Time, display TimeDisplay) string {
 	if value.IsZero() {
 		return "Never used"
 	}
-	return adminTime(value, timeFormat)
+	return adminTime(value, display)
 }
 func userTokenCount(view AdministrationPageView, userID int64) int {
 	count := 0

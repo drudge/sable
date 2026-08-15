@@ -664,9 +664,9 @@ func ClusterLiveStatus(view ClusterPageView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var19 string
-		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.ObservedAt, view.Console.TimeFormat, true))
+		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 193, Col: 286}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 193, Col: 287}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -2538,9 +2538,9 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var106 string
-			templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeFormat, true))
+			templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeDisplay, true))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 353, Col: 512}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 353, Col: 513}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 			if templ_7745c5c3_Err != nil {

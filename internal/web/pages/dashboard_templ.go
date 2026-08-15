@@ -15,7 +15,7 @@ import (
 
 type DashboardView struct {
 	Version              string
-	TimeFormat           string
+	TimeDisplay          TimeDisplay
 	Username             string
 	DisplayName          string
 	CSRFToken            string

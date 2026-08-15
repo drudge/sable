@@ -72,7 +72,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 	view.UniFi.CredentialsConfigured = configured
 	view.UniFi.AuthMode = unifiAuthMode(credentials)
 	view.UniFi.Username = credentials.Username
-	view.UniFi.Status = unifiStatusView(server.unifi.Status(), view.Console.TimeFormat)
+	view.UniFi.Status = unifiStatusView(server.unifi.Status(), view.Console.TimeDisplay)
 	return view
 }
 
@@ -110,17 +110,17 @@ func unifiPreviewName(template, network, zoneName string) string {
 	return preview
 }
 
-func unifiStatusView(status unifi.Status, timeFormat string) pages.UniFiStatusView {
+func unifiStatusView(status unifi.Status, display pages.TimeDisplay) pages.UniFiStatusView {
 	view := pages.UniFiStatusView{
 		Running: status.Running, LastError: status.LastError, Hosts: status.Hosts,
 		Added: status.Added, Updated: status.Updated, Removed: status.Removed,
 		ZonesCreated: status.ZonesCreated,
 	}
 	if !status.LastSuccess.IsZero() {
-		view.LastSuccess = pages.FormatShortDateTime(status.LastSuccess, timeFormat, true)
+		view.LastSuccess = pages.FormatShortDateTime(status.LastSuccess, display, true)
 	}
 	if !status.NextAttempt.IsZero() {
-		view.NextAttempt = pages.FormatShortDateTime(status.NextAttempt, timeFormat, true)
+		view.NextAttempt = pages.FormatShortDateTime(status.NextAttempt, display, true)
 	}
 	if status.Duration > 0 {
 		view.Duration = status.Duration.Round(time.Millisecond).String()

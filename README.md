@@ -204,8 +204,13 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 53:8053/udp \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
+  --env TZ=America/New_York \
   ghcr.io/drudge/sable:0.6.0
 ```
+
+The console renders timestamps in the timezone reported by your browser, so
+`TZ` is only the fallback used before that preference is known. Containers
+default to UTC when it is unset.
 
 Open `http://localhost:5380` to complete first-run setup. The console is bound
 to the host loopback interface in this example. Configure Sable HTTPS or place
