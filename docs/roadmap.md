@@ -58,8 +58,11 @@ performance before expanding the administrative surface.
 - Cloudflare, Porkbun, Namecheap, GoDaddy, DigitalOcean, Hetzner, Route 53,
   OVHcloud, and RFC 2136 providers are implemented
 - HTTP-01 and external command providers remain future work
-- DHCP integration, applications/plugins, backup/restore, and expanded migration
-  tooling
+- UniFi DHCP integration is implemented: a console setup wizard maps UniFi
+  networks to zones and publishes reservations and connected clients as
+  integration-owned forward and reverse records
+- Applications/plugins, backup/restore, and expanded migration tooling remain
+  future work
 
 Technitium feature parity is tracked as observable behavior, not copied code.
 Compatibility fixtures will be clean-room tests built from public DNS standards

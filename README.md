@@ -39,6 +39,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - Revisioned Settings UI for cluster-scoped DNS runtime configuration with atomic persistence and hot application
 - Durable primary/replica membership, short-lived single-use enrollment, signed zone/policy/runtime/authorization snapshots, manual replica promotion, and real-time node sync telemetry
 - Live policy reload, cache purge, and policy status APIs
+- UniFi host synchronization with a guided setup wizard, per-network zone mapping, automatic forward and reverse zone creation, and integration-owned records that never disturb hand-authored ones
 - Managed ACME DNS-01 certificates with automatic renewal and nine built-in DNS providers
 - UI-generated/imported public certificate key pairs with protected node-local keys
 - Unit, integration, race, allocation, and microbenchmark coverage

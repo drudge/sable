@@ -239,6 +239,76 @@ DNSSEC private keys remain encrypted in the database-backed secret vault. Public
 
 GET /api/v1/zones returns the active database-backed catalog. TOML containing a zones table is rejected rather than silently maintaining two sources of truth.
 
+## Integrations: UniFi host synchronization
+
+Sable can publish the hosts a UniFi controller already knows about — fixed-IP
+reservations and connected clients — as authoritative A, AAAA, and PTR records.
+It replaces the shell scripts people otherwise run on a timer against a DNS
+server's HTTP API.
+
+Set it up from **Integrations → UniFi Host Sync** in the console. The wizard connects to
+the controller, lists the networks it reports, lets you map each one to a zone,
+and shows the exact records the first synchronization will write before anything
+is saved. What lands in `sable.toml` looks like this:
+
+```toml
+[unifi]
+enabled = true
+controller_url = "https://192.168.1.1"
+site = "default"
+interval = "2m"
+sources = ["reservations", "active"]
+tls_ca_file = ""
+tls_insecure = false
+
+[[unifi.networks]]
+id = "61f0c1a2b3c4d5e6f7a8b9c0"
+name = "IoT"
+zone = "clients.example.net"
+hostname_template = "{{host}}.{{network}}.{{zone}}"
+ttl = 300
+reverse = true
+enabled = true
+```
+
+Controller credentials never appear here. An API key, or a local account
+username and password, is encrypted in the node's secret vault the moment the
+wizard's first step succeeds.
+
+**Mapping is per network.** Each UniFi network is mapped to a zone by its
+controller identifier, which survives renames in UniFi. Several networks may
+publish into one zone, in which case every mapping into that zone must keep
+`{{network}}` in its template — otherwise the same hostname on two VLANs would
+overwrite itself on every sync, and Sable rejects the configuration rather than
+let that happen quietly.
+
+**Zones are created as needed.** A mapped forward zone that does not exist is
+created as a primary zone with the same apex SOA and NS records the console
+would write. When `reverse` is on, Sable derives the reverse zone from the
+network's own subnet — `192.168.30.0/24` becomes `30.168.192.in-addr.arpa` — and
+creates that too.
+
+**Records carry their owner.** Everything the synchronizer writes is marked with
+the source `unifi`. Reconciliation only ever adds, changes, or removes records
+carrying that marker, so records you add by hand in the same zone are never
+touched. Those synchronized records are read-only in the zone editor, because an
+edit there would be reverted by the next sync.
+
+`sources` chooses what gets published: `reservations` for configured fixed IPs,
+`active` for currently connected clients, or both. When both describe the same
+device, the reservation wins. Hostnames are reduced to a single DNS label —
+lowercased, with apostrophes dropped and everything else unusable replaced by
+hyphens — so "Nick's iPhone" becomes `nicks-iphone`. A device whose name
+survives that with nothing left produces no record, and the wizard's review step
+lists every such skip.
+
+UniFi consoles ship a self-signed certificate. Point `tls_ca_file` at its issuer
+to pin it, or set `tls_insecure` to accept it unverified on a trusted network.
+
+Synchronization runs only on a cluster's writable node. Replicas receive the
+records through normal zone replication instead of contacting the controller
+themselves.
+
 ## Blocking
 
 ```toml

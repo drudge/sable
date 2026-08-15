@@ -224,6 +224,19 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return dynamicUpdater.Update(updateContext, request)
 	})
 
+	unifiCredentials := newUniFiCredentialStore(secretVault)
+	unifiSync := newUniFiSyncer(
+		configurationManager,
+		zoneManager,
+		unifiCredentials,
+		func() bool {
+			state := clusterService.Snapshot()
+			return !state.Initialized || state.LocalRole != cluster.RoleReplica
+		},
+		logger,
+	)
+	go unifiSync.Run(zoneRefreshContext)
+
 	webServer, err = web.New(
 		logger,
 		handler,
@@ -249,6 +262,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetDNSSECController(dnssec)
 	webServer.SetClusterController(clusterService)
 	webServer.SetCertificateController(certificateManager)
+	webServer.SetUniFiController(unifiSync)
 	webServer.SetRuntimeLogs(runtimeLogs)
 	restartRequests := make(chan struct{}, 1)
 	webServer.SetRestartController(func() {
