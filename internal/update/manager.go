@@ -81,10 +81,15 @@ type Manager struct {
 
 // NewManager returns a manager that installs releases with the supplied
 // options. Restart and CheckOnly are managed per operation and are ignored.
+// PreRelease seeds the release channel the first check runs on.
 func NewManager(options Options) *Manager {
 	return &Manager{
 		options: options.withDefaults(),
-		status:  Status{Phase: PhaseIdle, CurrentVersion: version.Current().Release},
+		status: Status{
+			Phase:             PhaseIdle,
+			CurrentVersion:    version.Current().Release,
+			IncludePreRelease: options.PreRelease,
+		},
 	}
 }
 

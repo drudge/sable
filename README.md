@@ -135,6 +135,13 @@ reports the available release and says to install it with `sudo sable update`
 or by pulling a newer image. Loosening the unit would let a compromised DNS
 server rewrite binaries on the system `PATH`, so it stays as it is.
 
+The release channel is remembered. Ticking **Include pre-releases** writes
+`updates.pre_release` to the configuration, so a server tracking release
+candidates keeps finding them after a restart instead of failing its next
+check with "no published release was found". Writing it needs `updates.apply`;
+an operator who may only check still gets the channel they picked for that
+check.
+
 Two permissions govern the console controls:
 
 | Permission | Effect |

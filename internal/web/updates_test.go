@@ -263,3 +263,41 @@ func TestAboutPageExplainsAnInstallationItCannotApply(t *testing.T) {
 		t.Error("about page offers an installation it cannot apply")
 	}
 }
+
+func TestCheckForUpdatesRemembersThePreReleaseChoice(t *testing.T) {
+	t.Parallel()
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
+		configuration, configuration.zoneStore(), "sqlite", testQueryLog{}, testQueryLog{},
+		func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetUpdateController(&testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0-rc.1", LatestVersion: "0.7.0-rc.1",
+		IncludePreRelease: true, CheckedAt: time.Now(),
+	}})
+	if configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("pre-releases should be off by default")
+	}
+	if response := serveUpdateForm(server, "/ui/updates/check", url.Values{"pre_release": {"true"}}); response.Code != http.StatusOK {
+		t.Fatalf("check status = %d", response.Code)
+	}
+	if !configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("the pre-release choice was not written to the configuration")
+	}
+	// A restarted server seeds its manager from the stored configuration.
+	restarted := update.NewManager(update.Options{PreRelease: configuration.snapshot.Config.Updates.PreRelease})
+	if !restarted.Status().IncludePreRelease {
+		t.Fatal("a restarted server did not resume checking pre-releases")
+	}
+	if response := serveUpdateForm(server, "/ui/updates/check", nil); response.Code != http.StatusOK {
+		t.Fatalf("check status = %d", response.Code)
+	}
+	if configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("clearing the checkbox did not return the server to stable releases")
+	}
+}

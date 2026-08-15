@@ -149,6 +149,12 @@ data_dir = "data/cluster"
 node_name = ""
 advertise_url = ""
 
+[updates]
+# Include release candidates when looking for a newer Sable release. The
+# About page writes your choice here, so a server tracking release candidates
+# keeps finding them after a restart.
+pre_release = false
+
 [config]
 watch = true
 debounce = "250ms"
