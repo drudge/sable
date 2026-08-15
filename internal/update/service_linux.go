@@ -12,6 +12,16 @@ import (
 	"github.com/drudge/sable/internal/install"
 )
 
+// ServiceManaged reports whether an installed Sable service starts the server
+// again after it exits.
+func ServiceManaged() bool {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return false
+	}
+	_, err := os.Stat(install.ServiceUnitPath)
+	return err == nil
+}
+
 // restartService restarts the installed Sable service so that the replacement
 // executable takes effect. It reports whether the service was restarted and
 // whether a Sable service is installed at all.

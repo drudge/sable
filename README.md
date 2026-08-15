@@ -120,6 +120,20 @@ The previous executable is kept until the downloaded build has been run once,
 so a corrupt or unrunnable download leaves the installation untouched. Set
 `SABLE_GITHUB_TOKEN` if the unauthenticated GitHub API rate limit is a problem.
 
+The **About** page in the console runs the same update path. It checks for a
+newer release, installs it after a confirmation, and then offers a controlled
+restart once the executable has been replaced. Sable keeps serving the running
+build until that restart, and the console says whether a service manager will
+start the new build again. Two permissions govern it:
+
+| Permission | Effect |
+| --- | --- |
+| `updates.read` | See the installed version and check for a newer release |
+| `updates.apply` | Install a release and restart Sable to run it |
+
+`updates.read` belongs to the built-in DNS Administrator, Operator, and Auditor
+groups. Only Administrator can apply an update.
+
 For live development, use the pinned Air workflow:
 
 ```sh

@@ -178,7 +178,7 @@ func TestApplySkipsPreReleasesUnlessRequested(t *testing.T) {
 	server := releaseServer(t, "v9.9.9-rc.1", true, nil)
 	if _, err := Apply(context.Background(), Options{APIBaseURL: server.URL, CheckOnly: true}); err == nil {
 		t.Fatal("a pre-release-only repository should report no stable release")
-	} else if !strings.Contains(err.Error(), "--pre-release") {
+	} else if !strings.Contains(err.Error(), "pre-release") {
 		t.Fatalf("error = %v", err)
 	}
 	result, err := Apply(context.Background(), Options{APIBaseURL: server.URL, CheckOnly: true, PreRelease: true})

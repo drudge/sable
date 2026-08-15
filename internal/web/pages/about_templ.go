@@ -14,6 +14,43 @@ type AboutPageView struct {
 	BuiltAt      string
 	GoVersion    string
 	ScrapeConfig string
+	Update       UpdateView
+}
+
+// UpdateView describes what the console knows about published Sable releases
+// and what the signed-in operator is allowed to do about it.
+type UpdateView struct {
+	Phase          string
+	CurrentVersion string
+	LatestVersion  string
+	ReleaseURL     string
+	Progress       string
+	Error          string
+	CheckedAt      string
+	CSRFToken      string
+	// PreRelease reports that the resolved release is a pre-release, and
+	// IncludePreRelease that the operator asked for pre-release builds.
+	PreRelease        bool
+	IncludePreRelease bool
+	// Supported reports whether this Sable process can install releases.
+	Supported bool
+	// Checked reports that a release check has completed at least once.
+	Checked bool
+	// Busy reports that a check or installation is still running.
+	Busy bool
+	// Available reports that a newer release can be installed.
+	Available bool
+	// UpToDate reports that the last check found nothing newer.
+	UpToDate bool
+	// Installed reports that the executable was replaced and Sable is still
+	// serving the previous build until it restarts.
+	Installed bool
+	// ServiceManaged reports that a service manager starts Sable again after
+	// it exits for a restart.
+	ServiceManaged bool
+	CanCheck       bool
+	CanApply       bool
+	CanRestart     bool
 }
 
 func AboutPage(view AboutPageView) templ.Component {
@@ -81,7 +118,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 22, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 59, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -94,7 +131,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.DNSListeners)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 24, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 61, Col: 37}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -107,7 +144,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Stats.Uptime)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 26, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 63, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -152,68 +189,60 @@ func AboutContent(view AboutPageView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(view.Console.Version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 50, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 87, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</strong><span class=\"about-version-status\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = Icon("check-circle").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span>Installed</span></span></div><small>Go ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</strong></div><small>Go ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(view.GoVersion)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 51, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " · commit ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, " · commit ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(view.Commit)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 51, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " · built ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " · built ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(view.BuiltAt)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 51, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 88, Col: 84}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</small></div><a class=\"button outline compact\" href=\"https://github.com/drudge/sable/releases/latest\" target=\"_blank\" rel=\"noopener noreferrer\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</small></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("refresh").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = UpdatePanel(view.Update).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span>Check for updates</span></a></div></div></section><section class=\"card about-card\"><header><h2 class=\"about-card-title\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div></section><section class=\"card about-card\"><header><h2 class=\"about-card-title\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -221,20 +250,20 @@ func AboutContent(view AboutPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<span>Prometheus Metrics</span></h2></header><div class=\"about-card-content\"><p>Sable exposes lifetime query and runtime metrics in Prometheus text format. Create an API token in <a class=\"inline-link\" href=\"/administration?tab=tokens\">Administration</a> using a group with <code>metrics.read</code>, then add this scrape job to your Prometheus configuration:</p><div class=\"about-code-block\"><pre id=\"prometheus-scrape-config\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span>Prometheus Metrics</span></h2></header><div class=\"about-card-content\"><p>Sable exposes lifetime query and runtime metrics in Prometheus text format. Create an API token in <a class=\"inline-link\" href=\"/administration?tab=tokens\">Administration</a> using a group with <code>metrics.read</code>, then add this scrape job to your Prometheus configuration:</p><div class=\"about-code-block\"><pre id=\"prometheus-scrape-config\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(view.ScrapeConfig)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 63, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 100, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</pre><button class=\"about-copy-button\" type=\"button\" data-copy-target=\"prometheus-scrape-config\" aria-label=\"Copy to clipboard\" title=\"Copy to clipboard\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</pre><button class=\"about-copy-button\" type=\"button\" data-copy-target=\"prometheus-scrape-config\" aria-label=\"Copy to clipboard\" title=\"Copy to clipboard\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -242,17 +271,17 @@ func AboutContent(view AboutPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.Console.CanMetrics {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"about-metrics-preview\"><button class=\"button outline compact\" type=\"button\" hx-get=\"/metrics\" hx-target=\"#metrics-preview\" hx-swap=\"innerHTML\" hx-disabled-elt=\"this\">Preview metrics</button><pre id=\"metrics-preview\" hidden></pre></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"about-metrics-preview\"><button class=\"button outline compact\" type=\"button\" hx-get=\"/metrics\" hx-target=\"#metrics-preview\" hx-swap=\"innerHTML\" hx-disabled-elt=\"this\">Preview metrics</button><pre id=\"metrics-preview\" hidden></pre></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div></section><section class=\"card about-card\"><header><h2>Support</h2></header><div class=\"about-card-content\"><p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p><div class=\"about-links\"><a href=\"https://github.com/drudge/sable\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Sable on GitHub</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div></section><section class=\"card about-card\"><header><h2>Support</h2></header><div class=\"about-card-content\"><p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p><div class=\"about-links\"><a href=\"https://github.com/drudge/sable\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Sable on GitHub</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -260,7 +289,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</a> <a href=\"https://github.com/drudge/sable/issues/new\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Report an issue</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</a> <a href=\"https://github.com/drudge/sable/issues/new\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Report an issue</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -268,12 +297,405 @@ func AboutContent(view AboutPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</a></div></div></section><footer class=\"about-footer\"><a href=\"https://github.com/drudge/sable/blob/main/LICENSE\" target=\"_blank\" rel=\"noopener noreferrer\">MIT License</a></footer></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</a></div></div></section><footer class=\"about-footer\"><a href=\"https://github.com/drudge/sable/blob/main/LICENSE\" target=\"_blank\" rel=\"noopener noreferrer\">MIT License</a></footer></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		return nil
 	})
+}
+
+// UpdatePanel renders the release check, the installation, and the restart
+// that finishes it. The panel replaces itself while an operation runs so the
+// console reports progress without holding a request open for the download.
+func UpdatePanel(view UpdateView) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var11 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var11 == nil {
+			templ_7745c5c3_Var11 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		var templ_7745c5c3_Var12 = []any{"about-update", "about-update-" + updateVariant(view)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var12...)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div id=\"about-update\" class=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var13 string
+		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var12).String())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 1, Col: 0}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.Busy {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, " hx-get=\"/ui/updates\" hx-trigger=\"every 2s\" hx-target=\"this\" hx-swap=\"outerHTML\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if view.Installed && view.CanRestart {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, " data-sable-restart data-restart-url=\"/ui/updates/restart\" data-health-url=\"/api/v1/health\" data-continue-url=\"/about\" data-csrf-token=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var14 string
+			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.CSRFToken)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 145, Col: 35}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "\" data-restart-confirm=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var15 string
+			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateRestartConfirmation(view))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 146, Col: 57}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" data-restart-confirm-title=\"Restart Sable?\" data-restart-confirm-action=\"Restart Sable\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "><div class=\"about-update-summary\"><span class=\"about-update-icon\" aria-hidden=\"true\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Icon(updateIcon(view)).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.Installed && view.CanRestart {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "  ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("refresh").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</span><div class=\"about-update-copy\"><strong aria-live=\"polite\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var16 string
+		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(updateHeadline(view))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 161, Col: 53}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</strong> <small data-restart-status>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var17 string
+		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(updateDetail(view))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 163, Col: 25}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, " ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.Available && !view.Installed && view.ReleaseURL != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<a class=\"inline-link about-update-notes\" href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var18 templ.SafeURL
+			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(view.ReleaseURL))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 165, Col: 85}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Release notes</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("external-link").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</a>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</small></div></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		switch updateAction(view) {
+		case "restart":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<div class=\"about-update-actions\"><button class=\"button compact\" type=\"button\" data-sable-restart-button>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("power").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<span>Restart Sable</span></button></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		case "install":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/install\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button\" hx-confirm=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var19 string
+			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateInstallConfirmation(view))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 176, Col: 189}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\" data-confirm-title=\"Install this release?\" data-confirm-action=\"Download &amp; Install\" data-confirm-tone=\"neutral\"><input type=\"hidden\" name=\"pre_release\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var20 string
+			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.IncludePreRelease, "true", "false"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 177, Col: 100}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\"> <button class=\"button compact\" type=\"submit\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("download").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<span>Install v")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var21 string
+			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(view.LatestVersion)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 178, Col: 102}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</span></button></form>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		case "check":
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/check\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button\"><div class=\"about-update-split\"><button class=\"button outline compact\" type=\"submit\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("refresh").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var22 string
+			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Checked, "Check Again", "Check for Updates"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 183, Col: 139}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "</span></button> <details class=\"about-update-menu\"><summary class=\"button outline compact\" aria-label=\"Release channel options\" title=\"Release channel options\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Icon("chevron-down").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</summary><div><label class=\"about-update-channel\"><input type=\"checkbox\" name=\"pre_release\" value=\"true\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if view.IncludePreRelease {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "><span>Include pre-releases</span></label> <small>Release candidates as well as stable builds.</small></div></details></div></form>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// updateAction names the one control the panel offers. Showing a single
+// action keeps the row from filling with competing buttons.
+func updateAction(view UpdateView) string {
+	switch {
+	case !view.Supported || view.Busy:
+		return ""
+	case view.Installed:
+		return ifThen(view.CanRestart, "restart", "")
+	case view.Available && view.CanApply:
+		return "install"
+	case view.CanCheck:
+		return "check"
+	default:
+		return ""
+	}
+}
+
+// updateVariant names the state the panel is reporting so that the stylesheet
+// can tint it without repeating the state rules.
+func updateVariant(view UpdateView) string {
+	switch {
+	case view.Busy:
+		return "busy"
+	case view.Installed:
+		return "installed"
+	case view.Error != "":
+		return "failed"
+	case view.Available:
+		return "available"
+	case view.UpToDate:
+		return "current"
+	default:
+		return "idle"
+	}
+}
+
+func updateIcon(view UpdateView) string {
+	switch updateVariant(view) {
+	case "busy":
+		return "refresh"
+	case "installed":
+		return "power"
+	case "failed":
+		return "alert-triangle"
+	case "available":
+		return "download"
+	case "current":
+		return "check-circle"
+	default:
+		return "refresh"
+	}
+}
+
+func updateHeadline(view UpdateView) string {
+	switch {
+	case !view.Supported:
+		return "Update checks are unavailable"
+	case view.Phase == "checking":
+		return "Checking for a newer release…"
+	case view.Phase == "installing":
+		return "Installing Sable v" + view.LatestVersion + "…"
+	case view.Installed:
+		return "Sable v" + view.LatestVersion + " is installed"
+	case view.Error != "":
+		return "The update could not be completed"
+	case view.Available:
+		return "Sable v" + view.LatestVersion + " is available"
+	case view.UpToDate:
+		return "Sable is up to date"
+	default:
+		return "Check for updates"
+	}
+}
+
+func updateDetail(view UpdateView) string {
+	switch {
+	case !view.Supported:
+		return "Update this installation with sable update."
+	case view.Phase == "checking":
+		return "Asking GitHub for the newest release."
+	case view.Phase == "installing" && view.Progress != "":
+		return view.Progress
+	case view.Phase == "installing":
+		return "Downloading and verifying the release archive."
+	case view.Installed && view.ServiceManaged:
+		return "Still serving v" + view.CurrentVersion + ". The service manager starts the new build after a restart."
+	case view.Installed:
+		return "Still serving v" + view.CurrentVersion + ". Sable stays down after a restart unless a supervisor starts it."
+	case view.Error != "":
+		return view.Error
+	case view.Available:
+		return "Verified against the published checksums before it replaces the executable."
+	case view.UpToDate:
+		return "Checked " + view.CheckedAt + ifThen(view.IncludePreRelease, ", including pre-releases.", ".")
+	default:
+		return "Releases are published on GitHub for this platform."
+	}
+}
+
+func updateInstallConfirmation(view UpdateView) string {
+	return "Download Sable v" + view.LatestVersion + " and replace the installed executable? Sable keeps serving v" +
+		view.CurrentVersion + " until you restart it."
+}
+
+func updateRestartConfirmation(view UpdateView) string {
+	if view.ServiceManaged {
+		return "Restart Sable to run v" + view.LatestVersion + "? DNS and the console are unavailable for a few seconds while the service manager starts the new build."
+	}
+	return "Restart Sable to run v" + view.LatestVersion + "? Sable stops serving DNS and will only come back if a service manager or container restart policy starts it again."
 }
 
 var _ = templruntime.GeneratedTemplate

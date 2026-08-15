@@ -80,6 +80,7 @@ type Server struct {
 	cluster          clusterController
 	unifi            unifiController
 	certificates     certificateController
+	updates          updateController
 	administrator    administrator
 	restart          func()
 	restartRequested atomic.Bool
@@ -203,7 +204,11 @@ func New(
 	mux.HandleFunc("POST /ui/cluster/nodes/{node}/remove", server.removeClusterNode)
 	mux.HandleFunc("POST /ui/cluster/leave", server.leaveCluster)
 	mux.HandleFunc("POST /ui/cluster/delete", server.deleteCluster)
-	mux.HandleFunc("POST /ui/cluster/restart", server.restartClusterNode)
+	mux.HandleFunc("POST /ui/cluster/restart", server.restartServer)
+	mux.HandleFunc("GET /ui/updates", server.updatePanel)
+	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)
+	mux.HandleFunc("POST /ui/updates/install", server.installUpdate)
+	mux.HandleFunc("POST /ui/updates/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/cluster/status", server.clusterLiveStatus)
 	mux.HandleFunc("GET /administration", server.administrationPage)
 	mux.HandleFunc("GET /profile", server.profilePage)
@@ -458,6 +463,7 @@ func (server *Server) aboutPage(writer http.ResponseWriter, request *http.Reques
 		BuiltAt:      current.BuiltAt,
 		GoVersion:    current.Go,
 		ScrapeConfig: prometheusScrapeConfig(request),
+		Update:       server.updateView(request, server.updateStatus()),
 	}
 	if err := pages.AboutPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render about page", "error", err)

@@ -2,7 +2,9 @@ package web
 
 import "net/http"
 
-func (server *Server) restartClusterNode(writer http.ResponseWriter, request *http.Request) {
+// restartServer performs the controlled restart the console offers after a
+// cluster change or an installed update.
+func (server *Server) restartServer(writer http.ResponseWriter, request *http.Request) {
 	if server.restart == nil {
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{
 			"error": "managed restart is unavailable; restart Sable with its service manager",

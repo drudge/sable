@@ -22,6 +22,7 @@ import (
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/trustanchor"
+	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web"
 	"github.com/drudge/sable/internal/zone"
@@ -264,6 +265,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetCertificateController(certificateManager)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetRuntimeLogs(runtimeLogs)
+	webServer.SetUpdateController(update.NewManager(update.Options{}))
 	restartRequests := make(chan struct{}, 1)
 	webServer.SetRestartController(func() {
 		select {
