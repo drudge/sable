@@ -1940,6 +1940,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-update-menu > summary.button .nav-icon { width: .875rem; height: .875rem; flex: none; transition: transform 120ms ease; }
 .about-update-menu[open] > summary.button { background: var(--accent); }
 .about-update-menu[open] > summary.button .nav-icon { transform: rotate(180deg); }
+/* .card clips to its rounded corners, which cuts the menu off at the card
+   edge. Lift the clip only while the menu is open. */
+.about-card:has(.about-update-menu[open]) { overflow: visible; }
 .about-update-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; max-width: 15rem; gap: .3rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground)); padding: .6rem .7rem; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .28), 0 .2rem .5rem rgb(0 0 0 / .18); }
 .about-update-menu > div small { color: var(--muted-foreground); font-size: .625rem; line-height: 1.4; }
 .about-update-channel { display: flex; align-items: center; gap: .45rem; font-size: .75rem; white-space: nowrap; cursor: pointer; }
