@@ -102,8 +102,8 @@ func zoneHref(name string) templ.SafeURL {
 	return templ.SafeURL("/zones/" + url.PathEscape(name))
 }
 
-func zoneRecordDialogTitle(record ZoneRecordView) string {
-	if record.SourceLabel != "" {
+func zoneRecordDialogTitle(zone ZoneView, record ZoneRecordView) string {
+	if zoneRecordReadOnly(zone, record) {
 		return "DNS Record"
 	}
 	return "Edit DNS Record"
@@ -113,14 +113,36 @@ func zoneRecordDialogSubtitle(zone ZoneView, record ZoneRecordView) string {
 	if record.SourceLabel != "" {
 		return "Published into " + zone.Name + " by " + record.SourceLabel
 	}
+	if zoneRecordReadOnly(zone, record) {
+		return "Maintained by Sable for " + zone.Name
+	}
 	return "Update the DNS record for " + zone.Name
 }
 
-func zoneRecordOpenLabel(record ZoneRecordView) string {
-	if record.SourceLabel != "" {
+func zoneRecordOpenLabel(zone ZoneView, record ZoneRecordView) string {
+	if zoneRecordReadOnly(zone, record) {
 		return "View " + record.Type + " record"
 	}
 	return "Edit " + record.Type + " record"
+}
+
+// zoneRecordReadOnly reports whether a record's dialog opens for inspection
+// only, either because a synchronizer owns the record or because no record in
+// this zone is authored by hand.
+func zoneRecordReadOnly(zone ZoneView, record ZoneRecordView) bool {
+	return record.SourceLabel != "" || !zoneCanEditRecords(zone)
+}
+
+// zoneRecordReadOnlyNote names whoever maintains a record the operator cannot
+// change here, and points at the place where they can change it.
+func zoneRecordReadOnlyNote(zone ZoneView, record ZoneRecordView) string {
+	if zone.Type == "alias" {
+		if record.SourceLabel == "" {
+			return "Sable maintains this record for the alias zone. Its serial advances whenever " + zone.AliasZone + " changes."
+		}
+		return "Mirrored from " + zone.AliasZone + ". Change it there and every alias of that zone follows."
+	}
+	return "Published by " + record.SourceLabel + " synchronization. Change it in " + record.SourceLabel + ", or under Integrations."
 }
 
 func zoneRecordEditPath(zone ZoneView, record ZoneRecordView) string {
@@ -147,6 +169,12 @@ func zoneTypeClass(value string) string {
 }
 
 func zoneCanEditRecords(zone ZoneView) bool { return zone.Type == "" || zone.Type == "primary" || zone.Type == "forwarder" }
+
+// zoneCanOpenRecords reports whether a record dialog is worth rendering. An
+// alias zone's records are maintained by Sable rather than authored by hand,
+// but they open read-only for inspection the same way integration-owned records
+// in an editable zone do.
+func zoneCanOpenRecords(zone ZoneView) bool { return zoneCanEditRecords(zone) || zone.Type == "alias" }
 func zoneCanResync(zone ZoneView) bool { return zone.Type == "secondary" || zone.Type == "stub" }
 
 // Primary zones manage signing here; forwarder and stub zones manage upstream
@@ -164,6 +192,12 @@ func zoneRecordOwner(zone ZoneView, record ZoneRecordView) string {
 		return strings.TrimSuffix(name, ".")
 	}
 	return name + "." + zone.Name
+}
+
+// zoneRecordSourceClass tints a record's source badge. An alias record carries
+// the same violet as the Alias zone badge so the two read as one idea.
+func zoneRecordSourceClass(label string) string {
+	return strings.ToLower(label)
 }
 
 // zoneRecordSourceTitle explains where a record came from. An alias zone
@@ -451,18 +485,18 @@ templ ZoneDetailView(zone ZoneView) {
 					<span class="record-owner-cell">
 						@ZoneCopyableText(zoneElementID("owner", index), zoneRecordOwner(zone, record), "record-owner-copy")
 						if record.SourceLabel != "" {
-							<span class="record-source-badge" title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
+							<span class={ "record-source-badge " + zoneRecordSourceClass(record.SourceLabel) } title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
 						}
 					</span>
 					@ZoneCopyableText(zoneElementID("value", index), record.Value, "record-value-copy")
 					<span class="record-ttl">{ fmt.Sprint(record.TTL) }s</span>
-					if zoneCanEditRecords(zone) && zone.CanRecords && !record.Managed {
-						<button class="record-open-button" type="button" data-dialog-open={ zoneElementID("record", index) } data-dialog-url={ zoneRecordEditPath(zone, record) } aria-label={ zoneRecordOpenLabel(record) }>@Icon("chevron-right")</button>
+					if zoneCanOpenRecords(zone) && zone.CanRecords && !record.Managed {
+						<button class="record-open-button" type="button" data-dialog-open={ zoneElementID("record", index) } data-dialog-url={ zoneRecordEditPath(zone, record) } aria-label={ zoneRecordOpenLabel(zone, record) }>@Icon("chevron-right")</button>
 					} else {
 						<span class="record-open-placeholder"></span>
 					}
 				</div>
-				if zoneCanEditRecords(zone) && zone.CanRecords && !record.Managed {
+				if zoneCanOpenRecords(zone) && zone.CanRecords && !record.Managed {
 					@EditZoneRecordDialog(zone, record, zoneElementID("record", index))
 				}
 			}
@@ -612,10 +646,10 @@ templ RecordTypeOptions(includeAll bool) {
 
 templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 	<dialog class="custom-server-dialog isotope-record-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-url={ zoneRecordEditPath(zone, record) } data-dialog-base-url={ "/zones/" + url.PathEscape(zone.Name) }>
-		<header class="dialog-header isotope-record-dialog-header"><h2 id={ id + "-title" }>{ zoneRecordDialogTitle(record) }</h2><p>{ zoneRecordDialogSubtitle(zone, record) }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+		<header class="dialog-header isotope-record-dialog-header"><h2 id={ id + "-title" }>{ zoneRecordDialogTitle(zone, record) }</h2><p>{ zoneRecordDialogSubtitle(zone, record) }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
 		<form class="isotope-record-form" hx-post="/ui/zones/records/update" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/><input type="hidden" name="name" value={ record.Name }/><input type="hidden" name="type" value={ record.Type }/><input type="hidden" name="value" value={ record.Value }/><input type="hidden" name="ttl" value={ fmt.Sprint(record.TTL) }/>
-			<fieldset class="isotope-record-fieldset" disabled?={ record.SourceLabel != "" }>
+			<fieldset class="isotope-record-fieldset" disabled?={ zoneRecordReadOnly(zone, record) }>
 			<div class="isotope-record-dialog-body">
 				<div class="edit-record-type"><span class="record-type-badge">{ record.Type }</span><small>{ zoneRecordDescription(record.Type) }</small><label class="record-enabled"><span class="switch">
 					if record.Type == "SOA" {
@@ -629,9 +663,9 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 				@RecordAdvancedOptions("new_", record.TTL, record.ExpiryTTL, record.Comments, record.Type == "NS")
 			</div>
 			</fieldset>
-			if record.SourceLabel != "" {
+			if zoneRecordReadOnly(zone, record) {
 				<footer class="dialog-footer edit-record-footer record-readonly-footer">
-					<span class="record-readonly-note">@Icon("info")<span>Published by { record.SourceLabel } synchronization. Change it in { record.SourceLabel }, or under Integrations.</span></span>
+					<span class="record-readonly-note">@Icon("info")<span>{ zoneRecordReadOnlyNote(zone, record) }</span></span>
 					<button class="button" type="button" data-dialog-close>Close</button>
 				</footer>
 			} else {

@@ -1916,12 +1916,36 @@ func TestZoneEditorCreatesAliasZonesAndKeepsTheirRecordsReadOnly(t *testing.T) {
 			t.Errorf("zones UI does not contain %q", expected)
 		}
 	}
+	// The zone manager's prepare hook mirrors the source in the real server. The
+	// test catalog has no hook, so run the same pass here to get the records the
+	// detail page has to render.
+	if err := zonemodel.MaterializeAliases(&configuration.zoneSnapshot.Zones, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	detail := serveRequest(server, http.MethodGet, "/zones/example.lan")
 	if !strings.Contains(detail.Body.String(), "mirrored from") || strings.Contains(detail.Body.String(), ">Add Record<") {
 		t.Fatalf("alias detail page = %s", detail.Body.String())
 	}
 	if strings.Contains(detail.Body.String(), ">Resync<") {
 		t.Fatal("alias detail page offers a resync action it cannot perform")
+	}
+	// Mirrored records still open, read-only, the same way integration-owned
+	// records in an editable zone do.
+	for _, expected := range []string{
+		`aria-label="View NS record"`, "record-open-button", "record-readonly-footer",
+		"Mirrored from example.test.", "Sable maintains this record for the alias zone.",
+		// The source badge carries the zone type's own class so it is tinted to
+		// match the Alias zone badge rather than the generic integration blue.
+		`class="record-source-badge alias"`,
+	} {
+		if !strings.Contains(detail.Body.String(), expected) {
+			t.Errorf("alias record dialog does not contain %q", expected)
+		}
+	}
+	for _, forbidden := range []string{">Update Record<", ">Delete Record<", `aria-label="Edit NS record"`} {
+		if strings.Contains(detail.Body.String(), forbidden) {
+			t.Errorf("alias record dialog offers %q", forbidden)
+		}
 	}
 }
 
