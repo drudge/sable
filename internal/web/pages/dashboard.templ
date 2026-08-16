@@ -241,7 +241,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 							if view.CanSettings {
 								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
 							}
-							@NavItem("DNS Client", "/dns-client", "tool", activePage == "dns-client", false)
+							@NavItem("DNS Client", "/dns-client", "terminal", activePage == "dns-client", false)
 							if view.CanLogs {
 								@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
 							}
@@ -251,7 +251,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 							if view.CanSettings {
 								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
 							}
-							@NavItem("DHCP", "#", "server", false, true)
 							if view.CanAdministration {
 								@NavItem("Administration", "/administration", "users", activePage == "administration", false)
 							}
@@ -761,7 +760,7 @@ templ Icon(kind string) {
 			case "shield-off": <path d="M4.7 4.7 12 2l8 3v8c0 2.1-.6 3.8-1.6 5.2M9.1 20.8C6 19.2 4 16.8 4 13V5l.5-.2M2 2l20 20"/>
 			case "apps": <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
 			case "plug": <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>
-			case "tool": <path d="M10 15h4M12 12v6M18 6V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v2"/><rect width="20" height="14" x="2" y="6" rx="2"/>
+			case "terminal": <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m7 10 2.5 2L7 14M12.5 14h4"/>
 			case "logs": <path d="M4 4h12v16H4zM8 8h4M8 12h4M8 16h4"/><path d="M16 8h4v12h-4"/>
 			case "settings": <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/>
 			case "settings-2": <path d="M20 7h-9M14 17H5"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/>
