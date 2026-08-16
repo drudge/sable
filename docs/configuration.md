@@ -393,6 +393,17 @@ controlled restart because they define the lifetime of the asynchronous worker.
 When the queue is saturated, Sable drops telemetry and increments an exposed
 counter instead of blocking DNS requests.
 
+## Dashboard statistics
+
+Query counters are written to the configured database as one bucket per minute,
+so the dashboard chart keeps its hour, day, week, month, and year ranges across
+restarts, and the stat cards keep counting instead of returning to zero. Buckets
+older than 400 days are pruned hourly; lifetime totals are stored separately and
+survive pruning. Downtime is drawn as a gap rather than being smoothed over.
+
+There is nothing to configure. The `sable_*` Prometheus counters continue to
+report this process only, which is what scrapers expect from a counter.
+
 ## Reload controls
 
 ```toml

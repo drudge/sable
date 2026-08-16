@@ -76,9 +76,10 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 	updateStatus := server.blockLists.Status()
 	return pages.BlockingPageView{
 		Console: console, Enabled: snapshot.Config.Blocking.Enabled, PausedUntil: pausedUntil,
-		CompiledDomains: stats.BlockedDomains, BlockedQueries: server.history.blockedSince(time.Hour, time.Now(), stats),
-		Domains:        append([]string(nil), snapshot.Config.Blocking.Domains...),
-		AllowedDomains: append([]string(nil), snapshot.Config.Blocking.AllowedDomains...), Lists: lists,
+		CompiledDomains: stats.BlockedDomains,
+		BlockedQueries:  server.history.blockedSince(request.Context(), time.Hour, time.Now(), stats),
+		Domains:         append([]string(nil), snapshot.Config.Blocking.Domains...),
+		AllowedDomains:  append([]string(nil), snapshot.Config.Blocking.AllowedDomains...), Lists: lists,
 		RemoteListCount: len(remoteBlockSources(snapshot.Config.Blocking)),
 		UpdateHours:     max(1, int(snapshot.Config.Blocking.UpdateInterval.Duration/time.Hour)),
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,

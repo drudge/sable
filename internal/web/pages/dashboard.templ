@@ -73,6 +73,8 @@ type QueryChartView struct {
 	StartLabel  string
 	EndLabel    string
 	HasActivity bool
+	Live        bool
+	Historical  bool
 	Maximum     uint64
 	CustomStart string
 	CustomEnd   string
@@ -617,7 +619,7 @@ templ QueryChart(view QueryChartView) {
 			if view.ActiveRange == "custom" {
 				<div class="chart-live">Custom range</div>
 			} else {
-				<div class="chart-live"><span></span>Live</div>
+				<div class={ ifThen(view.Live, "chart-live active", "chart-live") }><span></span>Live</div>
 			}
 			<div class="range-tabs" role="group" aria-label="Query statistics time range">
 				@RangeButton("Hour", "hour", view.ActiveRange)
@@ -689,7 +691,7 @@ templ QueryChart(view QueryChartView) {
 				}
 			</div>
 			if !view.HasActivity {
-				<div class="chart-empty">Waiting for query samples</div>
+				<div class="chart-empty">{ ifThen(view.Historical, "No queries in this range", "Waiting for query samples") }</div>
 			}
 			<div class="chart-axis"><span>{ view.StartLabel }</span><span>{ view.EndLabel }</span></div>
 		</div>

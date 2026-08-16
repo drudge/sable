@@ -111,6 +111,12 @@ func (server *Server) SetRestartController(restart func()) {
 	server.restart = restart
 }
 
+// SetStatsStore persists query statistics so the dashboard ranges keep their
+// history across restarts. Without it the console only charts this process.
+func (server *Server) SetStatsStore(ctx context.Context, statistics statsStore) error {
+	return server.history.attach(ctx, statistics)
+}
+
 type authenticator interface {
 	SetupRequired(context.Context) (bool, error)
 	Setup(context.Context, string, string, string, string) (auth.Credentials, error)
@@ -155,7 +161,7 @@ func New(
 		queryLog: queryLog, queries: queries, reload: reload,
 		auth: authentication, preAuthTokens: newPreAuthTokenStore(),
 		crossOrigin: http.NewCrossOriginProtection(),
-		history:     newStatsHistory(), historyStop: make(chan struct{}),
+		history:     newStatsHistory(logger), historyStop: make(chan struct{}),
 		securityEnabled: securityEnabled, secureCookies: secureCookies,
 		instanceID: strconv.FormatInt(time.Now().UnixNano(), 36),
 	}
@@ -386,7 +392,15 @@ func (server *Server) ReplaceCertificate(certificateFile, privateKeyFile string)
 
 func (server *Server) Close(ctx context.Context) error {
 	server.historyStopOnce.Do(func() { close(server.historyStop) })
-	return server.httpServer.Shutdown(ctx)
+	shutdownError := server.httpServer.Shutdown(ctx)
+	// The collector also flushes on its way out, but Close can win the race, so
+	// persist the trailing counters here too. A flush clears what it wrote, so
+	// whichever call runs second only writes what the first one missed.
+	server.history.record(time.Now(), server.stats.Stats())
+	if err := server.history.flush(ctx); err != nil {
+		server.logger.Warn("persist query statistics", "error", err)
+	}
+	return shutdownError
 }
 
 func (server *Server) dashboard(writer http.ResponseWriter, request *http.Request) {
@@ -487,14 +501,14 @@ func prometheusScrapeConfig(request *http.Request) string {
 
 func (server *Server) cachePage(writer http.ResponseWriter, request *http.Request) {
 	view := server.consoleView(request)
-	if err := pages.CachePage(server.cacheView(view, "")).Render(request.Context(), writer); err != nil {
+	if err := pages.CachePage(server.cacheView(request.Context(), view, "")).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render DNS cache", "error", err)
 	}
 }
 
 func (server *Server) cacheStatus(writer http.ResponseWriter, request *http.Request) {
 	view := server.consoleView(request)
-	if err := pages.CacheContent(server.cacheView(view, "")).Render(request.Context(), writer); err != nil {
+	if err := pages.CacheContent(server.cacheView(request.Context(), view, "")).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render DNS cache status", "error", err)
 	}
 }
@@ -503,18 +517,18 @@ func (server *Server) flushCache(writer http.ResponseWriter, request *http.Reque
 	removed := server.stats.PurgeCache()
 	view := server.consoleView(request)
 	message := fmt.Sprintf("Cleared %d cached DNS records", removed)
-	if err := pages.CacheContent(server.cacheView(view, message)).Render(request.Context(), writer); err != nil {
+	if err := pages.CacheContent(server.cacheView(request.Context(), view, message)).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render cleared DNS cache", "error", err)
 	}
 }
 
-func (server *Server) cacheView(console pages.DashboardView, message string) pages.CachePageView {
+func (server *Server) cacheView(ctx context.Context, console pages.DashboardView, message string) pages.CachePageView {
 	stats := server.stats.Stats()
 	domains := cachedDomainViews(server.stats.CachedResponses())
 	return pages.CachePageView{
 		Console:      console,
 		Entries:      stats.CacheEntries,
-		HitsLastHour: server.history.cacheHitsSince(time.Hour, time.Now(), stats),
+		HitsLastHour: server.history.cacheHitsSince(ctx, time.Hour, time.Now(), stats),
 		Domains:      domains,
 		Message:      message,
 	}
@@ -572,8 +586,8 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		QueryLogStatus:    queryLogStatus(snapshot.Config.QueryLog.Enabled, server.queryLog.Stats()),
 		DNSSECStatus:      dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
 		ConfigRevision:    snapshot.Revision,
-		Stats:             statsView(dnsStats),
-		Chart:             server.history.view("hour", time.Now(), dnsStats, display),
+		Stats:             statsView(server.history.totals(time.Now(), dnsStats)),
+		Chart:             server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
@@ -640,7 +654,7 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
-	if err := pages.Stats(statsView(server.stats.Stats())).Render(request.Context(), writer); err != nil {
+	if err := pages.Stats(statsView(server.history.totals(time.Now(), server.stats.Stats()))).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render runtime statistics", "error", err)
 	}
 }
@@ -659,7 +673,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			http.Error(writer, "custom range must contain valid start and end times", http.StatusBadRequest)
 			return
 		}
-		view := server.history.customView(start, end, server.stats.Stats(), display)
+		view := server.history.customView(request.Context(), start, end, server.stats.Stats(), display)
 		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 			server.logger.Error("render custom query statistics", "error", err)
 		}
@@ -669,7 +683,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		http.Error(writer, "range must be hour, day, week, month, or year", http.StatusBadRequest)
 		return
 	}
-	view := server.history.view(rangeName, time.Now(), server.stats.Stats(), display)
+	view := server.history.view(request.Context(), rangeName, time.Now(), server.stats.Stats(), display)
 	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render query statistics", "error", err)
 	}
@@ -836,7 +850,7 @@ func (server *Server) health(writer http.ResponseWriter, _ *http.Request) {
 		InstanceID: server.instanceID,
 		Version:    version.Current(),
 		Revision:   snapshot.Revision,
-		Stats:      server.stats.Stats(),
+		Stats:      server.history.totals(time.Now(), server.stats.Stats()),
 		QueryLog:   server.queryLog.Stats(),
 	}
 	writeJSON(writer, http.StatusOK, payload)
