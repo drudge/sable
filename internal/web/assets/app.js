@@ -401,6 +401,108 @@
 	  syncValues();
 	};
 
+	const setupQueryChartHover = (plot) => {
+	  if (!plot || plot.dataset.chartHoverReady === "true") return;
+	  plot.dataset.chartHoverReady = "true";
+
+	  const layer = plot.querySelector("[data-chart-hover-layer]");
+	  const tooltip = plot.querySelector("[data-chart-tooltip]");
+	  const svg = plot.querySelector("svg");
+	  if (!layer || !tooltip || !svg) return;
+	  let data;
+	  try {
+		data = JSON.parse(plot.dataset.chartPoints || "null");
+	  } catch (_) {
+		return;
+	  }
+	  if (!data?.x?.length || !data.series?.length) return;
+	  const box = data.box;
+
+	  const series = data.series.map((entry) => {
+		const line = svg.querySelector(`.chart-series.${entry.class}`);
+		return {...entry, color: line ? getComputedStyle(line).stroke : "currentColor"};
+	  });
+
+	  const crosshair = document.createElement("div");
+	  crosshair.className = "chart-crosshair";
+	  layer.append(crosshair);
+	  const markers = series.map((entry) => {
+		const marker = document.createElement("div");
+		marker.className = "chart-marker";
+		marker.style.background = entry.color;
+		layer.append(marker);
+		return marker;
+	  });
+
+	  const time = document.createElement("div");
+	  time.className = "chart-tooltip-time";
+	  tooltip.append(time);
+	  const amounts = series.map((entry) => {
+		const row = document.createElement("div");
+		row.className = "chart-tooltip-row";
+		const swatch = document.createElement("i");
+		swatch.style.background = entry.color;
+		const name = document.createElement("span");
+		name.textContent = entry.label;
+		const amount = document.createElement("b");
+		row.append(swatch, name, amount);
+		tooltip.append(row);
+		return amount;
+	  });
+
+	  const nearestIndex = (clientX) => {
+		const rect = svg.getBoundingClientRect();
+		if (!rect.width) return -1;
+		const x = ((clientX - rect.left) / rect.width) * box.width;
+		let closest = 0;
+		for (let index = 1; index < data.x.length; index += 1) {
+		  if (Math.abs(data.x[index] - x) < Math.abs(data.x[closest] - x)) closest = index;
+		}
+		return closest;
+	  };
+
+	  const show = (index, clientY) => {
+		const rect = svg.getBoundingClientRect();
+		const ratio = data.x[index] / box.width;
+		crosshair.style.left = `${ratio * 100}%`;
+		series.forEach((entry, position) => {
+		  const value = entry.values[index] || 0;
+		  const y = box.bottom - (data.max ? value / data.max : 0) * (box.bottom - box.top);
+		  markers[position].style.left = `${ratio * 100}%`;
+		  markers[position].style.top = `${(y / box.height) * 100}%`;
+		  amounts[position].textContent = value.toLocaleString();
+		});
+		time.textContent = data.times[index] || "";
+		layer.hidden = false;
+		tooltip.hidden = false;
+		const left = ratio * rect.width;
+		const width = tooltip.offsetWidth;
+		const flipped = left + 14 + width > rect.width ? left - 14 - width : left + 14;
+		tooltip.style.left = `${Math.max(0, Math.min(flipped, rect.width - width))}px`;
+		const top = (clientY ?? rect.top + rect.height / 2) - rect.top - tooltip.offsetHeight / 2;
+		tooltip.style.top = `${Math.max(0, Math.min(top, rect.height - tooltip.offsetHeight))}px`;
+	  };
+
+	  const hide = () => {
+		layer.hidden = true;
+		tooltip.hidden = true;
+		delete plot.dataset.chartHovering;
+	  };
+
+	  const track = (event) => {
+		const index = nearestIndex(event.clientX);
+		if (index < 0) return;
+		// Hold off the live refresh so the swap cannot yank the tooltip away.
+		plot.dataset.chartHovering = "true";
+		show(index, event.clientY);
+	  };
+
+	  plot.addEventListener("pointerenter", track);
+	  plot.addEventListener("pointermove", track);
+	  plot.addEventListener("pointerleave", hide);
+	  plot.addEventListener("pointercancel", hide);
+	};
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
@@ -1030,6 +1132,8 @@
 	  setupReplicaReadOnly(root);
 	  if (root.matches?.("[data-chart-range-popover]")) setupChartRangePicker(root);
 	  root.querySelectorAll?.("[data-chart-range-popover]").forEach(setupChartRangePicker);
+	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
+	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
 	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);
@@ -1426,6 +1530,9 @@
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
 	  if (source?.id === "query-statistics" && source.querySelector("[data-chart-range-popover]:not([hidden])")) {
+		event.preventDefault();
+	  }
+	  if (source?.id === "query-statistics" && source.querySelector('[data-chart-plot][data-chart-hovering="true"]')) {
 		event.preventDefault();
 	  }
 	  if (source?.id === "cluster-live-status" && document.querySelector("dialog.confirmation-dialog[open]")) {

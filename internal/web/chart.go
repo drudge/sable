@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -17,6 +18,55 @@ const (
 	maxChartPoints      = 160
 )
 
+// Plot geometry inside the chart's 1200x320 viewBox. The hover layer receives
+// the same numbers so the crosshair lands on the drawn series.
+const (
+	chartLeft   = 58.0
+	chartRight  = 1190.0
+	chartTop    = 24.0
+	chartBottom = 296.0
+	chartWidth  = 1200.0
+	chartHeight = 320.0
+)
+
+var chartSeriesDefinitions = []struct {
+	class string
+	label string
+	value func(chartPoint) uint64
+}{
+	{"total", "total", func(point chartPoint) uint64 { return point.total }},
+	{"success", "noError", func(point chartPoint) uint64 { return point.successful }},
+	{"server-failure", "serverFailure", func(point chartPoint) uint64 { return point.serverFailure }},
+	{"nx-domain", "nxDomain", func(point chartPoint) uint64 { return point.nxDomain }},
+	{"refused", "refused", func(point chartPoint) uint64 { return point.refused }},
+	{"recursive", "recursive", func(point chartPoint) uint64 { return point.recursive }},
+	{"cache", "cached", func(point chartPoint) uint64 { return point.cacheHits }},
+	{"blocked", "blocked", func(point chartPoint) uint64 { return point.blocked }},
+}
+
+type chartSeriesPayload struct {
+	Class  string   `json:"class"`
+	Label  string   `json:"label"`
+	Values []uint64 `json:"values"`
+}
+
+type chartHoverPayload struct {
+	Maximum uint64               `json:"max"`
+	Box     chartBoxPayload      `json:"box"`
+	X       []float64            `json:"x"`
+	Times   []string             `json:"times"`
+	Series  []chartSeriesPayload `json:"series"`
+}
+
+type chartBoxPayload struct {
+	Left   float64 `json:"left"`
+	Right  float64 `json:"right"`
+	Top    float64 `json:"top"`
+	Bottom float64 `json:"bottom"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
 type statsSample struct {
 	at    time.Time
 	stats dnsserver.Stats
@@ -28,6 +78,7 @@ type statsHistory struct {
 }
 
 type chartPoint struct {
+	at            time.Time
 	total         uint64
 	successful    uint64
 	serverFailure uint64
@@ -126,6 +177,7 @@ func buildChartView(rangeName string, start, end time.Time, selected []statsSamp
 	view.Recursive = chartCoordinates(points, maximum, func(point chartPoint) uint64 { return point.recursive })
 	view.Blocked = chartCoordinates(points, maximum, func(point chartPoint) uint64 { return point.blocked })
 	view.CacheHits = chartCoordinates(points, maximum, func(point chartPoint) uint64 { return point.cacheHits })
+	view.HoverData = chartHoverData(points, maximum, chartTooltipFormat(end.Sub(start), display), display)
 	return view
 }
 
@@ -201,12 +253,28 @@ func chartTimeFormat(duration time.Duration, display pages.TimeDisplay) string {
 	return "15:04:05"
 }
 
+// chartTooltipFormat keeps the hovered timestamp unambiguous. Axis labels can
+// drop the clock on long ranges; a tooltip pinned to one sample cannot.
+func chartTooltipFormat(duration time.Duration, display pages.TimeDisplay) string {
+	if display.TwentyFourHour() {
+		if duration > 24*time.Hour {
+			return "Jan 2, 15:04"
+		}
+		return "15:04:05"
+	}
+	if duration > 24*time.Hour {
+		return "Jan 2, 3:04 PM"
+	}
+	return "3:04:05 PM"
+}
+
 func chartDeltas(samples []statsSample) []chartPoint {
 	points := make([]chartPoint, 0, len(samples)-1)
 	for index := 1; index < len(samples); index++ {
 		previous, current := samples[index-1].stats, samples[index].stats
 		total := counterDelta(current.Queries, previous.Queries)
 		points = append(points, chartPoint{
+			at:            samples[index].at,
 			total:         total,
 			successful:    counterDelta(current.NoError, previous.NoError),
 			serverFailure: counterDelta(current.ServerFailures, previous.ServerFailures),
@@ -246,6 +314,7 @@ func compactChartPoints(points []chartPoint, maximum int) []chartPoint {
 			point.blocked += sample.blocked
 			point.cacheHits += sample.cacheHits
 		}
+		point.at = points[end-1].at
 		compacted = append(compacted, point)
 	}
 	return compacted
@@ -260,12 +329,58 @@ func chartMaximum(points []chartPoint) uint64 {
 }
 
 func chartCoordinates(points []chartPoint, maximum uint64, value func(chartPoint) uint64) string {
-	const left, right, top, bottom = 58.0, 1190.0, 24.0, 296.0
+	positions := chartXPositions(len(points))
 	coordinates := make([]string, 0, len(points))
 	for index, point := range points {
-		x := left + (right-left)/float64(max(len(points)-1, 1))*float64(index)
-		y := bottom - (float64(value(point))/float64(maximum))*(bottom-top)
-		coordinates = append(coordinates, fmt.Sprintf("%.1f,%.1f", x, y))
+		y := chartBottom - (float64(value(point))/float64(maximum))*(chartBottom-chartTop)
+		coordinates = append(coordinates, fmt.Sprintf("%.1f,%.1f", positions[index], y))
 	}
 	return strings.Join(coordinates, " ")
+}
+
+func chartXPositions(count int) []float64 {
+	positions := make([]float64, 0, count)
+	step := (chartRight - chartLeft) / float64(max(count-1, 1))
+	for index := range count {
+		positions = append(positions, math.Round((chartLeft+step*float64(index))*10)/10)
+	}
+	return positions
+}
+
+// chartHoverData describes every plotted point so the browser can draw a
+// crosshair and a tooltip without asking the server again.
+func chartHoverData(points []chartPoint, maximum uint64, format string, display pages.TimeDisplay) string {
+	payload := chartHoverPayload{
+		Maximum: maximum,
+		Box: chartBoxPayload{
+			Left:   chartLeft,
+			Right:  chartRight,
+			Top:    chartTop,
+			Bottom: chartBottom,
+			Width:  chartWidth,
+			Height: chartHeight,
+		},
+		X:      chartXPositions(len(points)),
+		Times:  make([]string, 0, len(points)),
+		Series: make([]chartSeriesPayload, 0, len(chartSeriesDefinitions)),
+	}
+	for _, point := range points {
+		payload.Times = append(payload.Times, display.In(point.at).Format(format))
+	}
+	for _, definition := range chartSeriesDefinitions {
+		values := make([]uint64, 0, len(points))
+		for _, point := range points {
+			values = append(values, definition.value(point))
+		}
+		payload.Series = append(payload.Series, chartSeriesPayload{
+			Class:  definition.class,
+			Label:  definition.label,
+			Values: values,
+		})
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }

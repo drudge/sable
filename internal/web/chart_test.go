@@ -1,6 +1,8 @@
 package web
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +33,42 @@ func TestStatsHistoryBuildsRealCounterDeltaSeries(t *testing.T) {
 	wantCustomStart := started.Add(5 * time.Second).Add(-7 * 24 * time.Hour).Local().Format("2006-01-02T15:04")
 	if view.CustomStart != wantCustomStart {
 		t.Fatalf("default custom start = %q, want %q", view.CustomStart, wantCustomStart)
+	}
+}
+
+func TestChartHoverDataMatchesPlottedPoints(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
+	history := newStatsHistory()
+	history.record(started, dnsserver.Stats{Queries: 10, NoError: 8, CacheHits: 2})
+	history.record(started.Add(5*time.Second), dnsserver.Stats{Queries: 25, NoError: 20, Blocked: 3, CacheHits: 6})
+
+	view := history.view("hour", started.Add(5*time.Second), dnsserver.Stats{
+		Queries: 25, NoError: 20, Blocked: 3, CacheHits: 6,
+	}, pages.TimeDisplay{Format: pages.TimeFormat12})
+
+	var payload chartHoverPayload
+	if err := json.Unmarshal([]byte(view.HoverData), &payload); err != nil {
+		t.Fatalf("hover payload = %q: %v", view.HoverData, err)
+	}
+	if payload.Maximum != view.Maximum || payload.Box.Left != chartLeft || payload.Box.Bottom != chartBottom {
+		t.Fatalf("hover payload header = %+v", payload)
+	}
+	if len(payload.Series) != len(chartSeriesDefinitions) {
+		t.Fatalf("hover series count = %d, want %d", len(payload.Series), len(chartSeriesDefinitions))
+	}
+	for _, series := range payload.Series {
+		if len(series.Values) != len(payload.X) || len(payload.Times) != len(payload.X) {
+			t.Fatalf("series %q has %d values for %d points (%d times)", series.Class, len(series.Values), len(payload.X), len(payload.Times))
+		}
+	}
+	// The hover x positions must land on the same coordinates the polylines use.
+	if !strings.HasPrefix(view.Total, fmt.Sprintf("%.1f,", payload.X[0])) {
+		t.Fatalf("hover x %v does not match plotted total %q", payload.X, view.Total)
+	}
+	if payload.Series[0].Values[0] != 15 || payload.Series[1].Values[0] != 12 {
+		t.Fatalf("hover values = total %d noError %d, want 15 and 12", payload.Series[0].Values[0], payload.Series[1].Values[0])
 	}
 }
 
