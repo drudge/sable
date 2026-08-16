@@ -30,6 +30,19 @@ func (network Network) IPv4Subnets() []netip.Prefix {
 	return subnets
 }
 
+// Addressable reports whether the network covers a range Sable can name. A
+// network without a subnet has no addresses to publish, and a single-host
+// prefix is how the controller describes a VPN client tunnel rather than a LAN,
+// so neither belongs in the inventory the console offers to synchronize.
+func (network Network) Addressable() bool {
+	for _, subnet := range network.Subnets {
+		if subnet.Bits() < subnet.Addr().BitLen() {
+			return true
+		}
+	}
+	return false
+}
+
 // Host is one address the controller knows about. Reserved marks a
 // configured fixed-IP reservation rather than an observed lease.
 type Host struct {

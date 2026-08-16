@@ -15,7 +15,9 @@ const (
 		{"_id":"net-lan","name":"Default","purpose":"corporate","ip_subnet":"192.168.1.1/24"},
 		{"_id":"net-iot","name":"IoT VLAN","purpose":"vlan-only","ip_subnet":"192.168.30.1/24"},
 		{"_id":"net-off","name":"Disabled","enabled":false,"ip_subnet":"192.168.9.1/24"},
-		{"_id":"","name":"Nameless","ip_subnet":"192.168.8.1/24"}
+		{"_id":"","name":"Nameless","ip_subnet":"192.168.8.1/24"},
+		{"_id":"net-none","name":"No Subnet","purpose":"vlan-only"},
+		{"_id":"net-vpn","name":"VPN Client","purpose":"vpn-client","ip_subnet":"10.8.0.5/32"}
 	]}`
 	reservationFixture = `{"data":[
 		{"mac":"aa:bb:cc:dd:ee:01","name":"Printer","fixed_ip":"192.168.1.10","use_fixedip":true,"network_id":"net-lan"},
@@ -73,7 +75,12 @@ func TestInventoryWithAPIKey(t *testing.T) {
 		t.Fatalf("Inventory: %v", err)
 	}
 	if len(inventory.Networks) != 2 {
-		t.Fatalf("read %d networks, want 2 (disabled and nameless networks are skipped)", len(inventory.Networks))
+		t.Fatalf("read %d networks, want 2 (disabled, nameless, subnetless, and /32 VPN networks are skipped)", len(inventory.Networks))
+	}
+	for _, id := range []string{"net-none", "net-vpn"} {
+		if _, found := inventory.NetworkByID(id); found {
+			t.Fatalf("network %s has no addressable subnet but appears in the inventory", id)
+		}
 	}
 	iot, found := inventory.NetworkByID("net-iot")
 	if !found {
