@@ -53,6 +53,16 @@ routing their namespace directly to the configured primary pool. Forwarder
 zones compile apex or delegated FWD records into the same longest-suffix routing
 table used by conditional forwarding.
 
+Alias zones are reconciled in the zone manager's prepare hook rather than by the
+lifecycle worker, because their source is another zone in the same catalog
+instead of a remote server. Every catalog mutation, and startup itself,
+republishes each source zone's records under its aliases before validation and
+DNSSEC signing run, so an alias is always consistent with the same transaction
+that changed its source. The pass is idempotent: an alias zone's own apex SOA
+serial advances only when the mirrored record set actually differs, which keeps
+restarts from churning serials and lets alias zones be transferred to secondary
+servers.
+
 Inbound RFC 1996 NOTIFY is validated against the exact managed zone, configured
 primary source addresses, and optional zone TSIG key before entering a bounded
 event channel. The lifecycle worker coalesces duplicate bursts and moves the

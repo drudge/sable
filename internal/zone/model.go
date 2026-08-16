@@ -61,9 +61,13 @@ type Zone struct {
 	Notify          []string `json:"notify,omitempty"`
 	PrimaryServers  []string `json:"primary_servers,omitempty"`
 	PrimaryProtocol string   `json:"primary_protocol,omitempty"`
-	TSIGKey         string   `json:"tsig_key,omitempty"`
-	DynamicUpdates  bool     `json:"dynamic_updates,omitempty"`
-	DNSSEC          bool     `json:"dnssec,omitempty"`
+	// AliasZone names the zone an alias zone mirrors. Every record of the source
+	// zone is republished under this zone's apex whenever the source changes, so
+	// an internal and an external name can answer with one set of records.
+	AliasZone      string `json:"alias_zone,omitempty"`
+	TSIGKey        string `json:"tsig_key,omitempty"`
+	DynamicUpdates bool   `json:"dynamic_updates,omitempty"`
+	DNSSEC         bool   `json:"dnssec,omitempty"`
 	// DNSSECValidationDisabled turns the zone subtree into a local negative
 	// trust anchor. Private forwarders commonly serve an unsigned split-horizon
 	// copy of a delegated name, which a validator can only report as bogus
@@ -100,6 +104,11 @@ type Record struct {
 
 // SourceUniFi marks records maintained by the UniFi host synchronizer.
 const SourceUniFi = "unifi"
+
+// SourceAlias marks records an alias zone mirrors from its source zone. They
+// are replaced wholesale on every reconciliation, so nothing else may claim
+// this source.
+const SourceAlias = "alias"
 
 // RecordID returns the compact, deterministic identifier used by control-plane
 // URLs. TTL and presentation metadata are intentionally excluded so those
@@ -179,6 +188,11 @@ func Normalize(zone *Zone) {
 		zone.PrimaryProtocol = "udp"
 	}
 	zone.PrimaryServers = normalizePrimaryServers(zone.PrimaryServers, zone.PrimaryProtocol)
+	if zone.Type == "alias" {
+		zone.AliasZone = normalizeDomain(zone.AliasZone)
+	} else {
+		zone.AliasZone = ""
+	}
 	if strings.TrimSpace(zone.TSIGKey) != "" {
 		zone.TSIGKey = strings.ToLower(dns.Fqdn(strings.TrimSpace(zone.TSIGKey)))
 	}
@@ -204,6 +218,10 @@ func ValidateAll(zones []Zone, tsigKeyNames []string) error {
 	for _, name := range tsigKeyNames {
 		keys[strings.ToLower(dns.Fqdn(strings.TrimSpace(name)))] = struct{}{}
 	}
+	types := make(map[string]string, len(zones))
+	for _, current := range zones {
+		types[current.Name] = current.Type
+	}
 	seen := make(map[string]struct{}, len(zones))
 	var validationErrors []error
 	for index, current := range zones {
@@ -219,15 +237,15 @@ func ValidateAll(zones []Zone, tsigKeyNames []string) error {
 			validationErrors = append(validationErrors, fmt.Errorf("duplicate authoritative zone %q", current.Name))
 		}
 		seen[current.Name] = struct{}{}
-		validationErrors = append(validationErrors, validateZone(field, current, keys)...)
+		validationErrors = append(validationErrors, validateZone(field, current, keys, types)...)
 	}
 	return errors.Join(validationErrors...)
 }
 
-func validateZone(field string, current Zone, tsigKeys map[string]struct{}) []error {
+func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zoneTypes map[string]string) []error {
 	var result []error
-	if current.Type != "primary" && current.Type != "secondary" && current.Type != "stub" && current.Type != "forwarder" {
-		result = append(result, fmt.Errorf("%s type must be primary, secondary, stub, or forwarder", field))
+	if current.Type != "primary" && current.Type != "secondary" && current.Type != "stub" && current.Type != "forwarder" && current.Type != "alias" {
+		result = append(result, fmt.Errorf("%s type must be primary, secondary, stub, forwarder, or alias", field))
 	}
 	if current.DefaultTTL == 0 {
 		result = append(result, fmt.Errorf("%s default TTL must be positive", field))
@@ -265,8 +283,36 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}) []er
 	if current.Type == "secondary" || current.Type == "stub" {
 		result = append(result, validateManagedZone(field, current)...)
 	}
+	result = append(result, validateAliasZone(field, current, zoneTypes)...)
 	result = append(result, validateRecords(field, current)...)
 	return result
+}
+
+func validateAliasZone(field string, current Zone, zoneTypes map[string]string) []error {
+	if current.Type != "alias" {
+		if current.AliasZone != "" {
+			return []error{fmt.Errorf("%s only alias zones may name a source zone", field)}
+		}
+		return nil
+	}
+	if current.AliasZone == "" {
+		return []error{fmt.Errorf("%s must name the zone it mirrors", field)}
+	}
+	if current.AliasZone == current.Name {
+		return []error{fmt.Errorf("%s cannot mirror itself", field)}
+	}
+	sourceType, found := zoneTypes[current.AliasZone]
+	if !found {
+		return []error{fmt.Errorf("%s mirrors unknown zone %q", field, current.AliasZone)}
+	}
+	// Chained aliases would need the mirrors resolved in dependency order and
+	// could form cycles. Stub and forwarder zones hold routing metadata rather
+	// than a record set worth republishing, so the source has to be a zone Sable
+	// already answers from its own records.
+	if sourceType != "primary" && sourceType != "secondary" {
+		return []error{fmt.Errorf("%s can only mirror a primary or secondary zone, and %q is a %s zone", field, current.AliasZone, sourceType)}
+	}
+	return nil
 }
 
 func validateDNSSEC(field string, current Zone) []error {
