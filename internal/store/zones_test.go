@@ -386,3 +386,70 @@ func TestZoneStoreAddsRecordSourceColumnToExistingDatabase(t *testing.T) {
 		}
 	}
 }
+
+func TestZoneStoreAddsAliasColumnToExistingDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "alias-zones.db")
+	storage, err := Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.database.ExecContext(ctx,
+		"ALTER TABLE sable_zones DROP COLUMN alias_zone"); err != nil {
+		storage.Close()
+		t.Fatalf("simulate pre-upgrade schema: %v", err)
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	storage, err = Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	zones := []zone.Zone{
+		{
+			Name: "example.test", Type: "primary", DefaultTTL: 300, ZoneTransfer: "deny",
+			Records: []zone.Record{
+				{Name: "@", Type: "SOA", Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300", TTL: 300},
+				{Name: "@", Type: "NS", Value: "ns1.example.test.", TTL: 300},
+			},
+		},
+		{
+			Name: "example.lan", Type: "alias", DefaultTTL: 300, ZoneTransfer: "deny", AliasZone: "example.test",
+			Records: []zone.Record{
+				{Name: "@", Type: "SOA", Value: "ns1.example.lan. hostmaster.example.lan. 1 3600 600 1209600 300", TTL: 300},
+				{Name: "@", Type: "NS", Value: "ns1.example.test.", TTL: 300, Source: zone.SourceAlias},
+			},
+		},
+	}
+	if _, err := storage.ReplaceZones(ctx, nil, zones); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := stored[0]
+	if alias.Name != "example.lan" || alias.AliasZone != "example.test" {
+		t.Fatalf("stored alias zone = %#v, want its source preserved", alias)
+	}
+	if len(alias.Records) != 2 || alias.Records[1].Source != zone.SourceAlias {
+		t.Fatalf("stored alias records = %#v, want the mirrored record marked", alias.Records)
+	}
+
+	updated := zone.Clone(stored)
+	updated[0].AliasZone = "other.test"
+	if _, err := storage.ReplaceZones(ctx, stored, updated); err != nil {
+		t.Fatal(err)
+	}
+	reread, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread[0].AliasZone != "other.test" {
+		t.Fatalf("updated alias source = %q, want %q", reread[0].AliasZone, "other.test")
+	}
+}

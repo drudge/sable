@@ -760,6 +760,8 @@ func zoneRecordSourceLabel(source string) string {
 	switch source {
 	case zone.SourceUniFi:
 		return "UniFi"
+	case zone.SourceAlias:
+		return "Alias"
 	case "":
 		return ""
 	default:

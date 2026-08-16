@@ -78,7 +78,15 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	zoneManager, err := zone.NewManager(
 		ctx,
 		database,
-		dnssec.Prepare,
+		// Alias zones mirror their source before signing runs so a mirrored
+		// record set is covered by the alias zone's own signatures rather than
+		// the stale ones the source was signed with.
+		func(ctx context.Context, zones *[]zone.Zone) error {
+			if err := zone.MaterializeAliases(zones, time.Now()); err != nil {
+				return err
+			}
+			return dnssec.Prepare(ctx, zones)
+		},
 		func(zones []zone.Zone) error {
 			configuration := initial
 			if configurationManager != nil {

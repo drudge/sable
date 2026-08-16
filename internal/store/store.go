@@ -109,6 +109,9 @@ ON sable_query_log (occurred_at)`}
 	if err := store.migrateZoneValidationSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
+	if err := store.migrateZoneAliasSchema(ctx); err != nil {
+		return fmt.Errorf("migrate %s database: %w", store.driver, err)
+	}
 	if err := store.migrateAuthenticationSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}

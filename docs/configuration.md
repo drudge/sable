@@ -218,13 +218,28 @@ blocking policy and forwarding and update through the transactional TOML reload.
 
 Authoritative zones are control-plane data, not node configuration. Sable stores zones and ordered records transactionally in the configured SQLite or PostgreSQL database. The DNS request path never queries SQL: startup and mutations compile immutable in-memory zone indexes, then atomically publish the new runtime snapshot.
 
-Create Primary, Secondary, Stub, and Forwarder zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
+Create Primary, Secondary, Stub, Forwarder, and Alias zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
 
 TSIG keys remain in sable.toml because their secret material is node-level bootstrap configuration. A zone stores only the canonical key name it references. Changing or removing a configured TSIG key is rejected while a zone still depends on it.
 
 Primary zones require one apex SOA and at least one apex NS record. Console and RFC 2136 mutations commit one zone transaction, advance the SOA serial, re-sign DNSSEC zones when needed, atomically activate the new in-memory runtime, and send NOTIFY after activation. Zone transfers, ACLs, DNSSEC policy, rollover state references, comments, disabled records, and record expiry metadata are all durable database fields.
 
-Secondary zones perform AXFR ingestion and SOA-driven IXFR refresh. Stub zones retain their authority metadata and route queries to their primary pool. Forwarder zones use FWD records whose value is protocol, priority, and address. All four types remain linkable and editable through the zone UI.
+Secondary zones perform AXFR ingestion and SOA-driven IXFR refresh. Stub zones retain their authority metadata and route queries to their primary pool. Forwarder zones use FWD records whose value is protocol, priority, and address. All types remain linkable through the zone UI.
+
+Alias zones publish a second name for an existing record set. Pick a primary or
+secondary source zone when you create one, and Sable republishes every source
+record under the alias apex and keeps the copy in step on every later change to
+the source. Use it when an internal and an external name have to answer
+identically without maintaining two sets of records by hand.
+
+The alias zone keeps its own apex SOA so its serial advances only when the
+mirrored records actually change, which lets it be transferred to secondary
+servers on its own. Mirrored records are read-only: they cannot be edited,
+imported into, or changed by dynamic update, and each one carries an `alias`
+source badge in the console. Record values are copied verbatim rather than
+rewritten, so an alias answers with exactly the same set of records as its
+source. The source zone's SOA and DNSSEC material are not copied, and an alias
+zone cannot be signed or mirror another alias zone.
 
 Forwarder and stub zones validate upstream answers by default. Turn off
 **Validate Responses** in the zone's DNSSEC dialog when the upstream servers

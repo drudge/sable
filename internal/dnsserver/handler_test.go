@@ -105,6 +105,56 @@ func testAuthoritativeZone(name, address string) AuthoritativeZone {
 	}
 }
 
+// Alias zones carry mirrored records of their own, so the handler answers them
+// like any other authoritative zone. Only dynamic updates stay reserved for
+// primary zones.
+func TestHandlerAnswersAliasZonesAuthoritativelyAndRefusesDynamicUpdates(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	alias := testAuthoritativeZone("example.lan", "192.0.2.10")
+	alias.Type = "alias"
+	alias.DynamicUpdates = true
+	configuration.Zones = []AuthoritativeZone{alias}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+
+	request := new(dns.Msg)
+	request.SetQuestion("www.example.lan.", dns.TypeA)
+	answered := new(responseCapture)
+	handler.ServeDNS(answered, request)
+	if answered.message == nil || answered.message.Rcode != dns.RcodeSuccess || !answered.message.Authoritative {
+		t.Fatalf("alias zone query = %v, want an authoritative NOERROR", answered.message)
+	}
+	if !slices.ContainsFunc(answered.message.Answer, func(record dns.RR) bool {
+		address, ok := record.(*dns.A)
+		return ok && address.A.String() == "192.0.2.10"
+	}) {
+		t.Fatalf("alias zone answer = %v, want the mirrored A record", answered.message.Answer)
+	}
+
+	update := new(dns.Msg)
+	update.SetUpdate("example.lan.")
+	update.Insert([]dns.RR{testRR(t, "new.example.lan. 300 IN A 192.0.2.99")})
+	refused := new(responseCapture)
+	handler.ServeDNS(refused, update)
+	if refused.message == nil || refused.message.Rcode == dns.RcodeSuccess {
+		t.Fatalf("alias zone dynamic update = %v, want a rejection", refused.message)
+	}
+}
+
+func testRR(t *testing.T, text string) dns.RR {
+	t.Helper()
+	record, err := dns.NewRR(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return record
+}
+
 func TestHandlerServesAuthorizedZoneTransfersAndRefusesOthers(t *testing.T) {
 	t.Parallel()
 

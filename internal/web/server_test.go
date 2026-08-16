@@ -1856,6 +1856,75 @@ func TestZoneEditorCreatesAndResyncsSecondaryStubAndForwarderZones(t *testing.T)
 	}
 }
 
+func TestZoneEditorCreatesAliasZonesAndKeepsTheirRecordsReadOnly(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testStats{}, configuration, configuration.zoneStore(), "sqlite",
+		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	post := func(path string, form url.Values) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+
+	source := post("/ui/zones/add", url.Values{"name": {"example.test"}, "type": {"primary"}})
+	if source.Code != http.StatusOK {
+		t.Fatalf("create source zone = %d %s", source.Code, source.Body.String())
+	}
+	alias := post("/ui/zones/add", url.Values{
+		"name": {"Example.Lan."}, "type": {"alias"}, "alias_zone": {"example.test"},
+	})
+	if alias.Code != http.StatusOK || !strings.Contains(alias.Body.String(), "Authoritative zone created") {
+		t.Fatalf("create alias zone = %d %s", alias.Code, alias.Body.String())
+	}
+	aliasZone := findZone(configuration.zoneSnapshot.Zones, "example.lan")
+	if aliasZone == nil || aliasZone.Type != "alias" || aliasZone.AliasZone != "example.test" {
+		t.Fatalf("alias zone = %#v", aliasZone)
+	}
+
+	for name, form := range map[string]url.Values{
+		"unknown source": {"name": {"missing.lan"}, "type": {"alias"}, "alias_zone": {"absent.test"}},
+		"self reference": {"name": {"loop.lan"}, "type": {"alias"}, "alias_zone": {"loop.lan"}},
+		"chained alias":  {"name": {"chain.lan"}, "type": {"alias"}, "alias_zone": {"example.lan"}},
+		"empty source":   {"name": {"blank.lan"}, "type": {"alias"}, "alias_zone": {""}},
+	} {
+		rejected := post("/ui/zones/add", form)
+		if findZone(configuration.zoneSnapshot.Zones, form.Get("name")) != nil {
+			t.Errorf("%s created a zone: %s", name, rejected.Body.String())
+		}
+	}
+
+	readOnly := post("/ui/zones/records/add", url.Values{
+		"zone": {"example.lan"}, "type": {"A"}, "name": {"blocked"}, "value": {"192.0.2.9"}, "ttl": {"300"},
+	})
+	if readOnly.Code != http.StatusOK || !strings.Contains(readOnly.Body.String(), "read-only") {
+		t.Fatalf("alias record mutation = %d %s", readOnly.Code, readOnly.Body.String())
+	}
+
+	page := serveRequest(server, http.MethodGet, "/zones")
+	for _, expected := range []string{">Alias<", `data-zone-create-options="alias"`, `name="alias_zone"`} {
+		if !strings.Contains(page.Body.String(), expected) {
+			t.Errorf("zones UI does not contain %q", expected)
+		}
+	}
+	detail := serveRequest(server, http.MethodGet, "/zones/example.lan")
+	if !strings.Contains(detail.Body.String(), "mirrored from") || strings.Contains(detail.Body.String(), ">Add Record<") {
+		t.Fatalf("alias detail page = %s", detail.Body.String())
+	}
+	if strings.Contains(detail.Body.String(), ">Resync<") {
+		t.Fatal("alias detail page offers a resync action it cannot perform")
+	}
+}
+
 func TestParseZoneFileRejectsRecordsOutsideTheSelectedZone(t *testing.T) {
 	t.Parallel()
 

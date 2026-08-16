@@ -1593,11 +1593,16 @@
 	  if (event.target.matches("[data-zone-create-type]")) {
 		const form = event.target.closest("[data-zone-create-form]");
 		const type = event.target.value;
+		const sectionsByType = {
+		  primary: [],
+		  secondary: ["transfer"],
+		  stub: ["transfer", "resolution"],
+		  forwarder: ["forwarder", "resolution"],
+		  alias: ["alias"],
+		};
+		const active = sectionsByType[type] || [];
 		form?.querySelectorAll("[data-zone-create-options]").forEach((section) => {
-		  const key = section.dataset.zoneCreateOptions;
-		  const shown = key === "resolution"
-			? (type === "forwarder" || type === "stub")
-			: key === (type === "forwarder" ? "forwarder" : (type === "secondary" || type === "stub" ? "transfer" : ""));
+		  const shown = active.includes(section.dataset.zoneCreateOptions);
 		  section.hidden = !shown;
 		  section.querySelectorAll("input, textarea, select").forEach((field) => { field.disabled = !shown; });
 		});

@@ -59,6 +59,16 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	console := server.consoleView(request)
 	zones := server.zones.Current().Zones
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	aliasSources := make([]string, 0, len(zones))
+	for _, zone := range zones {
+		if zone.Type != "primary" && zone.Type != "secondary" {
+			continue
+		}
+		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+			continue
+		}
+		aliasSources = append(aliasSources, zone.Name)
+	}
 	views := make([]pages.ZoneView, 0, len(zones))
 	for _, zone := range zones {
 		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
@@ -69,6 +79,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			Name: zone.Name, Type: zone.Type, DefaultTTL: zone.DefaultTTL, Disabled: zone.Disabled,
 			ZoneTransfer: zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
 			PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
+			AliasZone: zone.AliasZone, AliasSources: aliasZoneChoices(aliasSources, zone),
 			TSIGKey: zone.TSIGKey, DynamicUpdates: zone.DynamicUpdates,
 			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
 			DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
@@ -112,8 +123,24 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	}
 	return pages.ZonesPageView{
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
-		CanCreate: !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
+		CanCreate:    !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
+		AliasSources: aliasSources,
 	}
+}
+
+// aliasZoneChoices returns the source zones offered in an alias zone's settings
+// dialog. The zone's current source is always present so a source the account
+// cannot otherwise read is not silently swapped for another zone on save.
+func aliasZoneChoices(sources []string, current zonemodel.Zone) []string {
+	if current.Type != "alias" {
+		return nil
+	}
+	choices := append([]string(nil), sources...)
+	if current.AliasZone != "" && !slices.Contains(choices, current.AliasZone) {
+		choices = append(choices, current.AliasZone)
+		slices.Sort(choices)
+	}
+	return choices
 }
 
 func (server *Server) zoneAuthorized(principal auth.Principal, permission string, current zonemodel.Zone) bool {
@@ -419,7 +446,7 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		if zoneType == "" {
 			zoneType = "primary"
 		}
-		if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" && zoneType != "forwarder" {
+		if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" && zoneType != "forwarder" && zoneType != "alias" {
 			return errors.New("unsupported zone type")
 		}
 		primaryNSValue := strings.TrimSpace(request.FormValue("primary_ns"))
@@ -454,6 +481,15 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		switch zoneType {
 		case "primary":
 			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)}}
+		case "alias":
+			source, aliasErr := aliasSourceZone(*zones, request.FormValue("alias_zone"), name)
+			if aliasErr != nil {
+				return aliasErr
+			}
+			zone.AliasZone = source
+			// The mirrored records, including the apex NS set, are filled in
+			// when the catalog reconciles this zone against its source.
+			zone.Records = []zonemodel.Record{soa}
 		case "forwarder":
 			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("forwarder_protocol")))
 			if protocol == "" {
@@ -501,6 +537,28 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		*zones = append(*zones, zone)
 		return nil
 	})
+}
+
+// aliasSourceZone resolves the zone an alias mirrors and reports the problem in
+// the operator's own terms. Model validation covers the same ground for zones
+// that arrive through other paths, but its message is written for a catalog
+// rather than for the form the operator just submitted.
+func aliasSourceZone(zones []zonemodel.Zone, value, aliasName string) (string, error) {
+	source, err := dnsname.Normalize(value)
+	if err != nil {
+		return "", fmt.Errorf("source zone: %w", err)
+	}
+	if source == aliasName {
+		return "", errors.New("an alias zone cannot mirror itself")
+	}
+	existing := findZone(zones, source)
+	if existing == nil {
+		return "", fmt.Errorf("zone %q was not found", source)
+	}
+	if existing.Type != "primary" && existing.Type != "secondary" {
+		return "", fmt.Errorf("only primary and secondary zones can be mirrored, and %q is a %s zone", source, existing.Type)
+	}
+	return source, nil
 }
 
 func normalizeZonePrimaryServers(value, protocol string) ([]string, error) {
@@ -573,6 +631,13 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 				}
 				zone.Notify[index] = record.Address
 			}
+		}
+		if zone.Type == "alias" && request.Form.Has("alias_zone") {
+			source, aliasErr := aliasSourceZone(*zones, request.FormValue("alias_zone"), zone.Name)
+			if aliasErr != nil {
+				return aliasErr
+			}
+			zone.AliasZone = source
 		}
 		if (zone.Type == "secondary" || zone.Type == "stub") && request.Form.Has("primary_servers") {
 			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))

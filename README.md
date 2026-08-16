@@ -24,6 +24,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - Hot-reloadable local A/AAAA overrides with IDNA normalization
 - Primary and Secondary authoritative zones with AXFR/IXFR, automatic SOA refresh/retry/expiry, TSIG-authenticated transfers/NOTIFY and RFC 2136 dynamic updates, wildcard records, NSEC/NSEC3 negative proofs, transfer ACLs, and split KSK/ZSK signing with safe automated rollover
 - Automatically refreshed Stub zones and Forwarder zones with prioritized UDP/TCP/TLS subtree routing
+- Alias zones that republish another zone's records under a second name and follow every change to their source
 - Bounded sharded cache with TTL aging and RFC 2308 negative caching
 - Exact/subdomain blocking, allowed overrides, client bypasses, configurable responses, and temporary pause/resume
 - Curated or custom HTTP(S) block-list subscriptions with transactional scheduled and manual refresh
