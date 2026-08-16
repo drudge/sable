@@ -110,6 +110,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return err
 	}
 	handler = dnsserver.NewHandler(runtime)
+	handler.SetLogger(logger)
 	if initial.Resolver.SaveCache {
 		restored, restoreErr := restoreDNSCache(ctx, database, handler)
 		if restoreErr != nil {
