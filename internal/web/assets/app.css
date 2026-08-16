@@ -222,8 +222,16 @@ button { cursor: pointer; }
 .chart-tooltip-row b { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
 .chart-live { display: flex; margin-left: auto; align-items: center; gap: .4rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; }
 .chart-live > span { position: relative; width: .5rem; height: .5rem; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 .22rem rgb(16 185 129 / .12); }
+/* The ring only pulses while queries are still arriving, so a still dot means
+   an idle resolver rather than a stalled panel. */
+.chart-live.active > span { animation: chart-live-pulse 2s ease-out infinite; }
+@keyframes chart-live-pulse {
+  0% { box-shadow: 0 0 0 .1rem rgb(16 185 129 / .32); }
+  70% { box-shadow: 0 0 0 .5rem rgb(16 185 129 / 0); }
+  100% { box-shadow: 0 0 0 .1rem rgb(16 185 129 / 0); }
+}
 .chart-card:has(.chart-range-popover:not([hidden])) .chart-live { color: color-mix(in oklch, var(--muted-foreground) 55%, transparent); }
-.chart-card:has(.chart-range-popover:not([hidden])) .chart-live > span { background: var(--muted-foreground); box-shadow: none; opacity: .4; }
+.chart-card:has(.chart-range-popover:not([hidden])) .chart-live > span { animation: none; background: var(--muted-foreground); box-shadow: none; opacity: .4; }
 .chart-range-popover { position: absolute; top: 3.85rem; right: 1.5rem; z-index: 12; width: min(18rem, calc(100% - 2rem)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: .75rem; color: var(--foreground); box-shadow: 0 12px 30px rgb(0 0 0 / .22); }
 .chart-range-form { display: grid; gap: .75rem; }
 .calendar-caption { display: grid; grid-template-columns: 2rem 1fr 2rem; align-items: center; gap: .375rem; }
