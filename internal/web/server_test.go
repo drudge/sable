@@ -1934,6 +1934,9 @@ func TestZoneEditorCreatesAliasZonesAndKeepsTheirRecordsReadOnly(t *testing.T) {
 	for _, expected := range []string{
 		`aria-label="View NS record"`, "record-open-button", "record-readonly-footer",
 		"Mirrored from example.test.", "Sable maintains this record for the alias zone.",
+		// The source badge carries the zone type's own class so it is tinted to
+		// match the Alias zone badge rather than the generic integration blue.
+		`class="record-source-badge alias"`,
 	} {
 		if !strings.Contains(detail.Body.String(), expected) {
 			t.Errorf("alias record dialog does not contain %q", expected)

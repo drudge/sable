@@ -194,6 +194,12 @@ func zoneRecordOwner(zone ZoneView, record ZoneRecordView) string {
 	return name + "." + zone.Name
 }
 
+// zoneRecordSourceClass tints a record's source badge. An alias record carries
+// the same violet as the Alias zone badge so the two read as one idea.
+func zoneRecordSourceClass(label string) string {
+	return strings.ToLower(label)
+}
+
 // zoneRecordSourceTitle explains where a record came from. An alias zone
 // mirrors another zone in the same catalog rather than synchronizing with an
 // integration, so it names the source instead.
@@ -479,7 +485,7 @@ templ ZoneDetailView(zone ZoneView) {
 					<span class="record-owner-cell">
 						@ZoneCopyableText(zoneElementID("owner", index), zoneRecordOwner(zone, record), "record-owner-copy")
 						if record.SourceLabel != "" {
-							<span class="record-source-badge" title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
+							<span class={ "record-source-badge " + zoneRecordSourceClass(record.SourceLabel) } title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
 						}
 					</span>
 					@ZoneCopyableText(zoneElementID("value", index), record.Value, "record-value-copy")
