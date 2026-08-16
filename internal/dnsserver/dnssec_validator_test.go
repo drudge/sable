@@ -20,13 +20,13 @@ func TestDNSSECValidatorAuthenticatesDelegationChain(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	root := newValidatorTestKey(t, ".")
-	testZone := newValidatorTestKey(t, "test.")
-	secure := newValidatorTestKey(t, "secure.test.")
+	testZone := newValidatorTestKey(t, "demo.")
+	secure := newValidatorTestKey(t, "secure.demo.")
 	validator := validatorWithAnchor(t, root, now)
 
 	queries := validatorChainQueries(t, now, root, testZone, secure)
 	query := mapValidatorQuery(queries)
-	answer := validatorSignedResponse(t, now, secure, "www.secure.test.", dns.TypeA, "192.0.2.10")
+	answer := validatorSignedResponse(t, now, secure, "www.secure.demo.", dns.TypeA, "192.0.2.10")
 	state, err := validator.validate(context.Background(), answer, answer.Question[0], query)
 	if err != nil || state != validationSecure {
 		t.Fatalf("validate() = %v, %v; want secure", state, err)
@@ -42,19 +42,19 @@ func TestDNSSECValidatorAuthenticatesDelegationChain(t *testing.T) {
 func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	secure := newValidatorTestKey(t, "secure.test.")
+	secure := newValidatorTestKey(t, "secure.demo.")
 	validator := validatorWithAnchor(t, secure, now)
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("secure.test.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, secure),
+		validatorQueryKey("secure.demo.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, secure),
 	})
 	nsec := &dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "secure.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "www.secure.test.", TypeBitMap: []uint16{dns.TypeSOA, dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC, dns.TypeDNSKEY},
+		Hdr:        dns.RR_Header{Name: "secure.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "www.secure.demo.", TypeBitMap: []uint16{dns.TypeSOA, dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC, dns.TypeDNSKEY},
 	}
-	soa := validatorSOA("secure.test.")
+	soa := validatorSOA("secure.demo.")
 
 	missing := new(dns.Msg)
-	missing.SetQuestion("missing.secure.test.", dns.TypeA)
+	missing.SetQuestion("missing.secure.demo.", dns.TypeA)
 	missing.SetRcode(missing, dns.RcodeNameError)
 	missing.Authoritative = true
 	missing.Ns = append(missing.Ns, soa, signValidatorRRSet(t, now, secure, []dns.RR{soa}))
@@ -64,12 +64,12 @@ func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 		t.Fatalf("NXDOMAIN validate() = %v, %v; want secure", state, err)
 	}
 
-	wildcardRR := validatorA("*.secure.test.", "192.0.2.44")
+	wildcardRR := validatorA("*.secure.demo.", "192.0.2.44")
 	wildcardSignature := signValidatorRRSet(t, now, secure, []dns.RR{wildcardRR})
-	wildcardRR.Hdr.Name = "host.secure.test."
-	wildcardSignature.Hdr.Name = "host.secure.test."
+	wildcardRR.Hdr.Name = "host.secure.demo."
+	wildcardSignature.Hdr.Name = "host.secure.demo."
 	wildcard := new(dns.Msg)
-	wildcard.SetQuestion("host.secure.test.", dns.TypeA)
+	wildcard.SetQuestion("host.secure.demo.", dns.TypeA)
 	wildcard.SetReply(wildcard)
 	wildcard.Answer = []dns.RR{wildcardRR, wildcardSignature}
 	wildcard.Ns = []dns.RR{nsec, signValidatorRRSet(t, now, secure, []dns.RR{nsec})}
@@ -82,34 +82,34 @@ func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 func TestDNSSECValidatorRecognizesAuthenticatedInsecureDelegation(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	parent := newValidatorTestKey(t, "test.")
+	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
 	denial := &dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "unsigned.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "z.test.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.demo.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
 	}
-	soa := validatorSOA("test.")
+	soa := validatorSOA("demo.")
 	dsResponse := new(dns.Msg)
-	dsResponse.SetQuestion("unsigned.test.", dns.TypeDS)
+	dsResponse.SetQuestion("unsigned.demo.", dns.TypeDS)
 	dsResponse.SetReply(dsResponse)
 	dsResponse.Ns = []dns.RR{
 		soa, signValidatorRRSet(t, now, parent, []dns.RR{soa}),
 		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
 	}
 	soaResponse := new(dns.Msg)
-	soaResponse.SetQuestion("www.unsigned.test.", dns.TypeSOA)
+	soaResponse.SetQuestion("www.unsigned.demo.", dns.TypeSOA)
 	soaResponse.SetReply(soaResponse)
-	unsignedSOA := validatorSOA("unsigned.test.")
+	unsignedSOA := validatorSOA("unsigned.demo.")
 	soaResponse.Answer = []dns.RR{unsignedSOA}
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("test.", dns.TypeDNSKEY):           validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("unsigned.test.", dns.TypeDS):      dsResponse,
-		validatorQueryKey("www.unsigned.test.", dns.TypeSOA): soaResponse,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):           validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):      dsResponse,
+		validatorQueryKey("www.unsigned.demo.", dns.TypeSOA): soaResponse,
 	})
 	response := new(dns.Msg)
-	response.SetQuestion("www.unsigned.test.", dns.TypeA)
+	response.SetQuestion("www.unsigned.demo.", dns.TypeA)
 	response.SetReply(response)
-	response.Answer = []dns.RR{validatorA("www.unsigned.test.", "192.0.2.20")}
+	response.Answer = []dns.RR{validatorA("www.unsigned.demo.", "192.0.2.20")}
 	state, err := validator.validate(context.Background(), response, response.Question[0], query)
 	if err != nil || state != validationInsecure {
 		t.Fatalf("validate() = %v, %v; want insecure", state, err)
@@ -124,43 +124,43 @@ func TestDNSSECValidatorRecognizesAuthenticatedInsecureDelegation(t *testing.T) 
 func TestDNSSECValidatorInheritsInsecureStateForBareDSDenial(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	parent := newValidatorTestKey(t, "test.")
+	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
 	denial := &dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "unsigned.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "z.test.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.demo.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
 	}
-	parentSOA := validatorSOA("test.")
+	parentSOA := validatorSOA("demo.")
 	parentDS := new(dns.Msg)
-	parentDS.SetQuestion("unsigned.test.", dns.TypeDS)
+	parentDS.SetQuestion("unsigned.demo.", dns.TypeDS)
 	parentDS.SetReply(parentDS)
 	parentDS.Ns = []dns.RR{
 		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
 		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
 	}
 
-	// The upstream resolver already knows unsigned.test. is insecure, so it
+	// The upstream resolver already knows unsigned.demo. is insecure, so it
 	// serves this denial without an NSEC or an RRSIG to authenticate it.
 	childDS := new(dns.Msg)
-	childDS.SetQuestion("api.unsigned.test.", dns.TypeDS)
+	childDS.SetQuestion("api.unsigned.demo.", dns.TypeDS)
 	childDS.SetReply(childDS)
-	childDS.Ns = []dns.RR{validatorSOA("unsigned.test.")}
+	childDS.Ns = []dns.RR{validatorSOA("unsigned.demo.")}
 
 	childSOA := new(dns.Msg)
-	childSOA.SetQuestion("www.api.unsigned.test.", dns.TypeSOA)
+	childSOA.SetQuestion("www.api.unsigned.demo.", dns.TypeSOA)
 	childSOA.SetReply(childSOA)
-	childSOA.Answer = []dns.RR{validatorSOA("api.unsigned.test.")}
+	childSOA.Answer = []dns.RR{validatorSOA("api.unsigned.demo.")}
 
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("test.", dns.TypeDNSKEY):               validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("unsigned.test.", dns.TypeDS):          parentDS,
-		validatorQueryKey("api.unsigned.test.", dns.TypeDS):      childDS,
-		validatorQueryKey("www.api.unsigned.test.", dns.TypeSOA): childSOA,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):               validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):          parentDS,
+		validatorQueryKey("api.unsigned.demo.", dns.TypeDS):      childDS,
+		validatorQueryKey("www.api.unsigned.demo.", dns.TypeSOA): childSOA,
 	})
 	response := new(dns.Msg)
-	response.SetQuestion("www.api.unsigned.test.", dns.TypeA)
+	response.SetQuestion("www.api.unsigned.demo.", dns.TypeA)
 	response.SetReply(response)
-	response.Answer = []dns.RR{validatorA("www.api.unsigned.test.", "192.0.2.30")}
+	response.Answer = []dns.RR{validatorA("www.api.unsigned.demo.", "192.0.2.30")}
 	state, err := validator.validate(context.Background(), response, response.Question[0], query)
 	if err != nil || state != validationInsecure {
 		t.Fatalf("validate() = %v, %v; want insecure", state, err)
@@ -173,18 +173,18 @@ func TestDNSSECValidatorInheritsInsecureStateForBareDSDenial(t *testing.T) {
 func TestDNSSECValidatorRejectsBareDSDenialUnderSignedParent(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	parent := newValidatorTestKey(t, "test.")
+	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
 	stripped := new(dns.Msg)
-	stripped.SetQuestion("victim.test.", dns.TypeDS)
+	stripped.SetQuestion("victim.demo.", dns.TypeDS)
 	stripped.SetReply(stripped)
-	stripped.Ns = []dns.RR{validatorSOA("test.")}
+	stripped.Ns = []dns.RR{validatorSOA("demo.")}
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("test.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("victim.test.", dns.TypeDS):  stripped,
-		validatorQueryKey("victim.test.", dns.TypeSOA): stripped,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("victim.demo.", dns.TypeDS):  stripped,
+		validatorQueryKey("victim.demo.", dns.TypeSOA): stripped,
 	})
-	if _, err := validator.zoneKeys(context.Background(), "victim.test.", query); err == nil {
+	if _, err := validator.zoneKeys(context.Background(), "victim.demo.", query); err == nil {
 		t.Fatal("zoneKeys() accepted an unauthenticated DS denial under a signed parent")
 	}
 }
@@ -192,40 +192,40 @@ func TestDNSSECValidatorRejectsBareDSDenialUnderSignedParent(t *testing.T) {
 func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	parent := newValidatorTestKey(t, "test.")
+	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
 	denial := &dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "unsigned.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "z.test.",
+		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.demo.",
 		TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
 	}
-	parentSOA := validatorSOA("test.")
+	parentSOA := validatorSOA("demo.")
 	dsResponse := new(dns.Msg)
-	dsResponse.SetQuestion("unsigned.test.", dns.TypeDS)
+	dsResponse.SetQuestion("unsigned.demo.", dns.TypeDS)
 	dsResponse.SetReply(dsResponse)
 	dsResponse.Ns = []dns.RR{
 		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
 		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
 	}
 	aliasSOAResponse := new(dns.Msg)
-	aliasSOAResponse.SetQuestion("alias.unsigned.test.", dns.TypeSOA)
+	aliasSOAResponse.SetQuestion("alias.unsigned.demo.", dns.TypeSOA)
 	aliasSOAResponse.SetReply(aliasSOAResponse)
 	aliasSOAResponse.Answer = []dns.RR{&dns.CNAME{
-		Hdr:    dns.RR_Header{Name: "alias.unsigned.test.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
-		Target: "target.other.test.",
+		Hdr:    dns.RR_Header{Name: "alias.unsigned.demo.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
+		Target: "target.other.demo.",
 	}}
-	aliasSOAResponse.Ns = []dns.RR{validatorSOA("other.test.")}
+	aliasSOAResponse.Ns = []dns.RR{validatorSOA("other.demo.")}
 	zoneSOAResponse := new(dns.Msg)
-	zoneSOAResponse.SetQuestion("unsigned.test.", dns.TypeSOA)
+	zoneSOAResponse.SetQuestion("unsigned.demo.", dns.TypeSOA)
 	zoneSOAResponse.SetReply(zoneSOAResponse)
-	zoneSOAResponse.Answer = []dns.RR{validatorSOA("unsigned.test.")}
+	zoneSOAResponse.Answer = []dns.RR{validatorSOA("unsigned.demo.")}
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("test.", dns.TypeDNSKEY):             validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("unsigned.test.", dns.TypeDS):        dsResponse,
-		validatorQueryKey("alias.unsigned.test.", dns.TypeSOA): aliasSOAResponse,
-		validatorQueryKey("unsigned.test.", dns.TypeSOA):       zoneSOAResponse,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):             validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):        dsResponse,
+		validatorQueryKey("alias.unsigned.demo.", dns.TypeSOA): aliasSOAResponse,
+		validatorQueryKey("unsigned.demo.", dns.TypeSOA):       zoneSOAResponse,
 	})
-	state, err := validator.unsignedNameState(context.Background(), "alias.unsigned.test.", query)
+	state, err := validator.unsignedNameState(context.Background(), "alias.unsigned.demo.", query)
 	if err != nil || state != validationInsecure {
 		t.Fatalf("unsignedNameState() = %v, %v; want insecure", state, err)
 	}
@@ -271,15 +271,15 @@ func TestDNSSECResponsePresentation(t *testing.T) {
 func TestDNSSECResponseProofFollowsCNAMEForNODATA(t *testing.T) {
 	t.Parallel()
 	response := new(dns.Msg)
-	response.SetQuestion("alias.secure.test.", dns.TypeAAAA)
+	response.SetQuestion("alias.secure.demo.", dns.TypeAAAA)
 	response.SetReply(response)
 	response.Answer = []dns.RR{&dns.CNAME{
-		Hdr:    dns.RR_Header{Name: "alias.secure.test.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
-		Target: "target.secure.test.",
+		Hdr:    dns.RR_Header{Name: "alias.secure.demo.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
+		Target: "target.secure.demo.",
 	}}
 	response.Ns = []dns.RR{&dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "target.secure.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "z.secure.test.",
+		Hdr:        dns.RR_Header{Name: "target.secure.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.secure.demo.",
 		TypeBitMap: []uint16{dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC},
 	}}
 	if err := validateResponseProof(response, response.Question[0]); err != nil {
@@ -309,9 +309,9 @@ func TestDNSSECAcceptsOnlyCorrectDNAMECNAMEsAsSynthesized(t *testing.T) {
 func TestDNSSECVerifyWithKeysRejectsUnknownSignatureKey(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	zone := newValidatorTestKey(t, "secure.test.")
+	zone := newValidatorTestKey(t, "secure.demo.")
 	validator := validatorWithAnchor(t, zone, now)
-	record := validatorA("www.secure.test.", "192.0.2.10")
+	record := validatorA("www.secure.demo.", "192.0.2.10")
 	signature := signValidatorRRSet(t, now, zone, []dns.RR{record})
 	signature.KeyTag++
 	if err := validator.verifyWithKeys([]dns.RR{record}, []*dns.RRSIG{signature}, []*dns.DNSKEY{zone.key}); err == nil {
@@ -359,10 +359,10 @@ func validatorChainQueries(
 	t.Helper()
 	return map[string]*dns.Msg{
 		validatorQueryKey(".", dns.TypeDNSKEY):            validatorDNSKEYResponse(t, now, root),
-		validatorQueryKey("test.", dns.TypeDS):            validatorDSResponse(t, now, root, testZone),
-		validatorQueryKey("test.", dns.TypeDNSKEY):        validatorDNSKEYResponse(t, now, testZone),
-		validatorQueryKey("secure.test.", dns.TypeDS):     validatorDSResponse(t, now, testZone, secure),
-		validatorQueryKey("secure.test.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, secure),
+		validatorQueryKey("demo.", dns.TypeDS):            validatorDSResponse(t, now, root, testZone),
+		validatorQueryKey("demo.", dns.TypeDNSKEY):        validatorDNSKEYResponse(t, now, testZone),
+		validatorQueryKey("secure.demo.", dns.TypeDS):     validatorDSResponse(t, now, testZone, secure),
+		validatorQueryKey("secure.demo.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, secure),
 	}
 }
 
@@ -446,28 +446,28 @@ func validatorQueryKey(name string, recordType uint16) string {
 func TestDNSSECValidatorZoneInsecureCoversUnsignedForwarder(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	parent := newValidatorTestKey(t, "test.")
+	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
-	splitHorizonSOA := validatorSOA("private.test.")
+	splitHorizonSOA := validatorSOA("private.demo.")
 	dsResponse := new(dns.Msg)
-	dsResponse.SetQuestion("private.test.", dns.TypeDS)
+	dsResponse.SetQuestion("private.demo.", dns.TypeDS)
 	dsResponse.SetReply(dsResponse)
 	dsResponse.Ns = []dns.RR{splitHorizonSOA}
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("test.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("private.test.", dns.TypeDS): dsResponse,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("private.demo.", dns.TypeDS): dsResponse,
 	})
 	response := new(dns.Msg)
-	response.SetQuestion("host.private.test.", dns.TypeA)
+	response.SetQuestion("host.private.demo.", dns.TypeA)
 	response.SetReply(response)
-	response.Answer = []dns.RR{validatorA("host.private.test.", "10.2.0.245")}
+	response.Answer = []dns.RR{validatorA("host.private.demo.", "10.2.0.245")}
 
 	state, err := validator.validate(context.Background(), response, response.Question[0], query)
 	if err == nil || state != validationBogus {
 		t.Fatalf("validate() = %v, %v; want bogus", state, err)
 	}
 
-	validator.setZoneInsecure([]string{"private.test"})
+	validator.setZoneInsecure([]string{"private.demo"})
 	state, err = validator.validate(context.Background(), response, response.Question[0], query)
 	if err != nil || state != validationInsecure {
 		t.Fatalf("validate() after zone opt-out = %v, %v; want insecure", state, err)
@@ -477,15 +477,15 @@ func TestDNSSECValidatorZoneInsecureCoversUnsignedForwarder(t *testing.T) {
 func TestDNSSECValidatorSetZoneInsecureDropsCachedZoneState(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	validator := validatorWithAnchor(t, newValidatorTestKey(t, "test."), now)
-	validator.cacheZone("private.test.", validatedZone{state: validationSecure, expiresAt: now.Add(time.Hour)})
-	validator.setZoneInsecure([]string{"private.test"})
-	if _, found := validator.cachedZone("private.test."); found {
+	validator := validatorWithAnchor(t, newValidatorTestKey(t, "demo."), now)
+	validator.cacheZone("private.demo.", validatedZone{state: validationSecure, expiresAt: now.Add(time.Hour)})
+	validator.setZoneInsecure([]string{"private.demo"})
+	if _, found := validator.cachedZone("private.demo."); found {
 		t.Fatal("cached zone state survived a validation policy change")
 	}
-	validator.cacheZone("private.test.", validatedZone{state: validationInsecure, expiresAt: now.Add(time.Hour)})
-	validator.setZoneInsecure([]string{"private.test."})
-	if _, found := validator.cachedZone("private.test."); !found {
+	validator.cacheZone("private.demo.", validatedZone{state: validationInsecure, expiresAt: now.Add(time.Hour)})
+	validator.setZoneInsecure([]string{"private.demo."})
+	if _, found := validator.cachedZone("private.demo."); !found {
 		t.Fatal("unchanged validation policy discarded cached zone state")
 	}
 }
