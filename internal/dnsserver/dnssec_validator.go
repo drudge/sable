@@ -159,7 +159,7 @@ func (validator *dnssecValidator) validate(
 	query dnssecQuery,
 ) (validationState, error) {
 	qname := normalizeFQDN(question.Name)
-	if validator.hasNegativeTrustAnchor(qname) {
+	if validator.validationExempt(qname) {
 		return validationInsecure, nil
 	}
 	if response.Rcode != dns.RcodeSuccess && response.Rcode != dns.RcodeNameError {
@@ -272,7 +272,7 @@ func (validator *dnssecValidator) validateRRSet(
 
 func (validator *dnssecValidator) zoneKeys(ctx context.Context, zoneName string, query dnssecQuery) (validatedZone, error) {
 	zoneName = normalizeFQDN(zoneName)
-	if validator.hasNegativeTrustAnchor(zoneName) {
+	if validator.validationExempt(zoneName) {
 		return validatedZone{state: validationInsecure}, nil
 	}
 	if validator.deletedTrustPointFor(zoneName) {
@@ -471,7 +471,7 @@ func (validator *dnssecValidator) verifyDenialRRsets(response *dns.Msg, keys []*
 
 func (validator *dnssecValidator) unsignedNameState(ctx context.Context, name string, query dnssecQuery) (validationState, error) {
 	name = normalizeFQDN(name)
-	if validator.hasNegativeTrustAnchor(name) || validator.cachedInsecureAncestor(name) {
+	if validator.validationExempt(name) || validator.cachedInsecureAncestor(name) {
 		return validationInsecure, nil
 	}
 	var soa *dns.SOA
@@ -506,6 +506,13 @@ func (validator *dnssecValidator) unsignedNameState(ctx context.Context, name st
 		return validationBogus, err
 	}
 	return zone.state, nil
+}
+
+// validationExempt reports whether name is out of reach of DNSSEC validation,
+// either because an operator declared it insecure or because it belongs to a
+// locally served zone that has no global delegation behind it.
+func (validator *dnssecValidator) validationExempt(name string) bool {
+	return isLocallyServedZone(name) || validator.hasNegativeTrustAnchor(name)
 }
 
 func (validator *dnssecValidator) hasNegativeTrustAnchor(name string) bool {
