@@ -116,6 +116,79 @@ func TestDNSSECValidatorRecognizesAuthenticatedInsecureDelegation(t *testing.T) 
 	}
 }
 
+// TestDNSSECValidatorInheritsInsecureStateForBareDSDenial reproduces
+// api.anthropic.com: a delegation of its own that sits under an unsigned parent,
+// so the forwarder answers its DS query with a bare SOA and no proof at all. The
+// insecure parent has to carry the child rather than the missing proof failing
+// the whole query.
+func TestDNSSECValidatorInheritsInsecureStateForBareDSDenial(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "test.")
+	validator := validatorWithAnchor(t, parent, now)
+	denial := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: "unsigned.test.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.test.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+	}
+	parentSOA := validatorSOA("test.")
+	parentDS := new(dns.Msg)
+	parentDS.SetQuestion("unsigned.test.", dns.TypeDS)
+	parentDS.SetReply(parentDS)
+	parentDS.Ns = []dns.RR{
+		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
+		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
+	}
+
+	// The upstream resolver already knows unsigned.test. is insecure, so it
+	// serves this denial without an NSEC or an RRSIG to authenticate it.
+	childDS := new(dns.Msg)
+	childDS.SetQuestion("api.unsigned.test.", dns.TypeDS)
+	childDS.SetReply(childDS)
+	childDS.Ns = []dns.RR{validatorSOA("unsigned.test.")}
+
+	childSOA := new(dns.Msg)
+	childSOA.SetQuestion("www.api.unsigned.test.", dns.TypeSOA)
+	childSOA.SetReply(childSOA)
+	childSOA.Answer = []dns.RR{validatorSOA("api.unsigned.test.")}
+
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("test.", dns.TypeDNSKEY):               validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.test.", dns.TypeDS):          parentDS,
+		validatorQueryKey("api.unsigned.test.", dns.TypeDS):      childDS,
+		validatorQueryKey("www.api.unsigned.test.", dns.TypeSOA): childSOA,
+	})
+	response := new(dns.Msg)
+	response.SetQuestion("www.api.unsigned.test.", dns.TypeA)
+	response.SetReply(response)
+	response.Answer = []dns.RR{validatorA("www.api.unsigned.test.", "192.0.2.30")}
+	state, err := validator.validate(context.Background(), response, response.Question[0], query)
+	if err != nil || state != validationInsecure {
+		t.Fatalf("validate() = %v, %v; want insecure", state, err)
+	}
+}
+
+// TestDNSSECValidatorRejectsBareDSDenialUnderSignedParent guards the other side
+// of the inheritance rule: a signed parent owes a real denial, so a stripped one
+// stays bogus instead of downgrading the child to insecure.
+func TestDNSSECValidatorRejectsBareDSDenialUnderSignedParent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "test.")
+	validator := validatorWithAnchor(t, parent, now)
+	stripped := new(dns.Msg)
+	stripped.SetQuestion("victim.test.", dns.TypeDS)
+	stripped.SetReply(stripped)
+	stripped.Ns = []dns.RR{validatorSOA("test.")}
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("test.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("victim.test.", dns.TypeDS):  stripped,
+		validatorQueryKey("victim.test.", dns.TypeSOA): stripped,
+	})
+	if _, err := validator.zoneKeys(context.Background(), "victim.test.", query); err == nil {
+		t.Fatal("zoneKeys() accepted an unauthenticated DS denial under a signed parent")
+	}
+}
+
 func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)

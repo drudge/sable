@@ -321,7 +321,11 @@ func (validator *dnssecValidator) zoneKeys(ctx context.Context, zoneName string,
 
 	parentName, err := denialSigner(dsResponse)
 	if err != nil {
-		return validatedZone{}, fmt.Errorf("find authenticated DS denial for %s: %w", zoneName, err)
+		// Names below an insecure delegation carry no DNSSEC records, so a
+		// resolver that already proved the ancestor unsigned answers the DS
+		// query with a bare SOA. Climb to the parent before calling that a
+		// failure: an insecure parent makes every zone under it insecure too.
+		return validator.inheritedInsecureZone(ctx, zoneName, dsResponse, query, err)
 	}
 	parent, err := validator.zoneKeys(ctx, parentName, query)
 	if err != nil {
@@ -339,6 +343,36 @@ func (validator *dnssecValidator) zoneKeys(ctx context.Context, zoneName string,
 		return validatedZone{}, fmt.Errorf("%s has no authenticated delegation", zoneName)
 	}
 	zone := validatedZone{state: validationInsecure, expiresAt: validator.cacheExpiration(dsResponse)}
+	validator.cacheZone(zoneName, zone)
+	return zone, nil
+}
+
+// inheritedInsecureZone resolves a DS denial that carries no proof of its own by
+// asking whether the parent zone is insecure. Only a parent that reaches
+// validationInsecure through an authenticated chain lets the child inherit that
+// state, so a stripped denial under a signed parent still fails as denialErr.
+func (validator *dnssecValidator) inheritedInsecureZone(
+	ctx context.Context,
+	zoneName string,
+	dsResponse *dns.Msg,
+	query dnssecQuery,
+	denialErr error,
+) (validatedZone, error) {
+	failure := fmt.Errorf("find authenticated DS denial for %s: %w", zoneName, denialErr)
+	if zoneName == "." {
+		return validatedZone{}, failure
+	}
+	parent, err := validator.zoneKeys(ctx, parentFQDN(zoneName), query)
+	if err != nil {
+		return validatedZone{}, failure
+	}
+	if parent.state != validationInsecure {
+		return validatedZone{}, failure
+	}
+	zone := validatedZone{
+		state:     validationInsecure,
+		expiresAt: minTime(parent.expiresAt, validator.cacheExpiration(dsResponse)),
+	}
 	validator.cacheZone(zoneName, zone)
 	return zone, nil
 }
