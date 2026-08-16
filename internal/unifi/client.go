@@ -185,6 +185,9 @@ func (client *Client) networks(ctx context.Context) ([]Network, error) {
 				network.Subnets = append(network.Subnets, prefix.Masked())
 			}
 		}
+		if !network.Addressable() {
+			continue
+		}
 		networks = append(networks, network)
 	}
 	return networks, nil
