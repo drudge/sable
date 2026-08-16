@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
@@ -253,6 +254,8 @@ type Handler struct {
 	notifications        chan ZoneNotification
 	zoneUpdater          atomic.Pointer[zoneUpdaterHolder]
 	zoneUpdateAuditor    atomic.Pointer[zoneUpdateAuditorHolder]
+	logger               atomic.Pointer[slog.Logger]
+	failureLog           *failureLogLimiter
 }
 
 type ZoneNotification struct {
@@ -629,6 +632,7 @@ func NewHandler(runtime *Runtime) *Handler {
 		startedAt: time.Now(), upstreamExchange: exchangeForwarder,
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
+		failureLog: newFailureLogLimiter(),
 	}
 	emptyExpired := make(map[string]struct{})
 	handler.expiredZones.Store(&emptyExpired)
@@ -799,6 +803,7 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	}
 	if len(request.Question) == 1 && handler.zoneExpired(request.Question[0].Name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
+		handler.logResolutionFailure(request, "authoritative zone expired")
 		handler.recordResponseCode(result.response.Rcode)
 		handler.writeResponse(writer, request, result.response)
 		if observer != nil {
@@ -840,6 +845,7 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 		records = handler.incrementalTransferRecords(request, zone.name, records)
 	}
 	if len(records) == 0 || (question.Qtype == dns.TypeAXFR && len(records) < 2) {
+		handler.logResolutionFailure(request, "zone transfer has no records to send", "records", len(records))
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeServerFailure))
 		handler.serverFailures.Add(1)
 		return true
@@ -1170,6 +1176,8 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
 		if !request.CheckingDisabled {
+			handler.logResolutionFailure(request, "DNSSEC validation failed",
+				upstreamFailureFields(runtime, forwarders, validationErr)...)
 			return resolution{response: dnssecBogusResponse(request, validationErr), source: querylog.SourceError}
 		}
 	} else if validation == validationSecure {
@@ -1179,6 +1187,8 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	}
 	if validationErr != nil && validation != validationBogus {
 		handler.upstreamErrors.Add(1)
+		handler.logResolutionFailure(request, "upstream resolution failed",
+			upstreamFailureFields(runtime, forwarders, validationErr)...)
 		if !staleFallback {
 			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
 		}
@@ -1186,10 +1196,16 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	}
 	if response == nil {
 		handler.upstreamErrors.Add(1)
+		handler.logResolutionFailure(request, "upstream returned no response",
+			upstreamFailureFields(runtime, forwarders, nil)...)
 		if !staleFallback {
 			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
 		}
 		return handler.resolveUpstreamFailure(request, runtime)
+	}
+	if response.Rcode == dns.RcodeServerFailure {
+		handler.logResolutionFailure(request, "upstream answered SERVFAIL",
+			upstreamFailureFields(runtime, forwarders, nil)...)
 	}
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
@@ -1258,10 +1274,13 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.M
 		targetResponse, validation, err = handler.resolveUpstream(targetRequest, runtime, forwarders)
 		if err != nil {
 			handler.upstreamErrors.Add(1)
+			handler.logResolutionFailure(request, "ANAME target resolution failed",
+				append([]any{"target", alias.target}, upstreamFailureFields(runtime, forwarders, err)...)...)
 			return errorResponse(request, fallbackErrorCode), true
 		}
 		if validation == validationBogus {
 			handler.dnssecBogus.Add(1)
+			handler.logResolutionFailure(request, "ANAME target failed DNSSEC validation", "target", alias.target)
 			return dnssecBogusResponse(request, errors.New("ANAME target failed DNSSEC validation")), true
 		}
 	}
@@ -1270,6 +1289,8 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.M
 	response.Authoritative = true
 	response.RecursionAvailable = true
 	if targetResponse.Rcode != dns.RcodeSuccess {
+		handler.logResolutionFailure(request, "ANAME target did not resolve",
+			"target", alias.target, "target_rcode", rcodeDescription(targetResponse.Rcode))
 		response.Rcode = dns.RcodeServerFailure
 		return response, true
 	}
