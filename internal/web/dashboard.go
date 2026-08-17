@@ -11,6 +11,11 @@ import (
 	"github.com/drudge/sable/internal/web/pages"
 )
 
+// dashboardInsightEvents is how far back the rankings, distributions, and
+// client count read. The dashboard and its refreshing stat cards share it so
+// both describe the same slice of the query log.
+const dashboardInsightEvents = 1_000
+
 func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride) pages.DashboardInsightsView {
 	clientNames := make(map[string]string)
 	for _, host := range hosts {

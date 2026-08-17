@@ -418,7 +418,7 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	if !view.CanLogs {
 		return view
 	}
-	entries, err := server.queries.RecentQueryEvents(request.Context(), 1_000)
+	entries, err := server.queries.RecentQueryEvents(request.Context(), dashboardInsightEvents)
 	if err != nil {
 		server.logger.Warn("build dashboard insights", "error", err)
 		return view
@@ -657,9 +657,30 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
-	if err := pages.Stats(statsView(server.history.totals(time.Now(), server.stats.Stats()))).Render(request.Context(), writer); err != nil {
+	view := statsView(server.history.totals(time.Now(), server.stats.Stats()))
+	// The client and dropped counts come from the query log rather than the
+	// resolver counters, so the refreshed cards have to repeat the read the
+	// dashboard performs or those two would drop to zero every poll.
+	if server.canReadLogs(request) {
+		view.Dropped = server.queryLog.Stats().Dropped
+		entries, err := server.queries.RecentQueryEvents(request.Context(), dashboardInsightEvents)
+		if err != nil {
+			server.logger.Warn("count dashboard clients", "error", err)
+		} else {
+			view.Clients = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts).Clients
+		}
+	}
+	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render runtime statistics", "error", err)
 	}
+}
+
+func (server *Server) canReadLogs(request *http.Request) bool {
+	principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal)
+	if !ok {
+		return !server.securityEnabled
+	}
+	return auth.HasPermission(principal, auth.PermissionLogsRead)
 }
 
 func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {

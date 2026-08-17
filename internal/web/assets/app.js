@@ -401,6 +401,15 @@
 	  syncValues();
 	};
 
+	// The live refresh swaps the chart out from under the pointer, so the last
+	// known pointer position is what lets a fresh plot redraw the reading the
+	// old one was showing.
+	const pointerPosition = {x: null, y: null};
+	document.addEventListener("pointermove", (event) => {
+	  pointerPosition.x = event.clientX;
+	  pointerPosition.y = event.clientY;
+	}, {passive: true});
+
 	const setupQueryChartHover = (plot) => {
 	  if (!plot || plot.dataset.chartHoverReady === "true") return;
 	  plot.dataset.chartHoverReady = "true";
@@ -486,14 +495,11 @@
 	  const hide = () => {
 		layer.hidden = true;
 		tooltip.hidden = true;
-		delete plot.dataset.chartHovering;
 	  };
 
 	  const track = (event) => {
 		const index = nearestIndex(event.clientX);
 		if (index < 0) return;
-		// Hold off the live refresh so the swap cannot yank the tooltip away.
-		plot.dataset.chartHovering = "true";
 		show(index, event.clientY);
 	  };
 
@@ -501,6 +507,16 @@
 	  plot.addEventListener("pointermove", track);
 	  plot.addEventListener("pointerleave", hide);
 	  plot.addEventListener("pointercancel", hide);
+
+	  // A refresh replaces this plot while the pointer rests on it, and a
+	  // replaced element never sees another pointer event until the pointer
+	  // moves. Redraw for where the pointer already is so the reading survives
+	  // the swap with fresh numbers.
+	  if (pointerPosition.x === null) return;
+	  const under = document.elementFromPoint(pointerPosition.x, pointerPosition.y);
+	  if (!plot.matches(":hover") && !plot.contains(under)) return;
+	  const resumed = nearestIndex(pointerPosition.x);
+	  if (resumed >= 0) show(resumed, pointerPosition.y);
 	};
 
 	const setupToast = (toast) => {
@@ -1530,9 +1546,6 @@
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
 	  if (source?.id === "query-statistics" && source.querySelector("[data-chart-range-popover]:not([hidden])")) {
-		event.preventDefault();
-	  }
-	  if (source?.id === "query-statistics" && source.querySelector('[data-chart-plot][data-chart-hovering="true"]')) {
 		event.preventDefault();
 	  }
 	  if (source?.id === "cluster-live-status" && document.querySelector("dialog.confirmation-dialog[open]")) {
