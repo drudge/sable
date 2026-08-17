@@ -1230,6 +1230,17 @@ func uniqueAddresses(values []string) []string {
 	return result
 }
 
+// Marshal encodes a configuration back to TOML. Restoring a backup onto a node
+// that has to point at a different database rewrites the file this way, so the
+// configuration the node boots with names the database it can actually reach.
+func Marshal(configuration Config) ([]byte, error) {
+	encoded, err := toml.Marshal(configuration)
+	if err != nil {
+		return nil, fmt.Errorf("encode TOML: %w", err)
+	}
+	return encoded, nil
+}
+
 func AbsolutePath(path string) (string, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {

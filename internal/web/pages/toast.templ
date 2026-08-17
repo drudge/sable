@@ -1,16 +1,71 @@
 package pages
 
+// ToastAction is an optional button carried by a toast.
+type ToastAction struct {
+	Label         string
+	Icon          string
+	Post          string
+	Confirm       string
+	ConfirmTitle  string
+	ConfirmAction string
+}
+
+func (action ToastAction) Present() bool { return action.Label != "" && action.Post != "" }
+
+// Toast reports something that happened and clears itself.
 templ Toast(message string, variant string) {
+	@toastNotice(message, variant, ToastAction{}, false)
+}
+
+// ToastWithAction carries a button, so it waits for the operator instead of
+// counting down; an action you have to race a timer to reach may as well not
+// be offered.
+templ ToastWithAction(message string, variant string, action ToastAction) {
+	@toastNotice(message, variant, action, true)
+}
+
+// ToastSticky waits to be dismissed without offering an action. It is for
+// messages an operator has to actually read, such as why an operation failed.
+templ ToastSticky(message string, variant string) {
+	@toastNotice(message, variant, ToastAction{}, true)
+}
+
+templ toastNotice(message string, variant string, action ToastAction, persistent bool) {
 	if message != "" {
 		<div class="toast-region" aria-live={ ifThen(variant == "error", "assertive", "polite") } aria-atomic="true">
-			<div class={ "toast", "toast-" + variant } data-toast data-toast-duration={ ifThen(variant == "error", "6500", "4500") } role={ ifThen(variant == "error", "alert", "status") }>
+			<div
+				class={ "toast", "toast-" + variant, templ.KV("toast-persistent", persistent) }
+				data-toast
+				data-toast-duration={ ifThen(persistent, "0", ifThen(variant == "error", "6500", "4500")) }
+				role={ ifThen(variant == "error", "alert", "status") }
+			>
 				<span class="toast-icon" aria-hidden="true">@Icon(ifThen(variant == "error", "x-circle", "check-circle"))</span>
 				<div class="toast-content">
 					<strong>{ ifThen(variant == "error", "Error", "Success") }</strong>
 					<p>{ message }</p>
+					if action.Present() {
+						<div class="toast-actions">
+							<button
+								class="button compact"
+								type="button"
+								hx-post={ action.Post }
+								hx-swap="none"
+								hx-confirm={ action.Confirm }
+								data-confirm-title={ action.ConfirmTitle }
+								data-confirm-action={ action.ConfirmAction }
+							>
+								if action.Icon != "" {
+									@Icon(action.Icon)
+								}
+								<span>{ action.Label }</span>
+							</button>
+						</div>
+					}
 				</div>
 				<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-				<span class="toast-timer" aria-hidden="true"></span>
+				if !persistent {
+					<span class="toast-timer" aria-hidden="true"></span>
+				}
 			</div>
 		</div>
 	}

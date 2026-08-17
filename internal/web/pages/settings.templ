@@ -68,6 +68,7 @@ type SettingsPageView struct {
 	BlockingCustomAddresses string
 	BlockingBypassClients string
 	BlockingAllowTXTReport bool
+	Backup                 SettingsBackupView
 }
 
 templ SettingsPage(view SettingsPageView) {
@@ -90,7 +91,7 @@ templ SettingsContent(view SettingsPageView) {
 			@SettingsTab("blocking", "Blocking", "shield", view.ActiveTab, false)
 			@SettingsTab("proxy", "Proxy", "cluster", view.ActiveTab, false)
 			@SettingsTab("logging", "Logging", "file-text", view.ActiveTab, false)
-			@SettingsTab("backup", "Backup", "hard-drive", view.ActiveTab, true)
+			@SettingsTab("backup", "Backup", "hard-drive", view.ActiveTab, false)
 		</div>
 		<form class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
 			<div class="settings-tab-panel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
@@ -102,6 +103,9 @@ templ SettingsContent(view SettingsPageView) {
 			<div class="settings-tab-panel" data-isotope-panel="proxy" hidden?={ view.ActiveTab != "proxy" }>@SettingsProxyPanel(view)</div>
 			<div class="settings-tab-panel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
 		</form>
+		// Backup lives outside the settings form: it posts its own multipart
+		// upload and must never be swept up by a Save Settings submission.
+		<div class="settings-tab-panel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@ManualCertificateDialogs()
 	</div>
 }
@@ -275,6 +279,183 @@ templ SettingsLoggingPanel(view SettingsPageView) {
 	</div>
 }
 
+// SettingsBackupView drives the backup panel. The passphrase is never echoed
+// back into it, so a re-render after an error always asks for it again.
+type SettingsBackupView struct {
+	Available     bool
+	CanCreate     bool
+	CanRestore    bool
+	Message       string
+	Error         string
+	DownloadToken  string
+	DownloadName   string
+	DownloadSize   string
+	DownloadExpiry string
+	// DownloadExpiresAt is the same deadline as a Unix millisecond stamp, so
+	// the browser can keep the countdown honest instead of showing whatever
+	// was true when the page happened to render.
+	DownloadExpiresAt int64
+	// OfferRestart marks a result that only takes effect after a restart, so
+	// the notice carries the button rather than only naming the step.
+	OfferRestart bool
+	// Job describes the operation running right now. While it is set the panel
+	// shows progress in place of the forms and asks for the next poll.
+	Job *SettingsBackupJobView
+}
+
+// SettingsBackupJobView is the live state of a running backup or restore.
+type SettingsBackupJobView struct {
+	Kind    string
+	Title   string
+	Stage   string
+	Step    int
+	Total   int
+	Percent int
+}
+
+// Running reports whether an operation of the given kind is under way, which
+// decides whether a card shows its form or its progress.
+func (view SettingsBackupView) Running(kind string) bool {
+	return view.Job != nil && view.Job.Kind == kind
+}
+
+// Busy reports whether any operation is under way. Both cards lock down while
+// one runs, because a backup and a restore would fight over the same files.
+func (view SettingsBackupView) Busy() bool { return view.Job != nil }
+
+templ SettingsBackupPanel(view SettingsBackupView) {
+	<div class="settings-panel-stack backup-panel" id="backup-panel">
+		if view.Busy() {
+			// Each rendered panel asks for the next poll, so the loop stops on
+			// its own as soon as a render comes back without a running job.
+			<div hx-get="/ui/backup/progress" hx-trigger="load delay:400ms" hx-target="#backup-panel" hx-swap="outerHTML"></div>
+		}
+		if view.OfferRestart {
+			@ToastWithAction(view.Message, "success", ToastAction{
+				Label: "Restart Sable", Icon: "refresh", Post: "/ui/backup/restart",
+				Confirm:      "Restart Sable now? The restored deployment takes over once it comes back.",
+				ConfirmTitle: "Restart Sable?", ConfirmAction: "Restart",
+			})
+		} else {
+			@Toast(view.Message, "success")
+		}
+		// A backup or restore failure names what went wrong and what to do
+		// about it, so it waits to be dismissed rather than clearing itself
+		// while the operator is still reading.
+		@ToastSticky(view.Error, "error")
+		if !view.Available {
+			@SettingsCard("hard-drive", "Backup and Restore", "Capture this deployment or restore it from an archive") {
+				<div class="isotope-card-content"><div class="certificate-manual-note">@Icon("info")<span>Backups are unavailable on this node. Use <code>sable backup create</code> on the host instead.</span></div></div>
+			}
+		} else {
+			@SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included") {
+				<div class="isotope-card-content">
+					if !view.CanCreate {
+						<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot take backups of this deployment.</span></div>
+					} else if view.Running("backup") {
+						@BackupProgress(*view.Job)
+					} else {
+						<form class="backup-form" hx-post="/ui/backup/download" hx-target="#backup-panel" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" data-passphrase-pair>
+							<div class="field-grid two">
+								<label class="field-control"><span>Backup Passphrase</span><input type="password" name="passphrase" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters" data-passphrase/><small>Sable cannot recover this. Store it wherever you keep credentials, and not beside the backup.</small></label>
+								<label class="field-control"><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" required placeholder="Repeat the passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
+							</div>
+							<div class="backup-actions">
+								<button class="button" type="submit" disabled?={ view.Busy() } data-passphrase-submit>@Icon("download")<span>Create Backup</span></button>
+							</div>
+						</form>
+						if view.DownloadToken != "" {
+							<div class="backup-download">
+								<div class="backup-download-file">@Icon("hard-drive")<div><strong>{ view.DownloadName }</strong><span>{ view.DownloadSize } · <span data-backup-expiry data-expires-at={ fmt.Sprint(view.DownloadExpiresAt) }>{ view.DownloadExpiry }</span></span></div></div>
+								<a class="button" href={ templ.SafeURL("/ui/backup/download/" + view.DownloadToken) } download={ view.DownloadName }>@Icon("download")<span>Save File</span></a>
+							</div>
+						}
+						<details class="settings-advanced">
+							<summary>@Icon("info")<span>What the archive contains</span>@Icon("chevron-down")</summary>
+							<ul class="backup-inventory">
+								<li>Configuration, exactly as written</li>
+								<li>Zones, records, and their DNSSEC settings</li>
+								<li>Users, roles, and API tokens</li>
+								<li>DNSSEC signing keys and integration credentials</li>
+								<li>DNSSEC trust anchors and TLS material</li>
+								<li>Cluster membership and node trust</li>
+							</ul>
+							<small>Query logs, statistics, sessions, and the DNS cache stay behind. A restored node rebuilds them.</small>
+						</details>
+					}
+				</div>
+			}
+			@SettingsDangerCard("upload", "Restore a Backup", "Replace this node's state with the contents of an archive") {
+				<div class="isotope-card-content">
+					if !view.CanRestore {
+						<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot restore backups onto this deployment.</span></div>
+					} else if view.Running("restore") {
+						@BackupProgress(*view.Job)
+					} else {
+						<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Restoring replaces what is here now</strong><span>Zones, users, roles, API tokens, and secrets are swapped for the ones in the archive. The configuration this node is running is kept alongside the restored one. Sable keeps serving the old state until it restarts.</span></p></div>
+						<form class="backup-form" hx-post="/ui/backup/restore" hx-target="#backup-panel" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type='submit']" hx-confirm="Restore this backup? Every zone, user, role, API token, and secret on this node is replaced." data-confirm-title="Restore backup?" data-confirm-action="Restore Backup" data-backup-restore-form>
+							<div class="field-control">
+								<span>Backup File</span>
+								<div class="file-picker">
+									<input class="sr-only" id="backup-archive-file" type="file" name="archive" accept=".sablebackup" data-file-picker-input data-backup-archive-input required/>
+									<label class="button outline" for="backup-archive-file">@Icon("upload")<span>Choose File</span></label>
+									<span data-file-picker-name>No file selected</span>
+								</div>
+							</div>
+							// The envelope header is not encrypted, so the browser can say
+							// which node and which day a file came from before anyone
+							// commits to replacing this deployment with it.
+							@BackupArchivePreview()
+							<div class="field-grid two">
+								<label class="field-control"><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" required placeholder="The passphrase this backup was sealed with"/></label>
+								<label class="field-control switch-row"><span><strong>Keep this node's configuration</strong><small>Restore the data but leave local listeners, storage, and paths alone.</small></span><input type="checkbox" name="keep_configuration"/></label>
+							</div>
+							@BackupUploadMeter()
+							<div class="backup-actions">
+								<button class="button destructive" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button>
+							</div>
+						</form>
+					}
+				</div>
+			}
+		}
+	</div>
+}
+
+// BackupProgress renders a real bar: the stage is the work actually under way
+// and the count is the stages already finished, not a timer pretending to be
+// one.
+templ BackupProgress(job SettingsBackupJobView) {
+	<div class="backup-progress" role="status" aria-live="polite">
+		<div class="backup-progress-heading">
+			<strong>{ job.Title }</strong>
+			<span>{ fmt.Sprintf("%d%%", job.Percent) }</span>
+		</div>
+		<div class="backup-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ fmt.Sprint(job.Percent) } aria-label={ job.Title }>
+			<div class="backup-progress-fill" style={ fmt.Sprintf("width:%d%%", job.Percent) }></div>
+		</div>
+		<div class="backup-progress-meta">
+			<span>{ job.Stage }</span>
+			<span>{ fmt.Sprintf("Step %d of %d", min(job.Step+1, job.Total), job.Total) }</span>
+		</div>
+	</div>
+}
+
+// BackupUploadMeter is filled in by the browser from real upload progress
+// events. A large archive crossing a slow link is the one part of a restore
+// the server cannot see, so it is measured on the client instead.
+templ BackupUploadMeter() {
+	<div class="backup-progress backup-upload" data-backup-upload hidden>
+		<div class="backup-progress-heading">
+			<strong>Uploading archive</strong>
+			<span data-backup-upload-percent>0%</span>
+		</div>
+		<div class="backup-progress-track">
+			<div class="backup-progress-fill" data-backup-upload-fill style="width:0%"></div>
+		</div>
+	</div>
+}
+
 templ SettingsCard(icon, title, description string) {
 	<section class="card settings-source-card">
 		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
@@ -282,3 +463,26 @@ templ SettingsCard(icon, title, description string) {
 	</section>
 }
 templ SettingsSaveButton(tab string) { <div class="settings-panel-save"><button class="button" type="submit" name="settings_tab" value={ tab }>Save Settings</button></div> }
+
+// SettingsDangerCard marks a card whose action cannot be casually undone. The
+// restore card looks different from the download card on purpose: one produces
+// a file, the other replaces every user and secret on the node.
+templ SettingsDangerCard(icon, title, description string) {
+	<section class="card settings-source-card settings-danger-card">
+		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
+		{ children... }
+	</section>
+}
+
+// BackupArchivePreview is filled in by the browser once a file is chosen. The
+// envelope header travels unencrypted precisely so a backup can identify itself
+// without its passphrase.
+templ BackupArchivePreview() {
+	<div class="backup-archive-preview" data-backup-archive-preview hidden>
+		<span class="backup-archive-icon" aria-hidden="true">@Icon("hard-drive")</span>
+		<div>
+			<strong data-backup-archive-title></strong>
+			<span data-backup-archive-detail></span>
+		</div>
+	</div>
+}

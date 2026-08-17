@@ -523,6 +523,9 @@
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
 
+	  // A duration of zero means the toast carries an action and waits for the
+	  // operator instead of counting itself down.
+	  const persistent = toast.dataset.toastDuration === "0";
 	  const duration = Number(toast.dataset.toastDuration) || 4500;
 	  toast.style.setProperty("--toast-duration", `${duration}ms`);
 	  let remaining = duration;
@@ -541,6 +544,7 @@
 		window.setTimeout(remove, 160);
 	  };
 	  const schedule = () => {
+		if (persistent) return;
 		startedAt = Date.now();
 		timeoutID = window.setTimeout(dismiss, remaining);
 	  };
@@ -1542,6 +1546,127 @@
       }
     });
 
+	// Warn as soon as the two passphrase fields disagree. Finding out after the
+	// archive has been built and sealed is a slow way to learn about a typo.
+	const syncPassphrasePair = (form) => {
+	  const first = form.querySelector("[data-passphrase]");
+	  const second = form.querySelector("[data-passphrase-confirmation]");
+	  const note = form.querySelector("[data-passphrase-note]");
+	  const submit = form.querySelector("[data-passphrase-submit]");
+	  if (!first || !second) return;
+	  const typed = second.value.length > 0;
+	  const matches = first.value === second.value;
+	  const short = first.value.length > 0 && first.value.length < 12;
+	  let message = "";
+	  if (typed && !matches) message = "The passphrases do not match.";
+	  else if (short) message = "Use at least 12 characters.";
+	  if (note) {
+		note.textContent = message;
+		note.hidden = message === "";
+	  }
+	  second.setAttribute("aria-invalid", String(typed && !matches));
+	  if (submit) submit.disabled = message !== "" || first.value === "" || second.value === "";
+	};
+	document.body.addEventListener("input", (event) => {
+	  const form = event.target.closest?.("[data-passphrase-pair]");
+	  if (form) syncPassphrasePair(form);
+	});
+
+	// Read the unencrypted envelope header so a file identifies itself before
+	// anyone commits to replacing a deployment with it.
+	const BACKUP_MAGIC = "SABLEBAK";
+	const describeArchive = async (file) => {
+	  const head = new Uint8Array(await file.slice(0, 65536).arrayBuffer());
+	  if (head.length < 13) throw new Error("too short");
+	  if (new TextDecoder().decode(head.slice(0, 8)) !== BACKUP_MAGIC) throw new Error("not a backup");
+	  const headerLength = new DataView(head.buffer).getUint32(9, false);
+	  if (!headerLength || headerLength > head.length - 13) throw new Error("unreadable header");
+	  const header = JSON.parse(new TextDecoder().decode(head.slice(13, 13 + headerLength)));
+	  return header.summary || {};
+	};
+	const showArchivePreview = async (input) => {
+	  const preview = input.closest("form")?.querySelector("[data-backup-archive-preview]");
+	  if (!preview) return;
+	  const title = preview.querySelector("[data-backup-archive-title]");
+	  const detail = preview.querySelector("[data-backup-archive-detail]");
+	  const file = input.files?.[0];
+	  if (!file) {
+		preview.hidden = true;
+		return;
+	  }
+	  preview.hidden = false;
+	  preview.classList.remove("is-invalid");
+	  if (title) title.textContent = "Reading archive…";
+	  if (detail) detail.textContent = "";
+	  try {
+		const summary = await describeArchive(file);
+		const host = summary.hostname || "an unnamed host";
+		const taken = summary.created_at ? new Date(summary.created_at) : null;
+		const when = taken && !Number.isNaN(taken.valueOf())
+		  ? taken.toLocaleString(undefined, {dateStyle: "medium", timeStyle: "short"})
+		  : "an unknown date";
+		if (title) title.textContent = `Backup from ${host}`;
+		if (detail) {
+		  detail.textContent = summary.sable_version
+			? `Taken ${when} · Sable ${summary.sable_version}`
+			: `Taken ${when}`;
+		}
+	  } catch {
+		preview.classList.add("is-invalid");
+		if (title) title.textContent = "This file is not a Sable backup";
+		if (detail) detail.textContent = "Choose a .sablebackup archive.";
+	  }
+	};
+
+	// Keep the staged download's countdown honest; the panel renders once and
+	// would otherwise keep claiming whatever was true at render time.
+	const tickBackupExpiry = () => {
+	  document.querySelectorAll("[data-backup-expiry]").forEach((element) => {
+		const deadline = Number(element.dataset.expiresAt);
+		if (!deadline) return;
+		const remaining = deadline - Date.now();
+		if (remaining <= 0) {
+		  element.textContent = "expired";
+		  element.closest(".backup-download")?.setAttribute("hidden", "");
+		  return;
+		}
+		const minutes = Math.round(remaining / 60000);
+		element.textContent = minutes <= 1
+		  ? "expires in under a minute, or when Sable restarts"
+		  : `expires in ${minutes} minutes, or when Sable restarts`;
+	  });
+	};
+	window.setInterval(tickBackupExpiry, 10000);
+	document.body.addEventListener("htmx:afterSwap", tickBackupExpiry);
+	tickBackupExpiry();
+
+	// Drive the restore upload meter from real transfer progress. A large
+	// archive crossing a slow link is the only part of a restore the server
+	// cannot report on, so the browser measures that leg itself.
+	const backupUploadMeter = (form) => form?.querySelector("[data-backup-upload]");
+	const setBackupUpload = (form, percent, visible) => {
+	  const meter = backupUploadMeter(form);
+	  if (!meter) return;
+	  meter.hidden = !visible;
+	  const fill = meter.querySelector("[data-backup-upload-fill]");
+	  const label = meter.querySelector("[data-backup-upload-percent]");
+	  if (fill) fill.style.width = `${percent}%`;
+	  if (label) label.textContent = `${percent}%`;
+	};
+	document.body.addEventListener("htmx:xhr:loadstart", (event) => {
+	  const form = event.target.closest?.("[data-backup-restore-form]");
+	  if (form) setBackupUpload(form, 0, true);
+	});
+	document.body.addEventListener("htmx:xhr:progress", (event) => {
+	  const form = event.target.closest?.("[data-backup-restore-form]");
+	  if (!form || !event.detail?.lengthComputable || !event.detail.total) return;
+	  setBackupUpload(form, Math.round((event.detail.loaded / event.detail.total) * 100), true);
+	});
+	document.body.addEventListener("htmx:xhr:loadend", (event) => {
+	  const form = event.target.closest?.("[data-backup-restore-form]");
+	  if (form) setBackupUpload(form, 100, false);
+	});
+
 	// Keep the live chart refresh from replacing an open custom-range picker.
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
@@ -1735,6 +1860,16 @@
 	  }
 	  if (event.target.matches("[data-record-more-types]")) {
 		selectRecordType(event.target.closest("form"), event.target.value);
+		return;
+	  }
+	  if (event.target.matches("[data-backup-archive-input]")) showArchivePreview(event.target);
+	  if (event.target.matches("[data-file-picker-input]")) {
+		// A generic picker that only reports the chosen name. Binary uploads
+		// such as backups must never be read into a textarea the way a zone
+		// file is.
+		const chosen = event.target.files?.[0];
+		const label = event.target.closest("form")?.querySelector("[data-file-picker-name]");
+		if (label) label.textContent = chosen?.name || "No file selected";
 		return;
 	  }
 	  if (event.target.matches("[data-zone-file]")) {

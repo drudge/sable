@@ -43,6 +43,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - UniFi host synchronization with a guided setup wizard, per-network zone mapping, automatic forward and reverse zone creation, and integration-owned records that never disturb hand-authored ones
 - Managed ACME DNS-01 certificates with automatic renewal and nine built-in DNS providers
 - UI-generated/imported public certificate key pairs with protected node-local keys
+- Passphrase-sealed whole-deployment backup and restore covering configuration, zones, authorization, secrets and their vault key, trust anchors, TLS material, and cluster membership
 - Unit, integration, race, allocation, and microbenchmark coverage
 
 DNS-over-QUIC and automatic failover are planned and not represented as
@@ -95,7 +96,7 @@ installer:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
 
-Set `SABLE_VERSION=0.7.0-rc.1` to install a specific release. Re-running either
+Set `SABLE_VERSION=0.8.0-rc.1` to install a specific release. Re-running either
 installer updates the executable and service definition without replacing
 `/etc/sable/sable.toml` or `/var/lib/sable`.
 
@@ -114,7 +115,7 @@ sudo sable update
 | --- | --- |
 | `--check` | Report the available release without installing it |
 | `--pre-release` | Consider pre-release builds when selecting the newest release |
-| `--version v0.7.0-rc.1` | Install a specific release tag, including older ones |
+| `--version v0.8.0-rc.1` | Install a specific release tag, including older ones |
 | `--no-restart` | Replace the executable but leave the service running the old build |
 
 The previous executable is kept until the downloaded build has been run once,
@@ -152,6 +153,32 @@ Two permissions govern the console controls:
 
 `updates.read` belongs to the built-in DNS Administrator, Operator, and Auditor
 groups. Only Administrator can apply an update.
+
+## Backup and restore
+
+A backup is one sealed file holding everything a node needs to be rebuilt:
+configuration, zones and records, users and roles and API tokens, the encrypted
+secret vault together with the key that opens it, DNSSEC trust anchors, TLS
+material, and cluster membership. Query logs and statistics stay behind.
+
+```sh
+sable backup create --config /etc/sable/sable.toml --out /srv/backups/ns1.sablebackup
+```
+
+```sh
+sable backup restore --config /etc/sable/sable.toml /srv/backups/ns1.sablebackup
+```
+
+Every backup is encrypted with a passphrase, read from `--passphrase-file`, the
+`SABLE_BACKUP_PASSPHRASE` environment variable, or the terminal. The archive
+contains the vault key, so an unsealed copy would expose every private key on
+the node; a lost passphrase is a lost backup.
+
+The same operations live in the console under **Settings → Backup**, behind
+their own `backup.create` and `backup.restore` permissions. Restoring onto a
+fresh instance is covered in [the backup guide](docs/backup.md).
+
+## Development
 
 For live development, use the pinned Air workflow:
 
@@ -238,7 +265,7 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
   --env TZ=America/New_York \
-  ghcr.io/drudge/sable:0.7.0-rc.1
+  ghcr.io/drudge/sable:0.8.0-rc.1
 ```
 
 The console renders timestamps in the timezone reported by your browser, so
@@ -253,7 +280,8 @@ host. A newly created named volume receives the image's container-specific
 
 See [the architecture](docs/architecture.md) and
 [configuration guide](docs/configuration.md) for runtime behavior. The
-[benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
+[backup guide](docs/backup.md) covers capturing and rebuilding a deployment,
+the [benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
 [Proxmox guide](docs/proxmox.md) covers native unprivileged LXC deployment.
 
 Sable is licensed under the MIT License.
