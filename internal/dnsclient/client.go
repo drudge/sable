@@ -37,18 +37,20 @@ type Result struct {
 
 type exchangeFunc func(context.Context, *dns.Client, *dns.Msg, string) (*dns.Msg, time.Duration, error)
 type dohExchangeFunc func(context.Context, *dns.Msg, string, string, time.Duration) (*dns.Msg, time.Duration, error)
+type doqExchangeFunc func(context.Context, *dns.Msg, string, string, time.Duration) (*dns.Msg, time.Duration, error)
 
 const (
 	transportUDP = "udp"
 	transportTCP = "tcp"
 	transportDoT = "tcp-tls"
 	transportDoH = "doh"
+	transportDoQ = "quic"
 	dohMediaType = "application/dns-message"
 	dohPath      = "/dns-query"
 )
 
 func Query(ctx context.Context, request Request) (Result, error) {
-	return query(ctx, request, exchange, exchangeDoH)
+	return query(ctx, request, exchange, exchangeDoH, exchangeDoQ)
 }
 
 func query(
@@ -56,6 +58,7 @@ func query(
 	request Request,
 	exchangeMessage exchangeFunc,
 	exchangeHTTPS dohExchangeFunc,
+	exchangeQUIC doqExchangeFunc,
 ) (Result, error) {
 	request.Name = strings.TrimSpace(request.Name)
 	if request.Name == "" {
@@ -72,12 +75,17 @@ func query(
 		request.Transport = transportUDP
 	}
 	if !validTransport(request.Transport) {
-		return Result{}, fmt.Errorf("transport must be udp, tcp, tcp-tls, or doh, got %q", request.Transport)
+		return Result{}, fmt.Errorf("transport must be udp, tcp, tcp-tls, quic, or doh, got %q", request.Transport)
 	}
 
 	message := new(dns.Msg)
 	message.SetQuestion(dns.Fqdn(request.Name), queryType)
 	message.SetEdns0(dns.DefaultMsgSize, request.DNSSEC)
+	if request.Transport == transportDoQ {
+		// RFC 9250 section 4.2.1 requires the DNS Message ID to be zero on a
+		// QUIC stream because the stream itself correlates the exchange.
+		message.Id = 0
+	}
 	if request.EDNSSubnet != "" {
 		subnet, err := parseClientSubnet(request.EDNSSubnet)
 		if err != nil {
@@ -99,6 +107,13 @@ func query(
 	}
 	if _, _, err := net.SplitHostPort(request.Server); err != nil {
 		return Result{}, fmt.Errorf("DNS server must be host:port: %w", err)
+	}
+	if request.Transport == transportDoQ {
+		response, elapsed, err := exchangeQUIC(ctx, message, request.Server, request.TLSName, request.Timeout)
+		if err != nil {
+			return Result{}, fmt.Errorf("query %s via quic: %w", request.Server, err)
+		}
+		return Result{Response: response, Elapsed: elapsed, Server: request.Server}, nil
 	}
 
 	client := &dns.Client{Net: request.Transport, Timeout: request.Timeout}
@@ -159,7 +174,8 @@ func parseClientSubnet(value string) (*dns.EDNS0_SUBNET, error) {
 
 func validTransport(transport string) bool {
 	return transport == transportUDP || transport == transportTCP ||
-		transport == transportDoT || transport == transportDoH
+		transport == transportDoT || transport == transportDoH ||
+		transport == transportDoQ
 }
 
 func normalizeDoHEndpoint(server string) (string, error) {

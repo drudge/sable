@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/miekg/dns v1.1.72
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/quic-go/quic-go v0.61.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/mod v0.37.0
 	golang.org/x/net v0.56.0

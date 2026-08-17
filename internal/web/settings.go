@@ -192,6 +192,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		candidate.Resolver.DNSSECTrustAnchorUpdates = request.FormValue("trust_anchor_updates") == "true"
 		candidate.EncryptedDNS.DoTListen = formLines(request.FormValue("dot_listen"))
 		candidate.EncryptedDNS.DoHListen = formLines(request.FormValue("doh_listen"))
+		candidate.EncryptedDNS.DoQListen = formLines(request.FormValue("doq_listen"))
 		candidate.EncryptedDNS.CertificateMode = certificateMode
 		candidate.EncryptedDNS.CertificateFile = strings.TrimSpace(request.FormValue("certificate_file"))
 		candidate.EncryptedDNS.PrivateKeyFile = strings.TrimSpace(request.FormValue("private_key_file"))
@@ -412,6 +413,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		CachePrefetchHitsPerHour: configuration.Resolver.CachePrefetchHitsPerHour,
 		TrustAnchorUpdates:       configuration.Resolver.DNSSECTrustAnchorUpdates,
 		DoTListen:                strings.Join(configuration.EncryptedDNS.DoTListen, "\n"), DoHListen: strings.Join(configuration.EncryptedDNS.DoHListen, "\n"),
+		DoQListen:       strings.Join(configuration.EncryptedDNS.DoQListen, "\n"),
 		CertificateFile: configuration.EncryptedDNS.CertificateFile, PrivateKeyFile: configuration.EncryptedDNS.PrivateKeyFile,
 		CertificateMode: configuration.EncryptedDNS.CertificateMode,
 		ACMEEmail:       configuration.EncryptedDNS.ACME.Email, ACMEDomains: strings.Join(configuration.EncryptedDNS.ACME.Domains, "\n"),

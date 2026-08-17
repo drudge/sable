@@ -26,8 +26,9 @@ performance before expanding the administrative surface.
 ## Milestone 1 — production recursive service
 
 - Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover, authenticated denial, negative trust anchors, and AD/CD/DO semantics
-- Cache prefetch and block-list health/backoff telemetry
-- DNS-over-QUIC and encrypted-transport load benchmarks
+- Cache prefetch, plus per-source block-list health with exponential retry backoff
+- RFC 9250 DNS-over-QUIC server and client transports
+- Encrypted-transport load benchmarks
 - OpenTelemetry metrics and expanded structured query-log controls
 - External identity providers and delegated group synchronization
 

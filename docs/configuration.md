@@ -26,15 +26,22 @@ controlled restart. DNS listener changes hot-reload transactionally.
 [encrypted_dns]
 dot_listen = ["0.0.0.0:853", "[::]:853"]
 doh_listen = ["0.0.0.0:443", "[::]:443"]
+doq_listen = ["0.0.0.0:853", "[::]:853"]
 certificate_mode = "manual"
 certificate_file = "certs/fullchain.pem"
 private_key_file = "certs/private-key.pem"
 minimum_tls_version = "1.3"
 ```
 
-DoT and DoH are disabled when their listener arrays are empty. DoH implements
-RFC 8484 at `/dns-query` using GET and POST wire format over HTTP/2 or HTTP/1.1.
-TLS 1.3 is the default; `"1.2"` is accepted when compatibility requires it.
+DoT, DoH, and DoQ are disabled when their listener arrays are empty. DoH
+implements RFC 8484 at `/dns-query` using GET and POST wire format over HTTP/2
+or HTTP/1.1. DoQ implements RFC 9250 with the `doq` ALPN token, one query per
+bidirectional stream, and the same two-octet length prefix DNS uses over TCP.
+TLS 1.3 is the default; `"1.2"` is accepted when compatibility requires it, but
+DoQ always negotiates TLS 1.3 because QUIC requires it.
+
+DoQ listens on UDP, so `doq_listen` may reuse a port already bound for TCP by
+`dot_listen`, but it may not collide with a `server.dns_listen` address.
 
 Certificate and private-key paths may be absolute or relative to the directory
 containing `sable.toml`. Sable validates the key pair before opening a listener.
@@ -120,6 +127,12 @@ forwarders = ["10.0.0.53:53", "10.0.1.53:53"]
 domain = "dev.corp.example"
 forwarders = ["10.2.0.53:53"]
 ```
+
+A forwarder address may carry an explicit transport prefix: `udp://`, `tcp://`,
+`tls://` for DNS-over-TLS, or `quic://` for RFC 9250 DNS-over-QUIC. The prefix
+is optional and defaults to `udp`. `tls` and `quic` default to port 853, and
+the other transports default to port 53. The same prefixes are valid in the
+protocol field of a Forwarder zone's `FWD` record.
 
 Conditional routes match the requested name by longest DNS suffix. In the
 example, `api.dev.corp.example` uses `10.2.0.53`, while
@@ -366,6 +379,33 @@ any of them, recompiles the policy, and restores the previous files if
 activation fails. The console supports curated and custom subscriptions,
 manual refresh, and the configured automatic refresh interval.
 
+### Block-list health and retry backoff
+
+Sable tracks each remote subscription independently: last attempt, last
+success, last error, consecutive failures, downloaded size, and the next retry
+deadline. A source that fails to download does not abort the refresh. Its
+cached copy stays active, every other list still updates, and the failing
+source is retried on an exponential backoff that starts at 5 minutes, doubles
+per consecutive failure, and caps at 6 hours. A source that has never
+downloaded successfully has no cache to fall back on, so it does abort the
+refresh instead of compiling an incomplete policy.
+
+The scheduler wakes at whichever comes first, the configured
+`update_interval` or the earliest pending retry, so a source that recovers is
+picked up without waiting for the full interval. Pressing **Update Block
+Lists** in the console clears every pending backoff and retries all sources
+immediately.
+
+The console marks a failing list inline and shows the failing count on the
+block-list card. Every unhealthy source is also logged with its consecutive
+failure count and retry deadline, and exported to Prometheus as
+`sable_block_list_source_healthy`,
+`sable_block_list_source_consecutive_failures`,
+`sable_block_list_source_downloads_total`,
+`sable_block_list_source_failures_total`, and
+`sable_block_list_source_last_success_timestamp_seconds`, each labelled with
+`list` and `url`, plus the `sable_block_list_sources_degraded` total.
+
 Allowed domains override matching block-list and custom rules. Bypass entries
 accept individual client IP addresses or CIDR networks. Response types are
 `nxdomain`, `zero` (0.0.0.0 and ::), and `custom`; `response_ttl` applies to
@@ -517,12 +557,14 @@ former primary is offline.
 
 ## DNS client transports
 
-The CLI and embedded console support `udp`, `tcp`, `tcp-tls`, and `doh`. A DoH
-server may be a complete HTTPS URL or `host:port`; the latter expands to
-`https://host:port/dns-query`.
+The CLI and embedded console support `udp`, `tcp`, `tcp-tls`, `quic`, and
+`doh`. A DoH server may be a complete HTTPS URL or `host:port`; the latter
+expands to `https://host:port/dns-query`. A `quic` server is `host:port` and
+defaults to the RFC 9250 port 853.
 
 ```sh
 sable query --transport tcp-tls --server dns.example:853 example.com AAAA
+sable query --transport quic --server dns.example:853 example.com AAAA
 sable query --transport doh --server https://dns.example/dns-query example.com HTTPS
 ```
 
@@ -530,7 +572,8 @@ sable query --transport doh --server https://dns.example/dns-query example.com H
 
 `GET /metrics` on the administrative listener exposes Prometheus text format.
 It includes build identity, uptime, DNS query outcomes, local and authoritative
-answers, zone count, cache hits/misses and occupancy, compiled policy sizes, and asynchronous query-log
+answers, zone count, cache hits/misses and occupancy, compiled policy sizes,
+per-source block-list download health, and asynchronous query-log
 queue/persistence health. Assign `metrics.read` on the API surface to a group,
 create a token using that group, and send it as
 `Authorization: Bearer sable_pat_...`.

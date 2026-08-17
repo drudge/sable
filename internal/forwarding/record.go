@@ -21,7 +21,7 @@ func ParseRecord(value string) (Record, error) {
 		return Record{}, errors.New("FWD value must contain protocol, priority, and forwarder address")
 	}
 	protocol := strings.ToLower(fields[0])
-	if protocol != "udp" && protocol != "tcp" && protocol != "tls" {
+	if !supportedProtocol(protocol) {
 		return Record{}, fmt.Errorf("unsupported FWD protocol %q", fields[0])
 	}
 	priority, err := strconv.ParseUint(fields[1], 10, 16)
@@ -52,7 +52,7 @@ func ParseEndpoint(value string) (protocol, address string, err error) {
 		protocol = strings.ToLower(parsedProtocol)
 		address = parsedAddress
 	}
-	if protocol != "udp" && protocol != "tcp" && protocol != "tls" {
+	if !supportedProtocol(protocol) {
 		return "", "", fmt.Errorf("unsupported forwarding protocol %q", protocol)
 	}
 	address, err = normalizeAddress(address, protocol)
@@ -85,8 +85,19 @@ func normalizeAddress(value, protocol string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
+// supportedProtocol reports whether a forwarder can be reached over the named
+// transport. "tls" is DNS-over-TLS and "quic" is RFC 9250 DNS-over-QUIC.
+func supportedProtocol(protocol string) bool {
+	switch protocol {
+	case "udp", "tcp", "tls", "quic":
+		return true
+	default:
+		return false
+	}
+}
+
 func defaultPort(protocol string) string {
-	if protocol == "tls" {
+	if protocol == "tls" || protocol == "quic" {
 		return "853"
 	}
 	return "53"

@@ -5,7 +5,7 @@ built as one executable containing the DNS server, DNS client, administrative
 API, migrations, and reactive web console.
 
 The project is at an early foundation milestone. The current executable serves
-UDP, TCP, DNS-over-TLS, and DNS-over-HTTPS with direct iterative recursion or configured forwarders, supports exact and subdomain
+UDP, TCP, DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC with direct iterative recursion or configured forwarders, supports exact and subdomain
 blocking, caches positive and negative responses, persists query events
 asynchronously, hot-reloads TOML configuration transactionally, exposes health
 and runtime information, and embeds its web interface.
@@ -17,7 +17,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 ## Current foundation
 
 - One statically built `sable` executable
-- UDP, TCP, DoT, and RFC 8484 DoH listeners with TCP fallback for truncated replies
+- UDP, TCP, DoT, RFC 8484 DoH, and RFC 9250 DoQ listeners with TCP fallback for truncated replies
 - Transactional listener and TLS certificate hot reload with TLS 1.3 defaults
 - Longest-suffix conditional forwarding with round-robin failover pools
 - Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover, DS/DNSKEY chain validation, NSEC/NSEC3 denial proofs, AD/CD/DO handling, and Extended DNS Errors
@@ -28,7 +28,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - Bounded sharded cache with TTL aging and RFC 2308 negative caching
 - Exact/subdomain blocking, allowed overrides, client bypasses, configurable responses, and temporary pause/resume
 - Curated or custom HTTP(S) block-list subscriptions with transactional scheduled and manual refresh
-- Built-in UDP, TCP, DNS-over-TLS, and DNS-over-HTTPS client
+- Built-in UDP, TCP, DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC client
 - Strict TOML configuration with transactional hot reload
 - Transactional SQLite/PostgreSQL zone and record storage with retained per-zone revisions
 - Batched non-blocking query logging, retention, API, and live console table

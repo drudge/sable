@@ -366,6 +366,8 @@ button { cursor: pointer; }
 .blocking-source-row strong { font-size: .875rem; }
 .blocking-source-row code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .blocking-source-row small { color: var(--muted-foreground); font-size: .7rem; text-transform: capitalize; }
+.blocking-source-row small.blocklist-health-warning { display: flex; align-items: center; gap: .3rem; color: var(--destructive); text-transform: none; }
+.blocking-source-row small.blocklist-health-warning svg { width: .85rem; height: .85rem; flex: 0 0 auto; }
 .source-status { border-radius: 999px; background: rgb(34 197 94 / .13); padding: .2rem .5rem; color: #22c55e; font-size: .68rem; font-weight: 600; }
 .icon-button.danger { color: var(--muted-foreground); }
 .icon-button.danger:hover { background: rgb(239 68 68 / .12); color: #ef4444; }
@@ -1891,6 +1893,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .switch-row > span { display: grid; gap: .2rem; }
 .switch-row input[type=checkbox] { width: 2.25rem; height: 1.25rem; flex: 0 0 2.25rem; accent-color: var(--primary); }
 .protocol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.protocol-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .protocol-setting { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
 .protocol-setting > div { display: grid; gap: .2rem; }
 .certificate-settings, .acme-settings, .manual-certificate-settings { display: grid; gap: 1rem; }
@@ -2131,7 +2134,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .admin-mobile-list { display: block; }
   .isotope-data-header { min-height: 3.75rem; }
   .settings-tab-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-	.field-grid.two, .field-grid.three, .field-grid.four, .protocol-grid, .certificate-mode-control { grid-template-columns: 1fr; }
+	.field-grid.two, .field-grid.three, .field-grid.four, .protocol-grid, .protocol-grid.three, .certificate-mode-control { grid-template-columns: 1fr; }
   .server-configuration-card h2 { font-size: 1.25rem; }
   .server-configuration-card > header, .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
 	.isotope-form-dialog { width: calc(100% - 1rem); }

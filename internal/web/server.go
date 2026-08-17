@@ -628,12 +628,15 @@ func dnssecRuntimeStatus(resolver config.Resolver, stats dnsserver.Stats) string
 }
 
 func encryptedDNSStatus(configuration config.EncryptedDNS) string {
-	listeners := make([]string, 0, len(configuration.DoTListen)+len(configuration.DoHListen))
+	listeners := make([]string, 0, len(configuration.DoTListen)+len(configuration.DoHListen)+len(configuration.DoQListen))
 	for _, address := range configuration.DoTListen {
 		listeners = append(listeners, "DoT "+address)
 	}
 	for _, address := range configuration.DoHListen {
 		listeners = append(listeners, "DoH "+address)
+	}
+	for _, address := range configuration.DoQListen {
+		listeners = append(listeners, "DoQ "+address)
 	}
 	if len(listeners) == 0 {
 		return "Disabled"
@@ -811,6 +814,8 @@ func queryProtocolLabel(transport string) string {
 		return "TLS"
 	case "doh":
 		return "HTTPS"
+	case "quic":
+		return "QUIC"
 	default:
 		return "UDP"
 	}

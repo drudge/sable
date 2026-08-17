@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -30,6 +31,7 @@ type clusterPrometheusNode struct {
 func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 	dnsStats := server.stats.Stats()
 	queryLogStats := server.queryLog.Stats()
+	blockListStatus := server.blockLists.Status()
 	trustAnchorUpdates := uint64(0)
 	if dnsStats.DNSSECTrustAnchorUpdates {
 		trustAnchorUpdates = 1
@@ -102,6 +104,7 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		{name: "sable_cluster_nodes_synchronized", help: "Cluster nodes synchronized to the current generation.", metricType: "gauge", value: clusterSynchronized},
 		{name: "sable_cluster_generation", help: "Current cluster configuration generation observed by this node.", metricType: "gauge", value: clusterGeneration},
 		{name: "sable_cluster_is_primary", help: "Whether this node is the writable cluster primary.", metricType: "gauge", value: clusterPrimary},
+		{name: "sable_block_list_sources_degraded", help: "Remote block lists whose most recent download attempt failed.", metricType: "gauge", value: uint64(blockListStatus.Degraded)},
 	}
 
 	var output strings.Builder
@@ -136,9 +139,47 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
+	for _, metric := range []struct{ name, help, metricType string }{
+		{"sable_block_list_source_healthy", "Whether the most recent download attempt for the block list succeeded.", "gauge"},
+		{"sable_block_list_source_consecutive_failures", "Consecutive failed download attempts for the block list.", "gauge"},
+		{"sable_block_list_source_downloads_total", "Successful block-list downloads.", "counter"},
+		{"sable_block_list_source_failures_total", "Failed block-list download attempts.", "counter"},
+		{"sable_block_list_source_last_success_timestamp_seconds", "Unix time of the last successful download, or 0 if it has never succeeded.", "gauge"},
+	} {
+		fmt.Fprintf(&output, "# HELP %s %s\n# TYPE %s %s\n", metric.name, metric.help, metric.name, metric.metricType)
+		for _, source := range blockListStatus.Sources {
+			fmt.Fprintf(
+				&output, "%s{list=\"%s\",url=\"%s\"} %d\n",
+				metric.name, prometheusLabel(source.Name), prometheusLabel(source.URL),
+				blockListSourceMetricValue(metric.name, source),
+			)
+		}
+	}
+
 	writer.Header().Set("Content-Type", prometheusContentType)
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte(output.String()))
+}
+
+func blockListSourceMetricValue(name string, source blockcompiler.SourceHealth) uint64 {
+	switch name {
+	case "sable_block_list_source_healthy":
+		if source.Healthy() {
+			return 1
+		}
+		return 0
+	case "sable_block_list_source_consecutive_failures":
+		return uint64(source.ConsecutiveFailures)
+	case "sable_block_list_source_downloads_total":
+		return source.Downloads
+	case "sable_block_list_source_failures_total":
+		return source.Failures
+	default:
+		if source.LastSuccess.IsZero() {
+			return 0
+		}
+		return uint64(source.LastSuccess.Unix())
+	}
 }
 
 func prometheusLabel(value string) string {

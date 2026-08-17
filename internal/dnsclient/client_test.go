@@ -41,7 +41,7 @@ func TestQueryReturnsResponseFromUDPServer(t *testing.T) {
 			A:   net.ParseIP("192.0.2.1"),
 		})
 		return response, 25 * time.Microsecond, nil
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
@@ -68,7 +68,7 @@ func TestQueryReturnsResponseFromDoHServer(t *testing.T) {
 		response := new(dns.Msg)
 		response.SetReply(request)
 		return response, 40 * time.Microsecond, nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Query() error = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestQueryUsesExplicitTLSNameForPinnedServer(t *testing.T) {
 		response := new(dns.Msg)
 		response.SetReply(request)
 		return response, time.Millisecond, nil
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("query() error = %v", err)
 	}
@@ -198,7 +198,7 @@ func TestQueryAddsDNSSECAndEDNSClientSubnet(t *testing.T) {
 		response := new(dns.Msg)
 		response.SetReply(request)
 		return response, time.Millisecond, nil
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("query() error = %v", err)
 	}
