@@ -491,7 +491,12 @@ can cover every zone or selected zones; selected grants reference immutable zone
 IDs, so renaming display data cannot broaden access. The initial user receives
 Administrator. The `updates.read` permission exposes the release check on the
 About page and `updates.apply` allows the console to install a release and
-restart Sable; only Administrator holds `updates.apply` by default. Sable
+restart Sable; only Administrator holds `updates.apply` by default. The
+`backup.create` permission allows downloading a whole-deployment backup and
+`backup.restore` allows applying one; because a backup carries password hashes,
+API token hashes, and the key that opens every DNSSEC private key, neither is
+implied by `settings.write`, and only Administrator and API Administrator hold
+them by default. See the [backup guide](backup.md). Sable
 refuses any group, status, or deletion change that would
 leave no active administrator. Disabling an account or resetting its password
 revokes its active sessions.

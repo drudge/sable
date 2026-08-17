@@ -385,7 +385,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		activeTab = request.URL.Query().Get("tab")
 	}
 	switch activeTab {
-	case "general", "web-service", "protocols", "recursion", "cache", "blocking", "proxy", "logging":
+	case "general", "web-service", "protocols", "recursion", "cache", "blocking", "proxy", "logging", "backup":
 	default:
 		activeTab = "general"
 	}
@@ -395,6 +395,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		TimeZone:   requestTimeDisplay(request).Zone(),
 		ActiveTab:  activeTab,
 		Message:    message, Error: errorMessage,
+		Backup:     server.backupView(request, "", ""),
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),

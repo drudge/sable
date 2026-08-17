@@ -78,6 +78,12 @@ func requiredPermission(request *http.Request) string {
 			return auth.PermissionSettingsWrite
 		}
 		return auth.PermissionSettingsRead
+	case strings.HasPrefix(path, "/ui/backup/restore"):
+		// Restoring replaces every user, role, and token on the node, so it is
+		// held apart from the permission that only lets an operator take one.
+		return auth.PermissionBackupRestore
+	case strings.HasPrefix(path, "/ui/backup"):
+		return auth.PermissionBackupCreate
 	case path == "/administration" || strings.HasPrefix(path, "/ui/administration"):
 		if write {
 			return auth.PermissionUsersWrite

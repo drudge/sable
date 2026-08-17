@@ -278,6 +278,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		logger.Warn("restore query statistics", "error", err)
 	}
 	webServer.SetUpdateController(update.NewManager(update.Options{PreRelease: initial.Updates.PreRelease}))
+	webServer.SetBackupController(&consoleBackups{configurationPath: absolutePath})
 	restartRequests := make(chan struct{}, 1)
 	webServer.SetRestartController(func() {
 		select {

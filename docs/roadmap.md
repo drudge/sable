@@ -62,8 +62,11 @@ performance before expanding the administrative surface.
 - UniFi DHCP integration is implemented: a console setup wizard maps UniFi
   networks to zones and publishes reservations and connected clients as
   integration-owned forward and reverse records
-- Applications/plugins, backup/restore, and expanded migration tooling remain
-  future work
+- Whole-deployment backup and restore is implemented: a passphrase-sealed
+  archive carries configuration, zones, authorization, encrypted secrets with
+  the vault key that opens them, trust anchors, TLS material, and cluster
+  membership, and restores onto a fresh node from the console or the CLI
+- Applications/plugins and expanded migration tooling remain future work
 
 Technitium feature parity is tracked as observable behavior, not copied code.
 Compatibility fixtures will be clean-room tests built from public DNS standards

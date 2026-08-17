@@ -43,6 +43,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - UniFi host synchronization with a guided setup wizard, per-network zone mapping, automatic forward and reverse zone creation, and integration-owned records that never disturb hand-authored ones
 - Managed ACME DNS-01 certificates with automatic renewal and nine built-in DNS providers
 - UI-generated/imported public certificate key pairs with protected node-local keys
+- Passphrase-sealed whole-deployment backup and restore covering configuration, zones, authorization, secrets and their vault key, trust anchors, TLS material, and cluster membership
 - Unit, integration, race, allocation, and microbenchmark coverage
 
 DNS-over-QUIC and automatic failover are planned and not represented as
@@ -153,6 +154,32 @@ Two permissions govern the console controls:
 `updates.read` belongs to the built-in DNS Administrator, Operator, and Auditor
 groups. Only Administrator can apply an update.
 
+## Backup and restore
+
+A backup is one sealed file holding everything a node needs to be rebuilt:
+configuration, zones and records, users and roles and API tokens, the encrypted
+secret vault together with the key that opens it, DNSSEC trust anchors, TLS
+material, and cluster membership. Query logs and statistics stay behind.
+
+```sh
+sable backup create --config /etc/sable/sable.toml --out /srv/backups/ns1.sablebackup
+```
+
+```sh
+sable backup restore --config /etc/sable/sable.toml /srv/backups/ns1.sablebackup
+```
+
+Every backup is encrypted with a passphrase, read from `--passphrase-file`, the
+`SABLE_BACKUP_PASSPHRASE` environment variable, or the terminal. The archive
+contains the vault key, so an unsealed copy would expose every private key on
+the node; a lost passphrase is a lost backup.
+
+The same operations live in the console under **Settings → Backup**, behind
+their own `backup.create` and `backup.restore` permissions. Restoring onto a
+fresh instance is covered in [the backup guide](docs/backup.md).
+
+## Development
+
 For live development, use the pinned Air workflow:
 
 ```sh
@@ -253,7 +280,8 @@ host. A newly created named volume receives the image's container-specific
 
 See [the architecture](docs/architecture.md) and
 [configuration guide](docs/configuration.md) for runtime behavior. The
-[benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
+[backup guide](docs/backup.md) covers capturing and rebuilding a deployment,
+the [benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
 [Proxmox guide](docs/proxmox.md) covers native unprivileged LXC deployment.
 
 Sable is licensed under the MIT License.

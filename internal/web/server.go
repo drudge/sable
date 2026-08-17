@@ -81,6 +81,8 @@ type Server struct {
 	unifi            unifiController
 	certificates     certificateController
 	updates          updateController
+	backups          backupController
+	backupStaging    backupStaging
 	administrator    administrator
 	restart          func()
 	restartRequested atomic.Bool
@@ -211,6 +213,12 @@ func New(
 	mux.HandleFunc("POST /ui/cluster/leave", server.leaveCluster)
 	mux.HandleFunc("POST /ui/cluster/delete", server.deleteCluster)
 	mux.HandleFunc("POST /ui/cluster/restart", server.restartServer)
+	mux.HandleFunc("GET /ui/backup", server.backupPanel)
+	mux.HandleFunc("GET /ui/backup/progress", server.backupProgress)
+	mux.HandleFunc("POST /ui/backup/download", server.downloadBackup)
+	mux.HandleFunc("GET /ui/backup/download/{token}", server.sendBackup)
+	mux.HandleFunc("POST /ui/backup/restore", server.restoreBackup)
+	mux.HandleFunc("POST /ui/backup/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/updates", server.updatePanel)
 	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)
 	mux.HandleFunc("POST /ui/updates/install", server.installUpdate)

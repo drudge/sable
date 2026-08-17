@@ -34,6 +34,11 @@ const (
 	PermissionMetricsRead   = "metrics.read"
 	PermissionUpdatesRead   = "updates.read"
 	PermissionUpdatesApply  = "updates.apply"
+	// A backup carries password hashes, API token hashes, and the key that
+	// opens every DNSSEC private key, so taking one is its own permission
+	// rather than part of reading settings.
+	PermissionBackupCreate  = "backup.create"
+	PermissionBackupRestore = "backup.restore"
 )
 
 var AllPermissions = []string{
@@ -44,6 +49,7 @@ var AllPermissions = []string{
 	PermissionLogsRead, PermissionUsersRead, PermissionUsersWrite,
 	PermissionClusterRead, PermissionClusterWrite, PermissionMetricsRead,
 	PermissionUpdatesRead, PermissionUpdatesApply,
+	PermissionBackupCreate, PermissionBackupRestore,
 }
 
 type Surface string

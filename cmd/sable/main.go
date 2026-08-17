@@ -25,6 +25,9 @@ Usage:
   sable serve [--config sable.toml]
   sable query [options] <name> [type]
   sable config check [--config sable.toml]
+  sable backup create [--config sable.toml] [--out file]
+  sable backup restore [--config sable.toml] <file>
+  sable backup inspect <file>
   sable install [--no-start] [--certificate-name name-or-ip]
   sable update [--pre-release] [--check] [--version tag] [--no-restart]
   sable version
@@ -52,6 +55,8 @@ func run(arguments []string) error {
 		return query(arguments[1:])
 	case "config":
 		return configCommand(arguments[1:])
+	case "backup":
+		return backupCommand(arguments[1:])
 	case "install":
 		return installCommand(arguments[1:])
 	case "update":
@@ -160,7 +165,7 @@ func (values *stringListFlag) String() string { return strings.Join(*values, ","
 func (values *stringListFlag) Set(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return errors.New("certificate name cannot be empty")
+		return errors.New("value cannot be empty")
 	}
 	*values = append(*values, value)
 	return nil
