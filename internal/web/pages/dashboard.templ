@@ -595,7 +595,7 @@ templ RecentQueryLog(entries []QueryLogEntryView) {
 }
 
 templ Stats(view StatsView) {
-	<section id="runtime-stats" class="stats-grid primary-stats">
+	<section id="runtime-stats" class="stats-grid primary-stats" hx-get="/ui/stats" hx-trigger="every 10s" hx-swap="outerHTML">
 		@StatCard("Total Queries", formatNumber(view.Queries), "100%", "blue")
 		@StatCard("No Error", formatNumber(view.NoError), percent(view.NoError, view.Queries), "green")
 		@StatCard("Server Failure", formatNumber(view.ServerFailures), percent(view.ServerFailures, view.Queries), "red")
@@ -626,16 +626,16 @@ templ QueryChart(view QueryChartView) {
 				@RangeButton("Week", "week", view.ActiveRange)
 				@RangeButton("Month", "month", view.ActiveRange)
 				@RangeButton("Year", "year", view.ActiveRange)
-				<button type="button" class={ ifThen(view.ActiveRange == "custom", "active", "") } aria-pressed={ fmt.Sprint(view.ActiveRange == "custom") } aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
+				<button type="button" id="chart-range-custom" class={ ifThen(view.ActiveRange == "custom", "active", "") } aria-pressed={ fmt.Sprint(view.ActiveRange == "custom") } aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
 			</div>
-			<label class="range-select"><span class="sr-only">Query statistics time range</span><select name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
+			<label class="range-select"><span class="sr-only">Query statistics time range</span><select id="chart-range-select" name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
 				@RangeOption("Hour", "hour", view.ActiveRange)
 				@RangeOption("Day", "day", view.ActiveRange)
 				@RangeOption("Week", "week", view.ActiveRange)
 				@RangeOption("Month", "month", view.ActiveRange)
 				@RangeOption("Year", "year", view.ActiveRange)
 			</select></label>
-			<button class="range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
+			<button class="range-custom-mobile" id="chart-range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
 		</div>
 		<div class="chart-range-popover" id="chart-custom-range" role="dialog" aria-label="Custom query range" data-chart-range-popover hidden>
 			<form class="chart-range-form" hx-get="/ui/stats/chart" hx-target="#query-statistics" hx-swap="outerHTML" data-chart-range-form>
@@ -699,8 +699,11 @@ templ QueryChart(view QueryChartView) {
 }
 
 templ RangeButton(label string, value string, active string) {
+	// The identifier survives the live refresh: htmx only restores focus to a
+	// swapped-in control when it carries the same id as the focused one.
 	<button
 		type="button"
+		id={ "chart-range-" + value }
 		class={ ifThen(value == active, "active", "") }
 		aria-pressed={ fmt.Sprint(value == active) }
 		data-range={ value }
