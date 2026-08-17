@@ -18,6 +18,7 @@ type resolverPreset struct {
 	plain string
 	tls   string
 	https string
+	quic  string
 }
 
 type resolvedDNSServer struct {
@@ -31,7 +32,7 @@ var resolverPresets = map[string]resolverPreset{
 	"google":     {name: "Google", plain: "8.8.8.8:53", tls: "dns.google:853", https: "https://dns.google/dns-query"},
 	"quad9":      {name: "Quad9", plain: "9.9.9.9:53", tls: "dns.quad9.net:853", https: "https://dns.quad9.net/dns-query"},
 	"opendns":    {name: "OpenDNS", plain: "208.67.222.222:53"},
-	"adguard":    {name: "AdGuard DNS", plain: "94.140.14.14:53", tls: "dns.adguard-dns.com:853", https: "https://dns.adguard-dns.com/dns-query"},
+	"adguard":    {name: "AdGuard DNS", plain: "94.140.14.14:53", tls: "dns.adguard-dns.com:853", https: "https://dns.adguard-dns.com/dns-query", quic: "dns.adguard-dns.com:853"},
 	"root-a":     {name: "a.root-servers.net", plain: "198.41.0.4:53"},
 	"root-b":     {name: "b.root-servers.net", plain: "170.247.170.2:53"},
 	"root-c":     {name: "c.root-servers.net", plain: "192.33.4.12:53"},
@@ -93,6 +94,10 @@ func resolveDNSClientServer(preset, custom, customName, customIP, local, transpo
 	case "doh":
 		if selected.https != "" {
 			return resolvedDNSServer{address: selected.https}, nil
+		}
+	case "quic":
+		if selected.quic != "" {
+			return resolvedDNSServer{address: selected.quic}, nil
 		}
 	default:
 		return resolvedDNSServer{}, fmt.Errorf("unknown DNS transport %q", transport)
@@ -157,7 +162,7 @@ func resolveCustomDNSServer(name, ip, transport string) (resolvedDNSServer, erro
 	switch transport {
 	case "udp", "tcp":
 		return resolvedDNSServer{address: net.JoinHostPort(target, "53")}, nil
-	case "tcp-tls":
+	case "tcp-tls", "quic":
 		return resolvedDNSServer{address: net.JoinHostPort(target, "853"), tlsName: name}, nil
 	case "doh":
 		host := name
@@ -200,6 +205,8 @@ func transportName(transport string) string {
 		return "DNS-over-TLS"
 	case "doh":
 		return "DNS-over-HTTPS"
+	case "quic":
+		return "DNS-over-QUIC"
 	default:
 		return strings.ToUpper(transport)
 	}

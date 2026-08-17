@@ -199,6 +199,7 @@ type QueryLog struct {
 type EncryptedDNS struct {
 	DoTListen       []string `toml:"dot_listen"`
 	DoHListen       []string `toml:"doh_listen"`
+	DoQListen       []string `toml:"doq_listen"`
 	CertificateMode string   `toml:"certificate_mode"`
 	CertificateFile string   `toml:"certificate_file"`
 	PrivateKeyFile  string   `toml:"private_key_file"`
@@ -564,11 +565,15 @@ func (configuration Config) Validate() error {
 	for index, address := range configuration.EncryptedDNS.DoHListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.doh_listen[%d]", index), address))
 	}
+	for index, address := range configuration.EncryptedDNS.DoQListen {
+		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.doq_listen[%d]", index), address))
+	}
 	validationErrors = append(validationErrors, validateTCPListenerConflicts(configuration))
+	validationErrors = append(validationErrors, validateUDPListenerConflicts(configuration))
 	if configuration.EncryptedDNS.CertificateMode != "manual" && configuration.EncryptedDNS.CertificateMode != "acme" {
 		validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_mode must be manual or acme"))
 	}
-	if (len(configuration.EncryptedDNS.DoTListen)+len(configuration.EncryptedDNS.DoHListen) > 0 || configuration.Server.HTTPSListen != "") && configuration.EncryptedDNS.CertificateMode == "manual" {
+	if (configuration.EncryptedDNS.encryptedListenerCount() > 0 || configuration.Server.HTTPSListen != "") && configuration.EncryptedDNS.CertificateMode == "manual" {
 		if configuration.EncryptedDNS.CertificateFile == "" {
 			validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_file is required for encrypted listeners"))
 		}
@@ -796,6 +801,35 @@ func validateTCPListenerConflicts(configuration Config) error {
 	return errors.Join(conflicts...)
 }
 
+// validateUDPListenerConflicts rejects a DNS-over-QUIC endpoint that would
+// contend for a UDP port already claimed by the plain DNS listener.
+func validateUDPListenerConflicts(configuration Config) error {
+	claimed := make(map[string]string, len(configuration.Server.DNSListen))
+	for _, address := range configuration.Server.DNSListen {
+		if address != "" {
+			claimed[address] = "server.dns_listen"
+		}
+	}
+	var conflicts []error
+	for _, address := range configuration.EncryptedDNS.DoQListen {
+		if address == "" {
+			continue
+		}
+		if existing, duplicate := claimed[address]; duplicate {
+			conflicts = append(conflicts, fmt.Errorf("UDP listener encrypted_dns.doq_listen conflicts with %s at %s", existing, address))
+			continue
+		}
+		claimed[address] = "encrypted_dns.doq_listen"
+	}
+	return errors.Join(conflicts...)
+}
+
+// encryptedListenerCount reports how many encrypted DNS endpoints need the
+// shared TLS certificate.
+func (encrypted EncryptedDNS) encryptedListenerCount() int {
+	return len(encrypted.DoTListen) + len(encrypted.DoHListen) + len(encrypted.DoQListen)
+}
+
 // SharesHTTPSWithDoH reports whether the public HTTPS console listener also
 // serves the standard DNS-over-HTTPS endpoint at /dns-query.
 func (configuration Config) SharesHTTPSWithDoH() bool {
@@ -829,6 +863,7 @@ func (configuration *Config) normalize() {
 	configuration.Resolver.RootHints = uniqueTrimmed(configuration.Resolver.RootHints)
 	configuration.EncryptedDNS.DoTListen = uniqueTrimmed(configuration.EncryptedDNS.DoTListen)
 	configuration.EncryptedDNS.DoHListen = uniqueTrimmed(configuration.EncryptedDNS.DoHListen)
+	configuration.EncryptedDNS.DoQListen = uniqueTrimmed(configuration.EncryptedDNS.DoQListen)
 	configuration.EncryptedDNS.CertificateMode = strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.CertificateMode))
 	if configuration.EncryptedDNS.CertificateMode == "" {
 		configuration.EncryptedDNS.CertificateMode = defaultCertificateMode

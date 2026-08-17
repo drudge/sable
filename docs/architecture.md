@@ -6,7 +6,7 @@ control plane.
 
 ## Data plane
 
-`internal/dnsserver` owns UDP, TCP, DoT, and DoH listeners and request processing. A handler
+`internal/dnsserver` owns UDP, TCP, DoT, DoH, and DoQ listeners and request processing. A handler
 reads an immutable runtime through an atomic pointer. Policy compilation happens
 off the query path; activation is one atomic swap. Listener replacement opens
 every new socket before changing the active set, so an unavailable address
@@ -100,7 +100,7 @@ by both web middleware and resource-aware handlers, and the store prevents
 disabling, deleting, or demoting the final active administrator. Password resets
 and account disablement revoke existing sessions. Administration listing uses a
 fixed number of queries rather than one query per user or group. The web
-middleware leaves DNS, DoT, and DoH listeners untouched while protecting the
+middleware leaves DNS, DoT, DoH, and DoQ listeners untouched while protecting the
 management UI, APIs, and metrics. `internal/secrets` encrypts
 future provider credentials using AES-256-GCM with the secret name as associated
 data; its master key is stored outside the database with owner-only permissions.
@@ -169,7 +169,7 @@ queries.
 
 PEM certificate/key pairs are validated before listener activation and held
 behind an atomic certificate store. File-watcher reloads therefore update new
-DoT and DoH handshakes without restarting sockets; an invalid pair preserves the
+DoT, DoH, and DoQ handshakes without restarting sockets; an invalid pair preserves the
 last-known-good identity.
 
 ACME DNS-01 uses a provider interface with credentials stored as encrypted

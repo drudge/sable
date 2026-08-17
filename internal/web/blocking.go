@@ -57,6 +57,11 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 			Accepted: source.Accepted, Invalid: source.Invalid,
 		}
 	}
+	updateStatus := server.blockLists.Status()
+	health := make(map[string]blockcompiler.SourceHealth, len(updateStatus.Sources))
+	for _, source := range updateStatus.Sources {
+		health[source.URL] = source
+	}
 	lists := make([]pages.BlockListSourceView, 0, len(snapshot.Config.Blocking.Lists))
 	for _, list := range snapshot.Config.Blocking.Lists {
 		view := sourceStats[list.Name]
@@ -64,6 +69,12 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		view.ConfiguredPath = list.Path
 		view.URL = list.URL
 		view.Format = list.Format
+		view.Healthy = true
+		if source, tracked := health[list.URL]; tracked && !source.Healthy() {
+			view.Healthy = false
+			view.HealthSummary = blockListHealthSummary(source, time.Now())
+			view.HealthDetail = blockListHealthDetail(source)
+		}
 		lists = append(lists, view)
 	}
 	pausedUntil := time.Time{}
@@ -73,7 +84,6 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 			pausedUntil = time.Time{}
 		}
 	}
-	updateStatus := server.blockLists.Status()
 	return pages.BlockingPageView{
 		Console: console, Enabled: snapshot.Config.Blocking.Enabled, PausedUntil: pausedUntil,
 		CompiledDomains: stats.BlockedDomains,
@@ -83,7 +93,43 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		RemoteListCount: len(remoteBlockSources(snapshot.Config.Blocking)),
 		UpdateHours:     max(1, int(snapshot.Config.Blocking.UpdateInterval.Duration/time.Hour)),
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,
-		ActiveTab: activeTab, Message: message, Error: errorMessage,
+		DegradedLists: updateStatus.Degraded,
+		ActiveTab:     activeTab, Message: message, Error: errorMessage,
+	}
+}
+
+// blockListHealthSummary is the short badge shown next to a failing list.
+func blockListHealthSummary(source blockcompiler.SourceHealth, now time.Time) string {
+	attempts := "1 failed update"
+	if source.ConsecutiveFailures > 1 {
+		attempts = fmt.Sprintf("%d failed updates", source.ConsecutiveFailures)
+	}
+	if source.RetryAfter.After(now) {
+		return fmt.Sprintf("%s · retrying in %s", attempts, formatApproximateDuration(source.RetryAfter.Sub(now)))
+	}
+	return attempts + " · retrying shortly"
+}
+
+// blockListHealthDetail is the tooltip: why it failed and how stale it is.
+func blockListHealthDetail(source blockcompiler.SourceHealth) string {
+	detail := source.LastError
+	if detail == "" {
+		detail = "the last update attempt failed"
+	}
+	if source.LastSuccess.IsZero() {
+		return detail + " (this list has never updated successfully)"
+	}
+	return fmt.Sprintf("%s (last successful update %s)", detail, source.LastSuccess.Format(time.RFC3339))
+}
+
+func formatApproximateDuration(remaining time.Duration) string {
+	switch {
+	case remaining >= time.Hour:
+		return fmt.Sprintf("%dh", int(remaining.Round(time.Hour)/time.Hour))
+	case remaining >= time.Minute:
+		return fmt.Sprintf("%dm", int(remaining.Round(time.Minute)/time.Minute))
+	default:
+		return "under a minute"
 	}
 }
 
@@ -532,6 +578,9 @@ func (server *Server) deleteBlockList(writer http.ResponseWriter, request *http.
 func (server *Server) updateBlockLists(writer http.ResponseWriter, request *http.Request) {
 	started := time.Now()
 	sources := len(remoteBlockSources(server.config.Current().Config.Blocking))
+	// An operator asking for an update expects every source to be tried now,
+	// not skipped because it is still serving out a retry backoff.
+	server.blockLists.ClearBackoff()
 	if err := server.refreshRemoteBlockLists(request.Context()); err != nil {
 		server.logBlockingOperation(request, err, "sources", sources, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
@@ -593,17 +642,46 @@ func (server *Server) resumeBlocking(writer http.ResponseWriter, request *http.R
 	_ = pages.BlockingContent(server.blockingView(request, "Blocking resumed", "", "lists")).Render(request.Context(), writer)
 }
 
+// refreshRemoteBlockLists downloads every healthy source and reschedules the
+// next run. A source that failed is retried on its own backoff deadline rather
+// than waiting for the full update interval, so the refresh error is reported
+// to the caller but the schedule is always advanced.
 func (server *Server) refreshRemoteBlockLists(ctx context.Context) error {
 	snapshot := server.config.Current()
 	sources := remoteBlockSources(snapshot.Config.Blocking)
 	if len(sources) == 0 {
 		return errors.New("no remote block lists are configured")
 	}
-	if err := server.blockLists.Refresh(ctx, sources, server.reload); err != nil {
-		return err
+	refreshErr := server.blockLists.Refresh(ctx, sources, server.reload)
+	next := time.Now().Add(snapshot.Config.Blocking.UpdateInterval.Duration)
+	if retry := server.blockLists.RetryAt(); !retry.IsZero() && retry.Before(next) {
+		next = retry
 	}
-	server.blockLists.Schedule(time.Now().Add(snapshot.Config.Blocking.UpdateInterval.Duration))
-	return nil
+	server.blockLists.Schedule(next)
+	if refreshErr != nil {
+		server.logBlockListHealth()
+	}
+	return refreshErr
+}
+
+// logBlockListHealth emits one structured line per unhealthy source so an
+// operator can see which list is stale and for how long without opening the
+// console.
+func (server *Server) logBlockListHealth() {
+	for _, source := range server.blockLists.Status().Sources {
+		if source.Healthy() {
+			continue
+		}
+		server.logger.Warn(
+			"block-list source is failing",
+			"list", source.Name,
+			"url", source.URL,
+			"consecutive_failures", source.ConsecutiveFailures,
+			"last_success", source.LastSuccess,
+			"retry_after", source.RetryAfter,
+			"error", source.LastError,
+		)
+	}
 }
 
 func (server *Server) runBlockListScheduler() {
@@ -637,11 +715,15 @@ func (server *Server) runBlockListScheduler() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			err := server.refreshRemoteBlockLists(ctx)
 			cancel()
+			status := server.blockLists.Status()
 			if err != nil {
-				server.logger.Error("scheduled block-list update failed", "error", err)
-				server.blockLists.SetNext(time.Now().Add(time.Hour))
+				server.logger.Error(
+					"scheduled block-list update failed",
+					"sources", len(sources), "degraded", status.Degraded,
+					"next_update", status.NextUpdate, "error", err,
+				)
 			} else {
-				server.logger.Info("scheduled block-list update completed", "sources", len(sources), "domains", server.stats.Stats().BlockedDomains, "duration", time.Since(started), "next_update", server.blockLists.Status().NextUpdate)
+				server.logger.Info("scheduled block-list update completed", "sources", len(sources), "domains", server.stats.Stats().BlockedDomains, "duration", time.Since(started), "next_update", status.NextUpdate)
 			}
 		}
 	}

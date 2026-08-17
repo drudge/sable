@@ -38,6 +38,7 @@ type SettingsPageView struct {
 	TrustAnchorUpdates  bool
 	DoTListen           string
 	DoHListen           string
+	DoQListen           string
 	CertificateFile     string
 	PrivateKeyFile      string
 	CertificateMode     string
@@ -138,7 +139,7 @@ templ SettingsWebPanel(view SettingsPageView) {
 templ SettingsProtocolsPanel(view SettingsPageView) {
 	<div class="settings-panel-stack">
 		@SettingsCard("cluster", "Secure DNS Protocols", "Enable encrypted DNS protocols for enhanced privacy") {
-			<div class="isotope-card-content protocol-grid"><div class="protocol-setting"><div><strong>DNS-over-TLS (DoT)</strong><small>Port 853</small></div><textarea name="dot_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:853">{ view.DoTListen }</textarea></div><div class="protocol-setting"><div><strong>DNS-over-HTTPS (DoH)</strong><small>HTTPS endpoint</small></div><textarea name="doh_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:443">{ view.DoHListen }</textarea></div></div>
+			<div class="isotope-card-content protocol-grid three"><div class="protocol-setting"><div><strong>DNS-over-TLS (DoT)</strong><small>Port 853</small></div><textarea name="dot_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:853">{ view.DoTListen }</textarea></div><div class="protocol-setting"><div><strong>DNS-over-HTTPS (DoH)</strong><small>HTTPS endpoint</small></div><textarea name="doh_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:443">{ view.DoHListen }</textarea></div><div class="protocol-setting"><div><strong>DNS-over-QUIC (DoQ)</strong><small>UDP port 853</small></div><textarea name="doq_listen" rows="2" spellcheck="false" placeholder="0.0.0.0:853">{ view.DoQListen }</textarea></div></div>
 		}
 		<div id="public-certificates">
 			@SettingsCard("shield", "Public TLS Certificate", "Certificate used by the Web, DNS-over-HTTPS, and DNS-over-TLS endpoints") {

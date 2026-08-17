@@ -89,6 +89,7 @@ retention = "168h"
 [encrypted_dns]
 dot_listen = []
 doh_listen = []
+doq_listen = []
 certificate_mode = "manual"
 certificate_file = ""
 private_key_file = ""

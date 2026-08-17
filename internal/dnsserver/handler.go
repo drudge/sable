@@ -16,6 +16,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/querylog"
@@ -2096,6 +2097,14 @@ func exchangeForwarder(ctx context.Context, request *dns.Msg, forwarder string, 
 	protocol, address, err := forwarding.ParseEndpoint(forwarder)
 	if err != nil {
 		return nil, err
+	}
+	if protocol == "quic" {
+		host, _, splitErr := net.SplitHostPort(address)
+		if splitErr != nil {
+			return nil, splitErr
+		}
+		response, _, err := dnsclient.ExchangeQUIC(ctx, request, address, host, timeout)
+		return response, err
 	}
 	network := protocol
 	if protocol == "tls" {

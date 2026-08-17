@@ -20,6 +20,7 @@ type BlockingPageView struct {
 	LastUpdate time.Time
 	NextUpdate time.Time
 	Updating bool
+	DegradedLists int
 	ActiveTab string
 	Message string
 	Error string
@@ -34,6 +35,9 @@ type BlockListSourceView struct {
 	Lines int
 	Accepted int
 	Invalid int
+	Healthy bool
+	HealthSummary string
+	HealthDetail string
 }
 
 type BlockListCatalogItem struct { Name, Description, URL, Category string }
@@ -110,7 +114,7 @@ templ BlockingStatus(view BlockingPageView) {
 		<div class="operational-metric-grid blocking-status-stats">
 			@OperationalMetricCard("ban", "Blocked (Last Hour)", formatNumber(view.BlockedQueries), "Queries stopped by blocking policy", "red")
 			@OperationalMetricCard("list", "Domains in Block Lists", formatNumber(uint64(view.CompiledDomains)), "Unique compiled blocking entries", "blue")
-			@OperationalMetricCard("zap", "Active Block Lists", formatNumber(uint64(len(view.Lists))), "Enabled block list sources", "purple")
+			@OperationalMetricCard("zap", "Active Block Lists", formatNumber(uint64(len(view.Lists))), blockListHealthDescription(view.DegradedLists), blockListHealthColor(view.DegradedLists))
 		</div>
 		<footer class="blocking-quick-actions">
 			if !view.PausedUntil.IsZero() {
@@ -129,7 +133,14 @@ templ BlockingStatus(view BlockingPageView) {
 templ BlockListRow(list BlockListSourceView) {
 	<article class="blocking-source-row isotope-source-row">
 		<span class="blocking-source-icon">@Icon("list")</span>
-		<div><strong>{ list.Name }</strong><code title={ ifThen(list.URL != "", list.URL, list.ConfiguredPath) }>{ blockListLocation(list) }</code><small>{ strings.ToUpper(list.Format) } · { formatNumber(uint64(list.Accepted)) } domains · { formatNumber(uint64(list.Invalid)) } invalid</small></div>
+		<div>
+			<strong>{ list.Name }</strong>
+			<code title={ ifThen(list.URL != "", list.URL, list.ConfiguredPath) }>{ blockListLocation(list) }</code>
+			<small>{ strings.ToUpper(list.Format) } · { formatNumber(uint64(list.Accepted)) } domains · { formatNumber(uint64(list.Invalid)) } invalid</small>
+			if !list.Healthy {
+				<small class="blocklist-health-warning" title={ list.HealthDetail }>@Icon("alert-triangle")<span>{ list.HealthSummary }</span></small>
+			}
+		</div>
 		if list.URL != "" {
 			<a class="icon-button" href={ templ.SafeURL(list.URL) } target="_blank" rel="noreferrer" aria-label={ "Open " + list.Name }>@Icon("external-link")</a>
 		}
@@ -209,6 +220,10 @@ templ DomainDialog(id, title, endpoint, action, description string) { <dialog cl
 templ FlushDomainDialog(id, title, endpoint string, count int) { <dialog class="custom-server-dialog blocking-dialog" id={ id }><div class="dialog-header"><h2>{ title }</h2><p>This removes all { formatNumber(uint64(count)) } custom entries. Block-list subscriptions are not affected.</p></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="button" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML">Clear Domains</button></footer></dialog> }
 
 func blockListAdded(existing []BlockListSourceView, url string) bool { for _, list := range existing { if list.URL == url { return true } }; return false }
+func blockListHealthDescription(degraded int) string { if degraded == 0 { return "Enabled block list sources" }; return fmt.Sprintf("%d %s failing to update", degraded, ifThen(degraded == 1, "source", "sources")) }
+
+func blockListHealthColor(degraded int) string { return ifThen(degraded == 0, "purple", "red") }
+
 func blockListLocation(list BlockListSourceView) string { if list.URL != "" { parsed := strings.TrimPrefix(strings.TrimPrefix(list.URL, "https://"), "http://"); return strings.TrimSuffix(parsed, "/") }; return ifThen(list.Path != "", list.Path, list.ConfiguredPath) }
 func blockingStatusDescription(view BlockingPageView) string { if !view.Enabled { return "DNS blocking is currently disabled" }; if !view.PausedUntil.IsZero() { return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeDisplay, false) }; return "DNS blocking is active and protecting your network" }
 func pluralizeDomain(count int) string { if count == 1 { return "domain" }; return "domains" }

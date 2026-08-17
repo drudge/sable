@@ -182,7 +182,7 @@ func serve(arguments []string) error {
 func query(arguments []string) error {
 	flags := flag.NewFlagSet("query", flag.ContinueOnError)
 	server := flags.String("server", "127.0.0.1:8053", "DNS server address")
-	transport := flags.String("transport", "udp", "udp, tcp, tcp-tls, or doh")
+	transport := flags.String("transport", "udp", "udp, tcp, tcp-tls, quic, or doh")
 	timeout := flags.Duration("timeout", 3*time.Second, "query timeout")
 	if err := flags.Parse(arguments); err != nil {
 		return err

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
 )
 
 const (
@@ -31,6 +32,7 @@ type ListenerConfig struct {
 	PlainDNS    []string
 	DoT         []string
 	DoH         []string
+	DoQ         []string
 	Certificate string
 	PrivateKey  string
 	MinimumTLS  uint16
@@ -56,6 +58,7 @@ type activeListener struct {
 	target     listenerTarget
 	dnsServer  *dns.Server
 	httpServer *http.Server
+	quicServer *doqServer
 	socket     io.Closer
 	started    chan struct{}
 }
@@ -73,6 +76,9 @@ func (listener *activeListener) shutdown(ctx context.Context) error {
 	}
 	if listener.httpServer != nil {
 		return listener.httpServer.Shutdown(ctx)
+	}
+	if listener.quicServer != nil {
+		return listener.quicServer.shutdown(ctx)
 	}
 	return nil
 }
@@ -187,6 +193,8 @@ func (group *ListenerGroup) open(target listenerTarget) (*activeListener, error)
 		return group.openDoT(target)
 	case listenerDoH:
 		return group.openDoH(target)
+	case listenerDoQ:
+		return group.openDoQ(target)
 	default:
 		return nil, fmt.Errorf("unsupported DNS listener kind %q", target.kind)
 	}
@@ -282,6 +290,24 @@ func (group *ListenerGroup) openDoH(target listenerTarget) (*activeListener, err
 	return &activeListener{target: target, httpServer: server, socket: listener, started: make(chan struct{})}, nil
 }
 
+func (group *ListenerGroup) openDoQ(target listenerTarget) (*activeListener, error) {
+	packets, err := net.ListenPacket("udp", target.address)
+	if err != nil {
+		return nil, fmt.Errorf("listen doq %s: %w", target.address, err)
+	}
+	transport := &quic.Transport{Conn: packets}
+	// QUIC is TLS 1.3 only, so a lower configured minimum cannot apply here.
+	tlsConfiguration := group.tlsConfig(tls.VersionTLS13, []string{doqALPN})
+	listener, err := transport.Listen(tlsConfiguration, doqQUICConfig())
+	if err != nil {
+		_ = transport.Close()
+		_ = packets.Close()
+		return nil, fmt.Errorf("listen doq %s: %w", target.address, err)
+	}
+	server := newDoQServer(group.handler, group.logger, transport, listener, packets)
+	return &activeListener{target: target, quicServer: server, socket: server, started: make(chan struct{})}, nil
+}
+
 func (group *ListenerGroup) tlsConfig(minimumVersion uint16, protocols []string) *tls.Config {
 	return &tls.Config{
 		MinVersion:     minimumVersion,
@@ -294,14 +320,18 @@ func (group *ListenerGroup) serve(listener *activeListener) <-chan error {
 	result := make(chan error, 1)
 	go func() {
 		var err error
-		if listener.dnsServer != nil {
+		switch {
+		case listener.dnsServer != nil:
 			err = listener.dnsServer.ActivateAndServe()
-		} else {
+		case listener.quicServer != nil:
+			close(listener.started)
+			err = listener.quicServer.serve()
+		default:
 			close(listener.started)
 			err = listener.httpServer.ServeTLS(listener.socket.(net.Listener), "", "")
 		}
 		result <- err
-		if err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, quic.ErrServerClosed) {
 			group.logger.Error(
 				"DNS listener stopped",
 				"protocol", listener.target.kind,
@@ -335,7 +365,7 @@ func awaitListenerStarts(
 }
 
 func loadCertificate(configuration ListenerConfig) (*tls.Certificate, error) {
-	if len(configuration.DoT)+len(configuration.DoH) == 0 {
+	if len(configuration.DoT)+len(configuration.DoH)+len(configuration.DoQ) == 0 {
 		return nil, nil
 	}
 	certificate, err := tls.LoadX509KeyPair(configuration.Certificate, configuration.PrivateKey)
@@ -357,6 +387,7 @@ const (
 	listenerDNSTCP listenerKind = "dns-tcp"
 	listenerDoT    listenerKind = "dot"
 	listenerDoH    listenerKind = "doh"
+	listenerDoQ    listenerKind = "doq"
 )
 
 type listenerTarget struct {
@@ -366,7 +397,7 @@ type listenerTarget struct {
 }
 
 func listenerKeys(configuration ListenerConfig) map[string]listenerTarget {
-	capacity := len(configuration.PlainDNS)*2 + len(configuration.DoT) + len(configuration.DoH)
+	capacity := len(configuration.PlainDNS)*2 + len(configuration.DoT) + len(configuration.DoH) + len(configuration.DoQ)
 	result := make(map[string]listenerTarget, capacity)
 	for _, address := range configuration.PlainDNS {
 		addListenerTarget(result, listenerTarget{kind: listenerDNSUDP, address: address})
@@ -377,6 +408,9 @@ func listenerKeys(configuration ListenerConfig) map[string]listenerTarget {
 	}
 	for _, address := range configuration.DoH {
 		addListenerTarget(result, listenerTarget{kind: listenerDoH, address: address, minimumTLS: configuration.MinimumTLS})
+	}
+	for _, address := range configuration.DoQ {
+		addListenerTarget(result, listenerTarget{kind: listenerDoQ, address: address})
 	}
 	return result
 }

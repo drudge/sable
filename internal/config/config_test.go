@@ -337,6 +337,54 @@ private_key_file = "key.pem"
 	}
 }
 
+func TestDecodeRejectsDoQConflictWithPlainDNSUDPListener(t *testing.T) {
+	t.Parallel()
+
+	_, err := Decode(strings.NewReader(`
+[server]
+dns_listen = ["127.0.0.1:8053"]
+
+[encrypted_dns]
+doq_listen = ["127.0.0.1:8053"]
+certificate_file = "cert.pem"
+private_key_file = "key.pem"
+`))
+	if err == nil {
+		t.Fatal("Decode() error = nil, want UDP listener conflict")
+	}
+}
+
+func TestDecodeAcceptsDoQSharingTheDoTPort(t *testing.T) {
+	t.Parallel()
+
+	// DoT binds TCP and DoQ binds UDP, so the same port number is fine.
+	loaded, err := Decode(strings.NewReader(`
+[encrypted_dns]
+dot_listen = ["127.0.0.1:853"]
+doq_listen = ["127.0.0.1:853"]
+certificate_file = "cert.pem"
+private_key_file = "key.pem"
+`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if len(loaded.EncryptedDNS.DoQListen) != 1 || loaded.EncryptedDNS.DoQListen[0] != "127.0.0.1:853" {
+		t.Fatalf("doq_listen = %v", loaded.EncryptedDNS.DoQListen)
+	}
+}
+
+func TestDecodeRequiresACertificateForDoQ(t *testing.T) {
+	t.Parallel()
+
+	_, err := Decode(strings.NewReader(`
+[encrypted_dns]
+doq_listen = ["127.0.0.1:853"]
+`))
+	if err == nil {
+		t.Fatal("Decode() error = nil, want a missing certificate failure")
+	}
+}
+
 func TestDecodeNormalizesLocalHostOverrides(t *testing.T) {
 	t.Parallel()
 
