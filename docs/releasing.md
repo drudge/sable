@@ -19,6 +19,12 @@ a nonstandard name or location. Release checks and snapshots must run from a
 Git repository with an `origin` remote because GoReleaser derives release
 metadata from Git.
 
+Container targets require Docker and Docker Buildx. Buildx's default `docker`
+driver cannot export manifest lists or SBOM attestations, so Mage creates and
+selects a `sable-release` builder that runs BuildKit in a container. Set
+`BUILDX_BUILDER` to use a different builder; it must also use the
+`docker-container` driver.
+
 ## Local validation
 
 ```sh
