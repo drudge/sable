@@ -206,6 +206,19 @@ func zoneTypeDisplay(zone ZoneView) string {
 	return zoneTypeLabel(zone.Type)
 }
 
+// zoneTypeSelectValue maps a zone onto the option the Add Zone dialog would
+// have used for it. Both catalog roles share one zone type, so a subscribed
+// catalog resolves to the secondary catalog option.
+func zoneTypeSelectValue(zone ZoneView) string {
+	if zone.CatalogRole == "subscribed" {
+		return "secondary_catalog"
+	}
+	if zone.Type == "" {
+		return "primary"
+	}
+	return strings.ToLower(zone.Type)
+}
+
 // zoneCanOpenRecords reports whether a record dialog is worth rendering. An
 // alias zone's records are maintained by Sable rather than authored by hand,
 // but they open read-only for inspection the same way integration-owned records
@@ -598,12 +611,25 @@ templ ZoneCopyableText(id, text, className string) {
 	<span class={ "zone-copyable " + className }><code id={ id }>{ text }</code><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button></span>
 }
 
+// ZoneTypeOptions lists the zone types the console knows about. Zone Settings
+// renders the same options behind a disabled select so a zone's type reads the
+// way it was picked, rather than as a text box that looks editable.
+templ ZoneTypeOptions(selected string, allowAlias bool) {
+	<option value="primary" selected?={ selected == "primary" }>Primary Zone</option>
+	<option value="secondary" selected?={ selected == "secondary" }>Secondary Zone</option>
+	<option value="stub" selected?={ selected == "stub" }>Stub Zone</option>
+	<option value="forwarder" selected?={ selected == "forwarder" }>Forwarder Zone</option>
+	<option value="alias" selected?={ selected == "alias" } disabled?={ !allowAlias }>Alias Zone</option>
+	<option value="catalog" selected?={ selected == "catalog" }>Catalog Zone</option>
+	<option value="secondary_catalog" selected?={ selected == "secondary_catalog" }>Secondary Catalog Zone</option>
+}
+
 templ CreateZoneDialog(aliasSources []string) {
 	<dialog class="custom-server-dialog isotope-zone-dialog" id="create-zone-dialog" aria-labelledby="create-zone-title">
 		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
 			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
-			<label><span>Zone Type</span><select name="type" data-zone-create-type><option value="primary">Primary Zone</option><option value="secondary">Secondary Zone</option><option value="stub">Stub Zone</option><option value="forwarder">Forwarder Zone</option><option value="alias" disabled?={ len(aliasSources) == 0 }>Alias Zone</option><option value="catalog">Catalog Zone</option><option value="secondary_catalog">Secondary Catalog Zone</option></select></label>
+			<label><span>Zone Type</span><select name="type" data-zone-create-type>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
 			<label><span>TSIG Key (optional)</span><input class="mono-input" name="tsig_key" placeholder="transfer-key." autocomplete="off"/><small>References a key configured in <code>[[tsig_keys]]</code>.</small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
@@ -880,7 +906,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="general">
 				<label><span>Zone Name</span><input class="mono-input" value={ zone.Name } readonly/></label>
-				<label><span>Zone Type</span><input value={ zoneTypeDisplay(zone) } readonly/></label>
+				<label><span>Zone Type</span><select disabled>@ZoneTypeOptions(zoneTypeSelectValue(zone), true)</select></label>
 				<label><span>Default TTL (seconds)</span><input type="number" name="default_ttl" min="1" max="4294967295" value={ fmt.Sprint(zone.DefaultTTL) } required/></label>
 				if zone.CatalogManager != "" {
 					<section class="zone-settings-section">
