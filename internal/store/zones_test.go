@@ -453,3 +453,82 @@ func TestZoneStoreAddsAliasColumnToExistingDatabase(t *testing.T) {
 		t.Fatalf("updated alias source = %q, want %q", reread[0].AliasZone, "other.test")
 	}
 }
+
+func TestZoneStoreAddsCatalogColumnsToExistingDatabase(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	databasePath := filepath.Join(t.TempDir(), "catalog-zones.db")
+	storage, err := Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"catalog_zone", "catalog_group", "catalog_member_id", "catalog_change_owner"} {
+		if _, err := storage.database.ExecContext(ctx,
+			"ALTER TABLE sable_zones DROP COLUMN "+column); err != nil {
+			storage.Close()
+			t.Fatalf("simulate pre-upgrade schema: %v", err)
+		}
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	storage, err = Open(ctx, "sqlite", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	zones := []zone.Zone{
+		{
+			Name: "catalog.invalid", Type: "catalog", DefaultTTL: 300, ZoneTransfer: "deny",
+			Records: []zone.Record{
+				{Name: "@", Type: "SOA", Value: "invalid. hostmaster.catalog.invalid. 1 3600 600 1209600 300", TTL: 300},
+				{Name: "@", Type: "NS", Value: "invalid.", TTL: 300},
+				{Name: "version", Type: "TXT", Value: `"2"`, TTL: 300, Source: zone.SourceCatalog},
+			},
+		},
+		{
+			Name: "example.test", Type: "primary", DefaultTTL: 300, ZoneTransfer: "deny",
+			CatalogZone: "catalog.invalid", CatalogGroup: "operator-x-foo",
+			CatalogMemberID: "nj2xg5b", CatalogChangeOwner: "other.invalid",
+			Records: []zone.Record{
+				{Name: "@", Type: "SOA", Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300", TTL: 300},
+				{Name: "@", Type: "NS", Value: "ns1.example.test.", TTL: 300},
+			},
+		},
+	}
+	if _, err := storage.ReplaceZones(ctx, nil, zones); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := stored[1]
+	if member.Name != "example.test" {
+		t.Fatalf("stored zones are not in the expected order: %#v", stored)
+	}
+	if member.CatalogZone != "catalog.invalid" || member.CatalogGroup != "operator-x-foo" ||
+		member.CatalogMemberID != "nj2xg5b" || member.CatalogChangeOwner != "other.invalid" {
+		t.Fatalf("stored membership = %#v, want every catalog field preserved", member)
+	}
+	if stored[0].Records[2].Source != zone.SourceCatalog {
+		t.Fatalf("stored catalog records = %#v, want the published record marked", stored[0].Records)
+	}
+
+	updated := zone.Clone(stored)
+	updated[1].CatalogZone = ""
+	updated[1].CatalogGroup = ""
+	updated[1].CatalogMemberID = ""
+	updated[1].CatalogChangeOwner = ""
+	if _, err := storage.ReplaceZones(ctx, stored, updated); err != nil {
+		t.Fatal(err)
+	}
+	reread, err := storage.ListZones(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread[1].CatalogZone != "" || reread[1].CatalogMemberID != "" {
+		t.Fatalf("withdrawn membership = %#v, want it cleared", reread[1])
+	}
+}

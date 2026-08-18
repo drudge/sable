@@ -373,7 +373,9 @@ func (handler *Handler) RefreshZone(
 		}
 		return fresh, !zoneRecordSetsEqual(current, fresh), nil
 	}
-	if zoneType != "secondary" {
+	// Consumer catalog zones are ordinary zones on the wire; only what Sable
+	// does with the transferred records differs from a secondary.
+	if zoneType != "secondary" && zoneType != "catalog" {
 		return nil, false, fmt.Errorf("zone type %q cannot be refreshed", zoneType)
 	}
 	currentRR, currentSOA, err := zoneRecordsToRR(zoneName, current)

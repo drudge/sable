@@ -55,16 +55,25 @@ func (server *Server) zonesPage(writer http.ResponseWriter, request *http.Reques
 	}
 }
 
+// catalogConsumerFormType is the value the create dialog submits for a catalog
+// zone transferred from another server. It collapses to the "catalog" zone type
+// once the form has been read.
+const catalogConsumerFormType = "catalog_consumer"
+
 func (server *Server) zonesView(request *http.Request, message, errorMessage, selected string) pages.ZonesPageView {
 	console := server.consoleView(request)
 	zones := server.zones.Current().Zones
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
 	aliasSources := make([]string, 0, len(zones))
+	catalogTargets := make([]string, 0, len(zones))
 	for _, zone := range zones {
-		if zone.Type != "primary" && zone.Type != "secondary" {
+		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
 			continue
 		}
-		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+		if zonemodel.IsProducerCatalog(zone) {
+			catalogTargets = append(catalogTargets, zone.Name)
+		}
+		if zone.Type != "primary" && zone.Type != "secondary" {
 			continue
 		}
 		aliasSources = append(aliasSources, zone.Name)
@@ -80,7 +89,13 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			ZoneTransfer: zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
 			PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
 			AliasZone: zone.AliasZone, AliasSources: aliasZoneChoices(aliasSources, zone),
-			TSIGKey: zone.TSIGKey, DynamicUpdates: zone.DynamicUpdates,
+			CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,
+			CatalogTargets:        catalogZoneChoices(catalogTargets, zone),
+			CatalogRole:           catalogRoleLabel(zone),
+			CatalogManager:        catalogManagingZone(zones, zone),
+			CatalogMembers:        catalogMemberNames(zones, zone),
+			AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
+			TSIGKey:               zone.TSIGKey, DynamicUpdates: zone.DynamicUpdates,
 			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
 			DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
 			DNSSECDenial: zone.DNSSECDenial, NSEC3Iterations: zone.NSEC3Iterations, NSEC3Salt: zone.NSEC3Salt,
@@ -126,6 +141,49 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		CanCreate:    !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
 		AliasSources: aliasSources,
 	}
+}
+
+// catalogRoleLabel describes which side of RFC 9432 a catalog zone sits on.
+func catalogRoleLabel(current zonemodel.Zone) string {
+	switch {
+	case zonemodel.IsConsumerCatalog(current):
+		return "subscribed"
+	case zonemodel.IsProducerCatalog(current):
+		return "published"
+	default:
+		return ""
+	}
+}
+
+// catalogZoneChoices returns the published catalogs a zone may join. The zone's
+// current catalog is always present so a catalog the account cannot otherwise
+// read is not silently dropped on save.
+func catalogZoneChoices(targets []string, current zonemodel.Zone) []string {
+	if current.Type == "catalog" {
+		return nil
+	}
+	choices := append([]string(nil), targets...)
+	if current.CatalogZone != "" && !slices.Contains(choices, current.CatalogZone) {
+		choices = append(choices, current.CatalogZone)
+	}
+	slices.Sort(choices)
+	return choices
+}
+
+// catalogMemberNames lists the zones a catalog carries, so the console can show
+// membership without making the operator read the raw PTR records.
+func catalogMemberNames(zones []zonemodel.Zone, current zonemodel.Zone) []string {
+	if current.Type != "catalog" {
+		return nil
+	}
+	members := make([]string, 0)
+	for _, candidate := range zones {
+		if candidate.CatalogZone == current.Name {
+			members = append(members, candidate.Name)
+		}
+	}
+	slices.Sort(members)
+	return members
 }
 
 // aliasZoneChoices returns the source zones offered in an alias zone's settings
@@ -446,12 +504,25 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		if zoneType == "" {
 			zoneType = "primary"
 		}
-		if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" && zoneType != "forwarder" && zoneType != "alias" {
+		// The two catalog roles are one zone type that differs only in whether
+		// the catalog is transferred from somewhere else, but they are separate
+		// choices in the form because they behave nothing alike.
+		consumeCatalog := zoneType == catalogConsumerFormType
+		if consumeCatalog {
+			zoneType = "catalog"
+		}
+		if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" &&
+			zoneType != "forwarder" && zoneType != "alias" && zoneType != "catalog" {
 			return errors.New("unsupported zone type")
 		}
 		primaryNSValue := strings.TrimSpace(request.FormValue("primary_ns"))
 		if primaryNSValue == "" {
+			// RFC 9432 recommends an apex NS of "invalid." because a catalog
+			// zone is only ever transferred, never resolved.
 			primaryNSValue = "ns1." + name
+			if zoneType == "catalog" {
+				primaryNSValue = "invalid."
+			}
 		}
 		primaryNS, err := dnsname.Normalize(primaryNSValue)
 		if err != nil {
@@ -504,6 +575,38 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 				return fmt.Errorf("forwarder: %w", forwarderErr)
 			}
 			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "FWD", TTL: ttl, Value: forwarder.String()}}
+		case "catalog":
+			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)}}
+			if !consumeCatalog {
+				break
+			}
+			// A subscribed catalog is transferred exactly like a secondary, so
+			// its first transfer happens here and the operator sees a bad
+			// address or a rejected TSIG key immediately.
+			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
+			if protocol == "" {
+				protocol = "tcp"
+			}
+			if protocol != "tcp" && protocol != "tls" {
+				return errors.New("catalog zone transfer protocol must be TCP or DNS-over-TLS")
+			}
+			primaries, primaryErr := normalizeZonePrimaryServers(request.FormValue("primary_servers"), protocol)
+			if primaryErr != nil {
+				return primaryErr
+			}
+			synchronizer, ok := any(server.stats).(zoneSynchronizer)
+			if !ok {
+				return errors.New("zone synchronization is unavailable")
+			}
+			transferred, transferErr := synchronizer.FetchZone(request.Context(), name, "catalog", primaries, protocol, zone.TSIGKey)
+			if transferErr != nil {
+				return transferErr
+			}
+			zone.PrimaryServers, zone.PrimaryProtocol = primaries, protocol
+			zone.Records = configuredZoneRecords(transferred)
+			if _, parseErr := zonemodel.ParseCatalog(name, zone.Records); parseErr != nil {
+				return fmt.Errorf("the transferred zone is not a usable catalog: %w", parseErr)
+			}
 		case "secondary", "stub":
 			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
 			if protocol == "" {
@@ -606,6 +709,12 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 		if zone == nil {
 			return errors.New("zone was not found")
 		}
+		if owner := catalogManagingZone(*zones, *zone); owner != "" {
+			// Every setting on a provisioned member is inherited from its
+			// catalog and would be overwritten on the next refresh, so the form
+			// says so rather than accepting an edit that silently reverts.
+			return fmt.Errorf("this zone is managed by catalog %q; change it there instead", owner)
+		}
 		defaultTTL, err := formTTL(request.FormValue("default_ttl"), 0)
 		if err != nil {
 			return err
@@ -639,19 +748,80 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 			}
 			zone.AliasZone = source
 		}
-		if (zone.Type == "secondary" || zone.Type == "stub") && request.Form.Has("primary_servers") {
+		if request.Form.Has("catalog_zone") {
+			catalogName, catalogErr := catalogPublisherZone(*zones, request.FormValue("catalog_zone"), *zone)
+			if catalogErr != nil {
+				return catalogErr
+			}
+			zone.CatalogZone = catalogName
+			if catalogName == "" {
+				zone.CatalogGroup = ""
+			} else if request.Form.Has("catalog_group") {
+				zone.CatalogGroup = strings.TrimSpace(request.FormValue("catalog_group"))
+			}
+		}
+		if (zone.Type == "secondary" || zone.Type == "stub" || zone.Type == "catalog") && request.Form.Has("primary_servers") {
 			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
-			if zone.Type == "secondary" && protocol != "tcp" && protocol != "tls" {
-				return errors.New("secondary zone transfer protocol must be TCP or DNS-over-TLS")
+			if (zone.Type == "secondary" || zone.Type == "catalog") && protocol != "tcp" && protocol != "tls" {
+				return fmt.Errorf("%s zone transfer protocol must be TCP or DNS-over-TLS", zone.Type)
 			}
 			primaries, primaryErr := normalizeZonePrimaryServers(request.FormValue("primary_servers"), protocol)
 			if primaryErr != nil {
 				return primaryErr
 			}
+			if zone.Type == "catalog" && len(primaries) == 0 {
+				// Dropping the last primary would silently turn a subscribed
+				// catalog into one this server publishes, orphaning every zone
+				// it provisioned.
+				return errors.New("a subscribed catalog zone needs at least one primary server")
+			}
 			zone.PrimaryServers, zone.PrimaryProtocol = primaries, protocol
 		}
 		return nil
 	})
+}
+
+// catalogManagingZone names the consumer catalog that provisioned a zone, or an
+// empty string when the operator owns the zone themselves. Membership of a
+// catalog this server publishes is an ordinary local setting, so it does not
+// make the zone read-only.
+func catalogManagingZone(zones []zonemodel.Zone, current zonemodel.Zone) string {
+	if current.CatalogZone == "" {
+		return ""
+	}
+	owner := findZone(zones, current.CatalogZone)
+	if owner == nil || !zonemodel.IsConsumerCatalog(*owner) {
+		return ""
+	}
+	return owner.Name
+}
+
+// catalogPublisherZone resolves the catalog a zone is published into and reports
+// the problem in the operator's own terms. Model validation covers the same
+// ground for zones that arrive through other paths.
+func catalogPublisherZone(zones []zonemodel.Zone, value string, current zonemodel.Zone) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	catalogName, err := dnsname.Normalize(value)
+	if err != nil {
+		return "", fmt.Errorf("catalog zone: %w", err)
+	}
+	if current.Type == "catalog" {
+		return "", errors.New("a catalog zone cannot be a member of another catalog")
+	}
+	existing := findZone(zones, catalogName)
+	if existing == nil {
+		return "", fmt.Errorf("catalog zone %q was not found", catalogName)
+	}
+	if existing.Type != "catalog" {
+		return "", fmt.Errorf("zone %q is a %s zone, not a catalog zone", catalogName, existing.Type)
+	}
+	if zonemodel.IsConsumerCatalog(*existing) {
+		return "", fmt.Errorf("catalog %q is subscribed from another server, so its membership is not set here", catalogName)
+	}
+	return catalogName, nil
 }
 
 func (server *Server) updateZoneDNSSEC(writer http.ResponseWriter, request *http.Request) {

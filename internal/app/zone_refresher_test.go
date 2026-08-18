@@ -162,3 +162,91 @@ func managedTestZone() zonemodel.Zone {
 		},
 	}
 }
+
+func catalogTestZone() zonemodel.Zone {
+	return zonemodel.Zone{
+		Name: "catalog.example", Type: "catalog", DefaultTTL: 300,
+		PrimaryServers: []string{"192.0.2.53:53"}, PrimaryProtocol: "tcp",
+		Records: []zonemodel.Record{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "invalid. hostmaster.catalog.example. 1 10 3 20 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "invalid."},
+			{Name: "version", Type: "TXT", TTL: 300, Value: `"2"`},
+		},
+	}
+}
+
+func TestZoneRefresherRefreshesSubscribedCatalogs(t *testing.T) {
+	t.Parallel()
+
+	configuration := &refreshTestConfiguration{
+		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{catalogTestZone()}},
+	}
+	dnsService := &refreshTestDNS{changed: true, expired: make(map[string]bool)}
+	refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	start := time.Now()
+	refresher.step(context.Background(), start)
+	// The first pass only schedules the zone from its SOA refresh timer.
+	refresher.step(context.Background(), start.Add(11*time.Second))
+
+	if dnsService.calls == 0 {
+		t.Fatal("a subscribed catalog zone was never refreshed")
+	}
+}
+
+func TestZoneRefresherFetchesCatalogMemberFirstTransfer(t *testing.T) {
+	t.Parallel()
+
+	member := zonemodel.Zone{
+		Name: "member.example", Type: "secondary", DefaultTTL: 300,
+		PrimaryServers: []string{"192.0.2.53:53"}, PrimaryProtocol: "tcp",
+		CatalogZone: "catalog.example", CatalogMemberID: "aaa",
+	}
+	configuration := &refreshTestConfiguration{
+		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{member}},
+	}
+	dnsService := &refreshTestDNS{
+		expired: make(map[string]bool),
+		updated: []dnsserver.ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.member.example. hostmaster.member.example. 4 10 3 20 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.member.example."},
+		},
+	}
+	refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	refresher.step(context.Background(), time.Now())
+
+	stored := configuration.snapshot.Zones[0]
+	if len(stored.Records) != 2 {
+		t.Fatalf("expected the member to receive its first transfer, got %d records", len(stored.Records))
+	}
+	if zonemodel.AwaitingFirstTransfer(stored) {
+		t.Fatal("the member should no longer be awaiting its first transfer")
+	}
+}
+
+func TestZoneRefresherPacesFailedFirstTransfers(t *testing.T) {
+	t.Parallel()
+
+	member := zonemodel.Zone{
+		Name: "member.example", Type: "secondary", DefaultTTL: 300,
+		PrimaryServers: []string{"192.0.2.53:53"}, PrimaryProtocol: "tcp",
+		CatalogZone: "catalog.example", CatalogMemberID: "aaa",
+	}
+	configuration := &refreshTestConfiguration{
+		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{member}},
+	}
+	dnsService := &refreshTestDNS{expired: make(map[string]bool), err: errors.New("primary unreachable")}
+	refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	start := time.Now()
+	refresher.step(context.Background(), start)
+	refresher.step(context.Background(), start.Add(time.Second))
+	refresher.step(context.Background(), start.Add(2*time.Second))
+	if configuration.updates != 0 {
+		t.Fatal("a failed first transfer must not store records")
+	}
+	state, tracked := refresher.states["member.example"]
+	if !tracked || !state.nextAttempt.After(start.Add(30*time.Second)) {
+		t.Fatalf("a failed first transfer was not paced: %+v", state)
+	}
+}

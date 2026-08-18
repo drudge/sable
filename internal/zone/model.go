@@ -64,10 +64,25 @@ type Zone struct {
 	// AliasZone names the zone an alias zone mirrors. Every record of the source
 	// zone is republished under this zone's apex whenever the source changes, so
 	// an internal and an external name can answer with one set of records.
-	AliasZone      string `json:"alias_zone,omitempty"`
-	TSIGKey        string `json:"tsig_key,omitempty"`
-	DynamicUpdates bool   `json:"dynamic_updates,omitempty"`
-	DNSSEC         bool   `json:"dnssec,omitempty"`
+	AliasZone string `json:"alias_zone,omitempty"`
+	// CatalogZone names the RFC 9432 catalog zone this zone belongs to. On a
+	// producer catalog it marks a zone to publish; on a consumer catalog it
+	// records which catalog provisioned the zone, so a resync only ever removes
+	// zones that catalog created.
+	CatalogZone string `json:"catalog_zone,omitempty"`
+	// CatalogGroup carries the optional RFC 9432 group property. Producers
+	// publish it alongside the member PTR; consumers store what they received.
+	CatalogGroup string `json:"catalog_group,omitempty"`
+	// CatalogMemberID is the <unique-N> label that identifies this zone inside
+	// its catalog. A changed label means the member was removed and re-added.
+	CatalogMemberID string `json:"catalog_member_id,omitempty"`
+	// CatalogChangeOwner records a pending RFC 9432 change of ownership. The
+	// named catalog is the only one permitted to take this member over from the
+	// catalog that currently owns it.
+	CatalogChangeOwner string `json:"catalog_change_owner,omitempty"`
+	TSIGKey            string `json:"tsig_key,omitempty"`
+	DynamicUpdates     bool   `json:"dynamic_updates,omitempty"`
+	DNSSEC             bool   `json:"dnssec,omitempty"`
 	// DNSSECValidationDisabled turns the zone subtree into a local negative
 	// trust anchor. Private forwarders commonly serve an unsigned split-horizon
 	// copy of a delegated name, which a validator can only report as bogus
@@ -187,11 +202,35 @@ func Normalize(zone *Zone) {
 	if zone.Type == "stub" && zone.PrimaryProtocol == "" {
 		zone.PrimaryProtocol = "udp"
 	}
+	// A catalog zone with primary servers is consumed from those servers over
+	// AXFR/IXFR exactly like a secondary; one without them is published here.
+	if zone.Type == "catalog" && len(zone.PrimaryServers) > 0 && zone.PrimaryProtocol == "" {
+		zone.PrimaryProtocol = "tcp"
+	}
 	zone.PrimaryServers = normalizePrimaryServers(zone.PrimaryServers, zone.PrimaryProtocol)
 	if zone.Type == "alias" {
 		zone.AliasZone = normalizeDomain(zone.AliasZone)
 	} else {
 		zone.AliasZone = ""
+	}
+	zone.CatalogZone = normalizeDomain(zone.CatalogZone)
+	zone.CatalogGroup = strings.TrimSpace(zone.CatalogGroup)
+	zone.CatalogMemberID = strings.ToLower(strings.TrimSpace(zone.CatalogMemberID))
+	zone.CatalogChangeOwner = normalizeDomain(zone.CatalogChangeOwner)
+	if zone.CatalogZone == "" {
+		// The remaining catalog fields only describe a membership, so they are
+		// meaningless once the zone leaves its catalog.
+		zone.CatalogGroup = ""
+		zone.CatalogMemberID = ""
+		zone.CatalogChangeOwner = ""
+	}
+	// A catalog zone is itself never a catalog member: nesting catalogs has no
+	// meaning in RFC 9432 and would let a catalog list itself.
+	if zone.Type == "catalog" {
+		zone.CatalogZone = ""
+		zone.CatalogGroup = ""
+		zone.CatalogMemberID = ""
+		zone.CatalogChangeOwner = ""
 	}
 	if strings.TrimSpace(zone.TSIGKey) != "" {
 		zone.TSIGKey = strings.ToLower(dns.Fqdn(strings.TrimSpace(zone.TSIGKey)))
@@ -244,8 +283,9 @@ func ValidateAll(zones []Zone, tsigKeyNames []string) error {
 
 func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zoneTypes map[string]string) []error {
 	var result []error
-	if current.Type != "primary" && current.Type != "secondary" && current.Type != "stub" && current.Type != "forwarder" && current.Type != "alias" {
-		result = append(result, fmt.Errorf("%s type must be primary, secondary, stub, forwarder, or alias", field))
+	if current.Type != "primary" && current.Type != "secondary" && current.Type != "stub" &&
+		current.Type != "forwarder" && current.Type != "alias" && current.Type != "catalog" {
+		result = append(result, fmt.Errorf("%s type must be primary, secondary, stub, forwarder, alias, or catalog", field))
 	}
 	if current.DefaultTTL == 0 {
 		result = append(result, fmt.Errorf("%s default TTL must be positive", field))
@@ -280,10 +320,11 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zone
 			result = append(result, fmt.Errorf("%s notify target %d: %w", field, index, err))
 		}
 	}
-	if current.Type == "secondary" || current.Type == "stub" {
+	if current.Type == "secondary" || current.Type == "stub" || IsConsumerCatalog(current) {
 		result = append(result, validateManagedZone(field, current)...)
 	}
 	result = append(result, validateAliasZone(field, current, zoneTypes)...)
+	result = append(result, validateCatalogZone(field, current, zoneTypes)...)
 	result = append(result, validateRecords(field, current)...)
 	return result
 }
@@ -361,8 +402,8 @@ func validateManagedZone(field string, current Zone) []error {
 	if current.PrimaryProtocol != "udp" && current.PrimaryProtocol != "tcp" && current.PrimaryProtocol != "tls" {
 		result = append(result, fmt.Errorf("%s primary protocol must be udp, tcp, or tls", field))
 	}
-	if current.Type == "secondary" && current.PrimaryProtocol == "udp" {
-		result = append(result, fmt.Errorf("%s secondary primary protocol must be tcp or tls", field))
+	if (current.Type == "secondary" || current.Type == "catalog") && current.PrimaryProtocol == "udp" {
+		result = append(result, fmt.Errorf("%s %s primary protocol must be tcp or tls", field, current.Type))
 	}
 	for index, address := range current.PrimaryServers {
 		if err := validateAddress(address); err != nil {
@@ -373,6 +414,9 @@ func validateManagedZone(field string, current Zone) []error {
 }
 
 func validateRecords(field string, current Zone) []error {
+	if AwaitingFirstTransfer(current) {
+		return nil
+	}
 	var result []error
 	soaRecords := 0
 	hasApexNS := false

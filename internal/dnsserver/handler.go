@@ -123,15 +123,19 @@ type HostOverride struct {
 }
 
 type AuthoritativeZone struct {
-	Name            string
-	Type            string
-	Disabled        bool
-	ZoneTransfer    string
-	TransferACL     []string
-	PrimaryServers  []string
-	PrimaryProtocol string
-	TSIGKey         string
-	DynamicUpdates  bool
+	Name     string
+	Type     string
+	Disabled bool
+	// AwaitingTransfer marks a zone that a catalog provisioned but that has not
+	// received its first transfer yet. It holds no records, so it is not
+	// compiled into the runtime and answers nothing until its content arrives.
+	AwaitingTransfer bool
+	ZoneTransfer     string
+	TransferACL      []string
+	PrimaryServers   []string
+	PrimaryProtocol  string
+	TSIGKey          string
+	DynamicUpdates   bool
 	// DNSSECValidationDisabled marks the zone subtree insecure for the
 	// validator. Forwarder and stub zones frequently point at private servers
 	// that serve an unsigned copy of a signed delegation.
@@ -417,7 +421,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 	zoneCount := 0
 	zoneInsecure := make([]string, 0)
 	for _, configuredZone := range configuration.Zones {
-		if configuredZone.Disabled {
+		if configuredZone.Disabled || configuredZone.AwaitingTransfer {
 			continue
 		}
 		zoneCount++
@@ -462,7 +466,11 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 			}
 			continue
 		}
-		if zoneType == "secondary" {
+		// A catalog zone with primary servers is transferred exactly like a
+		// secondary. It is compiled into the zone map either way so that a
+		// published catalog can be served over AXFR/IXFR and journaled for
+		// incremental transfers.
+		if zoneType == "secondary" || (zoneType == "catalog" && len(configuredZone.PrimaryServers) > 0) {
 			managedZones[zoneName] = managedZone{kind: zoneType, primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
 		}
 		zone := &authoritativeZone{
@@ -966,7 +974,7 @@ func (handler *Handler) FetchZone(
 	auth := handler.transferAuth(zoneName, tsigKeyName)
 	for _, primary := range primaries {
 		var records []dns.RR
-		if zoneType == "secondary" {
+		if zoneType == "secondary" || zoneType == "catalog" {
 			records, err = handler.zoneTransfer(ctx, zoneName, primary, protocol, auth, timeout)
 		} else if zoneType == "stub" {
 			records, err = handler.fetchStubZone(ctx, zoneName, primary, protocol, timeout)
@@ -1408,6 +1416,15 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 	zone := runtime.authoritativeZoneFor(queryName)
 	if zone == nil {
 		return nil, false
+	}
+	if zone.kind == "catalog" {
+		// A catalog zone exists only to be transferred. Answering ordinary
+		// queries would hand any client the list of every zone the fleet
+		// serves, so the whole subtree is refused instead.
+		refusal := new(dns.Msg)
+		refusal.SetReply(request)
+		refusal.Rcode = dns.RcodeRefused
+		return refusal, true
 	}
 	if zone.forwards(queryName) {
 		return nil, false

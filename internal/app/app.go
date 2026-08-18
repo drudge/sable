@@ -78,11 +78,17 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	zoneManager, err := zone.NewManager(
 		ctx,
 		database,
-		// Alias zones mirror their source before signing runs so a mirrored
+		// Catalog membership is applied first so a zone a catalog just
+		// provisioned exists before aliases and signing look at the set. Alias
+		// zones then mirror their source before signing runs, so a mirrored
 		// record set is covered by the alias zone's own signatures rather than
 		// the stale ones the source was signed with.
 		func(ctx context.Context, zones *[]zone.Zone) error {
+			logCatalogEvents(logger, zone.ReconcileCatalogs(zones))
 			if err := zone.MaterializeAliases(zones, time.Now()); err != nil {
+				return err
+			}
+			if err := zone.MaterializeCatalogs(zones, time.Now()); err != nil {
 				return err
 			}
 			return dnssec.Prepare(ctx, zones)
@@ -634,12 +640,41 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 	return runtime, nil
 }
 
+// logCatalogEvents reports what catalog reconciliation changed. Provisioning
+// and withdrawing zones happens without an operator in the loop, so every
+// outcome is written to the log, and the ones the RFC makes Sable refuse are
+// warnings rather than notices.
+func logCatalogEvents(logger *slog.Logger, events []zone.CatalogEvent) {
+	if logger == nil {
+		return
+	}
+	for _, event := range events {
+		switch event.Kind {
+		case zone.CatalogBroken:
+			logger.Warn("catalog zone left unprocessed",
+				"catalog", event.Catalog, "error", event.Detail)
+		case zone.CatalogMemberConflict:
+			logger.Warn("catalog member not adopted",
+				"catalog", event.Catalog, "zone", event.Zone, "reason", event.Detail)
+		case zone.CatalogMemberAdded:
+			logger.Info("catalog provisioned zone",
+				"catalog", event.Catalog, "zone", event.Zone, "group", event.Detail)
+		case zone.CatalogMemberRemoved:
+			logger.Info("catalog withdrew zone", "catalog", event.Catalog, "zone", event.Zone)
+		case zone.CatalogMemberHandedOver:
+			logger.Info("catalog took over zone",
+				"catalog", event.Catalog, "zone", event.Zone, "detail", event.Detail)
+		}
+	}
+}
+
 func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZone {
 	zones := make([]dnsserver.AuthoritativeZone, 0, len(configuredZones))
 	for _, configuredZone := range configuredZones {
 		zone := dnsserver.AuthoritativeZone{
 			Name: configuredZone.Name, Type: configuredZone.Type, Disabled: configuredZone.Disabled,
-			ZoneTransfer: configuredZone.ZoneTransfer, TransferACL: configuredZone.TransferACL,
+			AwaitingTransfer: zone.AwaitingFirstTransfer(configuredZone),
+			ZoneTransfer:     configuredZone.ZoneTransfer, TransferACL: configuredZone.TransferACL,
 			PrimaryServers: configuredZone.PrimaryServers, PrimaryProtocol: configuredZone.PrimaryProtocol,
 			TSIGKey: configuredZone.TSIGKey, DynamicUpdates: configuredZone.DynamicUpdates,
 			DNSSECValidationDisabled: configuredZone.DNSSECValidationDisabled,

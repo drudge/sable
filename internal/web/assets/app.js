@@ -1844,6 +1844,8 @@
 		  stub: ["transfer", "resolution"],
 		  forwarder: ["forwarder", "resolution"],
 		  alias: ["alias"],
+		  catalog: [],
+		  catalog_consumer: ["transfer"],
 		};
 		const active = sectionsByType[type] || [];
 		form?.querySelectorAll("[data-zone-create-options]").forEach((section) => {
@@ -1855,7 +1857,7 @@
 		const stubProtocol = primaryProtocol?.querySelector("[data-stub-protocol]");
 		if (stubProtocol) stubProtocol.disabled = type !== "stub";
 		if (primaryProtocol && type === "stub" && primaryProtocol.value === "tcp") primaryProtocol.value = "udp";
-		if (primaryProtocol && type === "secondary" && primaryProtocol.value === "udp") primaryProtocol.value = "tcp";
+		if (primaryProtocol && (type === "secondary" || type === "catalog_consumer") && primaryProtocol.value === "udp") primaryProtocol.value = "tcp";
 		return;
 	  }
 	  if (event.target.matches("[data-record-more-types]")) {
