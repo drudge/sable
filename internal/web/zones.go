@@ -57,8 +57,9 @@ func (server *Server) zonesPage(writer http.ResponseWriter, request *http.Reques
 
 // catalogConsumerFormType is the value the create dialog submits for a catalog
 // zone transferred from another server. It collapses to the "catalog" zone type
-// once the form has been read.
-const catalogConsumerFormType = "catalog_consumer"
+// once the form has been read, because the two roles differ only in whether the
+// catalog has primary servers.
+const catalogConsumerFormType = "secondary_catalog"
 
 func (server *Server) zonesView(request *http.Request, message, errorMessage, selected string) pages.ZonesPageView {
 	console := server.consoleView(request)

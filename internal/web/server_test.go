@@ -2605,7 +2605,7 @@ func TestZoneEditorPublishesCatalogZonesAndTracksMembership(t *testing.T) {
 	}
 
 	page := serveRequest(server, http.MethodGet, "/zones")
-	for _, expected := range []string{">Catalog<", `value="catalog_consumer"`, `name="catalog_zone"`} {
+	for _, expected := range []string{">Catalog<", `value="secondary_catalog"`, `name="catalog_zone"`} {
 		if !strings.Contains(page.Body.String(), expected) {
 			t.Errorf("zones UI does not contain %q", expected)
 		}
@@ -2656,5 +2656,12 @@ func TestZoneEditorKeepsCatalogManagedZonesReadOnly(t *testing.T) {
 	}
 	if findZone(configuration.zoneSnapshot.Zones, "member.example").DefaultTTL != 300 {
 		t.Fatal("a catalog-managed zone was edited")
+	}
+
+	// Both catalog roles share one zone type, so the badge has to say which one
+	// this is rather than labelling a transferred catalog as a local one.
+	page := serveRequest(server, http.MethodGet, "/zones")
+	if !strings.Contains(page.Body.String(), ">Secondary Catalog<") {
+		t.Fatalf("zones UI does not label the subscribed catalog: %s", page.Body.String())
 	}
 }

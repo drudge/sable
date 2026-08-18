@@ -271,9 +271,8 @@ edited by hand; a disabled zone is withdrawn from its catalog until it is
 enabled again.
 
 A **subscribed** catalog is transferred from another server. Create it with the
-Catalog Zone (subscribed) type, give it the primary servers and TSIG key that
-serve it, and Sable transfers it on its SOA timers exactly like a secondary
-zone. Every zone the catalog lists becomes a secondary zone here, inheriting the
+Secondary Catalog Zone type, give it the primary servers and TSIG key that serve
+it, and Sable transfers it on its SOA timers exactly like a secondary zone. Every zone the catalog lists becomes a secondary zone here, inheriting the
 catalog's primary servers, protocol, TSIG key, transfer policy, and notify list.
 A newly provisioned member holds no records until its own first transfer
 completes, which happens within a minute or on the first NOTIFY. Zones a catalog

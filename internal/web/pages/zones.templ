@@ -184,16 +184,26 @@ func zoneCanEditRecords(zone ZoneView) bool { return zone.Type == "" || zone.Typ
 // zoneCatalogRoleHeading names which side of RFC 9432 a catalog zone sits on.
 func zoneCatalogRoleHeading(zone ZoneView) string {
 	if zone.CatalogRole == "subscribed" {
-		return "Subscribed Catalog"
+		return "Secondary Catalog Zone"
 	}
-	return "Published Catalog"
+	return "Catalog Zone"
 }
 
 func zoneCatalogRoleDescription(zone ZoneView) string {
 	if zone.CatalogRole == "subscribed" {
 		return "Sable transfers this catalog from its primary servers and provisions every zone it lists as a secondary zone here."
 	}
-	return "Sable publishes this catalog from the zones that name it. Subscribed name servers transfer it and provision those zones automatically."
+	return "Sable maintains this catalog from the zones that name it. Name servers subscribed to it transfer the catalog and provision those zones automatically."
+}
+
+// zoneTypeDisplay labels a zone in the console. A catalog transferred from
+// another server is a secondary catalog, which the bare zone type cannot say
+// because both catalog roles share one type.
+func zoneTypeDisplay(zone ZoneView) string {
+	if zone.CatalogRole == "subscribed" {
+		return "Secondary Catalog"
+	}
+	return zoneTypeLabel(zone.Type)
 }
 
 // zoneCanOpenRecords reports whether a record dialog is worth rendering. An
@@ -450,8 +460,8 @@ templ ZoneListView(view ZonesPageView) {
 			for index, zone := range view.Zones {
 				<div class={ ifThen(zone.Disabled, "isotope-zone-row disabled", "isotope-zone-row") } data-zone-row data-zone-name={ strings.ToLower(zone.Name) } data-zone-type={ strings.ToLower(zone.Type) } data-zone-status={ ifThen(zone.Disabled, "disabled", "active") }>
 					<a class="isotope-zone-row-link" href={ zoneHref(zone.Name) }>
-						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
-						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
+						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
+						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
 					</a>
 					@ZoneActionMenu(zone, "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
 					<a class="zone-row-chevron" href={ zoneHref(zone.Name) } aria-label={ "Open " + zone.Name }>@Icon("chevron-right")</a>
@@ -480,7 +490,7 @@ templ ZoneDetailView(zone ZoneView) {
 			<a class="icon-button zone-back-button" href="/zones" aria-label="Back to zones">@Icon("arrow-left")</a>
 			<div class="zone-records-title">
 				<h1>{ zone.Name }</h1>
-				<div><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeLabel(zone.Type) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span><span class={ "zone-dnssec-badge " + ifThen(zone.DNSSEC, "signed", "unsigned") }>{ ifThen(zone.DNSSEC, "DNSSEC: Signed", "DNSSEC: Unsigned") }</span></div>
+				<div><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span><span class={ "zone-dnssec-badge " + ifThen(zone.DNSSEC, "signed", "unsigned") }>{ ifThen(zone.DNSSEC, "DNSSEC: Signed", "DNSSEC: Unsigned") }</span></div>
 				<p>
 					{ fmt.Sprint(len(zone.Records)) } { ifThen(len(zone.Records) == 1, "record", "records") }
 					if zone.Type == "alias" && zone.AliasZone != "" {
@@ -593,7 +603,7 @@ templ CreateZoneDialog(aliasSources []string) {
 		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
 			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
-			<label><span>Zone Type</span><select name="type" data-zone-create-type><option value="primary">Primary Zone</option><option value="secondary">Secondary Zone</option><option value="stub">Stub Zone</option><option value="forwarder">Forwarder Zone</option><option value="alias" disabled?={ len(aliasSources) == 0 }>Alias Zone</option><option value="catalog">Catalog Zone (published here)</option><option value="catalog_consumer">Catalog Zone (subscribed)</option></select></label>
+			<label><span>Zone Type</span><select name="type" data-zone-create-type><option value="primary">Primary Zone</option><option value="secondary">Secondary Zone</option><option value="stub">Stub Zone</option><option value="forwarder">Forwarder Zone</option><option value="alias" disabled?={ len(aliasSources) == 0 }>Alias Zone</option><option value="catalog">Catalog Zone</option><option value="secondary_catalog">Secondary Catalog Zone</option></select></label>
 			<label><span>TSIG Key (optional)</span><input class="mono-input" name="tsig_key" placeholder="transfer-key." autocomplete="off"/><small>References a key configured in <code>[[tsig_keys]]</code>.</small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
@@ -870,7 +880,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="general">
 				<label><span>Zone Name</span><input class="mono-input" value={ zone.Name } readonly/></label>
-				<label><span>Zone Type</span><input value={ zoneTypeLabel(zone.Type) } readonly/></label>
+				<label><span>Zone Type</span><input value={ zoneTypeDisplay(zone) } readonly/></label>
 				<label><span>Default TTL (seconds)</span><input type="number" name="default_ttl" min="1" max="4294967295" value={ fmt.Sprint(zone.DefaultTTL) } required/></label>
 				if zone.CatalogManager != "" {
 					<section class="zone-settings-section">
