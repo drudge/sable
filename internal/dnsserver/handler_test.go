@@ -1678,3 +1678,64 @@ func TestActivateZonesUpdatesDNSSECValidationOptOut(t *testing.T) {
 		t.Fatal("re-enabling validation left the zone marked insecure")
 	}
 }
+
+func TestHandlerTransfersCatalogZonesButRefusesQueries(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "catalog.invalid", Type: "catalog",
+		ZoneTransfer: "acl", TransferACL: []string{"192.0.2.0/24"},
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 0, Value: "invalid. invalid. 2026081701 3600 600 1209600 0"},
+			{Name: "@", Type: "NS", TTL: 0, Value: "invalid."},
+			{Name: "version", Type: "TXT", TTL: 0, Value: `"2"`},
+			{Name: "nj2xg5b.zones", Type: "PTR", TTL: 0, Value: "example.test."},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+
+	transfer := new(dns.Msg)
+	transfer.SetAxfr("catalog.invalid.")
+	authorized := &transferCapture{remote: &net.TCPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}}
+	handler.ServeDNS(authorized, transfer)
+
+	var transferred []dns.RR
+	for _, message := range authorized.messages {
+		transferred = append(transferred, message.Answer...)
+	}
+	if !slices.ContainsFunc(transferred, func(record dns.RR) bool {
+		return record.Header().Rrtype == dns.TypePTR && record.Header().Name == "nj2xg5b.zones.catalog.invalid."
+	}) {
+		t.Fatalf("catalog AXFR records = %v, want the member PTR record", transferred)
+	}
+
+	// RFC 9432 catalogs are transferred, never resolved. Answering would hand
+	// any client the list of every zone the fleet serves.
+	for _, name := range []string{"catalog.invalid.", "version.catalog.invalid.", "nj2xg5b.zones.catalog.invalid."} {
+		query := new(dns.Msg)
+		query.SetQuestion(name, dns.TypeTXT)
+		capture := new(responseCapture)
+		handler.ServeDNS(capture, query)
+		if capture.message == nil || capture.message.Rcode != dns.RcodeRefused {
+			t.Fatalf("query for %s = %+v, want REFUSED", name, capture.message)
+		}
+	}
+}
+
+func TestHandlerSkipsCatalogMembersAwaitingTransfer(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "member.test", Type: "secondary", AwaitingTransfer: true,
+		PrimaryServers: []string{"192.0.2.53"}, PrimaryProtocol: "tcp",
+	}}
+	if _, err := Compile(configuration); err != nil {
+		t.Fatalf("a member awaiting its first transfer must compile, got %v", err)
+	}
+}

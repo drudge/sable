@@ -231,7 +231,7 @@ blocking policy and forwarding and update through the transactional TOML reload.
 
 Authoritative zones are control-plane data, not node configuration. Sable stores zones and ordered records transactionally in the configured SQLite or PostgreSQL database. The DNS request path never queries SQL: startup and mutations compile immutable in-memory zone indexes, then atomically publish the new runtime snapshot.
 
-Create Primary, Secondary, Stub, Forwarder, and Alias zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
+Create Primary, Secondary, Stub, Forwarder, Alias, and Catalog zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
 
 TSIG keys remain in sable.toml because their secret material is node-level bootstrap configuration. A zone stores only the canonical key name it references. Changing or removing a configured TSIG key is rejected while a zone still depends on it.
 
@@ -253,6 +253,51 @@ source badge in the console. Record values are copied verbatim rather than
 rewritten, so an alias answers with exactly the same set of records as its
 source. The source zone's SOA and DNSSEC material are not copied, and an alias
 zone cannot be signed or mirror another alias zone.
+
+### Catalog zones
+
+Catalog zones (RFC 9432) provision zones across servers without configuring each
+one by hand. A catalog is an ordinary zone whose content is a list of other
+zones, transferred with AXFR and IXFR like any other. Sable implements both
+sides.
+
+A **published** catalog is maintained by Sable from the zones that name it. Open
+a zone's settings, pick a catalog under **Catalog Membership**, and Sable
+publishes the member PTR record and the optional `group` property into the
+catalog and advances its serial. Any standards-compliant secondary that
+subscribes to the catalog, including BIND, Knot, PowerDNS, and NSD, then creates
+those zones on its own. Membership records are maintained by Sable and cannot be
+edited by hand; a disabled zone is withdrawn from its catalog until it is
+enabled again.
+
+A **subscribed** catalog is transferred from another server. Create it with the
+Catalog Zone (subscribed) type, give it the primary servers and TSIG key that
+serve it, and Sable transfers it on its SOA timers exactly like a secondary
+zone. Every zone the catalog lists becomes a secondary zone here, inheriting the
+catalog's primary servers, protocol, TSIG key, transfer policy, and notify list.
+A newly provisioned member holds no records until its own first transfer
+completes, which happens within a minute or on the first NOTIFY. Zones a catalog
+provisioned are read-only in the console, because any edit would be overwritten
+on the next refresh.
+
+Sable follows the RFC where it protects running zones:
+
+- A catalog with a missing, duplicated, or unsupported `version` property, or
+  with two labels pointing at one member, is left entirely unprocessed. A
+  malformed transfer never removes zones a working catalog already provisioned.
+- A zone this server configured locally, or that another catalog owns, is never
+  adopted or removed. The console logs the conflict instead.
+- A member moves between catalogs only when the catalog that owns it publishes a
+  `coo` property naming the new catalog and the new catalog lists the member.
+- A changed member label is treated as a removal followed by an add, so the zone
+  transfers again from scratch.
+
+Catalog zones are never answered for ordinary queries. Sable returns REFUSED for
+every name in a catalog zone and serves it only over AXFR and IXFR, so the list
+of zones a fleet serves is not readable by any client that can reach port 53.
+Set a transfer policy and a TSIG key on the catalog the same way you would for
+any other transferred zone. Catalog zones cannot be signed, cannot accept
+dynamic updates, and cannot be members of another catalog.
 
 Forwarder and stub zones validate upstream answers by default. Turn off
 **Validate Responses** in the zone's DNSSEC dialog when the upstream servers

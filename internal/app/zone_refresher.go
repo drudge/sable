@@ -18,6 +18,10 @@ import (
 const (
 	zoneRefreshTick      = time.Second
 	notifyCoalesceWindow = 2 * time.Second
+	// firstTransferRetry paces retries for a catalog member that has never
+	// transferred. Such a zone has no SOA yet, so it has no retry timer of its
+	// own to obey.
+	firstTransferRetry = time.Minute
 )
 
 type zoneRefreshConfiguration interface {
@@ -97,66 +101,73 @@ func (refresher *zoneRefresher) handleNotification(ctx context.Context, notifica
 func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 	snapshot := refresher.configuration.Current()
 	managed := make(map[string]struct{})
-	for _, zone := range snapshot.Zones {
-		if zone.Type != "secondary" && zone.Type != "stub" {
+	for _, current := range snapshot.Zones {
+		// A consumer catalog is refreshed on the same schedule as a secondary.
+		// Applying its new membership happens inside the zone transaction that
+		// stores the transferred records.
+		if current.Type != "secondary" && current.Type != "stub" && !zone.IsConsumerCatalog(current) {
 			continue
 		}
-		managed[zone.Name] = struct{}{}
-		if zone.Disabled {
-			refresher.dns.SetZoneExpired(zone.Name, false)
-			delete(refresher.states, zone.Name)
+		managed[current.Name] = struct{}{}
+		if current.Disabled {
+			refresher.dns.SetZoneExpired(current.Name, false)
+			delete(refresher.states, current.Name)
 			continue
 		}
-		soa, timers, err := configuredZoneSOA(zone)
+		if zone.AwaitingFirstTransfer(current) {
+			refresher.fetchFirstTransfer(ctx, current, now)
+			continue
+		}
+		soa, timers, err := configuredZoneSOA(current)
 		if err != nil {
-			refresher.logger.Error("read managed zone SOA", "zone", zone.Name, "error", err)
+			refresher.logger.Error("read managed zone SOA", "zone", current.Name, "error", err)
 			continue
 		}
-		state, tracked := refresher.states[zone.Name]
+		state, tracked := refresher.states[current.Name]
 		if !tracked || state.serial != soa.Serial {
 			state = zoneRefreshState{
 				serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
 			}
-			refresher.states[zone.Name] = state
-			refresher.dns.SetZoneExpired(zone.Name, false)
+			refresher.states[current.Name] = state
+			refresher.dns.SetZoneExpired(current.Name, false)
 			continue
 		}
 		if !now.Before(state.expiresAt) {
-			refresher.dns.SetZoneExpired(zone.Name, true)
+			refresher.dns.SetZoneExpired(current.Name, true)
 		}
 		if now.Before(state.nextAttempt) {
 			continue
 		}
-		current := dnsserverZoneRecords(zone.Records)
+		records := dnsserverZoneRecords(current.Records)
 		updated, changed, refreshErr := refresher.dns.RefreshZone(
-			ctx, zone.Name, zone.Type, zone.PrimaryServers, zone.PrimaryProtocol, zone.TSIGKey, current,
+			ctx, current.Name, current.Type, current.PrimaryServers, current.PrimaryProtocol, current.TSIGKey, records,
 		)
 		if refreshErr == nil && changed {
-			refreshErr = refresher.storeRecords(ctx, zone.Name, updated)
+			refreshErr = refresher.storeRecords(ctx, current.Name, updated)
 		}
 		if refreshErr != nil {
 			state.nextAttempt = now.Add(timers.retry)
-			refresher.states[zone.Name] = state
+			refresher.states[current.Name] = state
 			if !now.Before(state.expiresAt) {
-				refresher.dns.SetZoneExpired(zone.Name, true)
+				refresher.dns.SetZoneExpired(current.Name, true)
 			}
-			refresher.logger.Warn("managed zone refresh failed", "zone", zone.Name, "retry_at", state.nextAttempt, "error", refreshErr)
+			refresher.logger.Warn("managed zone refresh failed", "zone", current.Name, "retry_at", state.nextAttempt, "error", refreshErr)
 			continue
 		}
 		if changed {
-			zone.Records = configuredZoneRecords(updated)
-			soa, timers, err = configuredZoneSOA(zone)
+			current.Records = configuredZoneRecords(updated)
+			soa, timers, err = configuredZoneSOA(current)
 			if err != nil {
-				refresher.logger.Error("read refreshed zone SOA", "zone", zone.Name, "error", err)
+				refresher.logger.Error("read refreshed zone SOA", "zone", current.Name, "error", err)
 				continue
 			}
 		}
 		state = zoneRefreshState{
 			serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
 		}
-		refresher.states[zone.Name] = state
-		refresher.dns.SetZoneExpired(zone.Name, false)
-		refresher.logger.Debug("managed zone refreshed", "zone", zone.Name, "serial", soa.Serial, "changed", changed, "next_refresh", state.nextAttempt)
+		refresher.states[current.Name] = state
+		refresher.dns.SetZoneExpired(current.Name, false)
+		refresher.logger.Debug("managed zone refreshed", "zone", current.Name, "serial", soa.Serial, "changed", changed, "next_refresh", state.nextAttempt)
 	}
 	for name := range refresher.states {
 		if _, found := managed[name]; found {
@@ -168,17 +179,42 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 	}
 }
 
+// fetchFirstTransfer pulls the initial content of a zone a catalog provisioned.
+// The catalog names the zone but carries none of its records, so the member
+// stays empty and unanswerable until this succeeds.
+func (refresher *zoneRefresher) fetchFirstTransfer(ctx context.Context, member zone.Zone, now time.Time) {
+	if state, tracked := refresher.states[member.Name]; tracked && now.Before(state.nextAttempt) {
+		return
+	}
+	records, err := refresher.dns.FetchZone(
+		ctx, member.Name, "secondary", member.PrimaryServers, member.PrimaryProtocol, member.TSIGKey,
+	)
+	if err == nil {
+		err = refresher.storeRecords(ctx, member.Name, records)
+	}
+	if err != nil {
+		refresher.states[member.Name] = zoneRefreshState{nextAttempt: now.Add(firstTransferRetry)}
+		refresher.logger.Warn("catalog member first transfer failed",
+			"zone", member.Name, "catalog", member.CatalogZone, "retry_at", now.Add(firstTransferRetry), "error", err)
+		return
+	}
+	// The zone now carries its own SOA, so the next tick schedules it from the
+	// timers the primary published.
+	delete(refresher.states, member.Name)
+	refresher.logger.Info("catalog member transferred", "zone", member.Name, "catalog", member.CatalogZone)
+}
+
 func (refresher *zoneRefresher) storeRecords(ctx context.Context, zoneName string, records []dnsserver.ZoneRecord) error {
 	return refresher.configuration.UpdateZones(ctx, func(zones *[]zone.Zone) error {
-		index := slices.IndexFunc(*zones, func(zone zone.Zone) bool { return zone.Name == zoneName })
+		index := slices.IndexFunc(*zones, func(candidate zone.Zone) bool { return candidate.Name == zoneName })
 		if index < 0 {
 			return errors.New("zone was removed during refresh")
 		}
-		zone := &(*zones)[index]
-		if zone.Type != "secondary" && zone.Type != "stub" {
+		current := &(*zones)[index]
+		if current.Type != "secondary" && current.Type != "stub" && current.Type != "catalog" {
 			return errors.New("zone type changed during refresh")
 		}
-		zone.Records = configuredZoneRecords(records)
+		current.Records = configuredZoneRecords(records)
 		return nil
 	})
 }

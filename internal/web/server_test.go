@@ -2546,3 +2546,115 @@ func TestZoneEditorTogglesForwarderDNSSECValidation(t *testing.T) {
 		t.Fatal("forwarder zone DNSSEC dialog exposes zone-signing controls")
 	}
 }
+
+func TestZoneEditorPublishesCatalogZonesAndTracksMembership(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testStats{}, configuration, configuration.zoneStore(), "sqlite",
+		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	post := func(path string, form url.Values) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+
+	catalog := post("/ui/zones/add", url.Values{"name": {"Catalog.Invalid."}, "type": {"catalog"}})
+	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "Authoritative zone created") {
+		t.Fatalf("create catalog zone = %d %s", catalog.Code, catalog.Body.String())
+	}
+	catalogZone := findZone(configuration.zoneSnapshot.Zones, "catalog.invalid")
+	if catalogZone == nil || catalogZone.Type != "catalog" || len(catalogZone.PrimaryServers) != 0 {
+		t.Fatalf("catalog zone = %#v", catalogZone)
+	}
+
+	if member := post("/ui/zones/add", url.Values{"name": {"example.test"}, "type": {"primary"}}); member.Code != http.StatusOK {
+		t.Fatalf("create member zone = %d %s", member.Code, member.Body.String())
+	}
+	joined := post("/ui/zones/settings", url.Values{
+		"zone": {"example.test"}, "default_ttl": {"300"},
+		"catalog_zone": {"catalog.invalid"}, "catalog_group": {"operator-x-foo"},
+	})
+	if joined.Code != http.StatusOK || !strings.Contains(joined.Body.String(), "Zone settings updated") {
+		t.Fatalf("join catalog = %d %s", joined.Code, joined.Body.String())
+	}
+	memberZone := findZone(configuration.zoneSnapshot.Zones, "example.test")
+	if memberZone == nil || memberZone.CatalogZone != "catalog.invalid" || memberZone.CatalogGroup != "operator-x-foo" {
+		t.Fatalf("member zone = %#v", memberZone)
+	}
+
+	for name, form := range map[string]url.Values{
+		"unknown catalog": {"zone": {"example.test"}, "default_ttl": {"300"}, "catalog_zone": {"absent.invalid"}},
+		"not a catalog":   {"zone": {"example.test"}, "default_ttl": {"300"}, "catalog_zone": {"example.test"}},
+	} {
+		rejected := post("/ui/zones/settings", form)
+		if strings.Contains(rejected.Body.String(), "Zone settings updated") {
+			t.Errorf("%s was accepted: %s", name, rejected.Body.String())
+		}
+	}
+	if current := findZone(configuration.zoneSnapshot.Zones, "example.test"); current.CatalogZone != "catalog.invalid" {
+		t.Fatalf("a rejected membership change was applied: %#v", current)
+	}
+
+	page := serveRequest(server, http.MethodGet, "/zones")
+	for _, expected := range []string{">Catalog<", `value="catalog_consumer"`, `name="catalog_zone"`} {
+		if !strings.Contains(page.Body.String(), expected) {
+			t.Errorf("zones UI does not contain %q", expected)
+		}
+	}
+}
+
+func TestZoneEditorKeepsCatalogManagedZonesReadOnly(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	configuration.zoneSnapshot.Zones = []zonemodel.Zone{
+		{
+			Name: "catalog.example", Type: "catalog", DefaultTTL: 300,
+			PrimaryServers: []string{"192.0.2.53"}, PrimaryProtocol: "tcp",
+			Records: []zonemodel.Record{
+				{Name: "@", Type: "SOA", TTL: 300, Value: "invalid. hostmaster.catalog.example. 1 3600 600 1209600 300"},
+				{Name: "@", Type: "NS", TTL: 300, Value: "invalid."},
+				{Name: "version", Type: "TXT", TTL: 300, Value: `"2"`},
+			},
+		},
+		{
+			Name: "member.example", Type: "secondary", DefaultTTL: 300,
+			PrimaryServers: []string{"192.0.2.53"}, PrimaryProtocol: "tcp",
+			CatalogZone: "catalog.example", CatalogMemberID: "aaa",
+			Records: []zonemodel.Record{
+				{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.member.example. hostmaster.member.example. 1 3600 600 1209600 300"},
+				{Name: "@", Type: "NS", TTL: 300, Value: "ns1.member.example."},
+			},
+		},
+	}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testStats{}, configuration, configuration.zoneStore(), "sqlite",
+		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/ui/zones/settings", strings.NewReader(url.Values{
+		"zone": {"member.example"}, "default_ttl": {"900"},
+	}.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+
+	if !strings.Contains(response.Body.String(), "managed by catalog") {
+		t.Fatalf("catalog-managed settings edit = %d %s", response.Code, response.Body.String())
+	}
+	if findZone(configuration.zoneSnapshot.Zones, "member.example").DefaultTTL != 300 {
+		t.Fatal("a catalog-managed zone was edited")
+	}
+}

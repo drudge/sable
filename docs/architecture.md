@@ -63,6 +63,18 @@ serial advances only when the mirrored record set actually differs, which keeps
 restarts from churning serials and lets alias zones be transferred to secondary
 servers.
 
+Catalog zones (RFC 9432) reuse both paths. A published catalog is materialized
+in the same prepare hook as alias zones, so its membership records and serial
+are rebuilt inside the transaction that changed a member and the pass stays
+idempotent. A subscribed catalog is refreshed by the lifecycle worker on its own
+SOA timers, and the transaction that stores its transferred records also applies
+its membership: zones it lists are provisioned as secondary zones that inherit
+the catalog's transfer settings, and zones it dropped are withdrawn. A catalog
+that fails to parse is skipped whole rather than partially applied, so a
+truncated transfer cannot tear down provisioned zones. Members are compiled into
+the runtime only once they hold records, and catalog zones themselves are served
+over AXFR and IXFR while ordinary queries against them are refused.
+
 Inbound RFC 1996 NOTIFY is validated against the exact managed zone, configured
 primary source addresses, and optional zone TSIG key before entering a bounded
 event channel. The lifecycle worker coalesces duplicate bursts and moves the

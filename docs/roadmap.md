@@ -40,7 +40,11 @@ performance before expanding the administrative surface.
 - Automatic SOA refresh/retry/expiry scheduling
 - TSIG-authenticated RFC 2136 dynamic updates with prerequisites, transactional persistence, IXFR journaling, and NOTIFY
 - Automatic DNSSEC signing with encrypted Ed25519/ECDSA KSK/ZSK lifecycles, DNSKEY/DS publication, NSEC/NSEC3 proofs, scheduled re-signing, prepublished ZSK rollover, and parent-confirmed double-KSK rollover
-- Expanded RFC-compliant record validation and catalog zones
+- RFC 9432 catalog zones on both sides: published catalogs maintained from member
+  zones and served over AXFR/IXFR, and subscribed catalogs that provision and
+  withdraw secondary zones, with broken-catalog, ownership, and change-of-ownership
+  handling
+- Expanded RFC-compliant record validation
 - Import/export and migration tooling
 
 ## Milestone 3 — HA and clustering

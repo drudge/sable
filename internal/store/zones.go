@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS sable_zones (
     primary_servers TEXT NOT NULL,
     primary_protocol TEXT NOT NULL,
     alias_zone TEXT NOT NULL DEFAULT '',
+    catalog_zone TEXT NOT NULL DEFAULT '',
+    catalog_group TEXT NOT NULL DEFAULT '',
+    catalog_member_id TEXT NOT NULL DEFAULT '',
+    catalog_change_owner TEXT NOT NULL DEFAULT '',
     tsig_key TEXT NOT NULL,
     dynamic_updates BOOLEAN NOT NULL,
     dnssec BOOLEAN NOT NULL,
@@ -142,6 +146,26 @@ func (store *Store) migrateZoneAliasSchema(ctx context.Context) error {
 	if _, err := store.database.ExecContext(ctx,
 		"ALTER TABLE sable_zones ADD COLUMN alias_zone TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("add zone alias source: %w", err)
+	}
+	return nil
+}
+
+// migrateZoneCatalogSchema adds the RFC 9432 membership columns to databases
+// created before catalog zones existed. Every existing zone defaults to
+// belonging to no catalog, which is exactly how it behaved before.
+func (store *Store) migrateZoneCatalogSchema(ctx context.Context) error {
+	for _, column := range []string{"catalog_zone", "catalog_group", "catalog_member_id", "catalog_change_owner"} {
+		exists, err := store.tableHasColumn(ctx, "sable_zones", column)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := store.database.ExecContext(ctx,
+			"ALTER TABLE sable_zones ADD COLUMN "+column+" TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("add zone %s: %w", column, err)
+		}
 	}
 	return nil
 }
@@ -306,7 +330,8 @@ WHERE zone_name = `+store.placeholder(2)+` AND ordinal = `+store.placeholder(3),
 func (store *Store) ListZones(ctx context.Context) ([]zone.Zone, error) {
 	rows, err := store.database.QueryContext(ctx, `
 SELECT id, name, zone_type, default_ttl, disabled, zone_transfer, transfer_acl,
-       notify_targets, primary_servers, primary_protocol, alias_zone, tsig_key,
+       notify_targets, primary_servers, primary_protocol, alias_zone,
+       catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, tsig_key,
        dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
        nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
        key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
@@ -351,7 +376,9 @@ func scanZone(row rowScanner) (zone.Zone, error) {
 	var defaultTTL, nsec3Iterations, zskLifetime, kskLifetime, keyPrepublish, keyRetireAfter, parentDSKeyTag, revision int64
 	if err := row.Scan(
 		&current.ID, &current.Name, &current.Type, &defaultTTL, &current.Disabled, &current.ZoneTransfer,
-		&transferACL, &notifyTargets, &primaryServers, &current.PrimaryProtocol, &current.AliasZone, &current.TSIGKey,
+		&transferACL, &notifyTargets, &primaryServers, &current.PrimaryProtocol, &current.AliasZone,
+		&current.CatalogZone, &current.CatalogGroup, &current.CatalogMemberID, &current.CatalogChangeOwner,
+		&current.TSIGKey,
 		&current.DynamicUpdates, &current.DNSSEC, &current.DNSSECAlgorithm, &current.DNSSECDenial,
 		&nsec3Iterations, &current.NSEC3Salt, &zskLifetime, &kskLifetime,
 		&keyPrepublish, &keyRetireAfter, &parentDSKeyTag,
@@ -513,15 +540,18 @@ func (store *Store) insertZone(ctx context.Context, transaction *sql.Tx, current
 	_, err = transaction.ExecContext(ctx, `
 INSERT INTO sable_zones (
 	id, name, zone_type, default_ttl, disabled, zone_transfer, transfer_acl,
-    notify_targets, primary_servers, primary_protocol, alias_zone, tsig_key,
+    notify_targets, primary_servers, primary_protocol, alias_zone,
+    catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, tsig_key,
     dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
     nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
     key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
     dnssec_validation_disabled, revision,
     created_at, updated_at
-) VALUES (`+store.placeholders(27)+`)`,
+) VALUES (`+store.placeholders(31)+`)`,
 		current.ID, current.Name, current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL,
-		notifyTargets, primaryServers, current.PrimaryProtocol, current.AliasZone, current.TSIGKey,
+		notifyTargets, primaryServers, current.PrimaryProtocol, current.AliasZone,
+		current.CatalogZone, current.CatalogGroup, current.CatalogMemberID, current.CatalogChangeOwner,
+		current.TSIGKey,
 		current.DynamicUpdates, current.DNSSEC, current.DNSSECAlgorithm, current.DNSSECDenial,
 		current.NSEC3Iterations, current.NSEC3Salt, current.ZSKLifetime.Duration.Nanoseconds(),
 		current.KSKLifetime.Duration.Nanoseconds(), current.KeyPrepublish.Duration.Nanoseconds(),
@@ -552,16 +582,20 @@ UPDATE sable_zones SET
     zone_type = `+store.placeholder(1)+`, default_ttl = `+store.placeholder(2)+`, disabled = `+store.placeholder(3)+`,
     zone_transfer = `+store.placeholder(4)+`, transfer_acl = `+store.placeholder(5)+`, notify_targets = `+store.placeholder(6)+`,
     primary_servers = `+store.placeholder(7)+`, primary_protocol = `+store.placeholder(8)+`, alias_zone = `+store.placeholder(9)+`,
-    tsig_key = `+store.placeholder(10)+`,
-    dynamic_updates = `+store.placeholder(11)+`, dnssec = `+store.placeholder(12)+`, dnssec_algorithm = `+store.placeholder(13)+`,
-    dnssec_denial = `+store.placeholder(14)+`, nsec3_iterations = `+store.placeholder(15)+`, nsec3_salt = `+store.placeholder(16)+`,
-    zsk_lifetime_ns = `+store.placeholder(17)+`, ksk_lifetime_ns = `+store.placeholder(18)+`,
-    key_prepublish_ns = `+store.placeholder(19)+`, key_retire_after_ns = `+store.placeholder(20)+`,
-    parent_ds_key_tag = `+store.placeholder(21)+`, dnssec_validation_disabled = `+store.placeholder(22)+`,
-    revision = `+store.placeholder(23)+`, updated_at = `+store.placeholder(24)+`
-WHERE name = `+store.placeholder(25),
+    catalog_zone = `+store.placeholder(10)+`, catalog_group = `+store.placeholder(11)+`,
+    catalog_member_id = `+store.placeholder(12)+`, catalog_change_owner = `+store.placeholder(13)+`,
+    tsig_key = `+store.placeholder(14)+`,
+    dynamic_updates = `+store.placeholder(15)+`, dnssec = `+store.placeholder(16)+`, dnssec_algorithm = `+store.placeholder(17)+`,
+    dnssec_denial = `+store.placeholder(18)+`, nsec3_iterations = `+store.placeholder(19)+`, nsec3_salt = `+store.placeholder(20)+`,
+    zsk_lifetime_ns = `+store.placeholder(21)+`, ksk_lifetime_ns = `+store.placeholder(22)+`,
+    key_prepublish_ns = `+store.placeholder(23)+`, key_retire_after_ns = `+store.placeholder(24)+`,
+    parent_ds_key_tag = `+store.placeholder(25)+`, dnssec_validation_disabled = `+store.placeholder(26)+`,
+    revision = `+store.placeholder(27)+`, updated_at = `+store.placeholder(28)+`
+WHERE name = `+store.placeholder(29),
 		current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL, notifyTargets,
-		primaryServers, current.PrimaryProtocol, current.AliasZone, current.TSIGKey, current.DynamicUpdates, current.DNSSEC,
+		primaryServers, current.PrimaryProtocol, current.AliasZone,
+		current.CatalogZone, current.CatalogGroup, current.CatalogMemberID, current.CatalogChangeOwner,
+		current.TSIGKey, current.DynamicUpdates, current.DNSSEC,
 		current.DNSSECAlgorithm, current.DNSSECDenial, current.NSEC3Iterations, current.NSEC3Salt,
 		current.ZSKLifetime.Duration.Nanoseconds(), current.KSKLifetime.Duration.Nanoseconds(),
 		current.KeyPrepublish.Duration.Nanoseconds(), current.KeyRetireAfter.Duration.Nanoseconds(),
