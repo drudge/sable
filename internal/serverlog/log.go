@@ -26,11 +26,40 @@ type Filter struct {
 	Limit  int
 }
 
+// Query browses persisted entries. The live buffer answers Filter; anything
+// older than the buffer holds only exists in the store, so history reads go
+// through here instead.
+type Query struct {
+	Page     int
+	PageSize int
+	Search   string
+	Level    string
+	Since    time.Time
+	Until    time.Time
+}
+
+type Page struct {
+	Entries      []Entry `json:"entries"`
+	Page         int     `json:"page"`
+	PageSize     int     `json:"page_size"`
+	TotalEntries int     `json:"total_entries"`
+	TotalPages   int     `json:"total_pages"`
+}
+
+// Sink receives every entry the buffer accepts so it can outlive the process.
+// Record must not block and must not log through the handler feeding this
+// buffer: a sink that logs its own failures back into the buffer would queue
+// another write for the same broken destination and never settle.
+type Sink interface {
+	Record(Entry)
+}
+
 type Buffer struct {
 	mu       sync.RWMutex
 	entries  []Entry
 	capacity int
 	nextID   uint64
+	sink     Sink
 }
 
 func New(capacity int) *Buffer {
@@ -48,12 +77,35 @@ func (buffer *Buffer) Append(entry Entry) {
 	if entry.OccurredAt.IsZero() {
 		entry.OccurredAt = time.Now()
 	}
+	if buffer.sink != nil {
+		buffer.sink.Record(entry)
+	}
 	if len(buffer.entries) == buffer.capacity {
 		copy(buffer.entries, buffer.entries[1:])
 		buffer.entries[len(buffer.entries)-1] = entry
 		return
 	}
 	buffer.entries = append(buffer.entries, entry)
+}
+
+// Attach sends every entry to sink from here on, and replays what the buffer
+// already holds. The replay matters because logging starts before the database
+// is open: configuration loading, migrations, and any failure among them would
+// otherwise be the one stretch of startup missing from the history.
+//
+// The replay runs under the write lock so entries reach the sink in the order
+// they were logged. That is safe only because Sink.Record is required not to
+// block, which is also why it cannot log back through this buffer.
+func (buffer *Buffer) Attach(sink Sink) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	buffer.sink = sink
+	if sink == nil {
+		return
+	}
+	for _, entry := range buffer.entries {
+		sink.Record(cloneEntry(entry))
+	}
 }
 
 func (buffer *Buffer) Entries(filter Filter) []Entry {

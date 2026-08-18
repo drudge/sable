@@ -481,6 +481,36 @@ controlled restart because they define the lifetime of the asynchronous worker.
 When the queue is saturated, Sable drops telemetry and increments an exposed
 counter instead of blocking DNS requests.
 
+## Server logging
+
+```toml
+[server_log]
+enabled = true
+buffer_size = 4096
+batch_size = 128
+flush_interval = "1s"
+retention = "1440h"
+```
+
+The console's runtime log is held in a ring buffer that starts empty on every
+boot, so without this the record of what happened before a restart or an upgrade
+is gone exactly when it is wanted. Enabling it writes the same entries to the
+configured database, and the Logs page pages through that history rather than
+the buffer.
+
+Retention defaults to 60 days. Runtime logs are a tiny fraction of query-log
+volume, which is why they are kept far longer.
+
+Enablement hot-reloads. Buffer, batch, flush, and retention changes require a
+controlled restart, matching the query log, because they define the lifetime of
+the asynchronous worker. A saturated queue drops entries and counts them rather
+than blocking whichever goroutine happened to log.
+
+Entries also keep going to stderr, so `journalctl -u sable` and `docker logs`
+remain the place to look when the database itself is the thing that failed. The
+worker deliberately reports its own write failures there and never back through
+the buffer it drains.
+
 ## Dashboard statistics
 
 Query counters are written to the configured database as one bucket per minute,

@@ -37,6 +37,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	defer stopRuntime()
 	startedAt := time.Now()
 	runtimeLogs := serverlog.New(serverlog.DefaultCapacity)
+	// baseLogger stays unwrapped so the server log recorder can report its own
+	// failures without feeding them back into the buffer it drains.
+	baseLogger := logger
 	logger = slog.New(serverlog.NewHandler(logger.Handler(), runtimeLogs))
 	absolutePath, initial, err := loadConfiguration(configurationPath)
 	if err != nil {
@@ -49,6 +52,23 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return err
 	}
 	defer database.Close()
+	// The recorder attaches here rather than alongside the other services so
+	// the startup that follows is persisted too, and it is closed by defer so
+	// every path out of Run flushes it, including the startup failures that
+	// are the most valuable thing to still have after a restart. Deferred
+	// after database.Close, so it runs before it.
+	serverLogRecorder, err := serverlog.NewRecorder(database, serverlog.Options{
+		Enabled:       initial.ServerLog.Enabled,
+		BufferSize:    initial.ServerLog.BufferSize,
+		BatchSize:     initial.ServerLog.BatchSize,
+		FlushInterval: initial.ServerLog.FlushInterval.Duration,
+		Retention:     initial.ServerLog.Retention.Duration,
+	}, baseLogger)
+	if err != nil {
+		return fmt.Errorf("start server log recorder: %w", err)
+	}
+	defer closeServerLogRecorder(serverLogRecorder, initial)
+	runtimeLogs.Attach(serverLogRecorder)
 	secretVault, err := secrets.Open(initial.SecuritySecretKeyPath(configurationDirectory), database)
 	if err != nil {
 		return fmt.Errorf("initialize secret vault: %w", err)
@@ -171,6 +191,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		if err := queryLogWorkerChange(active.QueryLog, candidate.QueryLog); err != nil {
 			return err
 		}
+		if err := serverLogWorkerChange(active.ServerLog, candidate.ServerLog); err != nil {
+			return err
+		}
 		if active.Security != candidate.Security {
 			return errors.New("security settings require a controlled restart")
 		}
@@ -201,6 +224,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		}
 		handler.Activate(candidateRuntime)
 		queryRecorder.SetEnabled(candidate.QueryLog.Enabled)
+		serverLogRecorder.SetEnabled(candidate.ServerLog.Enabled)
 		if clusterRestartRequired {
 			logger.Info("cluster bootstrap settings staged", "restart_required", true)
 		}
@@ -561,6 +585,26 @@ func closeQueryRecorderAfterStartupFailure(recorder *querylog.Recorder, configur
 	ctx, cancel := context.WithTimeout(context.Background(), configuration.Server.ShutdownTimeout.Duration)
 	defer cancel()
 	return recorder.Close(ctx)
+}
+
+// closeServerLogRecorder flushes on the way out. It takes no error return
+// because it runs from a defer: a failure to persist the last few lines is
+// reported on stderr by the recorder itself, and there is no caller left to
+// hand it to.
+func closeServerLogRecorder(recorder *serverlog.Recorder, configuration config.Config) {
+	ctx, cancel := context.WithTimeout(context.Background(), configuration.Server.ShutdownTimeout.Duration)
+	defer cancel()
+	_ = recorder.Close(ctx)
+}
+
+func serverLogWorkerChange(active, candidate config.ServerLog) error {
+	if active.BufferSize == candidate.BufferSize &&
+		active.BatchSize == candidate.BatchSize &&
+		active.FlushInterval == candidate.FlushInterval &&
+		active.Retention == candidate.Retention {
+		return nil
+	}
+	return errors.New("server_log buffer, batch, flush, and retention settings require a controlled restart")
 }
 
 func queryLogWorkerChange(active, candidate config.QueryLog) error {

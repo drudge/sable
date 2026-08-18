@@ -48,6 +48,10 @@ const (
 	defaultQueryLogBatch       = 256
 	defaultQueryLogFlush       = 250 * time.Millisecond
 	defaultQueryLogKeep        = 7 * 24 * time.Hour
+	defaultServerLogBuffer     = 4_096
+	defaultServerLogBatch      = 128
+	defaultServerLogFlush      = time.Second
+	defaultServerLogKeep       = 60 * 24 * time.Hour
 	defaultTLSVersion          = "1.3"
 	defaultCertificateMode     = "manual"
 	defaultACMEDirectoryURL    = "https://acme-v02.api.letsencrypt.org/directory"
@@ -94,6 +98,7 @@ type Config struct {
 	TSIGKeys     []TSIGKey    `toml:"tsig_keys"`
 	Blocking     Blocking     `toml:"blocking"`
 	QueryLog     QueryLog     `toml:"query_log"`
+	ServerLog    ServerLog    `toml:"server_log"`
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
 	UniFi        UniFi        `toml:"unifi"`
 	Security     Security     `toml:"security"`
@@ -195,6 +200,18 @@ type BlockList struct {
 }
 
 type QueryLog struct {
+	Enabled       bool     `toml:"enabled"`
+	BufferSize    int      `toml:"buffer_size"`
+	BatchSize     int      `toml:"batch_size"`
+	FlushInterval Duration `toml:"flush_interval"`
+	Retention     Duration `toml:"retention"`
+}
+
+// ServerLog controls whether the runtime log survives a restart. Without it the
+// console only shows what this process logged since it started, so an upgrade
+// or a crash loop erases the record of what led to it. Volume is far below the
+// query log, which is why the retention default is much longer.
+type ServerLog struct {
 	Enabled       bool     `toml:"enabled"`
 	BufferSize    int      `toml:"buffer_size"`
 	BatchSize     int      `toml:"batch_size"`
@@ -349,6 +366,13 @@ func Defaults() Config {
 			BatchSize:     defaultQueryLogBatch,
 			FlushInterval: Duration{Duration: defaultQueryLogFlush},
 			Retention:     Duration{Duration: defaultQueryLogKeep},
+		},
+		ServerLog: ServerLog{
+			Enabled:       true,
+			BufferSize:    defaultServerLogBuffer,
+			BatchSize:     defaultServerLogBatch,
+			FlushInterval: Duration{Duration: defaultServerLogFlush},
+			Retention:     Duration{Duration: defaultServerLogKeep},
 		},
 		EncryptedDNS: EncryptedDNS{
 			MinimumVersion:  defaultTLSVersion,
@@ -568,6 +592,18 @@ func (configuration Config) Validate() error {
 	}
 	if configuration.QueryLog.Retention.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("query_log.retention must be positive"))
+	}
+	if configuration.ServerLog.BufferSize <= 0 {
+		validationErrors = append(validationErrors, errors.New("server_log.buffer_size must be positive"))
+	}
+	if configuration.ServerLog.BatchSize <= 0 || configuration.ServerLog.BatchSize > configuration.ServerLog.BufferSize {
+		validationErrors = append(validationErrors, errors.New("server_log.batch_size must be positive and no larger than buffer_size"))
+	}
+	if configuration.ServerLog.FlushInterval.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("server_log.flush_interval must be positive"))
+	}
+	if configuration.ServerLog.Retention.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("server_log.retention must be positive"))
 	}
 	for index, address := range configuration.EncryptedDNS.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
