@@ -44,6 +44,23 @@ func (capture *responseCapture) TsigStatus() error                { return nil }
 func (capture *responseCapture) TsigTimersOnly(bool)              {}
 func (capture *responseCapture) Hijack()                          {}
 
+// discardWriter drops the reply so a handler benchmark measures resolution
+// rather than the copy responseCapture makes to inspect it.
+type discardWriter struct{}
+
+func (discardWriter) LocalAddr() net.Addr {
+	return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8053}
+}
+func (discardWriter) RemoteAddr() net.Addr {
+	return &net.UDPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}
+}
+func (discardWriter) WriteMsg(*dns.Msg) error          { return nil }
+func (discardWriter) Write(buffer []byte) (int, error) { return len(buffer), nil }
+func (discardWriter) Close() error                     { return nil }
+func (discardWriter) TsigStatus() error                { return nil }
+func (discardWriter) TsigTimersOnly(bool)              {}
+func (discardWriter) Hijack()                          {}
+
 type transferCapture struct {
 	remote   net.Addr
 	messages []*dns.Msg
@@ -1505,6 +1522,68 @@ func TestApplyManagedTrustAnchorsKeepsCacheWhenAnchorsUnchanged(t *testing.T) {
 	handler.ApplyManagedTrustAnchors([]string{trustanchor.DefaultRootKSK2024}, false)
 	if entries := handler.Stats().CacheEntries; entries != 0 {
 		t.Fatalf("CacheEntries = %d after a changed anchor set, want 0", entries)
+	}
+}
+
+func benchmarkCacheHitHandler(b *testing.B) (*Handler, *dns.Msg) {
+	b.Helper()
+	configuration := testRuntimeConfig()
+	configuration.CacheSize = 10_000
+	runtime, err := Compile(configuration)
+	if err != nil {
+		b.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	request := cacheRequest("example.com.", 1)
+	if !runtime.cache.Set(request, positiveResponse(request, 300)) {
+		b.Fatal("failed to seed the response cache")
+	}
+	return handler, request
+}
+
+// BenchmarkServeDNSCacheHit measures the whole per-query handler cost for a
+// cache hit, which is the steady state the dnsperf comparison exercises.
+func BenchmarkServeDNSCacheHit(b *testing.B) {
+	handler, request := benchmarkCacheHitHandler(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		handler.ServeDNS(discardWriter{}, request)
+	}
+}
+
+// BenchmarkServeDNSCacheHitParallel shows how the same path holds up once more
+// than one reader is feeding it.
+func BenchmarkServeDNSCacheHitParallel(b *testing.B) {
+	handler, request := benchmarkCacheHitHandler(b)
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		local := request.Copy()
+		for pb.Next() {
+			handler.ServeDNS(discardWriter{}, local)
+		}
+	})
+}
+
+// BenchmarkWireRoundTrip measures what miekg/dns spends per query outside the
+// handler: unpacking the request off the socket and packing the reply back.
+// Read it against BenchmarkServeDNSCacheHit to see how much of a query never
+// reaches Sable's own code.
+func BenchmarkWireRoundTrip(b *testing.B) {
+	request := cacheRequest("example.com.", 1)
+	response := positiveResponse(request, 300)
+	wire, err := request.Pack()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		decoded := new(dns.Msg)
+		if err := decoded.Unpack(wire); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := response.Pack(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
