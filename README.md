@@ -248,7 +248,10 @@ health endpoint. Archive snapshots remain usable without a running Docker
 daemon. Tagged releases also publish a multi-architecture image to
 `ghcr.io/drudge/sable`. GoReleaser requires YAML internally, so Mage creates its
 configuration as a temporary file outside the repository and removes it after
-each command; no YAML is checked in. See [the release guide](docs/releasing.md).
+each command; no YAML is checked in. `mage release 0.8.0-rc.2` performs a whole
+release: it records the version everywhere it appears, verifies the repository,
+commits, tags, pushes, and publishes. See
+[the release guide](docs/releasing.md).
 
 ## Container quick start
 

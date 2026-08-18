@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -29,6 +30,8 @@ const (
 	containerImage            = "ghcr.io/drudge/sable"
 	templCommand              = "github.com/a-h/templ/cmd/templ"
 	clusterReplicaDirectory   = "_work/cluster-dev/replica"
+	releaseBranch             = "main"
+	recordedVersionPattern    = `[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?`
 	controlledRestartExitCode = 75
 	goReleaserConfig          = `version: 2
 
@@ -338,8 +341,67 @@ func DockerSmoke(ctx context.Context) error {
 	return nil
 }
 
-// Release verifies the repository and publishes the current tag through GoReleaser.
-func Release(ctx context.Context) error {
+// Release bumps every recorded version, verifies the repository, then commits,
+// tags, pushes, and publishes the release through GoReleaser. The version may be
+// given with or without its leading "v", as in "mage release 0.8.0-rc.2".
+func Release(ctx context.Context, version string) error {
+	release, err := parseReleaseVersion(version)
+	if err != nil {
+		return err
+	}
+	tag := "v" + release
+	branch := environmentOr("RELEASE_BRANCH", releaseBranch)
+	if err := requireReleaseBranch(ctx, branch); err != nil {
+		return err
+	}
+	if err := requireCleanWorktree(ctx); err != nil {
+		return err
+	}
+	if err := requireDocker(ctx); err != nil {
+		return err
+	}
+	if err := run(ctx, nil, "git", "pull", "--ff-only", "origin", branch); err != nil {
+		return err
+	}
+	if err := requireUnusedTag(ctx, tag); err != nil {
+		return err
+	}
+	updated, err := bumpVersionReferences(release)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Recorded %s in %d file(s)\n", release, updated)
+	if err := os.Setenv("VERSION", release); err != nil {
+		return fmt.Errorf("set the release version for the smoke build: %w", err)
+	}
+	if err := Verify(ctx); err != nil {
+		return err
+	}
+	if err := ReleaseSmoke(ctx); err != nil {
+		return err
+	}
+	message := "Sable " + tag
+	if updated > 0 {
+		if err := run(ctx, nil, "git", "commit", "--all", "--message", message); err != nil {
+			return err
+		}
+	}
+	if err := run(ctx, nil, "git", "tag", "--annotate", tag, "--message", message); err != nil {
+		return err
+	}
+	if err := run(ctx, nil, "git", "push", "origin", branch); err != nil {
+		return err
+	}
+	if err := run(ctx, nil, "git", "push", "origin", tag); err != nil {
+		return err
+	}
+	return publishCurrentTag(ctx)
+}
+
+// Publish verifies the repository and publishes the current tag through
+// GoReleaser. Release calls the same publication step after tagging, so this
+// target exists to retry a publication whose tag is already pushed.
+func Publish(ctx context.Context) error {
 	if err := Verify(ctx); err != nil {
 		return err
 	}
@@ -349,7 +411,119 @@ func Release(ctx context.Context) error {
 	if err := requireDocker(ctx); err != nil {
 		return err
 	}
+	return publishCurrentTag(ctx)
+}
+
+func publishCurrentTag(ctx context.Context) error {
 	return withGoReleaserConfigEnvironment(ctx, []string{"SABLE_CONTAINER_RELEASE=true"}, "release", "--clean")
+}
+
+// versionReference locates one recorded version so a release can rewrite every
+// copy of it. Each expression keeps the text around the version in capture
+// groups and must match at least once, so a moved reference fails the release
+// instead of silently going stale.
+type versionReference struct {
+	path       string
+	expression *regexp.Regexp
+}
+
+func versionReferences() []versionReference {
+	reference := func(path, pattern string) versionReference {
+		return versionReference{path: path, expression: regexp.MustCompile(pattern)}
+	}
+	return []versionReference{
+		reference("magefile.go", `(developmentVersion\s+= ")`+recordedVersionPattern+`(")`),
+		reference("internal/version/version.go", `(Release\s+= ")`+recordedVersionPattern+`(")`),
+		reference("README.md", `(SABLE_VERSION=)`+recordedVersionPattern),
+		reference("README.md", `(--version v)`+recordedVersionPattern),
+		reference("README.md", `(ghcr\.io/drudge/sable:)`+recordedVersionPattern),
+		reference("docs/proxmox.md", `(SABLE_VERSION=)`+recordedVersionPattern),
+	}
+}
+
+func bumpVersionReferences(release string) (int, error) {
+	contents := map[string][]byte{}
+	for _, reference := range versionReferences() {
+		current, cached := contents[reference.path]
+		if !cached {
+			read, err := os.ReadFile(reference.path)
+			if err != nil {
+				return 0, fmt.Errorf("read %s: %w", reference.path, err)
+			}
+			current = read
+		}
+		if reference.expression.Find(current) == nil {
+			return 0, fmt.Errorf("%s no longer contains a version matching %s", reference.path, reference.expression)
+		}
+		contents[reference.path] = reference.expression.ReplaceAll(current, []byte("${1}"+release+"${2}"))
+	}
+	updated := 0
+	for path, rewritten := range contents {
+		current, err := os.ReadFile(path)
+		if err != nil {
+			return 0, fmt.Errorf("read %s: %w", path, err)
+		}
+		if string(current) == string(rewritten) {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return 0, fmt.Errorf("inspect %s: %w", path, err)
+		}
+		if err := os.WriteFile(path, rewritten, info.Mode().Perm()); err != nil {
+			return 0, fmt.Errorf("write %s: %w", path, err)
+		}
+		updated++
+	}
+	return updated, nil
+}
+
+func parseReleaseVersion(version string) (string, error) {
+	release := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if !regexp.MustCompile(`^` + recordedVersionPattern + `$`).MatchString(release) {
+		return "", fmt.Errorf("release version %q is not a semantic version such as 0.8.0 or 0.8.0-rc.2", version)
+	}
+	return release, nil
+}
+
+func requireReleaseBranch(ctx context.Context, branch string) error {
+	current, err := output(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return fmt.Errorf("read current branch: %w", err)
+	}
+	if current != branch {
+		return fmt.Errorf("releases are cut from %s, but %s is checked out; set RELEASE_BRANCH to override", branch, current)
+	}
+	return nil
+}
+
+func requireCleanWorktree(ctx context.Context) error {
+	status, err := output(ctx, "git", "status", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("read repository status: %w", err)
+	}
+	if status != "" {
+		return fmt.Errorf("the repository has uncommitted changes:\n%s", status)
+	}
+	return nil
+}
+
+func requireUnusedTag(ctx context.Context, tag string) error {
+	local, err := output(ctx, "git", "tag", "--list", tag)
+	if err != nil {
+		return fmt.Errorf("list local tags: %w", err)
+	}
+	if local != "" {
+		return fmt.Errorf("tag %s already exists locally", tag)
+	}
+	remote, err := output(ctx, "git", "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	if err != nil {
+		return fmt.Errorf("list published tags: %w", err)
+	}
+	if remote != "" {
+		return fmt.Errorf("tag %s is already published", tag)
+	}
+	return nil
 }
 
 func withGoReleaserConfig(ctx context.Context, arguments ...string) error {
