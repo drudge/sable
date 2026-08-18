@@ -684,3 +684,88 @@ func TestReplaceCachedResponsesRoundTripAndClear(t *testing.T) {
 		t.Fatalf("CachedResponses() after clear = %+v, %v", got, err)
 	}
 }
+
+func TestSQLitePragmasReachEveryPooledConnection(t *testing.T) {
+	t.Parallel()
+
+	opened, err := Open(context.Background(), "sqlite", filepath.Join(t.TempDir(), "sable.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+
+	// Connections are held open together so the pool has to make new ones
+	// rather than handing back the connection that ran the migrations.
+	ctx := context.Background()
+	connections := make([]*sql.Conn, 0, 4)
+	defer func() {
+		for _, connection := range connections {
+			connection.Close()
+		}
+	}()
+	for range cap(connections) {
+		connection, err := opened.database.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		connections = append(connections, connection)
+	}
+	for index, connection := range connections {
+		var timeout, foreignKeys int
+		var journal string
+		if err := connection.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&timeout); err != nil {
+			t.Fatal(err)
+		}
+		if err := connection.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+			t.Fatal(err)
+		}
+		if err := connection.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journal); err != nil {
+			t.Fatal(err)
+		}
+		if timeout != 5000 || foreignKeys != 1 || !strings.EqualFold(journal, "wal") {
+			t.Fatalf("connection %d: busy_timeout = %d, foreign_keys = %d, journal_mode = %q", index, timeout, foreignKeys, journal)
+		}
+	}
+}
+
+func TestSQLiteDSNLeavesOperatorPragmasAlone(t *testing.T) {
+	t.Parallel()
+
+	for name, test := range map[string]struct {
+		dsn  string
+		want []string
+	}{
+		"plain path": {
+			dsn:  "data/sable.db",
+			want: []string{"_pragma=journal_mode%28WAL%29", "_pragma=busy_timeout%285000%29", "_pragma=foreign_keys%281%29"},
+		},
+		"pragma form": {
+			dsn:  "data/sable.db?_pragma=busy_timeout(20000)",
+			want: []string{"_pragma=journal_mode%28WAL%29", "_pragma=foreign_keys%281%29"},
+		},
+		"shorthand form": {
+			dsn:  "data/sable.db?_busy_timeout=20000&_fk=0",
+			want: []string{"_pragma=journal_mode%28WAL%29"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := sqliteDSN(test.dsn)
+			if !strings.HasPrefix(got, test.dsn) {
+				t.Fatalf("sqliteDSN(%q) = %q, want it to keep the configured DSN", test.dsn, got)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("sqliteDSN(%q) = %q, want it to carry %s", test.dsn, got, want)
+				}
+			}
+			if strings.Count(got, "_pragma=busy_timeout") > 1 || strings.Count(got, "_pragma=foreign_keys") > 1 {
+				t.Fatalf("sqliteDSN(%q) = %q, want no repeated pragma", test.dsn, got)
+			}
+			if strings.Count(got, "?") != 1 {
+				t.Fatalf("sqliteDSN(%q) = %q, want the settings appended to one query", test.dsn, got)
+			}
+		})
+	}
+}

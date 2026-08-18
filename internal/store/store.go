@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,16 +33,13 @@ func Open(ctx context.Context, driver, dsn string) (*Store, error) {
 		if err := prepareSQLitePath(dsn); err != nil {
 			return nil, err
 		}
+		dsn = sqliteDSN(dsn)
 	}
 	database, err := sql.Open(databaseDriver, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open %s database: %w", driver, err)
 	}
 	store := &Store{database: database, driver: driver}
-	if err := store.configure(ctx); err != nil {
-		database.Close()
-		return nil, err
-	}
 	if err := database.PingContext(ctx); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("ping %s database: %w", driver, err)
@@ -61,21 +59,70 @@ func (store *Store) Driver() string {
 	return store.driver
 }
 
-func (store *Store) configure(ctx context.Context) error {
-	if store.driver != "sqlite" {
-		return nil
+// sqlitePragmas are the settings every connection to the database needs. Only
+// journal_mode is a property of the file; busy_timeout and foreign_keys belong
+// to a connection and start at their defaults on each new one.
+var sqlitePragmas = [][2]string{
+	{"journal_mode", "WAL"},
+	{"busy_timeout", "5000"},
+	{"foreign_keys", "1"},
+}
+
+// sqliteDSN carries the pragmas on the connection string. Running them once
+// against the pool only reaches whichever connection happened to serve them,
+// and database/sql opens more on demand: those arrived with busy_timeout at
+// zero, so a writer that met another writer failed immediately with
+// SQLITE_BUSY instead of waiting for the lock, and foreign keys went
+// unenforced. The driver applies DSN pragmas to every connection it opens.
+// Anything the operator configured already wins, under either the _pragma form
+// or the driver's shorthand keys.
+func sqliteDSN(dsn string) string {
+	query := ""
+	if separator := strings.IndexByte(dsn, '?'); separator >= 0 {
+		query = dsn[separator+1:]
 	}
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-		"PRAGMA busy_timeout=5000",
+	configured, err := url.ParseQuery(query)
+	if err != nil {
+		configured = nil
 	}
-	for _, statement := range pragmas {
-		if _, err := store.database.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("configure SQLite: %w", err)
+	settings := make([]string, 0, len(sqlitePragmas))
+	for _, pragma := range sqlitePragmas {
+		if sqlitePragmaConfigured(configured, pragma[0]) {
+			continue
+		}
+		settings = append(settings, "_pragma="+url.QueryEscape(pragma[0]+"("+pragma[1]+")"))
+	}
+	if len(settings) == 0 {
+		return dsn
+	}
+	if query != "" {
+		return dsn + "&" + strings.Join(settings, "&")
+	}
+	return dsn + "?" + strings.Join(settings, "&")
+}
+
+// sqlitePragmaShorthand maps a pragma to the driver's mattn-compatible keys for
+// it, so a DSN that sets one of those is left alone.
+var sqlitePragmaShorthand = map[string][]string{
+	"journal_mode": {"_journal_mode", "_journal"},
+	"busy_timeout": {"_busy_timeout", "_timeout"},
+	"foreign_keys": {"_foreign_keys", "_fk"},
+}
+
+func sqlitePragmaConfigured(configured url.Values, name string) bool {
+	for _, key := range sqlitePragmaShorthand[name] {
+		if configured.Has(key) {
+			return true
 		}
 	}
-	return nil
+	for _, pragma := range configured["_pragma"] {
+		setting, _, _ := strings.Cut(pragma, "(")
+		setting, _, _ = strings.Cut(setting, "=")
+		if strings.EqualFold(strings.TrimSpace(setting), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (store *Store) migrate(ctx context.Context) error {

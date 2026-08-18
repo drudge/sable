@@ -139,3 +139,44 @@ func TestQueryStatsTotalsAreZeroBeforeAnyWrite(t *testing.T) {
 		t.Fatalf("totals = %+v, want zeroes", totals)
 	}
 }
+
+// A flush that meets another writer has to wait for the lock. Before the
+// pragmas rode the DSN, busy_timeout was zero on every connection the pool
+// opened after the first, so this write returned SQLITE_BUSY at once and the
+// console lost the minute.
+func TestQueryStatsWriteWaitsOutABusyDatabase(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	opened := openStatsStore(t)
+	minute := time.Date(2026, time.August, 15, 10, 0, 0, 0, time.UTC)
+
+	holder, err := opened.database.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	if _, err := holder.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		t.Fatalf("hold the write lock: %v", err)
+	}
+
+	written := make(chan error, 1)
+	go func() {
+		written <- opened.RecordQueryStats(ctx, []QueryStatsBucket{
+			{Start: minute, QueryStatsDelta: QueryStatsDelta{Queries: 3}},
+		}, QueryStatsTotals{Queries: 3})
+	}()
+
+	select {
+	case err := <-written:
+		t.Fatalf("RecordQueryStats() returned %v while the database was locked, want it to wait", err)
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	if _, err := holder.ExecContext(ctx, "COMMIT"); err != nil {
+		t.Fatalf("release the write lock: %v", err)
+	}
+	if err := <-written; err != nil {
+		t.Fatalf("RecordQueryStats() after the lock cleared = %v", err)
+	}
+}
