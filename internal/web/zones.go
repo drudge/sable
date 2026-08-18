@@ -65,6 +65,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	console := server.consoleView(request)
 	zones := server.zones.Current().Zones
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	tsigKeys := server.tsigKeyNames(request.Context())
 	aliasSources := make([]string, 0, len(zones))
 	catalogTargets := make([]string, 0, len(zones))
 	for _, zone := range zones {
@@ -96,7 +97,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CatalogManager:        catalogManagingZone(zones, zone),
 			CatalogMembers:        catalogMemberNames(zones, zone),
 			AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
-			TSIGKey:               zone.TSIGKey, DynamicUpdates: zone.DynamicUpdates,
+			TSIGKey:               zone.TSIGKey, TSIGKeys: tsigKeys, DynamicUpdates: zone.DynamicUpdates,
 			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
 			DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
 			DNSSECDenial: zone.DNSSECDenial, NSEC3Iterations: zone.NSEC3Iterations, NSEC3Salt: zone.NSEC3Salt,
@@ -141,6 +142,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
 		CanCreate:    !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
 		AliasSources: aliasSources,
+		TSIGKeys:     tsigKeys,
 	}
 }
 

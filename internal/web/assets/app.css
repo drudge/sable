@@ -2375,3 +2375,27 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .backup-archive-icon .nav-icon { width: 1.05rem; height: 1.05rem; color: var(--muted-foreground); }
 .backup-archive-preview.is-invalid { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); }
 .backup-archive-preview.is-invalid .backup-archive-icon .nav-icon, .backup-archive-preview.is-invalid strong { color: var(--destructive); }
+
+/* TSIG keys. A row states the algorithm, whether the vault holds a secret, and
+   which zones depend on the key, because removing one breaks every transfer
+   and update it guards. */
+.tsig-key-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.tsig-key-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto 2rem; align-items: center; gap: .75rem; border-top: 1px solid var(--border); padding: .75rem 1rem; }
+.tsig-key-row:first-child { border-top: 0; }
+.tsig-key-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.tsig-key-icon { display: grid; place-items: center; color: var(--muted-foreground); }
+.tsig-key-icon .nav-icon { width: 1rem; height: 1rem; }
+.tsig-key-row > div { display: grid; min-width: 0; gap: .15rem; }
+.tsig-key-row strong { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+.tsig-key-row small { color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
+.tsig-key-warning { display: flex; align-items: center; gap: .3rem; color: var(--destructive); }
+.tsig-key-warning .nav-icon { width: .85rem; height: .85rem; flex: 0 0 auto; }
+.tsig-empty { display: grid; place-items: center; align-content: center; gap: .35rem; padding: 2.5rem 1rem; color: var(--muted-foreground); text-align: center; }
+.tsig-empty > .nav-icon { width: 1.6rem; height: 1.6rem; margin-bottom: .3rem; }
+.tsig-empty h3 { margin: 0; color: var(--foreground); font-size: .9rem; }
+.tsig-empty p { margin: 0; max-width: 26rem; font-size: .78rem; }
+.tsig-add-form { gap: 1rem; }
+@media (max-width: 640px) {
+  .tsig-key-row { grid-template-columns: 1.5rem minmax(0, 1fr) 2rem; padding-inline: .75rem; }
+  .tsig-key-row .button.compact { grid-column: 2 / -1; justify-self: start; }
+}

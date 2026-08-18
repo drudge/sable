@@ -50,11 +50,16 @@ dnssec_trust_anchor_updates = true
 
 # Authoritative zones and records are managed through the Sable console or zone API.
 # They are stored transactionally in the configured SQLite or PostgreSQL database.
-# Zone files are used only for import and export. TSIG secrets remain node configuration.
+# Zone files are used only for import and export.
+#
+# TSIG keys are managed from Settings > TSIG in the console. Only the name and
+# algorithm live here; the shared secret is held in the encrypted vault next to
+# the DNSSEC and ACME material, so this file and its backups never carry it.
+# A secret written below is moved into the vault on the next start and removed
+# from the file, which is how an upgrade from an older release carries over.
 # [[tsig_keys]]
 # name = "transfer-example"
 # algorithm = "hmac-sha256"
-# secret = "BASE64_ENCODED_SECRET"
 
 [blocking]
 enabled = true

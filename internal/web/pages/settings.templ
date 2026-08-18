@@ -1,6 +1,9 @@
 package pages
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type SettingsPageView struct {
 	Console             DashboardView
@@ -69,6 +72,20 @@ type SettingsPageView struct {
 	BlockingBypassClients string
 	BlockingAllowTXTReport bool
 	Backup                 SettingsBackupView
+	// TSIGKeys lists the shared secrets this node knows about. Only the name
+	// and algorithm travel with the view: the secret itself stays in the
+	// encrypted vault and is shown once, right after it is generated.
+	TSIGKeys            []SettingsTSIGKeyView
+	TSIGAlgorithms      []string
+	TSIGGeneratedKey    string
+	TSIGGeneratedSecret string
+}
+
+type SettingsTSIGKeyView struct {
+	Name       string
+	Algorithm  string
+	Configured bool
+	Zones      []string
 }
 
 templ SettingsPage(view SettingsPageView) {
@@ -85,7 +102,7 @@ templ SettingsContent(view SettingsPageView) {
 			@SettingsTab("general", "General", "server", view.ActiveTab, false)
 			@SettingsTab("web-service", "Web", "globe", view.ActiveTab, false)
 			@SettingsTab("protocols", "Protocols", "cluster", view.ActiveTab, false)
-			@SettingsTab("tsig", "TSIG", "key", view.ActiveTab, true)
+			@SettingsTab("tsig", "TSIG", "key", view.ActiveTab, false)
 			@SettingsTab("recursion", "Recursion", "refresh", view.ActiveTab, false)
 			@SettingsTab("cache", "Cache", "database", view.ActiveTab, false)
 			@SettingsTab("blocking", "Blocking", "shield", view.ActiveTab, false)
@@ -103,8 +120,9 @@ templ SettingsContent(view SettingsPageView) {
 			<div class="settings-tab-panel" data-isotope-panel="proxy" hidden?={ view.ActiveTab != "proxy" }>@SettingsProxyPanel(view)</div>
 			<div class="settings-tab-panel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
 		</form>
-		// Backup lives outside the settings form: it posts its own multipart
-		// upload and must never be swept up by a Save Settings submission.
+		// TSIG and Backup live outside the settings form. Each posts its own
+		// actions and must never be swept up by a Save Settings submission.
+		<div class="settings-tab-panel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
 		<div class="settings-tab-panel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@ManualCertificateDialogs()
 	</div>
@@ -322,6 +340,100 @@ func (view SettingsBackupView) Running(kind string) bool {
 // Busy reports whether any operation is under way. Both cards lock down while
 // one runs, because a backup and a restore would fight over the same files.
 func (view SettingsBackupView) Busy() bool { return view.Job != nil }
+
+// SettingsTSIGPanel manages the shared secrets that authenticate transfers and
+// dynamic updates. Only the name and algorithm are configuration; the secret
+// itself lives in the node's encrypted vault, which is why the list can say
+// whether a key has one but never show it again after it is created.
+templ SettingsTSIGPanel(view SettingsPageView) {
+	<div class="settings-panel-stack tsig-panel">
+		if view.TSIGGeneratedSecret != "" {
+			<div class="token-created">
+				<strong>Copy this secret now</strong>
+				<div class="copyable-text token-secret"><span id="generated-tsig-secret">{ view.TSIGGeneratedSecret }</span><button type="button" data-copy-target="generated-tsig-secret" aria-label="Copy TSIG secret" title="Copy TSIG secret">@CopyIcons()</button></div>
+				<span>Configure the other server with this secret for { TSIGDisplayName(view.TSIGGeneratedKey) }. Sable keeps it encrypted and will not show it again; rotate the key if you lose it.</span>
+			</div>
+		}
+		@SettingsCard("key", "TSIG Keys", "Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml.") {
+			<div class="isotope-card-content">
+				if len(view.TSIGKeys) == 0 {
+					<div class="tsig-empty">@Icon("key")<h3>No TSIG keys yet</h3><p>Zones without a key fall back to source-IP and transfer-policy authorization.</p></div>
+				} else {
+					<div class="tsig-key-list isotope-source-list">
+						for _, key := range view.TSIGKeys {
+							@SettingsTSIGKeyRow(key)
+						}
+					</div>
+				}
+			</div>
+		}
+		@SettingsCard("plus", "Add a Key", "Leave the secret blank and Sable generates one sized to the algorithm. Paste a secret instead when another server already owns the key.") {
+			<form class="isotope-card-content tsig-add-form" hx-post="/ui/settings/tsig/save" hx-target="#settings-content" hx-swap="outerHTML">
+				<div class="field-grid three">
+					<label class="field-control"><span>Key Name</span><input class="mono-input" name="tsig_name" placeholder="transfer-key" autocomplete="off" required/><small>A DNS name. Both servers must agree on it exactly.</small></label>
+					<label class="field-control"><span>Algorithm</span><select name="tsig_algorithm">
+						for _, algorithm := range view.TSIGAlgorithms {
+							<option value={ algorithm }>{ TSIGAlgorithmLabel(algorithm) }</option>
+						}
+					</select><small>HMAC-SHA256 suits almost everything.</small></label>
+					<label class="field-control"><span>Secret (optional)</span><input class="mono-input" type="password" name="tsig_secret" autocomplete="new-password" placeholder="Generate one for me"/><small>Base64, at least 128 bits.</small></label>
+				</div>
+				<div class="settings-panel-save"><button class="button" type="submit">@Icon("plus")<span>Add Key</span></button></div>
+			</form>
+		}
+	</div>
+}
+
+// SettingsTSIGKeyRow follows the block-list row: an icon, the name, one muted
+// line of detail, and the actions. A stored secret is the normal state and goes
+// unremarked; only a key the vault cannot answer for earns a warning line.
+templ SettingsTSIGKeyRow(key SettingsTSIGKeyView) {
+	<article class="tsig-key-row">
+		<span class="tsig-key-icon">@Icon("key")</span>
+		<div>
+			<strong>{ TSIGDisplayName(key.Name) }</strong>
+			<small>{ TSIGAlgorithmLabel(key.Algorithm) } · { tsigKeyUsage(key) }</small>
+			if !key.Configured {
+				<small class="tsig-key-warning" title="Add the key again with its secret, or rotate it to generate a new one.">@Icon("alert-triangle")<span>No secret stored</span></small>
+			}
+		</div>
+		<button class="button outline compact" type="button" hx-post="/ui/settings/tsig/save" hx-vals={ fmt.Sprintf("{\"tsig_name\":%q,\"tsig_algorithm\":%q,\"tsig_rotate\":\"true\"}", key.Name, key.Algorithm) } hx-target="#settings-content" hx-swap="outerHTML" hx-confirm={ "Generate a new secret for " + TSIGDisplayName(key.Name) + "? Every server using this key must be updated." }>@Icon("refresh")<span>Rotate</span></button>
+		<button class="icon-button danger" type="button" hx-post="/ui/settings/tsig/delete" hx-vals={ fmt.Sprintf("{\"tsig_name\":%q}", key.Name) } hx-target="#settings-content" hx-swap="outerHTML" hx-confirm={ "Remove " + TSIGDisplayName(key.Name) + "? The stored secret is destroyed." } aria-label={ "Remove " + TSIGDisplayName(key.Name) }>@Icon("trash")</button>
+	</article>
+}
+
+// tsigKeyUsage names the zones depending on a key, which is what an operator
+// needs to know before rotating or removing it.
+func tsigKeyUsage(key SettingsTSIGKeyView) string {
+	if len(key.Zones) == 0 {
+		return "Not referenced by any zone"
+	}
+	return "Used by " + strings.Join(key.Zones, ", ")
+}
+
+// TSIGDisplayName drops the root label from a key name. Sable canonicalizes
+// key names to their fully qualified form, but zone names are shown bare and an
+// operator writing the key into another server types it that way too.
+func TSIGDisplayName(name string) string {
+	if name == "." {
+		return name
+	}
+	return strings.TrimSuffix(name, ".")
+}
+
+// TSIGAlgorithmLabel renders the wire name of an HMAC algorithm the way an
+// operator writes it down.
+func TSIGAlgorithmLabel(algorithm string) string {
+	switch strings.ToLower(strings.TrimSuffix(algorithm, ".")) {
+	case "hmac-sha384":
+		return "HMAC-SHA384"
+	case "hmac-sha512":
+		return "HMAC-SHA512"
+	case "hmac-sha256":
+		return "HMAC-SHA256"
+	}
+	return algorithm
+}
 
 templ SettingsBackupPanel(view SettingsBackupView) {
 	<div class="settings-panel-stack backup-panel" id="backup-panel">

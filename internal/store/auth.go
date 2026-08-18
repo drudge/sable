@@ -658,6 +658,18 @@ ON CONFLICT(name) DO UPDATE SET ciphertext = excluded.ciphertext, updated_at = e
 	return nil
 }
 
+// DeleteEncryptedSecret retires a stored secret. Removing the row rather than
+// blanking it means a deleted TSIG key leaves nothing behind in a backup.
+func (store *Store) DeleteEncryptedSecret(ctx context.Context, name string) error {
+	_, err := store.database.ExecContext(
+		ctx, "DELETE FROM sable_secrets WHERE name = "+store.placeholder(1), name,
+	)
+	if err != nil {
+		return fmt.Errorf("delete encrypted secret: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) EncryptedSecret(ctx context.Context, name string) (string, error) {
 	var ciphertext string
 	err := store.database.QueryRowContext(

@@ -12,6 +12,7 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -366,10 +367,16 @@ func certificateValidity(value string, defaultDays int) (time.Duration, error) {
 }
 
 func (server *Server) renderSettingsMutation(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
+	server.renderSettingsView(writer, request, status, server.settingsView(request, message, errorMessage))
+}
+
+// renderSettingsView writes an already-built view. Handlers that have something
+// extra to show, such as a freshly generated TSIG secret, fill in the view
+// first and render it through here.
+func (server *Server) renderSettingsView(writer http.ResponseWriter, request *http.Request, status int, view pages.SettingsPageView) {
 	if status != http.StatusOK {
 		writer.WriteHeader(status)
 	}
-	view := server.settingsView(request, message, errorMessage)
 	if request.Header.Get("HX-Request") == "true" {
 		_ = pages.SettingsContent(view).Render(request.Context(), writer)
 		return
@@ -385,7 +392,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		activeTab = request.URL.Query().Get("tab")
 	}
 	switch activeTab {
-	case "general", "web-service", "protocols", "recursion", "cache", "blocking", "proxy", "logging", "backup":
+	case "general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "proxy", "logging", "backup":
 	default:
 		activeTab = "general"
 	}
@@ -428,6 +435,8 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		BlockingResponseType: configuration.Blocking.ResponseType, BlockingResponseTTL: configuration.Blocking.ResponseTTL,
 		BlockingCustomAddresses: strings.Join(configuration.Blocking.CustomAddresses, "\n"),
 		BlockingBypassClients:   strings.Join(configuration.Blocking.BypassClients, "\n"), BlockingAllowTXTReport: configuration.Blocking.AllowTXTReport,
+		TSIGKeys:       server.tsigKeyViews(request.Context()),
+		TSIGAlgorithms: tsig.Algorithms(),
 	}
 	if server.certificates != nil {
 		status := server.certificates.Status(request.Context(), configuration.EncryptedDNS)

@@ -13,7 +13,7 @@ same integrations.
 | `configuration` | `sable.toml` exactly as it was written, comments included |
 | `zones` | Every zone, its records, and its per-zone DNSSEC and transfer settings |
 | `authorization` | Users with their password hashes, roles and grants, and API token hashes |
-| `secrets` | The encrypted secret vault and the key file that opens it: DNSSEC private keys, UniFi credentials, and ACME DNS provider credentials |
+| `secrets` | The encrypted secret vault and the key file that opens it: DNSSEC private keys, TSIG shared secrets, UniFi credentials, and ACME DNS provider credentials |
 | `trust_anchors` | Persisted RFC 5011 trust points and their anchors |
 | `certificates` | Manual certificate and private key, plus the whole ACME storage directory including the account key |
 | `cluster` | Cluster manifest, node trust anchor, enrollment state, and state snapshots |
