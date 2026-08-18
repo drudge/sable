@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,17 @@ const (
 	dohIdleTimeout       = 30 * time.Second
 	dohMaxHeaderBytes    = 16 << 10
 	listenerStartTimeout = 5 * time.Second
+	// udpReadBufferSize bounds a single inbound query. miekg/dns defaults this
+	// to 512 bytes, which truncates any query carrying EDNS cookies, padding,
+	// or client subnet, and any dynamic update past a couple of records.
+	udpReadBufferSize = 4096
+	// udpSocketBufferBytes sizes the kernel queue behind each reader. The
+	// default is small enough that a burst is dropped before a reader drains
+	// it, and a dropped query costs the client its full timeout.
+	udpSocketBufferBytes = 4 << 20
+	// maximumUDPReaders caps the sockets sharing a port. Past one per core the
+	// readers only contend with the goroutines doing the actual resolving.
+	maximumUDPReaders = 16
 )
 
 type ListenerConfig struct {
@@ -56,23 +68,35 @@ func (store *certificateStore) getCertificate(*tls.ClientHelloInfo) (*tls.Certif
 
 type activeListener struct {
 	target     listenerTarget
-	dnsServer  *dns.Server
+	dnsServers []*dns.Server
 	httpServer *http.Server
 	quicServer *doqServer
-	socket     io.Closer
+	sockets    []io.Closer
 	started    chan struct{}
 }
 
 func (listener *activeListener) closeSocket() error {
-	if listener.socket == nil {
-		return nil
+	var closeErrors []error
+	for _, socket := range listener.sockets {
+		if socket == nil {
+			continue
+		}
+		if err := socket.Close(); err != nil {
+			closeErrors = append(closeErrors, err)
+		}
 	}
-	return listener.socket.Close()
+	return errors.Join(closeErrors...)
 }
 
 func (listener *activeListener) shutdown(ctx context.Context) error {
-	if listener.dnsServer != nil {
-		return listener.dnsServer.ShutdownContext(ctx)
+	if len(listener.dnsServers) > 0 {
+		var shutdownErrors []error
+		for _, server := range listener.dnsServers {
+			if err := server.ShutdownContext(ctx); err != nil {
+				shutdownErrors = append(shutdownErrors, err)
+			}
+		}
+		return errors.Join(shutdownErrors...)
 	}
 	if listener.httpServer != nil {
 		return listener.httpServer.Shutdown(ctx)
@@ -200,23 +224,73 @@ func (group *ListenerGroup) open(target listenerTarget) (*activeListener, error)
 	}
 }
 
+// udpReaderCount reports how many sockets should share the DNS port. miekg/dns
+// runs exactly one goroutine reading each socket, so a single socket serialises
+// every inbound packet through one core no matter how many are available.
+func udpReaderCount() int {
+	if !reusePortSupported {
+		return 1
+	}
+	return min(max(runtime.GOMAXPROCS(0), 1), maximumUDPReaders)
+}
+
 func (group *ListenerGroup) openUDP(target listenerTarget) (*activeListener, error) {
-	connection, err := net.ListenPacket("udp", target.address)
-	if err != nil {
-		return nil, fmt.Errorf("listen udp %s: %w", target.address, err)
+	readers := udpReaderCount()
+	listener := &activeListener{target: target, started: make(chan struct{})}
+	remaining := new(atomic.Int32)
+	remaining.Store(int32(readers))
+	notifyStarted := func() {
+		if remaining.Add(-1) == 0 {
+			close(listener.started)
+		}
 	}
-	server := &dns.Server{
-		Net:           "udp",
-		Handler:       group.handler,
-		PacketConn:    connection,
-		ReadTimeout:   dnsReadTimeout,
-		WriteTimeout:  dnsWriteTimeout,
-		TsigProvider:  tsigProvider(group.handler),
-		MsgAcceptFunc: dynamicUpdateAcceptFunc,
+	configuration := net.ListenConfig{Control: udpSocketControl}
+	address := target.address
+	for range readers {
+		connection, err := configuration.ListenPacket(context.Background(), "udp", address)
+		if err != nil {
+			_ = listener.closeSocket()
+			return nil, fmt.Errorf("listen udp %s: %w", target.address, err)
+		}
+		// A configured port of zero resolves to a different ephemeral port on
+		// every bind, so the readers after the first have to name the port the
+		// first one landed on or they would each own a separate port.
+		if local := connection.LocalAddr(); local != nil {
+			address = local.String()
+		}
+		group.tuneUDPSocket(target.address, connection)
+		listener.sockets = append(listener.sockets, connection)
+		listener.dnsServers = append(listener.dnsServers, &dns.Server{
+			Net:               "udp",
+			Handler:           group.handler,
+			PacketConn:        connection,
+			UDPSize:           udpReadBufferSize,
+			ReadTimeout:       dnsReadTimeout,
+			WriteTimeout:      dnsWriteTimeout,
+			TsigProvider:      tsigProvider(group.handler),
+			MsgAcceptFunc:     dynamicUpdateAcceptFunc,
+			NotifyStartedFunc: notifyStarted,
+		})
 	}
-	started := make(chan struct{})
-	server.NotifyStartedFunc = func() { close(started) }
-	return &activeListener{target: target, dnsServer: server, socket: connection, started: started}, nil
+	return listener, nil
+}
+
+// tuneUDPSocket grows the kernel queues behind a reader. A refusal is worth a
+// line rather than a failed start, because the listener still serves at the
+// size the kernel allowed.
+func (group *ListenerGroup) tuneUDPSocket(address string, connection net.PacketConn) {
+	socket, ok := connection.(*net.UDPConn)
+	if !ok {
+		return
+	}
+	if err := socket.SetReadBuffer(udpSocketBufferBytes); err != nil {
+		group.logger.Warn("DNS UDP receive buffer was not resized",
+			"address", address, "bytes", udpSocketBufferBytes, "error", err)
+	}
+	if err := socket.SetWriteBuffer(udpSocketBufferBytes); err != nil {
+		group.logger.Warn("DNS UDP send buffer was not resized",
+			"address", address, "bytes", udpSocketBufferBytes, "error", err)
+	}
 }
 
 func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, error) {
@@ -235,7 +309,12 @@ func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, err
 	}
 	started := make(chan struct{})
 	server.NotifyStartedFunc = func() { close(started) }
-	return &activeListener{target: target, dnsServer: server, socket: listener, started: started}, nil
+	return &activeListener{
+		target:     target,
+		dnsServers: []*dns.Server{server},
+		sockets:    []io.Closer{listener},
+		started:    started,
+	}, nil
 }
 
 func (group *ListenerGroup) openDoT(target listenerTarget) (*activeListener, error) {
@@ -255,7 +334,12 @@ func (group *ListenerGroup) openDoT(target listenerTarget) (*activeListener, err
 	}
 	started := make(chan struct{})
 	server.NotifyStartedFunc = func() { close(started) }
-	return &activeListener{target: target, dnsServer: server, socket: tlsListener, started: started}, nil
+	return &activeListener{
+		target:     target,
+		dnsServers: []*dns.Server{server},
+		sockets:    []io.Closer{tlsListener},
+		started:    started,
+	}, nil
 }
 
 func tsigProvider(handler dns.Handler) dns.TsigProvider {
@@ -287,7 +371,12 @@ func (group *ListenerGroup) openDoH(target listenerTarget) (*activeListener, err
 		IdleTimeout:       dohIdleTimeout,
 		MaxHeaderBytes:    dohMaxHeaderBytes,
 	}
-	return &activeListener{target: target, httpServer: server, socket: listener, started: make(chan struct{})}, nil
+	return &activeListener{
+		target:     target,
+		httpServer: server,
+		sockets:    []io.Closer{listener},
+		started:    make(chan struct{}),
+	}, nil
 }
 
 func (group *ListenerGroup) openDoQ(target listenerTarget) (*activeListener, error) {
@@ -305,7 +394,12 @@ func (group *ListenerGroup) openDoQ(target listenerTarget) (*activeListener, err
 		return nil, fmt.Errorf("listen doq %s: %w", target.address, err)
 	}
 	server := newDoQServer(group.handler, group.logger, transport, listener, packets)
-	return &activeListener{target: target, quicServer: server, socket: server, started: make(chan struct{})}, nil
+	return &activeListener{
+		target:     target,
+		quicServer: server,
+		sockets:    []io.Closer{server},
+		started:    make(chan struct{}),
+	}, nil
 }
 
 func (group *ListenerGroup) tlsConfig(minimumVersion uint16, protocols []string) *tls.Config {
@@ -317,30 +411,47 @@ func (group *ListenerGroup) tlsConfig(minimumVersion uint16, protocols []string)
 }
 
 func (group *ListenerGroup) serve(listener *activeListener) <-chan error {
+	// A UDP target owns one server per reader socket, so the channel has to
+	// hold a result from each of them or a late failure would block its
+	// goroutine forever.
+	if len(listener.dnsServers) > 0 {
+		result := make(chan error, len(listener.dnsServers))
+		for _, server := range listener.dnsServers {
+			go func() {
+				err := server.ActivateAndServe()
+				result <- err
+				group.reportListenerStopped(listener, err)
+			}()
+		}
+		return result
+	}
 	result := make(chan error, 1)
 	go func() {
 		var err error
-		switch {
-		case listener.dnsServer != nil:
-			err = listener.dnsServer.ActivateAndServe()
-		case listener.quicServer != nil:
+		if listener.quicServer != nil {
 			close(listener.started)
 			err = listener.quicServer.serve()
-		default:
+		} else {
 			close(listener.started)
-			err = listener.httpServer.ServeTLS(listener.socket.(net.Listener), "", "")
+			err = listener.httpServer.ServeTLS(listener.sockets[0].(net.Listener), "", "")
 		}
 		result <- err
-		if err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, quic.ErrServerClosed) {
-			group.logger.Error(
-				"DNS listener stopped",
-				"protocol", listener.target.kind,
-				"address", listener.target.address,
-				"error", err,
-			)
-		}
+		group.reportListenerStopped(listener, err)
 	}()
 	return result
+}
+
+func (group *ListenerGroup) reportListenerStopped(listener *activeListener, err error) {
+	if err == nil || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, http.ErrServerClosed) || errors.Is(err, quic.ErrServerClosed) {
+		return
+	}
+	group.logger.Error(
+		"DNS listener stopped",
+		"protocol", listener.target.kind,
+		"address", listener.target.address,
+		"error", err,
+	)
 }
 
 func awaitListenerStarts(
