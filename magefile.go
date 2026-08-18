@@ -28,6 +28,7 @@ const (
 	goExperiment              = "jsonv2"
 	releasePackage            = "github.com/drudge/sable/internal/version"
 	containerImage            = "ghcr.io/drudge/sable"
+	releaseBuilder            = "sable-release"
 	templCommand              = "github.com/a-h/templ/cmd/templ"
 	clusterReplicaDirectory   = "_work/cluster-dev/replica"
 	releaseBranch             = "main"
@@ -549,6 +550,9 @@ func withGoReleaserConfigEnvironment(ctx context.Context, environment []string, 
 		return fmt.Errorf("close temporary GoReleaser configuration: %w", err)
 	}
 	environment = append(environment, "SABLE_SNAPSHOT_VERSION="+environmentOr("VERSION", developmentVersion)+"-snapshot")
+	if containerReleaseEnabled(environment) {
+		environment = append(environment, "BUILDX_BUILDER="+releaseBuilderName())
+	}
 	arguments = append(arguments, "--config", path)
 	return run(ctx, environment, environmentOr("GORELEASER", "goreleaser"), arguments...)
 }
@@ -589,7 +593,44 @@ func requireDocker(ctx context.Context) error {
 	if _, err := output(ctx, "docker", "buildx", "version"); err != nil {
 		return fmt.Errorf("Docker Buildx is required for multi-architecture images: %w", err)
 	}
+	return ensureReleaseBuilder(ctx)
+}
+
+// ensureReleaseBuilder prepares the Docker Buildx builder that publishes Sable's
+// container images. Buildx's default "docker" driver cannot export manifest
+// lists or SBOM attestations, so a multi-architecture publication fails unless
+// BuildKit runs in a container.
+func ensureReleaseBuilder(ctx context.Context) error {
+	name := releaseBuilderName()
+	driver, err := builderDriver(ctx, name)
+	if err != nil {
+		if _, err := output(ctx, "docker", "buildx", "create", "--name", name,
+			"--driver", "docker-container", "--bootstrap"); err != nil {
+			return fmt.Errorf("create Docker Buildx builder %q: %w", name, err)
+		}
+		return nil
+	}
+	if driver != "docker-container" {
+		return fmt.Errorf("Docker Buildx builder %q uses the %q driver; multi-architecture images require the docker-container driver", name, driver)
+	}
 	return nil
+}
+
+func releaseBuilderName() string {
+	return environmentOr("BUILDX_BUILDER", releaseBuilder)
+}
+
+func builderDriver(ctx context.Context, name string) (string, error) {
+	details, err := output(ctx, "docker", "buildx", "inspect", name)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(details, "\n") {
+		if value, found := strings.CutPrefix(strings.TrimSpace(line), "Driver:"); found {
+			return strings.TrimSpace(value), nil
+		}
+	}
+	return "", fmt.Errorf("Docker Buildx did not report a driver for builder %q", name)
 }
 
 func output(ctx context.Context, name string, arguments ...string) (string, error) {
