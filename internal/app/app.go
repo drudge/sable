@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -22,6 +23,7 @@ import (
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/trustanchor"
+	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web"
@@ -71,6 +73,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		}
 	}
 
+	tsigSecrets := tsig.NewStore(secretVault)
 	dnssec := newDNSSECSigner(secretVault)
 	var configurationManager *config.Manager
 	var webServer *web.Server
@@ -100,18 +103,23 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 			}
 			return zone.ValidateAll(zones, tsigKeyNames(configuration))
 		},
-		func(_ context.Context, _, zones []zone.Zone) error {
+		func(activateContext context.Context, _, zones []zone.Zone) error {
 			if handler == nil {
 				return nil
 			}
 			configuration := configurationManager.Current().Config
-			return handler.ActivateZones(authoritativeZones(zones), runtimeTSIGKeys(configuration))
+			keys := hydrateTSIGKeys(activateContext, tsigSecrets, configuration, logger).TSIGKeys
+			return handler.ActivateZones(authoritativeZones(zones), runtimeTSIGKeys(keys))
 		},
 	)
 	if err != nil {
 		return err
 	}
-	runtime, err := compileRuntime(initial, zoneManager.Current().Zones, configurationDirectory)
+	runtime, err := compileRuntime(
+		hydrateTSIGKeys(ctx, tsigSecrets, initial, logger),
+		zoneManager.Current().Zones,
+		configurationDirectory,
+	)
 	if err != nil {
 		return err
 	}
@@ -171,7 +179,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		if err := zone.ValidateAll(zones, tsigKeyNames(candidate)); err != nil {
 			return fmt.Errorf("validate zones with reloaded configuration: %w", err)
 		}
-		candidateRuntime, err := compileRuntime(candidate, zones, configurationDirectory)
+		candidateRuntime, err := compileRuntime(
+			hydrateTSIGKeys(reloadContext, tsigSecrets, candidate, logger),
+			zones,
+			configurationDirectory,
+		)
 		if err != nil {
 			return err
 		}
@@ -204,6 +216,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err := listeners.Replace(ctx, listenerConfiguration(initial, configurationDirectory)); err != nil {
 		return errors.Join(err, closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
 	}
+	migrateTSIGSecrets(ctx, configurationManager, tsigSecrets, logger)
 	dynamicUpdater := newDynamicZoneUpdater(ctx, zoneManager, handler, database, logger)
 	handler.SetZoneUpdater(dynamicUpdater.Update)
 	handler.SetZoneUpdateAuditor(dynamicUpdater.Audit)
@@ -221,7 +234,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		DNSListeners:    initial.Server.DNSListen,
 		TrustAnchorFile: initial.ClusterTrustAnchorPath(configurationDirectory),
 		Logger:          logger,
-		Replicator:      newClusterStateReplicator(configurationManager, zoneManager, database),
+		Replicator:      newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets),
 		Version:         version.Current().Release,
 		StartedAt:       startedAt,
 	})
@@ -279,6 +292,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetClusterController(clusterService)
 	webServer.SetCertificateController(certificateManager)
 	webServer.SetUniFiController(unifiSync)
+	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
 	webServer.SetRuntimeLogs(runtimeLogs)
 	if err := webServer.SetStatsStore(ctx, database); err != nil {
 		logger.Warn("restore query statistics", "error", err)
@@ -596,7 +610,7 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		})
 	}
 	zones := authoritativeZones(configuredZones)
-	tsigKeys := runtimeTSIGKeys(configuration)
+	tsigKeys := runtimeTSIGKeys(configuration.TSIGKeys)
 	runtime, err := dnsserver.Compile(dnsserver.RuntimeConfig{
 		Mode:                       configuration.Resolver.Mode,
 		Forwarders:                 configuration.Resolver.Forwarders,
@@ -691,12 +705,55 @@ func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZo
 	return zones
 }
 
-func runtimeTSIGKeys(configuration config.Config) []dnsserver.TSIGKey {
-	tsigKeys := make([]dnsserver.TSIGKey, 0, len(configuration.TSIGKeys))
-	for _, key := range configuration.TSIGKeys {
+func runtimeTSIGKeys(keys []config.TSIGKey) []dnsserver.TSIGKey {
+	tsigKeys := make([]dnsserver.TSIGKey, 0, len(keys))
+	for _, key := range keys {
 		tsigKeys = append(tsigKeys, dnsserver.TSIGKey{Name: key.Name, Algorithm: key.Algorithm, Secret: key.Secret})
 	}
 	return tsigKeys
+}
+
+// migrateTSIGSecrets moves secrets still written in sable.toml into the vault
+// on the first boot after an upgrade, then rewrites the file without them. A
+// failure is logged rather than fatal: the secrets are already loaded, so the
+// node keeps serving and tries again on the next start.
+func migrateTSIGSecrets(
+	ctx context.Context,
+	configuration *config.Manager,
+	secrets *tsig.Store,
+	logger *slog.Logger,
+) {
+	if !tsig.Pending(configuration.Current().Config) {
+		return
+	}
+	migrated := 0
+	if err := configuration.Update(ctx, func(candidate *config.Config) error {
+		moved, err := secrets.Migrate(ctx, candidate)
+		migrated = moved
+		return err
+	}); err != nil {
+		logger.Warn("move TSIG secrets into the encrypted vault", "error", err)
+		return
+	}
+	logger.Info("moved TSIG secrets into the encrypted vault", "keys", migrated)
+}
+
+// hydrateTSIGKeys returns the configuration with every TSIG secret read back
+// out of the vault. A key the vault cannot answer for is left blank rather than
+// dropped: every message it guards then fails verification, which refuses
+// transfers and updates instead of quietly accepting unsigned ones.
+func hydrateTSIGKeys(
+	ctx context.Context,
+	secrets *tsig.Store,
+	configuration config.Config,
+	logger *slog.Logger,
+) config.Config {
+	hydrated, missing := secrets.Hydrate(ctx, configuration.TSIGKeys)
+	if len(missing) > 0 && logger != nil {
+		logger.Warn("TSIG keys have no stored secret", "keys", strings.Join(missing, ", "))
+	}
+	configuration.TSIGKeys = hydrated
+	return configuration
 }
 
 func ensureRemoteBlockLists(ctx context.Context, configuration config.Config, baseDirectory string) error {

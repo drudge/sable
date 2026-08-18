@@ -15,6 +15,7 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/zone"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -27,10 +28,10 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	sourceConfiguration.Resolver.RootHints = []string{"192.0.2.1:53"}
 	sourceConfiguration.Blocking.Domains = []string{"ads.example"}
 	sourceConfiguration.QueryLog.Enabled = false
-	sourceConfiguration.TSIGKeys = []config.TSIGKey{{
-		Name: "transfer-key", Algorithm: "hmac-sha256",
-		Secret: base64.StdEncoding.EncodeToString(make([]byte, 32)),
-	}}
+	// The primary is already migrated: its configuration names the key and its
+	// vault holds the secret, which is the state Capture has to reassemble.
+	transferSecret := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	sourceConfiguration.TSIGKeys = []config.TSIGKey{{Name: "transfer-key", Algorithm: "hmac-sha256"}}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, []zone.Zone{{
 		ID: "zone-1", Name: "example.test", Type: "primary", DefaultTTL: 300,
@@ -43,11 +44,16 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	targetManager := newTestConfigurationManager(t, targetConfiguration)
 	targetZones := newTestZoneManager(t, nil)
 
-	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil).Capture(ctx)
+	sourceSecrets := newTestTSIGStore()
+	if err := sourceSecrets.PutSecret(ctx, "transfer-key.", transferSecret); err != nil {
+		t.Fatal(err)
+	}
+	targetSecrets := newTestTSIGStore()
+	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, sourceSecrets).Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := newClusterStateReplicator(targetManager, targetZones, nil).Apply(ctx, contents); err != nil {
+	if err := newClusterStateReplicator(targetManager, targetZones, nil, targetSecrets).Apply(ctx, contents); err != nil {
 		t.Fatal(err)
 	}
 	got := targetManager.Current().Config
@@ -55,9 +61,18 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		!reflect.DeepEqual(got.Resolver.Forwarders, sourceConfiguration.Resolver.Forwarders) ||
 		!reflect.DeepEqual(got.Resolver.RootHints, sourceConfiguration.Resolver.RootHints) ||
 		!reflect.DeepEqual(got.Blocking.Domains, sourceConfiguration.Blocking.Domains) ||
-		len(got.TSIGKeys) != 1 || got.TSIGKeys[0].Secret != sourceConfiguration.TSIGKeys[0].Secret ||
+		len(got.TSIGKeys) != 1 || got.TSIGKeys[0].Name != "transfer-key." ||
 		got.QueryLog.Enabled != sourceConfiguration.QueryLog.Enabled {
 		t.Fatalf("replicated runtime configuration = %#v", got)
+	}
+	// The secret reaches the replica but lands in its vault, so the replicated
+	// configuration it writes to disk carries only the name and algorithm.
+	if got.TSIGKeys[0].Secret != "" {
+		t.Fatal("replicated configuration kept the TSIG secret in plaintext")
+	}
+	replicated, found := targetSecrets.Secret(ctx, "transfer-key.")
+	if !found || replicated != transferSecret {
+		t.Fatalf("replica vault secret = %q, found = %v", replicated, found)
 	}
 	if got.Server.HTTPListen != targetConfiguration.Server.HTTPListen || got.Cluster.NodeName != targetConfiguration.Cluster.NodeName {
 		t.Fatalf("node-local configuration was overwritten: %#v", got)
@@ -76,7 +91,7 @@ func TestClusterStatePreparesRemoteBlockListsBeforeConfigurationApply(t *testing
 	}}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, nil)
-	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil).Capture(ctx)
+	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, newTestTSIGStore()).Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +117,7 @@ func TestClusterStatePreparesRemoteBlockListsBeforeConfigurationApply(t *testing
 		}
 		return nil
 	})
-	replicator := newClusterStateReplicator(targetManager, newTestZoneManager(t, nil), nil)
+	replicator := newClusterStateReplicator(targetManager, newTestZoneManager(t, nil), nil, newTestTSIGStore())
 	replicator.prepareConfiguration = func(_ context.Context, candidate config.Config, baseDirectory string) error {
 		prepared = true
 		path := candidate.BlockListPaths(baseDirectory)[0]
@@ -171,8 +186,8 @@ func TestClusterStateReplicatesAuthorizationAndTokenRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sourceReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), sourceStore)
-	targetReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), targetStore)
+	sourceReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), sourceStore, newTestTSIGStore())
+	targetReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), targetStore, newTestTSIGStore())
 	contents, err := sourceReplicator.Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -215,6 +230,32 @@ func TestClusterStateReplicatesAuthorizationAndTokenRevocation(t *testing.T) {
 	if _, err := targetAuth.AuthenticateToken(ctx, secret); !errors.Is(err, auth.ErrUnauthorized) {
 		t.Fatalf("revoked replicated API token authentication error = %v", err)
 	}
+}
+
+// memoryTSIGVault stands in for the encrypted vault so the replication tests
+// can watch a secret move from one node's store to another's.
+type memoryTSIGVault struct{ values map[string][]byte }
+
+func (vault *memoryTSIGVault) Put(_ context.Context, name string, value []byte) error {
+	vault.values[name] = append([]byte(nil), value...)
+	return nil
+}
+
+func (vault *memoryTSIGVault) Get(_ context.Context, name string) ([]byte, error) {
+	value, found := vault.values[name]
+	if !found {
+		return nil, errors.New("not found")
+	}
+	return value, nil
+}
+
+func (vault *memoryTSIGVault) Delete(_ context.Context, name string) error {
+	delete(vault.values, name)
+	return nil
+}
+
+func newTestTSIGStore() *tsig.Store {
+	return tsig.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
 }
 
 func newTestConfigurationManager(t *testing.T, initial config.Config) *config.Manager {

@@ -22,6 +22,7 @@ const (
 type Store interface {
 	PutEncryptedSecret(context.Context, string, string, time.Time) error
 	EncryptedSecret(context.Context, string) (string, error)
+	DeleteEncryptedSecret(context.Context, string) error
 }
 
 type Vault struct {
@@ -80,6 +81,15 @@ func (vault *Vault) Get(ctx context.Context, name string) ([]byte, error) {
 		return nil, errors.New("decrypt secret: authentication failed")
 	}
 	return plaintext, nil
+}
+
+// Delete retires a secret. Callers use it when the thing the secret belonged to
+// is gone for good, so the ciphertext should not linger in backups.
+func (vault *Vault) Delete(ctx context.Context, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("secret name is required")
+	}
+	return vault.store.DeleteEncryptedSecret(ctx, name)
 }
 
 func loadOrCreateKey(path string) ([]byte, error) {

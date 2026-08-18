@@ -111,10 +111,16 @@ type Updates struct {
 	PreRelease bool `toml:"pre_release"`
 }
 
+// TSIGKey names a shared secret used to authenticate NOTIFY, AXFR, IXFR, and
+// dynamic updates. Only the name and algorithm belong in TOML: the secret
+// itself lives in the encrypted vault alongside DNSSEC and ACME material, so
+// the configuration file, its backups, and cluster replicas never hold it in
+// the clear. Secret stays readable from TOML so an older configuration still
+// loads, and the first boot after an upgrade moves it into the vault.
 type TSIGKey struct {
 	Name      string `toml:"name" json:"name"`
 	Algorithm string `toml:"algorithm" json:"algorithm"`
-	Secret    string `toml:"secret" json:"-"`
+	Secret    string `toml:"secret,omitempty" json:"-"`
 }
 
 type Server struct {
@@ -440,9 +446,13 @@ func (configuration Config) Validate() error {
 		if key.Algorithm != dns.HmacSHA256 && key.Algorithm != dns.HmacSHA384 && key.Algorithm != dns.HmacSHA512 {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.algorithm must be hmac-sha256, hmac-sha384, or hmac-sha512", field))
 		}
-		secret, err := base64.StdEncoding.DecodeString(key.Secret)
-		if err != nil || len(secret) < 16 {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.secret must be base64 encoding at least 128 bits", field))
+		// A blank secret is not an error here: the key has been migrated to
+		// the vault, and the runtime fails loudly if the vault cannot produce
+		// it. Only a secret still written in TOML is checked.
+		if key.Secret != "" {
+			if err := ValidateTSIGSecret(key.Secret); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.secret: %w", field, err))
+			}
 		}
 	}
 	seenRouteDomains := make(map[string]struct{}, len(configuration.Resolver.Routes))
@@ -966,6 +976,17 @@ func (configuration *Config) normalize() {
 	slices.SortFunc(configuration.Blocking.Lists, func(left, right BlockList) int {
 		return strings.Compare(left.Name, right.Name)
 	})
+}
+
+// ValidateTSIGSecret reports whether a shared secret is usable. The console and
+// the configuration loader both apply it so a key rejected on one path cannot
+// slip in through the other.
+func ValidateTSIGSecret(secret string) error {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(secret))
+	if err != nil || len(decoded) < 16 {
+		return errors.New("must be base64 encoding at least 128 bits")
+	}
+	return nil
 }
 
 func canonicalTSIGAlgorithm(value string) string {

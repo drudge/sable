@@ -80,6 +80,7 @@ type Server struct {
 	cluster          clusterController
 	unifi            unifiController
 	certificates     certificateController
+	tsigKeys         tsigController
 	updates          updateController
 	backups          backupController
 	backupStaging    backupStaging
@@ -200,6 +201,8 @@ func New(
 	mux.HandleFunc("GET /logs", server.logsPage)
 	mux.HandleFunc("GET /settings", server.settingsPage)
 	mux.HandleFunc("POST /ui/settings", server.updateSettings)
+	mux.HandleFunc("POST /ui/settings/tsig/save", server.saveTSIGKey)
+	mux.HandleFunc("POST /ui/settings/tsig/delete", server.deleteTSIGKey)
 	mux.HandleFunc("POST /ui/certificates/renew", server.renewCertificate)
 	mux.HandleFunc("POST /ui/certificates/generate", server.generateManualCertificate)
 	mux.HandleFunc("POST /ui/certificates/import", server.importManualCertificate)

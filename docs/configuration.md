@@ -233,7 +233,11 @@ Authoritative zones are control-plane data, not node configuration. Sable stores
 
 Create Primary, Secondary, Stub, Forwarder, Alias, and Catalog zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
 
-TSIG keys remain in sable.toml because their secret material is node-level bootstrap configuration. A zone stores only the canonical key name it references. Changing or removing a configured TSIG key is rejected while a zone still depends on it.
+TSIG keys are managed in **Settings → TSIG**. A key has two halves that are stored differently. The name and algorithm are identifiers that zones and cluster members have to agree on, so they live in `sable.toml` under `[[tsig_keys]]`. The shared secret is credential material, so it is held in the node's encrypted vault alongside DNSSEC private keys and ACME provider credentials, and never appears in the configuration file or its backups.
+
+Leave the secret blank when adding a key and Sable generates one sized to the algorithm, shows it once so you can configure the other server, and stores nothing but the encrypted copy afterwards. Paste a secret instead when another server already owns the key. A secret cannot be read back: rotate the key if you lose it, which generates a new one and shows it the same way. A key still written as `secret = "..."` in `sable.toml` from an older release is moved into the vault on the next start and removed from the file.
+
+A zone stores only the canonical key name it references, and the zone forms pick from the configured keys rather than accepting free text. Changing or removing a configured TSIG key is rejected while a zone still depends on it.
 
 Primary zones require one apex SOA and at least one apex NS record. Console and RFC 2136 mutations commit one zone transaction, advance the SOA serial, re-sign DNSSEC zones when needed, atomically activate the new in-memory runtime, and send NOTIFY after activation. Zone transfers, ACLs, DNSSEC policy, rollover state references, comments, disabled records, and record expiry metadata are all durable database fields.
 
@@ -572,9 +576,10 @@ listener unless secure cookies are enabled. Disabling security is intended only
 for isolated development systems.
 
 `secret_key_file` holds a randomly generated 256-bit key with owner-only file
-permissions. Provider credentials are encrypted with AES-256-GCM before being
-written to SQLite or PostgreSQL. Back up this file separately: encrypted secrets
-cannot be recovered from the database alone.
+permissions. DNSSEC private keys, TSIG shared secrets, and provider credentials
+are encrypted with AES-256-GCM before being written to SQLite or PostgreSQL.
+Back up this file separately: encrypted secrets cannot be recovered from the
+database alone.
 
 The health endpoint remains public for process checks. Other `/api/*` endpoints
 and `/metrics` require an authenticated console session or a bearer token whose
@@ -597,7 +602,8 @@ primary. Each generation carries a content-addressed snapshot of authoritative
 zones, resolver/cache policy, TSIG keys, blocking policy, query-log enablement,
 users, groups, permission grants, and hashed API tokens. Token deletion is
 replicated as revocation. Password and token secrets are never stored in plain
-text. Browser sessions, audit history, token usage timestamps, listener and
+text, and a replicated TSIG secret is written into the receiving node's own
+encrypted vault rather than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
 certificate configuration, database paths, security bootstrap, and cluster
 settings remain node-local. Replicas continue serving DNS if the primary is
 unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is

@@ -16,6 +16,11 @@ func (store *memoryStore) PutEncryptedSecret(_ context.Context, name, ciphertext
 	return nil
 }
 
+func (store *memoryStore) DeleteEncryptedSecret(_ context.Context, name string) error {
+	delete(store.values, name)
+	return nil
+}
+
 func (store *memoryStore) EncryptedSecret(_ context.Context, name string) (string, error) {
 	value, found := store.values[name]
 	if !found {

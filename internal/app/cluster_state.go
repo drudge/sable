@@ -9,6 +9,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/zone"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -24,6 +25,7 @@ type clusterStateReplicator struct {
 	configuration        *config.Manager
 	zones                *zone.Manager
 	authorization        authorizationStateStore
+	tsigSecrets          *tsig.Store
 	baseDirectory        string
 	prepareConfiguration func(context.Context, config.Config, string) error
 }
@@ -42,18 +44,29 @@ type clusterRuntimeConfiguration struct {
 	QueryLogEnabled bool             `toml:"query_log_enabled"`
 }
 
-func newClusterStateReplicator(configuration *config.Manager, zones *zone.Manager, authorization authorizationStateStore) *clusterStateReplicator {
+func newClusterStateReplicator(
+	configuration *config.Manager,
+	zones *zone.Manager,
+	authorization authorizationStateStore,
+	tsigSecrets *tsig.Store,
+) *clusterStateReplicator {
 	return &clusterStateReplicator{
 		configuration: configuration, zones: zones, authorization: authorization,
+		tsigSecrets:   tsigSecrets,
 		baseDirectory: configuration.BaseDirectory(), prepareConfiguration: ensureRemoteBlockLists,
 	}
 }
 
 func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, error) {
 	active := replicator.configuration.Current().Config
+	// Replicas need the shared secrets to answer signed transfers, so the
+	// snapshot carries them even though neither side keeps them on disk in the
+	// clear. The enrollment channel is already mutually authenticated; what
+	// changed is that each node stores what it receives in its own vault.
+	tsigKeys, _ := replicator.tsigSecrets.Hydrate(ctx, active.TSIGKeys)
 	runtimeConfiguration := clusterRuntimeConfiguration{
 		Resolver:        active.Resolver,
-		TSIGKeys:        active.TSIGKeys,
+		TSIGKeys:        tsigKeys,
 		Blocking:        active.Blocking,
 		QueryLogEnabled: active.QueryLog.Enabled,
 	}
@@ -86,6 +99,13 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 	if err != nil {
 		return err
 	}
+	// Secrets are banked before anything is compared so the two sides can be
+	// matched on names and algorithms alone. Without this, an incoming
+	// snapshot would differ from the local configuration on every heartbeat.
+	secretsChanged, err := replicator.storeReplicatedTSIGSecrets(ctx, &runtimeConfiguration)
+	if err != nil {
+		return err
+	}
 	activeConfiguration := replicatedRuntimeConfiguration(replicator.configuration.Current().Config)
 	activeZones := replicator.zones.Current().Zones
 	activeAuthorization := store.AuthorizationState{}
@@ -98,7 +118,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 		authorizationChanged = !reflect.DeepEqual(activeAuthorization, snapshot.Authorization)
 	}
 
-	configurationChanged := !reflect.DeepEqual(activeConfiguration, runtimeConfiguration)
+	// A rotated secret leaves the replicated configuration untouched, so it is
+	// forced through the same update path to make the runtime pick it up.
+	configurationChanged := secretsChanged || !reflect.DeepEqual(activeConfiguration, runtimeConfiguration)
 	if configurationChanged {
 		candidate := replicator.configuration.Current().Config
 		applyReplicatedRuntimeConfiguration(&candidate, runtimeConfiguration)
@@ -154,6 +176,32 @@ func decodeClusterState(contents []byte) (clusterStateSnapshot, clusterRuntimeCo
 		return clusterStateSnapshot{}, clusterRuntimeConfiguration{}, fmt.Errorf("decode replicated runtime configuration: %w", err)
 	}
 	return snapshot, runtimeConfiguration, nil
+}
+
+// storeReplicatedTSIGSecrets writes the secrets the primary sent into this
+// node's vault and strips them from the snapshot, leaving only the names and
+// algorithms that belong in the replica's configuration file. It reports
+// whether any secret actually changed.
+func (replicator *clusterStateReplicator) storeReplicatedTSIGSecrets(
+	ctx context.Context,
+	runtimeConfiguration *clusterRuntimeConfiguration,
+) (bool, error) {
+	changed := false
+	for index := range runtimeConfiguration.TSIGKeys {
+		key := &runtimeConfiguration.TSIGKeys[index]
+		if key.Secret == "" {
+			continue
+		}
+		stored, found := replicator.tsigSecrets.Secret(ctx, key.Name)
+		if !found || stored != key.Secret {
+			if err := replicator.tsigSecrets.PutSecret(ctx, key.Name, key.Secret); err != nil {
+				return changed, fmt.Errorf("store replicated TSIG secret %q: %w", key.Name, err)
+			}
+			changed = true
+		}
+		key.Secret = ""
+	}
+	return changed, nil
 }
 
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {

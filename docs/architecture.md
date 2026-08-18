@@ -147,8 +147,11 @@ unreadable sources preserve the active policy.
 Sable uses a primary/replica control plane designed for one- and two-server
 deployments. One primary accepts configuration changes. Replicas pull signed,
 monotonically numbered generations containing authoritative zones, resolver and
-cache policy, TSIG keys, blocking policy, and query-log enablement. Every node
-continues answering DNS from its local in-memory runtime state. Losing the
+cache policy, TSIG keys, blocking policy, and query-log enablement. TSIG secrets
+travel with that generation over the mutually authenticated enrollment channel
+and land in each replica's own encrypted vault, so no node keeps them in its
+configuration file. Every node continues answering DNS from its local in-memory
+runtime state. Losing the
 primary therefore affects configuration writes, not DNS service. An
 administrator can manually promote a replica after confirming the former
 primary is offline; Sable does not require a third voter or claim automatic

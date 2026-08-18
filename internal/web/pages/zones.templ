@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,10 @@ type ZonesPageView struct {
 	CanCreate bool
 	// AliasSources lists the zones a new alias zone may mirror.
 	AliasSources []string
+	// TSIGKeys lists the keys configured under Settings. A zone references one
+	// by name, so the form offers the configured set rather than a free-text
+	// field a typo could silently break.
+	TSIGKeys []string
 }
 
 type ZoneView struct {
@@ -45,6 +50,7 @@ type ZoneView struct {
 	CatalogMembers []string
 	AwaitingFirstTransfer bool
 	TSIGKey      string
+	TSIGKeys     []string
 	DynamicUpdates bool
 	DNSSECValidationDisabled bool
 	DNSSEC       bool
@@ -98,6 +104,10 @@ type ZoneRecordView struct {
 	// records are read-only here because a synchronization would revert an edit
 	// made from the zone editor.
 	SourceLabel string
+}
+
+func containsString(values []string, value string) bool {
+	return slices.Contains(values, value)
 }
 
 func selectedZone(view ZonesPageView) (ZoneView, bool) {
@@ -442,7 +452,7 @@ templ ZonesContent(view ZonesPageView) {
 			@ZoneListView(view)
 		}
 		if view.CanCreate {
-			@CreateZoneDialog(view.AliasSources)
+			@CreateZoneDialog(view.AliasSources, view.TSIGKeys)
 			@ImportNewZoneDialog()
 		}
 	</div>
@@ -624,13 +634,28 @@ templ ZoneTypeOptions(selected string, allowAlias bool) {
 	<option value="secondary_catalog" selected?={ selected == "secondary_catalog" }>Secondary Catalog Zone</option>
 }
 
-templ CreateZoneDialog(aliasSources []string) {
+// TSIGKeySelect offers the keys configured under Settings. A zone that still
+// names a key removed from the configuration keeps it listed and selected, so
+// the form shows the broken reference instead of silently clearing it.
+templ TSIGKeySelect(keys []string, selected string) {
+	<select class="mono-input" name="tsig_key">
+		<option value="" selected?={ selected == "" }>None</option>
+		for _, key := range keys {
+			<option value={ key } selected?={ key == selected }>{ TSIGDisplayName(key) }</option>
+		}
+		if selected != "" && !containsString(keys, selected) {
+			<option value={ selected } selected>{ TSIGDisplayName(selected) } (not configured)</option>
+		}
+	</select>
+}
+
+templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 	<dialog class="custom-server-dialog isotope-zone-dialog" id="create-zone-dialog" aria-labelledby="create-zone-title">
 		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
 			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
 			<label><span>Zone Type</span><select name="type" data-zone-create-type>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
-			<label><span>TSIG Key (optional)</span><input class="mono-input" name="tsig_key" placeholder="transfer-key." autocomplete="off"/><small>References a key configured in <code>[[tsig_keys]]</code>.</small></label>
+			<label><span>TSIG Key (optional)</span>@TSIGKeySelect(tsigKeys, "")<small>Authenticates transfers and updates. Add keys under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a>.</small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
 				<label><span>Protocol</span><select name="primary_protocol" data-zone-primary-protocol disabled><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option><option value="udp" data-stub-protocol>UDP</option></select></label>
@@ -949,7 +974,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 				}
 				<section class="zone-settings-section">
 					<div><span class="zone-settings-section-icon">@Icon("key")</span><span><strong>TSIG Authentication</strong><small>Authenticate NOTIFY, AXFR, IXFR, and dynamic updates for this zone.</small></span></div>
-					<label><span>Key Name</span><input class="mono-input" name="tsig_key" value={ zone.TSIGKey } placeholder="transfer-key." autocomplete="off"/><small>Leave empty for source-IP and transfer-policy authorization only.</small></label>
+					<label><span>Key Name</span>@TSIGKeySelect(zone.TSIGKeys, zone.TSIGKey)<small>Leave unset for source-IP and transfer-policy authorization only. Keys are managed under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a>.</small></label>
 				</section>
 			</section>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="transfers" hidden>

@@ -740,6 +740,8 @@ func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
 	tests := []struct{ method, path, permission string }{
 		{http.MethodGet, "/settings", auth.PermissionSettingsRead},
 		{http.MethodPost, "/ui/settings", auth.PermissionSettingsWrite},
+		{http.MethodPost, "/ui/settings/tsig/save", auth.PermissionSettingsWrite},
+		{http.MethodPost, "/ui/settings/tsig/delete", auth.PermissionSettingsWrite},
 		{http.MethodPost, "/ui/certificates/renew", auth.PermissionSettingsWrite},
 		{http.MethodPost, "/ui/certificates/generate", auth.PermissionSettingsWrite},
 		{http.MethodPost, "/ui/certificates/import", auth.PermissionSettingsWrite},
