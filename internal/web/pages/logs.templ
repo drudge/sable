@@ -21,6 +21,18 @@ type RuntimeLogsView struct {
 	Live     bool
 	CopyText string
 	Error    string
+	// Persisted reports that these entries came from the stored history rather
+	// than this process's buffer, which is what makes paging past the current
+	// run meaningful.
+	Persisted    bool
+	Page         int
+	PageSize     int
+	TotalEntries int
+	TotalPages   int
+	FirstURL     string
+	PreviousURL  string
+	NextURL      string
+	LastURL      string
 }
 
 type RuntimeLogEntryView struct {
@@ -73,7 +85,7 @@ templ LogsContent(view LogsPageView) {
 templ RuntimeLogsPanel(view RuntimeLogsView) {
 	<section class="card logs-card emphasized" id="runtime-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
 		<header class="logs-toolbar">
-			<div><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-count">{ fmt.Sprintf("%d entries", view.Count) }</span></div>
+			<div><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-count">{ runtimeLogCount(view) }</span></div>
 			<div class="logs-toolbar-actions">
 				<button class={ ifThen(view.Live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(view.Live) }>@Icon(ifThen(view.Live, "pause", "play"))<span>{ ifThen(view.Live, "Pause", "Live") }</span></button>
 				<button class="button outline" type="button" data-copy-target="runtime-log-copy">@Icon("copy")<span data-copy-label>Copy</span></button>
@@ -84,6 +96,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 			<div class="search-field">@Icon("search")<input name="search" value={ view.Search } placeholder="Search server logs..." aria-label="Search server logs"/></div>
 			<select name="level" aria-label="Log level"><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select>
 			<input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/>
+			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/>
 			<button class="button outline" type="submit">@Icon("search")<span>Search</span></button>
 		</form>
 		<textarea class="sr-only" id="runtime-log-copy" readonly>{ view.CopyText }</textarea>
@@ -99,6 +112,9 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 					}</div>
 				}
 			</div>
+		}
+		if view.Persisted {
+			<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size aria-label="Rows per page"><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ runtimePageSummary(view) }</span><nav aria-label="Server log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 		}
 	</section>
 }
@@ -182,7 +198,9 @@ func queryFiltersActive(view QueryLogsView) bool { return queryFilterCount(view)
 func queryFilterCount(view QueryLogsView) int { count := 0; for _, value := range []string{view.ClientIP, view.Name, view.RecordType, view.ResponseCode, view.Source, view.Protocol} { if value != "" { count++ } }; return count }
 func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%d–%d of %d", first, last, view.TotalEntries) }
 func logSourceLabel(source string) string { switch source { case "cache": return "Cached"; case "upstream": return "Recursive"; case "authoritative": return "Authoritative"; case "local": return "Local"; case "blocked": return "Blocked"; case "error": return "Error"; default: return source } }
-func runtimePanelURL(view RuntimeLogsView) string { values := make([]string, 0, 3); if view.Search != "" { values = append(values, "search="+urlQueryEscape(view.Search)) }; if view.Level != "" { values = append(values, "level="+urlQueryEscape(view.Level)) }; if view.Live { values = append(values, "live=1") }; return "/ui/logs/runtime?"+strings.Join(values, "&") }
+func runtimePanelURL(view RuntimeLogsView) string { values := make([]string, 0, 5); if view.Search != "" { values = append(values, "search="+urlQueryEscape(view.Search)) }; if view.Level != "" { values = append(values, "level="+urlQueryEscape(view.Level)) }; if view.Persisted { values = append(values, "page=1", "page_size="+fmt.Sprint(view.PageSize)) }; if view.Live { values = append(values, "live=1") }; return "/ui/logs/runtime?"+strings.Join(values, "&") }
+func runtimeLogCount(view RuntimeLogsView) string { if view.Persisted { return fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }; return fmt.Sprintf("%d entries", view.Count) }
+func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%d\u2013%d of %s", first, last, formatCount(view.TotalEntries)) }
 func runtimeExportURL(view RuntimeLogsView) string { return strings.Replace(runtimePanelURL(view), "/ui/logs/runtime", "/api/v1/logs/runtime/export", 1) }
 func queryPanelLiveURL(view QueryLogsView) string { values := []string{"page=1", "page_size="+fmt.Sprint(view.PageSize), "live=1"}; for key, value := range map[string]string{"client_ip":view.ClientIP,"name":view.Name,"record_type":view.RecordType,"response_code":view.ResponseCode,"source":view.Source,"protocol":view.Protocol} { if value != "" { values = append(values, key+"="+urlQueryEscape(value)) } }; if view.FiltersOpen { values = append(values, "filters=1") }; return "/ui/logs/queries?"+strings.Join(values, "&") }
 func urlQueryEscape(value string) string { return url.QueryEscape(value) }

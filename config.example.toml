@@ -91,6 +91,13 @@ batch_size = 256
 flush_interval = "250ms"
 retention = "168h"
 
+[server_log]
+enabled = true
+buffer_size = 4096
+batch_size = 128
+flush_interval = "1s"
+retention = "1440h"
+
 [encrypted_dns]
 dot_listen = []
 doh_listen = []

@@ -151,6 +151,48 @@ batch_size = 64
 	}
 }
 
+func TestDecodeRejectsServerLogBatchLargerThanBuffer(t *testing.T) {
+	t.Parallel()
+
+	_, err := Decode(strings.NewReader(`
+[server_log]
+buffer_size = 32
+batch_size = 64
+`))
+	if err == nil {
+		t.Fatal("Decode() error = nil, want server log validation error")
+	}
+}
+
+// Runtime logs are a small fraction of query-log volume, so they are kept for
+// far longer by default, and the default is on: a history that has to be
+// switched on is missing exactly when the first restart makes it wanted.
+func TestDecodeDefaultsServerLogToSixtyDayRetention(t *testing.T) {
+	t.Parallel()
+
+	loaded, err := Decode(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if !loaded.ServerLog.Enabled {
+		t.Fatal("ServerLog.Enabled = false, want persistence on by default")
+	}
+	if loaded.ServerLog.Retention.Duration != 60*24*time.Hour {
+		t.Fatalf("ServerLog.Retention = %s, want 1440h", loaded.ServerLog.Retention.Duration)
+	}
+}
+
+func TestDecodeRejectsNonPositiveServerLogRetention(t *testing.T) {
+	t.Parallel()
+
+	if _, err := Decode(strings.NewReader(`
+[server_log]
+retention = "0s"
+`)); err == nil {
+		t.Fatal("Decode() error = nil, want server log retention validation error")
+	}
+}
+
 func TestDecodeNormalizesConditionalForwardingRoutes(t *testing.T) {
 	t.Parallel()
 

@@ -130,9 +130,11 @@ func (store *Store) migrate(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS sable_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
-)`, store.queryLogTable(), store.cacheTable(), `
+)`, store.queryLogTable(), store.serverLogTable(), store.cacheTable(), `
 CREATE INDEX IF NOT EXISTS sable_query_log_occurred_at_idx
-ON sable_query_log (occurred_at)`}
+ON sable_query_log (occurred_at)`, `
+CREATE INDEX IF NOT EXISTS sable_server_log_occurred_at_idx
+ON sable_server_log (occurred_at)`}
 	statements = append(statements, queryStatsTables()...)
 	statements = append(statements, store.authenticationTables()...)
 	statements = append(statements, trustAnchorTables()...)
