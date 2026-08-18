@@ -49,18 +49,38 @@ checks the CLI version output and HTTP health endpoint.
 
 ## Publishing
 
-Create and push a semantic-version tag, then run:
+One command records the version, verifies the repository, and publishes it:
 
 ```sh
-mage release
+mage release 0.8.0-rc.2
 ```
+
+The version may be given with or without its leading `v`. `release` requires a
+clean `main` checkout and a running Docker daemon. It fast-forwards `main` from
+`origin`, refuses a tag that already exists locally or on `origin`, rewrites
+every recorded version, runs `verify` and `releaseSmoke`, commits the bump,
+creates and pushes the annotated tag, and then publishes through GoReleaser.
+Set `RELEASE_BRANCH` to cut a release from another branch.
+
+The recorded versions are Mage's `developmentVersion`, `internal/version`, the
+installation and container examples in `README.md`, and the pinned installation
+example in `docs/proxmox.md`. Moving one of those references without updating
+`versionReferences` in `magefile.go` fails the release instead of leaving a
+stale version behind.
 
 Set `GITHUB_TOKEN` to a token allowed to publish releases to the repository and
 authenticate Docker to `ghcr.io` before publishing:
 
 ```sh
 printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username USERNAME --password-stdin
-mage release
+mage release 0.8.0-rc.2
+```
+
+When the tag is already pushed and only the publication failed, republish it
+without repeating the bump:
+
+```sh
+mage publish
 ```
 
 GoReleaser publishes one Sable executable per supported operating-system and
