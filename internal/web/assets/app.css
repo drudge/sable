@@ -2394,7 +2394,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .tsig-empty > .nav-icon { width: 1.6rem; height: 1.6rem; margin-bottom: .3rem; }
 .tsig-empty h3 { margin: 0; color: var(--foreground); font-size: .9rem; }
 .tsig-empty p { margin: 0; max-width: 26rem; font-size: .78rem; }
-.tsig-add-form { gap: 1rem; }
+.settings-action-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.settings-action-card > header > div { min-width: 0; }
+.settings-action-card > header > .button { flex: 0 0 auto; }
 @media (max-width: 640px) {
   .tsig-key-row { grid-template-columns: 1.5rem minmax(0, 1fr) 2rem; padding-inline: .75rem; }
   .tsig-key-row .button.compact { grid-column: 2 / -1; justify-self: start; }

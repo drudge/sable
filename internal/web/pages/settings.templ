@@ -124,6 +124,7 @@ templ SettingsContent(view SettingsPageView) {
 		// actions and must never be swept up by a Save Settings submission.
 		<div class="settings-tab-panel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
 		<div class="settings-tab-panel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
+		@AddTSIGKeyDialog(view)
 		@ManualCertificateDialogs()
 	</div>
 }
@@ -354,7 +355,11 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 				<span>Configure the other server with this secret for { TSIGDisplayName(view.TSIGGeneratedKey) }. Sable keeps it encrypted and will not show it again; rotate the key if you lose it.</span>
 			</div>
 		}
-		@SettingsCard("key", "TSIG Keys", "Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml.") {
+		<section class="card settings-source-card settings-action-card">
+			<header>
+				<div><h2>@Icon("key")<span>TSIG Keys</span></h2><p>Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml.</p></div>
+				<button class="button compact" type="button" data-dialog-open="add-tsig-key-dialog" data-replica-primary-action>@Icon("plus")<span>Add Key</span></button>
+			</header>
 			<div class="isotope-card-content">
 				if len(view.TSIGKeys) == 0 {
 					<div class="tsig-empty">@Icon("key")<h3>No TSIG keys yet</h3><p>Zones without a key fall back to source-IP and transfer-policy authorization.</p></div>
@@ -366,22 +371,25 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 					</div>
 				}
 			</div>
-		}
-		@SettingsCard("plus", "Add a Key", "Leave the secret blank and Sable generates one sized to the algorithm. Paste a secret instead when another server already owns the key.") {
-			<form class="isotope-card-content tsig-add-form" hx-post="/ui/settings/tsig/save" hx-target="#settings-content" hx-swap="outerHTML">
-				<div class="field-grid three">
-					<label class="field-control"><span>Key Name</span><input class="mono-input" name="tsig_name" placeholder="transfer-key" autocomplete="off" required/><small>A DNS name. Both servers must agree on it exactly.</small></label>
-					<label class="field-control"><span>Algorithm</span><select name="tsig_algorithm">
-						for _, algorithm := range view.TSIGAlgorithms {
-							<option value={ algorithm }>{ TSIGAlgorithmLabel(algorithm) }</option>
-						}
-					</select><small>HMAC-SHA256 suits almost everything.</small></label>
-					<label class="field-control"><span>Secret (optional)</span><input class="mono-input" type="password" name="tsig_secret" autocomplete="new-password" placeholder="Generate one for me"/><small>Base64, at least 128 bits.</small></label>
-				</div>
-				<div class="settings-panel-save"><button class="button" type="submit">@Icon("plus")<span>Add Key</span></button></div>
-			</form>
-		}
+		</section>
 	</div>
+}
+
+templ AddTSIGKeyDialog(view SettingsPageView) {
+	<dialog class="custom-server-dialog blocking-dialog" id="add-tsig-key-dialog" aria-labelledby="add-tsig-key-title">
+		<div class="dialog-header"><h2 id="add-tsig-key-title">Add TSIG Key</h2><p>Leave the secret blank and Sable generates one sized to the algorithm. Paste a secret instead when another server already owns the key.</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form" hx-post="/ui/settings/tsig/save" hx-target="#settings-content" hx-swap="outerHTML">
+			<label><span>Key Name</span><input class="mono-input" name="tsig_name" placeholder="transfer-key" autocomplete="off" required/><small>A DNS name. Both servers must agree on it exactly.</small></label>
+			<label><span>Algorithm</span><select name="tsig_algorithm">
+				for _, algorithm := range view.TSIGAlgorithms {
+					<option value={ algorithm }>{ TSIGAlgorithmLabel(algorithm) }</option>
+				}
+			</select><small>HMAC-SHA256 suits almost everything.</small></label>
+			<label><span>Secret (optional)</span><input class="mono-input" type="password" name="tsig_secret" autocomplete="new-password" placeholder="Generate one for me"/><small>Base64, at least 128 bits. Sable shows a generated secret once.</small></label>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Add Key</button></footer>
+		</form>
+	</dialog>
 }
 
 // SettingsTSIGKeyRow follows the block-list row: an icon, the name, one muted
