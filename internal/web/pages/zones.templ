@@ -313,6 +313,66 @@ func zoneRecordDescription(recordType string) string {
 	return descriptions[recordType]
 }
 
+// zoneRecordDisplayValue renders a record's rdata for the record list without
+// the canonical trailing dot on embedded domain names. The stored value stays
+// fully qualified; only the display drops the dot so the list reads the same
+// way as the owner column and the edit form, which already trim it.
+func zoneRecordDisplayValue(recordType, value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	switch strings.ToUpper(strings.TrimSpace(recordType)) {
+	case "FWD":
+		return trimmed
+	case "ANAME":
+		return trimRecordDot(trimmed)
+	}
+	rr, err := dns.NewRR("record.invalid. 300 IN " + recordType + " " + trimmed)
+	if err != nil {
+		return trimmed
+	}
+	switch record := rr.(type) {
+	case *dns.CNAME:
+		record.Target = trimRecordDot(record.Target)
+	case *dns.DNAME:
+		record.Target = trimRecordDot(record.Target)
+	case *dns.NS:
+		record.Ns = trimRecordDot(record.Ns)
+	case *dns.PTR:
+		record.Ptr = trimRecordDot(record.Ptr)
+	case *dns.MX:
+		record.Mx = trimRecordDot(record.Mx)
+	case *dns.SRV:
+		record.Target = trimRecordDot(record.Target)
+	case *dns.NAPTR:
+		record.Replacement = trimRecordDot(record.Replacement)
+	case *dns.HTTPS:
+		record.Target = trimRecordDot(record.Target)
+	case *dns.SVCB:
+		record.Target = trimRecordDot(record.Target)
+	case *dns.SOA:
+		record.Ns = trimRecordDot(record.Ns)
+		record.Mbox = trimRecordDot(record.Mbox)
+	default:
+		return trimmed
+	}
+	rendered := strings.TrimSpace(strings.TrimPrefix(rr.String(), rr.Header().String()))
+	if rendered == "" {
+		return trimmed
+	}
+	return rendered
+}
+
+// trimRecordDot drops the trailing dot from a domain name, leaving the root
+// name alone because "." is the whole name there rather than a suffix.
+func trimRecordDot(name string) string {
+	if name == "." {
+		return name
+	}
+	return strings.TrimSuffix(name, ".")
+}
+
 func zoneRecordParsedField(recordType, value, field string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
@@ -549,7 +609,7 @@ templ ZoneDetailView(zone ZoneView) {
 							<span class={ "record-source-badge " + zoneRecordSourceClass(record.SourceLabel) } title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
 						}
 					</span>
-					@ZoneCopyableText(zoneElementID("value", index), record.Value, "record-value-copy")
+					@ZoneCopyableText(zoneElementID("value", index), zoneRecordDisplayValue(record.Type, record.Value), "record-value-copy")
 					<span class="record-ttl">{ fmt.Sprint(record.TTL) }s</span>
 					if zoneCanOpenRecords(zone) && zone.CanRecords && !record.Managed {
 						<button class="record-open-button" type="button" data-dialog-open={ zoneElementID("record", index) } data-dialog-url={ zoneRecordEditPath(zone, record) } aria-label={ zoneRecordOpenLabel(zone, record) }>@Icon("chevron-right")</button>
