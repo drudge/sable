@@ -1165,11 +1165,16 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .sso-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
-.signin-method-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 0.75rem 0.9rem; }
-.signin-method-row + .signin-method-row { margin-top: 0.6rem; }
-.signin-method-row > div { display: grid; gap: 0.2rem; }
-.signin-method-row strong { font-size: 0.875rem; }
-.signin-method-row span { color: var(--muted-foreground); font-size: 0.8125rem; }
+.signin-methods { display: grid; gap: 0.5rem; }
+.signin-method-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 0.65rem 0.85rem; }
+.signin-method-row > div { display: grid; gap: 0.1rem; min-width: 0; }
+.signin-method-row strong { font-size: 0.8125rem; }
+.signin-method-row span { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.45; }
+/* The subject is an opaque identifier and is usually a UUID. It is clipped to
+   one line rather than allowed to set the row's height. */
+.signin-method-subject { overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.signin-method-row form { flex-shrink: 0; }
+.signin-method-row .button { white-space: nowrap; }
 /* The wizard inherits the UniFi wizard's grid, which bounds the dialog and
    zeroes the grid minimums so only the step panel scrolls. Without that the
    panel grows past the viewport and drags the footer off screen. */
@@ -1865,6 +1870,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .user-edit-dialog > .dialog-header { padding: 1.5rem 1.5rem 1.1rem; }
 .dialog-tab-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 1.5rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
 .dialog-tab-list.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dialog-tab-list.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dialog-tab-list.four .dialog-tab { gap: .3rem; padding: 0 .25rem; }
 .dialog-tab { display: inline-flex; height: 2rem; align-items: center; justify-content: center; border: 0; border-radius: .375rem; background: transparent; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .dialog-tab:hover { color: var(--foreground); }
 .dialog-tab.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }

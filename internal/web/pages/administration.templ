@@ -296,7 +296,7 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id={ adminUserDialogID(user.ID) } data-dialog-tabs>
 		<div class="dialog-header"><h2>Edit User</h2><p>Update user account details</p></div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="dialog-tab-list three" role="tablist" aria-label="User settings">
+		<div class="dialog-tab-list four" role="tablist" aria-label="User settings">
 			<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button>
 			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Groups</button>
 			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="signin">Sign-In</button>
@@ -447,27 +447,26 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 			<h3>Sign-In Methods</h3>
 			<p>How { user.Username } gets into this console.</p>
 		</div>
-		<div class="signin-method-row">
-			<div>
-				<strong>Password</strong>
-				<span>{ ifThen(user.PasswordLogin, "Enabled for this account.", "Turned off. This account signs in through an identity provider only.") }</span>
+		<div class="signin-methods">
+			<div class="signin-method-row">
+				<div>
+					<strong>Password</strong>
+					<span>{ ifThen(user.PasswordLogin, "Enabled", "Off. Signs in through a provider only.") }</span>
+				</div>
+				<form hx-post="/ui/administration/users/sign-in-method" hx-target="#administration-content" hx-swap="outerHTML">
+					<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+					<input type="hidden" name="password_login" value={ ifThen(user.PasswordLogin, "false", "true") }/>
+					<button class="button outline" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>
+						{ ifThen(user.PasswordLogin, "Turn off", "Turn on") }
+					</button>
+				</form>
 			</div>
-			<form hx-post="/ui/administration/users/sign-in-method" hx-target="#administration-content" hx-swap="outerHTML">
-				<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
-				<input type="hidden" name="password_login" value={ ifThen(user.PasswordLogin, "false", "true") }/>
-				<button class="button outline" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>
-					{ ifThen(user.PasswordLogin, "Use single sign-on only", "Allow password sign-in") }
-				</button>
-			</form>
-		</div>
-		if len(user.Identities) == 0 {
-			<p class="muted-cell">No identity provider is linked. This account cannot use single sign-on yet, so its password cannot be turned off.</p>
-		} else {
 			for _, identity := range user.Identities {
 				<div class="signin-method-row">
 					<div>
-						<strong>{ identity.Issuer }</strong>
-						<span>Subject <code>{ identity.Subject }</code>. { identitySignInSummary(identity) }</span>
+						<strong>{ ssoIssuerLabel(identity.Issuer) }</strong>
+						<span>{ identitySignInSummary(identity) }</span>
+						<span class="signin-method-subject" title={ identity.Subject }>{ identity.Subject }</span>
 					</div>
 					<form hx-post="/ui/administration/users/unlink" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Unlink " + user.Username + " from this identity provider?" }>
 						<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
@@ -476,6 +475,9 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 					</form>
 				</div>
 			}
+		</div>
+		if len(user.Identities) == 0 {
+			<p class="muted-cell">No identity provider is linked, so password sign-in cannot be turned off for this account.</p>
 		}
 	</section>
 }
@@ -491,7 +493,14 @@ func userIdentitySummary(user auth.ManagedUser) string {
 
 func identitySignInSummary(identity auth.LinkedIdentity) string {
 	if identity.LastLoginAt.IsZero() {
-		return "Has not signed in yet."
+		return "Never signed in"
 	}
-	return "Last signed in " + identity.LastLoginAt.UTC().Format("2006-01-02 15:04 UTC") + "."
+	return "Last signed in " + identity.LastLoginAt.UTC().Format("2 Jan 2006, 15:04 UTC")
+}
+
+// ssoIssuerLabel drops the scheme so the row reads as a provider name rather
+// than a URL. The full value is a tooltip on the subject line below it.
+func ssoIssuerLabel(issuer string) string {
+	trimmed := strings.TrimPrefix(strings.TrimPrefix(issuer, "https://"), "http://")
+	return strings.TrimSuffix(trimmed, "/")
 }
