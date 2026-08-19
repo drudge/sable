@@ -32,6 +32,22 @@ type AuthorizationUser struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	RoleIDs      []int64   `json:"role_ids"`
+	// PasswordLogin defaults to true so a snapshot written before single
+	// sign-on existed restores accounts that can still sign in.
+	PasswordLogin bool `json:"password_login"`
+	// Identities travel with the account. Without them a promoted replica
+	// would not know which provider subject owns which account, and every
+	// federated user would silently provision a second account on failover.
+	Identities []AuthorizationIdentity `json:"identities,omitempty"`
+}
+
+// AuthorizationIdentity is one replicated link between an identity provider
+// subject and a Sable account.
+type AuthorizationIdentity struct {
+	Provider string    `json:"provider"`
+	Subject  string    `json:"subject"`
+	Issuer   string    `json:"issuer"`
+	LinkedAt time.Time `json:"linked_at"`
 }
 
 type AuthorizationRole struct {
@@ -61,7 +77,7 @@ func (store *Store) ExportAuthorizationState(ctx context.Context) (Authorization
 	state := AuthorizationState{Initialized: initialized, Users: []AuthorizationUser{}, Roles: []AuthorizationRole{}, Tokens: []AuthorizationToken{}}
 	rows, err := store.database.QueryContext(ctx, `
 SELECT users.id, users.username, users.password_hash, users.created_at,
-       profiles.display_name, profiles.email, profiles.disabled, profiles.updated_at
+       profiles.display_name, profiles.email, profiles.disabled, profiles.password_login, profiles.updated_at
 FROM sable_users AS users
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
 ORDER BY users.id`)
@@ -70,13 +86,15 @@ ORDER BY users.id`)
 	}
 	for rows.Next() {
 		var user AuthorizationUser
-		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.DisplayName, &user.Email, &user.Disabled, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.DisplayName,
+			&user.Email, &user.Disabled, &user.PasswordLogin, &user.UpdatedAt); err != nil {
 			rows.Close()
 			return AuthorizationState{}, fmt.Errorf("scan authorization user: %w", err)
 		}
 		user.CreatedAt = user.CreatedAt.UTC()
 		user.UpdatedAt = user.UpdatedAt.UTC()
 		user.RoleIDs = []int64{}
+		user.Identities = []AuthorizationIdentity{}
 		state.Users = append(state.Users, user)
 	}
 	if err := rows.Close(); err != nil {
@@ -164,6 +182,31 @@ ORDER BY role_id, permission, surface, resource_type, resource_id`)
 	}
 	if err := rows.Close(); err != nil {
 		return AuthorizationState{}, fmt.Errorf("close authorization memberships: %w", err)
+	}
+
+	rows, err = store.database.QueryContext(ctx, `
+SELECT user_id, provider, subject, issuer, linked_at
+FROM sable_user_identities ORDER BY user_id, provider`)
+	if err != nil {
+		return AuthorizationState{}, fmt.Errorf("export authorization identities: %w", err)
+	}
+	for rows.Next() {
+		var userID int64
+		var identity AuthorizationIdentity
+		if err := rows.Scan(&userID, &identity.Provider, &identity.Subject, &identity.Issuer, &identity.LinkedAt); err != nil {
+			rows.Close()
+			return AuthorizationState{}, fmt.Errorf("scan authorization identity: %w", err)
+		}
+		index, found := userIndex[userID]
+		if !found {
+			rows.Close()
+			return AuthorizationState{}, fmt.Errorf("authorization identity references missing user %d", userID)
+		}
+		identity.LinkedAt = identity.LinkedAt.UTC()
+		state.Users[index].Identities = append(state.Users[index].Identities, identity)
+	}
+	if err := rows.Close(); err != nil {
+		return AuthorizationState{}, fmt.Errorf("close authorization identities: %w", err)
 	}
 	if err := rows.Err(); err != nil {
 		return AuthorizationState{}, fmt.Errorf("iterate authorization memberships: %w", err)
@@ -292,6 +335,7 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 	for _, statement := range []string{
 		"DELETE FROM sable_api_token_roles",
 		"DELETE FROM sable_api_tokens",
+		"DELETE FROM sable_user_identities",
 		"DELETE FROM sable_user_roles",
 		"DELETE FROM sable_role_grants",
 		"DELETE FROM sable_roles",
@@ -328,11 +372,11 @@ ON CONFLICT(id) DO UPDATE SET username = excluded.username, password_hash = excl
 			return fmt.Errorf("replace authorization user %q: %w", user.Username, err)
 		}
 		_, err = transaction.ExecContext(ctx, `
-INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, updated_at)
-VALUES (`+store.placeholders(5)+`)
+INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, password_login, updated_at)
+VALUES (`+store.placeholders(6)+`)
 ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, email = excluded.email,
-disabled = excluded.disabled, updated_at = excluded.updated_at`,
-			user.ID, user.DisplayName, user.Email, user.Disabled, user.UpdatedAt.UTC())
+disabled = excluded.disabled, password_login = excluded.password_login, updated_at = excluded.updated_at`,
+			user.ID, user.DisplayName, user.Email, user.Disabled, user.PasswordLogin, user.UpdatedAt.UTC())
 		if err != nil {
 			return fmt.Errorf("replace authorization profile %q: %w", user.Username, err)
 		}
@@ -361,6 +405,13 @@ VALUES (`+store.placeholders(5)+`)`, role.ID, grant.Permission, grant.Surface, g
 		for _, roleID := range user.RoleIDs {
 			if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_user_roles (user_id, role_id) VALUES (`+store.placeholders(2)+`)`, user.ID, roleID); err != nil {
 				return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
+			}
+		}
+		for _, identity := range user.Identities {
+			if _, err := transaction.ExecContext(ctx, `
+INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at)
+VALUES (`+store.placeholders(5)+`)`, identity.Provider, identity.Subject, user.ID, identity.Issuer, identity.LinkedAt.UTC()); err != nil {
+				return fmt.Errorf("replace identity link for user %q: %w", user.Username, err)
 			}
 		}
 	}
@@ -409,15 +460,36 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value`, "security_initialized", 
 func validateAuthorizationState(state AuthorizationState) error {
 	userIDs := make(map[int64]struct{}, len(state.Users))
 	usernames := make(map[string]struct{}, len(state.Users))
+	subjects := make(map[string]struct{}, len(state.Users))
 	for _, user := range state.Users {
-		if user.ID <= 0 || strings.TrimSpace(user.Username) == "" || strings.TrimSpace(user.PasswordHash) == "" {
+		if user.ID <= 0 || strings.TrimSpace(user.Username) == "" {
 			return errors.New("replicated authorization state contains an invalid user")
+		}
+		// An account needs at least one way in. A password hash was the only
+		// possibility before single sign-on; now a federated account has an
+		// empty hash and is reached through its linked provider instead.
+		if strings.TrimSpace(user.PasswordHash) == "" && len(user.Identities) == 0 {
+			return fmt.Errorf("replicated authorization user %q has neither a password nor a linked identity", user.Username)
 		}
 		if _, found := userIDs[user.ID]; found {
 			return fmt.Errorf("replicated authorization state contains duplicate user ID %d", user.ID)
 		}
 		if _, found := usernames[user.Username]; found {
 			return fmt.Errorf("replicated authorization state contains duplicate username %q", user.Username)
+		}
+		for _, identity := range user.Identities {
+			if strings.TrimSpace(identity.Provider) == "" || strings.TrimSpace(identity.Subject) == "" {
+				return fmt.Errorf("replicated authorization user %q has an incomplete identity link", user.Username)
+			}
+			// The table's primary key would reject this on insert, but a
+			// duplicate subject across two accounts means the snapshot itself
+			// disagrees about who owns it, and that is worth naming.
+			key := identity.Provider + "\x00" + identity.Subject
+			if _, found := subjects[key]; found {
+				return fmt.Errorf("replicated authorization state links %s/%s to more than one account",
+					identity.Provider, identity.Subject)
+			}
+			subjects[key] = struct{}{}
 		}
 		userIDs[user.ID] = struct{}{}
 		usernames[user.Username] = struct{}{}

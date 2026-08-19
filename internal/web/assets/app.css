@@ -1159,6 +1159,51 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .auth-card > p { margin: 0.35rem 0 1.5rem; color: var(--muted-foreground); text-align: center; }
 .auth-form { display: grid; gap: 1rem; }
 .auth-form button { width: 100%; margin-top: 0.25rem; }
+.sso-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
+.sso-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
+.sso-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+.sso-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
+.sso-badge { margin-left: 0.35rem; }
+.signin-method-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 0.75rem 0.9rem; }
+.signin-method-row + .signin-method-row { margin-top: 0.6rem; }
+.signin-method-row > div { display: grid; gap: 0.2rem; }
+.signin-method-row strong { font-size: 0.875rem; }
+.signin-method-row span { color: var(--muted-foreground); font-size: 0.8125rem; }
+/* The wizard inherits the UniFi wizard's grid, which bounds the dialog and
+   zeroes the grid minimums so only the step panel scrolls. Without that the
+   panel grows past the viewport and drags the footer off screen. */
+.sso-wizard-dialog { width: min(44rem, calc(100% - 3rem)); }
+/* The dialog body styles every label as a bold grid, which leaves helper text
+   inheriting the label's weight and colour. These re-quiet it inside the
+   wizard rather than changing the shared rule every other dialog relies on. */
+.sso-wizard-dialog .isotope-dialog-body { gap: 0.8rem; }
+.sso-wizard-dialog .isotope-dialog-body label small { color: var(--muted-foreground); font-size: 0.75rem; font-weight: 400; line-height: 1.4; }
+/* A checkbox is a row, not a stack: the shared label rule would put the box on
+   its own line with its text underneath. */
+.sso-wizard-dialog label.checkbox { display: flex; align-items: center; gap: 0.5rem; font-weight: 400; }
+.sso-wizard-dialog label.checkbox input { width: auto; margin: 0; }
+.sso-field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.8rem; }
+/* The shared label rule uses a child combinator, so a label nested one level
+   down inside a field row matches nothing and renders unstyled. */
+.sso-wizard-dialog .sso-field-row label { display: grid; gap: 0.5rem; font-size: 0.8125rem; font-weight: 500; }
+.sso-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: var(--muted-foreground); }
+.sso-presets .button { height: 1.85rem; padding: 0 0.65rem; font-size: 0.8125rem; }
+.sso-toggles, .sso-mappings { display: grid; gap: 0.6rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 0.85rem 1rem; }
+.sso-toggles legend, .sso-mappings legend { padding: 0 0.35rem; font-size: 0.8125rem; font-weight: 500; }
+.sso-toggles label.checkbox { display: flex; align-items: flex-start; gap: 0.5rem; font-weight: 400; }
+.sso-mappings small { color: var(--muted-foreground); font-size: 0.75rem; }
+.sso-mapping-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.6rem; }
+.sso-mapping-row .nav-icon { width: 1rem; height: 1rem; color: var(--muted-foreground); }
+.auth-sso { margin-bottom: 1rem; }
+/* Scoped through .auth-sso so it outranks `.auth-form button`, which paints
+   every button in the card as the primary action. Two primary buttons stacked
+   would give the password form and the provider equal weight. */
+.auth-sso .auth-sso-button { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0; border: 1px solid var(--border); background: var(--card); color: var(--card-foreground); }
+.auth-sso .auth-sso-button:hover { background: var(--accent); opacity: 1; }
+.auth-sso .auth-sso-button svg { width: 1rem; height: 1rem; }
+.auth-divider { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; color: var(--muted-foreground); font-size: 0.8125rem; }
+.auth-divider::before, .auth-divider::after { flex: 1; height: 1px; background: var(--border); content: ""; }
 .auth-error { margin-bottom: 1rem; border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--destructive) 10%, transparent); padding: 0.75rem; color: var(--destructive); font-size: 0.875rem; }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

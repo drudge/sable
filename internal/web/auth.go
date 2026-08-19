@@ -284,8 +284,29 @@ func (server *Server) logout(writer http.ResponseWriter, request *http.Request) 
 		return
 	}
 	clearSessionCookie(writer, request, server.sessionCookieName(), server.secureCookies)
-	writer.Header().Set("HX-Redirect", "/login")
+	// The Sable session is already gone by this point. Sending the browser on
+	// to the provider ends the session there too, so closing the tab does not
+	// leave a signed-in provider ready to wave the next visitor straight back
+	// in. It only happens when the operator asked for it in the [oidc]
+	// section, because it also signs out anyone who used a password.
+	destination := "/login"
+	if server.sso != nil && server.sso.Enabled() {
+		if target, supported := server.sso.LogoutURL(request.Context(), absoluteURL(request, "/login")); supported {
+			destination = target
+		}
+	}
+	writer.Header().Set("HX-Redirect", destination)
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+// absoluteURL rebuilds a full URL for this server, which the provider needs
+// when it is told where to send the browser after signing out.
+func absoluteURL(request *http.Request, path string) string {
+	scheme := "http"
+	if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
+	}
+	return scheme + "://" + request.Host + path
 }
 
 func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.Request) {
@@ -388,7 +409,8 @@ func clearSessionCookie(writer http.ResponseWriter, request *http.Request, name 
 }
 
 func publicRequest(path string) bool {
-	return path == "/setup" || path == "/login" || path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/")
+	return path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
+		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/")
 }
 
 func tokenRequest(path string) bool {
@@ -503,7 +525,11 @@ func (server *Server) renderAuthPage(
 		}
 		returnTo = validatedReturnTarget(rawReturnTo, request.Host)
 	}
-	if err := pages.AuthPage(setup, errorMessage, token, returnTo).Render(request.Context(), writer); err != nil {
+	ssoLabel := ""
+	if server.ssoAvailable() {
+		ssoLabel = server.sso.Label()
+	}
+	if err := pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render authentication page", "error", err)
 	}
 }

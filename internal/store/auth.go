@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS sable_user_profiles (
 	display_name TEXT NOT NULL,
 	email TEXT NOT NULL DEFAULT '',
 	disabled BOOLEAN NOT NULL,
+	password_login BOOLEAN NOT NULL DEFAULT TRUE,
     updated_at TIMESTAMP NOT NULL
 )`, fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS sable_roles (
@@ -91,7 +92,18 @@ CREATE TABLE IF NOT EXISTS sable_secrets (
     name TEXT PRIMARY KEY,
     ciphertext TEXT NOT NULL,
     updated_at TIMESTAMP NOT NULL
-)`,
+)`, `
+CREATE TABLE IF NOT EXISTS sable_user_identities (
+    provider TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    user_id BIGINT NOT NULL REFERENCES sable_users(id) ON DELETE CASCADE,
+    issuer TEXT NOT NULL,
+    linked_at TIMESTAMP NOT NULL,
+    last_login_at TIMESTAMP,
+    PRIMARY KEY (provider, subject)
+)`, `
+CREATE INDEX IF NOT EXISTS sable_user_identities_user_id_idx
+ON sable_user_identities (user_id)`,
 	}
 }
 
@@ -103,6 +115,18 @@ func (store *Store) migrateAuthenticationSchema(ctx context.Context) error {
 	if !hasEmail {
 		if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_user_profiles ADD COLUMN email TEXT NOT NULL DEFAULT ''"); err != nil {
 			return fmt.Errorf("add user profile email: %w", err)
+		}
+	}
+	// Accounts that predate single sign-on all have a password, so the column
+	// defaults to true. Only a user who later opts into SSO-only has it
+	// cleared, which is what keeps an upgrade from locking anybody out.
+	hasPasswordLogin, err := store.tableHasColumn(ctx, "sable_user_profiles", "password_login")
+	if err != nil {
+		return err
+	}
+	if !hasPasswordLogin {
+		if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_user_profiles ADD COLUMN password_login BOOLEAN NOT NULL DEFAULT TRUE"); err != nil {
+			return fmt.Errorf("add user profile password login: %w", err)
 		}
 	}
 	hasScopes, err := store.tableHasColumn(ctx, "sable_api_tokens", "scopes")
@@ -401,7 +425,8 @@ func (store *Store) UserByUsername(ctx context.Context, username string) (auth.U
 	var user auth.User
 	err := store.database.QueryRowContext(
 		ctx,
-		`SELECT users.id, users.username, profiles.display_name, profiles.email, users.password_hash, EXISTS (
+		`SELECT users.id, users.username, profiles.display_name, profiles.email, users.password_hash,
+       profiles.password_login, EXISTS (
     SELECT 1 FROM sable_user_roles AS memberships
     JOIN sable_role_grants AS grants ON grants.role_id = memberships.role_id
     WHERE memberships.user_id = users.id AND grants.surface = `+store.placeholder(1)+`
@@ -410,7 +435,7 @@ FROM sable_users AS users
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
 WHERE users.username = `+store.placeholder(2),
 		auth.SurfaceWeb, username,
-	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.PasswordHash, &user.LoginAllowed)
+	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.PasswordHash, &user.PasswordLogin, &user.LoginAllowed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.User{}, auth.ErrNotFound
 	}

@@ -40,6 +40,9 @@ func (server *Server) integrationsPage(writer http.ResponseWriter, request *http
 	if request.URL.Query().Get("setup") == "unifi" {
 		view.UniFi.Wizard = server.newUniFiWizard(request)
 	}
+	if request.URL.Query().Get("setup") == "sso" && server.ssoAdmin != nil {
+		view.SSO.Wizard = server.newSSOWizard(request)
+	}
 	if err := pages.IntegrationsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render integrations page", "error", err)
 	}
@@ -65,6 +68,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 			Mappings:         unifiMappingViews(settings),
 		},
 	}
+	view.SSO = server.ssoView(request, nil)
 	if server.unifi == nil {
 		return view
 	}

@@ -90,7 +90,11 @@ templ UsersPanel(view AdministrationPageView) {
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th></th></tr></thead><tbody>
 				for _, user := range view.Users {
-					<tr data-dialog-open={ adminUserDialogID(user.ID) } tabindex="0"><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span></td><td><div class="table-badges">
+					<tr data-dialog-open={ adminUserDialogID(user.ID) } tabindex="0"><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span>
+						if len(user.Identities) > 0 {
+							<span class="status-badge sso-badge" title={ userIdentitySummary(user) }>SSO</span>
+						}
+					</td><td><div class="table-badges">
 						for _, role := range user.Roles {
 							<span>{ role }</span>
 						}
@@ -295,6 +299,7 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 		<div class="dialog-tab-list three" role="tablist" aria-label="User settings">
 			<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button>
 			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Groups</button>
+			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="signin">Sign-In</button>
 			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="tokens">API Tokens <span class="tab-count" id={ adminUserTokenCountID(user.ID) }>{ fmt.Sprint(userTokenCount(view, user.ID)) }</span></button>
 		</div>
 		<div class="user-dialog-content">
@@ -328,6 +333,7 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 					<fieldset><legend class="sr-only">Member of groups</legend>@RoleChecks(view.Roles, user.Roles)</fieldset>
 				</form>
 			</section>
+			@UserSignInPanel(view, user)
 			@UserTokensPanel(view, user)
 		</div>
 		<footer class="dialog-footer user-dialog-footer">
@@ -431,3 +437,61 @@ func tokenRoleAssigned(view AdministrationPageView, userID int64, roleName strin
 func tokenRoleUserIDs(view AdministrationPageView, roleName string) string { result := make([]string, 0); for _, user := range view.Users { if !user.Disabled && adminContains(user.Roles, roleName) { result = append(result, fmt.Sprint(user.ID)) } }; return strings.Join(result, ",") }
 func tokenRoles(view AdministrationPageView) []auth.Role { result := make([]auth.Role, 0); for _, role := range view.Roles { if roleHasAPIAccess(role) { result = append(result, role) } }; return result }
 func apiGrantSummary(role auth.Role) string { count := 0; allZones := false; selectedZones := map[string]struct{}{}; for _, grant := range role.Grants { if grant.Surface != auth.SurfaceAPI { continue }; count++; if grant.ResourceType == auth.ResourceZone { if grant.ResourceID == auth.ResourceAll { allZones = true } else { selectedZones[grant.ResourceID] = struct{}{} } } }; scope := "global permissions"; if allZones { scope = "all zones" } else if len(selectedZones) > 0 { scope = fmt.Sprintf("%d selected zones", len(selectedZones)) }; return fmt.Sprintf("%d API grants · %s", count, scope) }
+
+// UserSignInPanel shows how one account gets in and lets an administrator
+// change it. Password sign-in and single sign-on are per account rather than
+// deployment wide, so moving to SSO is something each person opts into.
+templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
+	<section class="dialog-tab-panel user-signin-panel" role="tabpanel" data-dialog-panel="signin" hidden>
+		<div class="form-section-heading">
+			<h3>Sign-In Methods</h3>
+			<p>How { user.Username } gets into this console.</p>
+		</div>
+		<div class="signin-method-row">
+			<div>
+				<strong>Password</strong>
+				<span>{ ifThen(user.PasswordLogin, "Enabled for this account.", "Turned off. This account signs in through an identity provider only.") }</span>
+			</div>
+			<form hx-post="/ui/administration/users/sign-in-method" hx-target="#administration-content" hx-swap="outerHTML">
+				<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+				<input type="hidden" name="password_login" value={ ifThen(user.PasswordLogin, "false", "true") }/>
+				<button class="button outline" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>
+					{ ifThen(user.PasswordLogin, "Use single sign-on only", "Allow password sign-in") }
+				</button>
+			</form>
+		</div>
+		if len(user.Identities) == 0 {
+			<p class="muted-cell">No identity provider is linked. This account cannot use single sign-on yet, so its password cannot be turned off.</p>
+		} else {
+			for _, identity := range user.Identities {
+				<div class="signin-method-row">
+					<div>
+						<strong>{ identity.Issuer }</strong>
+						<span>Subject <code>{ identity.Subject }</code>. { identitySignInSummary(identity) }</span>
+					</div>
+					<form hx-post="/ui/administration/users/unlink" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Unlink " + user.Username + " from this identity provider?" }>
+						<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
+						<input type="hidden" name="provider" value={ identity.Provider }/>
+						<button class="button outline destructive" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Unlink</button>
+					</form>
+				</div>
+			}
+		}
+	</section>
+}
+
+// userIdentitySummary is the hover text behind the SSO badge in the user table.
+func userIdentitySummary(user auth.ManagedUser) string {
+	issuers := make([]string, 0, len(user.Identities))
+	for _, identity := range user.Identities {
+		issuers = append(issuers, identity.Issuer)
+	}
+	return "Signs in through " + strings.Join(issuers, ", ")
+}
+
+func identitySignInSummary(identity auth.LinkedIdentity) string {
+	if identity.LastLoginAt.IsZero() {
+		return "Has not signed in yet."
+	}
+	return "Last signed in " + identity.LastLoginAt.UTC().Format("2006-01-02 15:04 UTC") + "."
+}

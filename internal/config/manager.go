@@ -93,6 +93,9 @@ func cloneConfig(source Config) Config {
 	cloned.EncryptedDNS.ACME.Domains = append([]string(nil), source.EncryptedDNS.ACME.Domains...)
 	cloned.UniFi.Sources = append([]string(nil), source.UniFi.Sources...)
 	cloned.UniFi.Networks = append([]UniFiNetwork(nil), source.UniFi.Networks...)
+	cloned.OIDC.Scopes = append([]string(nil), source.OIDC.Scopes...)
+	cloned.OIDC.DefaultRoles = append([]string(nil), source.OIDC.DefaultRoles...)
+	cloned.OIDC.RoleMappings = append([]OIDCRoleMapping(nil), source.OIDC.RoleMappings...)
 	return cloned
 }
 
