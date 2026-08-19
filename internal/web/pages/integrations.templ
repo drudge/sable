@@ -521,7 +521,7 @@ templ UniFiWizardConnectStep(wizard UniFiWizardView) {
 			<label class="field-control"><span>Controller URL</span><input name="controller_url" value={ wizard.ControllerURL } placeholder="https://192.168.1.1" required/></label>
 			<label class="field-control"><span>Site</span><input name="site" value={ wizard.Site } placeholder="default" required/></label>
 		</div>
-		<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault and never written to TOML.</small></div></div>
+		<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault.</small></div></div>
 		<div class="unifi-auth-modes" data-unifi-auth-root>
 			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode != "account") }><input type="radio" name="auth_mode" value="api-key" checked?={ wizard.AuthMode != "account" } data-unifi-auth/><span><strong>API Key</strong><small>Recommended</small></span></label>
 			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode == "account") }><input type="radio" name="auth_mode" value="account" checked?={ wizard.AuthMode == "account" } data-unifi-auth/><span><strong>Local Account</strong><small>Older controllers</small></span></label>

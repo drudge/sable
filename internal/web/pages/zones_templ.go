@@ -5743,7 +5743,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 549, ">ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault and never written to TOML.</small></label><div class=\"record-field-grid two zone-dnssec-policy\"><label><span>ZSK Lifetime</span><input class=\"mono-input\" name=\"zsk_lifetime\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 549, ">ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault.</small></label><div class=\"record-field-grid two zone-dnssec-policy\"><label><span>ZSK Lifetime</span><input class=\"mono-input\" name=\"zsk_lifetime\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
