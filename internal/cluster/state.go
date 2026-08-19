@@ -48,8 +48,13 @@ func (service *Service) refreshPrimaryState(ctx context.Context) error {
 		service.manifest.Nodes[memberIndex].TrustAnchor != string(service.localTrustAnchorPEM) ||
 		service.manifest.Nodes[memberIndex].Version != service.version ||
 		!slices.Equal(service.manifest.Nodes[memberIndex].Addresses, localAddresses))
+	// The primary must always carry the primary role in its own entry. Nothing
+	// else restores it, so heal a role that was flipped out from under us (for
+	// example by an enrollment that claimed this node id) rather than leaving the
+	// node blocked from its own control plane.
+	roleChanged := memberIndex >= 0 && service.manifest.Nodes[memberIndex].Role != RolePrimary
 	stateChanged := digest != "" && service.manifest.StateDigest != digest
-	if !identityChanged && !stateChanged {
+	if !identityChanged && !stateChanged && !roleChanged {
 		return nil
 	}
 	if stateChanged {
@@ -69,6 +74,9 @@ func (service *Service) refreshPrimaryState(ctx context.Context) error {
 		candidate.Nodes[memberIndex].TrustAnchor = string(service.localTrustAnchorPEM)
 		candidate.Nodes[memberIndex].Version = service.version
 		candidate.Nodes[memberIndex].Addresses = localAddresses
+	}
+	if roleChanged {
+		candidate.Nodes[memberIndex].Role = RolePrimary
 	}
 	if err := writeManifest(service.directory, candidate); err != nil {
 		return err

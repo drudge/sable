@@ -257,6 +257,60 @@ func TestEnrollmentCreatesReplicaAndTokenIsSingleUse(t *testing.T) {
 	}
 }
 
+func TestEnrollmentRejectsClaimingPrimaryNodeID(t *testing.T) {
+	directory := t.TempDir()
+	primary, err := Open(Options{DataDirectory: directory, NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := primary.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := primary.CreateEnrollmentToken(context.Background(), 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = primary.Enroll(context.Background(), JoinRequest{
+		Token: token.Token, NodeID: primary.nodeID, Name: "attacker",
+		AdvertiseURL: "https://attacker.example:5380", Addresses: []string{"192.0.2.9"}, Version: "0.1.0",
+	})
+	if err == nil {
+		t.Fatal("Enroll accepted a request claiming the primary node id")
+	}
+	state := primary.Snapshot()
+	if state.LocalRole != RolePrimary || state.PrimaryID != primary.nodeID {
+		t.Fatalf("primary was demoted by the rejected enrollment: %#v", state)
+	}
+	if len(state.Nodes) != 1 || state.Nodes[0].AdvertiseURL != "https://dns-1.example:5380" {
+		t.Fatalf("primary manifest entry was mutated: %#v", state.Nodes)
+	}
+}
+
+func TestRefreshPrimaryStateHealsDemotedPrimaryRole(t *testing.T) {
+	directory := t.TempDir()
+	primary, err := Open(Options{DataDirectory: directory, NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := primary.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a manifest whose primary entry was flipped to replica. Nothing
+	// but refreshPrimaryState restores it, so it must repair the role itself.
+	primary.mu.Lock()
+	primary.manifest.Nodes[0].Role = RoleReplica
+	primary.mu.Unlock()
+
+	if err := primary.refreshPrimaryState(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if state := primary.Snapshot(); state.LocalRole != RolePrimary || state.Nodes[0].Role != RolePrimary {
+		t.Fatalf("primary role was not healed: %#v", state)
+	}
+}
+
 func TestPrivateClusterCATrustIsBundledAndPersistsOnReplica(t *testing.T) {
 	primaryDirectory := t.TempDir()
 	certificateManager := certificates.New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), primaryDirectory)
