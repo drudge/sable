@@ -146,6 +146,13 @@ func (service *Service) Enroll(ctx context.Context, request JoinRequest) (JoinCo
 	if !strings.HasPrefix(service.advertiseURL, "https://") {
 		return JoinConfiguration{}, ErrNetworkUnavailable
 	}
+	// An enrollment only ever adds or refreshes a replica. Claiming the primary's
+	// node id would overwrite the primary's own manifest entry and force it to a
+	// replica role, a demotion nothing later reverses. Node ids are not secret,
+	// so refuse the collision outright.
+	if request.NodeID == service.manifest.PrimaryID {
+		return JoinConfiguration{}, errors.New("node id collides with the cluster primary")
+	}
 	existingIndex := -1
 	for index, existing := range service.manifest.Nodes {
 		if existing.ID == request.NodeID {
