@@ -189,6 +189,59 @@ func TestDNSSECValidatorRejectsBareDSDenialUnderSignedParent(t *testing.T) {
 	}
 }
 
+// TestDNSSECValidatorRejectsOutOfBailiwickInsecureSigner is the regression test
+// for the signer-bailiwick bypass: an attacker attaches to a signed name an RRSIG
+// whose signer points at a provably-insecure zone that does not contain the name.
+// The RRSIG groups with the record by owner, so without a bailiwick check the
+// validator would consult the unsigned zone's state and downgrade the forged
+// record to insecure. The name is out of the signer's bailiwick, so validation
+// must stay bogus rather than accept the forged answer.
+func TestDNSSECValidatorRejectsOutOfBailiwickInsecureSigner(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "demo.")
+	validator := validatorWithAnchor(t, parent, now)
+
+	// unsigned.demo. is a genuinely insecure delegation, proven by an NSEC the
+	// signed parent authenticates. zoneKeys("unsigned.demo.") therefore returns
+	// validationInsecure, which the attacker tries to borrow for another name.
+	denial := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.demo.", TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+	}
+	parentSOA := validatorSOA("demo.")
+	dsResponse := new(dns.Msg)
+	dsResponse.SetQuestion("unsigned.demo.", dns.TypeDS)
+	dsResponse.SetReply(dsResponse)
+	dsResponse.Ns = []dns.RR{
+		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
+		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
+	}
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("demo.", dns.TypeDNSKEY):      validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS): dsResponse,
+	})
+
+	// The forged answer: victim.demo. (which is NOT under unsigned.demo.) carrying
+	// a bogus RRSIG whose signer is the insecure zone. The signature bytes are
+	// never checked because the fix rejects the out-of-bailiwick signer first.
+	forged := &dns.RRSIG{
+		Hdr:         dns.RR_Header{Name: "victim.demo.", Rrtype: dns.TypeRRSIG, Class: dns.ClassINET, Ttl: 300},
+		TypeCovered: dns.TypeA, Algorithm: dns.ECDSAP256SHA256, Labels: 2, OrigTtl: 300,
+		Inception: uint32(now.Add(-time.Hour).Unix()), Expiration: uint32(now.Add(time.Hour).Unix()),
+		KeyTag: 12345, SignerName: "unsigned.demo.", Signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	}
+	response := new(dns.Msg)
+	response.SetQuestion("victim.demo.", dns.TypeA)
+	response.SetReply(response)
+	response.Answer = []dns.RR{validatorA("victim.demo.", "192.0.2.66"), forged}
+
+	state, err := validator.validate(context.Background(), response, response.Question[0], query)
+	if state != validationBogus || err == nil {
+		t.Fatalf("validate() = %v, %v; want bogus with an error", state, err)
+	}
+}
+
 func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
