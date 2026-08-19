@@ -47,9 +47,8 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - Passphrase-sealed whole-deployment backup and restore covering configuration, zones, authorization, secrets and their vault key, trust anchors, TLS material, and cluster membership
 - Unit, integration, race, allocation, and microbenchmark coverage
 
-DNS-over-QUIC and automatic failover are planned and not represented as
-complete yet. See
-[the roadmap](docs/roadmap.md).
+Automatic failover is planned and not represented as complete yet. Replica
+promotion is manual. See [the roadmap](docs/roadmap.md).
 
 ## Requirements
 

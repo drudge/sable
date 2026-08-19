@@ -186,7 +186,7 @@ func generateReplicaCertificate(t *testing.T, directory string) certificates.Gen
 	generated, err := certificates.New(nil, integrationLogger(io.Discard), directory).GenerateSelfSigned(
 		context.Background(),
 		certificates.ManualCertificateOptions{
-			Names: []string{"127.0.0.1"}, StorageDirectory: "data/tls/self-signed", ValidFor: clusterCertificateLife,
+			Names: []string{"127.0.0.1", "::1"}, StorageDirectory: "data/tls/self-signed", ValidFor: clusterCertificateLife,
 		},
 	)
 	if err != nil {
@@ -433,6 +433,26 @@ func allocateTCPAddress(t *testing.T) string {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("allocate local integration-test listener: %v", err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return address
+}
+
+// allocateIPv6TCPAddress reserves a loopback IPv6 address. IPv6 is a supported
+// deployment, not an optional extra, so a host without loopback IPv6 fails the
+// suite instead of quietly skipping the coverage. Set SABLE_INTEGRATION_NO_IPV6
+// to run on a host or container image that has IPv6 disabled.
+func allocateIPv6TCPAddress(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "[::1]:0")
+	if err != nil {
+		if os.Getenv("SABLE_INTEGRATION_NO_IPV6") != "" {
+			t.Skipf("loopback IPv6 is unavailable and SABLE_INTEGRATION_NO_IPV6 is set: %v", err)
+		}
+		t.Fatalf("allocate loopback IPv6 integration-test listener: %v\nenable IPv6 on this host, or set SABLE_INTEGRATION_NO_IPV6=1 to skip IPv6 coverage", err)
 	}
 	address := listener.Addr().String()
 	if err := listener.Close(); err != nil {

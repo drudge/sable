@@ -1923,7 +1923,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 148, "</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault and never written to TOML.</small></div></div><div class=\"unifi-auth-modes\" data-unifi-auth-root>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 148, "</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault.</small></div></div><div class=\"unifi-auth-modes\" data-unifi-auth-root>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

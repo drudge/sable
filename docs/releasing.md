@@ -40,7 +40,10 @@ mage dockerSmoke
 the CLI metadata and configuration check, UDP/TCP/DoT/DoH service, zone
 CRUD/import/export and DNSSEC signing, blocking, query logging, graceful
 shutdown with cache restoration, two-node enrollment and synchronization, and
-a planned primary handoff. Its upstream DNS server and both Sable nodes are
+a planned primary handoff. Every listener is also bound on loopback IPv6 and
+queried there, including an AAAA answer and its `ip6.arpa` reverse name, so a
+host without IPv6 fails the run. Set `SABLE_INTEGRATION_NO_IPV6` to skip that
+coverage on an image with IPv6 disabled. Its upstream DNS server and both Sable nodes are
 created locally in temporary workspaces, so the result is deterministic and
 does not depend on public DNS. `releaseCheck` validates the generated
 GoReleaser configuration. `snapshot` runs the full verification suite and

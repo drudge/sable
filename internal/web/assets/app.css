@@ -1967,17 +1967,68 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .certificate-mode-control label { display: flex; min-height: 2.5rem; cursor: pointer; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: calc(var(--radius) - 3px); color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .certificate-mode-control label.active { border-color: var(--border); background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
 .certificate-mode-control input { position: absolute; opacity: 0; pointer-events: none; }
-.certificate-status, .acme-provider-card > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.certificate-status { border: 1px solid var(--border); border-radius: .5rem; padding: .875rem 1rem; }
-.certificate-status > div, .acme-provider-card > header > div { display: grid; min-width: 0; gap: .2rem; }
-.certificate-status span, .acme-provider-card header small { color: var(--muted-foreground); font-size: .7rem; }
-.certificate-status > .badge { color: var(--muted-foreground); }
-.certificate-status > .badge.success { color: rgb(34 197 94); }
-.certificate-status > .badge.danger { color: var(--destructive); }
+/* Each provider carries its own accent so the card changes colour with the
+   selection. In a long column of identical grey fields that tint is the only
+   thing saying which service is about to receive credentials. */
+.acme-provider-card { --provider-accent: var(--muted-foreground); }
+.acme-provider-card[data-acme-provider-selected="cloudflare"] { --provider-accent: #f6821f; }
+.acme-provider-card[data-acme-provider-selected="porkbun"] { --provider-accent: #ef6461; }
+.acme-provider-card[data-acme-provider-selected="namecheap"] { --provider-accent: #ff5000; }
+.acme-provider-card[data-acme-provider-selected="godaddy"] { --provider-accent: #00a4a6; }
+.acme-provider-card[data-acme-provider-selected="digitalocean"] { --provider-accent: #0080ff; }
+.acme-provider-card[data-acme-provider-selected="hetzner"] { --provider-accent: #d50c2d; }
+.acme-provider-card[data-acme-provider-selected="route53"] { --provider-accent: #ff9900; }
+.acme-provider-card[data-acme-provider-selected="ovh"] { --provider-accent: #4d7bd4; }
+.acme-provider-card[data-acme-provider-selected="rfc2136"] { --provider-accent: #a78bfa; }
+.acme-provider-card > header { position: relative; display: flex; align-items: center; gap: .9rem; margin: -1rem -1rem 0; border-bottom: 1px solid color-mix(in srgb, var(--provider-accent) 35%, var(--border)); background: linear-gradient(90deg, color-mix(in srgb, var(--provider-accent) 12%, transparent), transparent 70%); padding: 1rem; }
+.acme-provider-card > header > div { display: grid; min-width: 0; flex: 1 1 auto; gap: .2rem; }
+.acme-provider-card header strong { font-size: .875rem; }
+.acme-provider-card header small { color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.acme-provider-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: color-mix(in srgb, var(--provider-accent) 18%, transparent); color: var(--provider-accent); }
+.acme-provider-icon .nav-icon { width: 1.25rem; height: 1.25rem; }
+.certificate-status { display: flex; flex-wrap: wrap; align-items: center; gap: .9rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: 1rem; }
+.certificate-status-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: var(--background); color: var(--muted-foreground); }
+.certificate-status-icon .nav-icon { width: 1.25rem; height: 1.25rem; }
+.certificate-status.active .certificate-status-icon { background: rgb(34 197 94 / .14); color: #22c55e; }
+.certificate-status.attention .certificate-status-icon { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
+/* The detail column keeps a floor of 16rem so the button drops to its own row
+   when the card is narrow, rather than squeezing the status text into a column. */
+.certificate-status-detail { display: grid; min-width: 0; flex: 1 1 16rem; gap: .25rem; }
+.certificate-status-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.certificate-status-heading strong { font-size: .875rem; }
+.certificate-status-detail > span { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; text-overflow: ellipsis; }
+.certificate-status-separator { margin-inline: .35rem; }
+.certificate-status .badge { display: inline-flex; min-height: 1.35rem; flex: 0 0 auto; align-items: center; border-radius: 999px; background: var(--background); padding: .12rem .5rem; color: var(--muted-foreground); font-size: .67rem; font-weight: 600; line-height: 1.1; white-space: nowrap; }
+.certificate-status .badge.success { background: rgb(34 197 94 / .16); color: #22c55e; }
+.certificate-status .badge.danger { background: color-mix(in srgb, var(--destructive) 16%, transparent); color: var(--destructive); }
+.acme-provider-card .badge { display: inline-flex; min-height: 1.35rem; flex: 0 0 auto; align-items: center; border-radius: 999px; background: var(--muted); padding: .12rem .5rem; color: var(--muted-foreground); font-size: .67rem; font-weight: 600; line-height: 1.1; white-space: nowrap; }
+.acme-provider-card .badge.success { background: rgb(34 197 94 / .16); color: #22c55e; }
+.certificate-details-link { border: 0; background: none; padding: 0; color: var(--foreground); font: inherit; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: .2em; cursor: pointer; }
+.certificate-details-link:hover { text-decoration-style: solid; }
+.certificate-details-body { display: grid; gap: 1.25rem; }
+.certificate-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1rem; }
+.certificate-detail { display: grid; min-width: 0; gap: .2rem; }
+.certificate-detail > span { color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.certificate-detail > strong { font-size: .82rem; font-weight: 600; overflow-wrap: anywhere; }
+.certificate-detail-value { display: flex; width: 100%; align-items: flex-start; gap: .35rem; border-radius: .35rem; background: var(--muted); padding: .3rem .45rem; }
+.certificate-detail-value > code { min-width: 0; flex: 1 1 auto; font-size: .7rem; line-height: 1.5; overflow-wrap: anywhere; }
+.certificate-detail-value > button { margin-top: .1rem; }
+.certificate-detail-section { display: grid; gap: .5rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.certificate-detail-section h3 { margin: 0; font-size: .82rem; }
+.certificate-detail-section > p { margin: 0; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+.certificate-detail-empty { color: var(--muted-foreground); font-size: .75rem; }
+.certificate-name-list { display: grid; margin: .25rem 0 0; gap: .35rem; padding: 0; list-style: none; }
+.certificate-name-list li { display: flex; align-items: center; gap: .5rem; border: 1px solid var(--border); border-radius: .4rem; padding: .4rem .6rem; font-size: .78rem; overflow-wrap: anywhere; }
+.certificate-name-list .nav-icon { width: .95rem; height: .95rem; flex: 0 0 .95rem; color: #22c55e; }
+.certificate-name-list.pending li { border-color: color-mix(in srgb, var(--destructive) 40%, transparent); }
+.certificate-name-list.pending .nav-icon { color: var(--destructive); }
+.certificate-shared-settings { display: grid; gap: .75rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.certificate-shared-label { color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .certificate-error { display: flex; align-items: flex-start; gap: .5rem; border: 1px solid color-mix(in srgb, var(--destructive) 50%, transparent); border-radius: .5rem; background: color-mix(in srgb, var(--destructive) 8%, transparent); padding: .75rem; color: var(--destructive); font-size: .72rem; line-height: 1.45; }
 .certificate-error .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .acme-provider-card { display: grid; gap: 1rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
-.certificate-renew-button { justify-self: start; }
+.certificate-renew-button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: .45rem; justify-self: start; white-space: nowrap; }
+.certificate-renew-button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .certificate-renew-button.htmx-request .nav-icon { animation: blocking-refresh-spin .8s linear infinite; }
 .panel-copy { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
 .about-page { width: 100%; max-width: 56rem; margin-inline: auto; }
@@ -2196,6 +2247,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .isotope-data-header { min-height: 3.75rem; }
   .settings-tab-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 	.field-grid.two, .field-grid.three, .field-grid.four, .protocol-grid, .protocol-grid.three, .certificate-mode-control { grid-template-columns: 1fr; }
+	.certificate-renew-button { width: 100%; }
+	.certificate-detail-grid { grid-template-columns: 1fr; }
   .server-configuration-card h2 { font-size: 1.25rem; }
   .server-configuration-card > header, .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
 	.isotope-form-dialog { width: calc(100% - 1rem); }

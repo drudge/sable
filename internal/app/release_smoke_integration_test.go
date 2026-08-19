@@ -28,6 +28,11 @@ const (
 	releaseSmokeImportZone = "imported.release-smoke.test"
 	releaseSmokeCacheName  = "cache-release-smoke.invalid"
 	releaseSmokeBlocked    = "blocked-release-smoke.invalid"
+
+	// releaseSmokeIPv6Address is inside 2001:db8::/32, the documentation range
+	// that matches the 192.0.2.0/24 addresses the IPv4 checks use.
+	releaseSmokeIPv6Address     = "2001:db8::20"
+	releaseSmokeIPv6ReverseZone = "8.b.d.0.1.0.0.2.ip6.arpa"
 )
 
 type releaseSmokeUpstream struct {
@@ -50,11 +55,15 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	ports := allocateIntegrationNodePorts(t)
 	dotAddress := allocateTCPAddress(t)
 	dohAddress := allocateTCPAddress(t)
+	dnsIPv6Address := allocateIPv6TCPAddress(t)
+	dotIPv6Address := allocateIPv6TCPAddress(t)
+	dohIPv6Address := allocateIPv6TCPAddress(t)
 	upstream := startReleaseSmokeUpstream(t)
 	certificate := generateReplicaCertificate(t, directory)
 	configuration := integrationNodeConfiguration(directory, ports, "release-smoke", certificate)
-	configuration.EncryptedDNS.DoTListen = []string{dotAddress}
-	configuration.EncryptedDNS.DoHListen = []string{dohAddress}
+	configuration.Server.DNSListen = append(configuration.Server.DNSListen, dnsIPv6Address)
+	configuration.EncryptedDNS.DoTListen = []string{dotAddress, dotIPv6Address}
+	configuration.EncryptedDNS.DoHListen = []string{dohAddress, dohIPv6Address}
 	configuration.Resolver.Forwarders = []string{upstream.address}
 	configuration.Resolver.SaveCache = true
 	configuration.Blocking.Enabled = true
@@ -71,7 +80,9 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	createReleaseSmokeZone(t, client, ports.https)
 	verifyReleaseSmokeZoneManagement(t, client, ports.https, ports.dns)
 	verifyReleaseSmokeTransports(t, client, ports.dns, dotAddress, dohAddress)
+	verifyReleaseSmokeIPv6(t, client, dnsIPv6Address, dotIPv6Address, dohIPv6Address)
 	assertReleaseBinaryCommand(t, binaryPath, "query", "--server", ports.dns, "www."+releaseSmokeZone, "A", "192.0.2.20")
+	assertReleaseBinaryCommand(t, binaryPath, "query", "--server", dnsIPv6Address, "www."+releaseSmokeZone, "AAAA", releaseSmokeIPv6Address)
 
 	addBlockedDomain(t, client, ports.https, configurationPath, releaseSmokeBlocked)
 	waitForBlockedDNSResponse(t, first, ports.dns, releaseSmokeBlocked)
@@ -173,6 +184,17 @@ func createReleaseSmokeZone(t *testing.T, client *http.Client, httpsAddress stri
 		"zone": {releaseSmokeZone}, "name": {"www"}, "type": {"A"}, "value": {"192.0.2.10"}, "ttl": {"120"},
 		"new_name": {"www"}, "new_value": {"192.0.2.20"}, "new_ttl": {"180"}, "enabled": {"true"},
 	})
+	postReleaseSmokeForm(t, client, httpsAddress, "/ui/zones/records/add", url.Values{
+		"zone": {releaseSmokeZone}, "name": {"www"}, "type": {"AAAA"}, "value": {releaseSmokeIPv6Address}, "ttl": {"120"},
+	})
+	postReleaseSmokeForm(t, client, httpsAddress, "/ui/zones/add", url.Values{
+		"name": {releaseSmokeIPv6ReverseZone}, "type": {"primary"}, "primary_ns": {"ns1." + releaseSmokeZone},
+		"responsible": {"hostmaster@" + releaseSmokeZone}, "default_ttl": {"300"},
+	})
+	postReleaseSmokeForm(t, client, httpsAddress, "/ui/zones/records/add", url.Values{
+		"zone": {releaseSmokeIPv6ReverseZone}, "name": {releaseSmokeIPv6ReverseOwner(t)}, "type": {"PTR"},
+		"value": {"www." + releaseSmokeZone + "."}, "ttl": {"120"},
+	})
 	postReleaseSmokeForm(t, client, httpsAddress, "/ui/zones/dnssec", url.Values{
 		"zone": {releaseSmokeZone}, "enabled": {"true"}, "algorithm": {"ed25519"}, "denial": {"nsec"},
 		"nsec3_iterations": {"0"}, "zsk_lifetime": {"720h"}, "ksk_lifetime": {"8760h"},
@@ -226,6 +248,85 @@ func verifyReleaseSmokeTransports(t *testing.T, client *http.Client, dnsAddress,
 	tlsConfiguration := client.Transport.(*http.Transport).TLSClientConfig.Clone()
 	assertDNSA(t, dotAddress, "tcp-tls", wantName, "192.0.2.20", tlsConfiguration)
 	assertDoHA(t, client, dohAddress, wantName, "192.0.2.20")
+}
+
+// verifyReleaseSmokeIPv6 exercises the same service surface over IPv6 that the IPv4
+// checks cover: every listener binds a v6 address, answers plain and encrypted
+// queries there, and serves both an AAAA record and its ip6.arpa reverse name.
+func verifyReleaseSmokeIPv6(t *testing.T, client *http.Client, dnsAddress, dotAddress, dohAddress string) {
+	t.Helper()
+	wantName := "www." + releaseSmokeZone
+	assertDNSAAAA(t, dnsAddress, "udp", wantName, releaseSmokeIPv6Address, nil)
+	assertDNSAAAA(t, dnsAddress, "tcp", wantName, releaseSmokeIPv6Address, nil)
+	tlsConfiguration := client.Transport.(*http.Transport).TLSClientConfig.Clone()
+	assertDNSAAAA(t, dotAddress, "tcp-tls", wantName, releaseSmokeIPv6Address, tlsConfiguration)
+	assertDoHA(t, client, dohAddress, wantName, "192.0.2.20")
+
+	// The v4 answer must also be reachable over the v6 listener. A listener that
+	// only answered its own family would still pass every check above.
+	assertDNSA(t, dnsAddress, "udp", wantName, "192.0.2.20", nil)
+	assertDNSPTR(t, dnsAddress, releaseSmokeIPv6Address, wantName+".")
+}
+
+// releaseSmokeIPv6ReverseOwner returns the PTR owner relative to the ip6.arpa
+// zone. Hand-writing thirty-two reversed nibbles invites a typo that reads as a
+// product bug, so the name is derived the same way a resolver derives it.
+func releaseSmokeIPv6ReverseOwner(t *testing.T) string {
+	t.Helper()
+	reverse, err := dns.ReverseAddr(releaseSmokeIPv6Address)
+	if err != nil {
+		t.Fatalf("reverse name for %s: %v", releaseSmokeIPv6Address, err)
+	}
+	owner := strings.TrimSuffix(reverse, "."+dns.Fqdn(releaseSmokeIPv6ReverseZone))
+	if owner == reverse {
+		t.Fatalf("reverse name %s is not inside %s", reverse, releaseSmokeIPv6ReverseZone)
+	}
+	return owner
+}
+
+func assertDNSAAAA(t *testing.T, address, transport, name, want string, tlsConfiguration *tls.Config) {
+	t.Helper()
+	request := new(dns.Msg)
+	request.SetQuestion(dns.Fqdn(name), dns.TypeAAAA)
+	client := &dns.Client{Net: transport, Timeout: 2 * time.Second, TLSConfig: tlsConfiguration}
+	response, _, err := client.Exchange(request, address)
+	if err != nil {
+		t.Fatalf("query %s AAAA over %s at %s: %v", name, transport, address, err)
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		t.Fatalf("query %s AAAA over %s returned %s", name, transport, dns.RcodeToString[response.Rcode])
+	}
+	wantAddress := net.ParseIP(want)
+	for _, answer := range response.Answer {
+		if record, ok := answer.(*dns.AAAA); ok && record.AAAA.Equal(wantAddress) {
+			return
+		}
+	}
+	t.Fatalf("query %s AAAA over %s at %s answers = %v, want AAAA %s", name, transport, address, response.Answer, want)
+}
+
+func assertDNSPTR(t *testing.T, address, target, want string) {
+	t.Helper()
+	reverse, err := dns.ReverseAddr(target)
+	if err != nil {
+		t.Fatalf("reverse name for %s: %v", target, err)
+	}
+	request := new(dns.Msg)
+	request.SetQuestion(reverse, dns.TypePTR)
+	client := &dns.Client{Net: "udp", Timeout: 2 * time.Second}
+	response, _, err := client.Exchange(request, address)
+	if err != nil {
+		t.Fatalf("query %s PTR at %s: %v", reverse, address, err)
+	}
+	if response.Rcode != dns.RcodeSuccess {
+		t.Fatalf("query %s PTR returned %s", reverse, dns.RcodeToString[response.Rcode])
+	}
+	for _, answer := range response.Answer {
+		if record, ok := answer.(*dns.PTR); ok && strings.EqualFold(record.Ptr, want) {
+			return
+		}
+	}
+	t.Fatalf("query %s PTR answers = %v, want PTR %s", reverse, response.Answer, want)
 }
 
 func assertDNSA(t *testing.T, address, transport, name, want string, tlsConfiguration *tls.Config) {

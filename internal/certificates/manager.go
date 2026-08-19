@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
@@ -67,6 +69,16 @@ type Status struct {
 	Renewing              bool
 	ProviderEndpoint      string
 	TSIGAlgorithm         string
+
+	// The fields below describe the certificate that is actually installed,
+	// which is not always the certificate the settings ask for: a name added to
+	// the configuration is only covered once a renewal succeeds. Reading them
+	// from the leaf rather than from the configuration is what lets the console
+	// show that difference instead of hiding it.
+	Subject      string
+	SerialNumber string
+	Fingerprint  string
+	CoveredNames []string
 }
 
 type Manager struct {
@@ -343,6 +355,48 @@ func (manager *Manager) recordCertificate(certificate *x509.Certificate, lastErr
 	manager.status.NotAfter = certificate.NotAfter
 	manager.status.LastError = lastError
 	manager.status.LastSuccess = manager.now()
+	manager.status.Subject = certificate.Subject.CommonName
+	manager.status.SerialNumber = formatSerialNumber(certificate.SerialNumber)
+	manager.status.Fingerprint = formatFingerprint(sha256.Sum256(certificate.Raw))
+	manager.status.CoveredNames = coveredNames(certificate)
+}
+
+// coveredNames lists every identity the leaf actually authenticates. A client
+// trusts the connection only when the name it dialed appears here, so this is
+// the list worth showing rather than the configured domains.
+func coveredNames(certificate *x509.Certificate) []string {
+	names := make([]string, 0, len(certificate.DNSNames)+len(certificate.IPAddresses))
+	names = append(names, certificate.DNSNames...)
+	for _, address := range certificate.IPAddresses {
+		names = append(names, address.String())
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+// formatSerialNumber renders the serial the way certificate viewers do, as
+// colon-separated octets, so it can be compared against openssl output by eye.
+func formatSerialNumber(serial *big.Int) string {
+	if serial == nil {
+		return ""
+	}
+	octets := serial.Bytes()
+	if len(octets) == 0 {
+		return "00"
+	}
+	encoded := make([]string, 0, len(octets))
+	for _, octet := range octets {
+		encoded = append(encoded, fmt.Sprintf("%02x", octet))
+	}
+	return strings.Join(encoded, ":")
+}
+
+func formatFingerprint(sum [sha256.Size]byte) string {
+	encoded := make([]string, 0, len(sum))
+	for _, octet := range sum {
+		encoded = append(encoded, fmt.Sprintf("%02x", octet))
+	}
+	return strings.Join(encoded, ":")
 }
 
 func (manager *Manager) recordError(err error) {

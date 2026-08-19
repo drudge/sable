@@ -628,6 +628,11 @@
 		root.querySelectorAll("[data-acme-credentials]").forEach((fields) => {
 		  fields.hidden = fields.dataset.acmeCredentials !== provider?.value;
 		});
+		// The card takes the chosen provider's accent colour, which is the only
+		// signal in this long form that says which service is about to be given
+		// credentials.
+		const card = root.querySelector("[data-acme-provider-selected]");
+		if (card) card.dataset.acmeProviderSelected = provider?.value || "";
 	  };
 	  provider?.addEventListener("change", syncProvider);
 	  syncMode();
