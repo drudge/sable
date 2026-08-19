@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -216,6 +218,57 @@ func TestHandlerServesAuthorizedZoneTransfersAndRefusesOthers(t *testing.T) {
 	handler.ServeDNS(udp, request)
 	if udp.message == nil || udp.message.Rcode != dns.RcodeRefused {
 		t.Fatalf("UDP AXFR response = %+v, want REFUSED", udp.message)
+	}
+}
+
+func TestHandlerRefusesZoneTransferOverDoH(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "example.test", ZoneTransfer: "allow",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 2026080801 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+			{Name: "www", Type: "A", TTL: 60, Value: "192.0.2.10"},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+
+	request := new(dns.Msg)
+	request.SetAxfr("example.test.")
+
+	// A DoH request whose connection LocalAddr is a *net.TCPAddr, exactly as the
+	// HTTP server supplies it. Its network is "tcp", so the transport check alone
+	// would let the transfer through if DoH were not refused explicitly. DoH
+	// cannot verify a TSIG MAC, so a transfer over it must never be honored.
+	ctx := context.WithValue(context.Background(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 443})
+	httpRequest := httptest.NewRequest(http.MethodPost, "/dns-query", nil).WithContext(ctx)
+	httpRequest.RemoteAddr = "192.0.2.44:53000"
+	doh := newDoHResponseWriter(httpRequest)
+
+	handler.ServeDNS(doh, request)
+	if doh.message == nil || doh.message.Rcode != dns.RcodeRefused {
+		t.Fatalf("DoH AXFR response = %+v, want REFUSED", doh.message)
+	}
+	if len(doh.message.Answer) != 0 {
+		t.Fatalf("DoH AXFR leaked %d answer records", len(doh.message.Answer))
+	}
+
+	// The same request over TCP from an allowed source still transfers, so the
+	// guard is specific to DoH and does not break ordinary zone transfers.
+	tcp := &transferCapture{remote: &net.TCPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}}
+	handler.ServeDNS(tcp, request)
+	var transferred []dns.RR
+	for _, message := range tcp.messages {
+		transferred = append(transferred, message.Answer...)
+	}
+	if len(transferred) == 0 {
+		t.Fatalf("TCP AXFR = %+v, want a successful transfer", tcp.messages)
 	}
 }
 
