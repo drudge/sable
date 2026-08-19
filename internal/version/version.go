@@ -3,7 +3,7 @@ package version
 import "runtime"
 
 var (
-	Release = "0.8.0-rc.10"
+	Release = "0.9.0-rc.1"
 	Commit  = "unknown"
 	BuiltAt = "unknown"
 )
