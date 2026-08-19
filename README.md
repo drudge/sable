@@ -55,9 +55,9 @@ promotion is manual. See [the roadmap](docs/roadmap.md).
 - Go 1.27 or newer
 - Mage 1.17.1 or newer for build and development targets
 
-Go 1.27 is currently in release-candidate status. Development uses the pinned
-release-candidate toolchain with the JSON v2 experiment until the stable
-toolchain is available.
+The build pins the Go 1.27 toolchain and enables the JSON v2 experiment
+(`GOEXPERIMENT=jsonv2`), which the console requires for its
+`encoding/json/v2` usage.
 
 ## Run
 
