@@ -616,6 +616,132 @@ and `/metrics` require an authenticated console session or a bearer token whose
 selected groups grant the required API permission. Tokens can be created from
 the API-token panel in the console.
 
+## Single sign-on
+
+Sable can hand the console's sign-in over to an OpenID Connect provider, so
+people use the account they already have and losing access at the provider
+means losing access here. Group membership at the provider decides which Sable
+roles they get.
+
+Set it up from **Integrations → Single Sign-On** in the console. The wizard
+contacts the issuer before asking for anything else, so an unreachable host or
+a document answering for a different issuer is caught immediately rather than
+at somebody's first attempted sign-in. What lands in `sable.toml` looks like
+this:
+
+```toml
+[oidc]
+enabled = true
+display_name = "Pocket ID"
+issuer = "https://id.example.com"
+client_id = "sable"
+redirect_url = "https://dns.example.com/auth/oidc/callback"
+scopes = ["openid", "profile", "email", "groups"]
+username_claim = "preferred_username"
+email_claim = "email"
+groups_claim = "groups"
+fetch_userinfo = false
+provision = true
+link_by_verified_email = true
+sync_roles = true
+default_roles = ["Auditor"]
+rp_initiated_logout = false
+discovery_interval = "1h"
+clock_skew = "1m"
+
+[[oidc.role_mappings]]
+group = "dns-admins"
+role = "Administrator"
+
+[[oidc.role_mappings]]
+group = "noc"
+role = "Operator"
+```
+
+The client secret never appears here. It is encrypted in the node's secret
+vault the moment the wizard's first step succeeds, the same way TSIG secrets
+and ACME provider credentials are handled.
+
+**Nobody loses their password.** Enabling single sign-on adds a button to the
+sign-in page; it takes nothing away. Moving an account to SSO only is a
+per-account switch under **Administration → the user → Sign-In**, so people opt
+in one at a time. Sable refuses to leave the deployment without at least one
+administrator who can still sign in with a password, because single sign-on
+depends on a service Sable does not run: if the provider is unreachable, its
+certificate expires, or a group claim changes shape, that administrator is how
+you get in and fix it.
+
+**Accounts are bound by subject, not by email.** The provider's `sub` claim is
+the only identifier Sable treats as stable, because a username or an email
+address at the provider can change and reusing one to identify people would
+eventually hand somebody another person's account. With
+`link_by_verified_email` on, a *first* sign-in may attach to an existing local
+account whose email matches, but only when the provider asserts the address is
+verified; from then on the subject is what identifies that person. Turn it off
+if anyone can set their own email address at your provider without
+verification.
+
+**Provisioning is optional.** With `provision = true` an unknown person who
+signs in successfully gets an account created on the spot, holding whatever
+roles their groups map to. With it off, only people whose accounts already
+exist and are linked can sign in. At least one of `provision` and
+`link_by_verified_email` must be on, or nobody could ever sign in for the first
+time.
+
+**Role mapping is exact and additive.** `group` is compared to the groups claim
+byte for byte, because the values are opaque identifiers at the provider and
+case-folding them would silently merge two groups you meant to keep apart.
+Everyone who signs in receives `default_roles`; each matching mapping adds its
+role on top. With `sync_roles = true` the roles are reconciled on every
+sign-in, but only within the set the mappings and defaults name — a per-zone
+role you assigned by hand in the console is outside that set and survives
+untouched. A reconciliation that would leave no active administrator is refused
+and recorded in the audit log rather than applied, and the sign-in continues
+with the roles already on the account.
+
+`groups_claim` is where providers differ most. Pocket ID, Authentik, and
+Keycloak send group names as plain strings. Entra ID sends group object
+identifiers unless the app registration is configured to emit names, so a
+mapping there reads `group = "8c4f..."` rather than `group = "dns-admins"`.
+When a provider only exposes group membership from its UserInfo endpoint rather
+than in the ID token, set `fetch_userinfo = true`.
+
+`clock_skew` forgives the difference between the provider's clock and this
+server's when checking token expiry; it is capped at five minutes, because a
+larger allowance widens the window an expired token stays usable.
+`discovery_interval` is how long a fetched discovery document is trusted before
+it is read again. Signing keys are cached by key identifier and refetched when
+a token names one Sable has not seen, so a rotation is picked up without a
+restart.
+
+With `rp_initiated_logout = true`, signing out of Sable also sends the browser
+to the provider to end the session there. It applies to everyone, including
+people who signed in with a password, so leave it off unless the whole
+deployment uses the provider.
+
+### Connecting Pocket ID
+
+1. In Pocket ID, create an OIDC client. Set its callback URL to exactly the
+   `redirect_url` above — Sable prefills this with its own address, and the
+   value must match on both sides or the provider refuses the sign-in.
+2. Give the client the `groups` scope so group membership reaches Sable.
+3. Copy the client ID and secret into the wizard's first step.
+4. In the wizard's third step, map each Pocket ID group to a Sable role. The
+   group name is the group's **friendly name** in Pocket ID.
+
+Pocket ID authenticates with passkeys and has no passwords of its own, which is
+one more reason the local administrator keeps theirs: if your passkey device is
+lost, Sable's own sign-in is the way back in.
+
+### Clusters and backups
+
+The `[oidc]` section is cluster-scoped runtime configuration and replicates
+like the rest of it. Linked identities travel with their accounts in the
+authorization snapshot, so a promoted replica knows which provider subject owns
+which account instead of provisioning a duplicate for everyone on failover. The
+client secret is in the vault, and so is covered by a whole-deployment backup
+along with the key that opens it — see the [backup guide](backup.md).
+
 ## Cluster synchronization
 
 Cluster membership and synchronized state are not stored in TOML. The

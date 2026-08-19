@@ -30,7 +30,7 @@ performance before expanding the administrative surface.
 - RFC 9250 DNS-over-QUIC server and client transports
 - Encrypted-transport load benchmarks
 - OpenTelemetry metrics and expanded structured query-log controls
-- External identity providers and delegated group synchronization
+- OpenID Connect single sign-on with delegated group-to-role synchronization is implemented
 
 ## Milestone 2 — authoritative DNS
 

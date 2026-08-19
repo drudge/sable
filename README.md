@@ -37,6 +37,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - First-run administrator setup, Argon2id passwords, server-side sessions, CSRF protection, and login throttling
 - Database-backed users, built-in/custom roles, least-privilege permissions, account disable/delete/password reset, session and token revocation, and persistent audit views
 - Group-authorized API bearer tokens with configurable or non-expiring lifetimes, Web/API permission separation, per-zone grants, and an AES-256-GCM secret vault
+- OpenID Connect single sign-on with a guided setup wizard, group-to-role mapping, just-in-time account creation, verified-email linking, and a per-account switch to single sign-on only
 - Revisioned Settings UI for cluster-scoped DNS runtime configuration with atomic persistence and hot application
 - Durable primary/replica membership, short-lived single-use enrollment, signed zone/policy/runtime/authorization snapshots, manual replica promotion, and real-time node sync telemetry
 - Live policy reload, cache purge, and policy status APIs
