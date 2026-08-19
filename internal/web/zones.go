@@ -1077,6 +1077,7 @@ func (server *Server) addZoneRecord(writer http.ResponseWriter, request *http.Re
 		if err != nil {
 			return err
 		}
+		value = zonemodel.QualifyRecordValue(zone.Name, recordType, value)
 		record := zonemodel.Record{
 			Name:  normalizeZoneRecordOwner(zone.Name, request.FormValue("name")),
 			Type:  recordType,
@@ -1185,6 +1186,7 @@ func (server *Server) updateZoneRecord(writer http.ResponseWriter, request *http
 		if err != nil {
 			return err
 		}
+		newValue = zonemodel.QualifyRecordValue(zone.Name, recordType, newValue)
 		expiresAt, err := formExpiry(request.FormValue("new_expiry_ttl"), time.Now())
 		if err != nil {
 			return err

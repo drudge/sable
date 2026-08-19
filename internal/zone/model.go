@@ -461,6 +461,75 @@ func validateRecords(field string, current Zone) []error {
 	return result
 }
 
+// QualifyRecordValue expands a bare label in a record's rdata into a name
+// inside the zone. The zone-file grammar reads a name without a trailing dot
+// as absolute, so a CNAME target of "www" would otherwise point at the
+// top-level name "www." instead of "www" in this zone. A value that already
+// contains a dot is left alone, trailing dot or not, so records that spell out
+// a target such as mail.example.com keep pointing where they always did.
+func QualifyRecordValue(zoneName, recordType, value string) string {
+	zoneName = strings.TrimSuffix(strings.TrimSpace(zoneName), ".")
+	trimmed := strings.TrimSpace(value)
+	if zoneName == "" || trimmed == "" {
+		return trimmed
+	}
+	switch strings.ToUpper(strings.TrimSpace(recordType)) {
+	case "CNAME", "DNAME", "NS", "PTR", "ANAME":
+		return qualifyRecordNameAt(trimmed, zoneName, 0)
+	case "SVCB", "HTTPS":
+		return qualifyRecordNameAt(trimmed, zoneName, 1)
+	case "SOA":
+		return qualifyRecordNameAt(qualifyRecordNameAt(trimmed, zoneName, 0), zoneName, 1)
+	case "MX", "SRV", "NAPTR":
+		return qualifyLastRecordName(trimmed, zoneName)
+	}
+	return trimmed
+}
+
+// qualifyRecordNameAt rewrites the rdata token at index and splices it back in
+// place, so quoted parameters later in the value keep their exact spacing.
+func qualifyRecordNameAt(value, zoneName string, index int) string {
+	offset := 0
+	for position := 0; ; position++ {
+		for offset < len(value) && isRecordSpace(value[offset]) {
+			offset++
+		}
+		start := offset
+		for offset < len(value) && !isRecordSpace(value[offset]) {
+			offset++
+		}
+		if start == offset {
+			return value
+		}
+		if position == index {
+			return value[:start] + qualifyRecordLabel(value[start:offset], zoneName) + value[offset:]
+		}
+	}
+}
+
+// qualifyLastRecordName rewrites the final rdata token, which is where MX, SRV,
+// and NAPTR keep their domain name.
+func qualifyLastRecordName(value, zoneName string) string {
+	cut := strings.LastIndexFunc(value, func(symbol rune) bool { return symbol == ' ' || symbol == '\t' })
+	if cut < 0 {
+		return qualifyRecordLabel(value, zoneName)
+	}
+	return value[:cut+1] + qualifyRecordLabel(value[cut+1:], zoneName)
+}
+
+// qualifyRecordLabel appends the zone to a single label. The root name and any
+// name that already carries a dot stay untouched.
+func qualifyRecordLabel(label, zoneName string) string {
+	if label == "" || strings.Contains(label, ".") {
+		return label
+	}
+	return dns.Fqdn(label + "." + zoneName)
+}
+
+func isRecordSpace(symbol byte) bool {
+	return symbol == ' ' || symbol == '\t'
+}
+
 func ParseRecord(current Zone, record Record) (dns.RR, error) {
 	owner, err := recordOwner(current.Name, record.Name)
 	if err != nil {
@@ -473,7 +542,7 @@ func ParseRecord(current Zone, record Record) (dns.RR, error) {
 	}
 	switch recordType {
 	case "ANAME":
-		target, normalizeErr := dnsname.Normalize(record.Value)
+		target, normalizeErr := dnsname.Normalize(QualifyRecordValue(current.Name, "ANAME", record.Value))
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid ANAME target: %w", normalizeErr)
 		}
@@ -491,7 +560,7 @@ func ParseRecord(current Zone, record Record) (dns.RR, error) {
 	if strings.TrimSpace(record.Value) == "" {
 		return nil, errors.New("value is required")
 	}
-	rr, err := dns.NewRR(fmt.Sprintf("%s %d IN %s %s", owner, ttl, recordType, record.Value))
+	rr, err := dns.NewRR(fmt.Sprintf("%s %d IN %s %s", owner, ttl, recordType, QualifyRecordValue(current.Name, recordType, record.Value)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid %s record: %w", recordType, err)
 	}

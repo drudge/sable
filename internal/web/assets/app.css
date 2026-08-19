@@ -1469,8 +1469,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-main-column, .cluster-aside { display: grid; min-width: 0; align-content: start; gap: 1.25rem; }
 .cluster-live-status { display: grid; min-width: 0; gap: 1.25rem; }
 .cluster-status-card { overflow: hidden; }
-.cluster-status-card > header { display: flex; min-height: 5rem; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
-.cluster-status-card > header h2 { display: flex; align-items: center; gap: .6rem; margin: 0; font-size: 1.25rem; }
+.cluster-status-card > header { display: flex; min-height: 5rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
+.cluster-status-card > header > div:first-child { min-width: 0; flex: 1 1 16rem; }
+.cluster-status-card > header h2 { display: flex; min-width: 0; align-items: center; gap: .6rem; margin: 0; font-size: 1.25rem; }
+.cluster-status-card > header h2 > span { min-width: 0; }
 .cluster-status-card > header h2 .nav-icon { width: 1.35rem; height: 1.35rem; color: #3b82f6; }
 .cluster-status-card > header p { margin: .35rem 0 0; color: var(--muted-foreground); font-size: .8rem; }
 .cluster-empty-state { display: grid; min-height: 18rem; place-items: center; align-content: center; gap: .55rem; padding: 2rem; text-align: center; }
@@ -1484,8 +1486,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-empty-actions .button { display: inline-flex; align-items: center; gap: .45rem; }
 .cluster-live-indicator { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
 .cluster-live-indicator i { width: .5rem; height: .5rem; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 .2rem rgb(16 185 129 / .12); }
-.cluster-header-actions { display: flex; align-items: center; gap: .75rem; }
-.cluster-header-actions .button { display: inline-flex; align-items: center; gap: .35rem; }
+.cluster-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .75rem; }
+.cluster-header-actions .button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .35rem; white-space: nowrap; }
 .cluster-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 1.5rem; }
 .cluster-identity { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; border-top: 1px solid var(--border); padding: 1rem 1.5rem; }
 .cluster-identity > div { display: grid; min-width: 0; gap: .2rem; }
