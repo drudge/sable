@@ -345,6 +345,12 @@ func (server *Server) renderSSOWizard(writer http.ResponseWriter, request *http.
 // seeding anything the current step has not collected yet from the defaults.
 func (server *Server) ssoWizardFromRequest(request *http.Request) pages.SSOWizardView {
 	defaults := config.DefaultOIDC()
+	// A step only posts the answers it collects, so anything it does not ask
+	// about has to be seeded from what is already saved rather than from the
+	// defaults. Seeding from the defaults would drop an existing operator's
+	// group mappings the moment they walked past the provider step, and would
+	// quietly switch settings like provisioning back on.
+	saved := server.ssoAdmin.Status(request.Context())
 	wizard := pages.SSOWizardView{
 		Open:         true,
 		Step:         firstNonEmpty(request.FormValue("wizard_step"), pages.SSOStepProvider),
@@ -352,31 +358,48 @@ func (server *Server) ssoWizardFromRequest(request *http.Request) pages.SSOWizar
 		Issuer:       strings.TrimSpace(request.FormValue("issuer")),
 		ClientID:     strings.TrimSpace(request.FormValue("client_id")),
 		RedirectURL:  strings.TrimSpace(request.FormValue("redirect_url")),
-		SecretStored: server.ssoAdmin.Status(request.Context()).SecretStored,
+		SecretStored: saved.SecretStored,
 	}
+
 	// The provider step does not ask about claims, so unchecked boxes there
 	// must not be read as deliberate answers.
-	if request.Form.Has("claims_present") || request.FormValue("wizard_step") == pages.SSOStepClaims {
+	if ssoWizardCollected(request, "claims_present", pages.SSOStepClaims) {
 		wizard.Scopes = strings.TrimSpace(request.FormValue("scopes"))
 		wizard.UsernameClaim = strings.TrimSpace(request.FormValue("username_claim"))
 		wizard.GroupsClaim = strings.TrimSpace(request.FormValue("groups_claim"))
 		wizard.FetchUserInfo = request.FormValue("fetch_userinfo") == "true"
+	} else {
+		wizard.Scopes = strings.Join(saved.Scopes, " ")
+		wizard.UsernameClaim = saved.UsernameClaim
+		wizard.GroupsClaim = saved.GroupsClaim
 	}
 	wizard.Scopes = firstNonEmpty(wizard.Scopes, strings.TrimSpace(request.FormValue("scopes")), strings.Join(defaults.Scopes, " "))
 	wizard.UsernameClaim = firstNonEmpty(wizard.UsernameClaim, defaults.UsernameClaim)
 	wizard.GroupsClaim = firstNonEmpty(wizard.GroupsClaim, defaults.GroupsClaim)
 
-	if request.Form.Has("roles_present") || request.FormValue("wizard_step") == pages.SSOStepRoles {
+	if ssoWizardCollected(request, "roles_present", pages.SSOStepRoles) {
 		wizard.Provision = request.FormValue("provision") == "true"
 		wizard.LinkByEmail = request.FormValue("link_by_email") == "true"
 		wizard.SyncRoles = request.FormValue("sync_roles") == "true"
 		wizard.DefaultRoles = strings.TrimSpace(request.FormValue("default_roles"))
 		wizard.Mappings = ssoMappingViewsFromForm(request)
+	} else if saved.Configured {
+		wizard.Provision, wizard.LinkByEmail = saved.Provision, saved.LinkByEmail
+		wizard.SyncRoles = saved.SyncRoles
+		wizard.DefaultRoles = strings.Join(saved.DefaultRoles, ", ")
+		wizard.Mappings = ssoMappingViews(saved.Mappings)
 	} else {
 		wizard.Provision, wizard.LinkByEmail = defaults.Provision, defaults.LinkByVerifiedEmail
 		wizard.SyncRoles = defaults.SyncRoles
 	}
 	return wizard
+}
+
+// ssoWizardCollected reports whether the posted form carries a section's
+// answers: either the step that collects them is the one being submitted, or a
+// later step re-posted them through its hidden fields.
+func ssoWizardCollected(request *http.Request, marker, step string) bool {
+	return request.Form.Has(marker) || request.FormValue("wizard_step") == step
 }
 
 // ssoSettingsFromWizard turns the wizard's answers into the configuration the
