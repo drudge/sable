@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -445,12 +446,50 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		if !status.NotAfter.IsZero() {
 			view.ACMEExpires = status.NotAfter.Format("Jan 2, 2006")
 		}
+		if !status.NotBefore.IsZero() {
+			view.ACMEIssuedOn = status.NotBefore.Format("Jan 2, 2006")
+		}
+		if !status.LastSuccess.IsZero() {
+			view.ACMELastRenewal = status.LastSuccess.Format("Jan 2, 2006 15:04 MST")
+		}
+		view.ACMESubject = status.Subject
+		view.ACMESerialNumber = status.SerialNumber
+		view.ACMEFingerprint = status.Fingerprint
+		view.ACMECoveredNames = status.CoveredNames
+		view.ACMEPendingNames = pendingCertificateNames(status.Domains, status.CoveredNames)
 		view.ACMELastError = status.LastError
 		view.ACMERenewing = status.Renewing
 		view.ACMEProviderEndpoint = status.ProviderEndpoint
 		view.ACMETSIGAlgorithm = status.TSIGAlgorithm
 	}
 	return view
+}
+
+// pendingCertificateNames returns the configured names the installed
+// certificate does not cover yet. Adding a name to the settings does not put it
+// on the certificate until the next issuance succeeds, and a client dialing an
+// uncovered name sees a TLS error rather than anything the console would
+// otherwise surface.
+func pendingCertificateNames(configured, covered []string) []string {
+	if len(configured) == 0 || len(covered) == 0 {
+		return nil
+	}
+	present := make(map[string]struct{}, len(covered))
+	for _, name := range covered {
+		present[strings.ToLower(strings.TrimSuffix(name, "."))] = struct{}{}
+	}
+	pending := make([]string, 0, len(configured))
+	for _, name := range configured {
+		normalized := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+		if normalized == "" {
+			continue
+		}
+		if _, ok := present[normalized]; !ok {
+			pending = append(pending, normalized)
+		}
+	}
+	slices.Sort(pending)
+	return slices.Compact(pending)
 }
 
 func parseUint32Setting(value, label string, allowZero bool) (uint32, error) {

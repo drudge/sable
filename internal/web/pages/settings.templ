@@ -55,6 +55,13 @@ type SettingsPageView struct {
 	ACMECredentialsConfigured bool
 	ACMEIssuer          string
 	ACMEExpires         string
+	ACMESubject         string
+	ACMESerialNumber    string
+	ACMEFingerprint     string
+	ACMEIssuedOn        string
+	ACMELastRenewal     string
+	ACMECoveredNames    []string
+	ACMEPendingNames    []string
 	ACMELastError       string
 	ACMERenewing        bool
 	ACMEProviderEndpoint string
@@ -126,6 +133,7 @@ templ SettingsContent(view SettingsPageView) {
 		<div class="settings-tab-panel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
 		@ManualCertificateDialogs()
+		@CertificateDetailsDialog(view)
 	</div>
 }
 
@@ -174,12 +182,42 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 						<div class="certificate-manual-note">@Icon("info")<span>Generated certificates are useful for private deployments but remain untrusted until their identity is added to client trust stores.</span></div>
 					</div>
 					<div class="acme-settings" data-certificate-acme hidden?={ view.CertificateMode != "acme" }>
-						<div class="certificate-status"><div><strong>Managed certificate</strong><span>{ ifThen(view.ACMEIssuer != "", view.ACMEIssuer + " · expires " + view.ACMEExpires, "No certificate has been issued yet") }</span></div><span class={ ifThen(view.ACMELastError != "", "badge danger", ifThen(view.ACMEIssuer != "", "badge success", "badge")) }>{ ifThen(view.ACMELastError != "", "Attention", ifThen(view.ACMEIssuer != "", "Active", "Not issued")) }</span></div>
+						<div class={ "certificate-status", ifThen(view.ACMELastError != "", "attention", ifThen(view.ACMEIssuer != "", "active", "pending")) }>
+							<span class="certificate-status-icon">
+								if view.ACMELastError != "" {
+									@Icon("shield-x")
+								} else if view.ACMEIssuer != "" {
+									@Icon("shield-check")
+								} else {
+									@Icon("shield")
+								}
+							</span>
+							<div class="certificate-status-detail">
+								<div class="certificate-status-heading"><strong>Managed certificate</strong><span class={ ifThen(view.ACMELastError != "", "badge danger", ifThen(view.ACMEIssuer != "", "badge success", "badge")) }>{ ifThen(view.ACMELastError != "", "Attention", ifThen(view.ACMEIssuer != "", "Active", "Not issued")) }</span></div>
+								if view.ACMEIssuer != "" {
+									<span>
+										{ view.ACMEIssuer }<span class="certificate-status-separator">·</span>expires { view.ACMEExpires }
+										if len(view.ACMECoveredNames) > 0 {
+											<span class="certificate-status-separator">·</span>
+											<button class="certificate-details-link" type="button" data-dialog-open="certificate-details-dialog">{ coveredNamesSummary(view.ACMECoveredNames) }</button>
+										}
+									</span>
+								} else {
+									<span>No certificate has been issued yet. Complete the settings below, save, then issue one.</span>
+								}
+							</div>
+							<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" disabled?={ view.ACMERenewing } data-replica-primary-action>@Icon("refresh")<span>{ ifThen(view.ACMERenewing, "Issuing…", ifThen(view.ACMEIssuer != "", "Renew Now", "Issue Certificate")) }</span></button>
+						</div>
 						if view.ACMELastError != "" {
 							<div class="certificate-error" role="alert">@Icon("alert-triangle")<span>{ view.ACMELastError }</span></div>
 						}
 						<div class="field-grid two"><label class="field-control"><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/><small>Used by the certificate authority for expiry and account notices.</small></label><label class="field-control"><span>DNS Names</span><textarea name="acme_domains" rows="3" spellcheck="false" placeholder="dns.example.com&#10;*.example.com">{ view.ACMEDomains }</textarea><small>One name per line. Wildcards are supported through DNS-01.</small></label><label class="field-control"><span>Certificate Authority</span><select name="acme_directory_url"><option value="https://acme-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" }>Let's Encrypt Production</option><option value="https://acme-staging-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-staging-v02.api.letsencrypt.org/directory" }>Let's Encrypt Staging</option></select><small>Use staging while testing to avoid production rate limits.</small></label><label class="field-control"><span>Renew Before Expiry</span><input name="acme_renew_before" value={ view.ACMERenewBefore } placeholder="720h"/><small>Between 24h and 1440h.</small></label></div>
-						<div class="acme-provider-card" data-acme-provider-root><header><div><strong>DNS-01 Provider</strong><small>Credentials are encrypted in Sable's secret vault and never written to TOML.</small></div><span class={ ifThen(view.ACMECredentialsConfigured, "badge success", "badge") }>{ ifThen(view.ACMECredentialsConfigured, "Configured", "Credentials required") }</span></header><div class="field-grid two"><label class="field-control"><span>Provider</span><select name="acme_dns_provider" data-acme-provider><option value="" selected?={ view.ACMEDNSProvider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.ACMEDNSProvider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.ACMEDNSProvider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.ACMEDNSProvider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.ACMEDNSProvider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.ACMEDNSProvider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.ACMEDNSProvider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.ACMEDNSProvider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.ACMEDNSProvider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.ACMEDNSProvider == "rfc2136" }>RFC 2136 Dynamic Update</option></select></label><label class="field-control"><span>DNS Zone (optional)</span><input name="acme_dns_zone" value={ view.ACMEDNSZone } placeholder="example.com"/><small>Set this for delegated subzones; otherwise Sable detects the registrable zone.</small></label></div>
+						<div class="acme-provider-card" data-acme-provider-root data-acme-provider-selected={ view.ACMEDNSProvider }>
+							<header>
+								<span class="acme-provider-icon">@Icon("globe-lock")</span>
+								<div><strong>DNS-01 Provider</strong><small>Credentials are encrypted in Sable's secret vault.</small></div>
+								<span class={ ifThen(view.ACMECredentialsConfigured, "badge success", "badge") }>{ ifThen(view.ACMECredentialsConfigured, "Configured", "Credentials required") }</span>
+							</header><div class="field-grid two"><label class="field-control"><span>Provider</span><select name="acme_dns_provider" data-acme-provider><option value="" selected?={ view.ACMEDNSProvider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.ACMEDNSProvider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.ACMEDNSProvider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.ACMEDNSProvider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.ACMEDNSProvider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.ACMEDNSProvider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.ACMEDNSProvider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.ACMEDNSProvider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.ACMEDNSProvider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.ACMEDNSProvider == "rfc2136" }>RFC 2136 Dynamic Update</option></select></label><label class="field-control"><span>DNS Zone (optional)</span><input name="acme_dns_zone" value={ view.ACMEDNSZone } placeholder="example.com"/><small>Set this for delegated subzones; otherwise Sable detects the registrable zone.</small></label></div>
 							<div class="field-grid two acme-credential-fields" data-acme-credentials="cloudflare" hidden?={ view.ACMEDNSProvider != "cloudflare" }><label class="field-control"><span>API Token</span><input type="password" name="cloudflare_api_token" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Cloudflare API token") }/></label><label class="field-control"><span>Zone ID (optional)</span><input name="cloudflare_zone_id" placeholder="Detected from the zone when blank"/></label></div>
 							<div class="field-grid two acme-credential-fields" data-acme-credentials="porkbun" hidden?={ view.ACMEDNSProvider != "porkbun" }><label class="field-control"><span>API Key</span><input type="password" name="porkbun_api_key" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Porkbun API key") }/></label><label class="field-control"><span>Secret API Key</span><input type="password" name="porkbun_secret" autocomplete="new-password" placeholder="Secret API key"/></label></div>
 							<div class="field-grid three acme-credential-fields" data-acme-credentials="namecheap" hidden?={ view.ACMEDNSProvider != "namecheap" }><label class="field-control"><span>API Username</span><input name="namecheap_username" autocomplete="off"/></label><label class="field-control"><span>API Key</span><input type="password" name="namecheap_api_key" autocomplete="new-password"/></label><label class="field-control"><span>Allow-listed Client IP</span><input name="namecheap_client_ip" placeholder="203.0.113.10"/></label></div>
@@ -190,10 +228,12 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 							<div class="field-grid two acme-credential-fields" data-acme-credentials="ovh" hidden?={ view.ACMEDNSProvider != "ovh" }><label class="field-control"><span>API Endpoint</span><select name="ovh_endpoint"><option value="ovh-eu" selected?={ view.ACMEProviderEndpoint == "" || view.ACMEProviderEndpoint == "ovh-eu" }>Europe</option><option value="ovh-ca" selected?={ view.ACMEProviderEndpoint == "ovh-ca" }>Canada</option><option value="ovh-us" selected?={ view.ACMEProviderEndpoint == "ovh-us" }>United States</option></select></label><label class="field-control"><span>Application Key</span><input name="ovh_application_key" autocomplete="off"/></label><label class="field-control"><span>Application Secret</span><input type="password" name="ovh_application_secret" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "OVHcloud application secret") }/></label><label class="field-control"><span>Consumer Key</span><input type="password" name="ovh_consumer_key" autocomplete="new-password"/></label></div>
 							<div class="field-grid two acme-credential-fields" data-acme-credentials="rfc2136" hidden?={ view.ACMEDNSProvider != "rfc2136" }><label class="field-control"><span>Authoritative Server</span><input name="rfc2136_server" placeholder="dns.example.com:53"/></label><label class="field-control"><span>TSIG Key Name</span><input name="rfc2136_tsig_name" placeholder="acme-update."/></label><label class="field-control"><span>TSIG Secret</span><input type="password" name="rfc2136_tsig_secret" autocomplete="new-password" placeholder={ ifThen(view.ACMECredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret") }/></label><label class="field-control"><span>TSIG Algorithm</span><select name="rfc2136_tsig_algorithm"><option value="hmac-sha256" selected?={ view.ACMETSIGAlgorithm == "" || view.ACMETSIGAlgorithm == "hmac-sha256" }>HMAC-SHA256</option><option value="hmac-sha384" selected?={ view.ACMETSIGAlgorithm == "hmac-sha384" }>HMAC-SHA384</option><option value="hmac-sha512" selected?={ view.ACMETSIGAlgorithm == "hmac-sha512" }>HMAC-SHA512</option></select></label></div>
 						</div>
-						<div class="field-grid two"><label class="field-control"><span>Certificate Storage</span><input name="acme_storage_dir" value={ view.ACMEStorageDirectory } placeholder="data/tls/acme"/><small>Account key, certificate, and private key stay node-local.</small></label></div>
-						<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" disabled?={ view.ACMERenewing }>@Icon("refresh")<span>{ ifThen(view.ACMERenewing, "Issuing…", "Issue / Renew Now") }</span></button>
+						<label class="field-control"><span>Certificate Storage</span><input name="acme_storage_dir" value={ view.ACMEStorageDirectory } placeholder="data/tls/acme"/><small>Account key, certificate, and private key stay node-local.</small></label>
 					</div>
-					<label class="field-control narrow-control"><span>Minimum TLS Version</span><select name="minimum_tls_version"><option value="1.2" selected?={ view.MinimumTLSVersion == "1.2" }>TLS 1.2</option><option value="1.3" selected?={ view.MinimumTLSVersion == "1.3" }>TLS 1.3</option></select></label>
+					<div class="certificate-shared-settings">
+						<span class="certificate-shared-label">Applies to both sources</span>
+						<label class="field-control narrow-control"><span>Minimum TLS Version</span><select name="minimum_tls_version"><option value="1.2" selected?={ view.MinimumTLSVersion == "1.2" }>TLS 1.2</option><option value="1.3" selected?={ view.MinimumTLSVersion == "1.3" }>TLS 1.3</option></select></label>
+					</div>
 				</div>
 			}
 		</div>
@@ -605,4 +645,81 @@ templ BackupArchivePreview() {
 			<span data-backup-archive-detail></span>
 		</div>
 	</div>
+}
+
+// coveredNamesSummary labels the link that opens the certificate details. It
+// names the single covered host when there is only one, because "1 name" tells
+// an operator less than the name itself does.
+func coveredNamesSummary(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	default:
+		return fmt.Sprintf("%d names", len(names))
+	}
+}
+
+templ CertificateDetailsDialog(view SettingsPageView) {
+	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="certificate-details-dialog" aria-labelledby="certificate-details-title">
+		<div class="dialog-header"><h2 id="certificate-details-title">Certificate Details</h2><p>The certificate currently installed for Web, DoH, DoT, and DoQ</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="dialog-body certificate-details-body">
+			<div class="certificate-detail-grid">
+				<div class="certificate-detail"><span>Issued by</span><strong>{ ifThen(view.ACMEIssuer != "", view.ACMEIssuer, "Unknown") }</strong></div>
+				<div class="certificate-detail"><span>Subject</span><strong>{ ifThen(view.ACMESubject != "", view.ACMESubject, "Not set") }</strong></div>
+				<div class="certificate-detail"><span>Issued on</span><strong>{ ifThen(view.ACMEIssuedOn != "", view.ACMEIssuedOn, "Unknown") }</strong></div>
+				<div class="certificate-detail"><span>Expires</span><strong>{ ifThen(view.ACMEExpires != "", view.ACMEExpires, "Unknown") }</strong></div>
+			</div>
+			<div class="certificate-detail-section">
+				<h3>Covered Hosts</h3>
+				<p>A client is only protected when the name it connects to appears here.</p>
+				if len(view.ACMECoveredNames) > 0 {
+					<ul class="certificate-name-list">
+						for _, name := range view.ACMECoveredNames {
+							<li>@Icon("check-circle")<span>{ name }</span></li>
+						}
+					</ul>
+				} else {
+					<p class="certificate-detail-empty">No certificate is installed yet.</p>
+				}
+			</div>
+			if len(view.ACMEPendingNames) > 0 {
+				<div class="certificate-detail-section">
+					<h3>Not Covered Yet</h3>
+					<p>These names are configured but are not on the installed certificate. Issue a new one to include them.</p>
+					<ul class="certificate-name-list pending">
+						for _, name := range view.ACMEPendingNames {
+							<li>@Icon("alert-triangle")<span>{ name }</span></li>
+						}
+					</ul>
+				</div>
+			}
+			<div class="certificate-detail-section">
+				<h3>Identity</h3>
+				<div class="certificate-detail">
+					<span>Serial number</span>
+					<div class="copyable-text certificate-detail-value">
+						<code id="certificate-serial-number">{ ifThen(view.ACMESerialNumber != "", view.ACMESerialNumber, "Unknown") }</code>
+						if view.ACMESerialNumber != "" {
+							<button type="button" data-copy-target="certificate-serial-number" aria-label="Copy serial number" title="Copy serial number">@CopyIcons()</button>
+						}
+					</div>
+				</div>
+				<div class="certificate-detail">
+					<span>SHA-256 fingerprint</span>
+					<div class="copyable-text certificate-detail-value">
+						<code id="certificate-fingerprint">{ ifThen(view.ACMEFingerprint != "", view.ACMEFingerprint, "Unknown") }</code>
+						if view.ACMEFingerprint != "" {
+							<button type="button" data-copy-target="certificate-fingerprint" aria-label="Copy fingerprint" title="Copy fingerprint">@CopyIcons()</button>
+						}
+					</div>
+				</div>
+				if view.ACMELastRenewal != "" {
+					<div class="certificate-detail"><span>Last issued or renewed</span><strong>{ view.ACMELastRenewal }</strong></div>
+				}
+			</div>
+		</div>
+		<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Close</button></div>
+	</dialog>
 }
