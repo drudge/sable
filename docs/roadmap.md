@@ -62,7 +62,12 @@ performance before expanding the administrative surface.
 - DNS-01 ACME with automatic renewal is implemented
 - Cloudflare, Porkbun, Namecheap, GoDaddy, DigitalOcean, Hetzner, Route 53,
   OVHcloud, and RFC 2136 providers are implemented
-- HTTP-01 and external command providers remain future work
+- A local DNS-01 provider that answers challenges from Sable's own primary
+  zones, without an external account or a loopback RFC 2136 configuration,
+  remains future work
+- External command providers remain future work. HTTP-01 is deliberately out of
+  scope: it requires a publicly reachable port 80, which most deployments do not
+  have, and it cannot issue wildcard certificates
 - UniFi DHCP integration is implemented: a console setup wizard maps UniFi
   networks to zones and publishes reservations and connected clients as
   integration-owned forward and reverse records
