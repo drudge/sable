@@ -34,6 +34,20 @@ func ExchangeQUIC(
 	serverName string,
 	timeout time.Duration,
 ) (*dns.Msg, time.Duration, error) {
+	return ExchangeQUICWithSessions(ctx, message, server, serverName, timeout, nil)
+}
+
+// ExchangeQUICWithSessions is ExchangeQUIC with a TLS client session cache, so
+// repeated exchanges to the same upstream resume the TLS session instead of
+// running a full handshake every time. A nil cache disables resumption.
+func ExchangeQUICWithSessions(
+	ctx context.Context,
+	message *dns.Msg,
+	server string,
+	serverName string,
+	timeout time.Duration,
+	sessions tls.ClientSessionCache,
+) (*dns.Msg, time.Duration, error) {
 	host, _, err := net.SplitHostPort(server)
 	if err != nil {
 		return nil, 0, fmt.Errorf("parse QUIC server: %w", err)
@@ -56,9 +70,10 @@ func ExchangeQUIC(
 	}
 	started := time.Now()
 	tlsConfiguration := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		ServerName: strings.TrimSuffix(serverName, "."),
-		NextProtos: []string{doqALPN},
+		MinVersion:         tls.VersionTLS13,
+		ServerName:         strings.TrimSuffix(serverName, "."),
+		NextProtos:         []string{doqALPN},
+		ClientSessionCache: sessions,
 	}
 	connection, err := quic.DialAddr(ctx, server, tlsConfiguration, &quic.Config{
 		HandshakeIdleTimeout: timeout,

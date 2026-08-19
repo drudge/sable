@@ -16,7 +16,6 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/querylog"
@@ -638,7 +637,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 
 func NewHandler(runtime *Runtime) *Handler {
 	handler := &Handler{
-		startedAt: time.Now(), upstreamExchange: exchangeForwarder,
+		startedAt: time.Now(), upstreamExchange: newForwarderPool().exchange,
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog: newFailureLogLimiter(),
@@ -2112,46 +2111,6 @@ func dnssecBogusResponse(request *dns.Msg, validationErr error) *dns.Msg {
 func dnssecRuntimeSignature(configuration RuntimeConfig) string {
 	return fmt.Sprintf("|dnssec=%t|rfc5011=%t|anchors=%s|negative=%s", configuration.DNSSECValidation, configuration.DNSSECTrustAnchorUpdates,
 		strings.Join(configuration.DNSSECTrustAnchors, "\x00"), strings.Join(configuration.DNSSECNegativeTrustAnchors, "\x00"))
-}
-
-func exchangeForwarder(ctx context.Context, request *dns.Msg, forwarder string, timeout time.Duration) (*dns.Msg, error) {
-	protocol, address, err := forwarding.ParseEndpoint(forwarder)
-	if err != nil {
-		return nil, err
-	}
-	if protocol == "quic" {
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, splitErr
-		}
-		response, _, err := dnsclient.ExchangeQUIC(ctx, request, address, host, timeout)
-		return response, err
-	}
-	network := protocol
-	if protocol == "tls" {
-		network = "tcp-tls"
-	}
-	client := &dns.Client{Net: network, Timeout: timeout}
-	if protocol == "tls" {
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, splitErr
-		}
-		client.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host}
-	}
-	response, _, err := client.ExchangeContext(ctx, request, address)
-	if err != nil {
-		return nil, err
-	}
-	if protocol != "udp" || !response.Truncated {
-		return response, nil
-	}
-	client.Net = "tcp"
-	response, _, err = client.ExchangeContext(ctx, request, address)
-	if err != nil {
-		return nil, fmt.Errorf("retry truncated response over TCP: %w", err)
-	}
-	return response, nil
 }
 
 func (runtime *Runtime) forwardersFor(name string) ([]string, bool) {
