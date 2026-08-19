@@ -261,9 +261,7 @@ func (handler *Handler) exchangeIterative(
 		budget.remaining--
 		server := servers[(start+uint64(offset))%uint64(len(servers))]
 		attemptTimeout := max(timeout/time.Duration(min(len(servers), 3)), 100*time.Millisecond)
-		attemptContext, stopAttempt := context.WithTimeout(ctx, attemptTimeout)
-		response, err := handler.upstreamExchange(attemptContext, request, "udp://"+server, attemptTimeout)
-		stopAttempt()
+		response, err := handler.exchangeWithRetries(ctx, request, "udp://"+server, attemptTimeout)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", server, err))
 			continue

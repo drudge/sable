@@ -1995,15 +1995,38 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 	var exchangeErrors []error
 	for offset := range len(forwarders) {
 		forwarder := forwarders[(start+uint64(offset))%uint64(len(forwarders))]
-		attemptContext, stopAttempt := context.WithTimeout(ctx, attemptTimeout)
-		response, err := handler.upstreamExchange(attemptContext, request, forwarder, attemptTimeout)
-		stopAttempt()
+		response, err := handler.exchangeWithRetries(ctx, request, forwarder, attemptTimeout)
 		if err == nil {
 			return response, nil
 		}
 		exchangeErrors = append(exchangeErrors, fmt.Errorf("%s: %w", forwarder, err))
 	}
 	return nil, fmt.Errorf("all forwarders failed: %w", errors.Join(exchangeErrors...))
+}
+
+// resolverAttemptsPerServer is how many times a single upstream is tried before
+// moving on. A dropped UDP packet is common on a lossy path, so one immediate
+// retry recovers the query instead of failing the whole resolution.
+const resolverAttemptsPerServer = 2
+
+// exchangeWithRetries sends a request to one endpoint, retrying on a transient
+// error (a dropped packet reads as a timeout) until it succeeds, the per-attempt
+// budget is spent, or the surrounding deadline passes.
+func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Msg, endpoint string, attemptTimeout time.Duration) (*dns.Msg, error) {
+	var lastErr error
+	for attempt := 0; attempt < resolverAttemptsPerServer; attempt++ {
+		if ctx.Err() != nil {
+			break
+		}
+		attemptContext, stopAttempt := context.WithTimeout(ctx, attemptTimeout)
+		response, err := handler.upstreamExchange(attemptContext, request, endpoint, attemptTimeout)
+		stopAttempt()
+		if err == nil {
+			return response, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
