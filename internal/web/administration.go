@@ -18,6 +18,8 @@ type administrator interface {
 	UpdateUserProfile(context.Context, auth.Principal, int64, string, string, string, string, string) error
 	SetUserRoles(context.Context, auth.Principal, int64, []string, string, string) error
 	SetUserDisabled(context.Context, auth.Principal, int64, bool, string, string) error
+	SetPasswordLogin(context.Context, auth.Principal, int64, bool, string, string) error
+	UnlinkIdentity(context.Context, auth.Principal, int64, string, string, string) error
 	SetUserPassword(context.Context, auth.Principal, int64, string, string, string) error
 	DeleteUser(context.Context, auth.Principal, int64, string, string) error
 	CreateRole(context.Context, auth.Principal, string, string, []auth.Grant, string, string) error
@@ -107,6 +109,35 @@ func (server *Server) updateUserStatus(writer http.ResponseWriter, request *http
 			return err
 		}
 		return server.administrator.SetUserDisabled(request.Context(), principal, userID, request.FormValue("disabled") == "true", requestClientIP(request), request.UserAgent())
+	})
+}
+
+// updateUserPasswordLogin moves one account between password sign-in and
+// single sign-on only. It is per account rather than a deployment-wide switch,
+// so nobody is forced onto a provider before they are ready.
+func (server *Server) updateUserPasswordLogin(writer http.ResponseWriter, request *http.Request) {
+	server.administrationMutation(writer, request, "Sign-in method updated", func(principal auth.Principal) error {
+		userID, err := formID(request.FormValue("user_id"))
+		if err != nil {
+			return err
+		}
+		return server.administrator.SetPasswordLogin(
+			request.Context(), principal, userID, request.FormValue("password_login") == "true",
+			requestClientIP(request), request.UserAgent(),
+		)
+	})
+}
+
+func (server *Server) unlinkUserIdentity(writer http.ResponseWriter, request *http.Request) {
+	server.administrationMutation(writer, request, "Identity provider unlinked", func(principal auth.Principal) error {
+		userID, err := formID(request.FormValue("user_id"))
+		if err != nil {
+			return err
+		}
+		return server.administrator.UnlinkIdentity(
+			request.Context(), principal, userID, request.FormValue("provider"),
+			requestClientIP(request), request.UserAgent(),
+		)
 	})
 }
 

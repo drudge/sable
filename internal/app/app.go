@@ -317,6 +317,13 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetCertificateController(certificateManager)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
+	if authentication != nil {
+		// Single sign-on rides on the authentication service, so a deployment
+		// with security switched off has no provider and no sign-in button.
+		singleSignOn := newSSOService(configurationManager, newOIDCSecretStore(secretVault), authentication, logger)
+		webServer.SetSSO(singleSignOn)
+		webServer.SetSSOAdministration(singleSignOn)
+	}
 	webServer.SetRuntimeLogs(runtimeLogs)
 	if err := webServer.SetStatsStore(ctx, database); err != nil {
 		logger.Warn("restore query statistics", "error", err)

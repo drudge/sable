@@ -14,7 +14,7 @@ import (
 func (store *Store) ListUsers(ctx context.Context) ([]auth.ManagedUser, error) {
 	rows, err := store.database.QueryContext(ctx, `
 SELECT users.id, users.username, profiles.display_name, profiles.email,
-       profiles.disabled, users.created_at, profiles.updated_at
+       profiles.disabled, profiles.password_login, users.created_at, profiles.updated_at
 FROM sable_users AS users
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
 ORDER BY users.username`)
@@ -25,7 +25,8 @@ ORDER BY users.username`)
 	users := make([]auth.ManagedUser, 0)
 	for rows.Next() {
 		var user auth.ManagedUser
-		if err := rows.Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.Disabled, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.Disabled,
+			&user.PasswordLogin, &user.CreatedAt, &user.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 		users = append(users, user)
@@ -57,8 +58,13 @@ ORDER BY assignments.user_id, roles.name`)
 	if err := roleRows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate user roles: %w", err)
 	}
+	identities, err := store.AllIdentities(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for index := range users {
 		users[index].Roles = rolesByUser[users[index].ID]
+		users[index].Identities = identities[users[index].ID]
 	}
 	return users, nil
 }

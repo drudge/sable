@@ -66,6 +66,9 @@ type Server struct {
 	}
 	reload           func(context.Context) error
 	auth             authenticator
+	sso              ssoController
+	ssoAdmin         ssoAdministration
+	ssoStateStore    *ssoStateStore
 	preAuthTokens    *preAuthTokenStore
 	crossOrigin      *http.CrossOriginProtection
 	securityEnabled  bool
@@ -162,7 +165,7 @@ func New(
 	server := &Server{
 		logger: logger, stats: stats, config: configuration, zones: zones, database: database,
 		queryLog: queryLog, queries: queries, reload: reload,
-		auth: authentication, preAuthTokens: newPreAuthTokenStore(),
+		auth: authentication, preAuthTokens: newPreAuthTokenStore(), ssoStateStore: newSSOStateStore(),
 		crossOrigin: http.NewCrossOriginProtection(),
 		history:     newStatsHistory(logger), historyStop: make(chan struct{}),
 		securityEnabled: securityEnabled, secureCookies: secureCookies,
@@ -183,6 +186,8 @@ func New(
 	server.setupRequired.Store(setupRequired)
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assets))))
+	mux.HandleFunc("POST "+ssoStartPath, server.startSSO)
+	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
@@ -197,6 +202,10 @@ func New(
 	mux.HandleFunc("POST /ui/integrations/unifi/enabled", server.setUniFiEnabled)
 	mux.HandleFunc("POST /ui/integrations/unifi/remove", server.removeUniFi)
 	mux.HandleFunc("GET /ui/integrations/unifi/status", server.unifiStatusPanel)
+	mux.HandleFunc("POST /ui/integrations/sso/check", server.checkSSO)
+	mux.HandleFunc("POST /ui/integrations/sso/enabled", server.setSSOEnabled)
+	mux.HandleFunc("POST /ui/integrations/sso/wizard", server.runSSOWizard)
+	mux.HandleFunc("POST /ui/integrations/sso/remove", server.removeSSO)
 	mux.HandleFunc("GET /dns-client", server.dnsClientPage)
 	mux.HandleFunc("GET /logs", server.logsPage)
 	mux.HandleFunc("GET /settings", server.settingsPage)
@@ -239,6 +248,8 @@ func New(
 	mux.HandleFunc("POST /ui/administration/users/roles", server.updateUserRoles)
 	mux.HandleFunc("POST /ui/administration/users/status", server.updateUserStatus)
 	mux.HandleFunc("POST /ui/administration/users/password", server.updateUserPassword)
+	mux.HandleFunc("POST /ui/administration/users/sign-in-method", server.updateUserPasswordLogin)
+	mux.HandleFunc("POST /ui/administration/users/unlink", server.unlinkUserIdentity)
 	mux.HandleFunc("POST /ui/administration/users/delete", server.deleteUser)
 	mux.HandleFunc("POST /ui/administration/roles", server.createRole)
 	mux.HandleFunc("POST /ui/administration/roles/update", server.updateRole)

@@ -104,6 +104,23 @@ type ManagedUser struct {
 	Roles       []string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	// PasswordLogin reports whether this account may still sign in with a
+	// password. Clearing it is how a person moves to single sign-on only.
+	PasswordLogin bool
+	// Identities lists the external providers this account is linked to.
+	Identities []LinkedIdentity
+}
+
+// LinkedIdentity binds one identity provider's subject to a Sable account. The
+// subject is the only stable identifier a provider offers: usernames and email
+// addresses at the provider change, and matching on those after the first
+// sign-in would hand one person another person's account.
+type LinkedIdentity struct {
+	Provider    string
+	Subject     string
+	Issuer      string
+	LinkedAt    time.Time
+	LastLoginAt time.Time
 }
 
 type Role struct {
@@ -163,6 +180,8 @@ type AdministrationStore interface {
 	DeleteRole(context.Context, int64) error
 	RevokeSession(context.Context, string) error
 	DeleteAPIToken(context.Context, int64) error
+	SetPasswordLogin(context.Context, int64, bool, time.Time) error
+	UnlinkIdentity(context.Context, int64, string) error
 }
 
 type AdministrationSnapshot struct {
@@ -430,6 +449,47 @@ func (service *Service) SetUserDisabled(ctx context.Context, principal Principal
 	err := store.SetUserDisabled(ctx, userID, disabled, service.now())
 	if err == nil {
 		service.audit(ctx, &principal.UserID, "user.status.update", clientIP, userAgent, "user_id="+formatID(userID))
+	}
+	return err
+}
+
+// SetPasswordLogin turns password sign-in on or off for one account. Turning
+// it off is how somebody moves to single sign-on only; the store refuses it
+// when the account has no linked provider, or when it would leave nobody able
+// to sign in with a password and fix a broken identity provider.
+func (service *Service) SetPasswordLogin(ctx context.Context, principal Principal, userID int64, allowed bool, clientIP, userAgent string) error {
+	if err := requirePermission(principal, PermissionUsersWrite); err != nil {
+		return err
+	}
+	store, ok := service.store.(AdministrationStore)
+	if !ok {
+		return errors.New("administration store is unavailable")
+	}
+	err := store.SetPasswordLogin(ctx, userID, allowed, service.now())
+	if err == nil {
+		detail := "user_id=" + formatID(userID) + " password_login=off"
+		if allowed {
+			detail = "user_id=" + formatID(userID) + " password_login=on"
+		}
+		service.audit(ctx, &principal.UserID, "user.password_login.update", clientIP, userAgent, detail)
+	}
+	return err
+}
+
+// UnlinkIdentity detaches an account from an identity provider. The store
+// refuses to remove the last way into an account.
+func (service *Service) UnlinkIdentity(ctx context.Context, principal Principal, userID int64, provider, clientIP, userAgent string) error {
+	if err := requirePermission(principal, PermissionUsersWrite); err != nil {
+		return err
+	}
+	store, ok := service.store.(AdministrationStore)
+	if !ok {
+		return errors.New("administration store is unavailable")
+	}
+	err := store.UnlinkIdentity(ctx, userID, provider)
+	if err == nil {
+		service.audit(ctx, &principal.UserID, "user.identity.unlink", clientIP, userAgent,
+			"user_id="+formatID(userID)+" provider="+provider)
 	}
 	return err
 }

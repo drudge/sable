@@ -101,6 +101,7 @@ type Config struct {
 	ServerLog    ServerLog    `toml:"server_log"`
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
 	UniFi        UniFi        `toml:"unifi"`
+	OIDC         OIDC         `toml:"oidc"`
 	Security     Security     `toml:"security"`
 	Cluster      Cluster      `toml:"cluster"`
 	Updates      Updates      `toml:"updates"`
@@ -387,6 +388,7 @@ func Defaults() Config {
 			Interval: Duration{Duration: defaultUniFiInterval},
 			Sources:  []string{"reservations", "active"},
 		},
+		OIDC: DefaultOIDC(),
 		Security: Security{
 			Enabled:       true,
 			SessionTTL:    Duration{Duration: defaultSessionTTL},
@@ -731,6 +733,7 @@ func (configuration Config) Validate() error {
 		}
 	}
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
+	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
 	return errors.Join(validationErrors...)
 }
 

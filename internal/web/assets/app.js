@@ -1925,5 +1925,28 @@
 	  const custom = form?.querySelector("[data-custom-addresses]");
 	  if (custom) custom.hidden = event.target.value !== "custom";
 	});
+
+	// Single sign-on presets only fill in the fields that genuinely differ
+	// between providers. Everything else is per-deployment, so a preset never
+	// overwrites an issuer, a client id, or a redirect URL the operator typed.
+	const ssoPresets = {
+	  "pocket-id": { scopes: "openid profile email groups", groups_claim: "groups", username_claim: "preferred_username" },
+	  "authentik": { scopes: "openid profile email", groups_claim: "groups", username_claim: "preferred_username" },
+	  "keycloak": { scopes: "openid profile email roles", groups_claim: "groups", username_claim: "preferred_username" },
+	  "entra": { scopes: "openid profile email", groups_claim: "groups", username_claim: "preferred_username" },
+	  "google": { scopes: "openid profile email", groups_claim: "groups", username_claim: "email" },
+	  "generic": { scopes: "openid profile email groups", groups_claim: "groups", username_claim: "preferred_username" },
+	};
+	document.body.addEventListener("click", (event) => {
+	  const trigger = event.target.closest("[data-sso-preset]");
+	  if (!trigger) return;
+	  const preset = ssoPresets[trigger.getAttribute("data-sso-preset")];
+	  const form = trigger.closest("form");
+	  if (!preset || !form) return;
+	  Object.entries(preset).forEach(([field, value]) => {
+		const input = form.querySelector('[name="' + field + '"]');
+		if (input) input.value = value;
+	  });
+	});
   });
 })();

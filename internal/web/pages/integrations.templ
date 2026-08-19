@@ -9,6 +9,94 @@ type IntegrationsPageView struct {
 	Message string
 	Error   string
 	UniFi   UniFiAppView
+	SSO     SSOAppView
+}
+
+// SSOAppView describes the single sign-on card. Available is false on a
+// deployment with authentication switched off, where the card would offer
+// something that cannot work.
+type SSOAppView struct {
+	Available    bool
+	Configured   bool
+	Enabled      bool
+	Label        string
+	Issuer       string
+	ClientID     string
+	RedirectURL  string
+	Scopes       string
+	GroupsClaim  string
+	Provision    bool
+	LinkByEmail  bool
+	SyncRoles    bool
+	DefaultRoles string
+	SecretStored bool
+	Mappings     []SSOMappingView
+	Users        int
+	LastSignIn   string
+	Check        SSOCheckView
+	Wizard       SSOWizardView
+}
+
+type SSOMappingView struct {
+	Group string
+	Role  string
+}
+
+// SSOCheckView holds the result of the last test against the provider. It is
+// empty until an operator asks for one, because the card must render without
+// contacting anything.
+type SSOCheckView struct {
+	Ran          bool
+	Reachable    bool
+	Error        string
+	SupportsPKCE bool
+	EndSession   bool
+}
+
+// SSOWizardView is the four-step setup dialog. It carries every answer the
+// operator has given so far, because each step is a server round trip: the
+// provider step has to contact the issuer before the rest is worth filling in.
+type SSOWizardView struct {
+	Open  bool
+	Step  string
+	Error string
+
+	Label       string
+	Issuer      string
+	ClientID    string
+	RedirectURL string
+
+	Scopes        string
+	UsernameClaim string
+	GroupsClaim   string
+	FetchUserInfo bool
+
+	Provision    bool
+	LinkByEmail  bool
+	SyncRoles    bool
+	DefaultRoles string
+	Mappings     []SSOMappingView
+
+	// SecretStored reports whether the vault already holds a client secret, so
+	// a returning operator is not asked to paste it again.
+	SecretStored bool
+	// Roles is every Sable role a mapping may point at.
+	Roles []string
+	// Probe is what the provider said about itself when the first step
+	// contacted it.
+	Probe SSOProbeView
+}
+
+// SSOProbeView is what a provider advertises in its discovery document. The
+// claims step shows it so an operator picks a claim the provider actually
+// sends rather than guessing at one.
+type SSOProbeView struct {
+	Ran          bool
+	Issuer       string
+	Scopes       []string
+	Claims       []string
+	SupportsPKCE bool
+	EndSession   bool
 }
 
 type UniFiAppView struct {
@@ -115,13 +203,120 @@ templ IntegrationsContent(view IntegrationsPageView) {
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		@UniFiCard(view.UniFi)
+		if view.SSO.Available {
+			@SSOCard(view.SSO)
+		}
 		if view.UniFi.Available && view.UniFi.Configured {
 			@RemoveUniFiDialog()
 		}
 		if view.UniFi.Wizard.Open {
 			@UniFiWizardDialog(view.UniFi)
 		}
+		if view.SSO.Available && view.SSO.Configured {
+			@RemoveSSODialog(view.SSO)
+		}
+		if view.SSO.Wizard.Open {
+			@SSOWizardDialog(view.SSO.Wizard)
+		}
 	</div>
+}
+
+templ SSOCard(view SSOAppView) {
+	<section class="card integration-card" id="sso-card">
+		<header>
+			<div class="integration-card-identity">
+				<span class="integration-card-glyph">@Icon("key-round")</span>
+				<div>
+					<h2>Single Sign-On</h2>
+					<p>Signs operators in through an OpenID Connect provider and maps their groups to Sable roles.</p>
+				</div>
+			</div>
+			<span class={ ssoBadgeClass(view) }>{ ssoBadgeLabel(view) }</span>
+		</header>
+		if !view.Configured {
+			<div class="integration-card-body integration-card-empty">
+				<p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p>
+				<a class="button" href="/integrations?setup=sso">@Icon("plus")<span>Set Up Single Sign-On</span></a>
+			</div>
+		} else {
+			<div class="integration-card-body">
+				if view.Check.Ran {
+					if view.Check.Reachable {
+						<div class="unifi-status">@Icon("shield-check")<div><strong>The provider answered</strong><span>{ ssoCheckSummary(view.Check) }</span></div></div>
+					} else {
+						<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Could not reach the provider</strong><span>{ view.Check.Error }</span></div></div>
+					}
+				}
+				if !view.SecretStored {
+					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>No client secret is stored</strong><span>Sign-in cannot complete until the provider's client secret is saved.</span></div></div>
+				}
+				<div class="sso-facts">
+					<div><span class="sso-fact-label">Provider</span><span class="sso-fact-value">{ view.Label }</span></div>
+					<div><span class="sso-fact-label">Issuer</span><span class="sso-fact-value" title={ view.Issuer }>{ ssoIssuerHost(view.Issuer) }</span></div>
+					<div><span class="sso-fact-label">Linked accounts</span><span class="sso-fact-value">{ strconv.Itoa(view.Users) }</span></div>
+					<div><span class="sso-fact-label">Last sign-in</span><span class="sso-fact-value">{ ssoLastSignIn(view) }</span></div>
+				</div>
+				@SSOMappingTable(view)
+				<div class="integration-card-actions">
+					<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog">@Icon("trash")<span>Remove</span></button>
+					<div class="integration-card-actions-primary">
+						<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
+							<button class="button outline" type="submit">@Icon("refresh")<span>Test Connection</span></button>
+						</form>
+						<a class="button outline" href="/integrations?setup=sso">@Icon("settings-2")<span>Edit Setup</span></a>
+						if view.Enabled {
+							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+								<input type="hidden" name="enabled" value="false"/>
+								<button class="button outline" type="submit">@Icon("pause")<span>Disable</span></button>
+							</form>
+						} else {
+							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+								<input type="hidden" name="enabled" value="true"/>
+								<button class="button" type="submit">@Icon("play")<span>Enable</span></button>
+							</form>
+						}
+					</div>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ SSOMappingTable(view SSOAppView) {
+	if len(view.Mappings) == 0 && view.DefaultRoles == "" {
+		<p class="muted-cell">No group grants a role yet, so nobody can sign in through the provider.</p>
+	} else {
+		<div class="admin-desktop-table">
+			<table class="isotope-table">
+				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
+				<tbody>
+					for _, mapping := range view.Mappings {
+						<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
+					}
+					if view.DefaultRoles != "" {
+						<tr><td class="muted-cell">Everyone who signs in</td><td>{ view.DefaultRoles }</td></tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ RemoveSSODialog(view SSOAppView) {
+	<dialog class="custom-server-dialog confirmation-dialog" id="remove-sso-dialog" aria-labelledby="remove-sso-title">
+		<div class="dialog-header"><h2 id="remove-sso-title">Remove Single Sign-On</h2><p>Stop using { view.Label }</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="isotope-dialog-body">
+			<p>Sable will forget the provider and delete the stored client secret. Accounts it created stay, along with the link between them and the provider, so reconnecting the same provider picks up where it left off.</p>
+			<p>Anyone who turned off password sign-in will not be able to get in until you turn it back on for them from the administration page.</p>
+		</div>
+		<div class="dialog-footer">
+			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+			<form hx-post="/ui/integrations/sso/remove" hx-target="#integrations-content" hx-swap="outerHTML">
+				<button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button>
+			</form>
+		</div>
+	</dialog>
 }
 
 templ UniFiCard(view UniFiAppView) {
@@ -659,4 +854,474 @@ func unifiSourceLabel(view UniFiAppView) string {
 	default:
 		return "Nothing selected"
 	}
+}
+
+// SSOPreset prefills the provider fields that differ between vendors. Only the
+// claim names and scopes vary in practice; everything else is per-deployment.
+type SSOPreset struct {
+	Key         string
+	Name        string
+	Scopes      string
+	GroupsClaim string
+	UsernameKey string
+}
+
+// SSOPresets lists the providers Sable ships defaults for. Generic is last
+// because it is the fallback rather than a recommendation.
+func SSOPresets() []SSOPreset {
+	return []SSOPreset{
+		{Key: "pocket-id", Name: "Pocket ID", Scopes: "openid profile email groups", GroupsClaim: "groups", UsernameKey: "preferred_username"},
+		{Key: "authentik", Name: "Authentik", Scopes: "openid profile email", GroupsClaim: "groups", UsernameKey: "preferred_username"},
+		{Key: "keycloak", Name: "Keycloak", Scopes: "openid profile email roles", GroupsClaim: "groups", UsernameKey: "preferred_username"},
+		{Key: "entra", Name: "Entra ID", Scopes: "openid profile email", GroupsClaim: "groups", UsernameKey: "preferred_username"},
+		{Key: "google", Name: "Google", Scopes: "openid profile email", GroupsClaim: "groups", UsernameKey: "email"},
+		{Key: "generic", Name: "Generic", Scopes: "openid profile email groups", GroupsClaim: "groups", UsernameKey: "preferred_username"},
+	}
+}
+
+func ssoBadgeClass(view SSOAppView) string {
+	switch {
+	case !view.Configured:
+		return "status-badge"
+	case !view.SecretStored:
+		return "status-badge danger"
+	case view.Enabled:
+		return "status-badge success"
+	default:
+		return "status-badge"
+	}
+}
+
+func ssoBadgeLabel(view SSOAppView) string {
+	switch {
+	case !view.Configured:
+		return "Not set up"
+	case !view.SecretStored:
+		return "Needs attention"
+	case view.Enabled:
+		return "Active"
+	default:
+		return "Paused"
+	}
+}
+
+func ssoProvisionLabel(view SSOAppView) string {
+	switch {
+	case view.Provision && view.LinkByEmail:
+		return "Created on first sign-in, or attached by verified email"
+	case view.Provision:
+		return "Created on first sign-in"
+	case view.LinkByEmail:
+		return "Attached to existing accounts by verified email"
+	default:
+		return "Existing links only"
+	}
+}
+
+func ssoLastSignIn(view SSOAppView) string {
+	if view.LastSignIn == "" {
+		return "Never"
+	}
+	return view.LastSignIn
+}
+
+func ssoSecretPlaceholder(view SSOAppView) string {
+	if view.SecretStored {
+		return "Stored. Leave blank to keep it."
+	}
+	return "Paste the client secret"
+}
+
+func ssoCheckSummary(check SSOCheckView) string {
+	parts := []string{"Discovery and signing keys were read"}
+	if check.SupportsPKCE {
+		parts = append(parts, "PKCE is supported")
+	} else {
+		parts = append(parts, "PKCE is not advertised")
+	}
+	if check.EndSession {
+		parts = append(parts, "single logout is available")
+	}
+	return strings.Join(parts, ", ") + "."
+}
+
+
+
+templ SSOWizardDialog(wizard SSOWizardView) {
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog sso-wizard-dialog" id="sso-setup-dialog" aria-labelledby="sso-setup-title" data-dialog-auto-open="true">
+		<div class="dialog-header"><h2 id="sso-setup-title">Set Up Single Sign-On</h2><p>{ ssoWizardSubtitle(wizard.Step) }</p></div>
+		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+		<form hx-post="/ui/integrations/sso/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+			<div class="isotope-dialog-body">
+				@SSOWizardProgress(wizard.Step)
+				if wizard.Error != "" {
+					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>{ ssoStepProblem(wizard.Step) }</strong><span>{ wizard.Error }</span></div></div>
+				}
+				switch wizard.Step {
+					case SSOStepClaims:
+						@SSOWizardClaimsStep(wizard)
+					case SSOStepRoles:
+						@SSOWizardRolesStep(wizard)
+					case SSOStepReview:
+						@SSOWizardReviewStep(wizard)
+					default:
+						@SSOWizardProviderStep(wizard)
+				}
+			</div>
+			@SSOWizardFooter(wizard)
+		</form>
+	</dialog>
+}
+
+templ SSOWizardProgress(step string) {
+	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", ssoStepIndex(step)) }>
+		@SSOWizardStepMarker(step, 1, SSOStepProvider, "Provider")
+		<i></i>
+		@SSOWizardStepMarker(step, 2, SSOStepClaims, "Claims")
+		<i></i>
+		@SSOWizardStepMarker(step, 3, SSOStepRoles, "Roles")
+		<i></i>
+		@SSOWizardStepMarker(step, 4, SSOStepReview, "Review")
+	</div>
+}
+
+// SSOWizardStepMarker renders a finished step as a button so the operator can
+// jump straight back to it. formnovalidate keeps a half-filled current step
+// from blocking the way back.
+templ SSOWizardStepMarker(step string, position int, target, label string) {
+	if ssoStepIndex(step) > position {
+		<button class={ ssoStepClass(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
+			<span>&#10003;</span><small>{ label }</small>
+		</button>
+	} else {
+		<div class={ ssoStepClass(step, position) }><span>{ ssoStepMarker(step, position) }</span><small>{ label }</small></div>
+	}
+}
+
+templ SSOWizardProviderStep(wizard SSOWizardView) {
+	<div class="sso-presets">
+		<span>Start from</span>
+		for _, preset := range SSOPresets() {
+			<button class="button outline" type="button" data-sso-preset={ preset.Key }>{ preset.Name }</button>
+		}
+	</div>
+	<label>
+		<span>Issuer URL</span>
+		<input name="issuer" value={ wizard.Issuer } placeholder="https://id.example.com" required autofocus/>
+		<small>Sable reads { "/.well-known/openid-configuration" } under this address when you continue.</small>
+	</label>
+	<div class="sso-field-row">
+		<label>
+			<span>Client ID</span>
+			<input name="client_id" value={ wizard.ClientID } required/>
+		</label>
+		<label>
+			<span>Client secret</span>
+			<input type="password" name="client_secret" autocomplete="new-password" placeholder={ ssoWizardSecretPlaceholder(wizard) }/>
+		</label>
+	</div>
+	<label>
+		<span>Redirect URL</span>
+		<input name="redirect_url" value={ wizard.RedirectURL } required/>
+		<small>Add this exact address to the application at your provider before continuing. The secret is sealed in the encrypted vault, never written to sable.toml.</small>
+	</label>
+	<label>
+		<span>Display name</span>
+		<input name="display_name" value={ wizard.Label } placeholder="Single sign-on" maxlength="64"/>
+		<small>Shown on the sign-in button.</small>
+	</label>
+	<input type="hidden" name="scopes" value={ wizard.Scopes }/>
+	<input type="hidden" name="username_claim" value={ wizard.UsernameClaim }/>
+	<input type="hidden" name="groups_claim" value={ wizard.GroupsClaim }/>
+}
+
+templ SSOWizardClaimsStep(wizard SSOWizardView) {
+	if wizard.Probe.Ran {
+		<div class="unifi-status">
+			@Icon("shield-check")
+			<div>
+				<strong>{ wizard.Probe.Issuer } answered</strong>
+				<span>{ ssoProbeSummary(wizard.Probe) }</span>
+			</div>
+		</div>
+	}
+	<label>
+		<span>Scopes</span>
+		<input name="scopes" value={ wizard.Scopes } placeholder="openid profile email groups" required/>
+		if len(wizard.Probe.Scopes) > 0 {
+			<small>The provider advertises: { strings.Join(wizard.Probe.Scopes, ", ") }</small>
+		} else {
+			<small>Ask for the scope that carries group membership, or the groups claim will arrive empty.</small>
+		}
+	</label>
+	<div class="sso-field-row">
+		<label>
+			<span>Username claim</span>
+			<input name="username_claim" value={ wizard.UsernameClaim } placeholder="preferred_username"/>
+		</label>
+		<label>
+			<span>Groups claim</span>
+			<input name="groups_claim" value={ wizard.GroupsClaim } placeholder="groups"/>
+		</label>
+	</div>
+	if len(wizard.Probe.Claims) > 0 {
+		<p class="muted-cell">Claims the provider says it can send: { strings.Join(wizard.Probe.Claims, ", ") }</p>
+	}
+	<label class="checkbox">
+		<input type="checkbox" name="fetch_userinfo" value="true" checked?={ wizard.FetchUserInfo }/>
+		<span>Ask the UserInfo endpoint for claims the token leaves out</span>
+	</label>
+	@SSOWizardCarriedProvider(wizard)
+}
+
+templ SSOWizardRolesStep(wizard SSOWizardView) {
+	<fieldset class="sso-toggles">
+		<legend>Accounts</legend>
+		<label class="checkbox"><input type="checkbox" name="provision" value="true" checked?={ wizard.Provision }/><span>Create a Sable account the first time someone signs in</span></label>
+		<label class="checkbox"><input type="checkbox" name="link_by_email" value="true" checked?={ wizard.LinkByEmail }/><span>Attach a first sign-in to an existing account with the same verified email</span></label>
+		<label class="checkbox"><input type="checkbox" name="sync_roles" value="true" checked?={ wizard.SyncRoles }/><span>Update roles from the provider's groups on every sign-in</span></label>
+	</fieldset>
+	<label>
+		<span>Roles everyone gets</span>
+		<input name="default_roles" value={ wizard.DefaultRoles } placeholder="Auditor"/>
+		<small>Comma separated. Leave blank to grant nothing by default.</small>
+	</label>
+	<fieldset class="sso-mappings">
+		<legend>Group to role</legend>
+		<p class="muted-cell">Type the group name exactly as your provider sends it in the <code>{ wizard.GroupsClaim }</code> claim.</p>
+		for index, mapping := range ssoWizardRows(wizard) {
+			<div class="sso-mapping-row">
+				<input name="mapping_group" value={ mapping.Group } placeholder="dns-admins" aria-label={ fmt.Sprintf("Provider group %d", index+1) }/>
+				@Icon("arrow-right")
+				<select name="mapping_role" aria-label={ fmt.Sprintf("Sable role %d", index+1) }>
+					<option value="">No role</option>
+					for _, role := range wizard.Roles {
+						<option value={ role } selected?={ role == mapping.Role }>{ role }</option>
+					}
+				</select>
+			</div>
+		}
+		<small>Leave a row blank to drop it. Rows are added as you fill the last one.</small>
+	</fieldset>
+	@SSOWizardCarriedProvider(wizard)
+	@SSOWizardCarriedClaims(wizard)
+}
+
+templ SSOWizardReviewStep(wizard SSOWizardView) {
+	<div class="sso-facts">
+		<div><span class="sso-fact-label">Provider</span><span class="sso-fact-value">{ wizard.Label }</span></div>
+		<div><span class="sso-fact-label">Issuer</span><span class="sso-fact-value" title={ wizard.Issuer }>{ ssoIssuerHost(wizard.Issuer) }</span></div>
+		<div><span class="sso-fact-label">Client ID</span><span class="sso-fact-value" title={ wizard.ClientID }>{ wizard.ClientID }</span></div>
+		<div><span class="sso-fact-label">Groups claim</span><span class="sso-fact-value">{ wizard.GroupsClaim }</span></div>
+	</div>
+	if len(wizard.Mappings) == 0 && wizard.DefaultRoles == "" {
+		<div class="unifi-status error">
+			@Icon("alert-triangle")
+			<div><strong>Nobody can sign in yet</strong><span>No group grants a role and there is no default role, so every sign-in is refused.</span></div>
+		</div>
+	} else {
+		<div class="admin-desktop-table">
+			<table class="isotope-table">
+				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
+				<tbody>
+					for _, mapping := range wizard.Mappings {
+						<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
+					}
+					if wizard.DefaultRoles != "" {
+						<tr><td class="muted-cell">Everyone who signs in</td><td>{ wizard.DefaultRoles }</td></tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+	<p class="muted-cell sso-review-note">{ ssoWizardProvisionSummary(wizard) }. Nobody loses their password; each person switches to SSO only from the administration page.</p>
+	@SSOWizardCarriedProvider(wizard)
+	@SSOWizardCarriedClaims(wizard)
+	@SSOWizardCarriedRoles(wizard)
+}
+
+templ SSOWizardFooter(wizard SSOWizardView) {
+	<div class="dialog-footer wizard-footer">
+		<input type="hidden" name="wizard_step" value={ wizard.Step }/>
+		if wizard.Step == SSOStepProvider {
+			<a class="button outline" href="/integrations">Cancel</a>
+		} else {
+			<button class="button outline" type="submit" name="wizard_target" value={ ssoPreviousStep(wizard.Step) }>Back</button>
+		}
+		<button class="button" type="submit">
+			if wizard.Step == SSOStepReview {
+				@Icon("check")
+				<span>Enable Single Sign-On</span>
+			} else {
+				<span>Continue</span>
+				@Icon("arrow-right")
+			}
+		</button>
+	</div>
+}
+
+// SSOWizardCarriedProvider re-posts the provider answers on every later step,
+// because each step is its own form submission.
+templ SSOWizardCarriedProvider(wizard SSOWizardView) {
+	<input type="hidden" name="display_name" value={ wizard.Label }/>
+	<input type="hidden" name="issuer" value={ wizard.Issuer }/>
+	<input type="hidden" name="client_id" value={ wizard.ClientID }/>
+	<input type="hidden" name="redirect_url" value={ wizard.RedirectURL }/>
+}
+
+templ SSOWizardCarriedClaims(wizard SSOWizardView) {
+	<input type="hidden" name="claims_present" value="true"/>
+	<input type="hidden" name="scopes" value={ wizard.Scopes }/>
+	<input type="hidden" name="username_claim" value={ wizard.UsernameClaim }/>
+	<input type="hidden" name="groups_claim" value={ wizard.GroupsClaim }/>
+	if wizard.FetchUserInfo {
+		<input type="hidden" name="fetch_userinfo" value="true"/>
+	}
+}
+
+templ SSOWizardCarriedRoles(wizard SSOWizardView) {
+	<input type="hidden" name="roles_present" value="true"/>
+	<input type="hidden" name="default_roles" value={ wizard.DefaultRoles }/>
+	if wizard.Provision {
+		<input type="hidden" name="provision" value="true"/>
+	}
+	if wizard.LinkByEmail {
+		<input type="hidden" name="link_by_email" value="true"/>
+	}
+	if wizard.SyncRoles {
+		<input type="hidden" name="sync_roles" value="true"/>
+	}
+	for _, mapping := range wizard.Mappings {
+		<input type="hidden" name="mapping_group" value={ mapping.Group }/>
+		<input type="hidden" name="mapping_role" value={ mapping.Role }/>
+	}
+}
+
+// The wizard's steps, named the same way the UniFi wizard names its own.
+const (
+	SSOStepProvider = "provider"
+	SSOStepClaims   = "claims"
+	SSOStepRoles    = "roles"
+	SSOStepReview   = "review"
+)
+
+func ssoStepIndex(step string) int {
+	switch step {
+	case SSOStepClaims:
+		return 2
+	case SSOStepRoles:
+		return 3
+	case SSOStepReview:
+		return 4
+	default:
+		return 1
+	}
+}
+
+func ssoStepClass(step string, position int) string {
+	current := ssoStepIndex(step)
+	if current > position {
+		return "complete"
+	}
+	if current == position {
+		return "current"
+	}
+	return ""
+}
+
+func ssoStepMarker(step string, position int) string {
+	if ssoStepIndex(step) > position {
+		return "\u2713"
+	}
+	return strconv.Itoa(position)
+}
+
+func ssoPreviousStep(step string) string {
+	switch step {
+	case SSOStepReview:
+		return SSOStepRoles
+	case SSOStepRoles:
+		return SSOStepClaims
+	default:
+		return SSOStepProvider
+	}
+}
+
+func ssoWizardSubtitle(step string) string {
+	switch step {
+	case SSOStepClaims:
+		return "Tell Sable which claims carry the username and the groups"
+	case SSOStepRoles:
+		return "Decide who gets in and what they can do"
+	case SSOStepReview:
+		return "Check it over before anyone can use it"
+	default:
+		return "Point Sable at your identity provider"
+	}
+}
+
+func ssoWizardSecretPlaceholder(wizard SSOWizardView) string {
+	if wizard.SecretStored {
+		return "Stored. Leave blank to keep it."
+	}
+	return "Paste the client secret"
+}
+
+func ssoProbeSummary(probe SSOProbeView) string {
+	parts := []string{"Discovery and signing keys were read"}
+	if probe.SupportsPKCE {
+		parts = append(parts, "PKCE is supported")
+	} else {
+		parts = append(parts, "PKCE is not advertised, but Sable sends it anyway")
+	}
+	if probe.EndSession {
+		parts = append(parts, "single logout is available")
+	}
+	return strings.Join(parts, ", ") + "."
+}
+
+func ssoWizardProvisionSummary(wizard SSOWizardView) string {
+	switch {
+	case wizard.Provision && wizard.LinkByEmail:
+		return "Created on first sign-in, or attached to an existing account by verified email"
+	case wizard.Provision:
+		return "Created on first sign-in"
+	case wizard.LinkByEmail:
+		return "Attached to existing accounts by verified email"
+	default:
+		return "Existing links only"
+	}
+}
+
+// ssoWizardRows always leaves one empty row so a mapping can be added without
+// a separate button and another round trip.
+func ssoWizardRows(wizard SSOWizardView) []SSOMappingView {
+	rows := append([]SSOMappingView(nil), wizard.Mappings...)
+	return append(rows, SSOMappingView{})
+}
+
+// ssoStepProblem names what went wrong in the terms of the step the operator
+// is actually looking at.
+func ssoStepProblem(step string) string {
+	switch step {
+	case SSOStepClaims:
+		return "Those claim settings were not accepted"
+	case SSOStepRoles:
+		return "Those role settings were not accepted"
+	case SSOStepReview:
+		return "Single sign-on could not be saved"
+	default:
+		return "Sable could not reach that provider"
+	}
+}
+
+// ssoIssuerHost shortens the issuer to its host for the card. The full value
+// stays in the title attribute, because a tenant path is what distinguishes
+// two providers on the same hostname.
+func ssoIssuerHost(issuer string) string {
+	trimmed := strings.TrimPrefix(strings.TrimPrefix(issuer, "https://"), "http://")
+	if host, _, found := strings.Cut(trimmed, "/"); found && host != "" {
+		return host
+	}
+	return trimmed
 }

@@ -41,6 +41,10 @@ type User struct {
 	Email        string
 	PasswordHash string
 	LoginAllowed bool
+	// PasswordLogin reports whether a password may be used to sign in as this
+	// account. A federated account that never had a password has it cleared,
+	// and so does anyone who deliberately moved to single sign-on only.
+	PasswordLogin bool
 }
 
 type StoredSession struct {
@@ -84,6 +88,18 @@ type Store interface {
 	GrantsForUser(context.Context, int64, Surface) ([]Grant, error)
 	GrantsForToken(context.Context, int64, int64, Surface) ([]Grant, error)
 	RecordAuditEvent(context.Context, AuditEvent) error
+	RolesHaveSurface(context.Context, []string, Surface) (bool, error)
+
+	// Single sign-on storage. An identity is looked up by its provider subject
+	// on every repeat sign-in; the rest is only reached the first time someone
+	// arrives from a provider.
+	UserByIdentity(context.Context, string, string) (User, error)
+	UserByEmail(context.Context, string) (User, error)
+	LinkIdentity(context.Context, string, string, string, int64, time.Time) error
+	TouchIdentity(context.Context, string, string, time.Time) error
+	CreateFederatedUser(context.Context, string, string, string, []string, string, string, string, time.Time) (ManagedUser, error)
+	ReconcileManagedRoles(context.Context, int64, []string, []string, time.Time) ([]string, error)
+	UpdateFederatedProfile(context.Context, int64, string, string, time.Time) error
 }
 
 type Options struct {
@@ -197,11 +213,17 @@ func (service *Service) Login(
 	}
 	defer service.releasePasswordOperation()
 	user, err := service.store.UserByUsername(ctx, normalized)
-	valid := normalizeErr == nil && err == nil && user.LoginAllowed && VerifyPassword(user.PasswordHash, password)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Credentials{}, err
 	}
-	if err != nil || normalizeErr != nil {
+	// An account that moved to single sign-on keeps whatever password hash it
+	// had, so the check is on the flag rather than on the hash being empty.
+	usable := normalizeErr == nil && err == nil && user.LoginAllowed && user.PasswordLogin
+	valid := usable && VerifyPassword(user.PasswordHash, password)
+	if !usable {
+		// The hashing work happens even when there is nothing to compare
+		// against, so an unknown username, a disabled account, and an
+		// SSO-only account cannot be told apart by how long the reply takes.
 		consumePasswordWork(password)
 	}
 	if !valid {
