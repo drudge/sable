@@ -837,7 +837,11 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 		return false
 	}
 	zone := runtime.zones[normalizeName(question.Name)]
-	if zone == nil || !zone.transferAllowed(responseWriterClientIP(writer)) ||
+	// The DoH response writer cannot verify a TSIG MAC (its TsigStatus is always
+	// nil), so a transfer over DoH would treat any request bearing the key name
+	// as authenticated. Refuse DoH outright, as serveDynamicUpdate and
+	// serveNotify already do, so TSIG stays the authenticator it is meant to be.
+	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(responseWriterClientIP(writer)) ||
 		writer.LocalAddr() == nil || !strings.HasPrefix(writer.LocalAddr().Network(), "tcp") ||
 		handler.zoneExpired(question.Name) {
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeRefused))
