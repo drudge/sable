@@ -239,8 +239,19 @@ func (validator *dnssecValidator) validateRRSet(
 		}
 		return state, nil
 	}
+	owner := rrset[0].Header().Name
 	var failures []error
 	for _, signature := range signatures {
+		// RFC 4035 section 5.3.1: an RRSIG's signer name must be the zone that
+		// holds the RRset, i.e. equal to or an ancestor of the owner. Verify
+		// enforces this, but the insecure short-circuit below runs before it, so
+		// an RRSIG grouped by owner with an out-of-bailiwick signer could
+		// otherwise downgrade a signed name to insecure by pointing at an
+		// unsigned zone. Reject those signers before their zone state is trusted.
+		if !dns.IsSubDomain(signature.SignerName, owner) {
+			failures = append(failures, fmt.Errorf("RRSIG signer %s is not in bailiwick of %s", signature.SignerName, owner))
+			continue
+		}
 		zone, err := validator.zoneKeys(ctx, signature.SignerName, query)
 		if err != nil {
 			failures = append(failures, err)
