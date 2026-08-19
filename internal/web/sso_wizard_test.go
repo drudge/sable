@@ -302,3 +302,94 @@ func TestWizardBackReturnsToAnEarlierStep(t *testing.T) {
 		t.Fatal("Back saved the provider")
 	}
 }
+
+// configuredProvider is a provider that is already set up, which is what an
+// operator sees when they choose Edit Setup rather than starting fresh.
+func configuredProvider() SSOStatusView {
+	return SSOStatusView{
+		Configured:    true,
+		Enabled:       true,
+		Label:         "Pocket ID",
+		Issuer:        "https://id.example.com",
+		ClientID:      "sable",
+		RedirectURL:   "https://dns.example.test/auth/oidc/callback",
+		Scopes:        []string{"openid", "profile", "email", "groups"},
+		UsernameClaim: "preferred_username",
+		GroupsClaim:   "groups",
+		Provision:     false,
+		LinkByEmail:   false,
+		SyncRoles:     true,
+		DefaultRoles:  []string{"Auditor"},
+		Mappings:      []config.OIDCRoleMapping{{Group: "dns-admins", Role: "Administrator"}},
+		SecretStored:  true,
+	}
+}
+
+// Editing an existing provider walks the same steps as first-time setup, and
+// the early steps do not collect roles. Those answers have to be seeded from
+// what is saved, or an operator who clicks through loses every mapping they
+// had.
+func TestWizardKeepsSavedMappingsWhileEditing(t *testing.T) {
+	admin := &fakeSSOAdmin{status: configuredProvider(), probe: SSOProbeResult{Issuer: "https://id.example.com"}}
+	server := newWizardServer(t, admin)
+
+	// Advance to the roles step, which is where the mappings are edited. The
+	// assertions target the wizard's own inputs rather than any text on the
+	// page, because the card behind the dialog also lists the saved mappings
+	// and would mask the bug.
+	form := providerAnswers()
+	form.Set("wizard_step", pages.SSOStepClaims)
+	form.Set("claims_present", "true")
+	form.Set("scopes", "openid profile email groups")
+	form.Set("groups_claim", "groups")
+	body := postWizard(t, server, form).Body.String()
+
+	if !strings.Contains(body, `name="mapping_group" value="dns-admins"`) {
+		t.Fatal("the roles step did not load the saved group mapping")
+	}
+	if !strings.Contains(body, `name="default_roles" value="Auditor"`) {
+		t.Fatal("the roles step did not load the saved default roles")
+	}
+}
+
+// The same gap would quietly re-enable settings the operator had turned off,
+// because an unchecked box on a step that never asked is not an answer.
+func TestWizardDoesNotResurrectSettingsTheOperatorTurnedOff(t *testing.T) {
+	admin := &fakeSSOAdmin{status: configuredProvider(), probe: SSOProbeResult{Issuer: "https://id.example.com"}}
+	server := newWizardServer(t, admin)
+
+	form := providerAnswers()
+	form.Set("wizard_step", pages.SSOStepReview)
+	postWizard(t, server, form)
+
+	if admin.saved.Provision {
+		t.Error("provisioning was switched back on by a step that never asked about it")
+	}
+	if admin.saved.LinkByVerifiedEmail {
+		t.Error("email linking was switched back on by a step that never asked about it")
+	}
+	if len(admin.saved.RoleMappings) != 1 || admin.saved.RoleMappings[0].Group != "dns-admins" {
+		t.Errorf("saved mappings = %v, want the existing mapping to survive", admin.saved.RoleMappings)
+	}
+}
+
+// Claims are carried by the provider step's hidden fields, but an operator
+// arriving at a later step must not fall back to the defaults either.
+func TestWizardKeepsSavedClaimsWhileEditing(t *testing.T) {
+	status := configuredProvider()
+	status.GroupsClaim = "roles"
+	status.Scopes = []string{"openid", "profile", "email", "roles"}
+	admin := &fakeSSOAdmin{status: status, probe: SSOProbeResult{Issuer: "https://id.example.com"}}
+	server := newWizardServer(t, admin)
+
+	form := providerAnswers()
+	form.Set("wizard_step", pages.SSOStepReview)
+	postWizard(t, server, form)
+
+	if admin.saved.GroupsClaim != "roles" {
+		t.Errorf("saved groups claim = %q, want the configured one", admin.saved.GroupsClaim)
+	}
+	if strings.Join(admin.saved.Scopes, " ") != "openid profile email roles" {
+		t.Errorf("saved scopes = %v, want the configured ones", admin.saved.Scopes)
+	}
+}

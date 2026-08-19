@@ -155,6 +155,48 @@ session_ttl = "12h"
 api_token_ttl = "2160h"
 secret_key_file = "data/sable.key"
 
+# Console sign-in through an OpenID Connect provider. Set this up from
+# Integrations -> Single Sign-On in the console rather than by hand: the wizard
+# contacts the issuer before saving anything, and seals the client secret in the
+# encrypted vault, which is why no secret appears here.
+#
+# Enabling this adds a button to the sign-in page and takes nobody's password
+# away. Moving an account to single sign-on only is a per-account switch on the
+# Administration page, and Sable keeps one administrator able to sign in with a
+# password so a problem at the provider cannot lock everyone out.
+[oidc]
+enabled = false
+# display_name = "Pocket ID"
+# issuer = "https://id.example.com"
+# client_id = "sable"
+# redirect_url = "https://dns.example.com/auth/oidc/callback"
+# scopes = ["openid", "profile", "email", "groups"]
+# username_claim = "preferred_username"
+# email_claim = "email"
+# groups_claim = "groups"
+# Ask the UserInfo endpoint for claims the ID token leaves out, which some
+# providers require before group membership arrives at all.
+# fetch_userinfo = false
+# Create an account the first time somebody signs in successfully.
+# provision = true
+# Attach a first sign-in to an existing account with the same email, but only
+# when the provider asserts the address is verified. After that the provider's
+# subject identifies the person, because an email address can change hands.
+# link_by_verified_email = true
+# Reconcile roles from the provider's groups on every sign-in. Only the roles
+# named below are touched; anything assigned by hand in the console survives.
+# sync_roles = true
+# default_roles = ["Auditor"]
+# rp_initiated_logout = false
+# discovery_interval = "1h"
+# clock_skew = "1m"
+
+# Each mapping grants one Sable role to everyone carrying one provider group.
+# The group is matched exactly as the provider sends it in groups_claim.
+# [[oidc.role_mappings]]
+# group = "dns-admins"
+# role = "Administrator"
+
 # Node-local clustering identity. Membership and synchronized state are stored
 # in data_dir and are never embedded in this TOML file.
 [cluster]
