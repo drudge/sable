@@ -165,6 +165,14 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		if err != nil {
 			return errors.New("resolver timeout is invalid")
 		}
+		resolverRetries, err := strconv.Atoi(strings.TrimSpace(request.FormValue("resolver_retries")))
+		if err != nil || resolverRetries < 1 || resolverRetries > 10 {
+			return errors.New("resolver retries must be a whole number between 1 and 10")
+		}
+		resolverRetryTimeout, err := time.ParseDuration(strings.TrimSpace(request.FormValue("resolver_retry_timeout")))
+		if err != nil || resolverRetryTimeout <= 0 {
+			return errors.New("resolver retry timeout is invalid")
+		}
 		cacheSize, err := strconv.Atoi(request.FormValue("cache_size"))
 		if err != nil || cacheSize <= 0 {
 			return errors.New("cache size must be positive")
@@ -175,6 +183,8 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		candidate.Resolver.Forwarders = forwarders
 		candidate.Resolver.RootHints = formLines(request.FormValue("root_hints"))
 		candidate.Resolver.Timeout = config.Duration{Duration: resolverTimeout}
+		candidate.Resolver.Retries = resolverRetries
+		candidate.Resolver.RetryTimeout = config.Duration{Duration: resolverRetryTimeout}
 		candidate.Resolver.CacheSize = cacheSize
 		candidate.Resolver.CacheMinimumTTL = cacheMinimumTTL
 		candidate.Resolver.CacheMaximumTTL = cacheMaximumTTL
@@ -408,6 +418,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
+		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,
 		CacheMinimumTTL: configuration.Resolver.CacheMinimumTTL, CacheMaximumTTL: configuration.Resolver.CacheMaximumTTL,
 		CacheNegativeTTL: configuration.Resolver.CacheNegativeTTL, CacheFailureTTL: configuration.Resolver.CacheFailureTTL,

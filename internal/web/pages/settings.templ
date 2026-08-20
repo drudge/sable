@@ -22,6 +22,8 @@ type SettingsPageView struct {
 	Forwarders          string
 	RootHints           string
 	ResolverTimeout     string
+	ResolverRetries     int
+	ResolverRetryTimeout string
 	CacheSize           int
 	CacheMinimumTTL     uint32
 	CacheMaximumTTL     uint32
@@ -275,6 +277,7 @@ templ SettingsRecursionPanel(view SettingsPageView) {
 			<div class="isotope-card-content">
 				<div class="blocking-radio-list settings-blocking-radio-list"><label><input type="radio" name="resolver_mode" value="recursive" checked?={ view.ResolverMode == "recursive" }/><span><strong>Iterative Recursion</strong><small>Resolve directly from the DNS root with QNAME minimization. Conditional routes still use their configured forwarders.</small></span></label><label><input type="radio" name="resolver_mode" value="forward" checked?={ view.ResolverMode == "forward" }/><span><strong>Forwarding</strong><small>Send unmatched queries to the upstream servers configured under Proxy.</small></span></label></div>
 				<div class="field-grid two"><label class="field-control"><span>Resolution Timeout</span><input name="resolver_timeout" value={ view.ResolverTimeout } required/><small>End-to-end deadline, such as <code>3s</code>.</small></label><label class="field-control switch-row"><span><strong>Validate DNSSEC</strong><small>Reject bogus signatures during recursive resolution.</small></span><input type="checkbox" name="dnssec_validation" value="true" checked?={ view.DNSSECValidation }/></label></div>
+				<div class="field-grid two"><label class="field-control"><span>Upstream Retries</span><input type="number" name="resolver_retries" min="1" max="10" value={ fmt.Sprint(view.ResolverRetries) } required/><small>Attempts per upstream before failover on a dropped packet. Raise <code>Resolution Timeout</code> too if you increase this in recursive mode.</small></label><label class="field-control"><span>Retry Timeout</span><input name="resolver_retry_timeout" value={ view.ResolverRetryTimeout } required/><small>How long each attempt waits, such as <code>1500ms</code>.</small></label></div>
 				<label class="field-control switch-row"><span><strong>Automatic Trust-Anchor Updates</strong><small>Maintain RFC 5011 root trust anchors without manual intervention.</small></span><input type="checkbox" name="trust_anchor_updates" value="true" checked?={ view.TrustAnchorUpdates }/></label>
 				<details class="settings-advanced"><summary>@Icon("sliders")<span>Advanced root hints</span>@Icon("chevron-down")</summary><label class="field-control"><span>Root Server Addresses</span><textarea name="root_hints" rows="5" spellcheck="false" placeholder="Use Sable's bundled IANA root hints">{ view.RootHints }</textarea><small>Optional IP:port seed addresses, one per line. Leave empty to use the bundled root hints.</small></label></details>
 			</div>
