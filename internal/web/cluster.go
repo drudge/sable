@@ -614,7 +614,7 @@ func (server *Server) clusterAvailable(writer http.ResponseWriter, request *http
 }
 
 func (server *Server) renderClusterMutation(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 	if err := pages.ClusterContent(server.clusterView(request, message, errorMessage)).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render cluster mutation", "error", err)
 	}

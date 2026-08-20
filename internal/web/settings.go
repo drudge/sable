@@ -385,9 +385,7 @@ func (server *Server) renderSettingsMutation(writer http.ResponseWriter, request
 // extra to show, such as a freshly generated TSIG secret, fill in the view
 // first and render it through here.
 func (server *Server) renderSettingsView(writer http.ResponseWriter, request *http.Request, status int, view pages.SettingsPageView) {
-	if status != http.StatusOK {
-		writer.WriteHeader(status)
-	}
+	writeFragmentStatus(writer, status)
 	if request.Header.Get("HX-Request") == "true" {
 		_ = pages.SettingsContent(view).Render(request.Context(), writer)
 		return

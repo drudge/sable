@@ -1095,6 +1095,22 @@ func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
 	return result
 }
 
+// consoleFragmentHeader marks a response whose body is a rendered console
+// fragment rather than a bare error. HTMX throws away 4xx and 5xx bodies by
+// default, which silently hid every validation banner the server rendered, so
+// the console opts those responses back into the swap when it sees this header.
+// The status code itself stays honest for API clients and logs.
+const consoleFragmentHeader = "X-Sable-Console-Fragment"
+
+// writeFragmentStatus writes a status for a response carrying a console
+// fragment, flagging anything other than 200 so the browser still swaps it in.
+func writeFragmentStatus(writer http.ResponseWriter, status int) {
+	if status != http.StatusOK {
+		writer.Header().Set(consoleFragmentHeader, "true")
+	}
+	writer.WriteHeader(status)
+}
+
 func writeJSON(writer http.ResponseWriter, status int, value any) {
 	encoded, err := json.Marshal(value)
 	if err != nil {

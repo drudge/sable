@@ -335,7 +335,7 @@ func (server *Server) renderSSOWizard(writer http.ResponseWriter, request *http.
 	}
 	view := server.integrationsView(request, "", "")
 	view.SSO.Wizard = wizard
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render integrations content", "error", err)
 	}

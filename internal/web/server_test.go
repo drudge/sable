@@ -735,6 +735,14 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	if invalidResponse.Code != http.StatusUnprocessableEntity || configuration.Current().Revision != 5 {
 		t.Fatalf("invalid settings update = %d revision=%d", invalidResponse.Code, configuration.Current().Revision)
 	}
+	// Without this header the console drops the rejected response on the floor
+	// and the operator never sees why the save failed.
+	if invalidResponse.Header().Get("X-Sable-Console-Fragment") != "true" {
+		t.Fatalf("rejected settings response was not marked as a console fragment: %v", invalidResponse.Header())
+	}
+	if !strings.Contains(invalidResponse.Body.String(), "Block-list update interval must be between 1 and 8760 hours.") {
+		t.Fatalf("rejected settings response did not carry the reason: %s", invalidResponse.Body.String())
+	}
 }
 
 func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
