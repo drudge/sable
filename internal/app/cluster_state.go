@@ -84,7 +84,9 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 	snapshot := clusterStateSnapshot{
 		FormatVersion: clusterStateFormatVersion,
 		Configuration: configurationContents,
-		Zones:         replicator.zones.Current().Zones,
+		// Capture runs every heartbeat and only reads the zones to serialize them,
+		// so take them by reference rather than deep-copying every zone and record.
+		Zones:         replicator.zones.CurrentRef().Zones,
 		Authorization: authorization,
 	}
 	contents, err := json.Marshal(snapshot)
