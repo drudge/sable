@@ -260,7 +260,7 @@ func (server *Server) removeSourcedRecords(request *http.Request, source string)
 
 func (server *Server) renderIntegrationsMutation(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
 	view := server.integrationsView(request, message, errorMessage)
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render integrations content", "error", err)
 	}
@@ -752,7 +752,7 @@ func (server *Server) unifiWizardFinish(writer http.ResponseWriter, request *htt
 func (server *Server) renderWizard(writer http.ResponseWriter, request *http.Request, status int, wizard pages.UniFiWizardView) {
 	view := server.integrationsView(request, "", "")
 	view.UniFi.Wizard = wizard
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render UniFi setup wizard", "error", err)
 	}

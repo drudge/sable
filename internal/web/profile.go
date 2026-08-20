@@ -104,7 +104,7 @@ func (server *Server) renderProfileContent(writer http.ResponseWriter, request *
 		http.Error(writer, "Unable to refresh your profile.", http.StatusInternalServerError)
 		return
 	}
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 	_ = pages.ProfileContent(view).Render(request.Context(), writer)
 }
 

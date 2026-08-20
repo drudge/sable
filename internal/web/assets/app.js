@@ -1197,6 +1197,16 @@
 	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
 
+	// htmx treats every 4xx and 5xx as a failed request and drops the body, so a
+	// rejected form used to leave the page untouched with nothing but a console
+	// warning. Handlers that render the whole panel back, error banner included,
+	// mark the response and it gets swapped in like a normal reply.
+	document.body.addEventListener("htmx:beforeSwap", (event) => {
+	  if (event.detail?.xhr?.getResponseHeader("X-Sable-Console-Fragment") !== "true") return;
+	  event.detail.shouldSwap = true;
+	  event.detail.isError = false;
+	});
+
 	initializeSwappedContent(document);
 	document.body.addEventListener("htmx:afterSwap", (event) => {
 	  initializeSwappedContent(event.detail?.target);

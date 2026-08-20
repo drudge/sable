@@ -451,9 +451,7 @@ func backupFileName() string {
 }
 
 func (server *Server) renderBackupPanel(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
-	if status != http.StatusOK {
-		writer.WriteHeader(status)
-	}
+	writeFragmentStatus(writer, status)
 	_ = pages.SettingsBackupPanel(server.backupView(request, message, errorMessage)).Render(request.Context(), writer)
 }
 
