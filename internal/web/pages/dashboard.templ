@@ -216,6 +216,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<meta name="color-scheme" content="light dark"/>
 			<meta name="htmx-config" content={ htmxConfig }/>
 			<title>{ pageTitle } · Sable</title>
+			<link rel="icon" href="/assets/sable-mark.svg" type="image/svg+xml"/>
+			<link rel="icon" href="/assets/sable-icon-180.png" type="image/png" sizes="180x180"/>
+			<link rel="apple-touch-icon" href="/assets/sable-icon-180.png"/>
 			<script src="/assets/app.js"></script>
 			<link rel="stylesheet" href="/assets/app.css"/>
 			<script src="/assets/htmx.min.js" defer></script>
@@ -318,7 +321,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 }
 
 templ SableMark(extraClass string) {
-	<span class={ "brand-mark " + extraClass } aria-hidden="true">S</span>
+	<span class={ "brand-mark " + extraClass } aria-hidden="true"><img src="/assets/sable-mark.svg" alt="" width="32" height="32"/></span>
 }
 
 templ DNSClientContent(view DNSClientPageView) {
@@ -466,12 +469,15 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="color-scheme" content="light dark"/>
 			<title>{ ifThen(setup, "Set up Sable", "Sign in to Sable") }</title>
+			<link rel="icon" href="/assets/sable-mark.svg" type="image/svg+xml"/>
+			<link rel="icon" href="/assets/sable-icon-180.png" type="image/png" sizes="180x180"/>
+			<link rel="apple-touch-icon" href="/assets/sable-icon-180.png"/>
 			<script src="/assets/app.js"></script>
 			<link rel="stylesheet" href="/assets/app.css"/>
 		</head>
 		<body class="auth-body">
 			<main class="auth-card">
-				<div class="auth-logo" aria-hidden="true"><span>S</span></div>
+				<div class="auth-logo" aria-hidden="true"><img src="/assets/sable-mark.svg" alt="" width="32" height="32"/></div>
 				if setup {
 					<h1>Sable</h1>
 					<p>Create your administrator account</p>

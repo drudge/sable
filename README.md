@@ -1,4 +1,8 @@
-# Sable
+<p align="center">
+  <img src="docs/assets/sable-mascot.png" alt="Sable" width="280">
+</p>
+
+<h1 align="center">Sable</h1>
 
 Sable is a modern, high-performance DNS platform written in Go. It is being
 built as one executable containing the DNS server, DNS client, administrative
