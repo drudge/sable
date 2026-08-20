@@ -688,7 +688,8 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	form := url.Values{
 		"dns_listen": {"127.0.0.1:5353\n[::1]:5353"}, "forwarders": {"1.1.1.1:53\n9.9.9.9:53"},
 		"resolver_mode": {"recursive"}, "root_hints": {"192.0.2.1:53\n192.0.2.2:53"},
-		"resolver_timeout": {"2s"}, "cache_size": {"2048"}, "dnssec_validation": {"true"},
+		"resolver_timeout": {"2s"}, "resolver_retries": {"3"}, "resolver_retry_timeout": {"800ms"},
+		"cache_size": {"2048"}, "dnssec_validation": {"true"},
 		"trust_anchor_updates": {"true"}, "dot_listen": {"127.0.0.1:853"}, "doh_listen": {"127.0.0.1:8443"},
 		"certificate_file": {"tls/cert.pem"}, "private_key_file": {"tls/key.pem"},
 		"minimum_tls_version": {"1.3"}, "query_log_enabled": {"true"},
@@ -713,6 +714,7 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	}
 	updated := configuration.Current()
 	if updated.Revision != 5 || updated.Config.Resolver.CacheSize != 2048 || updated.Config.Resolver.Timeout.Duration != 2*time.Second ||
+		updated.Config.Resolver.Retries != 3 || updated.Config.Resolver.RetryTimeout.Duration != 800*time.Millisecond ||
 		updated.Config.Resolver.Mode != "recursive" || len(updated.Config.Resolver.RootHints) != 2 ||
 		!updated.Config.Resolver.SaveCache || updated.Config.Resolver.CacheStaleResetTTL != 30 ||
 		updated.Config.Resolver.CacheStaleMaxWait.Duration != 1800*time.Millisecond ||
