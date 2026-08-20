@@ -29,6 +29,8 @@ const (
 	defaultDatabaseDriver      = "sqlite"
 	defaultDatabaseDSN         = "data/sable.db"
 	defaultResolverTimeout     = 2 * time.Second
+	defaultResolverRetries     = 2
+	defaultResolverRetryWait   = 1500 * time.Millisecond
 	defaultShutdownTimeout     = 15 * time.Second
 	defaultReloadDebounce      = 250 * time.Millisecond
 	defaultCacheSize           = 65_536
@@ -148,6 +150,8 @@ type Resolver struct {
 	Routes                     []ForwardRoute `toml:"routes"`
 	Hosts                      []HostOverride `toml:"hosts"`
 	Timeout                    Duration       `toml:"timeout"`
+	Retries                    int            `toml:"retries"`
+	RetryTimeout               Duration       `toml:"retry_timeout"`
 	CacheSize                  int            `toml:"cache_size"`
 	CacheMinimumTTL            uint32         `toml:"cache_minimum_ttl"`
 	CacheMaximumTTL            uint32         `toml:"cache_maximum_ttl"`
@@ -341,6 +345,8 @@ func Defaults() Config {
 			Mode:                     "forward",
 			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
 			Timeout:                  Duration{Duration: defaultResolverTimeout},
+			Retries:                  defaultResolverRetries,
+			RetryTimeout:             Duration{Duration: defaultResolverRetryWait},
 			CacheSize:                defaultCacheSize,
 			CacheMinimumTTL:          defaultCacheMinimumTTL,
 			CacheMaximumTTL:          defaultCacheMaximumTTL,
@@ -543,6 +549,12 @@ func (configuration Config) Validate() error {
 	}
 	if configuration.Resolver.Timeout.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.timeout must be positive"))
+	}
+	if configuration.Resolver.Retries < 1 || configuration.Resolver.Retries > 10 {
+		validationErrors = append(validationErrors, errors.New("resolver.retries must be between 1 and 10"))
+	}
+	if configuration.Resolver.RetryTimeout.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("resolver.retry_timeout must be positive"))
 	}
 	if configuration.Resolver.CacheSize <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_size must be positive"))

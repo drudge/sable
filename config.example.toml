@@ -14,6 +14,12 @@ mode = "forward"
 forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
 # root_hints = ["198.41.0.4:53", "170.247.170.2:53"]
 timeout = "2s"
+# Attempts per upstream before failover, and how long each attempt waits. A
+# dropped UDP packet on a lossy path is retried instead of failing the query.
+# In recursive mode, raise timeout if you also raise these so the full
+# delegation chain still fits.
+retries = 2
+retry_timeout = "1500ms"
 cache_size = 65536
 cache_minimum_ttl = 10
 cache_maximum_ttl = 604800

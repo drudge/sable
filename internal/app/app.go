@@ -668,6 +668,8 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		RootHints:                  configuration.Resolver.RootHints,
 		Routes:                     routes,
 		Timeout:                    configuration.Resolver.Timeout.Duration,
+		Retries:                    configuration.Resolver.Retries,
+		RetryTimeout:               configuration.Resolver.RetryTimeout.Duration,
 		CacheSize:                  configuration.Resolver.CacheSize,
 		CacheMinimumTTL:            configuration.Resolver.CacheMinimumTTL,
 		CacheMaximumTTL:            configuration.Resolver.CacheMaximumTTL,

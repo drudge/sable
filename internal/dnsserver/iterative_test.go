@@ -163,6 +163,100 @@ func TestRecursiveModeKeepsConditionalForwardingRoutes(t *testing.T) {
 	}
 }
 
+func TestIterativeResolverRetriesDroppedPacket(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	rootAttempts := 0
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "com." && question.Qtype == dns.TypeNS:
+			rootAttempts++
+			if rootAttempts == 1 {
+				return nil, fmt.Errorf("simulated dropped packet")
+			}
+			return referralResponse(request, "com.", "ns.com.", "192.0.2.2"), nil
+		case endpoint == "udp://192.0.2.2:53" && question.Name == "example.com." && question.Qtype == dns.TypeNS:
+			return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "www.example.com." && question.Qtype == dns.TypeA:
+			return addressResponse(request, "192.0.2.44"), nil
+		default:
+			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+		}
+	}
+
+	// The root is the only configured hint, so without a retry the single dropped
+	// packet fails the whole resolution.
+	request := new(dns.Msg)
+	request.SetQuestion("www.example.com.", dns.TypeA)
+	response, err := handler.resolveNetwork(request, runtime, nil)
+	if err != nil {
+		t.Fatalf("resolveNetwork with one dropped packet: %v", err)
+	}
+	if len(response.Answer) != 1 || response.Answer[0].(*dns.A).A.String() != "192.0.2.44" {
+		t.Fatalf("answer = %+v", response.Answer)
+	}
+	if rootAttempts < 2 {
+		t.Fatalf("root queried %d times, want a retry after the dropped packet", rootAttempts)
+	}
+}
+
+func TestForwardExchangeRetriesDroppedPacket(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	attempts := 0
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		attempts++
+		if attempts == 1 {
+			return nil, fmt.Errorf("simulated dropped packet")
+		}
+		return addressResponse(request, "192.0.2.50"), nil
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.net.", dns.TypeA)
+	response, err := handler.exchangeContext(context.Background(), request, runtime, []string{"1.1.1.1:53"})
+	if err != nil {
+		t.Fatalf("exchangeContext with one dropped packet: %v", err)
+	}
+	if len(response.Answer) != 1 || response.Answer[0].(*dns.A).A.String() != "192.0.2.50" {
+		t.Fatalf("answer = %+v", response.Answer)
+	}
+	if attempts < 2 {
+		t.Fatalf("forwarder queried %d times, want a retry after the dropped packet", attempts)
+	}
+}
+
+func TestForwardExchangeHonorsConfiguredRetries(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Retries = 3
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	attempts := 0
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		attempts++
+		if attempts < 3 {
+			return nil, fmt.Errorf("simulated dropped packet %d", attempts)
+		}
+		return addressResponse(request, "192.0.2.51"), nil
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.net.", dns.TypeA)
+	if _, err := handler.exchangeContext(context.Background(), request, runtime, []string{"1.1.1.1:53"}); err != nil {
+		t.Fatalf("exchangeContext with retries=3: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("forwarder queried %d times, want 3 (two drops then success) from configured retries", attempts)
+	}
+}
+
 func recursiveTestRuntime(t *testing.T) *Runtime {
 	t.Helper()
 	configuration := testRuntimeConfig()

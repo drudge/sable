@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -33,6 +34,8 @@ type Runtime struct {
 	routes              map[string][]string
 	upstreams           string
 	timeout             time.Duration
+	retries             int
+	retryTimeout        time.Duration
 	staleMaxWait        time.Duration
 	blocked             map[string]struct{}
 	allowedExact        map[string]struct{}
@@ -72,6 +75,8 @@ type RuntimeConfig struct {
 	RootHints                  []string
 	Routes                     []ForwardingRoute
 	Timeout                    time.Duration
+	Retries                    int
+	RetryTimeout               time.Duration
 	CacheSize                  int
 	CacheMinimumTTL            uint32
 	CacheMaximumTTL            uint32
@@ -605,6 +610,8 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		routes:          routes,
 		upstreams:       upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
 		timeout:         configuration.Timeout,
+		retries:         cmp.Or(configuration.Retries, defaultRuntimeRetries),
+		retryTimeout:    cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
 		staleMaxWait:    configuration.CacheStaleMaxWait,
 		blocked:         blocked,
 		allowedExact:    allowedExact,
@@ -1991,19 +1998,47 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 		return nil, errors.New("no forwarding endpoints are available")
 	}
 	start := handler.upstreamIndex.Add(1) - 1
-	attemptTimeout := max(runtime.timeout/time.Duration(len(forwarders)), time.Nanosecond)
 	var exchangeErrors []error
 	for offset := range len(forwarders) {
 		forwarder := forwarders[(start+uint64(offset))%uint64(len(forwarders))]
-		attemptContext, stopAttempt := context.WithTimeout(ctx, attemptTimeout)
-		response, err := handler.upstreamExchange(attemptContext, request, forwarder, attemptTimeout)
-		stopAttempt()
+		response, err := handler.exchangeWithRetries(ctx, request, forwarder, runtime.retryTimeout, runtime.retries)
 		if err == nil {
 			return response, nil
 		}
 		exchangeErrors = append(exchangeErrors, fmt.Errorf("%s: %w", forwarder, err))
 	}
 	return nil, fmt.Errorf("all forwarders failed: %w", errors.Join(exchangeErrors...))
+}
+
+// Defaults applied by Compile when a RuntimeConfig leaves the retry settings at
+// their zero value (for example a hand-built config in a test).
+const (
+	defaultRuntimeRetries      = 2
+	defaultRuntimeRetryTimeout = 1500 * time.Millisecond
+)
+
+// exchangeWithRetries sends a request to one endpoint, retrying on a transient
+// error (a dropped packet reads as a timeout) until it succeeds, the retry count
+// is spent, or the surrounding deadline passes. Each attempt waits up to
+// retryTimeout, itself bounded by the caller's context.
+func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Msg, endpoint string, retryTimeout time.Duration, retries int) (*dns.Msg, error) {
+	if retries < 1 {
+		retries = 1
+	}
+	var lastErr error
+	for attempt := 0; attempt < retries; attempt++ {
+		if ctx.Err() != nil {
+			break
+		}
+		attemptContext, stopAttempt := context.WithTimeout(ctx, retryTimeout)
+		response, err := handler.upstreamExchange(attemptContext, request, endpoint, retryTimeout)
+		stopAttempt()
+		if err == nil {
+			return response, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {

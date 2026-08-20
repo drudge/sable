@@ -72,6 +72,40 @@ domains = ["Example.COM.", "example.com", " ads.example "]
 	}
 }
 
+func TestDecodeAppliesResolverRetryDefaultsAndValidates(t *testing.T) {
+	t.Parallel()
+
+	// Omitted retry settings fall back to the defaults, so an existing config
+	// keeps working.
+	loaded, err := Decode(strings.NewReader("[resolver]\nmode = \"forward\"\n"))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if loaded.Resolver.Retries != defaultResolverRetries {
+		t.Fatalf("Retries = %d, want default %d", loaded.Resolver.Retries, defaultResolverRetries)
+	}
+	if loaded.Resolver.RetryTimeout.Duration != defaultResolverRetryWait {
+		t.Fatalf("RetryTimeout = %v, want default %v", loaded.Resolver.RetryTimeout.Duration, defaultResolverRetryWait)
+	}
+
+	// Explicit values are honored.
+	custom, err := Decode(strings.NewReader("[resolver]\nretries = 4\nretry_timeout = \"800ms\"\n"))
+	if err != nil {
+		t.Fatalf("Decode() with explicit retry settings error = %v", err)
+	}
+	if custom.Resolver.Retries != 4 || custom.Resolver.RetryTimeout.Duration != 800*time.Millisecond {
+		t.Fatalf("retry settings = %d/%v, want 4/800ms", custom.Resolver.Retries, custom.Resolver.RetryTimeout.Duration)
+	}
+
+	// Out-of-range retries are rejected.
+	if _, err := Decode(strings.NewReader("[resolver]\nretries = 0\n")); err == nil || !strings.Contains(err.Error(), "resolver.retries") {
+		t.Fatalf("retries = 0 error = %v, want a resolver.retries validation error", err)
+	}
+	if _, err := Decode(strings.NewReader("[resolver]\nretry_timeout = \"0s\"\n")); err == nil || !strings.Contains(err.Error(), "resolver.retry_timeout") {
+		t.Fatalf("retry_timeout = 0 error = %v, want a resolver.retry_timeout validation error", err)
+	}
+}
+
 func TestDecodeValidatesDNSSECResolverPolicy(t *testing.T) {
 	t.Parallel()
 	loaded, err := Decode(strings.NewReader(`

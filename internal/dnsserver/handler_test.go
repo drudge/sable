@@ -1411,7 +1411,9 @@ func TestHandlerFailsOverToNextForwarder(t *testing.T) {
 	if result.response.Rcode != dns.RcodeSuccess || len(result.response.Answer) != 1 {
 		t.Fatalf("resolve() response = %+v, want successful failover", result.response)
 	}
-	want := []string{"192.0.2.1:53", "192.0.2.2:53"}
+	// The unreachable forwarder is retried once (a dropped packet is common on a
+	// lossy path) before failover moves on to the next one.
+	want := []string{"192.0.2.1:53", "192.0.2.1:53", "192.0.2.2:53"}
 	if !slices.Equal(attempted, want) {
 		t.Fatalf("attempted = %v, want %v", attempted, want)
 	}

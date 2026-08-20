@@ -163,7 +163,7 @@ func (handler *Handler) resolveIterativeQuestion(
 		if closestZone != "" && (candidate == dns.Fqdn(closestZone) || strings.HasSuffix(dns.Fqdn(closestZone), candidate)) {
 			continue
 		}
-		response, err := handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), servers, runtime.timeout, budget)
+		response, err := handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), servers, runtime, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +185,7 @@ func (handler *Handler) resolveIterativeQuestion(
 	var cnameChain []dns.RR
 	current := question
 	for hops := 0; hops <= maximumIterativeDepth; hops++ {
-		response, err := handler.exchangeIterative(ctx, iterativeQuery(current.Name, current.Qtype), servers, runtime.timeout, budget)
+		response, err := handler.exchangeIterative(ctx, iterativeQuery(current.Name, current.Qtype), servers, runtime, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +246,7 @@ func (handler *Handler) exchangeIterative(
 	ctx context.Context,
 	request *dns.Msg,
 	servers []string,
-	timeout time.Duration,
+	runtime *Runtime,
 	budget *iterativeBudget,
 ) (*dns.Msg, error) {
 	if len(servers) == 0 {
@@ -260,10 +260,7 @@ func (handler *Handler) exchangeIterative(
 		}
 		budget.remaining--
 		server := servers[(start+uint64(offset))%uint64(len(servers))]
-		attemptTimeout := max(timeout/time.Duration(min(len(servers), 3)), 100*time.Millisecond)
-		attemptContext, stopAttempt := context.WithTimeout(ctx, attemptTimeout)
-		response, err := handler.upstreamExchange(attemptContext, request, "udp://"+server, attemptTimeout)
-		stopAttempt()
+		response, err := handler.exchangeWithRetries(ctx, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", server, err))
 			continue
