@@ -1152,6 +1152,16 @@
 	  start();
 	};
 
+	// The fill width is server-rendered state, but a style attribute would trip
+	// the console's style-src CSP. The percentage rides in on aria-valuenow and
+	// is applied here instead, where CSP does not apply.
+	const syncProgressFill = (track) => {
+	  const fill = track?.querySelector("[data-progress-fill]");
+	  if (!fill) return;
+	  const percent = Number(track.getAttribute("aria-valuenow"));
+	  fill.style.width = `${Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0}%`;
+	};
+
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
@@ -1183,6 +1193,8 @@
 	  root.querySelectorAll?.("[data-unifi-zone-rows]").forEach(setupUniFiZoneRows);
 	  if (root.matches?.("[data-log-live-panel]")) setupLogLivePanel(root);
 	  root.querySelectorAll?.("[data-log-live-panel]").forEach(setupLogLivePanel);
+	  if (root.matches?.('[role="progressbar"]')) syncProgressFill(root);
+	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
 
 	initializeSwappedContent(document);
@@ -1199,6 +1211,10 @@
 	});
 	document.body.addEventListener("htmx:load", (event) => {
 	  initializeSwappedContent(event.detail?.elt);
+	});
+
+	document.addEventListener("click", (event) => {
+	  if (event.target.closest?.("[data-reload-page]")) window.location.reload();
 	});
 
 	document.addEventListener("click", (event) => {

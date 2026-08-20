@@ -106,7 +106,7 @@ templ SettingsContent(view SettingsPageView) {
 		<header class="page-heading"><h1>Settings</h1><p>Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect.</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
-		<section class="card server-configuration-card emphasized"><header><div><h2>@Icon("settings-2")<span>Server Configuration</span></h2><p>Sable v{ view.Console.Version } · Revision { fmt.Sprint(view.Revision) }</p></div><button class="icon-button" type="button" onclick="window.location.reload()" aria-label="Refresh settings">@Icon("refresh")</button></header></section>
+		<section class="card server-configuration-card emphasized"><header><div><h2>@Icon("settings-2")<span>Server Configuration</span></h2><p>Sable v{ view.Console.Version } · Revision { fmt.Sprint(view.Revision) }</p></div><button class="icon-button" type="button" data-reload-page aria-label="Refresh settings">@Icon("refresh")</button></header></section>
 		<div class="isotope-tab-list settings-tab-list" role="tablist" aria-label="Settings sections">
 			@SettingsTab("general", "General", "server", view.ActiveTab, false)
 			@SettingsTab("web-service", "Web", "globe", view.ActiveTab, false)
@@ -595,7 +595,7 @@ templ BackupProgress(job SettingsBackupJobView) {
 			<span>{ fmt.Sprintf("%d%%", job.Percent) }</span>
 		</div>
 		<div class="backup-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ fmt.Sprint(job.Percent) } aria-label={ job.Title }>
-			<div class="backup-progress-fill" style={ fmt.Sprintf("width:%d%%", job.Percent) }></div>
+			<div class="backup-progress-fill" data-progress-fill></div>
 		</div>
 		<div class="backup-progress-meta">
 			<span>{ job.Stage }</span>
@@ -614,7 +614,7 @@ templ BackupUploadMeter() {
 			<span data-backup-upload-percent>0%</span>
 		</div>
 		<div class="backup-progress-track">
-			<div class="backup-progress-fill" data-backup-upload-fill style="width:0%"></div>
+			<div class="backup-progress-fill" data-backup-upload-fill></div>
 		</div>
 	</div>
 }

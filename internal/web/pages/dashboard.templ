@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+// htmx injects its own <style> element for the indicator classes as soon as it
+// loads, which the console's strict style-src CSP blocks. Turning the injection
+// off keeps the console CSP-clean; the equivalent rules live in app.css.
+const htmxConfig = `{"includeIndicatorStyles":false}`
+
 type DashboardView struct {
 	Version        string
 	TimeDisplay    TimeDisplay
@@ -209,6 +214,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="color-scheme" content="light dark"/>
+			<meta name="htmx-config" content={ htmxConfig }/>
 			<title>{ pageTitle } · Sable</title>
 			<script src="/assets/app.js"></script>
 			<link rel="stylesheet" href="/assets/app.css"/>
