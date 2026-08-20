@@ -229,6 +229,34 @@ func TestForwardExchangeRetriesDroppedPacket(t *testing.T) {
 	}
 }
 
+func TestForwardExchangeHonorsConfiguredRetries(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Retries = 3
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	attempts := 0
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		attempts++
+		if attempts < 3 {
+			return nil, fmt.Errorf("simulated dropped packet %d", attempts)
+		}
+		return addressResponse(request, "192.0.2.51"), nil
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.net.", dns.TypeA)
+	if _, err := handler.exchangeContext(context.Background(), request, runtime, []string{"1.1.1.1:53"}); err != nil {
+		t.Fatalf("exchangeContext with retries=3: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("forwarder queried %d times, want 3 (two drops then success) from configured retries", attempts)
+	}
+}
+
 func recursiveTestRuntime(t *testing.T) *Runtime {
 	t.Helper()
 	configuration := testRuntimeConfig()
