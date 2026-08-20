@@ -254,6 +254,8 @@ type Handler struct {
 	startedAt            time.Time
 	observer             atomic.Pointer[observerHolder]
 	upstreamExchange     upstreamExchangeFunc
+	upstreamHealth       *upstreamHealthTracker
+	inflight             *inflightGroup
 	zoneTransfer         zoneTransferFunc
 	zoneRefresh          zoneRefreshFunc
 	journalMu            sync.RWMutex
@@ -318,7 +320,15 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 	}
 	blocked := make(map[string]struct{}, len(configuration.BlockedDomains))
 	for _, domain := range configuration.BlockedDomains {
-		normalized, err := dnsname.Normalize(strings.TrimPrefix(strings.TrimSpace(domain), "*."))
+		trimmed := strings.TrimPrefix(strings.TrimSpace(domain), "*.")
+		// Block lists arrive already normalized by the block-list compiler, which
+		// ran the same IDNA pass. Skip the expensive second idna.ToASCII for a
+		// name that is already in canonical form; only re-normalize the rest.
+		if isCanonicalDomain(trimmed) {
+			blocked[trimmed] = struct{}{}
+			continue
+		}
+		normalized, err := dnsname.Normalize(trimmed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid blocked domain %q: %w", domain, err)
 		}
@@ -645,6 +655,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 func NewHandler(runtime *Runtime) *Handler {
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: newForwarderPool().exchange,
+		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog: newFailureLogLimiter(),
@@ -1164,13 +1175,87 @@ func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, cli
 	if runtime.staleMaxWait > 0 && runtime.cache.HasStale(request) {
 		return handler.resolveWithStaleWait(request, runtime, forwarders)
 	}
-	return handler.resolveLiveUpstream(request, runtime, forwarders, true)
+	return handler.resolveShared(request, runtime, forwarders, true)
+}
+
+// resolveShared coalesces concurrent identical cache misses so only one upstream
+// resolution (and one DNSSEC validation) runs for a given question at a time. The
+// followers wait for the leader's result and each receive their own copy prepared
+// for their request.
+func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool) resolution {
+	result, shared := handler.inflight.do(coalesceKey(request), func() resolution {
+		return handler.resolveLiveUpstream(request, runtime, forwarders, staleFallback)
+	})
+	if !shared || result.response == nil {
+		return result
+	}
+	// The shared response was finished for the leader's request, so give this
+	// caller its own copy carrying its request id and question.
+	response := result.response.Copy()
+	response.Id = request.Id
+	response.Question = append(response.Question[:0], request.Question...)
+	prepareResponseForClient(response, request)
+	result.response = response
+	return result
+}
+
+// inflightGroup collapses concurrent calls sharing a key into one execution, so
+// a stampede of identical cache misses performs a single upstream resolution.
+// The first caller runs the work; the rest wait and receive its result.
+type inflightGroup struct {
+	mu    sync.Mutex
+	calls map[string]*inflightCall
+}
+
+type inflightCall struct {
+	wait   chan struct{}
+	result resolution
+}
+
+func newInflightGroup() *inflightGroup {
+	return &inflightGroup{calls: make(map[string]*inflightCall)}
+}
+
+// do runs fn for key unless a call is already in flight, in which case it waits
+// for that call and returns its result. The bool reports whether the result was
+// shared with an in-flight call (true for waiters), so the caller knows it must
+// copy a shared response before mutating it.
+func (group *inflightGroup) do(key string, fn func() resolution) (resolution, bool) {
+	group.mu.Lock()
+	if call, ok := group.calls[key]; ok {
+		group.mu.Unlock()
+		<-call.wait
+		return call.result, true
+	}
+	call := &inflightCall{wait: make(chan struct{})}
+	group.calls[key] = call
+	group.mu.Unlock()
+
+	call.result = fn()
+
+	group.mu.Lock()
+	delete(group.calls, key)
+	group.mu.Unlock()
+	close(call.wait)
+	return call.result, false
+}
+
+// coalesceKey identifies queries that share an upstream answer: the same name,
+// type, and class, and the same DNSSEC intent (DO/CD), since those change what a
+// resolver returns and caches.
+func coalesceKey(request *dns.Msg) string {
+	question := request.Question[0]
+	dnssecOK := false
+	if option := request.IsEdns0(); option != nil {
+		dnssecOK = option.Do()
+	}
+	return fmt.Sprintf("%s|%d|%d|%t|%t", normalizeName(question.Name), question.Qtype, question.Qclass, dnssecOK, request.CheckingDisabled)
 }
 
 func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string) resolution {
 	result := make(chan resolution, 1)
 	go func() {
-		result <- handler.resolveLiveUpstream(request.Copy(), runtime, forwarders, false)
+		result <- handler.resolveShared(request.Copy(), runtime, forwarders, false)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
 	defer timer.Stop()
@@ -1999,15 +2084,77 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 	}
 	start := handler.upstreamIndex.Add(1) - 1
 	var exchangeErrors []error
-	for offset := range len(forwarders) {
-		forwarder := forwarders[(start+uint64(offset))%uint64(len(forwarders))]
+	for _, forwarder := range handler.upstreamHealth.order(forwarders, start) {
 		response, err := handler.exchangeWithRetries(ctx, request, forwarder, runtime.retryTimeout, runtime.retries)
 		if err == nil {
+			handler.upstreamHealth.markHealthy(forwarder)
 			return response, nil
 		}
+		handler.upstreamHealth.markUnhealthy(forwarder)
 		exchangeErrors = append(exchangeErrors, fmt.Errorf("%s: %w", forwarder, err))
 	}
 	return nil, fmt.Errorf("all forwarders failed: %w", errors.Join(exchangeErrors...))
+}
+
+// upstreamUnhealthyCooldown is how long a forwarder that just failed is tried
+// last instead of first. It is deprioritized, never removed, so a recovered
+// upstream is probed again and cleared on the next success.
+const upstreamUnhealthyCooldown = 10 * time.Second
+
+// upstreamHealthTracker remembers which forwarders recently failed so a query
+// does not keep starting at a dead upstream and stalling on it for the whole
+// per-attempt timeout. The common case (nothing failing) takes only a read lock
+// on an empty map.
+type upstreamHealthTracker struct {
+	mu         sync.RWMutex
+	retryAfter map[string]time.Time
+	now        func() time.Time
+}
+
+func newUpstreamHealthTracker() *upstreamHealthTracker {
+	return &upstreamHealthTracker{retryAfter: make(map[string]time.Time), now: time.Now}
+}
+
+func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) []string {
+	rotated := make([]string, len(forwarders))
+	for offset := range forwarders {
+		rotated[offset] = forwarders[(start+uint64(offset))%uint64(len(forwarders))]
+	}
+	tracker.mu.RLock()
+	if len(tracker.retryAfter) == 0 {
+		tracker.mu.RUnlock()
+		return rotated
+	}
+	now := tracker.now()
+	healthy := make([]string, 0, len(rotated))
+	var cooling []string
+	for _, forwarder := range rotated {
+		if until, found := tracker.retryAfter[forwarder]; found && now.Before(until) {
+			cooling = append(cooling, forwarder)
+		} else {
+			healthy = append(healthy, forwarder)
+		}
+	}
+	tracker.mu.RUnlock()
+	return append(healthy, cooling...)
+}
+
+func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
+	tracker.mu.Lock()
+	tracker.retryAfter[forwarder] = tracker.now().Add(upstreamUnhealthyCooldown)
+	tracker.mu.Unlock()
+}
+
+func (tracker *upstreamHealthTracker) markHealthy(forwarder string) {
+	tracker.mu.RLock()
+	_, tracked := tracker.retryAfter[forwarder]
+	tracker.mu.RUnlock()
+	if !tracked {
+		return
+	}
+	tracker.mu.Lock()
+	delete(tracker.retryAfter, forwarder)
+	tracker.mu.Unlock()
 }
 
 // Defaults applied by Compile when a RuntimeConfig leaves the retry settings at
@@ -2295,4 +2442,22 @@ func (runtime *Runtime) blockedResponse(request *dns.Msg) *dns.Msg {
 
 func normalizeName(name string) string {
 	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
+}
+
+// isCanonicalDomain reports whether name is already the lowercase, ASCII,
+// dot-trimmed form that dnsname.Normalize produces, so a block-list entry can be
+// keyed without repeating the expensive IDNA pass. It still confirms the name is
+// structurally valid so a malformed input falls back to full normalization.
+func isCanonicalDomain(name string) bool {
+	if name == "" || len(name) > 255 || name[0] == '.' || name[len(name)-1] == '.' {
+		return false
+	}
+	for index := 0; index < len(name); index++ {
+		character := name[index]
+		if character >= 0x80 || (character >= 'A' && character <= 'Z') || character == ' ' {
+			return false
+		}
+	}
+	_, valid := dns.IsDomainName(name)
+	return valid
 }

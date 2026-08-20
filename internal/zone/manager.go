@@ -73,6 +73,15 @@ func (manager *Manager) Current() Snapshot {
 	return Snapshot{Zones: Clone(active.Zones), Revision: active.Revision, LoadedAt: active.LoadedAt}
 }
 
+// CurrentRef returns the active snapshot without copying its zones. Updates
+// replace the snapshot pointer atomically rather than mutating it in place, so a
+// caller that only reads the zones (for example serializing them) always sees a
+// consistent set and avoids the deep copy Current makes. The returned zones must
+// not be mutated.
+func (manager *Manager) CurrentRef() Snapshot {
+	return *manager.current.Load()
+}
+
 func (manager *Manager) UpdateZones(ctx context.Context, mutate func(*[]Zone) error) error {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1380,6 +1382,122 @@ func TestRuntimeUsesLongestConditionalForwardingSuffix(t *testing.T) {
 	forwarders, routed = runtime.forwardersFor("unrelated.test.")
 	if routed || forwarders[0] != configuration.Forwarders[0] {
 		t.Fatalf("forwardersFor(default) = %v, %v", forwarders, routed)
+	}
+}
+
+func TestResolveCoalescesConcurrentCacheMisses(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Forwarders = []string{"192.0.2.1:53"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+
+	var calls atomic.Int32
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		calls.Add(1)
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+		return positiveResponse(request, 60), nil
+	}
+
+	// SetQuestion assigns a random id, so set the id afterwards to give each
+	// caller a distinct, known id.
+	makeRequest := func(id uint16) *dns.Msg {
+		request := new(dns.Msg)
+		request.SetQuestion("coalesce.example.", dns.TypeA)
+		request.SetEdns0(dns.DefaultMsgSize, true)
+		request.Id = id
+		return request
+	}
+
+	const callers = 6
+	responses := make([]resolution, callers)
+	var wg sync.WaitGroup
+
+	// The leader enters the upstream exchange first; the followers then coalesce
+	// onto the in-flight resolution instead of each hitting the upstream.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		responses[0] = handler.resolveForClient(makeRequest(1), runtime, "")
+	}()
+	<-entered
+	for index := 1; index < callers; index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			responses[index] = handler.resolveForClient(makeRequest(uint16(index+1)), runtime, "")
+		}(index)
+	}
+	time.Sleep(30 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("upstream called %d times for %d concurrent identical misses, want 1", got, callers)
+	}
+	for index, result := range responses {
+		if result.response == nil || len(result.response.Answer) != 1 {
+			t.Fatalf("caller %d response = %+v, want one answer", index, result.response)
+		}
+		if want := uint16(index + 1); result.response.Id != want {
+			t.Fatalf("caller %d response id = %d, want %d (its own request id)", index, result.response.Id, want)
+		}
+	}
+}
+
+func TestUpstreamHealthTrackerDeprioritizesFailedForwarder(t *testing.T) {
+	t.Parallel()
+	tracker := newUpstreamHealthTracker()
+	now := time.Now()
+	tracker.now = func() time.Time { return now }
+	forwarders := []string{"a", "b", "c"}
+
+	if got := tracker.order(forwarders, 1); !slices.Equal(got, []string{"b", "c", "a"}) {
+		t.Fatalf("all-healthy order from start=1 = %v, want round-robin", got)
+	}
+
+	tracker.markUnhealthy("b")
+	if got := tracker.order(forwarders, 0); !slices.Equal(got, []string{"a", "c", "b"}) {
+		t.Fatalf("cooling order = %v, want the failed forwarder last", got)
+	}
+
+	now = now.Add(upstreamUnhealthyCooldown + time.Second)
+	if got := tracker.order(forwarders, 0); !slices.Equal(got, []string{"a", "b", "c"}) {
+		t.Fatalf("post-cooldown order = %v, want the recovered forwarder back in rotation", got)
+	}
+
+	tracker.markUnhealthy("a")
+	tracker.markHealthy("a")
+	if got := tracker.order(forwarders, 0); !slices.Equal(got, []string{"a", "b", "c"}) {
+		t.Fatalf("after markHealthy = %v, want the cleared forwarder in rotation", got)
+	}
+}
+
+func TestCompileNormalizesBlockedDomainsRegardlessOfCase(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Blocking = true
+	// A canonical name takes the fast path; a mixed-case name still normalizes.
+	configuration.BlockedDomains = []string{"blocked.example", "MixedCase.Example"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	if !runtime.matchesBlocked("blocked.example") {
+		t.Fatal("canonical blocked domain did not match")
+	}
+	if !runtime.matchesBlocked("mixedcase.example") {
+		t.Fatal("mixed-case blocked domain was not normalized to match")
 	}
 }
 
