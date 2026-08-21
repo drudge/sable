@@ -153,6 +153,8 @@ button { cursor: pointer; }
 .sidebar-collapsed .sidebar-header { padding-inline: 0.25rem; }
 .sidebar-collapsed .brand-mark, .sidebar-collapsed .avatar { width: 2rem; height: 2rem; }
 .sidebar-collapsed .user-menu { justify-content: center; padding-inline: 0; }
+.sidebar-tooltip { position: fixed; z-index: 80; max-width: 14rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--popover); padding: .3rem .55rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 500; line-height: 1.4; white-space: nowrap; pointer-events: none; box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .22); }
+.sidebar-tooltip::after { position: absolute; top: 50%; left: -.25rem; width: .375rem; height: .375rem; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--popover); content: ""; transform: translateY(-50%) rotate(45deg); }
 
 .main { min-width: 0; flex: 1; background: var(--background); }
 .mobile-header { display: none; }
