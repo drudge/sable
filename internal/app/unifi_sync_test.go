@@ -346,6 +346,29 @@ func TestUniFiSyncRefusesNonPrimaryZone(t *testing.T) {
 	}
 }
 
+// The console shows a host count beside every mapped network, which means the
+// synchronizer has to record the per-network totals it saw, not just the sum.
+func TestUniFiSyncRecordsHostsPerNetwork(t *testing.T) {
+	editor := &stubZoneEditor{}
+	reader := &stubReader{inventory: testInventory()}
+	syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), editor, reader)
+
+	syncer.runOnce(t.Context())
+
+	status := syncer.Status()
+	// Every network the controller reported is counted, including ones nothing
+	// is mapped to yet, so mapping one later shows a count straight away.
+	if status.HostsByNetwork["net-lan"] != 1 || status.HostsByNetwork["net-iot"] != 1 {
+		t.Fatalf("per-network host counts = %v", status.HostsByNetwork)
+	}
+	// The counts handed to the console are a copy, or a later sync would rewrite
+	// a snapshot the console is still rendering.
+	status.HostsByNetwork["net-lan"] = 99
+	if syncer.Status().HostsByNetwork["net-lan"] != 1 {
+		t.Fatal("the status handed out the synchronizer's own count map")
+	}
+}
+
 func TestUniFiSyncReportsControllerFailure(t *testing.T) {
 	editor := &stubZoneEditor{}
 	reader := &stubReader{err: errors.New("controller unreachable")}

@@ -127,6 +127,11 @@ type UniFiMappingView struct {
 	Reverse  bool
 	Enabled  bool
 	Preview  string
+	// Hosts is how many hosts the last synchronization saw on this network, and
+	// HostsKnown is false until one has run so the table can say "not yet
+	// counted" instead of showing a misleading zero.
+	Hosts      int
+	HostsKnown bool
 }
 
 type UniFiStatusView struct {
@@ -250,11 +255,11 @@ templ SSOCard(view SSOAppView) {
 				if !view.SecretStored {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>No client secret is stored</strong><span>Sign-in cannot complete until the provider's client secret is saved.</span></div></div>
 				}
-				<div class="sso-facts">
-					<div><span class="sso-fact-label">Provider</span><span class="sso-fact-value">{ view.Label }</span></div>
-					<div><span class="sso-fact-label">Issuer</span><span class="sso-fact-value" title={ view.Issuer }>{ ssoIssuerHost(view.Issuer) }</span></div>
-					<div><span class="sso-fact-label">Linked accounts</span><span class="sso-fact-value">{ strconv.Itoa(view.Users) }</span></div>
-					<div><span class="sso-fact-label">Last sign-in</span><span class="sso-fact-value">{ ssoLastSignIn(view) }</span></div>
+				<div class="integration-facts">
+					<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ view.Label }</span></div>
+					<div><span class="integration-fact-label">Issuer</span><span class="integration-fact-value" title={ view.Issuer }>{ ssoIssuerHost(view.Issuer) }</span></div>
+					<div><span class="integration-fact-label">Linked accounts</span><span class="integration-fact-value">{ strconv.Itoa(view.Users) }</span></div>
+					<div><span class="integration-fact-label">Last sign-in</span><span class="integration-fact-value">{ ssoLastSignIn(view) }</span></div>
 				</div>
 				@SSOMappingTable(view)
 				<div class="integration-card-actions">
@@ -349,7 +354,7 @@ templ UniFiCard(view UniFiAppView) {
 						<div><dt>Publishing</dt><dd>{ unifiSourceLabel(view) }</dd></div>
 					</dl>
 				</div>
-				@UniFiMappingTable(view)
+				@UniFiMappingTable(view, false)
 				@UniFiCardActions(view, false)
 			</div>
 		}
@@ -412,11 +417,11 @@ templ UniFiStatusPanel(view UniFiAppView) {
 		if view.Status.LastError != "" {
 			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last synchronization failed</strong><span>{ view.Status.LastError }</span></div></div>
 		}
-		<div class="unifi-status-metrics">
-			<div><span class="metric-value">{ fmt.Sprint(view.Status.Hosts) }</span><span class="metric-label">Hosts</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(view.Status.Added) }</span><span class="metric-label">Added</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(view.Status.Updated) }</span><span class="metric-label">Updated</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(view.Status.Removed) }</span><span class="metric-label">Removed</span></div>
+		<div class="integration-facts">
+			<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Hosts) }</span></div>
+			<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Added) }</span></div>
+			<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Updated) }</span></div>
+			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Removed) }</span></div>
 		</div>
 		if view.Status.Running {
 			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
@@ -442,24 +447,41 @@ templ UniFiStatusPanel(view UniFiAppView) {
 	</div>
 }
 
-templ UniFiMappingTable(view UniFiAppView) {
-	<div class="admin-desktop-table">
-		<table class="isotope-table unifi-mapping-table">
-			<thead><tr><th>UniFi Network</th><th>Zone</th><th>Example Name</th><th>TTL</th><th>Reverse</th><th>State</th></tr></thead>
-			<tbody>
-				for _, mapping := range view.Mappings {
-					<tr>
-						<td><strong>{ mapping.Name }</strong></td>
-						<td><a href={ templ.SafeURL("/zones/" + mapping.Zone) }>{ mapping.Zone }</a></td>
-						<td><code class="muted-cell">{ mapping.Preview }</code></td>
-						<td>{ fmt.Sprint(mapping.TTL) }</td>
-						<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
-						<td><span class={ ifThen(mapping.Enabled, "status-badge success", "status-badge") }>{ ifThen(mapping.Enabled, "Active", "Paused") }</span></td>
-					</tr>
-				}
-			</tbody>
-		</table>
-	</div>
+// UniFiMappingTable is swapped out of band by the status poll so the per-network
+// host counts land at the same time as the rest of the run state.
+templ UniFiMappingTable(view UniFiAppView, outOfBand bool) {
+	if outOfBand {
+		<div id="unifi-mapping-table" class="admin-desktop-table" hx-swap-oob="true">
+			@UniFiMappingRows(view)
+		</div>
+	} else {
+		<div id="unifi-mapping-table" class="admin-desktop-table">
+			@UniFiMappingRows(view)
+		</div>
+	}
+}
+
+templ UniFiMappingRows(view UniFiAppView) {
+	<table class="isotope-table unifi-mapping-table">
+		<thead><tr><th>UniFi Network</th><th>Zone</th><th>Hosts</th><th>Example Name</th><th>TTL</th><th>Reverse</th><th>State</th></tr></thead>
+		<tbody>
+			for _, mapping := range view.Mappings {
+				<tr>
+					<td><strong>{ mapping.Name }</strong></td>
+					<td><a href={ templ.SafeURL("/zones/" + mapping.Zone) }>{ mapping.Zone }</a></td>
+					if mapping.HostsKnown {
+						<td>{ fmt.Sprint(mapping.Hosts) }</td>
+					} else {
+						<td class="muted-cell" title="Counted after the first synchronization">—</td>
+					}
+					<td><code class="muted-cell">{ mapping.Preview }</code></td>
+					<td>{ fmt.Sprint(mapping.TTL) }</td>
+					<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
+					<td><span class={ ifThen(mapping.Enabled, "status-badge success", "status-badge") }>{ ifThen(mapping.Enabled, "Active", "Paused") }</span></td>
+				</tr>
+			}
+		</tbody>
+	</table>
 }
 
 templ UniFiWizardDialog(view UniFiAppView) {
@@ -641,11 +663,11 @@ templ UniFiWizardReviewStep(wizard UniFiWizardView) {
 	}
 	<section class="wizard-panel compact">
 		<div class="wizard-heading compact"><span>@Icon("list")</span><div><strong>Review</strong><small>This is exactly what the first synchronization will do.</small></div></div>
-		<div class="unifi-status-metrics">
-			<div><span class="metric-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span><span class="metric-label">Hosts</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span><span class="metric-label">Added</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span><span class="metric-label">Updated</span></div>
-			<div><span class="metric-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span><span class="metric-label">Removed</span></div>
+		<div class="integration-facts">
+			<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span></div>
+			<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span></div>
+			<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span></div>
+			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span></div>
 		</div>
 		if len(wizard.Plan.CreatedZones) > 0 {
 			<div class="cluster-dialog-note compact">@Icon("plus")<p><strong>Zones Sable will create</strong><span>{ strings.Join(wizard.Plan.CreatedZones, ", ") }</span></p></div>
@@ -1108,11 +1130,11 @@ templ SSOWizardRolesStep(wizard SSOWizardView) {
 }
 
 templ SSOWizardReviewStep(wizard SSOWizardView) {
-	<div class="sso-facts">
-		<div><span class="sso-fact-label">Provider</span><span class="sso-fact-value">{ wizard.Label }</span></div>
-		<div><span class="sso-fact-label">Issuer</span><span class="sso-fact-value" title={ wizard.Issuer }>{ ssoIssuerHost(wizard.Issuer) }</span></div>
-		<div><span class="sso-fact-label">Client ID</span><span class="sso-fact-value" title={ wizard.ClientID }>{ wizard.ClientID }</span></div>
-		<div><span class="sso-fact-label">Groups claim</span><span class="sso-fact-value">{ wizard.GroupsClaim }</span></div>
+	<div class="integration-facts">
+		<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ wizard.Label }</span></div>
+		<div><span class="integration-fact-label">Issuer</span><span class="integration-fact-value" title={ wizard.Issuer }>{ ssoIssuerHost(wizard.Issuer) }</span></div>
+		<div><span class="integration-fact-label">Client ID</span><span class="integration-fact-value" title={ wizard.ClientID }>{ wizard.ClientID }</span></div>
+		<div><span class="integration-fact-label">Groups claim</span><span class="integration-fact-value">{ wizard.GroupsClaim }</span></div>
 	</div>
 	if len(wizard.Mappings) == 0 && wizard.DefaultRoles == "" {
 		<div class="unifi-status error">

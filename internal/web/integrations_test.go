@@ -677,6 +677,85 @@ func TestUniFiStatusReflectsRunningSynchronization(t *testing.T) {
 	}
 }
 
+// A per-network host count only means something once a synchronization has
+// reported one, so before that the column says so rather than claiming zero.
+func TestUniFiMappingTableCountsHostsPerNetwork(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{status: unifi.Status{
+		Hosts: 7, HostsByNetwork: map[string]int{"net-lan": 5},
+	}}
+	server, configuration := newIntegrationsTestServer(t, controller)
+	candidate := configuration.snapshot.Config
+	candidate.UniFi = config.UniFi{
+		Enabled: true, ControllerURL: "https://192.168.1.1", Site: "default",
+		Interval: config.Duration{Duration: 2 * time.Minute}, Sources: []string{"active"},
+		Networks: []config.UniFiNetwork{
+			{
+				ID: "net-lan", Name: "Default", Zone: "clients.example.test",
+				HostnameTemplate: unifi.DefaultHostnameTemplate, TTL: 300, Reverse: true, Enabled: true,
+			},
+			{
+				ID: "net-iot", Name: "IoT", Zone: "iot.example.test",
+				HostnameTemplate: unifi.DefaultHostnameTemplate, TTL: 300, Enabled: true,
+			},
+		},
+	}
+	configuration.snapshot.Config = candidate
+
+	body := serveRequest(server, http.MethodGet, "/integrations").Body.String()
+
+	if !strings.Contains(body, "<th>Hosts</th>") {
+		t.Fatal("the mapping table has no host count column")
+	}
+	if !strings.Contains(body, "<td>5</td>") {
+		t.Error("the mapped network did not report its host count")
+	}
+	// The controller reported nothing for this network, which after a
+	// synchronization means it really holds no hosts.
+	if !strings.Contains(body, "<td>0</td>") {
+		t.Error("a network the last sync found empty did not report zero")
+	}
+
+	// Without a synchronization there is no count to show at all.
+	controller.status = unifi.Status{}
+	fresh := serveRequest(server, http.MethodGet, "/integrations").Body.String()
+	if strings.Contains(fresh, "<td>0</td>") {
+		t.Error("an unsynchronized network claimed it had no hosts")
+	}
+	if !strings.Contains(fresh, "Counted after the first synchronization") {
+		t.Error("an unsynchronized network did not explain the missing count")
+	}
+}
+
+// The mapping table sits outside the polled fragment, so the counts only stay
+// current if the status poll swaps it in as well.
+func TestUniFiStatusPollRefreshesTheMappingTable(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{status: unifi.Status{
+		Hosts: 5, HostsByNetwork: map[string]int{"net-lan": 5},
+	}}
+	server, configuration := newIntegrationsTestServer(t, controller)
+	candidate := configuration.snapshot.Config
+	candidate.UniFi = config.UniFi{
+		Enabled: true, ControllerURL: "https://192.168.1.1", Site: "default",
+		Interval: config.Duration{Duration: 2 * time.Minute}, Sources: []string{"active"},
+		Networks: []config.UniFiNetwork{{
+			ID: "net-lan", Name: "Default", Zone: "clients.example.test",
+			HostnameTemplate: unifi.DefaultHostnameTemplate, TTL: 300, Reverse: true, Enabled: true,
+		}},
+	}
+	configuration.snapshot.Config = candidate
+
+	body := serveRequest(server, http.MethodGet, "/ui/integrations/unifi/status").Body.String()
+
+	if !strings.Contains(body, `id="unifi-mapping-table"`) {
+		t.Fatal("the status poll did not carry the mapping table")
+	}
+	if !strings.Contains(body, "<td>5</td>") {
+		t.Error("the swapped mapping table did not carry the host count")
+	}
+}
+
 // The remove dialog needs a control that opens it.
 func TestUniFiCardOffersRemove(t *testing.T) {
 	t.Parallel()
