@@ -1517,6 +1517,44 @@
       });
     });
 
+    // On phones the header sticks to the top, so it would eat screen space on
+    // every long page. It slides away while scrolling down and comes straight
+    // back on the first scroll up, keeping navigation one gesture away.
+    (() => {
+      const header = document.querySelector("[data-mobile-header]");
+      if (!header) return;
+      const hiddenClass = "mobile-header-hidden";
+      // Small moves are rubber-band jitter, not a change of direction.
+      const threshold = 8;
+      let previous = Math.max(0, window.scrollY);
+      let queued = false;
+      const reveal = () => document.documentElement.classList.remove(hiddenClass);
+      const update = () => {
+        queued = false;
+        const current = Math.max(0, window.scrollY);
+        // Anything still behind the header stays visible, so a page shorter
+        // than the viewport can never leave the header stuck off screen.
+        if (current <= header.offsetHeight) {
+          previous = current;
+          reveal();
+          return;
+        }
+        const delta = current - previous;
+        if (Math.abs(delta) < threshold) return;
+        previous = current;
+        document.documentElement.classList.toggle(hiddenClass, delta > 0);
+      };
+      window.addEventListener("scroll", () => {
+        if (queued) return;
+        queued = true;
+        window.requestAnimationFrame(update);
+      }, { passive: true });
+      window.addEventListener("resize", reveal);
+      document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
+        button.addEventListener("click", reveal);
+      });
+    })();
+
 	const routedDialogPath = (value) => new URL(value, window.location.origin).pathname;
 	const resetTokenDialog = (dialog) => {
 	  if (dialog?.id !== "create-token-dialog" || dialog.dataset.tokenCreated !== "true") return;
