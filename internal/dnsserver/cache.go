@@ -15,20 +15,41 @@ import (
 const (
 	maximumCacheShards = 64
 	minimumDNSUDPSize  = 512
+	// Refreshes are issued by the resolver itself, so they advertise the same
+	// buffer size it uses for its own iterative queries rather than whatever the
+	// client that first populated the entry happened to ask for.
+	prefetchUDPSize = 1232
+	// Expired entries are reaped on this cadence so a cache nobody reads again
+	// still releases its slots. A minute also keeps the entry count the console
+	// shows from drifting far ahead of the entries it lists, and still costs one
+	// walk per minute instead of one per metrics scrape as it used to.
+	cacheSweepInterval = time.Minute
+	// The refresh scan has to fire several times inside the prefetch trigger
+	// window, or a popular entry slips between two scans and expires cold. Two
+	// seconds gives four passes at the default nine-second trigger.
+	cacheRefreshInterval = 2 * time.Second
+	// An upper bound on refreshes started per scan, so a cache full of expiring
+	// popular entries cannot spawn tens of thousands of upstream queries at once.
+	maximumPrefetchBatch = 64
 )
 
+// cacheKey identifies an answer, not the client that asked for it. The EDNS
+// buffer size, DO bit, and CD bit deliberately stay out of it: they describe how
+// a client wants the answer delivered, not which answer it gets, and keying on
+// them split a single question across six entries for no gain.
 type cacheKey struct {
-	name             string
-	recordType       uint16
-	class            uint16
-	udpSize          uint16
-	dnssecOK         bool
-	checkingDisabled bool
+	name       string
+	recordType uint16
+	class      uint16
 }
 
 type cacheEntry struct {
-	key        cacheKey
-	response   *dns.Msg
+	key      cacheKey
+	response *dns.Msg
+	// dnssecOK records whether the stored copy was fetched with signatures
+	// attached. A client that set DO can only be served from an entry that has
+	// them; a client that did not gets them stripped on the way out.
+	dnssecOK   bool
 	storedAt   time.Time
 	expiresAt  time.Time
 	staleUntil time.Time
@@ -148,6 +169,12 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 		return nil, false, false
 	}
 	entry := element.Value.(*cacheEntry)
+	if !entrySatisfies(entry, request) {
+		// The stored copy lacks the signatures this client asked for. Leave it in
+		// place for the clients it can still serve and resolve afresh.
+		shard.mu.Unlock()
+		return nil, false, false
+	}
 	if !now.Before(entry.expiresAt) {
 		if cache.options.ServeStale && now.Before(entry.retryAfter) && now.Before(entry.staleUntil) {
 			shard.recency.MoveToFront(element)
@@ -157,14 +184,15 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 			setResponseTTLs(response, max(cache.options.StaleAnswerTTL, 1))
 			return response, true, false
 		}
-		if entry.staleUntil.IsZero() || !now.Before(entry.staleUntil) {
+		if entryDead(entry, now) {
 			shard.remove(element)
 		}
 		shard.mu.Unlock()
 		return nil, false, false
 	}
 	shard.recency.MoveToFront(element)
-	prefetch := cache.startPrefetch(entry, now)
+	cache.recordHit(entry, now)
+	prefetch := cache.electPrefetch(entry, now)
 	storedResponse := entry.response
 	storedAt := entry.storedAt
 	shard.mu.Unlock()
@@ -194,7 +222,8 @@ func (cache *ResponseCache) GetStale(request *dns.Msg) (*dns.Msg, bool) {
 		return nil, false
 	}
 	entry := element.Value.(*cacheEntry)
-	if now.Before(entry.expiresAt) || entry.staleUntil.IsZero() || !now.Before(entry.staleUntil) {
+	if now.Before(entry.expiresAt) || entry.staleUntil.IsZero() || !now.Before(entry.staleUntil) ||
+		!entrySatisfies(entry, request) {
 		if !entry.staleUntil.IsZero() && !now.Before(entry.staleUntil) {
 			shard.remove(element)
 		}
@@ -229,7 +258,21 @@ func (cache *ResponseCache) HasStale(request *dns.Msg) bool {
 		return false
 	}
 	entry := element.Value.(*cacheEntry)
-	return !now.Before(entry.expiresAt) && now.Before(entry.staleUntil)
+	return entrySatisfies(entry, request) && !now.Before(entry.expiresAt) && now.Before(entry.staleUntil)
+}
+
+// entrySatisfies reports whether a stored copy carries enough detail for this
+// request. A client that set DO needs the signatures the entry may not have; a
+// client that did not can be served either copy, because prepareCachedResponse
+// strips the extra records on the way out.
+func entrySatisfies(entry *cacheEntry, request *dns.Msg) bool {
+	return entry.dnssecOK || !requestWantsDNSSEC(request)
+}
+
+// entryDead reports whether both an entry's fresh and stale windows have closed,
+// which is the only point at which it is safe to drop.
+func entryDead(entry *cacheEntry, now time.Time) bool {
+	return !now.Before(entry.expiresAt) && (entry.staleUntil.IsZero() || !now.Before(entry.staleUntil))
 }
 
 // CancelPrefetch releases the per-entry refresh election after an upstream
@@ -247,39 +290,98 @@ func (cache *ResponseCache) CancelPrefetch(request *dns.Msg) {
 	shard.mu.Unlock()
 }
 
-func (cache *ResponseCache) startPrefetch(entry *cacheEntry, now time.Time) bool {
+func (cache *ResponseCache) prefetchConfigured() bool {
 	options := cache.options
-	if options.PrefetchAtTTL == 0 || options.PrefetchHits == 0 || options.PrefetchSample <= 0 || entry.refreshing {
-		return false
+	return options.PrefetchAtTTL > 0 && options.PrefetchHits > 0 && options.PrefetchSample > 0
+}
+
+// recordHit samples how often an entry is asked for. The count restarts every
+// sample interval, so popularity reflects current demand rather than a lifetime
+// total that never decays. The caller must hold the shard lock.
+func (cache *ResponseCache) recordHit(entry *cacheEntry, now time.Time) {
+	if !cache.prefetchConfigured() {
+		return
 	}
-	if entry.expiresAt.Sub(entry.storedAt) < time.Duration(options.PrefetchMinTTL)*time.Second ||
-		entry.expiresAt.Sub(now) > time.Duration(options.PrefetchAtTTL)*time.Second {
-		return false
-	}
-	if entry.hitWindow.IsZero() || now.Sub(entry.hitWindow) >= options.PrefetchSample {
+	if entry.hitWindow.IsZero() || now.Sub(entry.hitWindow) >= cache.options.PrefetchSample {
 		entry.hitWindow = now
 		entry.hits = 0
 	}
 	entry.hits++
-	sampleSeconds := max(uint64(options.PrefetchSample/time.Second), 1)
-	requiredHits := (uint64(options.PrefetchHits)*sampleSeconds + uint64(time.Hour/time.Second) - 1) / uint64(time.Hour/time.Second)
-	requiredHits = max(requiredHits, 1)
-	if uint64(entry.hits) < requiredHits {
+}
+
+// electPrefetch claims an entry for refresh once it is popular enough and close
+// enough to expiry. Election is exclusive, so a client hit and the background
+// scan can never both refresh the same entry. The caller must hold the shard lock.
+func (cache *ResponseCache) electPrefetch(entry *cacheEntry, now time.Time) bool {
+	if !cache.prefetchConfigured() || entry.refreshing {
+		return false
+	}
+	options := cache.options
+	if entry.expiresAt.Sub(entry.storedAt) < time.Duration(options.PrefetchMinTTL)*time.Second ||
+		entry.expiresAt.Sub(now) > time.Duration(options.PrefetchAtTTL)*time.Second {
+		return false
+	}
+	// A hit window that has already lapsed means nothing asked for this entry in
+	// the current sample, so it is not popular however many hits it once had.
+	if entry.hitWindow.IsZero() || now.Sub(entry.hitWindow) >= options.PrefetchSample {
+		return false
+	}
+	if uint64(entry.hits) < cache.requiredPrefetchHits() {
 		return false
 	}
 	entry.refreshing = true
 	return true
 }
 
+func (cache *ResponseCache) requiredPrefetchHits() uint64 {
+	const secondsPerHour = uint64(time.Hour / time.Second)
+	sampleSeconds := max(uint64(cache.options.PrefetchSample/time.Second), 1)
+	required := (uint64(cache.options.PrefetchHits)*sampleSeconds + secondsPerHour - 1) / secondsPerHour
+	return max(required, 1)
+}
+
+// PrefetchCandidates elects popular entries nearing expiry and returns the
+// questions that renew them. Refreshing on a client hit only ever catches
+// entries that happen to be queried inside the trigger window; a background
+// caller uses this to renew the rest before anybody has to wait on them.
+func (cache *ResponseCache) PrefetchCandidates(limit int) []*dns.Msg {
+	if !cache.prefetchConfigured() || limit <= 0 {
+		return nil
+	}
+	now := cache.now()
+	var requests []*dns.Msg
+	for index := range cache.shards {
+		shard := &cache.shards[index]
+		shard.mu.Lock()
+		for element := shard.recency.Front(); element != nil && len(requests) < limit; element = element.Next() {
+			entry := element.Value.(*cacheEntry)
+			if entryDead(entry, now) || !cache.electPrefetch(entry, now) {
+				continue
+			}
+			requests = append(requests, requestFromCacheKey(entry.key, entry.dnssecOK))
+		}
+		shard.mu.Unlock()
+		if len(requests) >= limit {
+			break
+		}
+	}
+	return requests
+}
+
 func prepareCachedResponse(response, request *dns.Msg) {
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	response.RecursionDesired = request.RecursionDesired
-	response.CheckingDisabled = request.CheckingDisabled
-	response.AuthenticatedData = response.AuthenticatedData && (request.AuthenticatedData || requestWantsDNSSEC(request))
+	// One stored copy now serves clients that asked for different levels of
+	// DNSSEC detail, so give each the same view a live resolution would: the
+	// signatures it asked for, and nothing more.
+	prepareResponseForClient(response, request)
 }
 
-func (cache *ResponseCache) Set(request, response *dns.Msg) bool {
+// Set stores a response. dnssecOK states whether the stored copy was fetched
+// with signatures attached, which decides whether it can later serve a client
+// that set DO.
+func (cache *ResponseCache) Set(request, response *dns.Msg, dnssecOK bool) bool {
 	key, eligible := responseCacheKey(request)
 	if !eligible {
 		return false
@@ -294,6 +396,7 @@ func (cache *ResponseCache) Set(request, response *dns.Msg) bool {
 	entry := &cacheEntry{
 		key:       key,
 		response:  storedResponse,
+		dnssecOK:  dnssecOK,
 		storedAt:  now,
 		expiresAt: now.Add(time.Duration(ttl) * time.Second),
 	}
@@ -305,6 +408,11 @@ func (cache *ResponseCache) Set(request, response *dns.Msg) bool {
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
 	if element, found := shard.entries[key]; found {
+		// Carry the popularity sample across a refresh. Starting from zero would
+		// make a hot entry re-earn its eligibility every TTL, so prefetching would
+		// stutter on exactly the entries it exists to keep warm.
+		previous := element.Value.(*cacheEntry)
+		entry.hits, entry.hitWindow = previous.hits, previous.hitWindow
 		element.Value = entry
 		shard.recency.MoveToFront(element)
 		return true
@@ -317,24 +425,40 @@ func (cache *ResponseCache) Set(request, response *dns.Msg) bool {
 	return true
 }
 
+// Len reports how many entries are retained. It counts what the sweeper has
+// left in place instead of walking every entry, because it backs the stats
+// endpoint and a metrics scrape should not drag the whole cache under lock.
 func (cache *ResponseCache) Len() int {
 	total := 0
+	for index := range cache.shards {
+		shard := &cache.shards[index]
+		shard.mu.Lock()
+		total += len(shard.entries)
+		shard.mu.Unlock()
+	}
+	return total
+}
+
+// SweepExpired drops entries whose fresh and stale windows have both closed.
+// Lookups evict on contact, but an entry nobody asks for again would otherwise
+// hold its slot until the shard filled up and evicted something still useful.
+func (cache *ResponseCache) SweepExpired() int {
 	now := cache.now()
+	removed := 0
 	for index := range cache.shards {
 		shard := &cache.shards[index]
 		shard.mu.Lock()
 		for element := shard.recency.Back(); element != nil; {
 			previous := element.Prev()
-			entry := element.Value.(*cacheEntry)
-			if !now.Before(entry.expiresAt) && (entry.staleUntil.IsZero() || !now.Before(entry.staleUntil)) {
+			if entryDead(element.Value.(*cacheEntry), now) {
 				shard.remove(element)
+				removed++
 			}
 			element = previous
 		}
-		total += len(shard.entries)
 		shard.mu.Unlock()
 	}
-	return total
+	return removed
 }
 
 func (cache *ResponseCache) Snapshot() []CachedResponse {
@@ -343,16 +467,11 @@ func (cache *ResponseCache) Snapshot() []CachedResponse {
 	for index := range cache.shards {
 		shard := &cache.shards[index]
 		shard.mu.Lock()
-		for element := shard.recency.Front(); element != nil; {
-			next := element.Next()
+		for element := shard.recency.Front(); element != nil; element = element.Next() {
 			entry := element.Value.(*cacheEntry)
-			if !now.Before(entry.expiresAt) && (entry.staleUntil.IsZero() || !now.Before(entry.staleUntil)) {
-				shard.remove(element)
-				element = next
-				continue
-			}
+			// Reading the cache for the console must not mutate it; SweepExpired
+			// owns removal so this walk only needs to skip what it should not show.
 			if !now.Before(entry.expiresAt) {
-				element = next
 				continue
 			}
 			message := entry.response.Copy()
@@ -365,7 +484,6 @@ func (cache *ResponseCache) Snapshot() []CachedResponse {
 				RemainingTTL: remaining,
 				Records:      cachedRecords(message),
 			})
-			element = next
 		}
 		shard.mu.Unlock()
 	}
@@ -423,10 +541,10 @@ func (cache *ResponseCache) Export() ([]PersistedResponse, error) {
 		shard.mu.Lock()
 		for element := shard.recency.Front(); element != nil; element = element.Next() {
 			entry := element.Value.(*cacheEntry)
-			if !now.Before(entry.expiresAt) && (entry.staleUntil.IsZero() || !now.Before(entry.staleUntil)) {
+			if entryDead(entry, now) {
 				continue
 			}
-			request := requestFromCacheKey(entry.key)
+			request := requestFromCacheKey(entry.key, entry.dnssecOK)
 			requestWire, err := request.Pack()
 			if err != nil {
 				exportErrors = append(exportErrors, fmt.Errorf("pack cached request %q: %w", entry.key.name, err))
@@ -473,7 +591,8 @@ func (cache *ResponseCache) Restore(entries []PersistedResponse) (int, error) {
 			continue
 		}
 		entry := &cacheEntry{
-			key: key, response: response, storedAt: persisted.StoredAt,
+			key: key, response: response, dnssecOK: requestWantsDNSSEC(request),
+			storedAt:  persisted.StoredAt,
 			expiresAt: persisted.ExpiresAt, staleUntil: persisted.StaleUntil,
 		}
 		shard := cache.shard(key)
@@ -494,14 +613,16 @@ func (cache *ResponseCache) Restore(entries []PersistedResponse) (int, error) {
 	return restored, errors.Join(restoreErrors...)
 }
 
-func requestFromCacheKey(key cacheKey) *dns.Msg {
+// requestFromCacheKey rebuilds the question that produced an entry, for
+// refreshing it upstream or persisting it across a restart. The DO bit comes
+// from the entry rather than the key, and round-trips through the packed request
+// so a restored entry knows whether it still carries signatures.
+func requestFromCacheKey(key cacheKey, dnssecOK bool) *dns.Msg {
 	request := new(dns.Msg)
 	request.SetQuestion(key.name, key.recordType)
 	request.Question[0].Qclass = key.class
-	request.CheckingDisabled = key.checkingDisabled
-	if key.udpSize != minimumDNSUDPSize || key.dnssecOK {
-		request.SetEdns0(key.udpSize, key.dnssecOK)
-	}
+	request.RecursionDesired = true
+	request.SetEdns0(prefetchUDPSize, dnssecOK)
 	return request
 }
 
@@ -523,23 +644,18 @@ func responseCacheKey(request *dns.Msg) (cacheKey, bool) {
 		return cacheKey{}, false
 	}
 	question := request.Question[0]
-	key := cacheKey{
-		name:             strings.ToLower(question.Name),
-		recordType:       question.Qtype,
-		class:            question.Qclass,
-		udpSize:          minimumDNSUDPSize,
-		checkingDisabled: request.CheckingDisabled,
-	}
 	if option := request.IsEdns0(); option != nil {
 		for _, edns := range option.Option {
 			if !hopByHopEDNSOption(edns.Option()) {
 				return cacheKey{}, false
 			}
 		}
-		key.udpSize = option.UDPSize()
-		key.dnssecOK = option.Do()
 	}
-	return key, true
+	return cacheKey{
+		name:       strings.ToLower(question.Name),
+		recordType: question.Qtype,
+		class:      question.Qclass,
+	}, true
 }
 
 // hopByHopEDNSOption reports whether an EDNS option describes the transport hop
@@ -575,8 +691,8 @@ func (cache *ResponseCache) responseTTL(response *dns.Msg) (uint32, bool) {
 			return cache.negativeTTL(response)
 		}
 		clampResponseTTLs(response, cache.options.MinimumTTL, cache.options.MaximumTTL)
-		ttl := minimumResponseTTL(response)
-		return ttl, ttl > 0
+		ttl, found := minimumAnswerTTL(response)
+		return ttl, found && ttl > 0
 	case dns.RcodeNameError:
 		return cache.negativeTTL(response)
 	case dns.RcodeServerFailure:
@@ -594,12 +710,29 @@ func responseTTL(response *dns.Msg) (uint32, bool) {
 	return (&ResponseCache{}).responseTTL(response)
 }
 
+// negativeTTL derives how long a NODATA or NXDOMAIN answer may be held. RFC 2308
+// puts that in the zone's own SOA, so the configured value caps it rather than
+// replacing it: a zone that asks to be forgotten in thirty seconds must not be
+// remembered for five minutes because the resolver prefers a rounder number.
 func (cache *ResponseCache) negativeTTL(response *dns.Msg) (uint32, bool) {
-	if cache.options.NegativeTTL > 0 {
-		setResponseTTLs(response, cache.options.NegativeTTL)
-		return cache.options.NegativeTTL, true
+	ttl, found := negativeResponseTTL(response)
+	switch {
+	case found && cache.options.NegativeTTL > 0:
+		ttl = min(ttl, cache.options.NegativeTTL)
+	case !found:
+		if cache.options.NegativeTTL == 0 {
+			return 0, false
+		}
+		ttl = cache.options.NegativeTTL
 	}
-	return negativeResponseTTL(response)
+	// The floor applies here for the same reason it applies to answers: it stops
+	// a pathologically short SOA from making the cache useless.
+	ttl = max(ttl, cache.options.MinimumTTL)
+	if ttl == 0 {
+		return 0, false
+	}
+	setResponseTTLs(response, ttl)
+	return ttl, true
 }
 
 func clampResponseTTLs(response *dns.Msg, minimum, maximum uint32) {
@@ -628,32 +761,37 @@ func setResponseTTLs(response *dns.Msg, ttl uint32) {
 	}
 }
 
-func minimumResponseTTL(response *dns.Msg) uint32 {
+// minimumAnswerTTL bounds an entry by its answer section alone. A short-lived NS
+// or glue record riding along in the authority or additional section says nothing
+// about how long the answer is good for, and letting it shorten the entry threw
+// away answers that were still valid for hours.
+func minimumAnswerTTL(response *dns.Msg) (uint32, bool) {
 	minimum := ^uint32(0)
 	found := false
-	for _, records := range [][]dns.RR{response.Answer, response.Ns, response.Extra} {
-		for _, record := range records {
-			if record.Header().Rrtype == dns.TypeOPT {
-				continue
-			}
-			minimum = min(minimum, record.Header().Ttl)
-			found = true
+	for _, record := range response.Answer {
+		if record.Header().Rrtype == dns.TypeOPT {
+			continue
 		}
+		minimum = min(minimum, record.Header().Ttl)
+		found = true
 	}
 	if !found {
-		return 0
+		return 0, false
 	}
-	return minimum
+	return minimum, true
 }
 
+// negativeResponseTTL reports the zone's own view of how long a negative answer
+// may be held, per RFC 2308: the lesser of the SOA record's TTL and its MINIMUM
+// field. The boolean reports whether an SOA was present at all, which is a
+// different question from whether the TTL it carried was usable.
 func negativeResponseTTL(response *dns.Msg) (uint32, bool) {
 	for _, record := range response.Ns {
 		soa, ok := record.(*dns.SOA)
 		if !ok {
 			continue
 		}
-		ttl := min(soa.Hdr.Ttl, soa.Minttl)
-		return ttl, ttl > 0
+		return min(soa.Hdr.Ttl, soa.Minttl), true
 	}
 	return 0, false
 }
@@ -686,12 +824,6 @@ func cacheKeyHash(key cacheKey) uint64 {
 		hash ^= uint64(key.name[index])
 		hash *= prime
 	}
-	hash ^= uint64(key.recordType)<<48 | uint64(key.class)<<32 | uint64(key.udpSize)<<16
-	if key.dnssecOK {
-		hash ^= 1
-	}
-	if key.checkingDisabled {
-		hash ^= 2
-	}
+	hash ^= uint64(key.recordType)<<48 | uint64(key.class)<<32
 	return hash
 }

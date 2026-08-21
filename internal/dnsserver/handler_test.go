@@ -994,7 +994,7 @@ func TestHandlerServesAndReportsCacheHit(t *testing.T) {
 		t.Fatalf("Compile() error = %v", err)
 	}
 	request := cacheRequest("cached.example.", 10)
-	if !runtime.cache.Set(request, positiveResponse(request, 60)) {
+	if !runtime.cache.Set(request, positiveResponse(request, 60), true) {
 		t.Fatal("cache Set() = false")
 	}
 	handler := NewHandler(runtime)
@@ -1682,7 +1682,7 @@ func TestApplyManagedTrustAnchorsKeepsCacheWhenAnchorsUnchanged(t *testing.T) {
 	}
 	handler := NewHandler(runtime)
 	request := cacheRequest("example.com.", 1)
-	if !runtime.cache.Set(request, positiveResponse(request, 300)) {
+	if !runtime.cache.Set(request, positiveResponse(request, 300), true) {
 		t.Fatal("failed to seed the response cache")
 	}
 
@@ -1708,7 +1708,7 @@ func benchmarkCacheHitHandler(b *testing.B) (*Handler, *dns.Msg) {
 	}
 	handler := NewHandler(runtime)
 	request := cacheRequest("example.com.", 1)
-	if !runtime.cache.Set(request, positiveResponse(request, 300)) {
+	if !runtime.cache.Set(request, positiveResponse(request, 300), true) {
 		b.Fatal("failed to seed the response cache")
 	}
 	return handler, request

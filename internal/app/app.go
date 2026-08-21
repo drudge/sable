@@ -145,6 +145,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	}
 	handler = dnsserver.NewHandler(runtime)
 	handler.SetLogger(logger)
+	handler.StartMaintenance()
 	if initial.Resolver.SaveCache {
 		restored, restoreErr := restoreDNSCache(ctx, database, handler)
 		if restoreErr != nil {
@@ -430,6 +431,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	stopRuntime()
 	webError := webServer.Close(shutdownContext)
 	listenerError := listeners.Close(shutdownContext)
+	// Stop background cache refreshes before snapshotting, so what gets persisted
+	// is a settled cache rather than one being written to as it is read.
+	handler.Close()
 	cacheError := persistDNSCache(
 		shutdownContext,
 		database,

@@ -143,9 +143,11 @@ Changing forwarding routes or default upstreams creates a clean cache. Other
 compatible configuration reloads retain warm entries.
 
 Sable clamps positive response TTLs to `cache_minimum_ttl` and
-`cache_maximum_ttl`. `cache_negative_ttl` controls NXDOMAIN and other negative
-answers; `cache_failure_ttl` controls short-lived SERVFAIL caching and may be
-set to `0` to disable failure caching. When `serve_stale` is enabled, expired
+`cache_maximum_ttl`. `cache_negative_ttl` is a ceiling on how long NXDOMAIN and
+other negative answers are held: RFC 2308 puts that lifetime in the zone's own
+SOA record, so a zone asking to be forgotten sooner is honoured and only a zone
+asking for longer is capped. `cache_failure_ttl` controls short-lived SERVFAIL
+caching and may be set to `0` to disable failure caching. When `serve_stale` is enabled, expired
 successful and negative responses remain eligible for `cache_stale_ttl`
 seconds and are returned only after live upstream resolution fails. Stale
 answers are returned with `cache_stale_answer_ttl`; `cache_stale_reset_ttl`

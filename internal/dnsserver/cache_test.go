@@ -21,7 +21,7 @@ func TestResponseCacheReturnsIndependentResponseWithAdjustedIDAndTTL(t *testing.
 	request := cacheRequest("Example.COM.", 100)
 	response := positiveResponse(request, 60)
 
-	if !cache.Set(request, response) {
+	if !cache.Set(request, response, true) {
 		t.Fatal("Set() = false, want response cached")
 	}
 	clock = clock.Add(7 * time.Second)
@@ -41,7 +41,7 @@ func TestResponseCacheReturnsIndependentResponseWithAdjustedIDAndTTL(t *testing.
 	}
 }
 
-func TestResponseCacheExpiresEntryAtMinimumTTL(t *testing.T) {
+func TestResponseCacheLifetimeIgnoresOtherSectionTTLs(t *testing.T) {
 	t.Parallel()
 
 	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
@@ -49,18 +49,43 @@ func TestResponseCacheExpiresEntryAtMinimumTTL(t *testing.T) {
 	cache.now = func() time.Time { return clock }
 	request := cacheRequest("example.com.", 1)
 	response := positiveResponse(request, 10)
+	// A short-lived glue record riding along says nothing about how long the
+	// answer is good for, so it must not shorten the entry.
 	response.Extra = append(response.Extra, &dns.A{
 		Hdr: dns.RR_Header{Name: "ns.example.com.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 3},
 		A:   net.ParseIP("192.0.2.2"),
 	})
-	cache.Set(request, response)
+	cache.Set(request, response, true)
 
 	clock = clock.Add(3 * time.Second)
+	if _, found := cache.Get(request); !found {
+		t.Fatal("Get() found = false while the answer was still valid")
+	}
+	clock = clock.Add(7 * time.Second)
 	if _, found := cache.Get(request); found {
-		t.Fatal("Get() found = true after minimum TTL elapsed")
+		t.Fatal("Get() found = true after the answer TTL elapsed")
+	}
+}
+
+func TestResponseCacheSweepReclaimsUnreadEntries(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := NewResponseCache(4)
+	cache.now = func() time.Time { return clock }
+	request := cacheRequest("example.com.", 1)
+	cache.Set(request, positiveResponse(request, 10), true)
+
+	clock = clock.Add(11 * time.Second)
+	// Nothing looks this entry up again, so only the sweeper can release its slot.
+	if cache.Len() != 1 {
+		t.Fatalf("Len() = %d before sweep, want the expired entry still held", cache.Len())
+	}
+	if removed := cache.SweepExpired(); removed != 1 {
+		t.Fatalf("SweepExpired() = %d, want 1", removed)
 	}
 	if cache.Len() != 0 {
-		t.Fatalf("Len() = %d, want expired entry removed", cache.Len())
+		t.Fatalf("Len() = %d after sweep, want 0", cache.Len())
 	}
 }
 
@@ -79,7 +104,7 @@ func TestResponseCacheUsesSOAMinimumForNegativeResponse(t *testing.T) {
 		Mbox:   "hostmaster.example.",
 		Minttl: 5,
 	})
-	if !cache.Set(request, response) {
+	if !cache.Set(request, response, true) {
 		t.Fatal("Set() = false, want negative response cached")
 	}
 
@@ -95,10 +120,10 @@ func TestResponseCacheAppliesConfiguredTTLLimits(t *testing.T) {
 	cache := NewResponseCacheWithOptions(4, CacheOptions{MinimumTTL: 10, MaximumTTL: 60})
 	shortRequest := cacheRequest("short.example.", 1)
 	longRequest := cacheRequest("long.example.", 2)
-	if !cache.Set(shortRequest, positiveResponse(shortRequest, 3)) {
+	if !cache.Set(shortRequest, positiveResponse(shortRequest, 3), true) {
 		t.Fatal("Set(short) = false, want true")
 	}
-	if !cache.Set(longRequest, positiveResponse(longRequest, 600)) {
+	if !cache.Set(longRequest, positiveResponse(longRequest, 600), true) {
 		t.Fatal("Set(long) = false, want true")
 	}
 
@@ -128,17 +153,36 @@ func TestResponseCacheAppliesConfiguredNegativeAndFailureTTLs(t *testing.T) {
 		Mbox:   "hostmaster.example.",
 		Minttl: 5,
 	})
-	if !cache.Set(negativeRequest, negative) {
+	if !cache.Set(negativeRequest, negative, true) {
 		t.Fatal("Set(negative) = false, want true")
 	}
-	if cached, found := cache.Get(negativeRequest); !found || cached.Ns[0].Header().Ttl != 45 {
-		t.Fatalf("negative cached TTL = %v, want 45", cachedAuthorityTTL(cached, found))
+	// The zone asked to be forgotten in five seconds. The configured value is a
+	// ceiling, so it must not stretch that out to forty-five.
+	if cached, found := cache.Get(negativeRequest); !found || cached.Ns[0].Header().Ttl != 5 {
+		t.Fatalf("negative cached TTL = %v, want the SOA's 5", cachedAuthorityTTL(cached, found))
+	}
+
+	patientRequest := cacheRequest("absent.example.", 1)
+	patient := new(dns.Msg)
+	patient.SetRcode(patientRequest, dns.RcodeNameError)
+	patient.Ns = append(patient.Ns, &dns.SOA{
+		Hdr:    dns.RR_Header{Name: "example.", Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: 600},
+		Ns:     "ns.example.",
+		Mbox:   "hostmaster.example.",
+		Minttl: 600,
+	})
+	if !cache.Set(patientRequest, patient, true) {
+		t.Fatal("Set(patient negative) = false, want true")
+	}
+	// A zone asking for ten minutes is held only as long as the ceiling allows.
+	if cached, found := cache.Get(patientRequest); !found || cached.Ns[0].Header().Ttl != 45 {
+		t.Fatalf("negative cached TTL = %v, want the configured cap of 45", cachedAuthorityTTL(cached, found))
 	}
 
 	failureRequest := cacheRequest("failure.example.", 2)
 	failure := new(dns.Msg)
 	failure.SetRcode(failureRequest, dns.RcodeServerFailure)
-	if !cache.Set(failureRequest, failure) {
+	if !cache.Set(failureRequest, failure, true) {
 		t.Fatal("Set(SERVFAIL) = false, want failure cached")
 	}
 	clock = clock.Add(6 * time.Second)
@@ -160,7 +204,7 @@ func TestResponseCacheServesExpiredResponseOnlyAsStaleFallback(t *testing.T) {
 	})
 	cache.now = func() time.Time { return clock }
 	request := cacheRequest("stale.example.", 1)
-	if !cache.Set(request, positiveResponse(request, 5)) {
+	if !cache.Set(request, positiveResponse(request, 5), true) {
 		t.Fatal("Set() = false, want true")
 	}
 
@@ -193,7 +237,7 @@ func TestResponseCacheUsesStaleRetryWindowAfterFailedRefresh(t *testing.T) {
 	})
 	cache.now = func() time.Time { return clock }
 	request := cacheRequest("retry-stale.example.", 1)
-	cache.Set(request, positiveResponse(request, 5))
+	cache.Set(request, positiveResponse(request, 5), true)
 	clock = clock.Add(5 * time.Second)
 	if _, found := cache.GetStale(request); !found {
 		t.Fatal("GetStale() found = false")
@@ -216,7 +260,7 @@ func TestResponseCacheElectsSinglePopularPrefetch(t *testing.T) {
 	})
 	cache.now = func() time.Time { return clock }
 	request := cacheRequest("popular.example.", 1)
-	cache.Set(request, positiveResponse(request, 60))
+	cache.Set(request, positiveResponse(request, 60), true)
 	clock = clock.Add(51 * time.Second)
 
 	if _, found, prefetch := cache.GetWithPrefetch(request); !found || prefetch {
@@ -242,7 +286,7 @@ func TestResponseCacheExportRestoreRoundTrip(t *testing.T) {
 	source := NewResponseCacheWithOptions(4, options)
 	source.now = func() time.Time { return clock }
 	request := cacheRequest("persisted.example.", 1)
-	source.Set(request, positiveResponse(request, 60))
+	source.Set(request, positiveResponse(request, 60), true)
 	clock = clock.Add(7 * time.Second)
 	entries, err := source.Export()
 	if err != nil || len(entries) != 1 {
@@ -279,7 +323,7 @@ func TestHandlerReturnsStaleAfterConfiguredMaximumWait(t *testing.T) {
 	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
 	runtime.cache.now = func() time.Time { return clock }
 	request := cacheRequest("slow-upstream.example.", 1)
-	runtime.cache.Set(request, positiveResponse(request, 5))
+	runtime.cache.Set(request, positiveResponse(request, 5), true)
 	clock = clock.Add(5 * time.Second)
 	handler := NewHandler(runtime)
 	handler.upstreamExchange = func(ctx context.Context, _ *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
@@ -304,7 +348,7 @@ func TestResponseCacheRemainsBounded(t *testing.T) {
 	cache := NewResponseCache(capacity)
 	for index := range 100 {
 		request := cacheRequest(fmt.Sprintf("host-%d.example.", index), uint16(index))
-		cache.Set(request, positiveResponse(request, 60))
+		cache.Set(request, positiveResponse(request, 60), true)
 	}
 	if cache.Len() > capacity {
 		t.Fatalf("Len() = %d, want at most %d", cache.Len(), capacity)
@@ -317,7 +361,7 @@ func TestResponseCacheClearReturnsRemovedEntries(t *testing.T) {
 	cache := NewResponseCache(4)
 	for index := range 3 {
 		request := cacheRequest(fmt.Sprintf("clear-%d.example.", index), uint16(index))
-		cache.Set(request, positiveResponse(request, 60))
+		cache.Set(request, positiveResponse(request, 60), true)
 	}
 	if removed := cache.Clear(); removed != 3 {
 		t.Fatalf("Clear() = %d, want 3", removed)
@@ -335,7 +379,7 @@ func TestResponseCacheSnapshotIsSortedAndAdjustsTTLs(t *testing.T) {
 	cache.now = func() time.Time { return clock }
 	for _, name := range []string{"z.example.", "a.example."} {
 		request := cacheRequest(name, 1)
-		cache.Set(request, positiveResponse(request, 60))
+		cache.Set(request, positiveResponse(request, 60), true)
 	}
 	clock = clock.Add(7 * time.Second)
 
@@ -361,7 +405,7 @@ func TestHandlerActivationPreservesCompatibleCache(t *testing.T) {
 		t.Fatalf("Compile(active) error = %v", err)
 	}
 	request := cacheRequest("preserved.example.", 1)
-	active.cache.Set(request, positiveResponse(request, 60))
+	active.cache.Set(request, positiveResponse(request, 60), true)
 	handler := NewHandler(active)
 	candidateConfiguration := activeConfiguration
 	candidateConfiguration.Timeout = 2 * time.Second
@@ -388,7 +432,7 @@ func TestHandlerActivationClearsCacheWhenForwardingPolicyChanges(t *testing.T) {
 		t.Fatalf("Compile(active) error = %v", err)
 	}
 	request := cacheRequest("route-change.example.", 1)
-	active.cache.Set(request, positiveResponse(request, 60))
+	active.cache.Set(request, positiveResponse(request, 60), true)
 	handler := NewHandler(active)
 	candidateConfiguration := activeConfiguration
 	candidateConfiguration.Routes = []ForwardingRoute{{
@@ -411,14 +455,14 @@ func TestResponseCacheSkipsEDNSOptionsAndTransientFailures(t *testing.T) {
 	cache := NewResponseCache(4)
 	request := cacheRequest("example.com.", 1)
 	request.IsEdns0().Option = append(request.IsEdns0().Option, &dns.EDNS0_SUBNET{})
-	if cache.Set(request, positiveResponse(request, 60)) {
+	if cache.Set(request, positiveResponse(request, 60), true) {
 		t.Fatal("Set() = true for request with response-varying EDNS options")
 	}
 
 	request = cacheRequest("example.com.", 2)
 	response := new(dns.Msg)
 	response.SetRcode(request, dns.RcodeServerFailure)
-	if cache.Set(request, response) {
+	if cache.Set(request, response, true) {
 		t.Fatal("Set() = true for SERVFAIL response")
 	}
 }
@@ -438,7 +482,7 @@ func TestResponseCacheIgnoresHopByHopEDNSOptions(t *testing.T) {
 		&dns.EDNS0_COOKIE{Code: dns.EDNS0COOKIE, Cookie: "2436313a4d7a5f215365727665724330"},
 	)
 
-	if !cache.Set(padded, response) {
+	if !cache.Set(padded, response, true) {
 		t.Fatal("Set() = false for a padded request, want it cached")
 	}
 	cached, found := cache.Get(padded)
@@ -463,7 +507,7 @@ func TestResponseCacheIgnoresHopByHopEDNSOptions(t *testing.T) {
 func BenchmarkResponseCacheHit(b *testing.B) {
 	cache := NewResponseCache(65_536)
 	request := cacheRequest("example.com.", 1)
-	cache.Set(request, positiveResponse(request, 300))
+	cache.Set(request, positiveResponse(request, 300), true)
 	b.ReportAllocs()
 	for b.Loop() {
 		_, _ = cache.Get(request)
@@ -500,4 +544,236 @@ func cachedAuthorityTTL(message *dns.Msg, found bool) any {
 		return "missing"
 	}
 	return message.Ns[0].Header().Ttl
+}
+
+func clientQuery(name string, udpSize uint16, dnssecOK, checkingDisabled bool) *dns.Msg {
+	request := new(dns.Msg)
+	request.SetQuestion(name, dns.TypeA)
+	request.CheckingDisabled = checkingDisabled
+	if udpSize > 0 {
+		request.SetEdns0(udpSize, dnssecOK)
+	}
+	return request
+}
+
+func TestResponseCacheSharesOneEntryAcrossClientShapes(t *testing.T) {
+	t.Parallel()
+
+	cache := NewResponseCache(64)
+	// The buffer size, DO bit, and CD bit describe how a client wants an answer
+	// delivered, not which answer it gets. Every shape below asks the same
+	// question and must land on the same entry.
+	shapes := []*dns.Msg{
+		clientQuery("example.com.", 0, false, false),
+		clientQuery("example.com.", 512, false, false),
+		clientQuery("example.com.", 1232, false, false),
+		clientQuery("example.com.", 1400, false, false),
+		clientQuery("example.com.", 4096, false, false),
+		clientQuery("example.com.", 1232, true, false),
+		clientQuery("example.com.", 1232, false, true),
+	}
+	cache.Set(shapes[0], positiveResponse(shapes[0], 300), true)
+	if cache.Len() != 1 {
+		t.Fatalf("Len() = %d after one store, want 1", cache.Len())
+	}
+	for _, request := range shapes {
+		if _, found := cache.Get(request); !found {
+			t.Errorf("Get(udp=%d) found = false, want a shared hit", requestUDPSize(request))
+		}
+		cache.Set(request, positiveResponse(request, 300), true)
+	}
+	if cache.Len() != 1 {
+		t.Fatalf("Len() = %d, want one entry shared by every client shape", cache.Len())
+	}
+}
+
+func requestUDPSize(request *dns.Msg) uint16 {
+	if option := request.IsEdns0(); option != nil {
+		return option.UDPSize()
+	}
+	return 0
+}
+
+func signedResponse(request *dns.Msg, ttl uint32) *dns.Msg {
+	response := positiveResponse(request, ttl)
+	response.Answer = append(response.Answer, &dns.RRSIG{
+		Hdr:         dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeRRSIG, Class: dns.ClassINET, Ttl: ttl},
+		TypeCovered: dns.TypeA, Algorithm: 13, Labels: 2, OrigTtl: ttl,
+		SignerName: "example.com.", Signature: "AAAA",
+	})
+	return response
+}
+
+func TestResponseCacheStripsSignaturesForClientsThatDidNotAsk(t *testing.T) {
+	t.Parallel()
+
+	cache := NewResponseCache(64)
+	populating := clientQuery("example.com.", 1232, true, false)
+	cache.Set(populating, signedResponse(populating, 300), true)
+
+	plain := clientQuery("example.com.", 1232, false, false)
+	response, found := cache.Get(plain)
+	if !found {
+		t.Fatal("Get(DO=0) found = false, want a hit on the signed entry")
+	}
+	for _, record := range response.Answer {
+		if record.Header().Rrtype == dns.TypeRRSIG {
+			t.Fatal("cached hit handed an RRSIG to a client that did not set DO")
+		}
+	}
+
+	signing := clientQuery("example.com.", 1232, true, false)
+	response, found = cache.Get(signing)
+	if !found {
+		t.Fatal("Get(DO=1) found = false, want a hit")
+	}
+	signed := false
+	for _, record := range response.Answer {
+		if record.Header().Rrtype == dns.TypeRRSIG {
+			signed = true
+		}
+	}
+	if !signed {
+		t.Fatal("cached hit withheld the RRSIG from a client that set DO")
+	}
+}
+
+func TestResponseCacheWithholdsUnsignedEntryFromDNSSECClient(t *testing.T) {
+	t.Parallel()
+
+	cache := NewResponseCache(64)
+	// Stored without signatures, so a client that sets DO must resolve afresh
+	// rather than be told this is all there is.
+	plain := clientQuery("example.com.", 1232, false, false)
+	cache.Set(plain, positiveResponse(plain, 300), false)
+
+	if _, found := cache.Get(clientQuery("example.com.", 1232, true, false)); found {
+		t.Fatal("Get(DO=1) found = true on an entry stored without signatures")
+	}
+	if _, found := cache.Get(clientQuery("example.com.", 1232, false, false)); !found {
+		t.Fatal("Get(DO=0) found = false, want the entry still serving the clients it can")
+	}
+}
+
+func prefetchTestCache(clock *time.Time) *ResponseCache {
+	cache := NewResponseCacheWithOptions(64, CacheOptions{
+		PrefetchMinTTL: 2, PrefetchAtTTL: 9,
+		PrefetchSample: 5 * time.Minute, PrefetchHits: 30,
+	})
+	cache.now = func() time.Time { return *clock }
+	return cache
+}
+
+func TestPrefetchCandidatesRenewsPopularEntryWithoutAClientHit(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := prefetchTestCache(&clock)
+	request := clientQuery("popular.example.", 1232, false, false)
+	cache.Set(request, positiveResponse(request, 60), true)
+
+	// Earn eligibility early in the sample window, then go quiet.
+	for range 3 {
+		if _, found := cache.Get(request); !found {
+			t.Fatal("Get() found = false while the entry was fresh")
+		}
+		clock = clock.Add(time.Second)
+	}
+
+	// Nothing queries the entry again, so the hit-triggered path can never fire.
+	clock = clock.Add(52 * time.Second)
+	candidates := cache.PrefetchCandidates(10)
+	if len(candidates) != 1 {
+		t.Fatalf("PrefetchCandidates() = %d entries, want the popular one elected", len(candidates))
+	}
+	if got := candidates[0].Question[0].Name; got != "popular.example." {
+		t.Fatalf("candidate question = %q, want popular.example.", got)
+	}
+	if again := cache.PrefetchCandidates(10); len(again) != 0 {
+		t.Fatalf("PrefetchCandidates() = %d on a second pass, want the election to be exclusive", len(again))
+	}
+}
+
+func TestPrefetchCandidatesSkipsUnpopularEntry(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := prefetchTestCache(&clock)
+	request := clientQuery("quiet.example.", 1232, false, false)
+	cache.Set(request, positiveResponse(request, 60), true)
+	if _, found := cache.Get(request); !found {
+		t.Fatal("Get() found = false while the entry was fresh")
+	}
+
+	clock = clock.Add(55 * time.Second)
+	if candidates := cache.PrefetchCandidates(10); len(candidates) != 0 {
+		t.Fatalf("PrefetchCandidates() = %d, want nothing elected for a single hit", len(candidates))
+	}
+}
+
+func TestPrefetchSampleSurvivesARefresh(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := prefetchTestCache(&clock)
+	request := clientQuery("hot.example.", 1232, false, false)
+	cache.Set(request, positiveResponse(request, 60), true)
+	for range 3 {
+		cache.Get(request)
+	}
+
+	clock = clock.Add(55 * time.Second)
+	if len(cache.PrefetchCandidates(10)) != 1 {
+		t.Fatal("first election found no candidate")
+	}
+	// The refresh lands. A hot entry must not have to re-earn its eligibility
+	// from zero, or prefetching stutters on exactly the entries it exists for.
+	cache.Set(request, positiveResponse(request, 60), true)
+
+	clock = clock.Add(55 * time.Second)
+	if len(cache.PrefetchCandidates(10)) != 1 {
+		t.Fatal("second election found no candidate, want the hit sample carried across the refresh")
+	}
+}
+
+func TestHandlerMaintenanceStartsAndStopsCleanly(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	handler.StartMaintenance()
+	handler.StartMaintenance() // idempotent
+
+	done := make(chan struct{})
+	go func() {
+		handler.Close()
+		handler.Close() // idempotent
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return, maintenance goroutine is stuck")
+	}
+}
+
+func TestHandlerCloseWithoutMaintenanceDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+
+	done := make(chan struct{})
+	go func() { handler.Close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() blocked waiting on a maintenance goroutine that never started")
+	}
 }

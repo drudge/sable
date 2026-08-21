@@ -30,6 +30,7 @@ type Runtime struct {
 	forwarders          []string
 	rootHints           []string
 	delegations         *delegationCache
+	nameServers         *addressCache
 	baseRoutes          []ForwardingRoute
 	routes              map[string][]string
 	upstreams           string
@@ -242,6 +243,10 @@ type Handler struct {
 	upstreamErrors       atomic.Uint64
 	cacheHits            atomic.Uint64
 	cacheMisses          atomic.Uint64
+	maintenanceStop      chan struct{}
+	maintenanceDone      chan struct{}
+	maintenanceStarted   atomic.Bool
+	maintenanceOnce      sync.Once
 	routedQueries        atomic.Uint64
 	localAnswers         atomic.Uint64
 	authoritativeAnswers atomic.Uint64
@@ -616,6 +621,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		forwarders:      append([]string(nil), configuration.Forwarders...),
 		rootHints:       rootHints,
 		delegations:     newDelegationCache(4096),
+		nameServers:     newAddressCache(4096),
 		baseRoutes:      cloneForwardingRoutes(configuration.Routes),
 		routes:          routes,
 		upstreams:       upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
@@ -658,12 +664,62 @@ func NewHandler(runtime *Runtime) *Handler {
 		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
-		failureLog: newFailureLogLimiter(),
+		failureLog:      newFailureLogLimiter(),
+		maintenanceStop: make(chan struct{}), maintenanceDone: make(chan struct{}),
 	}
 	emptyExpired := make(map[string]struct{})
 	handler.expiredZones.Store(&emptyExpired)
 	handler.runtime.Store(runtime)
 	return handler
+}
+
+// StartMaintenance begins background cache upkeep. It is separate from the
+// constructor so that building a handler stays free of background work, and
+// callers that only resolve a query decide for themselves whether a ticker
+// should be running behind them.
+func (handler *Handler) StartMaintenance() {
+	if handler.maintenanceStarted.Swap(true) {
+		return
+	}
+	go handler.maintainCache()
+}
+
+// maintainCache runs the cache upkeep that no client request can do on its own:
+// reaping entries whose fresh and stale windows have both closed, and renewing
+// popular entries before they expire. Refreshing on a client hit only reaches
+// entries that happen to be queried inside the trigger window, so without this
+// the hottest records still go cold and make somebody wait for the upstream.
+func (handler *Handler) maintainCache() {
+	defer close(handler.maintenanceDone)
+	sweep := time.NewTicker(cacheSweepInterval)
+	defer sweep.Stop()
+	refresh := time.NewTicker(cacheRefreshInterval)
+	defer refresh.Stop()
+	for {
+		select {
+		case <-handler.maintenanceStop:
+			return
+		case <-sweep.C:
+			handler.runtime.Load().cache.SweepExpired()
+		case <-refresh.C:
+			runtime := handler.runtime.Load()
+			for _, request := range runtime.cache.PrefetchCandidates(maximumPrefetchBatch) {
+				handler.prefetch(request, runtime)
+			}
+		}
+	}
+}
+
+// Close stops cache maintenance. It is safe to call more than once, and safe to
+// call before persisting the cache: no refresh is in flight once it returns.
+func (handler *Handler) Close() {
+	handler.maintenanceOnce.Do(func() { close(handler.maintenanceStop) })
+	// Swap reports what came before: true means maintainCache is running and will
+	// close maintenanceDone, false means it never started and now never will, so
+	// there is nothing to wait for.
+	if handler.maintenanceStarted.Swap(true) {
+		<-handler.maintenanceDone
+	}
 }
 
 func (handler *Handler) ExportCache() ([]PersistedResponse, error) {
@@ -679,6 +735,7 @@ func (handler *Handler) Activate(runtime *Runtime) {
 	if active.upstreams == runtime.upstreams && active.cache.Compatible(runtime.cache) {
 		runtime.cache = active.cache
 		runtime.delegations = active.delegations
+		runtime.nameServers = active.nameServers
 	}
 	if runtime.managedTrustAnchors && runtime.dnssec != nil && handler.trustAnchorManager != nil {
 		if anchors, initialized := handler.trustAnchorManager.ActiveAnchors(); initialized {
@@ -1365,9 +1422,13 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	response.CheckingDisabled = request.CheckingDisabled
 	response.AuthenticatedData = validation == validationSecure
 	// CD is a diagnostic escape hatch, not permission to poison the shared
-	// cache with data that failed validation for every other client.
-	if validation != validationBogus {
-		runtime.cache.Set(request, response)
+	// cache with data that failed validation for every other client. With local
+	// validation on, every upstream fetch already sets CD and bogus answers never
+	// reach here, so a CD client's answer is what everyone else would get and is
+	// safe to share. With validation off the upstream did the validating and a CD
+	// fetch went around it, so that answer stays private to the client that asked.
+	if validation != validationBogus && (runtime.dnssec != nil || !request.CheckingDisabled) {
+		runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 	}
 	prepareResponseForClient(response, request)
 	return resolution{response: response, source: querylog.SourceUpstream}
@@ -1386,7 +1447,7 @@ func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
 		response.Question = append(response.Question[:0], request.Question...)
 		response.CheckingDisabled = request.CheckingDisabled
 		response.AuthenticatedData = validation == validationSecure
-		if !runtime.cache.Set(request, response) {
+		if !runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request)) {
 			runtime.cache.CancelPrefetch(request)
 		}
 	}()
@@ -1399,7 +1460,9 @@ func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtim
 		return resolution{response: response, source: querylog.SourceCache}
 	}
 	response := errorResponse(request, fallbackErrorCode)
-	runtime.cache.Set(request, response)
+	// A synthesised failure carries no records, so there is nothing a client that
+	// set DO would be missing and no reason to make it refetch the same failure.
+	runtime.cache.Set(request, response, true)
 	return resolution{response: response, source: querylog.SourceError}
 }
 
@@ -1462,7 +1525,9 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.M
 			response.Ns = cloneRecords(zone.soa, "", time.Now())
 		}
 	}
-	runtime.cache.Set(request, response)
+	// The synthesised answer is unsigned however the client asked for it, so the
+	// cached copy is exactly what a fresh synthesis would produce for anyone.
+	runtime.cache.Set(request, response, true)
 	return response, true
 }
 
@@ -2263,6 +2328,15 @@ func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forw
 	}
 	state, validationErr := runtime.dnssec.validate(validationContext, response, request.Question[0], query)
 	return response, state, validationErr
+}
+
+// upstreamDNSSEC reports whether the answer to this request was fetched with
+// signatures attached. With validation enabled dnssecUpstreamRequest sets DO on
+// every upstream query regardless of what the client asked for, so the cached
+// copy can serve a DO client too; with it disabled only the client's own DO bit
+// decides what came back.
+func (runtime *Runtime) upstreamDNSSEC(request *dns.Msg) bool {
+	return runtime.dnssec != nil || requestWantsDNSSEC(request)
 }
 
 func dnssecUpstreamRequest(request *dns.Msg) *dns.Msg {

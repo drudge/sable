@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 const (
 	maximumIterativeDepth   = 24
 	maximumIterativeQueries = 96
+	// Delegations and name-server addresses are held no longer than a day even
+	// when the zone claims more, so a stale nameset cannot outlive a renumbering.
+	maximumDelegationTTL = uint32(24 * 60 * 60)
 )
 
 // The IPv4 addresses in the IANA root hints change very rarely. Operators can
@@ -32,28 +36,90 @@ type iterativeBudget struct {
 	remaining int
 }
 
-type delegationEntry struct {
-	servers   []string
-	expiresAt time.Time
-}
-
-type delegationCache struct {
-	mu       sync.RWMutex
-	entries  map[string]delegationEntry
+// addressCache is a small map of name to server addresses with per-entry expiry
+// and least-recently-used eviction. It backs both the delegation cache and the
+// name-server address cache. Eviction order matters: picking an arbitrary map
+// entry, as this used to, could throw away the delegation the resolver was about
+// to reuse while keeping one it had not touched in an hour.
+type addressCache struct {
+	mu       sync.Mutex
+	entries  map[string]*list.Element
+	recency  list.List
 	capacity int
 }
 
+type addressEntry struct {
+	key       string
+	addresses []string
+	expiresAt time.Time
+}
+
+func newAddressCache(capacity int) *addressCache {
+	return &addressCache{entries: make(map[string]*list.Element), capacity: max(capacity, 1)}
+}
+
+func (cache *addressCache) get(name string, now time.Time) ([]string, bool) {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.lookupLocked(normalizeName(name), now)
+}
+
+func (cache *addressCache) lookupLocked(name string, now time.Time) ([]string, bool) {
+	element, found := cache.entries[name]
+	if !found {
+		return nil, false
+	}
+	entry := element.Value.(*addressEntry)
+	if !now.Before(entry.expiresAt) {
+		cache.removeLocked(element)
+		return nil, false
+	}
+	cache.recency.MoveToFront(element)
+	return slices.Clone(entry.addresses), true
+}
+
+func (cache *addressCache) set(name string, addresses []string, ttl uint32, now time.Time) {
+	if ttl == 0 || len(addresses) == 0 {
+		return
+	}
+	name = normalizeName(name)
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	entry := &addressEntry{key: name, addresses: slices.Clone(addresses), expiresAt: now.Add(time.Duration(ttl) * time.Second)}
+	if element, found := cache.entries[name]; found {
+		element.Value = entry
+		cache.recency.MoveToFront(element)
+		return
+	}
+	cache.entries[name] = cache.recency.PushFront(entry)
+	for cache.recency.Len() > cache.capacity {
+		cache.removeLocked(cache.recency.Back())
+	}
+}
+
+func (cache *addressCache) removeLocked(element *list.Element) {
+	if element == nil {
+		return
+	}
+	delete(cache.entries, element.Value.(*addressEntry).key)
+	cache.recency.Remove(element)
+}
+
+// delegationCache maps a zone to the addresses that serve it, and answers for the
+// closest enclosing zone it knows so resolution can start below the root.
+type delegationCache struct{ *addressCache }
+
 func newDelegationCache(capacity int) *delegationCache {
-	return &delegationCache{entries: make(map[string]delegationEntry), capacity: capacity}
+	return &delegationCache{addressCache: newAddressCache(capacity)}
 }
 
 func (cache *delegationCache) get(name string, now time.Time) (string, []string, bool) {
 	name = normalizeName(name)
-	cache.mu.RLock()
-	defer cache.mu.RUnlock()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 	for current := name; current != ""; {
-		if entry, found := cache.entries[current]; found && now.Before(entry.expiresAt) {
-			return current, append([]string(nil), entry.servers...), true
+		if servers, found := cache.lookupLocked(current, now); found {
+			return current, servers, true
 		}
 		separator := strings.IndexByte(current, '.')
 		if separator < 0 {
@@ -65,26 +131,7 @@ func (cache *delegationCache) get(name string, now time.Time) (string, []string,
 }
 
 func (cache *delegationCache) set(zone string, servers []string, ttl uint32, now time.Time) {
-	if ttl == 0 || len(servers) == 0 {
-		return
-	}
-	zone = normalizeName(zone)
-	cache.mu.Lock()
-	defer cache.mu.Unlock()
-	if len(cache.entries) >= cache.capacity {
-		for name, entry := range cache.entries {
-			if !now.Before(entry.expiresAt) {
-				delete(cache.entries, name)
-			}
-		}
-	}
-	if len(cache.entries) >= cache.capacity {
-		for name := range cache.entries {
-			delete(cache.entries, name)
-			break
-		}
-	}
-	cache.entries[zone] = delegationEntry{servers: append([]string(nil), servers...), expiresAt: now.Add(time.Duration(ttl) * time.Second)}
+	cache.addressCache.set(zone, servers, ttl, now)
 }
 
 func normalizeRootHints(configured []string) ([]string, error) {
@@ -301,7 +348,6 @@ func referralFrom(response *dns.Msg, queryName string) (string, []string, bool) 
 }
 
 func referralTTL(response *dns.Msg) uint32 {
-	const maximumDelegationTTL = uint32(24 * 60 * 60)
 	ttl := maximumDelegationTTL
 	found := false
 	for _, record := range response.Ns {
@@ -349,6 +395,20 @@ func (handler *Handler) referralServers(
 		if resolved[name] {
 			continue
 		}
+		// A name server's own addresses are worth remembering beyond the zone that
+		// sent us here: one host commonly serves many delegations, and without this
+		// every cold delegation resolves the same host again from the root. Only
+		// fully resolved answers are stored. Glue stays confined to the delegation
+		// that carried it, because it is unverified data from the parent zone.
+		if cached, found := runtime.nameServers.get(name, time.Now()); found {
+			addresses = append(addresses, cached...)
+			if len(addresses) >= 4 {
+				break
+			}
+			continue
+		}
+		discovered := make([]string, 0, 2)
+		ttl := maximumDelegationTTL
 		for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA} {
 			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
 			if err != nil {
@@ -356,10 +416,13 @@ func (handler *Handler) referralServers(
 			}
 			for _, record := range response.Answer {
 				if address, ok := addressFromRecord(record); ok {
-					addresses = append(addresses, net.JoinHostPort(address.String(), "53"))
+					discovered = append(discovered, net.JoinHostPort(address.String(), "53"))
+					ttl = min(ttl, record.Header().Ttl)
 				}
 			}
 		}
+		runtime.nameServers.set(name, discovered, ttl, time.Now())
+		addresses = append(addresses, discovered...)
 		if len(addresses) >= 4 {
 			break
 		}
