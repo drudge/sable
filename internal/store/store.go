@@ -338,10 +338,24 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 		conditions = append(conditions, column+" "+operator+" "+store.placeholder(len(arguments)))
 	}
 	if value := strings.TrimSpace(filter.ClientIP); value != "" {
-		addCondition("LOWER(client_ip)", "LIKE", "%"+strings.ToLower(value)+"%")
+		if filter.Exact {
+			addCondition("LOWER(client_ip)", "=", strings.ToLower(value))
+		} else {
+			addCondition("LOWER(client_ip)", "LIKE", "%"+strings.ToLower(value)+"%")
+		}
 	}
 	if value := strings.TrimSpace(filter.Name); value != "" {
-		addCondition("LOWER(name)", "LIKE", "%"+strings.ToLower(value)+"%")
+		if filter.Exact {
+			addCondition(queryLogDomainExpression, "=", queryLogDomainKey(value))
+		} else {
+			addCondition("LOWER(name)", "LIKE", "%"+strings.ToLower(value)+"%")
+		}
+	}
+	if !filter.Since.IsZero() {
+		addCondition("occurred_at", ">=", filter.Since.UTC())
+	}
+	if !filter.Until.IsZero() {
+		addCondition("occurred_at", "<=", filter.Until.UTC())
 	}
 	if len(filter.RecordTypes) > 0 {
 		placeholders := make([]string, 0, len(filter.RecordTypes))

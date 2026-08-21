@@ -802,6 +802,55 @@ func (handler *Handler) DNSSECTrustAnchorQuery(ctx context.Context, name string,
 	return handler.resolveNetworkContext(ctx, message, runtime, forwarders)
 }
 
+// ReverseLookup resolves the PTR name for an address the way a client query
+// would: the authoritative zones first, then the host overrides, then the cache,
+// and only then the network. It deliberately skips the query counters and the
+// query log, because a name the console prints beside a client is not traffic
+// that client sent, and recording it would make the console a top talker in its
+// own rankings.
+//
+// An empty name and a nil error mean the lookup succeeded and there is no PTR.
+func (handler *Handler) ReverseLookup(ctx context.Context, address netip.Addr) (string, error) {
+	runtime := handler.runtime.Load()
+	if runtime == nil {
+		return "", errors.New("DNS runtime is unavailable")
+	}
+	reverseName, err := dns.ReverseAddr(address.Unmap().WithZone("").String())
+	if err != nil {
+		return "", fmt.Errorf("reverse name for %s: %w", address, err)
+	}
+	request := new(dns.Msg)
+	request.SetQuestion(reverseName, dns.TypePTR)
+	request.RecursionDesired = true
+	if response, found := runtime.authoritativeResponse(request); found {
+		return firstPTRTarget(response), nil
+	}
+	if response, found := runtime.localResponse(request); found {
+		return firstPTRTarget(response), nil
+	}
+	if response, found := runtime.cache.Get(request); found {
+		return firstPTRTarget(response), nil
+	}
+	forwarders, _ := runtime.forwardersFor(reverseName)
+	response, err := handler.resolveNetworkContext(ctx, request, runtime, forwarders)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", reverseName, err)
+	}
+	return firstPTRTarget(response), nil
+}
+
+func firstPTRTarget(response *dns.Msg) string {
+	if response == nil {
+		return ""
+	}
+	for _, record := range response.Answer {
+		if pointer, ok := record.(*dns.PTR); ok {
+			return strings.TrimSuffix(pointer.Ptr, ".")
+		}
+	}
+	return ""
+}
+
 func (handler *Handler) SetQueryObserver(observer querylog.Observer) {
 	if observer == nil {
 		handler.observer.Store(nil)

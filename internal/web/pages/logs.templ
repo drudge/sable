@@ -54,6 +54,13 @@ type QueryLogsView struct {
 	ResponseCode string
 	Source       string
 	Protocol     string
+	// Start and End bound the window the page counts, in the form a
+	// datetime-local input accepts. Exact matches the client and domain whole
+	// rather than as a substring, which is what a dashboard ranking links with
+	// so its total and this page's total describe the same rows.
+	Start        string
+	End          string
+	Exact        bool
 	Live         bool
 	FiltersOpen  bool
 	CanBlocking  bool
@@ -137,8 +144,13 @@ templ QueryLogsPanel(view QueryLogsView) {
 					<label><span>Response Type</span><select name="source">@LogOption("", "All Types", view.Source)@LogOption("authoritative", "Authoritative", view.Source)@LogOption("upstream", "Recursive", view.Source)@LogOption("cache", "Cached", view.Source)@LogOption("blocked", "Blocked", view.Source)@LogOption("local", "Local", view.Source)@LogOption("error", "Error", view.Source)</select></label>
 					<label><span>Protocol</span><select name="protocol">@LogOption("", "All Protocols", view.Protocol)@LogOption("UDP", "UDP", view.Protocol)@LogOption("TCP", "TCP", view.Protocol)@LogOption("TLS", "TLS", view.Protocol)@LogOption("HTTPS", "HTTPS", view.Protocol)@LogOption("QUIC", "QUIC", view.Protocol)</select></label>
 					<label><span>RCODE</span><input name="response_code" value={ view.ResponseCode } placeholder="e.g. NoError"/></label>
+					<label class="query-filter-wide"><span>From</span><input type="datetime-local" name="start" value={ view.Start }/></label>
+					<label class="query-filter-wide"><span>To</span><input type="datetime-local" name="end" value={ view.End }/></label>
 				</div>
 				<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/><input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/><input type="hidden" name="filters" value="1"/>
+				if view.Exact {
+					<input type="hidden" name="match" value="exact"/>
+				}
 				<div class="query-filter-actions"><button class="button" type="submit">@Icon("search")<span>Search</span></button>if queryFilterCount(view) > 0 {
 					<a class="button outline" href="/logs?tab=queries">@Icon("refresh")<span>Clear</span></a>
 				}</div>

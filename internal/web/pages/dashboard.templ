@@ -42,7 +42,11 @@ type DashboardView struct {
 }
 
 type DashboardInsightsView struct {
-	Clients         int
+	// RangeLabel names the window the rankings and distributions describe, and
+	// LogWindowQuery reproduces that window on the query log page so a ranking
+	// row and the log it links to report the same count.
+	RangeLabel      string
+	LogWindowQuery  string
 	TopClients      []RankedStatView
 	TopDomains      []RankedStatView
 	TopBlocked      []RankedStatView
@@ -658,7 +662,7 @@ templ QueryChart(view QueryChartView) {
 				@RangeButton("Year", "year", view.ActiveRange)
 				<button type="button" id="chart-range-custom" class={ ifThen(view.ActiveRange == "custom", "active", "") } aria-pressed={ fmt.Sprint(view.ActiveRange == "custom") } aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
 			</div>
-			<label class="range-select"><span class="sr-only">Query statistics time range</span><select id="chart-range-select" name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
+			<label class="range-select"><span class="sr-only">Query statistics time range</span><select id="chart-range-select" name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart?insights=1" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
 				@RangeOption("Hour", "hour", view.ActiveRange)
 				@RangeOption("Day", "day", view.ActiveRange)
 				@RangeOption("Week", "week", view.ActiveRange)
@@ -668,7 +672,7 @@ templ QueryChart(view QueryChartView) {
 			<button class="range-custom-mobile" id="chart-range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-chart-range-open>Custom</button>
 		</div>
 		<div class="chart-range-popover" id="chart-custom-range" role="dialog" aria-label="Custom query range" data-chart-range-popover hidden>
-			<form class="chart-range-form" hx-get="/ui/stats/chart" hx-target="#query-statistics" hx-swap="outerHTML" data-chart-range-form>
+			<form class="chart-range-form" hx-get="/ui/stats/chart?insights=1" hx-target="#query-statistics" hx-swap="outerHTML" data-chart-range-form>
 				<input type="hidden" name="range" value="custom"/>
 				<input type="hidden" name="start" value={ view.CustomStart } data-chart-range-start required/>
 				<input type="hidden" name="end" value={ view.CustomEnd } data-chart-range-end required/>
@@ -737,7 +741,7 @@ templ RangeButton(label string, value string, active string) {
 		class={ ifThen(value == active, "active", "") }
 		aria-pressed={ fmt.Sprint(value == active) }
 		data-range={ value }
-		hx-get={ templ.SafeURL("/ui/stats/chart?range=" + value) }
+		hx-get={ templ.SafeURL("/ui/stats/chart?insights=1&range=" + value) }
 		hx-target="#query-statistics"
 		hx-swap="outerHTML"
 	>{ label }</button>

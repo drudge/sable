@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -10,6 +11,31 @@ import (
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
+// insightsFrom aggregates entries the way the store's GROUP BY does, so these
+// tests can keep describing the query log as rows.
+func insightsFrom(entries []querylog.Entry) querylog.Insights {
+	insights := querylog.Insights{
+		Clients:       map[string]uint64{},
+		Domains:       map[string]uint64{},
+		Blocked:       map[string]uint64{},
+		RecordTypes:   map[uint16]uint64{},
+		Sources:       map[string]uint64{},
+		ResponseCodes: map[int]uint64{},
+	}
+	for _, entry := range entries {
+		name := strings.TrimSuffix(strings.ToLower(entry.Name), ".")
+		insights.Clients[entry.ClientIP]++
+		insights.Domains[name]++
+		if entry.Source == querylog.SourceBlocked {
+			insights.Blocked[name]++
+		}
+		insights.RecordTypes[entry.RecordType]++
+		insights.Sources[string(entry.Source)]++
+		insights.ResponseCodes[entry.ResponseCode]++
+	}
+	return insights
+}
+
 func TestDashboardInsightsRanksPersistedQuerySample(t *testing.T) {
 	t.Parallel()
 
@@ -18,11 +44,15 @@ func TestDashboardInsightsRanksPersistedQuerySample(t *testing.T) {
 		{Event: querylog.Event{ClientIP: "192.0.2.10", Name: "api.example.", RecordType: dns.TypeAAAA, ResponseCode: dns.RcodeSuccess, Source: querylog.SourceUpstream}},
 		{Event: querylog.Event{ClientIP: "192.0.2.20", Name: "ads.example.", RecordType: dns.TypeA, ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked}},
 	}
-	view := dashboardInsights(entries, []config.HostOverride{{
+	window := insightWindow{Label: "Last hour"}
+	view := dashboardInsights(insightsFrom(entries), window, []config.HostOverride{{
 		Name: "laptop.home.arpa", Addresses: []string{"192.0.2.10"}, TTL: 60,
 	}}, nil)
-	if view.Clients != 2 || len(view.TopClients) != 2 {
+	if dashboardClientSample(entries) != 2 || len(view.TopClients) != 2 {
 		t.Fatalf("client insights = %+v", view)
+	}
+	if view.RangeLabel != "Last hour" {
+		t.Fatalf("range label = %q", view.RangeLabel)
 	}
 	if view.TopClients[0].Name != "192.0.2.10" || view.TopClients[0].Secondary != "laptop.home.arpa" || view.TopClients[0].Value != 2 {
 		t.Fatalf("top client = %+v", view.TopClients[0])
@@ -56,7 +86,7 @@ func TestDashboardInsightsNamesClientsFromReverseZones(t *testing.T) {
 			{Name: "9", Type: "PTR", Value: "retired.default.clients.example.net.", TTL: 300, Disabled: true},
 		},
 	}}
-	view := dashboardInsights(entries, []config.HostOverride{{
+	view := dashboardInsights(insightsFrom(entries), insightWindow{}, []config.HostOverride{{
 		Name: "gateway.example.net", Addresses: []string{"10.0.9.1"}, TTL: 60,
 	}}, zones)
 

@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -15,47 +16,117 @@ import (
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
-// dashboardInsightEvents is how far back the rankings, distributions, and
-// client count read. The dashboard and its refreshing stat cards share it so
-// both describe the same slice of the query log.
+// dashboardInsightEvents is how far back the client counter on the stat cards
+// reads. The rankings below it no longer sample rows at all; they count the
+// selected chart range in the database instead.
 const dashboardInsightEvents = 1_000
 
-func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride, zones []zonemodel.Zone) pages.DashboardInsightsView {
-	clients := make(map[string]uint64)
-	domains := make(map[string]uint64)
-	blocked := make(map[string]uint64)
-	queryTypes := make(map[string]uint64)
-	sources := make(map[string]uint64)
-	responseCodes := make(map[string]uint64)
-	for _, entry := range entries {
-		clients[entry.ClientIP]++
-		name := strings.TrimSuffix(strings.ToLower(entry.Name), ".")
-		domains[name]++
-		if entry.Source == querylog.SourceBlocked {
-			blocked[name]++
-		}
-		recordType := dns.TypeToString[entry.RecordType]
-		if recordType == "" {
-			recordType = "OTHER"
-		}
-		queryTypes[recordType]++
-		sources[dashboardSourceLabel(entry.Source)]++
-		responseCode := dns.RcodeToString[entry.ResponseCode]
-		if responseCode == "" {
-			responseCode = "Other"
-		}
-		responseCodes[responseCode]++
+// dashboardRankLimit is how many ranked entries the dashboard dialog offers.
+const dashboardRankLimit = 1_000
+
+// insightWindow is the slice of the query log a set of rankings describes. It
+// follows the chart's range picker so a panel and the plot above it always
+// answer for the same stretch of time, and so a ranking can hand that same
+// window to the query log page instead of sending an operator to a total
+// gathered over a different period.
+type insightWindow struct {
+	Start time.Time
+	End   time.Time
+	Label string
+}
+
+// chartInsightWindow resolves a chart range name into the window it plots.
+func chartInsightWindow(rangeName string, now time.Time) (insightWindow, bool) {
+	duration, valid := chartDuration(rangeName)
+	if !valid {
+		return insightWindow{}, false
 	}
-	clientNames := dashboardClientNames(clients, hosts, zones)
+	return insightWindow{Start: now.Add(-duration), End: now, Label: chartRangeLabel(rangeName)}, true
+}
+
+func chartRangeLabel(rangeName string) string {
+	switch rangeName {
+	case "hour":
+		return "Last hour"
+	case "day":
+		return "Last 24 hours"
+	case "week":
+		return "Last 7 days"
+	case "month":
+		return "Last 30 days"
+	case "year":
+		return "Last year"
+	case "custom":
+		return "Custom range"
+	default:
+		return "Selected range"
+	}
+}
+
+// logWindowQuery is the query string that reproduces this window on the query
+// log page. Seconds are kept so the page counts precisely the rows the ranking
+// counted, and the exact flag stops a client address from also matching every
+// longer address that starts with it.
+func (window insightWindow) logWindowQuery() string {
+	values := url.Values{}
+	if !window.Start.IsZero() {
+		values.Set("start", window.Start.UTC().Format(time.RFC3339))
+	}
+	if !window.End.IsZero() {
+		values.Set("end", window.End.UTC().Format(time.RFC3339))
+	}
+	values.Set("match", "exact")
+	return values.Encode()
+}
+
+func dashboardInsights(
+	insights querylog.Insights,
+	window insightWindow,
+	hosts []config.HostOverride,
+	zones []zonemodel.Zone,
+) pages.DashboardInsightsView {
+	queryTypes := make(map[string]uint64, len(insights.RecordTypes))
+	for recordType, count := range insights.RecordTypes {
+		label := dns.TypeToString[recordType]
+		if label == "" {
+			label = "OTHER"
+		}
+		queryTypes[label] += count
+	}
+	sources := make(map[string]uint64, len(insights.Sources))
+	for source, count := range insights.Sources {
+		sources[dashboardSourceLabel(querylog.Source(source))] += count
+	}
+	responseCodes := make(map[string]uint64, len(insights.ResponseCodes))
+	for responseCode, count := range insights.ResponseCodes {
+		label := dns.RcodeToString[responseCode]
+		if label == "" {
+			label = "Other"
+		}
+		responseCodes[label] += count
+	}
+	clientNames := dashboardClientNames(insights.Clients, hosts, zones)
 	return pages.DashboardInsightsView{
-		Clients:         len(clients),
-		TopClients:      rankedStats(clients, clientNames, 1_000),
-		TopDomains:      rankedStats(domains, nil, 1_000),
-		TopBlocked:      rankedStats(blocked, nil, 1_000),
+		RangeLabel:      window.Label,
+		LogWindowQuery:  window.logWindowQuery(),
+		TopClients:      rankedStats(insights.Clients, clientNames, dashboardRankLimit),
+		TopDomains:      rankedStats(insights.Domains, nil, dashboardRankLimit),
+		TopBlocked:      rankedStats(insights.Blocked, nil, dashboardRankLimit),
 		QueryTypes:      distributionItems(queryTypes, 6),
 		ResponseSources: distributionItems(sources, 6),
 		ResponseCodes:   distributionItems(responseCodes, 6),
 	}
+}
+
+// dashboardClientSample counts the distinct clients in a sample of the newest
+// query log rows. The stat card it feeds sits with lifetime counters rather
+// than with the ranged rankings, so it deliberately keeps its own window.
+func dashboardClientSample(entries []querylog.Entry) int {
+	clients := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		clients[entry.ClientIP] = struct{}{}
+	}
+	return len(clients)
 }
 
 // dashboardClientNames labels the client addresses in the query sample. A
