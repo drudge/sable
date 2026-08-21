@@ -182,6 +182,13 @@ enabled = false
 # username_claim = "preferred_username"
 # email_claim = "email"
 # groups_claim = "groups"
+# picture_claim = "picture"
+# Copy the profile picture the provider advertises into Sable, so the console
+# shows the same face the identity provider does. The image is downloaded once
+# per sign-in and stored locally rather than linked, because the console only
+# loads images from its own address and hotlinking would tell the provider
+# which pages get looked at. PNG, JPEG, and GIF up to 256 KB are accepted.
+# sync_avatar = true
 # Ask the UserInfo endpoint for claims the ID token leaves out, which some
 # providers require before group membership arrives at all.
 # fetch_userinfo = false

@@ -13,8 +13,10 @@ import (
 
 func (store *Store) authenticationTables() []string {
 	primaryKey := "INTEGER PRIMARY KEY AUTOINCREMENT"
+	blob := "BLOB"
 	if store.driver == "postgres" {
 		primaryKey = "BIGSERIAL PRIMARY KEY"
+		blob = "BYTEA"
 	}
 	return []string{
 		fmt.Sprintf(`
@@ -30,8 +32,17 @@ CREATE TABLE IF NOT EXISTS sable_user_profiles (
 	email TEXT NOT NULL DEFAULT '',
 	disabled BOOLEAN NOT NULL,
 	password_login BOOLEAN NOT NULL DEFAULT TRUE,
+	avatar_etag TEXT NOT NULL DEFAULT '',
     updated_at TIMESTAMP NOT NULL
 )`, fmt.Sprintf(`
+CREATE TABLE IF NOT EXISTS sable_user_avatars (
+    user_id BIGINT PRIMARY KEY REFERENCES sable_users(id) ON DELETE CASCADE,
+    content_type TEXT NOT NULL,
+    image %s NOT NULL,
+    source_url TEXT NOT NULL,
+    etag TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+)`, blob), fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS sable_roles (
     id %s,
     name TEXT NOT NULL UNIQUE,
@@ -127,6 +138,17 @@ func (store *Store) migrateAuthenticationSchema(ctx context.Context) error {
 	if !hasPasswordLogin {
 		if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_user_profiles ADD COLUMN password_login BOOLEAN NOT NULL DEFAULT TRUE"); err != nil {
 			return fmt.Errorf("add user profile password login: %w", err)
+		}
+	}
+	// The avatar tag lives on the profile rather than with the image so a
+	// session lookup can tell whether a picture exists without reading one.
+	hasAvatarETag, err := store.tableHasColumn(ctx, "sable_user_profiles", "avatar_etag")
+	if err != nil {
+		return err
+	}
+	if !hasAvatarETag {
+		if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_user_profiles ADD COLUMN avatar_etag TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("add user profile avatar tag: %w", err)
 		}
 	}
 	hasScopes, err := store.tableHasColumn(ctx, "sable_api_tokens", "scopes")
@@ -467,7 +489,8 @@ func (store *Store) CreateSession(
 func (store *Store) SessionByHash(ctx context.Context, tokenHash string, now time.Time) (auth.StoredSession, error) {
 	var session auth.StoredSession
 	err := store.database.QueryRowContext(ctx, `
-SELECT users.id, users.username, profiles.display_name, profiles.email, sessions.csrf_token, sessions.expires_at
+SELECT users.id, users.username, profiles.display_name, profiles.email,
+       COALESCE(profiles.avatar_etag, ''), sessions.csrf_token, sessions.expires_at
 FROM sable_sessions AS sessions
 JOIN sable_users AS users ON users.id = sessions.user_id
 LEFT JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
@@ -480,7 +503,8 @@ WHERE sessions.token_hash = `+store.placeholder(1)+` AND sessions.expires_at > `
   )`,
 		tokenHash, now.UTC(), auth.SurfaceWeb,
 	).Scan(
-		&session.User.ID, &session.User.Username, &session.User.DisplayName, &session.User.Email, &session.CSRFToken, &session.Expires,
+		&session.User.ID, &session.User.Username, &session.User.DisplayName, &session.User.Email,
+		&session.User.AvatarETag, &session.CSRFToken, &session.Expires,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.StoredSession{}, auth.ErrNotFound

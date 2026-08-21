@@ -52,6 +52,10 @@ type Identity struct {
 	Email         string
 	EmailVerified bool
 	Groups        []string
+	// Picture is where the provider says the person's profile image lives. It
+	// is a URL rather than the image itself, and the provider is free to move
+	// or remove it at any time, so nothing may depend on it resolving.
+	Picture string
 }
 
 // normalizeIssuer trims the trailing slash so a configured issuer and the one

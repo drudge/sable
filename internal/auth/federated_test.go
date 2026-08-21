@@ -25,6 +25,10 @@ type fakeStore struct {
 	touched         []string
 	profileUpdates  int
 	reconcileCalled int
+	avatars         map[int64]Avatar
+	avatarDeletes   int
+	avatarSaves     int
+	avatarErr       error
 }
 
 func newFakeStore() *fakeStore {
@@ -35,6 +39,7 @@ func newFakeStore() *fakeStore {
 		identities:   map[string]int64{},
 		roles:        map[int64][]string{},
 		grants:       map[int64][]Grant{},
+		avatars:      map[int64]Avatar{},
 		nextID:       1,
 	}
 }
@@ -184,6 +189,40 @@ func (store *fakeStore) ReconcileManagedRoles(
 func (store *fakeStore) UpdateFederatedProfile(_ context.Context, _ int64, _, _ string, _ time.Time) error {
 	store.profileUpdates++
 	return nil
+}
+
+func (store *fakeStore) SaveAvatar(_ context.Context, userID int64, avatar Avatar, _ time.Time) error {
+	if store.avatarErr != nil {
+		return store.avatarErr
+	}
+	store.avatarSaves++
+	store.avatars[userID] = avatar
+	if user, found := store.usersByID[userID]; found {
+		user.AvatarETag = avatar.ETag
+		store.usersByID[userID] = user
+	}
+	return nil
+}
+
+func (store *fakeStore) DeleteAvatar(_ context.Context, userID int64, _ time.Time) error {
+	if store.avatarErr != nil {
+		return store.avatarErr
+	}
+	store.avatarDeletes++
+	delete(store.avatars, userID)
+	if user, found := store.usersByID[userID]; found {
+		user.AvatarETag = ""
+		store.usersByID[userID] = user
+	}
+	return nil
+}
+
+func (store *fakeStore) Avatar(_ context.Context, userID int64) (Avatar, error) {
+	avatar, found := store.avatars[userID]
+	if !found {
+		return Avatar{}, ErrNotFound
+	}
+	return avatar, nil
 }
 
 func contains(list []string, value string) bool {
@@ -445,5 +484,109 @@ func TestLoginRefusesAnAccountThatMovedToSingleSignOn(t *testing.T) {
 	store.usersByID[user.ID] = stored
 	if _, err := service.Login(context.Background(), "casey", "correct horse battery staple", "10.0.0.2", "test"); err != nil {
 		t.Fatalf("sign-in after restoring password login: %v", err)
+	}
+}
+
+func TestFederatedLoginStoresTheProfilePicture(t *testing.T) {
+	store := newFakeStore()
+	service := newFederatedService(t, store)
+	identity := FederatedIdentity{
+		Subject: "subject-1", Username: "casey", Email: "casey@example.com",
+		Avatar: &Avatar{
+			ContentType: "image/png", Data: []byte{0x89, 'P', 'N', 'G'},
+			ETag: `"abc"`, SourceURL: "https://id.example.com/avatar.png",
+		},
+	}
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("federated sign-in: %v", err)
+	}
+	id := store.identities["pocket-id\x00subject-1"]
+	stored, err := store.Avatar(context.Background(), id)
+	if err != nil {
+		t.Fatalf("read stored avatar: %v", err)
+	}
+	if stored.ETag != `"abc"` || stored.ContentType != "image/png" {
+		t.Errorf("stored avatar = %+v, want the one the provider served", stored)
+	}
+}
+
+// Rewriting an unchanged picture would churn the row and hand every browser a
+// fresh tag for bytes it already has.
+func TestFederatedLoginLeavesAnUnchangedPictureAlone(t *testing.T) {
+	store := newFakeStore()
+	service := newFederatedService(t, store)
+	avatar := &Avatar{ContentType: "image/png", Data: []byte{0x89, 'P', 'N', 'G'}, ETag: `"abc"`}
+	identity := FederatedIdentity{Subject: "subject-1", Username: "casey", Avatar: avatar}
+
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("second sign-in: %v", err)
+	}
+	if store.avatarSaves != 1 {
+		t.Errorf("avatar writes = %d, want 1", store.avatarSaves)
+	}
+}
+
+// A download that failed arrives as a nil avatar. Erasing the stored picture
+// then would turn a provider's flaky image host into a lost avatar.
+func TestFederatedLoginKeepsThePictureWhenTheDownloadFailed(t *testing.T) {
+	store := newFakeStore()
+	service := newFederatedService(t, store)
+	identity := FederatedIdentity{
+		Subject: "subject-1", Username: "casey",
+		Avatar: &Avatar{ContentType: "image/png", Data: []byte{0x89, 'P'}, ETag: `"abc"`},
+	}
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	id := store.identities["pocket-id\x00subject-1"]
+
+	identity.Avatar = nil
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("second sign-in: %v", err)
+	}
+	if _, err := store.Avatar(context.Background(), id); err != nil {
+		t.Fatalf("the stored picture was dropped after a failed download: %v", err)
+	}
+	if store.avatarDeletes != 0 {
+		t.Errorf("avatar deletions = %d, want 0", store.avatarDeletes)
+	}
+}
+
+func TestFederatedLoginRemovesAPictureTheProviderNoLongerAdvertises(t *testing.T) {
+	store := newFakeStore()
+	service := newFederatedService(t, store)
+	identity := FederatedIdentity{
+		Subject: "subject-1", Username: "casey",
+		Avatar: &Avatar{ContentType: "image/png", Data: []byte{0x89, 'P'}, ETag: `"abc"`},
+	}
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	id := store.identities["pocket-id\x00subject-1"]
+
+	identity.Avatar, identity.AvatarCleared = nil, true
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("second sign-in: %v", err)
+	}
+	if _, err := store.Avatar(context.Background(), id); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound; the picture was not removed", err)
+	}
+}
+
+// A picture is decoration. A store that cannot hold one must not cost somebody
+// the console.
+func TestFederatedLoginSurvivesAnAvatarStoreFailure(t *testing.T) {
+	store := newFakeStore()
+	service := newFederatedService(t, store)
+	store.avatarErr = errors.New("disk is full")
+	identity := FederatedIdentity{
+		Subject: "subject-1", Username: "casey",
+		Avatar: &Avatar{ContentType: "image/png", Data: []byte{0x89, 'P'}, ETag: `"abc"`},
+	}
+	if _, err := service.FederatedLogin(context.Background(), identity, defaultPolicy(), "10.0.0.1", "test"); err != nil {
+		t.Fatalf("federated sign-in: %v", err)
 	}
 }

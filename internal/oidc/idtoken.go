@@ -79,6 +79,7 @@ type ClaimNames struct {
 	Username string
 	Email    string
 	Groups   string
+	Picture  string
 }
 
 func (names ClaimNames) withDefaults() ClaimNames {
@@ -90,6 +91,9 @@ func (names ClaimNames) withDefaults() ClaimNames {
 	}
 	if names.Groups == "" {
 		names.Groups = "groups"
+	}
+	if names.Picture == "" {
+		names.Picture = "picture"
 	}
 	return names
 }
@@ -170,6 +174,7 @@ func validateClaims(payload []byte, check verification) (Identity, error) {
 		Email:         strings.ToLower(stringClaim(raw, names.Email)),
 		EmailVerified: boolClaim(raw, "email_verified"),
 		Groups:        stringsClaim(raw, names.Groups),
+		Picture:       stringClaim(raw, names.Picture),
 	}
 	return identity, nil
 }

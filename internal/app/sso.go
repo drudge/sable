@@ -23,6 +23,10 @@ import (
 // behind a different path, would otherwise orphan every existing link.
 const ssoProviderKey = "oidc"
 
+// avatarFetchTimeout bounds the profile picture download. It is short because
+// a browser is waiting on the sign-in callback while it runs.
+const avatarFetchTimeout = 5 * time.Second
+
 // federatedAuthenticator is the part of the authentication service single
 // sign-on needs.
 type federatedAuthenticator interface {
@@ -125,6 +129,7 @@ func (service *ssoService) resolveProvider(ctx context.Context) (*oidc.Provider,
 			Username: settings.UsernameClaim,
 			Email:    settings.EmailClaim,
 			Groups:   settings.GroupsClaim,
+			Picture:  settings.PictureClaim,
 		},
 		FetchUserInfo:     settings.FetchUserInfo,
 		ClockSkew:         settings.ClockSkew.Duration,
@@ -166,13 +171,17 @@ func (service *ssoService) Complete(
 		return auth.Credentials{}, err
 	}
 	settings := service.settings()
-	return service.auth.FederatedLogin(ctx, auth.FederatedIdentity{
+	federated := auth.FederatedIdentity{
 		Subject:       identity.Subject,
 		Username:      identity.Username,
 		DisplayName:   identity.DisplayName,
 		Email:         identity.Email,
 		EmailVerified: identity.EmailVerified,
-	}, auth.FederatedPolicy{
+	}
+	if settings.SyncAvatar {
+		federated.Avatar, federated.AvatarCleared = service.avatarFor(ctx, provider, identity.Picture)
+	}
+	return service.auth.FederatedLogin(ctx, federated, auth.FederatedPolicy{
 		Provider:            ssoProviderKey,
 		Issuer:              identity.Issuer,
 		Provision:           settings.Provision,
@@ -181,6 +190,41 @@ func (service *ssoService) Complete(
 		ManagedRoles:        settings.ManagedRoles(),
 		GrantedRoles:        settings.MappedRoles(identity.Groups),
 	}, clientIP, userAgent)
+}
+
+// avatarFor downloads the profile picture a verified identity advertises.
+//
+// The download is bounded and its failure is not: an unreachable image host,
+// an oversized file, or something that is not an image at all leaves the
+// stored picture exactly as it was, because a broken avatar is not a reason to
+// refuse somebody the console. Only a provider that has stopped advertising a
+// picture at all clears one.
+func (service *ssoService) avatarFor(
+	ctx context.Context,
+	provider *oidc.Provider,
+	pictureURL string,
+) (*auth.Avatar, bool) {
+	if strings.TrimSpace(pictureURL) == "" {
+		return nil, true
+	}
+	// The picture is fetched on its own deadline. The browser is waiting on
+	// the callback, and a provider that serves images slowly should cost the
+	// sign-in a couple of seconds rather than the whole request timeout.
+	fetchContext, cancel := context.WithTimeout(ctx, avatarFetchTimeout)
+	defer cancel()
+	picture, err := provider.FetchPicture(fetchContext, pictureURL)
+	if err != nil {
+		if !errors.Is(err, oidc.ErrNoPicture) {
+			service.logger.Warn("read profile picture from the identity provider", "url", pictureURL, "error", err)
+		}
+		return nil, false
+	}
+	return &auth.Avatar{
+		ContentType: picture.ContentType,
+		Data:        picture.Data,
+		ETag:        picture.ETag,
+		SourceURL:   picture.SourceURL,
+	}, false
 }
 
 // LogoutURL reports where to send a browser to end the session at the provider
@@ -267,6 +311,7 @@ func (service *ssoService) Probe(ctx context.Context, settings config.OIDC, secr
 			Username: settings.UsernameClaim,
 			Email:    settings.EmailClaim,
 			Groups:   settings.GroupsClaim,
+			Picture:  settings.PictureClaim,
 		},
 		ClockSkew:  settings.ClockSkew.Duration,
 		HTTPClient: service.client,

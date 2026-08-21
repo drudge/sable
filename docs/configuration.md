@@ -647,6 +647,8 @@ scopes = ["openid", "profile", "email", "groups"]
 username_claim = "preferred_username"
 email_claim = "email"
 groups_claim = "groups"
+picture_claim = "picture"
+sync_avatar = true
 fetch_userinfo = false
 provision = true
 link_by_verified_email = true
@@ -705,6 +707,20 @@ role you assigned by hand in the console is outside that set and survives
 untouched. A reconciliation that would leave no active administrator is refused
 and recorded in the audit log rather than applied, and the sign-in continues
 with the roles already on the account.
+
+**Profile pictures come along for the ride.** With `sync_avatar = true`, the
+URL in `picture_claim` is downloaded at each sign-in and the image is stored in
+Sable's database, where the console serves it as the account's avatar. It is
+copied rather than linked on purpose: the console loads images only from its
+own address, and pointing a page at the provider would tell the provider which
+console pages an operator has open. Only PNG, JPEG, and GIF are kept, up to 256
+KB and 4096 pixels a side, and the stored type comes from decoding the bytes
+rather than from what the provider's header claimed. A picture that will not
+download, will not decode, or is too big is logged and skipped, and whatever
+avatar is already stored stays put — a sign-in never fails over an image. When
+a provider stops sending a picture entirely, the stored one is removed. Turn
+`sync_avatar` off and the console draws the account initial instead, which is
+what it does for local accounts.
 
 `groups_claim` is where providers differ most. Pocket ID, Authentik, and
 Keycloak send group names as plain strings. Entra ID sends group object

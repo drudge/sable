@@ -15,6 +15,9 @@ type DashboardView struct {
 	TimeDisplay    TimeDisplay
 	Username       string
 	DisplayName    string
+	// AvatarURL points at the signed-in operator's profile picture, and is
+	// empty when there is none and the account initial is drawn instead.
+	AvatarURL      string
 	CSRFToken      string
 	SecurityEnabled bool
 	CanSettings     bool
@@ -276,13 +279,13 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					<div class="sidebar-bottom">
 						<div class="sidebar-account" data-account-menu>
 							<button class="user-menu" type="button" data-account-trigger aria-haspopup="menu" aria-expanded="false" data-tooltip={ accountDisplayName(view) }>
-								<span class="avatar">{ userInitial(accountDisplayName(view)) }</span>
+								@AccountAvatar(view)
 								<span class="user-copy"><strong>{ accountDisplayName(view) }</strong><small>{ ifThen(view.SecurityEnabled, view.Username, "local console") }</small></span>
 								<span class="user-action">@Icon("chevron-up")</span>
 							</button>
 							<div class="account-popover" data-account-popover role="menu" hidden>
 								if view.SecurityEnabled {
-									<div class="account-popover-header"><span class="avatar">{ userInitial(accountDisplayName(view)) }</span><span><strong>{ accountDisplayName(view) }</strong><small>{ view.Username }</small></span></div>
+									<div class="account-popover-header">@AccountAvatar(view)<span><strong>{ accountDisplayName(view) }</strong><small>{ view.Username }</small></span></div>
 									<a class="account-menu-item" href="/profile" role="menuitem">@Icon("user")<span>Profile</span></a>
 									<a class="account-menu-item" href="/profile?tab=tokens" role="menuitem">@Icon("key")<span>API Tokens</span></a>
 									<div class="account-menu-separator"></div>
@@ -567,6 +570,19 @@ func brandTooltip(view DashboardView) string {
 		return "Sable"
 	}
 	return "Sable " + view.Version
+}
+
+// AccountAvatar draws the operator's profile picture when one has been synced
+// from the identity provider, and their initial when it has not. The image is
+// served from Sable's own origin rather than linked to the provider, which is
+// what keeps it inside the console's image policy and keeps the provider from
+// learning which pages get looked at.
+templ AccountAvatar(view DashboardView) {
+	if view.AvatarURL != "" {
+		<img class="avatar avatar-image" src={ view.AvatarURL } alt="" width="32" height="32"/>
+	} else {
+		<span class="avatar">{ userInitial(accountDisplayName(view)) }</span>
+	}
 }
 
 func accountDisplayName(view DashboardView) string {

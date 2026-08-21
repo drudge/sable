@@ -331,6 +331,10 @@ func (testAuthenticator) CreateAPIToken(
 ) (string, time.Time, error) {
 	return "sable_pat_created", time.Now().Add(24 * time.Hour), nil
 }
+func (testAuthenticator) Avatar(context.Context, auth.Principal) (auth.Avatar, error) {
+	return auth.Avatar{}, auth.ErrNotFound
+}
+
 func (testAuthenticator) Profile(context.Context, auth.Principal) (auth.ProfileSnapshot, error) {
 	return auth.ProfileSnapshot{
 		User:  auth.ManagedUser{ID: 1, Username: "admin", DisplayName: "Administrator", Email: "admin@example.test", Roles: []string{"Administrator"}},

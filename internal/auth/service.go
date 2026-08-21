@@ -45,6 +45,25 @@ type User struct {
 	// account. A federated account that never had a password has it cleared,
 	// and so does anyone who deliberately moved to single sign-on only.
 	PasswordLogin bool
+	// AvatarETag identifies the stored profile picture, and is empty when the
+	// account has none. It travels with the account rather than with the image
+	// so the console can decide whether to ask for a picture at all without
+	// reading one out of the database on every page.
+	AvatarETag string
+}
+
+// Avatar is a profile picture Sable holds for an account. The bytes are stored
+// rather than linked because the console serves them from its own origin,
+// which is the only image source its content policy allows.
+type Avatar struct {
+	ContentType string
+	Data        []byte
+	// ETag identifies these exact bytes, so an unchanged picture is neither
+	// rewritten on sign-in nor re-sent to a browser that already has it.
+	ETag string
+	// SourceURL records where the image came from, for the audit trail and so
+	// an operator can see which provider a face belongs to.
+	SourceURL string
 }
 
 type StoredSession struct {
@@ -100,6 +119,9 @@ type Store interface {
 	CreateFederatedUser(context.Context, string, string, string, []string, string, string, string, time.Time) (ManagedUser, error)
 	ReconcileManagedRoles(context.Context, int64, []string, []string, time.Time) ([]string, error)
 	UpdateFederatedProfile(context.Context, int64, string, string, time.Time) error
+	SaveAvatar(context.Context, int64, Avatar, time.Time) error
+	DeleteAvatar(context.Context, int64, time.Time) error
+	Avatar(context.Context, int64) (Avatar, error)
 }
 
 type Options struct {
@@ -134,6 +156,7 @@ type Principal struct {
 	Groups               []string
 	Permissions          []string
 	Grants               []Grant
+	AvatarETag           string
 	grantIndex           map[string]struct{}
 	Surface              Surface
 	SessionHash          string
@@ -256,7 +279,7 @@ func (service *Service) AuthenticateSession(ctx context.Context, token string) (
 	return Principal{
 		UserID: session.User.ID, Username: session.User.Username, DisplayName: session.User.DisplayName, Email: session.User.Email,
 		CSRFToken: session.CSRFToken, SessionHash: sessionHash, Permissions: grantPermissions(grants), Grants: grants,
-		grantIndex: indexGrants(grants, SurfaceWeb), Surface: SurfaceWeb,
+		AvatarETag: session.User.AvatarETag, grantIndex: indexGrants(grants, SurfaceWeb), Surface: SurfaceWeb,
 	}, nil
 }
 
