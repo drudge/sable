@@ -172,11 +172,14 @@ func (server *Server) queryLogsPanel(writer http.ResponseWriter, request *http.R
 
 func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 	filter, raw := queryLogFilter(request)
+	display := requestTimeDisplay(request)
 	view := pages.QueryLogsView{
 		Page: filter.Page, PageSize: filter.PageSize, ClientIP: raw.Get("client_ip"),
 		Name: raw.Get("name"), RecordType: strings.ToUpper(raw.Get("record_type")),
 		ResponseCode: strings.ToUpper(raw.Get("response_code")), Source: raw.Get("source"), Protocol: strings.ToUpper(raw.Get("protocol")),
-		Live: raw.Get("live") == "1", FiltersOpen: raw.Get("filters") == "1",
+		Start: logTimeField(filter.Since, display), End: logTimeField(filter.Until, display),
+		Exact: filter.Exact,
+		Live:  raw.Get("live") == "1", FiltersOpen: raw.Get("filters") == "1",
 	}
 	view.FiltersOpen = view.FiltersOpen || queryFiltersActiveView(view)
 	pager, ok := server.queries.(queryEventPager)
@@ -208,7 +211,8 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 }
 
 func queryFiltersActiveView(view pages.QueryLogsView) bool {
-	return view.ClientIP != "" || view.Name != "" || view.RecordType != "" || view.ResponseCode != "" || view.Source != "" || view.Protocol != ""
+	return view.ClientIP != "" || view.Name != "" || view.RecordType != "" || view.ResponseCode != "" ||
+		view.Source != "" || view.Protocol != "" || view.Start != "" || view.End != ""
 }
 
 func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
@@ -226,6 +230,10 @@ func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
 			}
 		}
 	}
+	filter.Exact = values.Get("match") == "exact"
+	display := requestTimeDisplay(request)
+	filter.Since = parseLogTime(values.Get("start"), display)
+	filter.Until = parseLogTime(values.Get("end"), display)
 	if value := strings.ToUpper(strings.TrimSpace(values.Get("response_code"))); value != "" && value != "ALL" {
 		for number, name := range dns.RcodeToString {
 			if strings.EqualFold(name, value) {
@@ -241,6 +249,37 @@ func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
 		}
 	}
 	return filter, values
+}
+
+// parseLogTime reads a window bound. A dashboard ranking links with a precise
+// instant so the log counts exactly the rows it counted, while the filter form
+// posts back what a datetime-local input can hold, which is minutes in the
+// operator's own zone.
+func parseLogTime(raw string, display pages.TimeDisplay) time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}
+	}
+	if moment, err := time.Parse(time.RFC3339, raw); err == nil {
+		return moment
+	}
+	location := display.Location
+	if location == nil {
+		location = time.Local
+	}
+	if moment, err := time.ParseInLocation("2006-01-02T15:04", raw, location); err == nil {
+		return moment
+	}
+	return time.Time{}
+}
+
+// logTimeField renders a window bound for the filter form's datetime-local
+// input, which only understands local wall-clock minutes.
+func logTimeField(moment time.Time, display pages.TimeDisplay) string {
+	if moment.IsZero() {
+		return ""
+	}
+	return display.In(moment).Format("2006-01-02T15:04")
 }
 
 func parseBoundedInt(raw string, fallback, minimum, maximum int) int {
@@ -262,7 +301,7 @@ func queryLogPanelURL(values url.Values, page int) string {
 
 func exportQueryValues(values url.Values) url.Values {
 	copy := make(url.Values)
-	for _, key := range []string{"client_ip", "name", "record_type", "response_code", "source", "protocol", "page_size"} {
+	for _, key := range []string{"client_ip", "name", "record_type", "response_code", "source", "protocol", "page_size", "start", "end", "match"} {
 		if value := values.Get(key); value != "" {
 			copy.Set(key, value)
 		}

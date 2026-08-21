@@ -171,6 +171,14 @@ func (testQueryLog) RecentQueryEvents(context.Context, int) ([]querylog.Entry, e
 	}}, nil
 }
 
+func (log testQueryLog) QueryLogInsights(ctx context.Context, _, _ time.Time) (querylog.Insights, error) {
+	entries, err := log.RecentQueryEvents(ctx, 1_000)
+	if err != nil {
+		return querylog.Insights{}, err
+	}
+	return insightsFrom(entries), nil
+}
+
 func (log testQueryLog) QueryEvents(ctx context.Context, filter querylog.Filter) (querylog.Page, error) {
 	entries, err := log.RecentQueryEvents(ctx, filter.PageSize)
 	if err != nil {
@@ -378,7 +386,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?range=day"`, `data-range="year"`, `data-chart-range-popover`, `data-calendar-grid`, `data-chart-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `/logs?tab=queries&amp;`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-chart-range-popover`, `data-calendar-grid`, `data-chart-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `/logs?tab=queries&amp;`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}

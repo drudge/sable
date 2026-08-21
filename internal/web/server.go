@@ -64,6 +64,11 @@ type Server struct {
 	runtimeLogs interface {
 		Entries(serverlog.Filter) []serverlog.Entry
 	}
+	// reverseNames names the clients in the dashboard rankings from PTR
+	// records the resolver can reach, which covers the reverse zones this
+	// server does not answer for itself. Nil when the DNS handler cannot
+	// resolve, in which case the rankings fall back to local zones alone.
+	reverseNames     *reverseNameCache
 	reload           func(context.Context) error
 	auth             authenticator
 	sso              ssoController
@@ -173,6 +178,9 @@ func New(
 	}
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
+	}
+	if resolver, ok := stats.(reverseResolver); ok {
+		server.reverseNames = newReverseNameCache(resolver, logger)
 	}
 	baseDirectory := "."
 	if located, ok := configuration.(interface{ BaseDirectory() string }); ok {
@@ -442,12 +450,46 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	}
 	entries, err := server.queries.RecentQueryEvents(request.Context(), dashboardInsightEvents)
 	if err != nil {
-		server.logger.Warn("build dashboard insights", "error", err)
-		return view
+		server.logger.Warn("count dashboard clients", "error", err)
+	} else {
+		view.Stats.Clients = dashboardClientSample(entries)
 	}
-	view.Insights = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts, server.zones.Current().Zones)
-	view.Stats.Clients = view.Insights.Clients
 	view.Stats.Dropped = server.queryLog.Stats().Dropped
+	// The rankings open on whatever range the chart opens on, so the panels and
+	// the plot above them always answer for the same window.
+	if window, valid := chartInsightWindow(view.Chart.ActiveRange, time.Now()); valid {
+		view.Insights = server.dashboardInsightsView(request, window)
+	}
+	return view
+}
+
+// queryInsightReader is the optional query log capability the rankings need.
+// A store that cannot aggregate simply leaves the panels empty rather than
+// falling back to a sample whose totals nothing else on the page agrees with.
+type queryInsightReader interface {
+	QueryLogInsights(context.Context, time.Time, time.Time) (querylog.Insights, error)
+}
+
+func (server *Server) dashboardInsightsView(request *http.Request, window insightWindow) pages.DashboardInsightsView {
+	reader, ok := server.queries.(queryInsightReader)
+	if !ok {
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery()}
+	}
+	insights, err := reader.QueryLogInsights(request.Context(), window.Start, window.End)
+	if err != nil {
+		server.logger.Warn("build dashboard insights", "error", err)
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery()}
+	}
+	view := dashboardInsights(
+		insights,
+		window,
+		server.config.Current().Config.Resolver.Hosts,
+		server.zones.Current().Zones,
+	)
+	// Whatever the host overrides and the local zones could not name is asked
+	// of the resolver, which is the only path that sees a reverse zone this
+	// server merely forwards.
+	server.nameRankedClients(view.TopClients)
 	return view
 }
 
@@ -689,7 +731,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 		if err != nil {
 			server.logger.Warn("count dashboard clients", "error", err)
 		} else {
-			view.Clients = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts, nil).Clients
+			view.Clients = dashboardClientSample(entries)
 		}
 	}
 	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
@@ -712,6 +754,10 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 	if location == nil {
 		location = time.Local
 	}
+	// The rankings are recounted only when a range control asked for the
+	// chart, never on the ten-second refresh: aggregating a week of the query
+	// log is worth doing on a click and wasteful on a poll.
+	withInsights := request.URL.Query().Get("insights") == "1" && server.canReadLogs(request)
 	if rangeName == "custom" {
 		start, startErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("start"), location)
 		end, endErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("end"), location)
@@ -722,6 +768,11 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		view := server.history.customView(request.Context(), start, end, server.stats.Stats(), display)
 		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 			server.logger.Error("render custom query statistics", "error", err)
+			return
+		}
+		if withInsights {
+			window := insightWindow{Start: start, End: end, Label: chartRangeLabel("custom")}
+			server.renderInsights(writer, request, window)
 		}
 		return
 	}
@@ -729,9 +780,23 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		http.Error(writer, "range must be hour, day, week, month, or year", http.StatusBadRequest)
 		return
 	}
-	view := server.history.view(request.Context(), rangeName, time.Now(), server.stats.Stats(), display)
+	now := time.Now()
+	view := server.history.view(request.Context(), rangeName, now, server.stats.Stats(), display)
 	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render query statistics", "error", err)
+		return
+	}
+	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
+		server.renderInsights(writer, request, window)
+	}
+}
+
+// renderInsights appends the rankings as an out-of-band swap so one range click
+// updates the chart and the panels below it together.
+func (server *Server) renderInsights(writer http.ResponseWriter, request *http.Request, window insightWindow) {
+	insights := server.dashboardInsightsView(request, window)
+	if err := pages.DashboardInsights(insights, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dashboard insights", "error", err)
 	}
 }
 

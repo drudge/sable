@@ -10,16 +10,7 @@ templ DashboardHome(view DashboardView) {
 	<div class="dashboard-page isotope-dashboard">
 		@Stats(view.Stats)
 		@QueryChart(view.Chart)
-		<section class="dashboard-rankings" aria-label="Query rankings">
-			@RankedPanel("Top Clients", "clients", view.Insights.TopClients)
-			@RankedPanel("Top Domains", "domains", view.Insights.TopDomains)
-			@RankedPanel("Top Blocked Domains", "blocked", view.Insights.TopBlocked)
-		</section>
-		<section class="dashboard-distributions" aria-label="Query distributions">
-			@DistributionPanel("Query Types", view.Insights.QueryTypes)
-			@DistributionPanel("Response Sources", view.Insights.ResponseSources)
-			@DistributionPanel("Response Codes", view.Insights.ResponseCodes)
-		</section>
+		@DashboardInsights(view.Insights, false)
 		<footer class="dashboard-footer">
 			<span><i></i>Sable operational</span>
 			<span>{ view.DNSSECStatus }</span>
@@ -31,10 +22,40 @@ templ DashboardHome(view DashboardView) {
 	</div>
 }
 
-templ RankedPanel(title string, kind string, items []RankedStatView) {
+// DashboardInsights carries the rankings and distributions for one time range.
+// The chart's range picker swaps this block in alongside the plot, so an
+// operator who asks for a week is ranked over that week rather than over a
+// fixed sample of the newest rows.
+templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
+	<div
+		class="dashboard-insights"
+		id="dashboard-insights"
+		if outOfBand {
+			hx-swap-oob="outerHTML"
+		}
+	>
+		<section class="dashboard-rankings" aria-label="Query rankings">
+			@RankedPanel("Top Clients", "clients", view.TopClients, view)
+			@RankedPanel("Top Domains", "domains", view.TopDomains, view)
+			@RankedPanel("Top Blocked Domains", "blocked", view.TopBlocked, view)
+		</section>
+		<section class="dashboard-distributions" aria-label="Query distributions">
+			@DistributionPanel("Query Types", view.QueryTypes)
+			@DistributionPanel("Response Sources", view.ResponseSources)
+			@DistributionPanel("Response Codes", view.ResponseCodes)
+		</section>
+	</div>
+}
+
+templ RankedPanel(title string, kind string, items []RankedStatView, insights DashboardInsightsView) {
 	<article class="card ranking-card">
 		<header>
-			<h2>{ title }</h2>
+			<div class="ranking-heading">
+				<h2>{ title }</h2>
+				if insights.RangeLabel != "" {
+					<small>{ insights.RangeLabel }</small>
+				}
+			</div>
 			<button class="ranking-view-all" type="button" data-dialog-open={ "top-stats-" + kind + "-dialog" }>
 				<span>View all</span>
 				@Icon("chevron-right")
@@ -42,10 +63,10 @@ templ RankedPanel(title string, kind string, items []RankedStatView) {
 		</header>
 		<div class="ranking-list">
 			if len(items) == 0 {
-				<div class="dashboard-empty">No query data yet</div>
+				<div class="dashboard-empty">No queries in this range</div>
 			}
 			for _, item := range firstRanked(items, 5) {
-				<a class="ranking-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name)) }>
+				<a class="ranking-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)) }>
 					<div>
 						<strong title={ item.Name }>{ item.Name }</strong>
 						if item.Secondary != "" {
@@ -57,13 +78,16 @@ templ RankedPanel(title string, kind string, items []RankedStatView) {
 			}
 		</div>
 	</article>
-	@TopStatsDialog(title, kind, items)
+	@TopStatsDialog(title, kind, items, insights)
 }
 
-templ TopStatsDialog(title string, kind string, items []RankedStatView) {
+templ TopStatsDialog(title string, kind string, items []RankedStatView, insights DashboardInsightsView) {
 	<dialog class="custom-server-dialog top-stats-dialog" id={ "top-stats-" + kind + "-dialog" } aria-labelledby={ "top-stats-" + kind + "-title" } data-top-stats-dialog>
 		<header class="top-stats-header">
 			<h2 id={ "top-stats-" + kind + "-title" }>{ title }</h2>
+			if insights.RangeLabel != "" {
+				<span class="top-stats-range">{ insights.RangeLabel }</span>
+			}
 			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		</header>
 		<div class="top-stats-toolbar">
@@ -75,7 +99,7 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView) {
 				<div class="top-stats-empty">No data for this period</div>
 			}
 			for index, item := range items {
-				<a class="top-stats-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name)) } data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
+				<a class="top-stats-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)) } data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
 					<span class="top-stats-rank">{ fmt.Sprint(index + 1) }</span>
 					<div>
 						<strong title={ item.Name }>{ item.Name }</strong>
@@ -146,10 +170,14 @@ func firstRanked(items []RankedStatView, limit int) []RankedStatView { return it
 func rankedTotal(items []RankedStatView) uint64 { var total uint64; for _, item := range items { total += item.Value }; return total }
 func topStatsNoun(kind string) string { if kind == "clients" { return "clients" }; return "domains" }
 func topStatsPlaceholder(kind string) string { if kind == "clients" { return "Filter clients..." }; return "Filter domains..." }
-func topStatsEntryURL(kind string, name string) string {
+// topStatsEntryURL opens the query log on exactly what the ranking counted:
+// the same entry, over the same window, matched whole rather than as a
+// substring that would also sweep in 10.0.7.168 for 10.0.7.16.
+func topStatsEntryURL(kind string, name string, window string) string {
 	key := "name"
 	if kind == "clients" { key = "client_ip" }
 	value := "/logs?tab=queries&" + key + "=" + url.QueryEscape(name)
 	if kind == "blocked" { value += "&source=blocked" }
+	if window != "" { value += "&" + window }
 	return value
 }

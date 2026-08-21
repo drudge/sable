@@ -281,10 +281,13 @@ button { cursor: pointer; }
 .chart-legend .yellow::before { background: #ffc000; }
 
 .isotope-dashboard { gap: 1rem; }
+.dashboard-insights { display: grid; gap: 1rem; }
 .dashboard-rankings, .dashboard-distributions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .ranking-card, .distribution-card { display: flex; min-width: 0; flex-direction: column; }
 .ranking-card > header, .distribution-card > header { display: flex; min-height: 4.25rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem .75rem; }
 .ranking-card h2, .distribution-card h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.ranking-heading { display: grid; min-width: 0; gap: .15rem; }
+.ranking-heading small { color: var(--muted-foreground); font-size: .75rem; }
 .ranking-view-all { display: inline-flex; height: 1.75rem; margin-block: -.25rem; flex: 0 0 auto; align-items: center; gap: .125rem; border: 0; border-radius: .375rem; background: transparent; padding: 0 .5rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; }
 .ranking-view-all:hover { background: var(--muted); color: var(--foreground); }
 .ranking-view-all:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
@@ -299,6 +302,7 @@ button { cursor: pointer; }
 .top-stats-dialog { width: min(42rem, calc(100vw - 2rem)); max-width: 42rem; max-height: 85vh; padding: 0; overflow: hidden; }
 .top-stats-header { position: relative; display: flex; min-height: 4.75rem; align-items: center; border-bottom: 1px solid var(--border); padding: 1.5rem 3.5rem 1rem 1.5rem; }
 .top-stats-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.top-stats-range { margin-left: .625rem; color: var(--muted-foreground); font-size: .8125rem; }
 .top-stats-toolbar { display: flex; gap: .75rem; border-bottom: 1px solid var(--border); padding: .75rem 1.5rem; }
 .top-stats-search { position: relative; min-width: 10rem; flex: 1; }
 .top-stats-search .nav-icon { position: absolute; top: 50%; left: .625rem; width: 1rem; height: 1rem; translate: 0 -50%; color: var(--muted-foreground); pointer-events: none; }
@@ -2203,6 +2207,11 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .isotope-query-filters form { border-top: 0; padding: 1.1rem 1.25rem; }
 .query-filter-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; }
 .query-filter-grid label { display: grid; min-width: 0; gap: .4rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; }
+/* A date input reports an intrinsic width wider than its column, so it has
+   to be told to shrink like the text fields beside it. */
+.query-filter-grid input, .query-filter-grid select { min-width: 0; width: 100%; }
+/* A date reads as one value, so its field is given room for the whole thing. */
+.query-filter-wide { grid-column: span 2; }
 .query-filter-actions { display: flex; justify-content: flex-end; gap: .5rem; }
 .query-filter-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
 .query-filter-actions .nav-icon { width: .9rem; height: .9rem; }
@@ -2291,6 +2300,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.logs-filter-bar { align-items: stretch; flex-direction: column; }
 	.logs-filter-bar select { width: 100%; }
 	.query-filter-grid { grid-template-columns: 1fr; }
+	.query-filter-wide { grid-column: auto; }
 	.query-logs-toolbar > div:first-child { align-items: stretch; flex-direction: column; }
 	.query-log-table-scroll { max-height: none; }
 	.logs-pagination { align-items: flex-end; flex-wrap: wrap; justify-content: space-between; }
