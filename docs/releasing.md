@@ -98,8 +98,13 @@ configuration, plus the Linux bootstrap installer. It also publishes
 `checksums.txt`. The executable embeds the tag
 version, commit, and commit timestamp used for the release. The same release
 publishes Linux amd64 and arm64 images under one
-`ghcr.io/drudge/sable:<version>` manifest. The image is non-root, contains the
-same static `sable` executable, and persists all mutable state in `/data`.
+`ghcr.io/drudge/sable:<version>` manifest. A stable release also publishes that
+manifest as `ghcr.io/drudge/sable:latest`, and a pre-release publishes it as
+`ghcr.io/drudge/sable:next` instead. The `next` tag keeps pointing at the last
+pre-release until another one ships, so it can trail `latest` after a stable
+release. The image is
+non-root, contains the same static `sable` executable, and persists all mutable
+state in `/data`.
 
 `sable update` installs these artifacts on running appliances, so the release
 pipeline must keep the `sable_<version>_<os>_<arch>.tar.gz` archive names, the
