@@ -320,3 +320,23 @@ func (service *ssoService) Remove(ctx context.Context) error {
 	service.mutex.Unlock()
 	return nil
 }
+
+// SignInOrigins reports where the sign-in button sends the browser, so the
+// console can name the provider in that page's form-action policy. It reads
+// configuration plus whatever discovery has already cached and never contacts
+// the provider, because the sign-in page renders it on every request.
+func (service *ssoService) SignInOrigins() []string {
+	service.mutex.Lock()
+	provider := service.provider
+	service.mutex.Unlock()
+	if provider != nil {
+		return provider.SignInOrigins()
+	}
+	// No provider has been built yet, which is the ordinary state until
+	// somebody signs in. The issuer is where every provider Sable has seen
+	// authorizes, so it is enough to get the first sign-in moving.
+	if origin, ok := oidc.OriginOf(service.settings().Issuer); ok {
+		return []string{origin}
+	}
+	return nil
+}

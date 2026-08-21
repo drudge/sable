@@ -1122,9 +1122,34 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 	_, _ = writer.Write(encoded)
 }
 
+// contentSecurityPolicy builds the console's policy.
+//
+// formActionOrigins names origins a form submission is allowed to end up at
+// besides this server. It is empty everywhere except the sign-in page: that
+// page posts to a handler which redirects to the identity provider, and
+// browsers apply form-action across the redirect, so the provider has to be
+// named or the redirect is dropped and single sign-on cannot start.
+func contentSecurityPolicy(formActionOrigins []string) string {
+	formAction := "form-action 'self'"
+	for _, origin := range formActionOrigins {
+		formAction += " " + origin
+	}
+	return strings.Join([]string{
+		"default-src 'self'",
+		"base-uri 'none'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		formAction,
+		"style-src 'self'",
+		"script-src 'self'",
+		"connect-src 'self'",
+		"img-src 'self' data:",
+	}, "; ")
+}
+
 func secureHeaders(next http.Handler, forceHTTPS bool) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:")
+		writer.Header().Set("Content-Security-Policy", contentSecurityPolicy(nil))
 		writer.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
 		writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		writer.Header().Set("Referrer-Policy", "no-referrer")

@@ -164,7 +164,7 @@ func (server *Server) setup(writer http.ResponseWriter, request *http.Request) {
 		server.logger.Warn("rejected setup form with missing or expired token", "client", requestClientIP(request))
 		server.renderAuthPage(
 			writer, request, true,
-			"This setup form expired after Sable restarted. Enter the details again to continue.",
+			"This setup form is no longer valid. Enter the details again to continue.",
 			http.StatusForbidden,
 		)
 		return
@@ -233,7 +233,7 @@ func (server *Server) login(writer http.ResponseWriter, request *http.Request) {
 		server.logger.Warn("rejected login form with missing or expired token", "client", requestClientIP(request))
 		server.renderAuthPage(
 			writer, request, false,
-			"This sign-in form expired after Sable restarted. Enter your credentials again to continue.",
+			"This sign-in form is no longer valid. Enter your credentials again to continue.",
 			http.StatusForbidden,
 		)
 		return
@@ -514,6 +514,17 @@ func (server *Server) renderAuthPage(
 		http.Error(writer, "authentication form unavailable", http.StatusInternalServerError)
 		return
 	}
+	ssoLabel := ""
+	if server.ssoAvailable() {
+		ssoLabel = server.sso.Label()
+		// The single sign-on button posts to a handler that answers with a
+		// redirect to the provider, and browsers hold the whole redirect chain
+		// to form-action. Only this page gets the wider policy; everything
+		// else keeps form-action 'self'.
+		if origins := server.ssoFormActionOrigins(); len(origins) > 0 {
+			writer.Header().Set("Content-Security-Policy", contentSecurityPolicy(origins))
+		}
+	}
 	if status != http.StatusOK {
 		writer.WriteHeader(status)
 	}
@@ -524,10 +535,6 @@ func (server *Server) renderAuthPage(
 			rawReturnTo = request.PostForm.Get("return_to")
 		}
 		returnTo = validatedReturnTarget(rawReturnTo, request.Host)
-	}
-	ssoLabel := ""
-	if server.ssoAvailable() {
-		ssoLabel = server.sso.Label()
 	}
 	if err := pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render authentication page", "error", err)
