@@ -328,3 +328,62 @@ func BenchmarkIterativeResolverCachedDelegation(b *testing.B) {
 		}
 	}
 }
+
+func TestDelegationCacheEvictsLeastRecentlyUsed(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := newDelegationCache(2)
+	cache.set("first.example.", []string{"192.0.2.1:53"}, 3600, now)
+	cache.set("second.example.", []string{"192.0.2.2:53"}, 3600, now)
+
+	// Touching the first entry must make the second the eviction candidate.
+	if _, _, found := cache.get("first.example.", now); !found {
+		t.Fatal("get(first) found = false")
+	}
+	cache.set("third.example.", []string{"192.0.2.3:53"}, 3600, now)
+
+	if _, _, found := cache.get("first.example.", now); !found {
+		t.Error("get(first) found = false, want the recently used entry retained")
+	}
+	if _, _, found := cache.get("second.example.", now); found {
+		t.Error("get(second) found = true, want the least recently used entry evicted")
+	}
+	if _, _, found := cache.get("third.example.", now); !found {
+		t.Error("get(third) found = false, want the newest entry retained")
+	}
+}
+
+func TestDelegationCacheExpiresOnTTL(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := newDelegationCache(8)
+	cache.set("example.", []string{"192.0.2.1:53"}, 30, now)
+
+	if zone, servers, found := cache.get("www.example.", now.Add(29*time.Second)); !found || zone != "example" || len(servers) != 1 {
+		t.Fatalf("get() = %q, %v, %v; want the enclosing delegation", zone, servers, found)
+	}
+	if _, _, found := cache.get("www.example.", now.Add(30*time.Second)); found {
+		t.Error("get() found = true after the delegation TTL elapsed")
+	}
+}
+
+func TestAddressCacheReusesResolvedNameServer(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := newAddressCache(8)
+	cache.set("ns1.shared.example.", []string{"192.0.2.1:53"}, 600, now)
+
+	// The same host serves many delegations, so a second zone pointing at it
+	// must not have to resolve it again.
+	addresses, found := cache.get("NS1.Shared.Example.", now.Add(time.Minute))
+	if !found || len(addresses) != 1 || addresses[0] != "192.0.2.1:53" {
+		t.Fatalf("get() = %v, %v; want the cached address regardless of case", addresses, found)
+	}
+	addresses[0] = "mutated"
+	if again, _ := cache.get("ns1.shared.example.", now.Add(time.Minute)); again[0] != "192.0.2.1:53" {
+		t.Fatal("caller mutated the cached slice")
+	}
+}
