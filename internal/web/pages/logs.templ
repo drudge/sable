@@ -66,16 +66,24 @@ type QueryLogsView struct {
 	Error        string
 }
 
+// logsTabs drives both the tab strip and the document title so the browser tab
+// names the log source an operator is actually looking at.
+var logsTabs = []tabOption{
+	{Value: "server", Label: "Server Logs"},
+	{Value: "queries", Label: "Query Logs"},
+}
+
 templ LogsPage(view LogsPageView) {
-	@AppDocument(view.Console, "Logs", "logs", LogsContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(logsTabs, view.ActiveTab), "Logs"), "logs", LogsContent(view))
 }
 
 templ LogsContent(view LogsPageView) {
-	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab">
+	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Logs">
 		<header class="logs-heading"><div class="page-heading"><h1>Logs</h1><p>View server logs and DNS query history</p></div><a class="icon-button" href="/settings?tab=logging" aria-label="Logging settings" title="Logging settings">@Icon("settings")</a></header>
 		<div class="isotope-tab-list logs-tab-list" role="tablist" aria-label="Log sources">
-			<button class={ ifThen(view.ActiveTab == "server", "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab="server" aria-selected={ fmt.Sprint(view.ActiveTab == "server") }>Server Logs</button>
-			<button class={ ifThen(view.ActiveTab == "queries", "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab="queries" aria-selected={ fmt.Sprint(view.ActiveTab == "queries") }>Query Logs</button>
+			for _, tab := range logsTabs {
+				<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) }>{ tab.Label }</button>
+			}
 		</div>
 		<div class="logs-tab-panel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
 		<div class="logs-tab-panel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>

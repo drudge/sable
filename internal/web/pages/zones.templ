@@ -499,7 +499,17 @@ func zoneRecordGlue(zone ZoneView, record ZoneRecordView) string {
 }
 
 templ ZonesPage(view ZonesPageView) {
-	@AppDocument(view.Console, "Zones", "zones", ZonesContent(view))
+	@AppDocument(view.Console, zonesTitle(view), "zones", ZonesContent(view))
+}
+
+// zonesTitle names the open zone in the browser tab. It reads the resolved zone
+// rather than the requested one so a stale bookmark, which falls back to the
+// list, does not title the page after a zone that is no longer there.
+func zonesTitle(view ZonesPageView) string {
+	if zone, found := selectedZone(view); found {
+		return documentTitle(zone.Name, "Zones")
+	}
+	return "Zones"
 }
 
 templ ZonesContent(view ZonesPageView) {
