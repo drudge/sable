@@ -1,0 +1,87 @@
+package pages
+
+import (
+	"strings"
+	"testing"
+)
+
+// A panel narrowed by a dashboard link opens with the filter bar collapsed, so
+// the tokens beside the count are the only thing telling an operator that they
+// are not looking at every row.
+func TestQueryLogPanelShowsAppliedFiltersAsTokens(t *testing.T) {
+	t.Parallel()
+
+	view := QueryLogsView{
+		PageSize: 50, ClientIP: "10.0.7.112", Source: "cache",
+		Start: "2026-08-20T00:00", End: "2026-08-21T23:59",
+	}
+	panel := renderComponent(t, QueryLogsPanel(view))
+	for _, expected := range []string{
+		"10.0.7.112",
+		"Cached",
+		"Aug 20, 00:00 – Aug 21, 23:59",
+		"/logs?end=2026-08-21T23%3A59&amp;source=cache&amp;start=2026-08-20T00%3A00&amp;tab=queries",
+	} {
+		if !strings.Contains(panel, expected) {
+			t.Errorf("query log panel does not contain %q", expected)
+		}
+	}
+	if strings.Contains(panel, `type="datetime-local"`) {
+		t.Error("query log filter still uses a bare datetime-local input instead of the range picker")
+	}
+}
+
+// The live refresh replaces the whole panel, so its URL has to carry every
+// filter or a filtered panel quietly widens to every row once polling starts.
+func TestQueryPanelLiveURLKeepsTheWholeFilter(t *testing.T) {
+	t.Parallel()
+
+	view := QueryLogsView{
+		PageSize: 50, ClientIP: "10.0.7.112", Name: "example.com", RecordType: "A",
+		Source: "cache", Protocol: "UDP", ResponseCode: "NOERROR",
+		Start: "2026-08-20T00:00", End: "2026-08-21T23:59", Exact: true, Live: true,
+	}
+	url := queryPanelLiveURL(view)
+	for _, expected := range []string{
+		"client_ip=10.0.7.112", "name=example.com", "record_type=A", "source=cache",
+		"protocol=UDP", "response_code=NOERROR", "start=2026-08-20T00%3A00",
+		"end=2026-08-21T23%3A59", "match=exact", "live=1",
+	} {
+		if !strings.Contains(url, expected) {
+			t.Errorf("live URL %q does not carry %q", url, expected)
+		}
+	}
+}
+
+// Exact only qualifies the client and domain filters, so dropping the last of
+// them has to drop it too rather than leave a match mode with nothing to match.
+func TestQueryFilterRemovalDropsExactWithItsLastFilter(t *testing.T) {
+	t.Parallel()
+
+	view := QueryLogsView{ClientIP: "10.0.7.112", Exact: true}
+	if url := queryFilterURL(view, "client_ip"); strings.Contains(url, "match=exact") {
+		t.Errorf("removing the last exact filter left %q", url)
+	}
+	view.Name = "example.com"
+	if url := queryFilterURL(view, "client_ip"); !strings.Contains(url, "match=exact") {
+		t.Errorf("removing one exact filter dropped the match mode from %q", url)
+	}
+}
+
+// The runtime log is a tail, so it follows on arrival. Paging into the stored
+// history stops it: the refresh always reads the newest page, and a panel left
+// following would drag the operator straight back off the page they asked for.
+func TestRuntimeLogFollowsUntilPaged(t *testing.T) {
+	t.Parallel()
+
+	view := RuntimeLogsView{Level: "all", PageSize: 100, Live: true, Persisted: true}
+	if url := runtimePanelURL(view); !strings.Contains(url, "live=1") {
+		t.Errorf("following panel URL %q does not ask to keep following", url)
+	}
+	if url := runtimePanelURL(RuntimeLogsView{Level: "all", PageSize: 100}); !strings.Contains(url, "live=0") {
+		t.Errorf("paused panel URL %q does not spell the pause out", url)
+	}
+	if url := runtimeExportURL(view); strings.Contains(url, "live=") {
+		t.Errorf("export URL %q carries the follow flag", url)
+	}
+}
