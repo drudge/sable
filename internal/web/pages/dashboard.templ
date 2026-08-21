@@ -227,7 +227,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<div class="app-shell">
 				<aside class="sidebar" id="app-sidebar">
 					<div class="sidebar-header">
-						<a class="brand" href="/" aria-label="Sable dashboard">
+						<a class="brand" href="/" aria-label="Sable dashboard" data-tooltip="Sable">
 							@SableMark("")
 							<span class="brand-copy"><strong>Sable</strong><small>{ view.Version }</small></span>
 						</a>
@@ -271,7 +271,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					</nav>
 					<div class="sidebar-bottom">
 						<div class="sidebar-account" data-account-menu>
-							<button class="user-menu" type="button" data-account-trigger aria-haspopup="menu" aria-expanded="false">
+							<button class="user-menu" type="button" data-account-trigger aria-haspopup="menu" aria-expanded="false" data-tooltip={ accountDisplayName(view) }>
 								<span class="avatar">{ userInitial(accountDisplayName(view)) }</span>
 								<span class="user-copy"><strong>{ accountDisplayName(view) }</strong><small>{ ifThen(view.SecurityEnabled, view.Username, "local console") }</small></span>
 								<span class="user-action">@Icon("chevron-up")</span>
@@ -768,9 +768,9 @@ templ OperationalMetricCard(icon, label, value, description, color string) {
 
 templ NavItem(label string, href string, icon string, active bool, disabled bool) {
 	if disabled {
-		<span class="nav-item disabled">@Icon(icon)<span>{ label }</span></span>
+		<span class="nav-item disabled" data-tooltip={ label } aria-label={ label }>@Icon(icon)<span>{ label }</span></span>
 	} else {
-		<a class={ ifThen(active, "nav-item active", "nav-item") } href={ templ.SafeURL(href) }>@Icon(icon)<span>{ label }</span></a>
+		<a class={ ifThen(active, "nav-item active", "nav-item") } href={ templ.SafeURL(href) } data-tooltip={ label } aria-label={ label }>@Icon(icon)<span>{ label }</span></a>
 	}
 }
 

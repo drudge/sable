@@ -1353,6 +1353,50 @@
 		if (event.key === "Escape") closeAccountMenus();
 	  });
 
+	// The collapsed sidebar hides nav labels, so hover and focus get a floating
+	// label instead. It is positioned here because the scrolling nav column
+	// clips anything drawn beside it.
+	const sidebarTooltip = (() => {
+	  const sidebar = document.getElementById("app-sidebar");
+	  let bubble = null;
+	  let anchor = null;
+	  const available = () => document.documentElement.classList.contains("sidebar-collapsed") &&
+		!window.matchMedia("(max-width: 767px)").matches;
+	  const hide = () => {
+		bubble?.remove();
+		bubble = null;
+		anchor = null;
+	  };
+	  const show = (target) => {
+		const label = target?.dataset.tooltip?.trim();
+		if (!label || !available()) { hide(); return; }
+		if (anchor === target) return;
+		hide();
+		anchor = target;
+		bubble = document.createElement("div");
+		bubble.className = "sidebar-tooltip";
+		bubble.setAttribute("role", "tooltip");
+		bubble.textContent = label;
+		document.body.append(bubble);
+		const rect = target.getBoundingClientRect();
+		const top = rect.top + rect.height / 2 - bubble.offsetHeight / 2;
+		bubble.style.left = `${rect.right + 8}px`;
+		bubble.style.top = `${Math.max(8, Math.min(top, window.innerHeight - bubble.offsetHeight - 8))}px`;
+	  };
+	  const track = (event) => show(event.target.closest?.("[data-tooltip]"));
+	  if (sidebar) {
+		sidebar.addEventListener("mouseover", track);
+		sidebar.addEventListener("focusin", track);
+		sidebar.addEventListener("mouseleave", hide);
+		sidebar.addEventListener("focusout", hide);
+		sidebar.addEventListener("click", hide);
+		sidebar.querySelector(".nav")?.addEventListener("scroll", hide, { passive: true });
+		window.addEventListener("resize", hide);
+		document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
+	  }
+	  return { hide };
+	})();
+
 	const syncSidebarToggleState = () => {
 	  const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
 	  document.querySelectorAll(".sidebar-collapse, .sidebar-rail").forEach((button) => {
@@ -1370,6 +1414,7 @@
         }
         const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
         localStorage.setItem(sidebarKey, String(collapsed));
+		sidebarTooltip.hide();
 		syncSidebarToggleState();
       });
     });
