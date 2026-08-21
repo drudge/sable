@@ -59,12 +59,20 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"Fanboy Social", "Social media tracking and widgets", "https://easylist.to/easylist/fanboy-social.txt", "social"},
 }
 
+// blockingTabs drives both the tab strip and the document title so the browser
+// tab names the list an operator is actually looking at.
+var blockingTabs = []tabOption{
+	{"lists", "Block Lists", "list"},
+	{"domains", "Blocked", "shield-x"},
+	{"allowed", "Allowed", "shield-check"},
+}
+
 templ BlockingPage(view BlockingPageView) {
-	@AppDocument(view.Console, "DNS Blocking", blockingNavigationPage(view), BlockingContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(blockingTabs, view.ActiveTab), "DNS Blocking"), blockingNavigationPage(view), BlockingContent(view))
 }
 
 templ BlockingContent(view BlockingPageView) {
-	<div class="blocking-page page-stack" id="blocking-content" data-blocking-root>
+	<div class="blocking-page page-stack" id="blocking-content" data-blocking-root data-title-base="DNS Blocking">
 		<header class="page-heading"><h1>DNS Blocking</h1><p>Block unwanted domains using block lists and custom rules</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
@@ -73,9 +81,9 @@ templ BlockingContent(view BlockingPageView) {
 				@BlockingStatus(view)
 				<section class="blocking-workspace">
 					<div class="blocking-tabs" role="tablist" aria-label="Blocking configuration">
-						@BlockingTab("lists", "Block Lists", "list", view.ActiveTab)
-						@BlockingTab("domains", "Blocked", "shield-x", view.ActiveTab)
-						@BlockingTab("allowed", "Allowed", "shield-check", view.ActiveTab)
+						for _, tab := range blockingTabs {
+							@BlockingTab(tab, view.ActiveTab)
+						}
 					</div>
 					<div class="blocking-panel isotope-list-panel" role="tabpanel" data-blocking-panel="lists" hidden?={ view.ActiveTab != "lists" }>
 						<div class="blocking-list-toolbar">
@@ -174,7 +182,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 	</div>
 }
 
-templ BlockingTab(value, label, icon, active string) { <button type="button" role="tab" class={ ifThen(value == active, "active", "") } aria-selected={ fmt.Sprint(value == active) } data-blocking-tab={ value }>@Icon(icon)<span>{ label }</span></button> }
+templ BlockingTab(tab tabOption, active string) { <button type="button" role="tab" class={ ifThen(tab.Value == active, "active", "") } aria-selected={ fmt.Sprint(tab.Value == active) } data-blocking-tab={ tab.Value } data-tab-title={ tab.Label }>@Icon(tab.Icon)<span>{ tab.Label }</span></button> }
 
 templ BlockingGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
 
