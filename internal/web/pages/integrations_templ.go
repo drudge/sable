@@ -383,7 +383,7 @@ func SSOCard(view SSOAppView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if !view.Configured {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"integration-card-body integration-card-empty\"><p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p><a class=\"button\" href=\"/integrations?setup=sso\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<div class=\"integration-card-body integration-card-empty\"><p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p><a class=\"button\" href=\"/integrations?setup=sso\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -542,7 +542,7 @@ func SSOCard(view SSOAppView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"integration-card-actions\"><button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"remove-sso-dialog\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"integration-card-actions\"><button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"remove-sso-dialog\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -558,7 +558,7 @@ func SSOCard(view SSOAppView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<span>Test Connection</span></button></form><a class=\"button outline\" href=\"/integrations?setup=sso\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<span>Test Connection</span></button></form><a class=\"button outline\" href=\"/integrations?setup=sso\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -833,7 +833,7 @@ func UniFiCard(view UniFiAppView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if !view.Configured {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<div class=\"integration-card-body integration-card-empty\"><p>Point Sable at your UniFi controller, choose which networks to publish, and map each one to a zone. Sable creates the forward and reverse zones it needs and keeps them current.</p><a class=\"button\" href=\"/integrations?setup=unifi\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<div class=\"integration-card-body integration-card-empty\"><p>Point Sable at your UniFi controller, choose which networks to publish, and map each one to a zone. Sable creates the forward and reverse zones it needs and keeps them current.</p><a class=\"button\" href=\"/integrations?setup=unifi\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1006,7 +1006,7 @@ func UniFiCardActionButtons(view UniFiAppView) templ.Component {
 			templ_7745c5c3_Var29 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"remove-unifi-dialog\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"remove-unifi-dialog\" data-replica-primary-action>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1014,7 +1014,7 @@ func UniFiCardActionButtons(view UniFiAppView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<span>Remove</span></button><div class=\"integration-card-actions-primary\"><a class=\"button outline\" href=\"/integrations?setup=unifi\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<span>Remove</span></button><div class=\"integration-card-actions-primary\"><a class=\"button outline\" href=\"/integrations?setup=unifi\" data-replica-primary-action>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

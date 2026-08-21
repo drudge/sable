@@ -46,6 +46,10 @@
 	  element.setAttribute("aria-disabled", "true");
 	  element.title = "This change must be made on the cluster primary.";
 	  if ("disabled" in element) element.disabled = true;
+	  // Only form controls honor `disabled`. A link styled as a button would
+	  // otherwise look unavailable and still navigate, which is how a replica
+	  // ended up opening a setup wizard it cannot save.
+	  else if (element.tagName === "A") element.removeAttribute("href");
 	};
 	const setupReplicaReadOnly = (root) => {
 	  if (document.body?.dataset.controlPlaneReadOnly !== "true" || !root) return;

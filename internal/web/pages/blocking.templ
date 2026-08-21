@@ -162,7 +162,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 			<button class="button" type="button" data-dialog-open={ ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog") } data-replica-primary-action>@Icon("plus")<span>Add Domain</span></button>
 			<form class="domain-import-form" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
 			if len(domains) > 0 {
-				<a class="button outline" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") } data-replica-primary-action>@Icon("download")<span>Export</span></a>
+				<a class="button outline" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") }>@Icon("download")<span>Export</span></a>
 			} else {
 				<span class="button outline disabled" aria-disabled="true">@Icon("download")<span>Export</span></span>
 			}

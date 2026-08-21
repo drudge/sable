@@ -245,7 +245,7 @@ templ SSOCard(view SSOAppView) {
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p>
-				<a class="button" href="/integrations?setup=sso">@Icon("plus")<span>Set Up Single Sign-On</span></a>
+				<a class="button" href="/integrations?setup=sso" data-replica-primary-action>@Icon("plus")<span>Set Up Single Sign-On</span></a>
 			</div>
 		} else {
 			<div class="integration-card-body">
@@ -267,12 +267,12 @@ templ SSOCard(view SSOAppView) {
 				</div>
 				@SSOMappingTable(view)
 				<div class="integration-card-actions">
-					<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog">@Icon("trash")<span>Remove</span></button>
+					<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
 					<div class="integration-card-actions-primary">
 						<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
 							<button class="button outline" type="submit">@Icon("refresh")<span>Test Connection</span></button>
 						</form>
-						<a class="button outline" href="/integrations?setup=sso">@Icon("settings-2")<span>Edit Setup</span></a>
+						<a class="button outline" href="/integrations?setup=sso" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
 						if view.Enabled {
 							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 								<input type="hidden" name="enabled" value="false"/>
@@ -345,7 +345,7 @@ templ UniFiCard(view UniFiAppView) {
 		} else if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your UniFi controller, choose which networks to publish, and map each one to a zone. Sable creates the forward and reverse zones it needs and keeps them current.</p>
-				<a class="button" href="/integrations?setup=unifi">@Icon("plus")<span>Set Up UniFi Sync</span></a>
+				<a class="button" href="/integrations?setup=unifi" data-replica-primary-action>@Icon("plus")<span>Set Up UniFi Sync</span></a>
 			</div>
 		} else {
 			<div class="integration-card-body">
@@ -380,9 +380,9 @@ templ UniFiCardActions(view UniFiAppView, outOfBand bool) {
 }
 
 templ UniFiCardActionButtons(view UniFiAppView) {
-	<button class="button outline destructive" type="button" data-dialog-open="remove-unifi-dialog">@Icon("trash")<span>Remove</span></button>
+	<button class="button outline destructive" type="button" data-dialog-open="remove-unifi-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
 	<div class="integration-card-actions-primary">
-		<a class="button outline" href="/integrations?setup=unifi">@Icon("settings-2")<span>Edit Setup</span></a>
+		<a class="button outline" href="/integrations?setup=unifi" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
 		if view.Enabled {
 			<form hx-post="/ui/integrations/unifi/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 				<input type="hidden" name="enabled" value="false"/>
