@@ -198,6 +198,26 @@ func releaseSmokeBinaryIdentity(path string) (int64, string, error) {
 	return info.Size(), fmt.Sprintf("%x", digest.Sum(nil)), nil
 }
 
+// Demo brings up the Vandelay Industries demonstration deployment and leaves it
+// running. Nothing in it is real: a mock UniFi controller serves the fixture,
+// the block lists are generated offline, and the traffic history is seeded into
+// a throwaway database under _work/demo.
+func Demo(ctx context.Context) error {
+	if err := Build(ctx); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", "run", "./scripts/demo", "-keep")
+}
+
+// Screenshots rebuilds the Vandelay Industries demonstration deployment and
+// photographs its console into docs/assets/screenshots.
+func Screenshots(ctx context.Context) error {
+	if err := Build(ctx); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", "run", "./scripts/demo", "-out", filepath.Join("docs", "assets", "screenshots"))
+}
+
 // ClusterReplica runs a persistent second Sable node for interactive cluster UI testing.
 func ClusterReplica(ctx context.Context) error {
 	if err := Build(ctx); err != nil {
