@@ -108,6 +108,8 @@ dockers_v2:
       - "ghcr.io/drudge/sable"
     tags:
       - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+      - "{{ if .Prerelease }}next{{ end }}"
     platforms:
       - linux/amd64
       - linux/arm64
