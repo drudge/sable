@@ -30,6 +30,11 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 	<div
 		class="dashboard-insights"
 		id="dashboard-insights"
+		if view.PollRange != "" {
+			hx-get={ templ.SafeURL("/ui/stats/insights?range=" + view.PollRange) }
+			hx-trigger="every 60s"
+			hx-swap="outerHTML"
+		}
 		if outOfBand {
 			hx-swap-oob="outerHTML"
 		}

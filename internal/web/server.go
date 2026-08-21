@@ -268,6 +268,7 @@ func New(
 	mux.HandleFunc("POST /ui/administration/tokens/revoke", server.revokeAPIToken)
 	mux.HandleFunc("GET /ui/stats", server.runtimeStats)
 	mux.HandleFunc("GET /ui/stats/chart", server.queryStatistics)
+	mux.HandleFunc("GET /ui/stats/insights", server.dashboardInsightsPanel)
 	mux.HandleFunc("GET /ui/query-log", server.recentQueryLog)
 	mux.HandleFunc("GET /ui/logs/runtime", server.runtimeLogsPanel)
 	mux.HandleFunc("GET /ui/logs/queries", server.queryLogsPanel)
@@ -475,12 +476,12 @@ type queryInsightReader interface {
 func (server *Server) dashboardInsightsView(request *http.Request, window insightWindow) pages.DashboardInsightsView {
 	reader, ok := server.queries.(queryInsightReader)
 	if !ok {
-		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery()}
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
 	}
 	insights, err := reader.QueryLogInsights(request.Context(), window.Start, window.End)
 	if err != nil {
 		server.logger.Warn("build dashboard insights", "error", err)
-		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery()}
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
 	}
 	view := dashboardInsights(
 		insights,
@@ -774,7 +775,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			return
 		}
 		if withInsights {
-			window := insightWindow{Start: start, End: end, Label: chartRangeLabel("custom")}
+			window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
 			server.renderInsights(writer, request, window)
 		}
 		return
@@ -791,6 +792,25 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 	}
 	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
 		server.renderInsights(writer, request, window)
+	}
+}
+
+// dashboardInsightsPanel recounts the rankings on their own timer. Only the
+// short ranges are allowed here: a new client should appear in the panels
+// without a page reload, while a week-wide aggregate stays a click.
+func (server *Server) dashboardInsightsPanel(writer http.ResponseWriter, request *http.Request) {
+	window, valid := chartInsightWindow(request.URL.Query().Get("range"), time.Now())
+	if !valid || window.pollRange() == "" {
+		http.Error(writer, "range must be hour or day", http.StatusBadRequest)
+		return
+	}
+	if !server.canReadLogs(request) {
+		http.Error(writer, "forbidden", http.StatusForbidden)
+		return
+	}
+	view := server.dashboardInsightsView(request, window)
+	if err := pages.DashboardInsights(view, false).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dashboard insights", "error", err)
 	}
 }
 

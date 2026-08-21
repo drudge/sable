@@ -30,9 +30,24 @@ const dashboardRankLimit = 1_000
 // window to the query log page instead of sending an operator to a total
 // gathered over a different period.
 type insightWindow struct {
+	Range string
 	Start time.Time
 	End   time.Time
 	Label string
+}
+
+// insightPollRanges are the chart ranges whose rankings are cheap enough to
+// recount on a timer. A week or more of the query log is aggregated only when
+// an operator asks for it, which is what the range picker is for.
+var insightPollRanges = map[string]struct{}{"hour": {}, "day": {}}
+
+// pollRange reports the range name the panels may refresh themselves on, or an
+// empty string when this window is only ever recounted by a click.
+func (window insightWindow) pollRange() string {
+	if _, pollable := insightPollRanges[window.Range]; pollable {
+		return window.Range
+	}
+	return ""
 }
 
 // chartInsightWindow resolves a chart range name into the window it plots.
@@ -41,7 +56,7 @@ func chartInsightWindow(rangeName string, now time.Time) (insightWindow, bool) {
 	if !valid {
 		return insightWindow{}, false
 	}
-	return insightWindow{Start: now.Add(-duration), End: now, Label: chartRangeLabel(rangeName)}, true
+	return insightWindow{Range: rangeName, Start: now.Add(-duration), End: now, Label: chartRangeLabel(rangeName)}, true
 }
 
 func chartRangeLabel(rangeName string) string {
@@ -109,6 +124,7 @@ func dashboardInsights(
 	return pages.DashboardInsightsView{
 		RangeLabel:      window.Label,
 		LogWindowQuery:  window.logWindowQuery(),
+		PollRange:       window.pollRange(),
 		TopClients:      rankedStats(insights.Clients, clientNames, dashboardRankLimit),
 		TopDomains:      rankedStats(insights.Domains, nil, dashboardRankLimit),
 		TopBlocked:      rankedStats(insights.Blocked, nil, dashboardRankLimit),

@@ -390,7 +390,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `/logs?tab=queries&amp;`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
@@ -417,6 +417,21 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	invalidChartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=forever")
 	if invalidChartResponse.Code != http.StatusBadRequest {
 		t.Fatalf("invalid chart range status = %d, want 400", invalidChartResponse.Code)
+	}
+	insightsResponse := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=hour")
+	if insightsResponse.Code != http.StatusOK || !strings.Contains(insightsResponse.Body.String(), `id="dashboard-insights"`) {
+		t.Fatalf("hour insights response = %d %s", insightsResponse.Code, insightsResponse.Body.String())
+	}
+	if strings.Contains(insightsResponse.Body.String(), "hx-swap-oob") {
+		t.Error("polled insights should replace themselves rather than swap out of band")
+	}
+	// A week of the query log is aggregated only when the range picker asks for
+	// it, so the polling endpoint refuses the wide ranges outright.
+	if response := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=week"); response.Code != http.StatusBadRequest {
+		t.Fatalf("week insights status = %d, want 400", response.Code)
+	}
+	if response := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=forever"); response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid insights range status = %d, want 400", response.Code)
 	}
 	dnsClientResponse := serveRequest(server, http.MethodGet, "/dns-client")
 	if dnsClientResponse.Code != http.StatusOK {
