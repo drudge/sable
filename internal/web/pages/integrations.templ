@@ -65,6 +65,10 @@ type SSOWizardView struct {
 	Issuer      string
 	ClientID    string
 	RedirectURL string
+	// DerivedRedirectURL is what this node uses when RedirectURL is empty. It
+	// is shown as the field's placeholder so the operator can copy the address
+	// to register without having to set an override to see it.
+	DerivedRedirectURL string
 
 	Scopes        string
 	UsernameClaim string
@@ -1044,8 +1048,8 @@ templ SSOWizardProviderStep(wizard SSOWizardView) {
 	</div>
 	<label>
 		<span>Redirect URL</span>
-		<input name="redirect_url" value={ wizard.RedirectURL } required/>
-		<small>Add this exact address to the application at your provider before continuing. The secret is sealed in the encrypted vault, never written to sable.toml.</small>
+		<input name="redirect_url" value={ wizard.RedirectURL } placeholder={ wizard.DerivedRedirectURL }/>
+		<small>Add this exact address to the application at your provider before continuing. Every other node in the cluster adds its own, on the same path, to the same application. Leave this empty unless the node is reached at a different hostname than it advertises. The secret is sealed in the encrypted vault, never written to sable.toml.</small>
 	</label>
 	<label>
 		<span>Display name</span>

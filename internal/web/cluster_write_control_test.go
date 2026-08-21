@@ -32,6 +32,12 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/cache/flush", false},
 		{http.MethodPost, "/ui/query", false},
 		{http.MethodPost, "/ui/certificates/renew", false},
+		// Integration settings are cluster-scoped and replicate from the
+		// primary, so configuring them on a replica would be overwritten on the
+		// next heartbeat. The single sign-on callback is the one node-local
+		// part, and each node derives that for itself.
+		{http.MethodPost, "/ui/integrations/sso/wizard", true},
+		{http.MethodPost, "/ui/integrations/unifi/wizard", true},
 		{http.MethodPost, "/ui/cluster/settings", false},
 		{http.MethodPost, "/ui/cluster/leave", false},
 		{http.MethodPost, "/ui/cluster/restart", false},

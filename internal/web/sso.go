@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/oidc"
 )
 
@@ -16,8 +17,10 @@ const (
 	ssoStateCookieName = "sable_sso_state"
 	// ssoStartPath and ssoCallbackPath are reachable without a session, so
 	// both are listed in publicRequest.
-	ssoStartPath    = "/auth/oidc/start"
-	ssoCallbackPath = "/auth/oidc/callback"
+	ssoStartPath = "/auth/oidc/start"
+	// The callback path is fixed and shared: a node derives its own redirect
+	// URL from it, so the router and the derivation cannot drift apart.
+	ssoCallbackPath = config.OIDCCallbackPath
 )
 
 // ssoController is the single sign-on provider the application wires in. It is

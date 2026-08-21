@@ -123,15 +123,6 @@ templ ClusterContent(view ClusterPageView) {
 				}
 			</div>
 			<aside class="cluster-aside">
-				<section class="card cluster-configuration-card">
-					<div><h2>@Icon("settings")<span>Node Identity</span></h2><p>Name and HTTPS endpoint advertised to other nodes</p></div>
-					if view.RestartRequired {
-						<span class="status-badge warning">Restart required</span>
-					} else if view.NetworkReady {
-						<span class="status-badge active">Ready</span>
-					}
-					<button class="button outline" type="button" data-dialog-open="cluster-settings-dialog">@Icon("settings")<span>Configure Node</span></button>
-				</section>
 				<section class="card cluster-guidance">
 					<h2>How Clustering Works</h2>
 					@ClusterGuide("blue", "One Primary", "Configuration changes are made on the primary and synchronized to every replica.")
@@ -141,7 +132,18 @@ templ ClusterContent(view ClusterPageView) {
 				if !view.NetworkReady {
 					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
 				}
-				<section class="card cluster-details"><h2>Local Node</h2><dl><div><dt>Node ID</dt><dd><code>{ view.NodeID }</code></dd></div><div><dt>Role</dt><dd>{ view.LocalRole }</dd></div><div><dt>Endpoint</dt><dd><code>{ endpointLabel(view.AdvertiseURL) }</code></dd></div><div><dt>Replication</dt><dd>HTTPS + signed requests</dd></div></dl></section>
+				<section class="card cluster-details">
+					<header>
+						<h2>Local Node</h2>
+						if view.RestartRequired {
+							<span class="status-badge warning">Restart required</span>
+						} else if view.NetworkReady {
+							<span class="status-badge active">Ready</span>
+						}
+					</header>
+					<dl><div><dt>Node ID</dt><dd><code>{ view.NodeID }</code></dd></div><div><dt>Role</dt><dd>{ view.LocalRole }</dd></div><div><dt>Endpoint</dt><dd><code>{ endpointLabel(view.AdvertiseURL) }</code></dd></div><div><dt>Replication</dt><dd>HTTPS + signed requests</dd></div></dl>
+					<button class="button outline" type="button" data-dialog-open="cluster-settings-dialog">@Icon("server-cog")<span>Configure Node</span></button>
+				</section>
 			</aside>
 		</div>
 		@ClusterSettingsDialog(view)
@@ -183,11 +185,11 @@ templ ClusterLiveStatus(view ClusterPageView) {
 			</header>
 			<div class="operational-metric-grid cluster-metrics">
 				@OperationalMetricCard(ifThen(view.LocalRole == "Primary", "crown", "server"), "This Node", view.LocalRole, "Local cluster role", "blue")
-				@OperationalMetricCard("cluster", "Total Nodes", fmt.Sprint(len(view.Nodes)), "Primary and replicas", "purple")
+				@OperationalMetricCard("layers", "Generation", fmt.Sprint(view.Generation), "Current configuration revision", "purple")
 				@OperationalMetricCard("check-circle", "Connected", fmt.Sprintf("%d / %d", view.Connected, len(view.Nodes)), "Nodes currently reachable", "green")
 				@OperationalMetricCard("refresh", "In Sync", fmt.Sprintf("%d / %d", view.Synchronized, len(view.Nodes)), "Nodes at current generation", "cyan")
 			</div>
-			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div><div><span>Primary</span><code>{ view.PrimaryID }</code></div><div><span>Generation</span><strong>{ fmt.Sprint(view.Generation) }</strong></div></footer>
+			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
 		</section>
 		<section class="card cluster-nodes-card">
 			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><div class="cluster-observed"><span class="count-badge">{ fmt.Sprint(len(view.Nodes)) }</span><small>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</small></div></header>

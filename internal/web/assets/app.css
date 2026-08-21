@@ -1588,12 +1588,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-danger-card form, .cluster-danger-card .button { flex: 0 0 auto; }
 .cluster-danger-card .button { display: inline-flex; align-items: center; gap: .45rem; }
 .cluster-guidance, .cluster-details { padding: 1.25rem; }
-.cluster-configuration-card { display: grid; gap: .85rem; padding: 1.25rem; }
-.cluster-configuration-card > div h2 { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: 1rem; }
-.cluster-configuration-card > div h2 .nav-icon { width: 1rem; height: 1rem; }
-.cluster-configuration-card > div p, .cluster-configuration-card small { margin: .3rem 0 0; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
-.cluster-configuration-card .status-badge { width: fit-content; }
-.cluster-configuration-card .button { display: inline-flex; width: 100%; align-items: center; justify-content: center; gap: .45rem; }
+.cluster-details header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 1.2rem; }
+.cluster-details header h2 { margin: 0; }
+.cluster-details .status-badge { width: fit-content; }
+.cluster-details .button { display: inline-flex; width: 100%; align-items: center; justify-content: center; gap: .45rem; margin-top: 1.1rem; }
 .status-badge.warning { background: rgb(245 158 11 / .13); color: #d97706; }
 .cluster-guidance h2, .cluster-details h2 { margin: 0 0 1.2rem; font-size: 1rem; }
 .cluster-guidance > div { display: flex; align-items: flex-start; gap: .75rem; margin-top: 1rem; }

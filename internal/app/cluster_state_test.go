@@ -16,6 +16,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/tsig"
+	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/zone"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -28,10 +29,26 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	sourceConfiguration.Resolver.RootHints = []string{"192.0.2.1:53"}
 	sourceConfiguration.Blocking.Domains = []string{"ads.example"}
 	sourceConfiguration.QueryLog.Enabled = false
+	sourceConfiguration.Cluster.AdvertiseURL = "https://ns1.example.test"
+	sourceConfiguration.OIDC = config.DefaultOIDC()
+	sourceConfiguration.OIDC.Enabled = true
+	sourceConfiguration.OIDC.Issuer = "https://id.example.test"
+	sourceConfiguration.OIDC.ClientID = "sable"
+	sourceConfiguration.OIDC.RoleMappings = []config.OIDCRoleMapping{{Group: "admins", Role: "Administrators"}}
 	// The primary is already migrated: its configuration names the key and its
 	// vault holds the secret, which is the state Capture has to reassemble.
 	transferSecret := base64.StdEncoding.EncodeToString(make([]byte, 32))
 	sourceConfiguration.TSIGKeys = []config.TSIGKey{{Name: "transfer-key", Algorithm: "hmac-sha256"}}
+	// UniFi synchronization never runs here, but the replica has to inherit
+	// enough to take over the moment it is promoted.
+	sourceConfiguration.UniFi = config.UniFi{
+		Enabled: true, ControllerURL: "https://unifi.example.test", Site: "default",
+		Interval: config.Duration{Duration: 5 * time.Minute},
+		Sources:  []string{"reservations", "active"},
+		Networks: []config.UniFiNetwork{{
+			ID: "net-1", Name: "LAN", Zone: "example.test", TTL: 300, Enabled: true,
+		}},
+	}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, []zone.Zone{{
 		ID: "zone-1", Name: "example.test", Type: "primary", DefaultTTL: 300,
@@ -41,6 +58,7 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	targetConfiguration := config.Defaults()
 	targetConfiguration.Server.HTTPListen = "127.0.0.1:6380"
 	targetConfiguration.Cluster.NodeName = "replica-local"
+	targetConfiguration.Cluster.AdvertiseURL = "https://ns2.example.test"
 	targetManager := newTestConfigurationManager(t, targetConfiguration)
 	targetZones := newTestZoneManager(t, nil)
 
@@ -49,11 +67,22 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetSecrets := newTestTSIGStore()
-	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, sourceSecrets).Capture(ctx)
+	controllerCredentials := unifi.Credentials{Username: "sable", Password: "controller-password"}
+	sourceCredentials := newTestUniFiCredentials()
+	if err := sourceCredentials.Replace(ctx, controllerCredentials); err != nil {
+		t.Fatal(err)
+	}
+	targetCredentials := newTestUniFiCredentials()
+	sourceOIDC := newTestOIDCSecrets()
+	if err := sourceOIDC.Put(ctx, "sso-client-secret"); err != nil {
+		t.Fatal(err)
+	}
+	targetOIDC := newTestOIDCSecrets()
+	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, sourceSecrets, sourceCredentials, sourceOIDC).Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := newClusterStateReplicator(targetManager, targetZones, nil, targetSecrets).Apply(ctx, contents); err != nil {
+	if err := newClusterStateReplicator(targetManager, targetZones, nil, targetSecrets, targetCredentials, targetOIDC).Apply(ctx, contents); err != nil {
 		t.Fatal(err)
 	}
 	got := targetManager.Current().Config
@@ -74,11 +103,101 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	if !found || replicated != transferSecret {
 		t.Fatalf("replica vault secret = %q, found = %v", replicated, found)
 	}
+	// A promoted replica has to be able to reach the controller on its own, so
+	// the settings and the credentials both have to have crossed.
+	if !got.UniFi.Runnable() || got.UniFi.ControllerURL != sourceConfiguration.UniFi.ControllerURL ||
+		got.UniFi.Site != sourceConfiguration.UniFi.Site || len(got.UniFi.ActiveNetworks()) != 1 ||
+		got.UniFi.Networks[0].ID != "net-1" || got.UniFi.Networks[0].Zone != "example.test" {
+		t.Fatalf("replicated UniFi settings = %#v", got.UniFi)
+	}
+	replicatedCredentials, found := targetCredentials.Get(ctx)
+	if !found || replicatedCredentials != controllerCredentials {
+		t.Fatalf("replica UniFi credentials = %+v, found = %v", replicatedCredentials, found)
+	}
+	// Single sign-on crosses whole except the callback, which every node builds
+	// from its own advertised address.
+	if !got.OIDC.Enabled || got.OIDC.Issuer != sourceConfiguration.OIDC.Issuer ||
+		got.OIDC.ClientID != sourceConfiguration.OIDC.ClientID ||
+		!reflect.DeepEqual(got.OIDC.RoleMappings, sourceConfiguration.OIDC.RoleMappings) {
+		t.Fatalf("replicated single sign-on settings = %#v", got.OIDC)
+	}
+	if got.OIDC.RedirectURL != "" {
+		t.Fatalf("replica inherited a callback override: %q", got.OIDC.RedirectURL)
+	}
+	if derived := got.OIDCRedirectURL(); derived != "https://ns2.example.test/auth/oidc/callback" {
+		t.Fatalf("replica derived callback = %q", derived)
+	}
+	replicatedSecret, secretErr := targetOIDC.Get(ctx)
+	if secretErr != nil || replicatedSecret != "sso-client-secret" {
+		t.Fatalf("replica single sign-on secret = %q, err = %v", replicatedSecret, secretErr)
+	}
 	if got.Server.HTTPListen != targetConfiguration.Server.HTTPListen || got.Cluster.NodeName != targetConfiguration.Cluster.NodeName {
 		t.Fatalf("node-local configuration was overwritten: %#v", got)
 	}
 	if zones := targetZones.Current().Zones; !reflect.DeepEqual(zones, sourceZones.Current().Zones) {
 		t.Fatalf("replicated zones = %#v", zones)
+	}
+}
+
+// A snapshot arrives every second. Anything the two sides normalize differently
+// would look like a change on every one of them and rewrite sable.toml in a
+// loop, so applying the same state twice has to be silent the second time.
+func TestClusterStateReplicationIsIdleWhenNothingChanged(t *testing.T) {
+	ctx := context.Background()
+	sourceConfiguration := config.Defaults()
+	sourceConfiguration.UniFi = config.UniFi{
+		Enabled: true, ControllerURL: "https://unifi.example.test/", Site: "",
+		Sources: []string{"active", "Reservations", "active"},
+		Networks: []config.UniFiNetwork{
+			{ID: "net-2", Name: "IoT", Zone: "iot.example.test.", Enabled: true},
+			{ID: "net-1", Name: "LAN", Zone: "example.test", Enabled: true},
+		},
+	}
+	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
+	// The primary normalizes on load in production, so mirror that here rather
+	// than comparing a hand-written literal against a normalized replica.
+	if err := sourceManager.Update(ctx, func(*config.Config) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	sourceCredentials := newTestUniFiCredentials()
+	if err := sourceCredentials.Replace(ctx, unifi.Credentials{APIKey: "controller-api-key"}); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := newClusterStateReplicator(sourceManager, newTestZoneManager(t, nil), nil, newTestTSIGStore(), sourceCredentials, newTestOIDCSecrets()).Capture(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	applies := 0
+	path := filepath.Join(t.TempDir(), "sable.toml")
+	encoded, err := toml.Marshal(config.Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targetManager := config.NewManager(path, config.Defaults(), func(context.Context, config.Config, config.Config) error {
+		applies++
+		return nil
+	})
+	replicator := newClusterStateReplicator(targetManager, newTestZoneManager(t, nil), nil, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
+	if err := replicator.Apply(ctx, contents); err != nil {
+		t.Fatal(err)
+	}
+	if applies != 1 {
+		t.Fatalf("first apply wrote configuration %d times, want 1", applies)
+	}
+	if !targetManager.Current().Config.UniFi.Runnable() {
+		t.Fatal("replica did not become runnable")
+	}
+	for range 3 {
+		if err := replicator.Apply(ctx, contents); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if applies != 1 {
+		t.Fatalf("unchanged snapshot rewrote configuration %d times, want 1", applies)
 	}
 }
 
@@ -91,7 +210,7 @@ func TestClusterStatePreparesRemoteBlockListsBeforeConfigurationApply(t *testing
 	}}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, nil)
-	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, newTestTSIGStore()).Capture(ctx)
+	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets()).Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +236,7 @@ func TestClusterStatePreparesRemoteBlockListsBeforeConfigurationApply(t *testing
 		}
 		return nil
 	})
-	replicator := newClusterStateReplicator(targetManager, newTestZoneManager(t, nil), nil, newTestTSIGStore())
+	replicator := newClusterStateReplicator(targetManager, newTestZoneManager(t, nil), nil, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
 	replicator.prepareConfiguration = func(_ context.Context, candidate config.Config, baseDirectory string) error {
 		prepared = true
 		path := candidate.BlockListPaths(baseDirectory)[0]
@@ -186,8 +305,8 @@ func TestClusterStateReplicatesAuthorizationAndTokenRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sourceReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), sourceStore, newTestTSIGStore())
-	targetReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), targetStore, newTestTSIGStore())
+	sourceReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), sourceStore, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
+	targetReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), newTestZoneManager(t, nil), targetStore, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
 	contents, err := sourceReplicator.Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -256,6 +375,16 @@ func (vault *memoryTSIGVault) Delete(_ context.Context, name string) error {
 
 func newTestTSIGStore() *tsig.Store {
 	return tsig.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
+}
+
+// newTestUniFiCredentials gives each node its own vault so a test can prove the
+// controller credentials really crossed rather than being shared by reference.
+func newTestUniFiCredentials() *unifiCredentialStore {
+	return newUniFiCredentialStore(&memoryTSIGVault{values: make(map[string][]byte)})
+}
+
+func newTestOIDCSecrets() *oidcSecretStore {
+	return newOIDCSecretStore(&memoryTSIGVault{values: make(map[string][]byte)})
 }
 
 func newTestConfigurationManager(t *testing.T, initial config.Config) *config.Manager {

@@ -251,6 +251,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	go runDNSSECRefresher(zoneRefreshContext, zoneManager, dnssec, handler, logger)
 	go trustAnchorManager.Run(zoneRefreshContext, logger)
 
+	unifiCredentials := newUniFiCredentialStore(secretVault)
+	oidcSecrets := newOIDCSecretStore(secretVault)
 	clusterService, err := cluster.Open(cluster.Options{
 		DataDirectory:   initial.ClusterDataPath(configurationDirectory),
 		NodeName:        clusterNodeName(initial.Cluster.NodeName),
@@ -259,7 +261,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		DNSListeners:    initial.Server.DNSListen,
 		TrustAnchorFile: initial.ClusterTrustAnchorPath(configurationDirectory),
 		Logger:          logger,
-		Replicator:      newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets),
+		Replicator:      newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets),
 		Version:         version.Current().Release,
 		StartedAt:       startedAt,
 	})
@@ -278,7 +280,6 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return dynamicUpdater.Update(updateContext, request)
 	})
 
-	unifiCredentials := newUniFiCredentialStore(secretVault)
 	unifiSync := newUniFiSyncer(
 		configurationManager,
 		zoneManager,
@@ -321,7 +322,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
 		// with security switched off has no provider and no sign-in button.
-		singleSignOn := newSSOService(configurationManager, newOIDCSecretStore(secretVault), authentication, logger)
+		singleSignOn := newSSOService(configurationManager, oidcSecrets, authentication, logger)
 		webServer.SetSSO(singleSignOn)
 		webServer.SetSSOAdministration(singleSignOn)
 	}

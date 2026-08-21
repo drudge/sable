@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/tsig"
+	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/zone"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -21,11 +23,28 @@ type authorizationStateStore interface {
 	ReplaceAuthorizationState(context.Context, store.AuthorizationState) error
 }
 
+// unifiCredentialVault is the part of the UniFi credential store replication
+// needs. Settings alone are not enough: a promoted replica that knows the
+// controller URL but has no credentials still cannot sign in to it.
+type unifiCredentialVault interface {
+	Get(context.Context) (unifi.Credentials, bool)
+	Replace(context.Context, unifi.Credentials) error
+}
+
+// oidcSecretVault is the part of the single sign-on secret store replication
+// needs.
+type oidcSecretVault interface {
+	Get(context.Context) (string, error)
+	Put(context.Context, string) error
+}
+
 type clusterStateReplicator struct {
 	configuration        *config.Manager
 	zones                *zone.Manager
 	authorization        authorizationStateStore
 	tsigSecrets          *tsig.Store
+	unifiCredentials     unifiCredentialVault
+	oidcSecret           oidcSecretVault
 	baseDirectory        string
 	prepareConfiguration func(context.Context, config.Config, string) error
 }
@@ -42,6 +61,23 @@ type clusterRuntimeConfiguration struct {
 	TSIGKeys        []config.TSIGKey `toml:"tsig_keys"`
 	Blocking        config.Blocking  `toml:"blocking"`
 	QueryLogEnabled bool             `toml:"query_log_enabled"`
+	// UniFi synchronization only runs on the writable node, but the settings
+	// travel to every node so a promoted replica keeps publishing hosts instead
+	// of silently freezing the records it inherited.
+	UniFi config.UniFi `toml:"unifi"`
+	// UniFiCredentials ride beside the settings and are banked in the receiving
+	// node's vault, the same way TSIG secrets are. Neither side keeps them on
+	// disk in the clear.
+	UniFiCredentials unifi.Credentials `toml:"unifi_credentials"`
+	// OIDC travels with redirect_url cleared. Every node serves the callback at
+	// the same path and fills in its own host, so the section is identical
+	// cluster-wide and a node that needs a different callback keeps its own
+	// override instead of having the primary's imposed on it.
+	OIDC config.OIDC `toml:"oidc"`
+	// OIDCClientSecret is banked in the receiving node's vault like the UniFi
+	// credentials. Without it a replica shows the sign-in button and then fails
+	// the token exchange.
+	OIDCClientSecret string `toml:"oidc_client_secret"`
 }
 
 func newClusterStateReplicator(
@@ -49,10 +85,12 @@ func newClusterStateReplicator(
 	zones *zone.Manager,
 	authorization authorizationStateStore,
 	tsigSecrets *tsig.Store,
+	unifiCredentials unifiCredentialVault,
+	oidcSecret oidcSecretVault,
 ) *clusterStateReplicator {
 	return &clusterStateReplicator{
 		configuration: configuration, zones: zones, authorization: authorization,
-		tsigSecrets:   tsigSecrets,
+		tsigSecrets: tsigSecrets, unifiCredentials: unifiCredentials, oidcSecret: oidcSecret,
 		baseDirectory: configuration.BaseDirectory(), prepareConfiguration: ensureRemoteBlockLists,
 	}
 }
@@ -69,6 +107,17 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		TSIGKeys:        tsigKeys,
 		Blocking:        active.Blocking,
 		QueryLogEnabled: active.QueryLog.Enabled,
+		UniFi:           active.UniFi,
+		OIDC:            replicatedOIDC(active.OIDC),
+	}
+	if replicator.unifiCredentials != nil {
+		if credentials, found := replicator.unifiCredentials.Get(ctx); found {
+			runtimeConfiguration.UniFiCredentials = credentials
+		}
+	}
+	if replicator.oidcSecret != nil {
+		secret, _ := replicator.oidcSecret.Get(ctx)
+		runtimeConfiguration.OIDCClientSecret = secret
 	}
 	configurationContents, err := toml.Marshal(runtimeConfiguration)
 	if err != nil {
@@ -108,6 +157,12 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 	if err != nil {
 		return err
 	}
+	if err := replicator.storeReplicatedUniFiCredentials(ctx, &runtimeConfiguration); err != nil {
+		return err
+	}
+	if err := replicator.storeReplicatedOIDCSecret(ctx, &runtimeConfiguration); err != nil {
+		return err
+	}
 	activeConfiguration := replicatedRuntimeConfiguration(replicator.configuration.Current().Config)
 	activeZones := replicator.zones.Current().Zones
 	activeAuthorization := store.AuthorizationState{}
@@ -122,7 +177,7 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 
 	// A rotated secret leaves the replicated configuration untouched, so it is
 	// forced through the same update path to make the runtime pick it up.
-	configurationChanged := secretsChanged || !reflect.DeepEqual(activeConfiguration, runtimeConfiguration)
+	configurationChanged := secretsChanged || !replicatedConfigurationEqual(activeConfiguration, runtimeConfiguration)
 	if configurationChanged {
 		candidate := replicator.configuration.Current().Config
 		applyReplicatedRuntimeConfiguration(&candidate, runtimeConfiguration)
@@ -206,12 +261,29 @@ func (replicator *clusterStateReplicator) storeReplicatedTSIGSecrets(
 	return changed, nil
 }
 
+// replicatedConfigurationEqual compares the two sides the way they will be
+// written rather than field by field. An empty list is nil on the node that
+// never had one and an empty slice once it has been through TOML, which
+// reflect.DeepEqual reports as a difference that never converges: the snapshot
+// arrives every second, so the replica would rewrite sable.toml and reapply its
+// whole runtime configuration once a second, forever.
+func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool {
+	leftContents, leftErr := toml.Marshal(left)
+	rightContents, rightErr := toml.Marshal(right)
+	if leftErr != nil || rightErr != nil {
+		return reflect.DeepEqual(left, right)
+	}
+	return bytes.Equal(leftContents, rightContents)
+}
+
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
 	return clusterRuntimeConfiguration{
 		Resolver:        source.Resolver,
 		TSIGKeys:        source.TSIGKeys,
 		Blocking:        source.Blocking,
 		QueryLogEnabled: source.QueryLog.Enabled,
+		UniFi:           source.UniFi,
+		OIDC:            replicatedOIDC(source.OIDC),
 	}
 }
 
@@ -227,4 +299,65 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	candidate.TSIGKeys = append([]config.TSIGKey(nil), source.TSIGKeys...)
 	candidate.Blocking = source.Blocking
 	candidate.QueryLog.Enabled = source.QueryLogEnabled
+	candidate.UniFi = source.UniFi
+	// The override stays put. It names this node, and the primary has no say in
+	// what hostname a browser reaches it at.
+	override := candidate.OIDC.RedirectURL
+	candidate.OIDC = source.OIDC
+	candidate.OIDC.RedirectURL = override
+}
+
+// replicatedOIDC is the section as it crosses the wire: everything except the
+// callback, which each node fills in for itself.
+func replicatedOIDC(settings config.OIDC) config.OIDC {
+	settings.RedirectURL = ""
+	settings.Scopes = append([]string(nil), settings.Scopes...)
+	settings.DefaultRoles = append([]string(nil), settings.DefaultRoles...)
+	settings.RoleMappings = append([]config.OIDCRoleMapping(nil), settings.RoleMappings...)
+	return settings
+}
+
+// storeReplicatedOIDCSecret banks the client secret the primary sent and strips
+// it from the snapshot. Like the UniFi credentials it reports no change,
+// because the relying party is rebuilt whenever the stored secret differs from
+// the one it was built with.
+func (replicator *clusterStateReplicator) storeReplicatedOIDCSecret(
+	ctx context.Context,
+	runtimeConfiguration *clusterRuntimeConfiguration,
+) error {
+	secret := runtimeConfiguration.OIDCClientSecret
+	runtimeConfiguration.OIDCClientSecret = ""
+	if replicator.oidcSecret == nil || secret == "" {
+		return nil
+	}
+	if stored, err := replicator.oidcSecret.Get(ctx); err == nil && stored == secret {
+		return nil
+	}
+	if err := replicator.oidcSecret.Put(ctx, secret); err != nil {
+		return fmt.Errorf("store replicated single sign-on client secret: %w", err)
+	}
+	return nil
+}
+
+// storeReplicatedUniFiCredentials banks the credentials the primary sent and
+// strips them from the snapshot, leaving a section that matches what this node
+// keeps in TOML. Unlike TSIG keys it reports no change, because the
+// synchronizer reads the vault on every run rather than caching what it was
+// configured with.
+func (replicator *clusterStateReplicator) storeReplicatedUniFiCredentials(
+	ctx context.Context,
+	runtimeConfiguration *clusterRuntimeConfiguration,
+) error {
+	credentials := runtimeConfiguration.UniFiCredentials
+	runtimeConfiguration.UniFiCredentials = unifi.Credentials{}
+	if replicator.unifiCredentials == nil || !credentials.Configured() {
+		return nil
+	}
+	if stored, found := replicator.unifiCredentials.Get(ctx); found && stored == credentials {
+		return nil
+	}
+	if err := replicator.unifiCredentials.Replace(ctx, credentials); err != nil {
+		return fmt.Errorf("store replicated UniFi credentials: %w", err)
+	}
+	return nil
 }

@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// OIDCCallbackPath is where every node receives the provider's redirect. It is
+// the same on all of them, which is what lets a node derive its own redirect URL
+// from the address it advertises instead of being told one.
+const OIDCCallbackPath = "/auth/oidc/callback"
+
 const (
 	defaultOIDCDisplayName       = "Single sign-on"
 	defaultOIDCDiscoveryInterval = time.Hour
@@ -32,6 +37,11 @@ type OIDC struct {
 	DisplayName string `toml:"display_name"`
 	Issuer      string `toml:"issuer"`
 	ClientID    string `toml:"client_id"`
+	// RedirectURL overrides the derived callback address. Leave it empty and
+	// the node builds its own from the address it advertises, which is what
+	// keeps the rest of this section identical on every node in a cluster. Set
+	// it when the node is reached at some other hostname, such as through a
+	// proxy that terminates on a different name than the node advertises.
 	RedirectURL string `toml:"redirect_url"`
 
 	Scopes        []string `toml:"scopes"`
@@ -188,10 +198,10 @@ func (settings OIDC) validate() []error {
 	if strings.TrimSpace(settings.ClientID) == "" {
 		validationErrors = append(validationErrors, errors.New("oidc.client_id is required when oidc.enabled is true"))
 	}
-	if strings.TrimSpace(settings.RedirectURL) == "" {
-		validationErrors = append(validationErrors, errors.New("oidc.redirect_url is required when oidc.enabled is true"))
-	} else if err := validateProviderURL("oidc.redirect_url", settings.RedirectURL, true); err != nil {
-		validationErrors = append(validationErrors, err)
+	if strings.TrimSpace(settings.RedirectURL) != "" {
+		if err := validateProviderURL("oidc.redirect_url", settings.RedirectURL, true); err != nil {
+			validationErrors = append(validationErrors, err)
+		}
 	}
 	// Without the openid scope the provider is free to answer with no ID token
 	// at all, which leaves nothing to verify an identity against.
