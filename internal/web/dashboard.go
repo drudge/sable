@@ -1,14 +1,18 @@
 package web
 
 import (
+	"net/netip"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 // dashboardInsightEvents is how far back the rankings, distributions, and
@@ -16,13 +20,7 @@ import (
 // both describe the same slice of the query log.
 const dashboardInsightEvents = 1_000
 
-func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride) pages.DashboardInsightsView {
-	clientNames := make(map[string]string)
-	for _, host := range hosts {
-		for _, address := range host.Addresses {
-			clientNames[address] = host.Name
-		}
-	}
+func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride, zones []zonemodel.Zone) pages.DashboardInsightsView {
 	clients := make(map[string]uint64)
 	domains := make(map[string]uint64)
 	blocked := make(map[string]uint64)
@@ -48,6 +46,7 @@ func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride) pa
 		}
 		responseCodes[responseCode]++
 	}
+	clientNames := dashboardClientNames(clients, hosts, zones)
 	return pages.DashboardInsightsView{
 		Clients:         len(clients),
 		TopClients:      rankedStats(clients, clientNames, 1_000),
@@ -57,6 +56,126 @@ func dashboardInsights(entries []querylog.Entry, hosts []config.HostOverride) pa
 		ResponseSources: distributionItems(sources, 6),
 		ResponseCodes:   distributionItems(responseCodes, 6),
 	}
+}
+
+// dashboardClientNames labels the client addresses in the query sample. A
+// configured host override wins because an operator wrote it by hand; every
+// other address falls back to a PTR record from a zone this server answers
+// for, which is where the UniFi synchronizer publishes DHCP client names.
+func dashboardClientNames(clients map[string]uint64, hosts []config.HostOverride, zones []zonemodel.Zone) map[string]string {
+	names := make(map[string]string, len(clients))
+	for _, host := range hosts {
+		for _, address := range host.Addresses {
+			names[address] = host.Name
+		}
+	}
+	if len(zones) == 0 {
+		return names
+	}
+	reverse := newReverseZoneIndex(zones)
+	for address := range clients {
+		if names[address] != "" {
+			continue
+		}
+		if name, found := reverse.lookup(address); found {
+			names[address] = name
+		}
+	}
+	return names
+}
+
+// reverseZoneIndex answers PTR lookups from the local zone snapshot. Owners are
+// indexed per zone the first time that zone is consulted so a dashboard with a
+// hundred clients never rescans one large reverse zone a hundred times.
+type reverseZoneIndex struct {
+	zones  map[string]*zonemodel.Zone
+	owners map[string]map[string]string
+	now    time.Time
+}
+
+func newReverseZoneIndex(zones []zonemodel.Zone) *reverseZoneIndex {
+	index := &reverseZoneIndex{
+		zones:  make(map[string]*zonemodel.Zone, len(zones)),
+		owners: make(map[string]map[string]string),
+		now:    time.Now(),
+	}
+	for position := range zones {
+		name := normalizeZoneName(zones[position].Name)
+		if name == "" {
+			continue
+		}
+		if _, taken := index.zones[name]; taken {
+			continue
+		}
+		index.zones[name] = &zones[position]
+	}
+	return index
+}
+
+// lookup returns the PTR target for an address. The deepest zone covering the
+// reverse name is the authoritative one, so a hit there settles the question
+// even when it holds no PTR for this address.
+func (index *reverseZoneIndex) lookup(address string) (string, bool) {
+	parsed, err := netip.ParseAddr(strings.TrimSpace(address))
+	if err != nil {
+		return "", false
+	}
+	reverseName, err := dnsname.ReverseName(parsed.WithZone(""))
+	if err != nil {
+		return "", false
+	}
+	for candidate := reverseName; candidate != ""; {
+		if _, known := index.zones[candidate]; known {
+			target, found := index.ownersOf(candidate)[reverseName]
+			return target, found
+		}
+		_, rest, cut := strings.Cut(candidate, ".")
+		if !cut {
+			return "", false
+		}
+		candidate = rest
+	}
+	return "", false
+}
+
+func (index *reverseZoneIndex) ownersOf(zoneName string) map[string]string {
+	if owners, built := index.owners[zoneName]; built {
+		return owners
+	}
+	owners := make(map[string]string)
+	for _, record := range index.zones[zoneName].Records {
+		if !strings.EqualFold(record.Type, "PTR") {
+			continue
+		}
+		if record.Disabled || (!record.ExpiresAt.IsZero() && !record.ExpiresAt.After(index.now)) {
+			continue
+		}
+		target := normalizeZoneName(record.Value)
+		if target == "" {
+			continue
+		}
+		owner := reverseRecordOwner(zoneName, record.Name)
+		if _, taken := owners[owner]; taken {
+			continue
+		}
+		owners[owner] = target
+	}
+	index.owners[zoneName] = owners
+	return owners
+}
+
+// reverseRecordOwner expands a stored owner into the full reverse name. Records
+// are usually written relative to their zone, but an imported zone file may
+// carry fully qualified owners instead.
+func reverseRecordOwner(zoneName, recordName string) string {
+	recordName = strings.TrimSpace(recordName)
+	if recordName == "" || recordName == "@" {
+		return zoneName
+	}
+	if strings.HasSuffix(recordName, ".") {
+		return normalizeZoneName(recordName)
+	}
+	return normalizeZoneName(recordName) + "." + zoneName
 }
 
 func dashboardSourceLabel(source querylog.Source) string {

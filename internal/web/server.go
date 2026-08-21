@@ -445,7 +445,7 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 		server.logger.Warn("build dashboard insights", "error", err)
 		return view
 	}
-	view.Insights = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts)
+	view.Insights = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts, server.zones.Current().Zones)
 	view.Stats.Clients = view.Insights.Clients
 	view.Stats.Dropped = server.queryLog.Stats().Dropped
 	return view
@@ -689,7 +689,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 		if err != nil {
 			server.logger.Warn("count dashboard clients", "error", err)
 		} else {
-			view.Clients = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts).Clients
+			view.Clients = dashboardInsights(entries, server.config.Current().Config.Resolver.Hosts, nil).Clients
 		}
 	}
 	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
