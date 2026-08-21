@@ -1,6 +1,10 @@
 (() => {
   const themeKey = "sable-theme";
   const sidebarKey = "sable-sidebar-collapsed";
+  // Document titles read most specific first and end in the product name, the
+  // same shape the server renders.
+  const APP_NAME = "Sable";
+  const TITLE_SEPARATOR = " \u00b7 ";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
   const dark = currentTheme() === "dark" || (currentTheme() === "system" && systemDark());
@@ -646,6 +650,15 @@
 	  section.querySelectorAll("input, select, textarea").forEach((field) => { field.disabled = !shown; });
 	};
 
+	// applyTabTitle names the open tab in the browser tab. Tab switches happen
+	// without a request, so the title the server rendered would otherwise go
+	// stale the moment an operator moves between panels.
+	const applyTabTitle = (root, label) => {
+	  const base = root?.dataset.titleBase;
+	  if (!base) return;
+	  document.title = [label, base, APP_NAME].filter(Boolean).join(TITLE_SEPARATOR);
+	};
+
 	const setupIsotopeTabs = (root) => {
 	  if (!root || root.dataset.isotopeTabsReady === "true") return;
 	  root.dataset.isotopeTabsReady = "true";
@@ -662,6 +675,7 @@
 		});
 		panels.forEach((panel) => { panel.hidden = panel.dataset.isotopePanel !== value; });
 		root.dataset.activeTab = value;
+		applyTabTitle(root, selected.dataset.tabTitle);
 		if (updateURL) {
 		  const url = new URL(window.location.href);
 		  const parameter = root.dataset.tabParam || "tab";
@@ -1648,6 +1662,7 @@
 		});
 		const nextURL = selected === "lists" ? "/blocked" : `/blocked?tab=${selected}`;
 		window.history.replaceState(null, "", nextURL);
+		applyTabTitle(root, blockingTab.dataset.tabTitle);
 		return;
 	  }
 

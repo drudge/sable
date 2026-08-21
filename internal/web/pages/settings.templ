@@ -97,27 +97,35 @@ type SettingsTSIGKeyView struct {
 	Zones      []string
 }
 
+// settingsTabs drives both the tab strip and the document title so the browser
+// tab names the section an operator is actually looking at.
+var settingsTabs = []tabOption{
+	{"general", "General", "server"},
+	{"web-service", "Web", "globe"},
+	{"protocols", "Protocols", "cluster"},
+	{"tsig", "TSIG", "key"},
+	{"recursion", "Recursion", "refresh"},
+	{"cache", "Cache", "database"},
+	{"blocking", "Blocking", "shield"},
+	{"proxy", "Proxy", "cluster"},
+	{"logging", "Logging", "file-text"},
+	{"backup", "Backup", "hard-drive"},
+}
+
 templ SettingsPage(view SettingsPageView) {
-	@AppDocument(view.Console, "Settings", "settings", SettingsContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(settingsTabs, view.ActiveTab), "Settings"), "settings", SettingsContent(view))
 }
 
 templ SettingsContent(view SettingsPageView) {
-	<div class="settings-page page-stack isotope-control-page" id="settings-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab">
+	<div class="settings-page page-stack isotope-control-page" id="settings-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Settings">
 		<header class="page-heading"><h1>Settings</h1><p>Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect.</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		<section class="card server-configuration-card emphasized"><header><div><h2>@Icon("settings-2")<span>Server Configuration</span></h2><p>Sable v{ view.Console.Version } · Revision { fmt.Sprint(view.Revision) }</p></div><button class="icon-button" type="button" data-reload-page aria-label="Refresh settings">@Icon("refresh")</button></header></section>
 		<div class="isotope-tab-list settings-tab-list" role="tablist" aria-label="Settings sections">
-			@SettingsTab("general", "General", "server", view.ActiveTab, false)
-			@SettingsTab("web-service", "Web", "globe", view.ActiveTab, false)
-			@SettingsTab("protocols", "Protocols", "cluster", view.ActiveTab, false)
-			@SettingsTab("tsig", "TSIG", "key", view.ActiveTab, false)
-			@SettingsTab("recursion", "Recursion", "refresh", view.ActiveTab, false)
-			@SettingsTab("cache", "Cache", "database", view.ActiveTab, false)
-			@SettingsTab("blocking", "Blocking", "shield", view.ActiveTab, false)
-			@SettingsTab("proxy", "Proxy", "cluster", view.ActiveTab, false)
-			@SettingsTab("logging", "Logging", "file-text", view.ActiveTab, false)
-			@SettingsTab("backup", "Backup", "hard-drive", view.ActiveTab, false)
+			for _, tab := range settingsTabs {
+				@SettingsTab(tab, view.ActiveTab, false)
+			}
 		</div>
 		<form class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
 			<div class="settings-tab-panel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
@@ -139,8 +147,8 @@ templ SettingsContent(view SettingsPageView) {
 	</div>
 }
 
-templ SettingsTab(value, label, icon, active string, disabled bool) {
-	<button class={ ifThen(active == value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ value } aria-selected={ fmt.Sprint(active == value) } disabled?={ disabled } title={ ifThen(disabled, label + " settings are not available yet", "") }>@Icon(icon)<span>{ label }</span></button>
+templ SettingsTab(tab tabOption, active string, disabled bool) {
+	<button class={ ifThen(active == tab.Value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(active == tab.Value) } disabled?={ disabled } title={ ifThen(disabled, tab.Label + " settings are not available yet", "") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
 }
 
 templ SettingsGeneralPanel(view SettingsPageView) {

@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
@@ -18,16 +19,35 @@ type ProfilePageView struct {
 	Error           string
 }
 
+// profileTabs names the sections for the document title. The strip itself is
+// built from links because each tab is a separate request.
+var profileTabs = []tabOption{
+	{Value: "profile", Label: "Account", Icon: "user"},
+	{Value: "tokens", Label: "API Tokens", Icon: "key"},
+}
+
+// profileTabHref links a tab to its own request.
+func profileTabHref(value string) templ.SafeURL {
+	return templ.SafeURL("/profile?tab=" + url.QueryEscape(value))
+}
+
 templ ProfilePage(view ProfilePageView) {
-	@AppDocument(view.Console, "Profile", "profile", ProfileContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(profileTabs, view.ActiveTab), "Profile"), "profile", ProfileContent(view))
 }
 
 templ ProfileContent(view ProfilePageView) {
 	<div class="profile-page" id="profile-content" data-isotope-tabs data-tab-param="tab">
 		<header class="page-heading"><h1>Profile</h1><p>Manage your account, password, and API tokens</p></header>
 		<nav class="isotope-tab-list profile-tabs" aria-label="Profile sections">
-			<a class={ ifThen(view.ActiveTab == "profile", "isotope-tab active", "isotope-tab") } href="/profile?tab=profile">@Icon("user")<span>Account</span></a>
-			<a class={ ifThen(view.ActiveTab == "tokens", "isotope-tab active", "isotope-tab") } href="/profile?tab=tokens">@Icon("key")<span>API Tokens</span><span class="tab-count">{ fmt.Sprint(len(view.Tokens)) }</span></a>
+			for _, tab := range profileTabs {
+				<a class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } href={ profileTabHref(tab.Value) }>
+					@Icon(tab.Icon)
+					<span>{ tab.Label }</span>
+					if tab.Value == "tokens" {
+						<span class="tab-count">{ fmt.Sprint(len(view.Tokens)) }</span>
+					}
+				</a>
+			}
 		</nav>
 		if view.Message != "" {
 			@Toast(view.Message, "success")
