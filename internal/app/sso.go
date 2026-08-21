@@ -42,11 +42,12 @@ type ssoService struct {
 	logger  *slog.Logger
 	client  *http.Client
 
-	mutex    sync.Mutex
-	provider *oidc.Provider
-	builtFor config.OIDC
-	builtKey string
-	buildErr error
+	mutex         sync.Mutex
+	provider      *oidc.Provider
+	builtFor      config.OIDC
+	builtKey      string
+	builtRedirect string
+	buildErr      error
 }
 
 func newSSOService(
@@ -71,6 +72,19 @@ func (service *ssoService) settings() config.OIDC {
 	return service.config.Current().Config.OIDC
 }
 
+// redirectURLFor resolves the callback for a block of settings. An empty
+// override is the normal case in a cluster: the section is identical on every
+// node and each one fills in its own host.
+func (service *ssoService) redirectURLFor(settings config.OIDC) string {
+	if override := strings.TrimSpace(settings.RedirectURL); override != "" {
+		return override
+	}
+	if service == nil || service.config == nil {
+		return ""
+	}
+	return strings.TrimRight(service.config.Current().Config.AdvertisedBaseURL(), "/") + config.OIDCCallbackPath
+}
+
 // Enabled reports whether a provider is configured and switched on. The
 // sign-in page calls it on every render, so it only reads configuration.
 func (service *ssoService) Enabled() bool {
@@ -93,16 +107,19 @@ func (service *ssoService) resolveProvider(ctx context.Context) (*oidc.Provider,
 		return nil, err
 	}
 
+	redirectURL := service.redirectURLFor(settings)
+
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
-	if service.provider != nil && service.builtKey == secret && reflect.DeepEqual(service.builtFor, settings) {
+	if service.provider != nil && service.builtKey == secret &&
+		service.builtRedirect == redirectURL && reflect.DeepEqual(service.builtFor, settings) {
 		return service.provider, service.buildErr
 	}
 	built, buildErr := oidc.New(oidc.Config{
 		Issuer:       settings.Issuer,
 		ClientID:     settings.ClientID,
 		ClientSecret: secret,
-		RedirectURL:  settings.RedirectURL,
+		RedirectURL:  redirectURL,
 		Scopes:       settings.Scopes,
 		Claims: oidc.ClaimNames{
 			Username: settings.UsernameClaim,
@@ -116,6 +133,7 @@ func (service *ssoService) resolveProvider(ctx context.Context) (*oidc.Provider,
 		UserAgent:         "sable/" + version.Release,
 	})
 	service.provider, service.builtFor, service.builtKey, service.buildErr = built, settings, secret, buildErr
+	service.builtRedirect = redirectURL
 	if buildErr != nil {
 		service.provider = nil
 	}
@@ -184,21 +202,22 @@ func (service *ssoService) Status(ctx context.Context) web.SSOStatusView {
 	settings := service.settings()
 	secret, _ := service.secrets.Get(ctx)
 	return web.SSOStatusView{
-		Configured:    strings.TrimSpace(settings.Issuer) != "" && strings.TrimSpace(settings.ClientID) != "",
-		Enabled:       settings.Enabled,
-		Label:         settings.Label(),
-		Issuer:        settings.Issuer,
-		ClientID:      settings.ClientID,
-		RedirectURL:   settings.RedirectURL,
-		Scopes:        settings.Scopes,
-		UsernameClaim: settings.UsernameClaim,
-		GroupsClaim:   settings.GroupsClaim,
-		Provision:     settings.Provision,
-		LinkByEmail:   settings.LinkByVerifiedEmail,
-		SyncRoles:     settings.SyncRoles,
-		DefaultRoles:  settings.DefaultRoles,
-		Mappings:      settings.RoleMappings,
-		SecretStored:  secret != "",
+		Configured:       strings.TrimSpace(settings.Issuer) != "" && strings.TrimSpace(settings.ClientID) != "",
+		Enabled:          settings.Enabled,
+		Label:            settings.Label(),
+		Issuer:           settings.Issuer,
+		ClientID:         settings.ClientID,
+		RedirectURL:      service.redirectURLFor(settings),
+		RedirectOverride: settings.RedirectURL,
+		Scopes:           settings.Scopes,
+		UsernameClaim:    settings.UsernameClaim,
+		GroupsClaim:      settings.GroupsClaim,
+		Provision:        settings.Provision,
+		LinkByEmail:      settings.LinkByVerifiedEmail,
+		SyncRoles:        settings.SyncRoles,
+		DefaultRoles:     settings.DefaultRoles,
+		Mappings:         settings.RoleMappings,
+		SecretStored:     secret != "",
 	}
 }
 
@@ -242,7 +261,7 @@ func (service *ssoService) Probe(ctx context.Context, settings config.OIDC, secr
 		Issuer:       settings.Issuer,
 		ClientID:     settings.ClientID,
 		ClientSecret: secret,
-		RedirectURL:  settings.RedirectURL,
+		RedirectURL:  service.redirectURLFor(settings),
 		Scopes:       settings.Scopes,
 		Claims: oidc.ClaimNames{
 			Username: settings.UsernameClaim,

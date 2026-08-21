@@ -746,6 +746,12 @@ func (configuration Config) Validate() error {
 	}
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
+	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
+		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf(
+				"%w (derived from the advertised address; set oidc.redirect_url or cluster.advertise_url)", err))
+		}
+	}
 	return errors.Join(validationErrors...)
 }
 
@@ -1090,6 +1096,30 @@ func (configuration Config) EncryptedDNSCertificatePaths(baseDirectory string) (
 
 func (configuration Config) SecuritySecretKeyPath(baseDirectory string) string {
 	return resolveOptionalPath(baseDirectory, configuration.Security.SecretKeyFile)
+}
+
+// AdvertisedBaseURL is the address other nodes and browsers are told to reach
+// this one at, preferring what the operator configured over what can be guessed
+// from the listeners.
+func (configuration Config) AdvertisedBaseURL() string {
+	if configuration.Cluster.AdvertiseURL != "" {
+		return configuration.Cluster.AdvertiseURL
+	}
+	if configuration.Server.HTTPSListen != "" {
+		return "https://" + configuration.Server.HTTPSListen
+	}
+	return "http://" + configuration.Server.HTTPListen
+}
+
+// OIDCRedirectURL is the callback this node hands the provider. Every node uses
+// the same path, so the only thing that differs between them is the host, which
+// each one already knows. That is what lets the rest of the [oidc] section be
+// identical cluster-wide while the callback stays node-local.
+func (configuration Config) OIDCRedirectURL() string {
+	if override := strings.TrimSpace(configuration.OIDC.RedirectURL); override != "" {
+		return override
+	}
+	return strings.TrimRight(configuration.AdvertisedBaseURL(), "/") + OIDCCallbackPath
 }
 
 func (configuration Config) ClusterDataPath(baseDirectory string) string {

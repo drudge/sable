@@ -385,7 +385,10 @@ to pin it, or set `tls_insecure` to accept it unverified on a trusted network.
 
 Synchronization runs only on a cluster's writable node. Replicas receive the
 records through normal zone replication instead of contacting the controller
-themselves.
+themselves. The `[unifi]` section and the controller credentials still travel to
+every node, so a promoted replica picks the synchronization up instead of
+leaving the inherited records frozen. Point `tls_ca_file` at a path that exists
+on every node.
 
 ## Blocking
 
@@ -637,7 +640,9 @@ enabled = true
 display_name = "Pocket ID"
 issuer = "https://id.example.com"
 client_id = "sable"
-redirect_url = "https://dns.example.com/auth/oidc/callback"
+# Optional. Empty means this node derives its own callback from the address it
+# advertises, which is what keeps the section identical across a cluster.
+redirect_url = ""
 scopes = ["openid", "profile", "email", "groups"]
 username_claim = "preferred_username"
 email_claim = "email"
@@ -724,8 +729,9 @@ deployment uses the provider.
 ### Connecting Pocket ID
 
 1. In Pocket ID, create an OIDC client. Set its callback URL to exactly the
-   `redirect_url` above — Sable prefills this with its own address, and the
-   value must match on both sides or the provider refuses the sign-in.
+   address the wizard shows for **Redirect URL** — the value must match on both
+   sides or the provider refuses the sign-in. In a cluster, add one callback per
+   node to that same client; they differ only in the hostname.
 2. Give the client the `groups` scope so group membership reaches Sable.
 3. Copy the client ID and secret into the wizard's first step.
 4. In the wizard's third step, map each Pocket ID group to a Sable role. The
@@ -737,12 +743,22 @@ lost, Sable's own sign-in is the way back in.
 
 ### Clusters and backups
 
-The `[oidc]` section is cluster-scoped runtime configuration and replicates
-like the rest of it. Linked identities travel with their accounts in the
-authorization snapshot, so a promoted replica knows which provider subject owns
-which account instead of provisioning a duplicate for everyone on failover. The
-client secret is in the vault, and so is covered by a whole-deployment backup
-along with the key that opens it — see the [backup guide](backup.md).
+The `[oidc]` section is cluster-scoped and replicates from the primary, client
+secret included. Configure single sign-on once, on the primary.
+
+`redirect_url` is the exception, because it is the one part that names a
+particular node. Leave it empty and each node builds its own callback from the
+address it advertises plus `/auth/oidc/callback`, so the section stays identical
+everywhere. Set it only when a node is reached at some other hostname, such as
+through a proxy terminating on a different name; an override is node-local and
+is never replaced by the primary's. Either way, register every node's callback
+with the provider against the same client.
+
+Linked identities travel with their accounts in the authorization snapshot, so a
+promoted replica knows which provider subject owns which account instead of
+provisioning a duplicate for everyone on failover. The client secret is in the
+vault, and so is covered by a whole-deployment backup along with the key that
+opens it — see the [backup guide](backup.md).
 
 ## Cluster synchronization
 
@@ -758,12 +774,15 @@ default, are stored only as SHA-256 digests, and are consumed on first use. A
 new node joins as a replica and begins pulling signed generations from the
 primary. Each generation carries a content-addressed snapshot of authoritative
 zones, resolver/cache policy, TSIG keys, blocking policy, query-log enablement,
-users, groups, permission grants, and hashed API tokens. Token deletion is
+UniFi integration settings and controller credentials, single sign-on settings
+and their client secret, users, groups, permission grants, and hashed API
+tokens. Token deletion is
 replicated as revocation. Password and token secrets are never stored in plain
-text, and a replicated TSIG secret is written into the receiving node's own
-encrypted vault rather than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
-certificate configuration, database paths, security bootstrap, and cluster
-settings remain node-local. Replicas continue serving DNS if the primary is
+text, and replicated TSIG secrets, UniFi credentials, and the single sign-on
+client secret are written into the receiving node's own encrypted vault rather
+than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
+certificate configuration, database paths, security bootstrap, the single
+sign-on callback override, and cluster settings remain node-local. Replicas continue serving DNS if the primary is
 unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is
 performed on the replica being promoted and requires confirmation that the
 former primary is offline.

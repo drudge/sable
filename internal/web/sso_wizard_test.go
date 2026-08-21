@@ -303,6 +303,37 @@ func TestWizardBackReturnsToAnEarlierStep(t *testing.T) {
 	}
 }
 
+// A node with no override has to show the callback it will actually use, so the
+// operator can register it without first inventing a value to make it appear.
+func TestWizardShowsTheDerivedCallbackWithoutAnOverride(t *testing.T) {
+	status := configuredProvider()
+	status.RedirectOverride = ""
+	status.RedirectURL = "https://ns2.example.test/auth/oidc/callback"
+	server := newWizardServer(t, &fakeSSOAdmin{status: status})
+
+	wizard := server.newSSOWizard(httptest.NewRequest(http.MethodGet, "https://ns2.example.test/integrations", nil))
+	if wizard.RedirectURL != "" {
+		t.Fatalf("the override field was prefilled with %q", wizard.RedirectURL)
+	}
+	if wizard.DerivedRedirectURL != status.RedirectURL {
+		t.Fatalf("derived callback = %q, want %q", wizard.DerivedRedirectURL, status.RedirectURL)
+	}
+}
+
+// An operator who set an override has to see it in the field, not as a hint
+// they could scroll past and overwrite with the derived value.
+func TestWizardShowsAnOverrideInTheField(t *testing.T) {
+	status := configuredProvider()
+	status.RedirectOverride = "https://dns.example.test/auth/oidc/callback"
+	status.RedirectURL = status.RedirectOverride
+	server := newWizardServer(t, &fakeSSOAdmin{status: status})
+
+	wizard := server.newSSOWizard(httptest.NewRequest(http.MethodGet, "https://ns2.example.test/integrations", nil))
+	if wizard.RedirectURL != status.RedirectOverride {
+		t.Fatalf("override field = %q, want %q", wizard.RedirectURL, status.RedirectOverride)
+	}
+}
+
 // configuredProvider is a provider that is already set up, which is what an
 // operator sees when they choose Edit Setup rather than starting fresh.
 func configuredProvider() SSOStatusView {

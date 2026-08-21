@@ -175,6 +175,8 @@ enabled = false
 # display_name = "Pocket ID"
 # issuer = "https://id.example.com"
 # client_id = "sable"
+# Optional override. Left unset, the node derives its own callback from the
+# address it advertises, so a cluster shares one identical [oidc] section.
 # redirect_url = "https://dns.example.com/auth/oidc/callback"
 # scopes = ["openid", "profile", "email", "groups"]
 # username_claim = "preferred_username"

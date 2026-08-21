@@ -41,21 +41,26 @@ type SSOProbeResult struct {
 // SSOStatusView mirrors the application's status type. The web package
 // declares its own so it does not depend on the application package.
 type SSOStatusView struct {
-	Configured    bool
-	Enabled       bool
-	Label         string
-	Issuer        string
-	ClientID      string
-	RedirectURL   string
-	Scopes        []string
-	UsernameClaim string
-	GroupsClaim   string
-	Provision     bool
-	LinkByEmail   bool
-	SyncRoles     bool
-	DefaultRoles  []string
-	Mappings      []config.OIDCRoleMapping
-	SecretStored  bool
+	Configured bool
+	Enabled    bool
+	Label      string
+	Issuer     string
+	ClientID   string
+	// RedirectURL is the address this node will actually hand the provider,
+	// derived from what it advertises unless RedirectOverride is set.
+	RedirectURL string
+	// RedirectOverride is the configured value, empty on the nodes that let
+	// theirs be derived.
+	RedirectOverride string
+	Scopes           []string
+	UsernameClaim    string
+	GroupsClaim      string
+	Provision        bool
+	LinkByEmail      bool
+	SyncRoles        bool
+	DefaultRoles     []string
+	Mappings         []config.OIDCRoleMapping
+	SecretStored     bool
 
 	Checked      bool
 	Reachable    bool
@@ -147,17 +152,18 @@ func (server *Server) newSSOWizard(request *http.Request) pages.SSOWizardView {
 	defaults := config.DefaultOIDC()
 	wizard := pages.SSOWizardView{
 		Open: true, Step: pages.SSOStepProvider,
-		Label:         firstNonEmpty(status.Label, defaults.Label()),
-		Issuer:        status.Issuer,
-		ClientID:      status.ClientID,
-		RedirectURL:   firstNonEmpty(status.RedirectURL, absoluteURL(request, ssoCallbackPath)),
-		Scopes:        strings.Join(firstNonEmptyList(status.Scopes, defaults.Scopes), " "),
-		UsernameClaim: firstNonEmpty(status.UsernameClaim, defaults.UsernameClaim),
-		GroupsClaim:   firstNonEmpty(status.GroupsClaim, defaults.GroupsClaim),
-		SecretStored:  status.SecretStored,
-		Roles:         server.assignableRoles(request),
-		Mappings:      ssoMappingViews(status.Mappings),
-		DefaultRoles:  strings.Join(status.DefaultRoles, ", "),
+		Label:              firstNonEmpty(status.Label, defaults.Label()),
+		Issuer:             status.Issuer,
+		ClientID:           status.ClientID,
+		RedirectURL:        status.RedirectOverride,
+		DerivedRedirectURL: firstNonEmpty(status.RedirectURL, absoluteURL(request, ssoCallbackPath)),
+		Scopes:             strings.Join(firstNonEmptyList(status.Scopes, defaults.Scopes), " "),
+		UsernameClaim:      firstNonEmpty(status.UsernameClaim, defaults.UsernameClaim),
+		GroupsClaim:        firstNonEmpty(status.GroupsClaim, defaults.GroupsClaim),
+		SecretStored:       status.SecretStored,
+		Roles:              server.assignableRoles(request),
+		Mappings:           ssoMappingViews(status.Mappings),
+		DefaultRoles:       strings.Join(status.DefaultRoles, ", "),
 	}
 	if status.Configured {
 		wizard.Provision, wizard.LinkByEmail, wizard.SyncRoles = status.Provision, status.LinkByEmail, status.SyncRoles
