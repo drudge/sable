@@ -227,7 +227,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<div class="app-shell">
 				<aside class="sidebar" id="app-sidebar">
 					<div class="sidebar-header">
-						<a class="brand" href="/" aria-label="Sable dashboard" data-tooltip="Sable">
+						<a class="brand" href="/" aria-label="Sable dashboard" data-tooltip={ brandTooltip(view) }>
 							@SableMark("")
 							<span class="brand-copy"><strong>Sable</strong><small>{ view.Version }</small></span>
 						</a>
@@ -556,6 +556,13 @@ func displayUsername(username string) string {
 		return "Sable"
 	}
 	return username
+}
+
+func brandTooltip(view DashboardView) string {
+	if strings.TrimSpace(view.Version) == "" {
+		return "Sable"
+	}
+	return "Sable " + view.Version
 }
 
 func accountDisplayName(view DashboardView) string {
