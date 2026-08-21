@@ -41,7 +41,14 @@ func writeRequiresPrimary(state cluster.State, method, path string) bool {
 
 func replicaLocalWrite(path string) bool {
 	switch {
-	case path == "/login", path == "/logout", path == "/ui/administration/sessions/revoke", path == "/ui/query":
+	// Sessions are node-local by design, so signing in to a replica's own
+	// console is a local write, not a control-plane change. Starting single
+	// sign-on belongs with /login for exactly that reason: without it a
+	// replica offers the button and then refuses the click, while password
+	// sign-in on the same page works. The callback is a GET and never reaches
+	// this gate.
+	case path == "/login", path == "/logout", path == ssoStartPath,
+		path == "/ui/administration/sessions/revoke", path == "/ui/query":
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
 		return true

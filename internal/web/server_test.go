@@ -2416,7 +2416,7 @@ func TestFirstRunSetupProtectsConsoleAndEnforcesCSRF(t *testing.T) {
 	missingTokenResponse := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(missingTokenResponse, missingTokenRequest)
 	if missingTokenResponse.Code != http.StatusForbidden ||
-		!strings.Contains(missingTokenResponse.Body.String(), "form expired") {
+		!strings.Contains(missingTokenResponse.Body.String(), "form is no longer valid") {
 		t.Fatalf("missing-token setup response = %d %s", missingTokenResponse.Code, missingTokenResponse.Body.String())
 	}
 

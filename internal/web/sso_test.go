@@ -26,6 +26,8 @@ type fakeSSO struct {
 	logoutURL   string
 	logoutOK    bool
 
+	signInOrigins []string
+
 	completedCode string
 	completedWith oidc.Request
 	completeCalls int
@@ -33,6 +35,13 @@ type fakeSSO struct {
 
 func (fake *fakeSSO) Enabled() bool { return fake.enabled }
 func (fake *fakeSSO) Label() string { return "Example SSO" }
+
+func (fake *fakeSSO) SignInOrigins() []string {
+	if fake.signInOrigins == nil {
+		return []string{"https://id.example.com"}
+	}
+	return fake.signInOrigins
+}
 
 func (fake *fakeSSO) Begin(_ context.Context, returnTo string) (oidc.Request, error) {
 	if fake.beginErr != nil {
@@ -364,5 +373,82 @@ func TestSignInRoutesAreReachableWithoutASession(t *testing.T) {
 		if !publicRequest(path) {
 			t.Fatalf("%s requires a session, so no one could ever sign in through it", path)
 		}
+	}
+}
+
+// TestSignInPageAllowsTheRedirectToTheProvider guards the failure that made
+// single sign-on look broken on phones: with form-action 'self' alone the
+// browser drops the redirect out to the provider, the page never moves, and
+// the next attempt reports a spent form token instead of the real cause.
+func TestSignInPageAllowsTheRedirectToTheProvider(t *testing.T) {
+	server := newSSOTestServer(t, &fakeSSO{enabled: true})
+	request := httptest.NewRequest(http.MethodGet, "http://dns.example.test/login", nil)
+	response := httptest.NewRecorder()
+	server.renderAuthPage(response, request, false, "", http.StatusOK)
+
+	policy := response.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "form-action 'self' https://id.example.com;") {
+		t.Fatalf("the sign-in page does not let the browser follow the redirect to the provider: %q", policy)
+	}
+}
+
+// TestSignInPageKeepsTheRestOfThePolicyIntact checks that naming the provider
+// widens form-action and nothing else.
+func TestSignInPageKeepsTheRestOfThePolicyIntact(t *testing.T) {
+	server := newSSOTestServer(t, &fakeSSO{enabled: true})
+	request := httptest.NewRequest(http.MethodGet, "http://dns.example.test/login", nil)
+	response := httptest.NewRecorder()
+	server.renderAuthPage(response, request, false, "", http.StatusOK)
+
+	policy := response.Header().Get("Content-Security-Policy")
+	for _, directive := range []string{
+		"default-src 'self'", "base-uri 'none'", "object-src 'none'",
+		"frame-ancestors 'none'", "style-src 'self'", "script-src 'self'",
+		"connect-src 'self'", "img-src 'self' data:",
+	} {
+		if !strings.Contains(policy, directive) {
+			t.Fatalf("the sign-in page dropped %q from its policy: %q", directive, policy)
+		}
+	}
+}
+
+// TestPagesWithoutAProviderKeepFormActionSelf keeps the widened policy off
+// every page that has no reason to leave this server.
+func TestPagesWithoutAProviderKeepFormActionSelf(t *testing.T) {
+	server := newSSOTestServer(t, &fakeSSO{enabled: false})
+	request := httptest.NewRequest(http.MethodGet, "http://dns.example.test/login", nil)
+	response := httptest.NewRecorder()
+	server.renderAuthPage(response, request, false, "", http.StatusOK)
+
+	if policy := response.Header().Get("Content-Security-Policy"); policy != "" {
+		t.Fatalf("the sign-in page overrode the policy with no provider configured: %q", policy)
+	}
+	if policy := contentSecurityPolicy(nil); !strings.Contains(policy, "form-action 'self';") {
+		t.Fatalf("the default policy no longer confines form submissions to this server: %q", policy)
+	}
+}
+
+// TestSignInPageRefusesAnUnusableProviderOrigin keeps anything the provider
+// reported that is not a plain origin out of the response header.
+func TestSignInPageRefusesAnUnusableProviderOrigin(t *testing.T) {
+	provider := &fakeSSO{
+		enabled: true,
+		signInOrigins: []string{
+			"https://id.example.com/authorize; script-src *",
+			"javascript:alert(1)",
+			"https://id.example.com",
+		},
+	}
+	server := newSSOTestServer(t, provider)
+	request := httptest.NewRequest(http.MethodGet, "http://dns.example.test/login", nil)
+	response := httptest.NewRecorder()
+	server.renderAuthPage(response, request, false, "", http.StatusOK)
+
+	policy := response.Header().Get("Content-Security-Policy")
+	if strings.Contains(policy, "script-src *") || strings.Contains(policy, "javascript:") {
+		t.Fatalf("a provider value was written into the policy unchecked: %q", policy)
+	}
+	if !strings.Contains(policy, "form-action 'self' https://id.example.com;") {
+		t.Fatalf("the usable provider origin was discarded along with the bad ones: %q", policy)
 	}
 }

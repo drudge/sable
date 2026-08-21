@@ -20,6 +20,11 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/administration/users", true},
 		{http.MethodPost, "/login", false},
 		{http.MethodPost, "/logout", false},
+		// A replica offers the single sign-on button because sessions are
+		// node-local. Blocking the click would leave the button present and
+		// broken while password sign-in beside it works.
+		{http.MethodPost, ssoStartPath, false},
+		{http.MethodGet, ssoCallbackPath, false},
 		{http.MethodPost, "/ui/administration/sessions/revoke", false},
 		{http.MethodPost, "/ui/api-tokens", true},
 		{http.MethodPost, "/ui/profile", true},

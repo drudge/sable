@@ -126,3 +126,15 @@ func (metadata Metadata) SupportsPKCE() bool {
 	}
 	return false
 }
+
+// cachedMetadata returns the last document that was fetched successfully,
+// without contacting the provider. It reports false until a fetch has landed,
+// which lets a caller that must not block fall back to the configured issuer.
+func (cache *discoveryCache) cachedMetadata() (Metadata, bool) {
+	cache.mutex.Lock()
+	defer cache.mutex.Unlock()
+	if cache.metadata.Issuer == "" {
+		return Metadata{}, false
+	}
+	return cache.metadata, true
+}

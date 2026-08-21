@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
@@ -27,6 +28,10 @@ type ssoController interface {
 	// read on every sign-in page render, so it must not perform network calls.
 	Enabled() bool
 	Label() string
+	// SignInOrigins reports where starting a sign-in sends the browser, so the
+	// sign-in page's form-action policy can name the provider. It is read on
+	// every sign-in page render, so it must not perform network calls either.
+	SignInOrigins() []string
 	Begin(context.Context, string) (oidc.Request, error)
 	Complete(context.Context, string, oidc.Request, string, string) (auth.Credentials, error)
 	LogoutURL(context.Context, string) (string, bool)
@@ -42,6 +47,25 @@ func (server *Server) SetSSO(controller ssoController) {
 // ssoAvailable reports whether the sign-in page should offer the button.
 func (server *Server) ssoAvailable() bool {
 	return server.securityEnabled && server.sso != nil && server.sso.Enabled()
+}
+
+// ssoFormActionOrigins reports the extra form-action sources the sign-in page
+// needs so the redirect out to the identity provider is not dropped by the
+// console's Content-Security-Policy. Anything the provider reported that does
+// not reduce to a plain origin is discarded rather than written into a header.
+func (server *Server) ssoFormActionOrigins() []string {
+	if !server.ssoAvailable() {
+		return nil
+	}
+	var origins []string
+	for _, candidate := range server.sso.SignInOrigins() {
+		origin, ok := oidc.OriginOf(candidate)
+		if !ok || slices.Contains(origins, origin) {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
 }
 
 // startSSO sends the browser to the identity provider. It is a POST rather
@@ -67,7 +91,7 @@ func (server *Server) startSSO(writer http.ResponseWriter, request *http.Request
 		server.logger.Warn("rejected single sign-on start with missing or expired token", "client", requestClientIP(request))
 		server.renderAuthPage(
 			writer, request, false,
-			"This sign-in form expired after Sable restarted. Reload the page and try again.",
+			"This sign-in form is no longer valid. Reload the page and try again.",
 			http.StatusForbidden,
 		)
 		return

@@ -353,3 +353,87 @@ func randomToken() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
+
+// SignInOrigins lists the origins a browser is sent to when a sign-in starts.
+//
+// The console names them in the sign-in page's form-action policy. That is not
+// a relaxation for its own sake: the sign-in button is a form post whose reply
+// is a redirect to the provider, and browsers apply form-action to the whole
+// redirect chain, so a policy of 'self' alone makes the browser drop the
+// redirect and the sign-in silently never leaves the page.
+//
+// It never contacts the provider, because the sign-in page renders on every
+// unauthenticated request. The configured issuer is always reported, and the
+// discovered authorization endpoint is added only once discovery has cached
+// it, which covers the rare provider that authorizes on another host.
+func (provider *Provider) SignInOrigins() []string {
+	origins := make([]string, 0, 2)
+	if origin, ok := OriginOf(provider.config.Issuer); ok {
+		origins = append(origins, origin)
+	}
+	if metadata, cached := provider.discovery.cachedMetadata(); cached {
+		if origin, ok := OriginOf(metadata.AuthorizationEndpoint); ok && !slices.Contains(origins, origin) {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
+}
+
+// OriginOf reduces an absolute URL to the "scheme://host[:port]" form a
+// Content-Security-Policy source expects.
+//
+// It is deliberately stricter than url.Parse. One of its inputs is an endpoint
+// read from the provider's discovery document, which is remote data on its way
+// into a response header, so anything carrying a character that could end the
+// directive early is rejected rather than escaped.
+func OriginOf(value string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || parsed.Host == "" {
+		return "", false
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return "", false
+	}
+	host := parsed.Hostname()
+	if host == "" {
+		return "", false
+	}
+	if strings.Contains(host, ":") {
+		// An IPv6 literal loses its brackets to Hostname and needs them back
+		// before it can be written as an origin.
+		if !isHostSafe(host, true) {
+			return "", false
+		}
+		host = "[" + host + "]"
+	} else if !isHostSafe(host, false) {
+		return "", false
+	}
+	origin := parsed.Scheme + "://" + host
+	port := parsed.Port()
+	if port == "" {
+		return origin, true
+	}
+	for _, char := range port {
+		if char < '0' || char > '9' {
+			return "", false
+		}
+	}
+	return origin + ":" + port, true
+}
+
+// isHostSafe reports whether a host is made only of the characters a hostname
+// or an IPv6 literal is allowed to use.
+func isHostSafe(host string, allowColon bool) bool {
+	for _, char := range host {
+		switch {
+		case char >= 'a' && char <= 'z',
+			char >= 'A' && char <= 'Z',
+			char >= '0' && char <= '9',
+			char == '.', char == '-':
+		case char == ':' && allowColon:
+		default:
+			return false
+		}
+	}
+	return true
+}
