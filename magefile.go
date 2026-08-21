@@ -24,7 +24,7 @@ import (
 
 const (
 	airVersion                = "v1.65.1"
-	developmentVersion        = "0.9.5-rc.11"
+	developmentVersion        = "0.9.5-rc.12"
 	goExperiment              = "jsonv2"
 	releasePackage            = "github.com/drudge/sable/internal/version"
 	containerImage            = "ghcr.io/drudge/sable"
