@@ -182,7 +182,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 				</div>
 			</header>
 			<div class="operational-metric-grid cluster-metrics">
-				@OperationalMetricCard("server", "This Node", view.LocalRole, "Local cluster role", "blue")
+				@OperationalMetricCard(ifThen(view.LocalRole == "Primary", "crown", "server"), "This Node", view.LocalRole, "Local cluster role", "blue")
 				@OperationalMetricCard("cluster", "Total Nodes", fmt.Sprint(len(view.Nodes)), "Primary and replicas", "purple")
 				@OperationalMetricCard("check-circle", "Connected", fmt.Sprintf("%d / %d", view.Connected, len(view.Nodes)), "Nodes currently reachable", "green")
 				@OperationalMetricCard("refresh", "In Sync", fmt.Sprintf("%d / %d", view.Synchronized, len(view.Nodes)), "Nodes at current generation", "cyan")
@@ -195,7 +195,13 @@ templ ClusterLiveStatus(view ClusterPageView) {
 				for _, node := range view.Nodes {
 					<article class="cluster-node-row">
 						<div class="cluster-node-heading">
-							<span class="cluster-node-icon">@Icon("server")</span>
+							<span class="cluster-node-icon">
+								if node.Role == "Primary" {
+									@Icon("crown")
+								} else {
+									@Icon("server")
+								}
+							</span>
 							<div class="cluster-node-copy">
 								<div><strong>{ node.Name }</strong>
 									if node.Local {
