@@ -206,7 +206,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 		} else if len(view.Entries) == 0 {
 			<div class="logs-empty">No DNS queries match these filters.</div>
 		} else {
-			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th>Timestamp</th><th>Client IP</th><th>Domain</th><th>Type</th><th>Response</th><th>Status</th><th>Protocol</th><th>Answer</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th>Timestamp</th><th class="query-col-client">Client IP</th><th>Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th>Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
@@ -216,22 +216,27 @@ templ QueryLogsPanel(view QueryLogsView) {
 	</section>
 }
 
+templ QueryAnswers(answers []string) {
+	if hasAnswers(answers) {
+		<div>
+			for _, answer := range answers {
+				if answer != "" {
+					<span title={ answer }>{ answer }</span>
+				}
+			}
+		</div>
+	} else {
+		<span class="muted-cell">—</span>
+	}
+}
+
 templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 	<tr data-query-result-row>
-		<td><time>{ entry.OccurredAt }</time></td><td><code>{ entry.ClientIP }</code></td><td class="query-name" title={ entry.Name }>{ entry.Name }</td><td><span class="pill query-type-pill">{ entry.RecordType }</span></td><td><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
-		<td class="query-answers">
-			if hasAnswers(entry.Answers) {
-				<div>
-					for _, answer := range entry.Answers {
-						if answer != "" {
-							<span title={ answer }>{ answer }</span>
-						}
-					}
-				</div>
-			} else {
-				<span class="muted-cell">—</span>
-			}
-		</td>
+		// The client and the protocol ride under the timestamp, and the answers
+		// under the domain, so the narrow layout can drop those columns without
+		// dropping what they said.
+		<td class="query-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
+		<td class="query-answers query-col-answer">@QueryAnswers(entry.Answers)</td>
 		<td class="query-row-actions">
 			if canBlocking && entry.Name != "" {
 				if entry.Source != "blocked" {
