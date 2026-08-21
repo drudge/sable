@@ -519,6 +519,82 @@
 	  if (resumed >= 0) show(resumed, pointerPosition.y);
 	};
 
+	// Isotope's doughnuts read out on hover, so each segment carries its own
+	// label, count, and share and the panel lights the matching legend row.
+	const setupDonutChart = (panel) => {
+	  if (!panel || panel.dataset.donutHoverReady === "true") return;
+	  panel.dataset.donutHoverReady = "true";
+
+	  const tooltip = panel.querySelector("[data-donut-tooltip]");
+	  const segments = [...panel.querySelectorAll("[data-donut-segment]")];
+	  const legends = [...panel.querySelectorAll("[data-donut-legend]")];
+	  if (!tooltip || !segments.length) return;
+
+	  const row = document.createElement("div");
+	  row.className = "chart-tooltip-row";
+	  const swatch = document.createElement("i");
+	  const name = document.createElement("span");
+	  const amount = document.createElement("b");
+	  row.append(swatch, name, amount);
+	  const share = document.createElement("div");
+	  share.className = "chart-tooltip-share";
+	  tooltip.append(row, share);
+
+	  const segmentFor = (node) => {
+		const segment = node?.closest?.("[data-donut-segment]");
+		if (segment && panel.contains(segment)) return segment;
+		const legend = node?.closest?.("[data-donut-legend]");
+		if (!legend || !panel.contains(legend)) return null;
+		return segments.find((entry) => entry.dataset.donutSegment === legend.dataset.donutLegend) || null;
+	  };
+
+	  const place = (clientX, clientY) => {
+		const rect = panel.getBoundingClientRect();
+		const left = clientX - rect.left + 14;
+		const top = clientY - rect.top + 14;
+		tooltip.style.left = `${Math.max(0, Math.min(left, rect.width - tooltip.offsetWidth))}px`;
+		tooltip.style.top = `${Math.max(0, Math.min(top, rect.height - tooltip.offsetHeight))}px`;
+	  };
+
+	  const show = (segment, clientX, clientY) => {
+		const index = segment.dataset.donutSegment;
+		swatch.style.background = getComputedStyle(segment).stroke;
+		name.textContent = segment.dataset.donutLabel || "";
+		amount.textContent = segment.dataset.donutValue || "";
+		share.textContent = segment.dataset.donutShare || "";
+		segments.forEach((entry) => entry.classList.toggle("is-active", entry === segment));
+		legends.forEach((entry) => entry.classList.toggle("is-active", entry.dataset.donutLegend === index));
+		panel.classList.add("is-donut-active");
+		tooltip.hidden = false;
+		place(clientX, clientY);
+	  };
+
+	  const hide = () => {
+		panel.classList.remove("is-donut-active");
+		segments.forEach((entry) => entry.classList.remove("is-active"));
+		legends.forEach((entry) => entry.classList.remove("is-active"));
+		tooltip.hidden = true;
+	  };
+
+	  const track = (event) => {
+		const segment = segmentFor(event.target);
+		if (!segment) { hide(); return; }
+		show(segment, event.clientX, event.clientY);
+	  };
+
+	  panel.addEventListener("pointerenter", track);
+	  panel.addEventListener("pointermove", track);
+	  panel.addEventListener("pointerleave", hide);
+	  panel.addEventListener("pointercancel", hide);
+
+	  // The dashboard refreshes under a resting pointer, and the replacement
+	  // panel never sees a pointer event until the pointer moves. Redraw for
+	  // where the pointer already is so the reading survives the swap.
+	  if (pointerPosition.x === null) return;
+	  const resumed = segmentFor(document.elementFromPoint(pointerPosition.x, pointerPosition.y));
+	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
+	};
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
@@ -1169,6 +1245,8 @@
 	  root.querySelectorAll?.("[data-chart-range-popover]").forEach(setupChartRangePicker);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
 	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
+	  if (root.matches?.("[data-donut]")) setupDonutChart(root);
+	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
 	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);

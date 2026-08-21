@@ -95,16 +95,20 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView) {
 templ DistributionPanel(title string, items []DistributionItemView) {
 	<article class="card distribution-card">
 		<header><h2>{ title }</h2></header>
-		<div class="distribution-content">
+		<div class="distribution-content" data-donut>
 			<div class="donut-wrap" aria-label={ title + " chart" }>
 				<svg viewBox="0 0 120 120" role="img">
 					<circle class="donut-track" cx="60" cy="60" r="44" pathLength="100"/>
-					for _, item := range items {
+					for index, item := range items {
 						<circle
 							class={ fmt.Sprintf("donut-segment donut-color-%d", item.Color) }
 							cx="60" cy="60" r="44" pathLength="100"
 							stroke-dasharray={ fmt.Sprintf("%.3f %.3f", item.Percent, 100-item.Percent) }
 							stroke-dashoffset={ fmt.Sprintf("%.3f", item.Offset) }
+							data-donut-segment={ fmt.Sprint(index) }
+							data-donut-label={ item.Name }
+							data-donut-value={ formatNumber(item.Value) }
+							data-donut-share={ fmt.Sprintf("%.1f%% of total", item.Percent) }
 						/>
 					}
 				</svg>
@@ -116,10 +120,13 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 				if len(items) == 0 {
 					<div class="dashboard-empty compact">Waiting for queries</div>
 				}
-				for _, item := range items {
-					<div><i class={ fmt.Sprintf("donut-color-%d", item.Color) }></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>
+				for index, item := range items {
+					<div data-donut-legend={ fmt.Sprint(index) }><i class={ fmt.Sprintf("donut-color-%d", item.Color) }></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>
 				}
 			</div>
+			if len(items) > 0 {
+				<div class="chart-tooltip donut-tooltip" data-donut-tooltip aria-hidden="true" hidden></div>
+			}
 		</div>
 	</article>
 }
