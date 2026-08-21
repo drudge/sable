@@ -6,18 +6,22 @@ import "time"
 // than beside the reconciler so the web layer can read it without depending on
 // the application wiring.
 type Status struct {
-	Enabled      bool
-	Running      bool
-	LastAttempt  time.Time
-	LastSuccess  time.Time
-	NextAttempt  time.Time
-	Duration     time.Duration
-	LastError    string
-	Hosts        int
-	ZonesCreated int
-	Added        int
-	Updated      int
-	Removed      int
+	Enabled     bool
+	Running     bool
+	LastAttempt time.Time
+	LastSuccess time.Time
+	NextAttempt time.Time
+	Duration    time.Duration
+	LastError   string
+	Hosts       int
+	// HostsByNetwork counts the hosts the controller reported on each mapped
+	// network, keyed by network ID, so the console can show a per-network total
+	// without reading the controller on every page load.
+	HostsByNetwork map[string]int
+	ZonesCreated   int
+	Added          int
+	Updated        int
+	Removed        int
 }
 
 // Plan is the difference one synchronization would make. The setup wizard
@@ -36,6 +40,9 @@ type Plan struct {
 	// operator can tell "nothing to do" apart from "something went wrong".
 	Skipped []string
 	Hosts   int
+	// HostsByNetwork counts the hosts on each network the controller reported,
+	// keyed by network ID.
+	HostsByNetwork map[string]int
 }
 
 // PlanRecord is one record a plan would add, change, or remove.

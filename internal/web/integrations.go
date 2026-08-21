@@ -65,7 +65,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 			SyncActive:       settings.SyncsActiveClients(),
 			CAFile:           settings.CAFile,
 			Insecure:         settings.Insecure,
-			Mappings:         unifiMappingViews(settings),
+			Mappings:         unifiMappingViews(settings, nil),
 		},
 	}
 	view.SSO = server.ssoView(request, nil)
@@ -76,7 +76,9 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 	view.UniFi.CredentialsConfigured = configured
 	view.UniFi.AuthMode = unifiAuthMode(credentials)
 	view.UniFi.Username = credentials.Username
-	view.UniFi.Status = unifiStatusView(server.unifi.Status(), view.Console.TimeDisplay)
+	status := server.unifi.Status()
+	view.UniFi.Status = unifiStatusView(status, view.Console.TimeDisplay)
+	view.UniFi.Mappings = unifiMappingViews(settings, status.HostsByNetwork)
 	return view
 }
 
@@ -87,13 +89,17 @@ func unifiAuthMode(credentials unifi.Credentials) string {
 	return "api-key"
 }
 
-func unifiMappingViews(settings config.UniFi) []pages.UniFiMappingView {
+// unifiMappingViews renders the mapped networks. Host counts come from the last
+// synchronization, so before one has run they are unknown rather than zero and
+// the table says so instead of claiming an empty network.
+func unifiMappingViews(settings config.UniFi, hosts map[string]int) []pages.UniFiMappingView {
 	mappings := make([]pages.UniFiMappingView, 0, len(settings.Networks))
 	for _, network := range settings.Networks {
 		mappings = append(mappings, pages.UniFiMappingView{
 			ID: network.ID, Name: network.DisplayName(), Zone: network.Zone,
 			Template: network.HostnameTemplate, TTL: network.TTL,
 			Reverse: network.Reverse, Enabled: network.Enabled,
+			Hosts: hosts[network.ID], HostsKnown: hosts != nil,
 			Preview: unifiPreviewName(network.HostnameTemplate, network.DisplayName(), network.Zone),
 		})
 	}
@@ -138,10 +144,15 @@ func (server *Server) unifiStatusPanel(writer http.ResponseWriter, request *http
 		server.logger.Error("render UniFi status", "error", err)
 		return
 	}
-	// The action row lives outside the polled fragment, so it rides along as an
-	// out-of-band swap to keep Sync Now in step with the run state.
+	// The action row and the mapping table live outside the polled fragment, so
+	// they ride along as out-of-band swaps to keep Sync Now and the per-network
+	// host counts in step with the run state.
 	if err := pages.UniFiCardActions(view.UniFi, true).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render UniFi actions", "error", err)
+		return
+	}
+	if err := pages.UniFiMappingTable(view.UniFi, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render UniFi mappings", "error", err)
 	}
 }
 

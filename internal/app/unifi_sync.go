@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/netip"
 	"slices"
 	"sort"
@@ -90,6 +91,7 @@ func (syncer *unifiSyncer) Status() unifi.Status {
 	syncer.mu.Lock()
 	defer syncer.mu.Unlock()
 	status := syncer.status
+	status.HostsByNetwork = maps.Clone(syncer.status.HostsByNetwork)
 	status.Enabled = syncer.configuration.Current().Config.UniFi.Runnable()
 	return status
 }
@@ -245,6 +247,7 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.status.LastError = ""
 	syncer.status.LastSuccess = started
 	syncer.status.Hosts = hosts
+	syncer.status.HostsByNetwork = plan.HostsByNetwork
 	syncer.status.ZonesCreated = len(plan.CreatedZones)
 	syncer.status.Added = len(plan.Added)
 	syncer.status.Updated = len(plan.Updated)
@@ -284,6 +287,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		plan := planUniFiZones(&zones, desired, syncer.now())
 		plan.Skipped = skipped
 		plan.Hosts = len(inventory.Hosts)
+		plan.HostsByNetwork = inventory.HostCounts()
 		return plan, len(inventory.Hosts), nil
 	}
 	var plan unifi.Plan
@@ -296,6 +300,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	}
 	plan.Skipped = skipped
 	plan.Hosts = len(inventory.Hosts)
+	plan.HostsByNetwork = inventory.HostCounts()
 	return plan, len(inventory.Hosts), nil
 }
 

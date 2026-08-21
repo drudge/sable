@@ -1181,10 +1181,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .auth-card > p { margin: 0.35rem 0 1.5rem; color: var(--muted-foreground); text-align: center; }
 .auth-form { display: grid; gap: 1rem; }
 .auth-form button { width: 100%; margin-top: 0.25rem; }
-.sso-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
-.sso-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
-.sso-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
-.sso-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
+.integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
+.integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+.integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
 .signin-methods { display: grid; gap: 0.5rem; }
@@ -2334,10 +2334,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 }
 .integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; }
 #unifi-status { display: grid; gap: .6rem; }
-.unifi-status-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
-.unifi-status-metrics > div { display: grid; gap: .2rem; border: 1px solid var(--border); border-radius: .5rem; padding: .7rem .85rem; }
-.unifi-status-metrics .metric-value { font-size: 1.15rem; font-weight: 600; }
-.unifi-status-metrics .metric-label { color: var(--muted-foreground); font-size: .68rem; }
 .unifi-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; color: var(--muted-foreground); font-size: .72rem; }
 .button.is-syncing .icon-refresh, .unifi-status-line .icon-refresh { animation: blocking-refresh-spin .8s linear infinite; }
 .button.is-syncing { cursor: progress; }
@@ -2450,7 +2446,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .dark .record-source-badge.alias { background: #4c1d95; color: #ddd6fe; }
 
 @media (max-width: 700px) {
-	.unifi-status-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.unifi-connection dl { grid-template-columns: 1fr; }
 	.unifi-connection dl > div { border-top: 1px solid var(--border); padding: .6rem 0; }
 	.unifi-connection dl > div:first-child { border-top: 0; padding-top: 0; }
