@@ -143,7 +143,8 @@ func (client *Client) Inventory(ctx context.Context) (Inventory, error) {
 	if err != nil {
 		return Inventory{}, err
 	}
-	return Inventory{Networks: networks, Hosts: mergeHosts(reserved, active)}, nil
+	hosts := placeHosts(networks, mergeHosts(reserved, active))
+	return Inventory{Networks: networks, Hosts: hosts}, nil
 }
 
 type networkPayload struct {
@@ -201,6 +202,28 @@ type clientPayload struct {
 	FixedIP    string `json:"fixed_ip"`
 	UseFixedIP bool   `json:"use_fixedip"`
 	NetworkID  string `json:"network_id"`
+	// OverrideNetworkID pins a client to one network wherever it connects, and
+	// LastNetworkID is where the controller last saw it. Reservations usually
+	// carry one of these instead of network_id, so they stand in when the
+	// preferred field is absent.
+	OverrideNetworkID      string `json:"virtual_network_override_id"`
+	OverrideNetworkEnabled bool   `json:"virtual_network_override_enabled"`
+	LastNetworkID          string `json:"last_connection_network_id"`
+}
+
+// networkID resolves the network an entry belongs to. The controller fills
+// network_id on active clients but usually leaves it empty on reservations,
+// which would otherwise strand a device the operator explicitly configured.
+func (payload clientPayload) networkID() string {
+	if payload.OverrideNetworkEnabled {
+		if id := strings.TrimSpace(payload.OverrideNetworkID); id != "" {
+			return id
+		}
+	}
+	if id := strings.TrimSpace(payload.NetworkID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(payload.LastNetworkID)
 }
 
 func (client *Client) reservedHosts(ctx context.Context) ([]Host, error) {
@@ -258,7 +281,7 @@ func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool)
 		MAC:       strings.ToLower(strings.TrimSpace(payload.MAC)),
 		Hostname:  name,
 		Address:   address.Unmap(),
-		NetworkID: strings.TrimSpace(payload.NetworkID),
+		NetworkID: payload.networkID(),
 		Reserved:  reserved,
 	}, true
 }

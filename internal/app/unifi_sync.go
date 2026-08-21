@@ -286,9 +286,9 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		zones := syncer.zones.Current().Zones
 		plan := planUniFiZones(&zones, desired, syncer.now())
 		plan.Skipped = skipped
-		plan.Hosts = len(inventory.Hosts)
 		plan.HostsByNetwork = inventory.HostCounts()
-		return plan, len(inventory.Hosts), nil
+		plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
+		return plan, plan.Hosts, nil
 	}
 	var plan unifi.Plan
 	err = syncer.zones.UpdateZones(ctx, func(zones *[]zone.Zone) error {
@@ -299,9 +299,21 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		return unifi.Plan{}, 0, err
 	}
 	plan.Skipped = skipped
-	plan.Hosts = len(inventory.Hosts)
 	plan.HostsByNetwork = inventory.HostCounts()
-	return plan, len(inventory.Hosts), nil
+	plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
+	return plan, plan.Hosts, nil
+}
+
+// mappedUniFiHosts totals the hosts on the networks the operator mapped. The
+// controller also reports devices on networks Sable does not publish, so
+// counting every host would leave the summary total larger than the per-network
+// rows beneath it and imply records that were never written.
+func mappedUniFiHosts(settings config.UniFi, counts map[string]int) int {
+	total := 0
+	for _, network := range settings.Networks {
+		total += counts[network.ID]
+	}
+	return total
 }
 
 // desiredZone collects the records one zone should hold after a sync.

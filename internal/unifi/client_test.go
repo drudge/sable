@@ -220,3 +220,65 @@ func TestNewDefaultsSchemeAndSite(t *testing.T) {
 		t.Fatalf("client defaulted to %s and site %q", client.baseURL, client.site)
 	}
 }
+
+// unplacedFixture mirrors what a controller really returns: reservations
+// mostly omit network_id and describe their network some other way, or not at
+// all.
+const unplacedFixture = `{"data":[
+	{"mac":"aa:bb:cc:dd:ee:11","name":"Last Seen","fixed_ip":"192.168.1.20","use_fixedip":true,"last_connection_network_id":"net-lan"},
+	{"mac":"aa:bb:cc:dd:ee:12","name":"Pinned","fixed_ip":"192.168.30.20","use_fixedip":true,"virtual_network_override_enabled":true,"virtual_network_override_id":"net-iot","last_connection_network_id":"net-lan"},
+	{"mac":"aa:bb:cc:dd:ee:13","name":"Silent","fixed_ip":"192.168.30.21","use_fixedip":true},
+	{"mac":"aa:bb:cc:dd:ee:14","name":"Server","fixed_ip":"192.168.1.21","use_fixedip":true},
+	{"mac":"aa:bb:cc:dd:ee:15","name":"Stranger","fixed_ip":"172.16.4.9","use_fixedip":true},
+	{"mac":"aa:bb:cc:dd:ee:16","name":"Moved","fixed_ip":"192.168.30.22","use_fixedip":true,"network_id":"net-lan"},
+	{"mac":"aa:bb:cc:dd:ee:17","name":"Routed","fixed_ip":"172.16.4.10","use_fixedip":true,"network_id":"net-lan"}
+]}`
+
+const unplacedActiveFixture = `{"data":[
+	{"mac":"aa:bb:cc:dd:ee:14","name":"Server","ip":"192.168.1.21","network_id":"net-lan"}
+]}`
+
+func TestInventoryPlacesReservationsWithoutNetworkID(t *testing.T) {
+	mux := http.NewServeMux()
+	serve := func(body string) http.HandlerFunc {
+		return func(writer http.ResponseWriter, _ *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(body))
+		}
+	}
+	mux.Handle("GET /proxy/network/api/s/default/rest/networkconf", serve(networkFixture))
+	mux.Handle("GET /proxy/network/api/s/default/rest/user", serve(unplacedFixture))
+	mux.Handle("GET /proxy/network/api/s/default/stat/sta", serve(unplacedActiveFixture))
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	networks := make(map[string]string, len(inventory.Hosts))
+	for _, host := range inventory.Hosts {
+		networks[host.MAC] = host.NetworkID
+	}
+	for _, testCase := range []struct {
+		mac     string
+		network string
+		reason  string
+	}{
+		{"aa:bb:cc:dd:ee:11", "net-lan", "the last network the controller saw it on"},
+		{"aa:bb:cc:dd:ee:12", "net-iot", "the network it is pinned to, not the one it last used"},
+		{"aa:bb:cc:dd:ee:13", "net-iot", "the network whose subnet covers its address"},
+		{"aa:bb:cc:dd:ee:14", "net-lan", "the network its own active lease reported"},
+		{"aa:bb:cc:dd:ee:15", "", "no network covers its address"},
+		{"aa:bb:cc:dd:ee:16", "net-iot", "the subnet holding its address, not the network the controller named"},
+		{"aa:bb:cc:dd:ee:17", "net-lan", "no subnet holds its address, so the controller's answer stands"},
+	} {
+		if networks[testCase.mac] != testCase.network {
+			t.Errorf("host %s is on network %q, want %q: %s", testCase.mac, networks[testCase.mac], testCase.network, testCase.reason)
+		}
+	}
+	counts := inventory.HostCounts()
+	if counts["net-lan"] != 3 || counts["net-iot"] != 3 {
+		t.Fatalf("host counts = %v, want three hosts on each mapped network", counts)
+	}
+}
