@@ -30,6 +30,16 @@ func (network Network) IPv4Subnets() []netip.Prefix {
 	return subnets
 }
 
+// Contains reports whether one of the network's subnets covers an address.
+func (network Network) Contains(address netip.Addr) bool {
+	for _, subnet := range network.Subnets {
+		if subnet.Contains(address) {
+			return true
+		}
+	}
+	return false
+}
+
 // Addressable reports whether the network covers a range Sable can name. A
 // network without a subnet has no addresses to publish, and a single-host
 // prefix is how the controller describes a VPN client tunnel rather than a LAN,
@@ -82,7 +92,9 @@ func (inventory Inventory) HostCounts() map[string]int {
 // mergeHosts collapses reservations and active clients into one host per MAC.
 // A reservation always wins over an observed lease because it is the address
 // the operator chose, and an entry without a usable hostname loses to one that
-// has a name so a nameless active client cannot mask a named reservation.
+// has a name so a nameless active client cannot mask a named reservation. The
+// winner inherits a network the loser knew about, because the reservation that
+// carries the right address often does not say which network it is on.
 func mergeHosts(reserved, active []Host) []Host {
 	byMAC := make(map[string]Host, len(reserved)+len(active))
 	for _, host := range slices.Concat(active, reserved) {
@@ -92,6 +104,9 @@ func mergeHosts(reserved, active []Host) []Host {
 		existing, found := byMAC[host.MAC]
 		if found && existing.Reserved && !host.Reserved {
 			continue
+		}
+		if found && host.NetworkID == "" {
+			host.NetworkID = existing.NetworkID
 		}
 		byMAC[host.MAC] = host
 	}
@@ -106,4 +121,40 @@ func mergeHosts(reserved, active []Host) []Host {
 		return left.Address.Compare(right.Address)
 	})
 	return hosts
+}
+
+// placeHosts settles which network each host belongs to. What the controller
+// says comes first, but it says nothing at all on most reservations, and it can
+// name a network that does not hold the address being published, so the network
+// whose subnet covers the address stands in for it. A host that matches no
+// subnet keeps whatever the controller said, which may be nothing, so it is
+// counted nowhere rather than counted wrongly.
+func placeHosts(networks []Network, hosts []Host) []Host {
+	byID := make(map[string]Network, len(networks))
+	for _, network := range networks {
+		byID[network.ID] = network
+	}
+	for index, host := range hosts {
+		if declared, known := byID[host.NetworkID]; known && declared.Contains(host.Address) {
+			continue
+		}
+		if id, found := networkForAddress(networks, host.Address); found {
+			hosts[index].NetworkID = id
+		}
+	}
+	return hosts
+}
+
+// networkForAddress finds the network covering an address, preferring the most
+// specific subnet so a wider network cannot claim a host from a narrower one.
+func networkForAddress(networks []Network, address netip.Addr) (string, bool) {
+	best, bestBits, found := "", -1, false
+	for _, network := range networks {
+		for _, subnet := range network.Subnets {
+			if subnet.Contains(address) && subnet.Bits() > bestBits {
+				best, bestBits, found = network.ID, subnet.Bits(), true
+			}
+		}
+	}
+	return best, found
 }

@@ -369,6 +369,26 @@ func TestUniFiSyncRecordsHostsPerNetwork(t *testing.T) {
 	}
 }
 
+// The console prints the summary total above a row per mapped network, so the
+// total has to be the sum of those rows and not everything the controller
+// happens to know about.
+func TestUniFiSyncCountsOnlyMappedHosts(t *testing.T) {
+	editor := &stubZoneEditor{}
+	reader := &stubReader{inventory: testInventory()}
+	syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), editor, reader)
+
+	syncer.runOnce(t.Context())
+
+	status := syncer.Status()
+	if status.Hosts != status.HostsByNetwork["net-lan"] {
+		t.Fatalf("summary total = %d, want the %d hosts on the one mapped network (per-network: %v)",
+			status.Hosts, status.HostsByNetwork["net-lan"], status.HostsByNetwork)
+	}
+	if status.HostsByNetwork["net-iot"] == 0 {
+		t.Fatal("the unmapped network lost its count, so mapping it later would show nothing")
+	}
+}
+
 func TestUniFiSyncReportsControllerFailure(t *testing.T) {
 	editor := &stubZoneEditor{}
 	reader := &stubReader{err: errors.New("controller unreachable")}
