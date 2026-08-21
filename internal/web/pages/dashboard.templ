@@ -50,6 +50,10 @@ type DashboardInsightsView struct {
 	// row and the log it links to report the same count.
 	RangeLabel      string
 	LogWindowQuery  string
+	// PollRange names the chart range the panels may refresh themselves on. It
+	// is empty for the wide ranges, whose counts are recounted only when the
+	// range picker asks for them.
+	PollRange       string
 	TopClients      []RankedStatView
 	TopDomains      []RankedStatView
 	TopBlocked      []RankedStatView

@@ -1728,6 +1728,15 @@
 	  });
 	};
 	window.addEventListener("popstate", syncRoutedDialogs);
+	// The dashboard rankings refresh themselves on a timer. Replacing that block
+	// while an operator has a "View all" list open would close it out from under
+	// them, so the poll is dropped for that cycle and the next one catches up.
+	// The check lives here rather than in an hx-trigger filter because the
+	// console's CSP has no unsafe-eval for htmx to compile one with.
+	document.body.addEventListener("htmx:beforeRequest", (event) => {
+	  if (event.detail?.elt?.id !== "dashboard-insights") return;
+	  if (document.querySelector("#dashboard-insights dialog[open]")) event.preventDefault();
+	});
 	document.body.addEventListener("htmx:afterSwap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
 	syncRoutedDialogs();
 	openAutomaticDialogs();
