@@ -482,7 +482,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		t.Fatalf("blocking page status = %d", blockingResponse.Code)
 	}
 	settingsResponse := serveRequest(server, http.MethodGet, "/settings")
-	for _, expected := range []string{"Settings", "Server Configuration", "General", "Protocols", "Recursion", "Logging", "Revision 7", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference`, "12-hour (9:30 PM)"} {
+	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference`, "12-hour (9:30 PM)"} {
 		if !strings.Contains(settingsResponse.Body.String(), expected) {
 			t.Errorf("settings page does not contain %q", expected)
 		}

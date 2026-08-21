@@ -57,7 +57,10 @@
 
 * { box-sizing: border-box; border-color: var(--border); }
 [hidden] { display: none !important; }
-html { min-width: 320px; background: var(--background); scroll-behavior: smooth; }
+/* The gutter is held open whether or not the page scrolls: without it a tab
+   whose panel outgrows the viewport takes the scrollbar's width out of the
+   layout, and every switch between two such tabs nudges the page sideways. */
+html { min-width: 320px; background: var(--background); scroll-behavior: smooth; scrollbar-gutter: stable; }
 body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--background); color: var(--foreground); font-size: 14px; }
 a { color: inherit; text-decoration: none; }
 button, input, select { color: inherit; font: inherit; }
@@ -336,7 +339,7 @@ button { cursor: pointer; }
   .distribution-legend { width: 100%; flex: none; }
 }
 
-.blocking-page { max-width: 92rem; margin-inline: auto; }
+.blocking-page { width: 100%; }
 .blocking-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
 .blocking-summary-card { display: flex; min-height: 6rem; align-items: center; gap: .9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 1rem; }
 .blocking-summary-card > span { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: var(--muted); color: var(--muted-foreground); }
@@ -1957,12 +1960,18 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .user-danger-actions form { display: inline-flex; }
 .user-footer-actions { display: flex; align-items: center; gap: .5rem; }
 
-.server-configuration-card > header { display: flex; align-items: flex-start; justify-content: space-between; padding: 1.25rem 1.5rem; }
-.server-configuration-card h2, .settings-source-card > header h2 { display: flex; align-items: center; gap: .5rem; margin: 0; }
-.server-configuration-card h2 { font-size: 1.5rem; }
-.server-configuration-card h2 .nav-icon { width: 1.5rem; height: 1.5rem; color: var(--primary); }
-.server-configuration-card p, .settings-source-card > header p { margin: .3rem 0 0; color: var(--muted-foreground); font-size: .8125rem; }
-.settings-tab-list { display: grid; width: 100%; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: .25rem; }
+.settings-source-card > header h2 { display: flex; align-items: center; gap: .5rem; margin: 0; }
+.settings-source-card > header p { margin: .3rem 0 0; color: var(--muted-foreground); font-size: .8125rem; }
+/* The strip shares each row out between whatever tabs land on it, so adding
+   or dropping a section never leaves a hole at the end of a row. */
+.settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: .25rem; }
+.settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 8 * .25rem) / 9); }
+/* The basis names how many tabs share a row, and flex-grow fills whatever row
+   they land on: nine across while there is room, then five, then three. A
+   plain fixed basis wraps wherever it happens to run out and leaves the last
+   row holding one tab stretched across the whole strip. */
+@media (max-width: 1230px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
+@media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 2 * .25rem) / 3); } }
 .settings-tab { height: 3.25rem; flex-direction: column; gap: .25rem; padding: .45rem .25rem; }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
 .settings-tab span { font-size: .6875rem; line-height: 1; }
@@ -2183,7 +2192,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .settings-advanced[open] > summary { margin-bottom: .85rem; }
 .settings-advanced[open] > summary .icon-chevron-down { transform: rotate(180deg); }
 
-.logs-page { max-width: 92rem; margin-inline: auto; }
+.logs-page { width: 100%; }
 .logs-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .logs-tab-list { display: grid; width: fit-content; grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
 .logs-tab-panel { min-width: 0; }
@@ -2280,7 +2289,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .log-result-actions { display: flex; gap: .4rem; }
 .log-result-actions .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; }
 .log-result-actions .nav-icon { width: .9rem; height: .9rem; }
-.query-log-table-scroll { max-height: calc(100vh - 22rem); min-height: 18rem; overflow: auto; }
+/* The query table stops growing where the runtime viewer stops, so the two
+   tabs stand the same height instead of one of them scrolling the page. */
+.query-log-table-scroll { max-height: min(38rem, calc(100vh - 22rem)); min-height: 18rem; overflow: auto; }
 .isotope-query-log-table thead { position: sticky; top: 0; z-index: 2; background: color-mix(in oklch, var(--muted) 82%, transparent); backdrop-filter: blur(8px); }
 .isotope-query-log-table th { text-transform: none; letter-spacing: 0; }
 .isotope-query-log-table td { height: auto; min-height: 3.5rem; padding-block: .65rem; }
@@ -2295,6 +2306,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-answers { min-width: 12rem; max-width: 30rem; }
 .query-answers > div { display: flex; flex-wrap: wrap; gap: .25rem; }
 .query-answers > div > span { display: inline-block; max-width: 20rem; overflow: hidden; border-radius: .3rem; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .18rem .4rem; font: .68rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+/* Folded copies of the columns the narrow layout drops: hidden while the full
+   table fits, so only one copy is ever in the page. */
+.query-fold, .query-fold-tight { display: none; }
+.query-name-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .query-row-actions { width: 4rem; }
 .query-row-actions form { display: inline-flex; }
 .query-policy-action { display: inline-grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
@@ -2320,11 +2335,58 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .logs-pagination .icon-button:disabled { cursor: not-allowed; opacity: .35; }
 
 @media (max-width: 980px) {
-  .settings-tab-list { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 	.field-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.query-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 	.runtime-log-line { grid-template-columns: 11.75rem 3.5rem minmax(0, 1fr); }
 	.runtime-log-attributes { grid-column: 3; }
+}
+
+/* The full nine columns need about 1220px of table, which only a very wide
+   window can give once the sidebar takes its share. Below that the client, the
+   protocol and the answers fold into the cells they belong to rather than
+   pushing the table into a sideways scroll. */
+@media (max-width: 1560px) {
+	.query-col-client, .query-col-protocol, .query-col-answer { display: none; }
+	.query-fold-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin-top: .15rem; color: var(--muted-foreground); font: .66rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+	.query-fold-meta code { color: inherit; font: inherit; }
+	.query-fold-answers { display: block; min-width: 0; max-width: none; margin-top: .3rem; }
+	/* A row with no answer says so in the Answer column; folded under the
+	   domain the same dash would just repeat itself down the table. */
+	.query-fold-answers .muted-cell { display: none; }
+	.query-log-table.full th, .query-log-table.full td { padding-inline: .85rem; }
+	.isotope-query-log-table .query-name { max-width: 16rem; overflow: visible; white-space: normal; }
+	.query-time { white-space: nowrap; }
+}
+
+/* Narrower still: the domain gives up width before the table gives up a column. */
+@media (max-width: 1150px) {
+	.query-log-table.full th, .query-log-table.full td { padding-inline: .6rem; }
+	.isotope-query-log-table .query-name { max-width: 11rem; }
+}
+
+/* Tablet width leaves room for the domain, the status and little else, so the
+   type and the response join the client and the protocol under the timestamp. */
+@media (max-width: 960px) {
+	.query-col-type, .query-col-source { display: none; }
+	.query-fold-tight { display: inline; }
+	.isotope-query-log-table .query-name { max-width: 9rem; }
+	/* The heading and its controls stop sharing a line here rather than at the
+	   phone breakpoint: on one line this narrow the buttons sit on top of the
+	   entry count. */
+	.logs-toolbar { align-items: stretch; flex-direction: column; }
+	.query-logs-toolbar > div:first-child { align-items: stretch; flex-direction: column; }
+	/* The runtime line drops to two columns at the same width, so the attribute
+	   text stops being squeezed into a hand's width of column. */
+	.runtime-log-line { grid-template-columns: 1fr 3.5rem; gap: .25rem .75rem; padding-block: .4rem; }
+	.runtime-log-message, .runtime-log-attributes { grid-column: 1 / -1; }
+}
+
+/* On a phone the row actions are already out of reach: they only appear on
+   hover, and the width they hold is the last thing keeping the table from
+   fitting. */
+@media (max-width: 640px) {
+	.query-col-actions, .query-row-actions { display: none; }
+	.isotope-query-log-table .query-name { max-width: 7rem; }
 }
 
 @media (max-width: 700px) {
@@ -2333,12 +2395,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .desktop-only, .admin-desktop-table { display: none; }
   .admin-mobile-list { display: block; }
   .isotope-data-header { min-height: 3.75rem; }
-  .settings-tab-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 	.field-grid.two, .field-grid.three, .field-grid.four, .protocol-grid, .protocol-grid.three, .certificate-mode-control { grid-template-columns: 1fr; }
 	.certificate-renew-button { width: 100%; }
 	.certificate-detail-grid { grid-template-columns: 1fr; }
-  .server-configuration-card h2 { font-size: 1.25rem; }
-  .server-configuration-card > header, .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
+  .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
 	.isotope-form-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
@@ -2362,8 +2422,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.query-logs-toolbar > div:first-child { align-items: stretch; flex-direction: column; }
 	.query-log-table-scroll { max-height: none; }
 	.logs-pagination { align-items: flex-end; flex-wrap: wrap; justify-content: space-between; }
-	.runtime-log-line { grid-template-columns: 1fr 3.5rem; gap: .25rem .75rem; padding-block: .4rem; }
-	.runtime-log-message, .runtime-log-attributes { grid-column: 1 / -1; }
 }
 
 /* Apps */

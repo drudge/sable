@@ -401,7 +401,11 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		activeTab = request.URL.Query().Get("tab")
 	}
 	switch activeTab {
-	case "general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "proxy", "logging", "backup":
+	// Forwarders moved in with the resolver, so a link saved to the old Proxy
+	// tab lands where its settings live now.
+	case "proxy":
+		activeTab = "recursion"
+	case "general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "logging", "backup":
 	default:
 		activeTab = "general"
 	}
