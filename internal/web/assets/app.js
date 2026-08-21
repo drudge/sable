@@ -1254,18 +1254,42 @@
 		if (timer !== null) window.clearInterval(timer);
 		timer = null;
 	  };
+	  let holdUntil = 0;
+	  let pollRequest = null;
 	  // A refresh replaces the whole panel, so it waits while someone is working a
-	  // control inside it rather than swapping the field out mid-keystroke.
+	  // control inside it rather than swapping the field out mid-keystroke. Focus
+	  // cannot answer that on its own: Safari leaves a clicked <select> unfocused,
+	  // so an open level menu would read as idle and the refresh would tear the
+	  // menu out before the pick could land. A pointer on a control holds the
+	  // refresh off until the pick lands or the hold lapses.
 	  const inUse = () => {
 		const active = document.activeElement;
-		return !!active && panel.contains(active) && active.matches("input, select, textarea");
+		if (active && panel.contains(active) && active.matches("input, select, textarea")) return true;
+		return performance.now() < holdUntil;
 	  };
+	  panel.addEventListener("pointerdown", (event) => {
+		if (event.target.closest?.("input, select, textarea, label")) holdUntil = performance.now() + 10000;
+	  });
+	  // The pick landed: the change it fires reloads the panel with the new
+	  // filter, so nothing is left to protect.
+	  panel.addEventListener("change", () => { holdUntil = 0; });
+	  // A refresh already on the wire still answers the filter the panel carried
+	  // when it left, so it is dropped rather than allowed to land on top of the
+	  // filter the operator just asked for.
+	  panel.addEventListener("htmx:beforeRequest", () => {
+		if (!pollRequest) return;
+		pollRequest.abort();
+		pollRequest = null;
+	  });
+	  panel.addEventListener("htmx:beforeSend", (event) => {
+		if (event.detail?.elt === panel) pollRequest = event.detail.xhr;
+	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
 		if (document.hidden || requestInFlight || inUse() || panel.dataset.live !== "true") return;
 		requestInFlight = true;
-		htmx.ajax("GET", panel.dataset.liveUrl, {target: `#${panel.id}`, swap: "outerHTML"})
-		  .finally?.(() => { requestInFlight = false; });
+		htmx.ajax("GET", panel.dataset.liveUrl, {source: panel, target: `#${panel.id}`, swap: "outerHTML"})
+		  .finally?.(() => { requestInFlight = false; pollRequest = null; });
 	  };
 	  const start = () => {
 		stop();
@@ -1321,7 +1345,7 @@
 		target.searchParams.set("page", "1");
 		target.searchParams.set("page_size", event.target.value);
 		target.searchParams.set("live", panel.dataset.live === "true" ? "1" : "0");
-		htmx.ajax("GET", target.pathname + target.search, {target: `#${panel.id}`, swap: "outerHTML"});
+		htmx.ajax("GET", target.pathname + target.search, {source: panel, target: `#${panel.id}`, swap: "outerHTML"});
 	  });
 	  start();
 	};
