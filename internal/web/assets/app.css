@@ -1970,7 +1970,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
    they land on: nine across while there is room, then five, then three. A
    plain fixed basis wraps wherever it happens to run out and leaves the last
    row holding one tab stretched across the whole strip. */
-@media (max-width: 1230px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
+@media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
 @media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 2 * .25rem) / 3); } }
 .settings-tab { height: 3.25rem; flex-direction: column; gap: .25rem; padding: .45rem .25rem; }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
