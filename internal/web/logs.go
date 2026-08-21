@@ -62,7 +62,7 @@ func (server *Server) runtimeLogsPanel(writer http.ResponseWriter, request *http
 func (server *Server) runtimeLogsView(request *http.Request) pages.RuntimeLogsView {
 	values := request.URL.Query()
 	view := pages.RuntimeLogsView{
-		Search: values.Get("search"), Level: values.Get("level"), Live: values.Get("live") == "1",
+		Search: values.Get("search"), Level: values.Get("level"), Live: liveRequested(values, true),
 		Page: parseBoundedInt(values.Get("page"), 1, 1, 1_000_000), PageSize: parseBoundedInt(values.Get("page_size"), 100, 1, 250),
 	}
 	if view.Level == "" {
@@ -101,10 +101,10 @@ func (server *Server) persistedRuntimeLogsView(request *http.Request, pager serv
 	view.TotalPages = result.TotalPages
 	view = finishRuntimeLogsView(request, view, result.Entries)
 	raw := runtimeExportValues(request.URL.Query())
-	view.FirstURL = runtimeLogPanelURL(raw, 1, view.Live)
-	view.PreviousURL = runtimeLogPanelURL(raw, max(1, result.Page-1), view.Live)
-	view.NextURL = runtimeLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), view.Live)
-	view.LastURL = runtimeLogPanelURL(raw, max(1, result.TotalPages), view.Live)
+	view.FirstURL = runtimeLogPanelURL(raw, 1)
+	view.PreviousURL = runtimeLogPanelURL(raw, max(1, result.Page-1))
+	view.NextURL = runtimeLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1))
+	view.LastURL = runtimeLogPanelURL(raw, max(1, result.TotalPages))
 	return view
 }
 
@@ -140,16 +140,31 @@ func runtimeExportValues(values url.Values) url.Values {
 	return copied
 }
 
-func runtimeLogPanelURL(values url.Values, page int, live bool) string {
+// runtimeLogPanelURL pages the stored history, and paging stops the follow: the
+// live refresh always reads the newest page, so a panel left following would
+// drag an operator straight back off the page they asked for.
+func runtimeLogPanelURL(values url.Values, page int) string {
 	copied := make(url.Values, len(values)+2)
 	for key, value := range values {
 		copied[key] = value
 	}
 	copied.Set("page", strconv.Itoa(page))
-	if live {
-		copied.Set("live", "1")
-	}
+	copied.Set("live", "0")
 	return "/ui/logs/runtime?" + copied.Encode()
+}
+
+// liveRequested reads the follow flag, which has to tell "off" apart from
+// "unsaid": the runtime log follows by default, so only an explicit live=0
+// pauses it.
+func liveRequested(values url.Values, byDefault bool) bool {
+	switch values.Get("live") {
+	case "":
+		return byDefault
+	case "1":
+		return true
+	default:
+		return false
+	}
 }
 
 func runtimeLevelName(level interface{ String() string }) string {
@@ -179,9 +194,8 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 		ResponseCode: strings.ToUpper(raw.Get("response_code")), Source: raw.Get("source"), Protocol: strings.ToUpper(raw.Get("protocol")),
 		Start: logTimeField(filter.Since, display), End: logTimeField(filter.Until, display),
 		Exact: filter.Exact,
-		Live:  raw.Get("live") == "1", FiltersOpen: raw.Get("filters") == "1",
+		Live:  liveRequested(raw, false), FiltersOpen: raw.Get("filters") == "1",
 	}
-	view.FiltersOpen = view.FiltersOpen || queryFiltersActiveView(view)
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {
 		view.Error = "The configured query log store does not support browsing."
@@ -208,11 +222,6 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages))
 	view.ExportURL = "/api/v1/logs/queries/export?" + exportQueryValues(raw).Encode()
 	return view
-}
-
-func queryFiltersActiveView(view pages.QueryLogsView) bool {
-	return view.ClientIP != "" || view.Name != "" || view.RecordType != "" || view.ResponseCode != "" ||
-		view.Source != "" || view.Protocol != "" || view.Start != "" || view.End != ""
 }
 
 func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
@@ -293,9 +302,7 @@ func parseBoundedInt(raw string, fallback, minimum, maximum int) int {
 func queryLogPanelURL(values url.Values, page int) string {
 	copy := exportQueryValues(values)
 	copy.Set("page", strconv.Itoa(page))
-	if values.Get("live") == "1" {
-		copy.Set("live", "1")
-	}
+	copy.Set("live", "0")
 	return "/ui/logs/queries?" + copy.Encode()
 }
 

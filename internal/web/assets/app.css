@@ -236,10 +236,11 @@ button { cursor: pointer; }
   70% { box-shadow: 0 0 0 .5rem rgb(16 185 129 / 0); }
   100% { box-shadow: 0 0 0 .1rem rgb(16 185 129 / 0); }
 }
-.chart-card:has(.chart-range-popover:not([hidden])) .chart-live { color: color-mix(in oklch, var(--muted-foreground) 55%, transparent); }
-.chart-card:has(.chart-range-popover:not([hidden])) .chart-live > span { animation: none; background: var(--muted-foreground); box-shadow: none; opacity: .4; }
-.chart-range-popover { position: absolute; top: 3.85rem; right: 1.5rem; z-index: 12; width: min(18rem, calc(100% - 2rem)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: .75rem; color: var(--foreground); box-shadow: 0 12px 30px rgb(0 0 0 / .22); }
-.chart-range-form { display: grid; gap: .75rem; }
+.chart-card:has(.range-popover:not([hidden])) .chart-live { color: color-mix(in oklch, var(--muted-foreground) 55%, transparent); }
+.chart-card:has(.range-popover:not([hidden])) .chart-live > span { animation: none; background: var(--muted-foreground); box-shadow: none; opacity: .4; }
+.range-popover { position: absolute; z-index: 12; width: min(18rem, calc(100vw - 2rem)); border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: .75rem; color: var(--foreground); box-shadow: 0 12px 30px rgb(0 0 0 / .22); }
+.chart-range-popover { top: 3.85rem; right: 1.5rem; }
+.range-picker-body { display: grid; gap: .75rem; }
 .calendar-caption { display: grid; grid-template-columns: 2rem 1fr 2rem; align-items: center; gap: .375rem; }
 .calendar-caption > button { display: grid; width: 2rem; height: 2rem; place-items: center; border: 0; border-radius: .375rem; background: transparent; padding: 0; }
 .calendar-caption > button:hover:not(:disabled) { background: var(--accent); }
@@ -262,12 +263,12 @@ button { cursor: pointer; }
 .calendar-day.today:not(.range-start, .range-end) button { background: var(--accent); color: var(--accent-foreground); }
 .calendar-day.outside-month button { color: var(--muted-foreground); }
 .calendar-day button:disabled { cursor: default; opacity: .35; }
-.chart-range-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
-.chart-range-times label { display: grid; gap: .375rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 500; }
-.chart-range-times input { height: 2rem; padding: 0 .55rem; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.range-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.range-times label { display: grid; gap: .375rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 500; }
+.range-times input { height: 2rem; padding: 0 .55rem; font-size: .75rem; font-variant-numeric: tabular-nums; }
 .time-field::-webkit-calendar-picker-indicator { display: none; }
-.chart-range-error { margin: -.2rem 0 0; color: var(--destructive); font-size: .7rem; line-height: 1.35; }
-.chart-range-apply { width: 100%; height: 2rem; min-height: 2rem; }
+.range-error { margin: -.2rem 0 0; color: var(--destructive); font-size: .7rem; line-height: 1.35; }
+.range-apply { width: 100%; height: 2rem; min-height: 2rem; }
 .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; padding: 0.75rem 1.5rem 1.25rem; color: var(--muted-foreground); font-size: 0.75rem; }
 .chart-legend span::before { display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.35rem; border-radius: 50%; content: ""; }
 .chart-legend .blue::before { background: #559bd4; }
@@ -299,25 +300,6 @@ button { cursor: pointer; }
 .ranking-row strong { overflow: hidden; font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .ranking-row small { overflow: hidden; color: var(--muted-foreground); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
 .ranking-row > span { color: var(--muted-foreground); font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.top-stats-dialog { width: min(42rem, calc(100vw - 2rem)); max-width: 42rem; max-height: 85vh; padding: 0; overflow: hidden; }
-.top-stats-header { position: relative; display: flex; min-height: 4.75rem; align-items: center; border-bottom: 1px solid var(--border); padding: 1.5rem 3.5rem 1rem 1.5rem; }
-.top-stats-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
-.top-stats-range { margin-left: .625rem; color: var(--muted-foreground); font-size: .8125rem; }
-.top-stats-toolbar { display: flex; gap: .75rem; border-bottom: 1px solid var(--border); padding: .75rem 1.5rem; }
-.top-stats-search { position: relative; min-width: 10rem; flex: 1; }
-.top-stats-search .nav-icon { position: absolute; top: 50%; left: .625rem; width: 1rem; height: 1rem; translate: 0 -50%; color: var(--muted-foreground); pointer-events: none; }
-.top-stats-search input { width: 100%; height: 2rem; padding-left: 2rem; }
-.top-stats-limit select { width: 6.875rem; height: 2rem; }
-.top-stats-list { min-height: 8rem; max-height: calc(85vh - 10rem); overflow-y: auto; }
-.top-stats-row { display: flex; min-height: 3.25rem; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); padding: .5rem 1.5rem; transition: background-color .15s ease; }
-.top-stats-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
-.top-stats-rank { width: 2.5rem; flex: 0 0 2.5rem; color: var(--muted-foreground); font-size: .75rem; text-align: right; font-variant-numeric: tabular-nums; }
-.top-stats-row > div { display: grid; min-width: 0; flex: 1; gap: .1rem; }
-.top-stats-row strong { overflow: hidden; font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.top-stats-row small { overflow: hidden; color: var(--muted-foreground); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
-.top-stats-hits { flex: 0 0 auto; color: var(--muted-foreground); font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums; }
-.top-stats-empty { padding: 4rem 1.5rem; color: var(--muted-foreground); font-size: .875rem; text-align: center; }
-.top-stats-footer { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding: .625rem 1.5rem; color: var(--muted-foreground); font-size: .75rem; font-variant-numeric: tabular-nums; }
 .dashboard-empty { display: grid; min-height: 17.5rem; flex: 1; place-items: center; color: var(--muted-foreground); font-size: .8rem; }
 .dashboard-empty.compact { min-height: 5rem; }
 .distribution-card { min-height: 20rem; container-type: inline-size; }
@@ -593,6 +575,13 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-primary-row .search-field { position: relative; min-width: 12rem; flex: 1; }
 .search-field > .nav-icon { position: absolute; top: 50%; left: 0.75rem; z-index: 1; width: 1rem; height: 1rem; transform: translateY(-50%); color: var(--muted-foreground); }
 .search-field input { padding-right: 2.25rem; padding-left: 2.25rem; }
+/* One clear control, ours: the browser's own search cancel button would sit on
+   top of it wherever the engine draws one. */
+.search-field input::-webkit-search-cancel-button { display: none; }
+.search-clear { position: absolute; top: 50%; right: .5rem; display: grid; width: 1.35rem; height: 1.35rem; place-items: center; border: 0; border-radius: 999px; background: transparent; padding: 0; color: var(--muted-foreground); translate: 0 -50%; }
+.search-clear:hover { background: var(--accent); color: var(--foreground); }
+.search-clear .nav-icon { width: .8rem; height: .8rem; }
+.search-clear[hidden] { display: none; }
 .query-clear { position: absolute; top: 50%; right: 0.5rem; display: grid; width: 1.75rem; height: 1.75rem; place-items: center; transform: translateY(-50%); border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); }
 .query-clear:hover { background: var(--accent); color: var(--accent-foreground); }
 .query-clear .nav-icon { width: 1rem; height: 1rem; }
@@ -690,6 +679,28 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
+/* The rankings dialog borrows the shared dialog chrome but lays its own rows
+   out edge to edge, so it has to land after the base rules to keep them. */
+.top-stats-dialog { width: min(54rem, calc(100vw - 2rem)); max-width: 54rem; max-height: 85vh; padding: 0; overflow: hidden; }
+.top-stats-dialog[open] { display: flex; flex-direction: column; gap: 0; }
+.top-stats-header { position: relative; display: flex; min-height: 3.5rem; align-items: center; border-bottom: 1px solid var(--border); padding: .85rem 3rem .85rem 1.25rem; }
+.top-stats-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
+.top-stats-range { margin-left: .625rem; color: var(--muted-foreground); font-size: .8125rem; }
+.top-stats-toolbar { display: flex; gap: .75rem; border-bottom: 1px solid var(--border); padding: .65rem 1.25rem; }
+.top-stats-search { position: relative; min-width: 10rem; flex: 1; }
+.top-stats-search .nav-icon { position: absolute; top: 50%; left: .625rem; width: 1rem; height: 1rem; translate: 0 -50%; color: var(--muted-foreground); pointer-events: none; }
+.top-stats-search input { width: 100%; height: 2rem; padding-left: 2rem; }
+.top-stats-limit select { width: 6.875rem; height: 2rem; }
+.top-stats-list { min-height: 8rem; max-height: calc(85vh - 9rem); overflow-y: auto; }
+.top-stats-row { display: flex; min-height: 2.75rem; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); padding: .4rem 1.25rem; transition: background-color .15s ease; }
+.top-stats-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
+.top-stats-rank { width: 2rem; flex: 0 0 2rem; color: var(--muted-foreground); font-size: .75rem; text-align: right; font-variant-numeric: tabular-nums; }
+.top-stats-row > div { display: grid; min-width: 0; flex: 1; gap: .1rem; }
+.top-stats-row strong { overflow: hidden; font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.top-stats-row small { overflow: hidden; color: var(--muted-foreground); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+.top-stats-hits { flex: 0 0 auto; color: var(--muted-foreground); font-size: .875rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.top-stats-empty { padding: 3rem 1.25rem; color: var(--muted-foreground); font-size: .875rem; text-align: center; }
+.top-stats-footer { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding: .55rem 1.25rem; color: var(--muted-foreground); font-size: .75rem; font-variant-numeric: tabular-nums; }
 .query-options-row .transport-picker { width: 6rem; }
 .query-options-row .edns-subnet { width: 9rem; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; white-space: nowrap; }
@@ -2177,20 +2188,20 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .logs-tab-list { display: grid; width: fit-content; grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
 .logs-tab-panel { min-width: 0; }
 .logs-card { overflow: hidden; }
-.logs-toolbar { display: flex; min-height: 4.5rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; }
-.logs-toolbar > div, .logs-toolbar h2, .logs-toolbar-actions, .logs-filter-bar, .logs-pagination, .logs-pagination > div, .logs-pagination nav { display: flex; align-items: center; }
+.logs-toolbar { display: flex; min-height: 4.5rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1rem 1.25rem; }
+.logs-toolbar > div, .logs-toolbar h2, .logs-toolbar-actions, .logs-pagination, .logs-pagination > div, .logs-pagination nav { display: flex; align-items: center; }
+/* The count belongs beside the heading at every width: only the filter
+   tokens after it are allowed to wrap onto a line of their own. */
+.log-title { display: flex; min-width: 0; align-items: center; gap: .6rem; }
 .logs-toolbar > div:first-child { min-width: 0; gap: .75rem; }
 .logs-toolbar h2 { gap: .5rem; margin: 0; font-size: 1rem; }
 .logs-toolbar h2 .nav-icon { width: 1.1rem; height: 1.1rem; }
-.log-count { border-radius: 999px; background: var(--muted); padding: .2rem .55rem; color: var(--muted-foreground); font-size: .68rem; white-space: nowrap; }
 .logs-toolbar-actions { gap: .5rem; }
-.logs-toolbar-actions .button, .logs-filter-bar .button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; white-space: nowrap; }
-.logs-toolbar-actions .nav-icon, .logs-filter-bar .nav-icon { width: .9rem; height: .9rem; }
+.logs-toolbar-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; white-space: nowrap; }
+.logs-toolbar-actions .nav-icon { width: .9rem; height: .9rem; }
 .logs-toolbar-actions .live.active { border-color: rgb(16 185 129 / .55); color: #10b981; }
-.logs-filter-bar { gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1.25rem; }
-.logs-filter-bar .search-field { position: relative; min-width: 12rem; flex: 1; }
-.logs-filter-bar select { width: 9rem; }
-.runtime-log-viewer { height: min(38rem, calc(100vh - 22rem)); min-height: 20rem; overflow: auto; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--background) 90%, #000); padding: .75rem 0; font: .72rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.runtime-level-field { display: block; width: 9rem; }
+.runtime-log-viewer { height: min(38rem, calc(100vh - 22rem)); min-height: 20rem; overflow: auto; background: color-mix(in oklch, var(--background) 90%, #000); padding: .75rem 0; font: .72rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .runtime-log-line { display: grid; grid-template-columns: 11.75rem 3.5rem minmax(12rem, auto) minmax(0, 1fr); gap: .75rem; padding: .18rem 1.25rem; }
 .runtime-log-line:hover { background: color-mix(in oklch, var(--muted) 55%, transparent); }
 .runtime-log-line time, .runtime-log-attributes { color: var(--muted-foreground); }
@@ -2201,12 +2212,37 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .level-debug .runtime-log-level { color: #a855f7; }
 .runtime-log-message { color: var(--foreground); }
 .runtime-log-attributes { overflow-wrap: anywhere; }
-.logs-empty { display: grid; min-height: 20rem; place-items: center; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: .8rem; }
+.logs-empty { display: grid; min-height: 20rem; place-items: center; color: var(--muted-foreground); font-size: .8rem; }
 .logs-empty.error { color: var(--destructive); }
-.query-logs-toolbar { min-height: 5.5rem; }
-.query-log-total { color: var(--muted-foreground); font-size: .78rem; white-space: nowrap; }
+.log-total { color: var(--muted-foreground); font-size: .78rem; white-space: nowrap; }
 .logs-toolbar-actions .button.active { background: var(--accent); color: var(--accent-foreground); }
-.query-log-filters { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+/* Applied filters read as tokens beside the count while the filter bar is
+   collapsed, so a panel narrowed by a dashboard link never looks unfiltered. */
+.query-filter-tokens { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .35rem; }
+/* The open filter bar already spells the filters out, so the tokens stand in
+   for it only while it is closed. */
+.logs-card:has(.query-log-filters:not([hidden])) .query-filter-tokens { display: none; }
+.query-logs-toolbar > div:first-child { flex-wrap: wrap; }
+.query-logs-toolbar h2, .logs-toolbar .log-total { white-space: nowrap; }
+.query-filter-token { display: inline-flex; max-width: 22rem; align-items: center; gap: .3rem; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .12rem .3rem .12rem .55rem; font-size: .72rem; line-height: 1.6; }
+.query-filter-token b { color: var(--muted-foreground); font-weight: 500; }
+.query-filter-token > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.query-filter-token a, .query-filter-clear { display: grid; width: 1.05rem; height: 1.05rem; flex: none; place-items: center; border-radius: 999px; color: var(--muted-foreground); }
+.query-filter-token a:hover, .query-filter-clear:hover { background: var(--accent); color: var(--foreground); }
+.query-filter-token .nav-icon, .query-filter-clear .nav-icon { width: .7rem; height: .7rem; }
+.query-filter-clear { width: 1.25rem; height: 1.25rem; }
+.query-filter-clear .nav-icon { width: .8rem; height: .8rem; }
+/* The caret is a segment of the Filters button: it points at the state the
+   click leads to, the way the collapsed bar itself does. */
+.filters-toggle { gap: .4rem; }
+.filters-toggle .filter-count { display: grid; min-width: 1.1rem; height: 1.1rem; place-items: center; border-radius: 999px; background: var(--primary); padding: 0 .3rem; color: var(--primary-foreground); font-size: .65rem; font-weight: 600; }
+.filters-toggle .button-caret { display: inline-flex; align-items: center; margin-left: .1rem; border-left: 1px solid var(--border); padding-left: .45rem; }
+.filters-toggle[aria-expanded="true"] .button-caret .nav-icon { rotate: 180deg; }
+.filters-toggle .button-caret .nav-icon { transition: rotate .15s ease; }
+.live-icon { display: inline-flex; }
+.button.live .live-icon.pause, .button.live[aria-pressed="true"] .live-icon.play { display: none; }
+.button.live[aria-pressed="true"] .live-icon.pause { display: inline-flex; }
+.query-log-filters { border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 60%, transparent); }
 .query-log-filters > summary { display: flex; min-height: 2.75rem; align-items: center; gap: .45rem; cursor: pointer; padding: 0 1.25rem; color: var(--muted-foreground); font-size: .78rem; font-weight: 600; list-style: none; }
 .query-log-filters > summary::-webkit-details-marker { display: none; }
 .query-log-filters > summary:hover { color: var(--foreground); }
@@ -2221,15 +2257,27 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-filter-grid input, .query-filter-grid select { min-width: 0; width: 100%; }
 /* A date reads as one value, so its field is given room for the whole thing. */
 .query-filter-wide { grid-column: span 2; }
+/* The window filter opens the same calendar the dashboard's custom range uses,
+   rather than two bare datetime-local inputs. */
+.query-filter-range { position: relative; display: grid; min-width: 0; gap: .4rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; }
+.range-trigger { display: flex; height: 2.25rem; min-width: 0; align-items: center; gap: .45rem; border: 1px solid var(--input, var(--border)); border-radius: var(--radius); background: var(--background); padding: 0 .65rem; color: var(--foreground); font-size: .8rem; font-weight: 400; text-align: left; }
+.range-trigger:hover { border-color: color-mix(in oklch, var(--primary) 40%, var(--border)); }
+.range-trigger .nav-icon { width: .9rem; height: .9rem; flex: none; color: var(--muted-foreground); }
+.range-trigger > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.range-trigger.picker-open { border-color: var(--primary); }
+.query-range-popover { top: calc(100% + .35rem); left: 0; }
+.range-picker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.range-picker-actions .button { width: 100%; height: 2rem; min-height: 2rem; }
+
 .query-filter-actions { display: flex; justify-content: flex-end; gap: .5rem; }
 .query-filter-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
 .query-filter-actions .nav-icon { width: .9rem; height: .9rem; }
-.query-result-search { display: flex; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); padding: .65rem 1.25rem; }
-.query-result-search .search-field { position: relative; min-width: 12rem; flex: 1; }
-.query-result-search input { height: 2rem; }
-.query-result-actions { display: flex; gap: .4rem; }
-.query-result-actions .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; }
-.query-result-actions .nav-icon { width: .9rem; height: .9rem; }
+.log-search-bar { display: flex; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); padding: .65rem 1.25rem; }
+.log-search-bar .search-field { position: relative; min-width: 12rem; flex: 1; }
+.log-search-bar input { height: 2rem; }
+.log-result-actions { display: flex; gap: .4rem; }
+.log-result-actions .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; }
+.log-result-actions .nav-icon { width: .9rem; height: .9rem; }
 .query-log-table-scroll { max-height: calc(100vh - 22rem); min-height: 18rem; overflow: auto; }
 .isotope-query-log-table thead { position: sticky; top: 0; z-index: 2; background: color-mix(in oklch, var(--muted) 82%, transparent); backdrop-filter: blur(8px); }
 .isotope-query-log-table th { text-transform: none; letter-spacing: 0; }
@@ -2306,8 +2354,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.settings-blocking-actions .button { justify-content: center; }
 	.logs-toolbar { align-items: stretch; flex-direction: column; }
 	.logs-toolbar-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-	.logs-filter-bar { align-items: stretch; flex-direction: column; }
-	.logs-filter-bar select { width: 100%; }
+	.runtime-level-field { width: 100%; }
 	.query-filter-grid { grid-template-columns: 1fr; }
 	.query-filter-wide { grid-column: auto; }
 	.query-logs-toolbar > div:first-child { align-items: stretch; flex-direction: column; }

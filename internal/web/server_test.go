@@ -386,7 +386,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-chart-range-popover`, `data-calendar-grid`, `data-chart-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `/logs?tab=queries&amp;`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `/logs?tab=queries&amp;`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}

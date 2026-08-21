@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type LogsPageView struct {
@@ -100,19 +101,19 @@ templ LogsContent(view LogsPageView) {
 templ RuntimeLogsPanel(view RuntimeLogsView) {
 	<section class="card logs-card emphasized" id="runtime-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
 		<header class="logs-toolbar">
-			<div><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-count">{ runtimeLogCount(view) }</span></div>
+			<div><div class="log-title"><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
 			<div class="logs-toolbar-actions">
-				<button class={ ifThen(view.Live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(view.Live) }>@Icon(ifThen(view.Live, "pause", "play"))<span>{ ifThen(view.Live, "Pause", "Live") }</span></button>
-				<button class="button outline" type="button" data-copy-target="runtime-log-copy">@Icon("copy")<span data-copy-label>Copy</span></button>
-				<a class="button outline" href={ templ.SafeURL(runtimeExportURL(view)) }>@Icon("download")<span>Export</span></a>
+				@LogLiveButton(view.Live)
+				<label class="runtime-level-field"><span class="sr-only">Log level</span><select name="level" aria-label="Log level" data-runtime-level><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select></label>
 			</div>
 		</header>
-		<form class="logs-filter-bar" hx-get="/ui/logs/runtime" hx-target="#runtime-logs-panel" hx-swap="outerHTML">
-			<div class="search-field">@Icon("search")<input name="search" value={ view.Search } placeholder="Search server logs..." aria-label="Search server logs"/></div>
-			<select name="level" aria-label="Log level"><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select>
+		// The level sits with the live toggle but posts with the search, so both
+		// controls take effect on their own rather than through a Search button.
+		<form class="log-search-bar" id="runtime-log-search-bar" hx-get="/ui/logs/runtime" hx-target="#runtime-logs-panel" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:#runtime-log-search, change from:[data-runtime-level]" hx-include="[data-runtime-level]">
+			<div class="search-field">@Icon("search")<input id="runtime-log-search" type="search" name="search" value={ view.Search } placeholder="Search server logs..." autocomplete="off" aria-label="Search server logs" data-search-clearable/>@SearchClear(view.Search == "")</div>
 			<input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/>
 			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/>
-			<button class="button outline" type="submit">@Icon("search")<span>Search</span></button>
+			<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="runtime-log-copy" aria-label="Copy current entries" title="Copy current entries">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(runtimeExportURL(view)) } aria-label="Export server logs" title="Export server logs">@Icon("download")</a></div>
 		</form>
 		<textarea class="sr-only" id="runtime-log-copy" readonly>{ view.CopyText }</textarea>
 		if view.Error != "" {
@@ -135,12 +136,28 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 }
 
 templ QueryLogsPanel(view QueryLogsView) {
+	{{ tokens := queryFilterTokens(view) }}
 	<section class="card logs-card emphasized" id="query-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
 		<header class="logs-toolbar query-logs-toolbar">
-			<div><h2>@Icon("logs")<span>DNS Query Log</span></h2><span class="query-log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
+			<div>
+				<div class="log-title"><h2>@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
+				if len(tokens) > 0 {
+					<div class="query-filter-tokens">
+						for _, token := range tokens {
+							<span class="query-filter-token"><b>{ token.Label }:</b><span title={ token.Value }>{ token.Value }</span><a href={ templ.SafeURL(token.RemoveURL) } aria-label={ "Remove the " + token.Label + " filter" } title={ "Remove the " + token.Label + " filter" }>@Icon("x")</a></span>
+						}
+						<a class="query-filter-clear" href="/logs?tab=queries" aria-label="Clear all filters" title="Clear all filters">@Icon("x")</a>
+					</div>
+				}
+			</div>
 			<div class="logs-toolbar-actions">
-				<button class={ ifThen(view.Live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(view.Live) }>@Icon(ifThen(view.Live, "pause", "play"))<span>{ ifThen(view.Live, "Pause", "Live") }</span></button>
-				<button class={ ifThen(view.FiltersOpen, "button outline active", "button outline") } type="button" data-query-filters-toggle aria-expanded={ fmt.Sprint(view.FiltersOpen) }>@Icon("filter")<span>Filters</span></button>
+				@LogLiveButton(view.Live)
+				<button class={ ifThen(view.FiltersOpen, "button outline filters-toggle active", "button outline filters-toggle") } type="button" data-query-filters-toggle aria-expanded={ fmt.Sprint(view.FiltersOpen) }>@Icon("filter")<span>Filters</span>
+					if len(tokens) > 0 {
+						<span class="filter-count">{ fmt.Sprint(len(tokens)) }</span>
+					}
+					<span class="button-caret">@Icon("chevron-down")</span>
+				</button>
 			</div>
 		</header>
 		<div class="query-log-filters isotope-query-filters" data-query-filters hidden?={ !view.FiltersOpen }>
@@ -152,19 +169,37 @@ templ QueryLogsPanel(view QueryLogsView) {
 					<label><span>Response Type</span><select name="source">@LogOption("", "All Types", view.Source)@LogOption("authoritative", "Authoritative", view.Source)@LogOption("upstream", "Recursive", view.Source)@LogOption("cache", "Cached", view.Source)@LogOption("blocked", "Blocked", view.Source)@LogOption("local", "Local", view.Source)@LogOption("error", "Error", view.Source)</select></label>
 					<label><span>Protocol</span><select name="protocol">@LogOption("", "All Protocols", view.Protocol)@LogOption("UDP", "UDP", view.Protocol)@LogOption("TCP", "TCP", view.Protocol)@LogOption("TLS", "TLS", view.Protocol)@LogOption("HTTPS", "HTTPS", view.Protocol)@LogOption("QUIC", "QUIC", view.Protocol)</select></label>
 					<label><span>RCODE</span><input name="response_code" value={ view.ResponseCode } placeholder="e.g. NoError"/></label>
-					<label class="query-filter-wide"><span>From</span><input type="datetime-local" name="start" value={ view.Start }/></label>
-					<label class="query-filter-wide"><span>To</span><input type="datetime-local" name="end" value={ view.End }/></label>
+					<div class="query-filter-range query-filter-wide" data-range-root>
+						<span>Time Range</span>
+						<button class="range-trigger" type="button" data-range-open aria-haspopup="dialog" aria-expanded="false" aria-controls="query-log-range">@Icon("calendar")<span data-range-label>{ queryRangeLabel(view) }</span>@Icon("chevron-down")</button>
+						<input type="hidden" name="start" value={ view.Start } data-range-start/>
+						<input type="hidden" name="end" value={ view.End } data-range-end/>
+						<div class="range-popover query-range-popover" id="query-log-range" role="dialog" aria-label="Query log time range" data-range-popover data-range-default-end-time="23:59" hidden>
+							<div class="range-picker-body">
+								@RangeCalendar()
+								<div class="range-times">
+									<label><span>From</span><input class="time-field" type="time" step="60" data-range-start-time/></label>
+									<label><span>To</span><input class="time-field" type="time" step="60" data-range-end-time/></label>
+								</div>
+								<p class="range-error" data-range-error hidden></p>
+								<div class="range-picker-actions">
+									<button class="button outline" type="button" data-range-clear>Any time</button>
+									<button class="button range-apply" type="button" data-range-apply>Apply</button>
+								</div>
+							</div>
+						</div>
+					</div>
 				</div>
 				<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/><input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/><input type="hidden" name="filters" value="1"/>
 				if view.Exact {
 					<input type="hidden" name="match" value="exact"/>
 				}
-				<div class="query-filter-actions"><button class="button" type="submit">@Icon("search")<span>Search</span></button>if queryFilterCount(view) > 0 {
+				<div class="query-filter-actions"><button class="button" type="submit">@Icon("search")<span>Search</span></button>if len(tokens) > 0 {
 					<a class="button outline" href="/logs?tab=queries">@Icon("refresh")<span>Clear</span></a>
 				}</div>
 			</form>
 		</div>
-		<div class="query-result-search"><div class="search-field">@Icon("search")<input placeholder="Search in results..." data-query-result-search aria-label="Search in results"/></div><div class="query-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
+		<div class="log-search-bar query-result-search"><div class="search-field">@Icon("search")<input type="search" placeholder="Search in results..." autocomplete="off" data-query-result-search aria-label="Search in results" data-search-clearable/>@SearchClear(true)</div><div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
 		<textarea class="sr-only" id="query-log-copy" readonly>{ view.CopyText }</textarea>
 		if view.Error != "" {
 			<div class="logs-empty error">{ view.Error }</div>
@@ -212,17 +247,139 @@ templ QueryPolicyAction(domain, action, icon, label string) {
 	<form hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ domain }/><input type="hidden" name="action" value={ action }/><button class={ "query-policy-action " + action } type="submit" aria-label={ label } title={ label }>@Icon(icon)</button></form>
 }
 
+templ SearchClear(empty bool) {
+	<button class="search-clear" type="button" data-search-clear aria-label="Clear search" title="Clear search" hidden?={ empty }>@Icon("x")</button>
+}
+
+templ LogLiveButton(live bool) {
+	<button class={ ifThen(live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(live) }><span class="live-icon play">@Icon("play")</span><span class="live-icon pause">@Icon("pause")</span><span data-log-live-label>{ ifThen(live, "Pause", "Live") }</span></button>
+}
+
 templ LogOption(value, label, selected string) { <option value={ value } selected?={ strings.EqualFold(selected, value) }>{ label }</option> }
 
-func queryFiltersActive(view QueryLogsView) bool { return queryFilterCount(view) > 0 }
-func queryFilterCount(view QueryLogsView) int { count := 0; for _, value := range []string{view.ClientIP, view.Name, view.RecordType, view.ResponseCode, view.Source, view.Protocol} { if value != "" { count++ } }; return count }
-func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%d–%d of %d", first, last, view.TotalEntries) }
+// queryFilterToken is one applied filter as the toolbar shows it while the
+// filter bar is collapsed: what it matches, and where to go to drop just it.
+type queryFilterToken struct {
+	Label     string
+	Value     string
+	RemoveURL string
+}
+
+func queryFilterTokens(view QueryLogsView) []queryFilterToken {
+	fields := []struct{ key, label, value string }{
+		{"client_ip", "IP", view.ClientIP},
+		{"name", "Domain", view.Name},
+		{"record_type", "Type", view.RecordType},
+		{"source", "Response", logSourceLabel(view.Source)},
+		{"protocol", "Protocol", view.Protocol},
+		{"response_code", "RCODE", view.ResponseCode},
+	}
+	tokens := make([]queryFilterToken, 0, len(fields)+1)
+	for _, field := range fields {
+		if field.value == "" {
+			continue
+		}
+		tokens = append(tokens, queryFilterToken{Label: field.label, Value: field.value, RemoveURL: queryFilterURL(view, field.key)})
+	}
+	if view.Start != "" || view.End != "" {
+		tokens = append(tokens, queryFilterToken{Label: "Window", Value: logWindowLabel(view.Start, view.End), RemoveURL: queryFilterURL(view, "start", "end")})
+	}
+	return tokens
+}
+
+// queryFilterURL rebuilds the log page with every filter except the ones named,
+// which is what a token's remove control links to.
+func queryFilterURL(view QueryLogsView, omit ...string) string {
+	dropped := func(key string) bool { for _, name := range omit { if name == key { return true } }; return false }
+	values := url.Values{"tab": []string{"queries"}}
+	for key, value := range map[string]string{"client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
+		if value != "" && !dropped(key) {
+			values.Set(key, value)
+		}
+	}
+	// Exact only qualifies the client and domain filters, so it leaves with them.
+	if view.Exact && (values.Get("client_ip") != "" || values.Get("name") != "") {
+		values.Set("match", "exact")
+	}
+	if view.FiltersOpen {
+		values.Set("filters", "1")
+	}
+	return "/logs?" + values.Encode()
+}
+
+// logWindowLabel reads a datetime-local bound back out for people rather than
+// for the input that produced it.
+func logWindowLabel(start, end string) string {
+	switch {
+	case start != "" && end != "":
+		return logMomentLabel(start) + " – " + logMomentLabel(end)
+	case start != "":
+		return "After " + logMomentLabel(start)
+	case end != "":
+		return "Before " + logMomentLabel(end)
+	default:
+		return ""
+	}
+}
+
+func logMomentLabel(value string) string {
+	moment, err := time.Parse("2006-01-02T15:04", value)
+	if err != nil {
+		return value
+	}
+	return moment.Format("Jan 2, 15:04")
+}
+
+func queryRangeLabel(view QueryLogsView) string {
+	if label := logWindowLabel(view.Start, view.End); label != "" {
+		return label
+	}
+	return "Any time"
+}
+func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s–%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries)) }
 func logSourceLabel(source string) string { switch source { case "cache": return "Cached"; case "upstream": return "Recursive"; case "authoritative": return "Authoritative"; case "local": return "Local"; case "blocked": return "Blocked"; case "error": return "Error"; default: return source } }
-func runtimePanelURL(view RuntimeLogsView) string { values := make([]string, 0, 5); if view.Search != "" { values = append(values, "search="+urlQueryEscape(view.Search)) }; if view.Level != "" { values = append(values, "level="+urlQueryEscape(view.Level)) }; if view.Persisted { values = append(values, "page=1", "page_size="+fmt.Sprint(view.PageSize)) }; if view.Live { values = append(values, "live=1") }; return "/ui/logs/runtime?"+strings.Join(values, "&") }
-func runtimeLogCount(view RuntimeLogsView) string { if view.Persisted { return fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }; return fmt.Sprintf("%d entries", view.Count) }
-func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%d\u2013%d of %s", first, last, formatCount(view.TotalEntries)) }
-func runtimeExportURL(view RuntimeLogsView) string { return strings.Replace(runtimePanelURL(view), "/ui/logs/runtime", "/api/v1/logs/runtime/export", 1) }
-func queryPanelLiveURL(view QueryLogsView) string { values := []string{"page=1", "page_size="+fmt.Sprint(view.PageSize), "live=1"}; for key, value := range map[string]string{"client_ip":view.ClientIP,"name":view.Name,"record_type":view.RecordType,"response_code":view.ResponseCode,"source":view.Source,"protocol":view.Protocol} { if value != "" { values = append(values, key+"="+urlQueryEscape(value)) } }; if view.FiltersOpen { values = append(values, "filters=1") }; return "/ui/logs/queries?"+strings.Join(values, "&") }
+// runtimeLogURL names the same slice of the log for the panel and for the
+// export. The follow flag is spelled out rather than left off when paused,
+// because an absent flag means follow.
+func runtimeLogURL(view RuntimeLogsView, path string, follow bool) string {
+	values := make([]string, 0, 5)
+	if view.Search != "" {
+		values = append(values, "search="+urlQueryEscape(view.Search))
+	}
+	if view.Level != "" {
+		values = append(values, "level="+urlQueryEscape(view.Level))
+	}
+	if view.Persisted {
+		values = append(values, "page=1", "page_size="+fmt.Sprint(view.PageSize))
+	}
+	if follow {
+		values = append(values, "live="+ifThen(view.Live, "1", "0"))
+	}
+	return path + "?" + strings.Join(values, "&")
+}
+
+func runtimePanelURL(view RuntimeLogsView) string { return runtimeLogURL(view, "/ui/logs/runtime", true) }
+func runtimeLogCount(view RuntimeLogsView) string { if view.Persisted { return fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }; return fmt.Sprintf("%s entries", formatCount(view.Count)) }
+func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s\u2013%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries)) }
+func runtimeExportURL(view RuntimeLogsView) string { return runtimeLogURL(view, "/api/v1/logs/runtime/export", false) }
+func queryPanelLiveURL(view QueryLogsView) string {
+	values := url.Values{"page": []string{"1"}, "page_size": []string{fmt.Sprint(view.PageSize)}}
+	for key, value := range map[string]string{"client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	if view.Exact {
+		values.Set("match", "exact")
+	}
+	if view.Live {
+		values.Set("live", "1")
+	}
+	if view.FiltersOpen {
+		values.Set("filters", "1")
+	}
+	return "/ui/logs/queries?" + values.Encode()
+}
 func urlQueryEscape(value string) string { return url.QueryEscape(value) }
 func hasAnswers(answers []string) bool { for _, answer := range answers { if answer != "" { return true } }; return false }
 func formatCount(value int) string { if value < 1_000 { return fmt.Sprint(value) }; whole := fmt.Sprintf("%d", value); for index := len(whole)-3; index > 0; index -= 3 { whole = whole[:index]+","+whole[index:] }; return whole }

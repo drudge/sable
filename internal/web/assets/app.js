@@ -223,24 +223,32 @@
 
 	document.querySelectorAll("[data-resolver-combobox]").forEach(setupResolverCombobox);
 
-	const setupChartRangePicker = (popover) => {
+	// One range picker drives both the dashboard's custom range and the query
+	// log's time window. The dashboard hangs a form off it and submits on Apply;
+	// the log filter has no form of its own and only writes the hidden bounds
+	// the surrounding filter form already posts.
+	const setupRangePicker = (popover) => {
 	  if (popover.dataset.rangeReady === "true") return;
 	  popover.dataset.rangeReady = "true";
 
-	  const chart = popover.closest("#query-statistics");
-	  const triggers = [...chart.querySelectorAll("[data-chart-range-open]")];
-	  const form = popover.querySelector("[data-chart-range-form]");
+	  const root = popover.closest("[data-range-root]");
+	  if (!root) return;
+	  const triggers = [...root.querySelectorAll("[data-range-open]")];
+	  const form = popover.querySelector("[data-range-form]");
 	  const grid = popover.querySelector("[data-calendar-grid]");
 	  const monthSelect = popover.querySelector("[data-calendar-month]");
 	  const yearSelect = popover.querySelector("[data-calendar-year]");
 	  const previous = popover.querySelector("[data-calendar-previous]");
 	  const next = popover.querySelector("[data-calendar-next]");
-	  const startValue = popover.querySelector("[data-chart-range-start]");
-	  const endValue = popover.querySelector("[data-chart-range-end]");
-	  const startTime = popover.querySelector("[data-chart-range-start-time]");
-	  const endTime = popover.querySelector("[data-chart-range-end-time]");
-	  const error = popover.querySelector("[data-chart-range-error]");
-	  if (!chart || !form || !grid || !monthSelect || !yearSelect || !startValue || !endValue) return;
+	  const startValue = root.querySelector("[data-range-start]");
+	  const endValue = root.querySelector("[data-range-end]");
+	  const startTime = popover.querySelector("[data-range-start-time]");
+	  const endTime = popover.querySelector("[data-range-end-time]");
+	  const error = popover.querySelector("[data-range-error]");
+	  const applyButton = popover.querySelector("[data-range-apply]");
+	  const clearButton = popover.querySelector("[data-range-clear]");
+	  const triggerLabel = root.querySelector("[data-range-label]");
+	  if (!grid || !monthSelect || !yearSelect || !startValue || !endValue || !startTime || !endTime) return;
 
 	  const pad = (value) => String(value).padStart(2, "0");
 	  const dateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -258,7 +266,7 @@
 	  const rangeWasApplied = triggers.some((trigger) => trigger.classList.contains("active"));
 
 	  startTime.value = startValue.value.slice(11, 16) || "00:00";
-	  endTime.value = endValue.value.slice(11, 16) || "00:00";
+	  endTime.value = endValue.value.slice(11, 16) || popover.dataset.rangeDefaultEndTime || "00:00";
 	  for (let year = minimumYear; year <= today.getFullYear(); year++) {
 		const option = document.createElement("option");
 		option.value = String(year);
@@ -266,10 +274,23 @@
 		yearSelect.append(option);
 	  }
 
+	  const momentLabel = (value) => {
+		const moment = new Date(value);
+		if (Number.isNaN(moment.getTime())) return value;
+		const day = moment.toLocaleDateString(undefined, {month: "short", day: "numeric"});
+		return `${day}, ${pad(moment.getHours())}:${pad(moment.getMinutes())}`;
+	  };
+	  const syncTriggerLabel = () => {
+		if (!triggerLabel) return;
+		if (!startValue.value && !endValue.value) triggerLabel.textContent = "Any time";
+		else if (startValue.value && endValue.value) triggerLabel.textContent = `${momentLabel(startValue.value)} – ${momentLabel(endValue.value)}`;
+		else triggerLabel.textContent = startValue.value ? `After ${momentLabel(startValue.value)}` : `Before ${momentLabel(endValue.value)}`;
+	  };
+
 	  const syncValues = () => {
 		startValue.value = `${selectedStart}T${startTime.value || "00:00"}`;
 		endValue.value = `${selectedEnd}T${endTime.value || "00:00"}`;
-		error.hidden = true;
+		if (error) error.hidden = true;
 	  };
 
 	  const validate = (showError = false) => {
@@ -281,7 +302,7 @@
 		} else if (start >= end) {
 		  message = "The From time must be before the To time.";
 		}
-		if (showError) {
+		if (showError && error) {
 		  error.textContent = message;
 		  error.hidden = !message;
 		}
@@ -336,7 +357,7 @@
 		triggers.forEach((trigger) => {
 		  trigger.classList.add("picker-open");
 		  trigger.setAttribute("aria-expanded", "true");
-		  trigger.setAttribute("aria-pressed", "true");
+		  if (trigger.hasAttribute("aria-pressed")) trigger.setAttribute("aria-pressed", "true");
 		});
 		renderCalendar();
 	  };
@@ -346,7 +367,7 @@
 		triggers.forEach((trigger) => {
 		  trigger.classList.remove("picker-open");
 		  trigger.setAttribute("aria-expanded", "false");
-		  if (!rangeWasApplied) trigger.setAttribute("aria-pressed", "false");
+		  if (!rangeWasApplied && trigger.hasAttribute("aria-pressed")) trigger.setAttribute("aria-pressed", "false");
 		});
 		if (restoreFocus) triggers.find((trigger) => trigger.offsetParent !== null)?.focus();
 	  };
@@ -393,17 +414,45 @@
 	  });
 	  startTime.addEventListener("input", syncValues);
 	  endTime.addEventListener("input", syncValues);
-	  form.addEventListener("htmx:beforeRequest", (event) => {
+	  form?.addEventListener("htmx:beforeRequest", (event) => {
 		if (!validate(true)) event.preventDefault();
 	  });
-	  document.addEventListener("pointerdown", (event) => {
-		if (!popover.hidden && !popover.contains(event.target) && !triggers.some((trigger) => trigger.contains(event.target))) close();
-	  });
-	  document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape" && !popover.hidden) close({restoreFocus: true});
-	  });
-	  syncValues();
+	  // Without a form of its own, Apply just commits the window to the hidden
+	  // bounds and hands the panel back to whatever submits them.
+	  if (!form) {
+		applyButton?.addEventListener("click", () => {
+		  syncValues();
+		  if (!validate(true)) return;
+		  syncTriggerLabel();
+		  close({restoreFocus: true});
+		});
+		clearButton?.addEventListener("click", () => {
+		  startValue.value = "";
+		  endValue.value = "";
+		  if (error) error.hidden = true;
+		  syncTriggerLabel();
+		  close({restoreFocus: true});
+		});
+	  }
+	  // Live refreshes swap these panels out constantly, so dismissal lives on a
+	  // single document listener rather than one more per rendered picker.
+	  popover.sableCloseRangePicker = close;
+	  popover.sableRangeTriggers = triggers;
+	  if (form) syncValues();
 	};
+
+	const openRangePickers = () => [...document.querySelectorAll("[data-range-popover]")].filter((popover) => !popover.hidden);
+	document.addEventListener("pointerdown", (event) => {
+	  openRangePickers().forEach((popover) => {
+		if (popover.contains(event.target)) return;
+		if (popover.sableRangeTriggers?.some((trigger) => trigger.contains(event.target))) return;
+		popover.sableCloseRangePicker?.();
+	  });
+	});
+	document.addEventListener("keydown", (event) => {
+	  if (event.key !== "Escape") return;
+	  openRangePickers().forEach((popover) => popover.sableCloseRangePicker?.({restoreFocus: true}));
+	});
 
 	// The live refresh swaps the chart out from under the pointer, so the last
 	// known pointer position is what lets a fresh plot redraw the reading the
@@ -1172,6 +1221,24 @@
 	  updateGroups(false);
 	};
 
+	const syncSearchClear = (input) => {
+	  const clear = input?.parentElement?.querySelector("[data-search-clear]");
+	  if (clear) clear.hidden = input.value === "";
+	};
+	document.addEventListener("input", (event) => {
+	  if (event.target.matches?.("[data-search-clearable]")) syncSearchClear(event.target);
+	});
+	document.addEventListener("click", (event) => {
+	  const button = event.target.closest?.("[data-search-clear]");
+	  if (!button) return;
+	  const input = button.parentElement?.querySelector("[data-search-clearable]");
+	  if (!input) return;
+	  input.value = "";
+	  button.hidden = true;
+	  input.dispatchEvent(new Event("input", {bubbles: true}));
+	  input.focus();
+	});
+
 	let queryResultSearch = "";
 	const setupLogLivePanel = (panel) => {
 	  if (!panel || panel.dataset.logLiveReady === "true") return;
@@ -1180,16 +1247,22 @@
 	  let requestInFlight = false;
 	  const button = panel.querySelector("[data-log-live-toggle]");
 	  const input = panel.querySelector("[data-log-live-input]");
-	  const label = button?.querySelector("span");
+	  const label = button?.querySelector("[data-log-live-label]");
 	  const filtersButton = panel.querySelector("[data-query-filters-toggle]");
 	  const filtersPanel = panel.querySelector("[data-query-filters]");
 	  const stop = () => {
 		if (timer !== null) window.clearInterval(timer);
 		timer = null;
 	  };
+	  // A refresh replaces the whole panel, so it waits while someone is working a
+	  // control inside it rather than swapping the field out mid-keystroke.
+	  const inUse = () => {
+		const active = document.activeElement;
+		return !!active && panel.contains(active) && active.matches("input, select, textarea");
+	  };
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
-		if (document.hidden || requestInFlight || panel.dataset.live !== "true") return;
+		if (document.hidden || requestInFlight || inUse() || panel.dataset.live !== "true") return;
 		requestInFlight = true;
 		htmx.ajax("GET", panel.dataset.liveUrl, {target: `#${panel.id}`, swap: "outerHTML"})
 		  .finally?.(() => { requestInFlight = false; });
@@ -1199,6 +1272,13 @@
 		if (panel.dataset.live !== "true") return;
 		timer = window.setInterval(poll, 3000);
 	  };
+	  // The poll URL carries the live flag itself: without it the refreshed panel
+	  // comes back server-rendered as paused and the toggle looks inert.
+	  const syncLiveURL = (live) => {
+		const target = new URL(panel.dataset.liveUrl, window.location.origin);
+		target.searchParams.set("live", live ? "1" : "0");
+		panel.dataset.liveUrl = target.pathname + target.search;
+	  };
 	  button?.addEventListener("click", () => {
 		const live = panel.dataset.live !== "true";
 		panel.dataset.live = String(live);
@@ -1206,6 +1286,7 @@
 		button.setAttribute("aria-pressed", String(live));
 		if (label) label.textContent = live ? "Pause" : "Live";
 		if (input) input.value = live ? "1" : "0";
+		syncLiveURL(live);
 		if (live) { poll(); start(); } else stop();
 	  });
 	  filtersButton?.addEventListener("click", () => {
@@ -1220,7 +1301,10 @@
 		panel.dataset.liveUrl = liveURL.pathname + liveURL.search;
 	  });
 	  const resultSearch = panel.querySelector("[data-query-result-search]");
-	  if (resultSearch) resultSearch.value = queryResultSearch;
+	  if (resultSearch) {
+		resultSearch.value = queryResultSearch;
+		syncSearchClear(resultSearch);
+	  }
 	  const applyResultSearch = (search) => {
 		panel.querySelectorAll("[data-query-result-row]").forEach((row) => {
 		  row.hidden = search !== "" && !row.textContent.toLowerCase().includes(search);
@@ -1236,7 +1320,7 @@
 		const target = new URL(panel.dataset.liveUrl, window.location.origin);
 		target.searchParams.set("page", "1");
 		target.searchParams.set("page_size", event.target.value);
-		if (panel.dataset.live !== "true") target.searchParams.delete("live");
+		target.searchParams.set("live", panel.dataset.live === "true" ? "1" : "0");
 		htmx.ajax("GET", target.pathname + target.search, {target: `#${panel.id}`, swap: "outerHTML"});
 	  });
 	  start();
@@ -1255,8 +1339,8 @@
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
-	  if (root.matches?.("[data-chart-range-popover]")) setupChartRangePicker(root);
-	  root.querySelectorAll?.("[data-chart-range-popover]").forEach(setupChartRangePicker);
+	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
+	  root.querySelectorAll?.("[data-range-popover]").forEach(setupRangePicker);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
 	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
 	  if (root.matches?.("[data-donut]")) setupDonutChart(root);
