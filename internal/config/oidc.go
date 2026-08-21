@@ -48,7 +48,15 @@ type OIDC struct {
 	UsernameClaim string   `toml:"username_claim"`
 	EmailClaim    string   `toml:"email_claim"`
 	GroupsClaim   string   `toml:"groups_claim"`
+	PictureClaim  string   `toml:"picture_claim"`
 	FetchUserInfo bool     `toml:"fetch_userinfo"`
+
+	// SyncAvatar copies the profile picture the provider advertises into
+	// Sable, so the console shows the same face the identity provider does.
+	// The image is downloaded once per sign-in and stored locally rather than
+	// linked: the console's image policy allows its own origin only, and
+	// hotlinking would tell the provider which pages an operator is looking at.
+	SyncAvatar bool `toml:"sync_avatar"`
 
 	// Provision creates a Sable user the first time an unknown person signs in
 	// successfully. With it off, only accounts that already exist can use SSO.
@@ -87,6 +95,8 @@ func DefaultOIDC() OIDC {
 		UsernameClaim:       "preferred_username",
 		EmailClaim:          "email",
 		GroupsClaim:         "groups",
+		PictureClaim:        "picture",
+		SyncAvatar:          true,
 		Provision:           true,
 		LinkByVerifiedEmail: true,
 		SyncRoles:           true,

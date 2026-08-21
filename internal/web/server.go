@@ -138,6 +138,7 @@ type authenticator interface {
 	Logout(context.Context, auth.Principal, string, string) error
 	CreateAPIToken(context.Context, auth.Principal, int64, string, []string, auth.APITokenExpiration, string, string) (string, time.Time, error)
 	Profile(context.Context, auth.Principal) (auth.ProfileSnapshot, error)
+	Avatar(context.Context, auth.Principal) (auth.Avatar, error)
 	UpdateOwnProfile(context.Context, auth.Principal, string, string, string, string) error
 	ChangeOwnPassword(context.Context, auth.Principal, string, string, string, string) error
 	RevokeOwnAPIToken(context.Context, auth.Principal, int64, string, string) error
@@ -245,6 +246,7 @@ func New(
 	mux.HandleFunc("POST /ui/updates/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/cluster/status", server.clusterLiveStatus)
 	mux.HandleFunc("GET /administration", server.administrationPage)
+	mux.HandleFunc("GET "+avatarPath, server.ownAvatar)
 	mux.HandleFunc("GET /profile", server.profilePage)
 	mux.HandleFunc("GET /ui/profile/tokens", server.profileTokens)
 	mux.HandleFunc("POST /ui/profile", server.updateOwnProfile)
@@ -656,6 +658,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
 		view.DisplayName = principal.DisplayName
+		view.AvatarURL = avatarURL(principal.AvatarETag)
 		view.CSRFToken = principal.CSRFToken
 		view.CanSettings = auth.HasPermission(principal, auth.PermissionSettingsRead)
 		view.CanAdministration = auth.HasPermission(principal, auth.PermissionUsersRead)

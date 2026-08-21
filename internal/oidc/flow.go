@@ -226,7 +226,11 @@ func (provider *Provider) Complete(ctx context.Context, code string, request Req
 	if err != nil {
 		return Identity{}, err
 	}
-	if provider.config.FetchUserInfo && len(identity.Groups) == 0 && metadata.UserInfoEndpoint != "" && tokens.AccessToken != "" {
+	// UserInfo is consulted only for what the ID token left out. Providers
+	// differ on which of the two carries group membership, and Entra puts the
+	// profile picture there and nowhere else.
+	if provider.config.FetchUserInfo && metadata.UserInfoEndpoint != "" && tokens.AccessToken != "" &&
+		(len(identity.Groups) == 0 || identity.Picture == "") {
 		provider.fillFromUserInfo(ctx, metadata, tokens.AccessToken, &identity)
 	}
 	return identity, nil
@@ -311,6 +315,9 @@ func (provider *Provider) fillFromUserInfo(ctx context.Context, metadata Metadat
 	}
 	if identity.DisplayName == "" {
 		identity.DisplayName = stringClaim(raw, "name")
+	}
+	if identity.Picture == "" {
+		identity.Picture = stringClaim(raw, names.Picture)
 	}
 }
 

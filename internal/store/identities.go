@@ -20,7 +20,7 @@ func (store *Store) UserByIdentity(ctx context.Context, provider, subject string
 	err := store.database.QueryRowContext(
 		ctx,
 		`SELECT users.id, users.username, profiles.display_name, profiles.email, users.password_hash,
-       profiles.password_login, EXISTS (
+       profiles.password_login, COALESCE(profiles.avatar_etag, ''), EXISTS (
     SELECT 1 FROM sable_user_roles AS memberships
     JOIN sable_role_grants AS grants ON grants.role_id = memberships.role_id
     WHERE memberships.user_id = users.id AND grants.surface = `+store.placeholder(1)+`
@@ -30,7 +30,8 @@ JOIN sable_users AS users ON users.id = identities.user_id
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
 WHERE identities.provider = `+store.placeholder(2)+` AND identities.subject = `+store.placeholder(3),
 		auth.SurfaceWeb, provider, subject,
-	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.PasswordHash, &user.PasswordLogin, &user.LoginAllowed)
+	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.PasswordHash, &user.PasswordLogin,
+		&user.AvatarETag, &user.LoginAllowed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return auth.User{}, auth.ErrNotFound
 	}

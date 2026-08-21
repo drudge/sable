@@ -28,6 +28,17 @@ type FederatedIdentity struct {
 	DisplayName   string
 	Email         string
 	EmailVerified bool
+
+	// Avatar is the profile picture already downloaded for this sign-in. It is
+	// nil when the caller has nothing new to store, which covers avatar sync
+	// being off and a download that failed: a provider that is briefly
+	// unreachable must not cost somebody the picture they already have.
+	Avatar *Avatar
+	// AvatarCleared says the provider no longer advertises a picture, so the
+	// stored one should go. It is separate from a nil Avatar because "there is
+	// no picture any more" and "there is nothing new to store" have to lead to
+	// different outcomes.
+	AvatarCleared bool
 }
 
 // FederatedPolicy is what the operator's configuration decided about this
@@ -95,6 +106,7 @@ func (service *Service) FederatedLogin(
 	if err := service.store.UpdateFederatedProfile(ctx, user.ID, identity.DisplayName, identity.Email, now); err != nil {
 		service.audit(ctx, &user.ID, "auth.federated.profile.failed", clientIP, userAgent, err.Error())
 	}
+	service.syncFederatedAvatar(ctx, user, identity, clientIP, userAgent, now)
 	if err := service.store.TouchIdentity(ctx, policy.Provider, identity.Subject, now); err != nil {
 		service.audit(ctx, &user.ID, "auth.federated.touch.failed", clientIP, userAgent, err.Error())
 	}
@@ -115,6 +127,50 @@ func (service *Service) FederatedLogin(
 	service.audit(ctx, &user.ID, "auth.federated.login", clientIP, userAgent,
 		fmt.Sprintf("session created through %s", policy.Provider))
 	return credentials, err
+}
+
+// syncFederatedAvatar stores or removes the profile picture the provider
+// asserts. Every failure is recorded and swallowed: a picture is decoration,
+// and refusing a sign-in over one would turn a provider's broken image host
+// into an outage for the console.
+func (service *Service) syncFederatedAvatar(
+	ctx context.Context,
+	user User,
+	identity FederatedIdentity,
+	clientIP, userAgent string,
+	now time.Time,
+) {
+	switch {
+	case identity.Avatar != nil:
+		if identity.Avatar.ETag != "" && identity.Avatar.ETag == user.AvatarETag {
+			// The same image as last time. Rewriting it would churn the row
+			// and hand every browser a fresh tag for bytes it already has.
+			return
+		}
+		if err := service.store.SaveAvatar(ctx, user.ID, *identity.Avatar, now); err != nil {
+			service.audit(ctx, &user.ID, "auth.federated.avatar.failed", clientIP, userAgent, err.Error())
+			return
+		}
+		service.audit(ctx, &user.ID, "auth.federated.avatar", clientIP, userAgent,
+			fmt.Sprintf("stored profile picture from %s", identity.Avatar.SourceURL))
+	case identity.AvatarCleared && user.AvatarETag != "":
+		if err := service.store.DeleteAvatar(ctx, user.ID, now); err != nil {
+			service.audit(ctx, &user.ID, "auth.federated.avatar.failed", clientIP, userAgent, err.Error())
+			return
+		}
+		service.audit(ctx, &user.ID, "auth.federated.avatar", clientIP, userAgent,
+			"removed profile picture; the provider no longer advertises one")
+	}
+}
+
+// Avatar returns the profile picture stored for an account, which is only ever
+// the caller's own: the console renders it into a page that already names the
+// person, and reading somebody else's is not something any page needs.
+func (service *Service) Avatar(ctx context.Context, principal Principal) (Avatar, error) {
+	if principal.UserID == 0 {
+		return Avatar{}, ErrUnauthorized
+	}
+	return service.store.Avatar(ctx, principal.UserID)
 }
 
 // resolveFederatedUser finds, links, or creates the account behind a verified
