@@ -100,7 +100,7 @@ installer:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
 
-Set `SABLE_VERSION=0.9.5-rc.10` to install a specific release. Re-running either
+Set `SABLE_VERSION=0.9.5-rc.11` to install a specific release. Re-running either
 installer updates the executable and service definition without replacing
 `/etc/sable/sable.toml` or `/var/lib/sable`.
 
@@ -119,7 +119,7 @@ sudo sable update
 | --- | --- |
 | `--check` | Report the available release without installing it |
 | `--pre-release` | Consider pre-release builds when selecting the newest release |
-| `--version v0.9.5-rc.10` | Install a specific release tag, including older ones |
+| `--version v0.9.5-rc.11` | Install a specific release tag, including older ones |
 | `--no-restart` | Replace the executable but leave the service running the old build |
 
 The previous executable is kept until the downloaded build has been run once,
@@ -272,7 +272,7 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
   --env TZ=America/New_York \
-  ghcr.io/drudge/sable:0.9.5-rc.10
+  ghcr.io/drudge/sable:0.9.5-rc.11
 ```
 
 The console renders timestamps in the timezone reported by your browser, so
