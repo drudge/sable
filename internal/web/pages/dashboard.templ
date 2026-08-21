@@ -299,9 +299,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 				</aside>
 				<div class="sidebar-scrim" data-sidebar-toggle></div>
 				<main class="main">
-					<header class="mobile-header">
+					<header class="mobile-header" data-mobile-header>
 						<button type="button" data-sidebar-toggle aria-label="Open navigation">@Icon("menu")</button>
-						<strong>Sable</strong>
+						<a class="mobile-header-brand" href="/">Sable</a>
 					</header>
 					if view.ControlPlaneReadOnly {
 						<div class="replica-read-only-banner" role="status">

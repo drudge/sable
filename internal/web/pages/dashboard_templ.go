@@ -647,7 +647,7 @@ func AppDocument(view DashboardView, pageTitle string, activePage string, page t
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div></div></div><button class=\"sidebar-rail\" type=\"button\" data-sidebar-toggle aria-label=\"Expand sidebar\" title=\"Expand sidebar\"></button></aside><div class=\"sidebar-scrim\" data-sidebar-toggle></div><main class=\"main\"><header class=\"mobile-header\"><button type=\"button\" data-sidebar-toggle aria-label=\"Open navigation\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div></div></div><button class=\"sidebar-rail\" type=\"button\" data-sidebar-toggle aria-label=\"Expand sidebar\" title=\"Expand sidebar\"></button></aside><div class=\"sidebar-scrim\" data-sidebar-toggle></div><main class=\"main\"><header class=\"mobile-header\" data-mobile-header><button type=\"button\" data-sidebar-toggle aria-label=\"Open navigation\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -655,7 +655,7 @@ func AppDocument(view DashboardView, pageTitle string, activePage string, page t
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</button> <strong>Sable</strong></header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</button> <a class=\"mobile-header-brand\" href=\"/\">Sable</a></header>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
