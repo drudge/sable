@@ -1643,16 +1643,8 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 	response.Authoritative = true
 	response.RecursionAvailable = true
 	now := time.Now()
-	records := zone.records[queryName]
-	wildcardOwner := ""
-	if !hasActiveRecords(records, now) {
-		if _, ownerExists := zone.owners[queryName]; ownerExists {
-			records = map[uint16][]authoritativeRecord{}
-		} else {
-			records, wildcardOwner = zone.wildcardRecords(queryName, now)
-		}
-	}
-	if records == nil {
+	records, wildcardOwner, nameExists := zone.recordsAt(queryName, now)
+	if !nameExists {
 		response.Rcode = dns.RcodeNameError
 		response.Ns = cloneRecords(zone.soa, "", now)
 		if requestWantsDNSSEC(request) && zone.signed {
@@ -1661,6 +1653,7 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 		}
 		return response, true
 	}
+	var chain cnameChain
 	if question.Qtype == dns.TypeANY {
 		for _, typed := range records {
 			response.Answer = append(response.Answer, cloneRecords(typed, queryName, now)...)
@@ -1668,7 +1661,23 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 	} else {
 		response.Answer = append(response.Answer, cloneRecords(records[question.Qtype], queryName, now)...)
 		if question.Qtype != dns.TypeCNAME && len(response.Answer) == 0 {
-			response.Answer = append(response.Answer, cloneRecords(records[dns.TypeCNAME], queryName, now)...)
+			aliases := cloneRecords(records[dns.TypeCNAME], queryName, now)
+			response.Answer = append(response.Answer, aliases...)
+			// RFC 1034 4.3.2 step 3a: an alias answer has to restart the lookup at
+			// the canonical name so the address rides along in the same reply. A
+			// stub resolver such as glibc's or Go's reads a lone CNAME as "no
+			// address" and gives up instead of asking a second time.
+			chain = runtime.chaseCNAME(response, queryName, aliases, question.Qtype, now)
+		}
+	}
+	if chain.dangling != nil {
+		// RFC 6604: the rcode describes the last name in the chain, and the
+		// aliases that led there stay in the answer section.
+		response.Rcode = dns.RcodeNameError
+		response.Ns = cloneRecords(chain.dangling.soa, "", now)
+		if requestWantsDNSSEC(request) && chain.dangling.signed {
+			response.Ns = append(response.Ns, chain.dangling.signaturesFor(chain.dangling.name, dns.TypeSOA, "", now)...)
+			response.Ns = append(response.Ns, chain.dangling.negativeProof(chain.danglingName, false, now)...)
 		}
 	}
 	if len(response.Answer) == 0 {
@@ -1689,13 +1698,120 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 				continue
 			}
 			covered[key] = struct{}{}
-			response.Answer = append(response.Answer, zone.signaturesFor(normalizeName(answer.Header().Name), answer.Header().Rrtype, queryName, now)...)
+			owner := normalizeName(answer.Header().Name)
+			// A chased hop can live in a different zone than the question, so it
+			// has to be signed with the keys of whichever zone actually owns it.
+			signer := zone
+			if hop := chain.zones[owner]; hop != nil {
+				signer = hop
+			}
+			if !signer.signed {
+				continue
+			}
+			response.Answer = append(response.Answer, signer.signaturesFor(owner, answer.Header().Rrtype, queryName, now)...)
 		}
 		if wildcardOwner != "" {
 			response.Ns = append(response.Ns, zone.wildcardAnswerProof(queryName, now)...)
 		}
+		for _, hop := range chain.wildcards {
+			response.Ns = append(response.Ns, hop.zone.wildcardAnswerProof(hop.name, now)...)
+		}
 	}
 	return response, true
+}
+
+// recordsAt resolves the record set an owner name serves inside the zone,
+// falling back to a covering wildcard the way a lookup at that name would. It
+// reports the wildcard owner it expanded from, if any, and whether the name
+// exists at all so callers can tell empty-but-present (NODATA) from missing
+// (NXDOMAIN).
+func (zone *authoritativeZone) recordsAt(name string, now time.Time) (map[uint16][]authoritativeRecord, string, bool) {
+	records := zone.records[name]
+	if hasActiveRecords(records, now) {
+		return records, "", true
+	}
+	if _, ownerExists := zone.owners[name]; ownerExists {
+		return map[uint16][]authoritativeRecord{}, "", true
+	}
+	records, wildcardOwner := zone.wildcardRecords(name, now)
+	return records, wildcardOwner, records != nil
+}
+
+// chainHop names one link of an alias chain together with the zone that owns it.
+type chainHop struct {
+	name string
+	zone *authoritativeZone
+}
+
+// cnameChain records what following an alias chain through this node's own zones
+// added to an answer: which zone owns each hop, so DNSSEC signs with the right
+// keys, which hops came from a wildcard, and whether the chain dead-ended on a
+// name that does not exist.
+type cnameChain struct {
+	zones        map[string]*authoritativeZone
+	wildcards    []chainHop
+	dangling     *authoritativeZone
+	danglingName string
+}
+
+// chaseCNAME follows an alias chain across the zones this node is authoritative
+// for, appending every hop to the answer until it reaches the requested type,
+// leaves local authority, or dead-ends. A target outside those zones is left
+// alone, because resolving it is the querying resolver's job, not ours.
+func (runtime *Runtime) chaseCNAME(response *dns.Msg, owner string, aliases []dns.RR, qtype uint16, now time.Time) cnameChain {
+	// Long enough for the alias chains real deployments build, short enough that
+	// a mistyped record cannot make a single query walk an entire zone.
+	const maxChainDepth = 16
+	chain := cnameChain{zones: make(map[string]*authoritativeZone, 2)}
+	visited := map[string]struct{}{owner: {}}
+	target := firstCNAMETarget(aliases)
+	for depth := 0; target != "" && depth < maxChainDepth; depth++ {
+		if _, seen := visited[target]; seen {
+			// A loop never reaches an address, so stop here instead of walking to
+			// the depth cap on every query that touches it.
+			return chain
+		}
+		visited[target] = struct{}{}
+		zone := runtime.authoritativeZoneFor(target)
+		if zone == nil || zone.kind == "catalog" || zone.forwards(target) {
+			return chain
+		}
+		records, wildcardOwner, nameExists := zone.recordsAt(target, now)
+		if !nameExists {
+			chain.dangling, chain.danglingName = zone, target
+			return chain
+		}
+		answers := cloneRecords(records[qtype], target, now)
+		aliased := false
+		if len(answers) == 0 {
+			answers = cloneRecords(records[dns.TypeCNAME], target, now)
+			aliased = len(answers) > 0
+		}
+		if len(answers) == 0 {
+			// The name exists but holds nothing of the requested type, which is a
+			// NODATA answer carrying just the chain we have so far.
+			return chain
+		}
+		response.Answer = append(response.Answer, answers...)
+		chain.zones[target] = zone
+		if wildcardOwner != "" {
+			chain.wildcards = append(chain.wildcards, chainHop{name: target, zone: zone})
+		}
+		if !aliased {
+			return chain
+		}
+		target = firstCNAMETarget(answers)
+	}
+	return chain
+}
+
+func firstCNAMETarget(records []dns.RR) string {
+	for _, record := range records {
+		if alias, ok := record.(*dns.CNAME); ok {
+			return normalizeName(alias.Target)
+		}
+	}
+	return ""
 }
 
 func requestWantsDNSSEC(request *dns.Msg) bool {

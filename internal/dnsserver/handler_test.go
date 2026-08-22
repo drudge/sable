@@ -1912,3 +1912,129 @@ func TestHandlerSkipsCatalogMembersAwaitingTransfer(t *testing.T) {
 		t.Fatalf("a member awaiting its first transfer must compile, got %v", err)
 	}
 }
+
+func TestAuthoritativeZoneChasesCNAMEChainIntoAnswer(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "example.test",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 2026080801 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+			{Name: "host", Type: "A", TTL: 120, Value: "192.0.2.10"},
+			{Name: "host", Type: "AAAA", TTL: 120, Value: "2001:db8::10"},
+			{Name: "id", Type: "CNAME", TTL: 900, Value: "host.example.test."},
+			{Name: "hop", Type: "CNAME", TTL: 900, Value: "id.example.test."},
+			{Name: "dangling", Type: "CNAME", TTL: 900, Value: "absent.example.test."},
+			{Name: "elsewhere", Type: "CNAME", TTL: 900, Value: "target.offsite.invalid."},
+			{Name: "loop-a", Type: "CNAME", TTL: 900, Value: "loop-b.example.test."},
+			{Name: "loop-b", Type: "CNAME", TTL: 900, Value: "loop-a.example.test."},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	ask := func(name string, recordType uint16) *dns.Msg {
+		t.Helper()
+		request := new(dns.Msg)
+		request.SetQuestion(name, recordType)
+		response, found := runtime.authoritativeResponse(request)
+		if !found {
+			t.Fatalf("authoritativeResponse(%s) not answered locally", name)
+		}
+		return response
+	}
+
+	// The reported bug: a lone CNAME answer makes glibc and Go report "no such
+	// host", so the address has to arrive in the same reply.
+	single := ask("id.example.test.", dns.TypeA)
+	if single.Rcode != dns.RcodeSuccess || len(single.Answer) != 2 {
+		t.Fatalf("id answer = %+v; want CNAME plus A", single.Answer)
+	}
+	if _, ok := single.Answer[0].(*dns.CNAME); !ok {
+		t.Fatalf("id answer[0] = %T; want *dns.CNAME", single.Answer[0])
+	}
+	address, ok := single.Answer[1].(*dns.A)
+	if !ok || address.A.String() != "192.0.2.10" {
+		t.Fatalf("id answer[1] = %v; want A 192.0.2.10", single.Answer[1])
+	}
+
+	// Chasing must follow the requested type, not stop at the first address.
+	sixSingle := ask("id.example.test.", dns.TypeAAAA)
+	if len(sixSingle.Answer) != 2 {
+		t.Fatalf("id AAAA answer = %+v; want CNAME plus AAAA", sixSingle.Answer)
+	}
+	if _, ok := sixSingle.Answer[1].(*dns.AAAA); !ok {
+		t.Fatalf("id AAAA answer[1] = %T; want *dns.AAAA", sixSingle.Answer[1])
+	}
+
+	multi := ask("hop.example.test.", dns.TypeA)
+	if multi.Rcode != dns.RcodeSuccess || len(multi.Answer) != 3 {
+		t.Fatalf("hop answer = %+v; want two CNAMEs plus A", multi.Answer)
+	}
+
+	// A CNAME query still answers with just the alias, chain untouched.
+	alias := ask("hop.example.test.", dns.TypeCNAME)
+	if len(alias.Answer) != 1 {
+		t.Fatalf("hop CNAME answer = %+v; want the alias alone", alias.Answer)
+	}
+
+	// RFC 6604: the rcode belongs to the last name in the chain.
+	dangling := ask("dangling.example.test.", dns.TypeA)
+	if dangling.Rcode != dns.RcodeNameError || len(dangling.Answer) != 1 || len(dangling.Ns) != 1 {
+		t.Fatalf("dangling answer = %+v ns = %+v rcode = %d; want NXDOMAIN with the alias kept", dangling.Answer, dangling.Ns, dangling.Rcode)
+	}
+
+	// Off-zone targets stay the querying resolver's problem.
+	offsite := ask("elsewhere.example.test.", dns.TypeA)
+	if offsite.Rcode != dns.RcodeSuccess || len(offsite.Answer) != 1 {
+		t.Fatalf("offsite answer = %+v; want the alias alone", offsite.Answer)
+	}
+
+	// A loop must terminate without repeating hops forever.
+	loop := ask("loop-a.example.test.", dns.TypeA)
+	if loop.Rcode != dns.RcodeSuccess || len(loop.Answer) != 2 {
+		t.Fatalf("loop answer = %+v; want the two aliases and nothing more", loop.Answer)
+	}
+}
+
+func TestAuthoritativeZoneChasesCNAMEIntoNoDataAndWildcards(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "example.test",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 2026080801 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+			{Name: "sixonly", Type: "AAAA", TTL: 120, Value: "2001:db8::20"},
+			{Name: "nodata", Type: "CNAME", TTL: 900, Value: "sixonly.example.test."},
+			{Name: "*.wild", Type: "A", TTL: 120, Value: "192.0.2.30"},
+			{Name: "star", Type: "CNAME", TTL: 900, Value: "anything.wild.example.test."},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("nodata.example.test.", dns.TypeA)
+	noData, found := runtime.authoritativeResponse(request)
+	if !found || noData.Rcode != dns.RcodeSuccess || len(noData.Answer) != 1 {
+		t.Fatalf("nodata answer = %+v found = %v; want NOERROR with the alias alone", noData, found)
+	}
+
+	request.SetQuestion("star.example.test.", dns.TypeA)
+	wild, found := runtime.authoritativeResponse(request)
+	if !found || wild.Rcode != dns.RcodeSuccess || len(wild.Answer) != 2 {
+		t.Fatalf("wildcard answer = %+v found = %v; want CNAME plus the expanded A", wild, found)
+	}
+	expanded, ok := wild.Answer[1].(*dns.A)
+	if !ok || expanded.Hdr.Name != "anything.wild.example.test." || expanded.A.String() != "192.0.2.30" {
+		t.Fatalf("wildcard answer[1] = %v; want A 192.0.2.30 owned by the chased name", wild.Answer[1])
+	}
+}
