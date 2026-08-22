@@ -51,7 +51,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/script
 Pin an explicit version when a controlled rollout is required:
 
 ```sh
-SABLE_VERSION=0.9.5-rc.12 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
+SABLE_VERSION=0.9.5-rc.13 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
 
 Update the replica first, verify DNS and cluster synchronization, then update
