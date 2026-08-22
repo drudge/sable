@@ -2404,16 +2404,28 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 	}
 	var lastErr error
 	for attempt := 0; attempt < retries; attempt++ {
-		if ctx.Err() != nil {
+		// A context that is already done leaves no attempt to make. Report why
+		// rather than falling out of the loop with no error, which would hand
+		// the caller a nil response and a nil error.
+		if err := ctx.Err(); err != nil {
+			if lastErr == nil {
+				lastErr = err
+			}
 			break
 		}
 		attemptContext, stopAttempt := context.WithTimeout(ctx, retryTimeout)
 		response, err := handler.upstreamExchange(attemptContext, request, endpoint, retryTimeout)
 		stopAttempt()
-		if err == nil {
+		if err == nil && response != nil {
 			return response, nil
 		}
+		if err == nil {
+			err = fmt.Errorf("%s returned no response", endpoint)
+		}
 		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("%s was not queried", endpoint)
 	}
 	return nil, lastErr
 }
@@ -2430,6 +2442,9 @@ func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forw
 	response, err := handler.resolveNetwork(upstreamRequest, runtime, forwarders)
 	if err != nil {
 		return nil, validationIndeterminate, err
+	}
+	if response == nil {
+		return nil, validationIndeterminate, errors.New("upstream returned no response")
 	}
 	validationContext, cancel := context.WithTimeout(context.Background(), max(4*runtime.timeout, 2*time.Second))
 	defer cancel()

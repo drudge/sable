@@ -2038,3 +2038,81 @@ func TestAuthoritativeZoneChasesCNAMEIntoNoDataAndWildcards(t *testing.T) {
 		t.Fatalf("wildcard answer[1] = %v; want A 192.0.2.30 owned by the chased name", wild.Answer[1])
 	}
 }
+
+func TestExchangeWithRetriesReportsExpiredContextInsteadOfEmptyResult(t *testing.T) {
+	t.Parallel()
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	attempts := 0
+	handler.upstreamExchange = func(context.Context, *dns.Msg, string, time.Duration) (*dns.Msg, error) {
+		attempts++
+		return nil, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.com.", dns.TypeA)
+	response, err := handler.exchangeWithRetries(ctx, request, "udp://127.0.0.1:53", time.Second, 2)
+	if response != nil {
+		t.Fatalf("expired context returned a response: %+v", response)
+	}
+	if err == nil {
+		t.Fatal("expired context returned no error, which hands callers a nil response and a nil error")
+	}
+	if attempts != 0 {
+		t.Fatalf("expired context still queried the upstream %d times", attempts)
+	}
+}
+
+func TestExchangeWithRetriesRejectsEmptyUpstreamResult(t *testing.T) {
+	t.Parallel()
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	handler.upstreamExchange = func(context.Context, *dns.Msg, string, time.Duration) (*dns.Msg, error) {
+		return nil, nil
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.com.", dns.TypeA)
+	response, err := handler.exchangeWithRetries(context.Background(), request, "udp://127.0.0.1:53", time.Second, 1)
+	if response != nil || err == nil {
+		t.Fatalf("empty upstream result = (%+v, %v), want (nil, error)", response, err)
+	}
+}
+
+func TestResolveUpstreamWithValidationSurvivesEmptyUpstreamResult(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.DNSSECValidation = true
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.dnssec == nil {
+		t.Fatal("DNSSEC validation did not compile a validator")
+	}
+	handler := NewHandler(runtime)
+	handler.upstreamExchange = func(context.Context, *dns.Msg, string, time.Duration) (*dns.Msg, error) {
+		return nil, nil
+	}
+
+	request := new(dns.Msg)
+	request.SetQuestion("example.com.", dns.TypeA)
+	response, state, err := handler.resolveUpstream(request, runtime, []string{"udp://127.0.0.1:53"})
+	if response != nil {
+		t.Fatalf("empty upstream result returned a response: %+v", response)
+	}
+	if err == nil {
+		t.Fatal("empty upstream result returned no error")
+	}
+	if state != validationIndeterminate {
+		t.Fatalf("validation state = %v, want indeterminate", state)
+	}
+}
