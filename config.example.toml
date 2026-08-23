@@ -13,11 +13,16 @@ dsn = "data/sable.db"
 mode = "forward"
 forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
 # root_hints = ["198.41.0.4:53", "170.247.170.2:53"]
+# The budget for the whole query. In forward mode it is divided evenly among the
+# forwarders that have not been tried yet, so one stalled upstream cannot spend
+# the pool's time and leave the rest of it unreachable.
 timeout = "2s"
 # Attempts per upstream before failover, and how long each attempt waits. A
 # dropped UDP packet on a lossy path is retried instead of failing the query.
-# In recursive mode, raise timeout if you also raise these so the full
-# delegation chain still fits.
+# An upstream only gets a second attempt if its share of timeout has room for
+# one, so raise timeout to keep retries as well as failover across a long
+# forwarder list. In recursive mode, raise timeout if you also raise these so
+# the full delegation chain still fits.
 retries = 2
 retry_timeout = "1500ms"
 cache_size = 65536

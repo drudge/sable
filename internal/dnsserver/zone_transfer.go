@@ -238,7 +238,7 @@ func (handler *Handler) serveNotify(writer dns.ResponseWriter, request *dns.Msg,
 	case handler.notifications <- notification:
 		response.Rcode = dns.RcodeSuccess
 	default:
-		handler.logResolutionFailure(request, "zone notification queue is full", "zone", zoneName, "source", source)
+		handler.logResolutionFailure(request, source, "zone notification queue is full", "zone", zoneName)
 		response.Rcode = dns.RcodeServerFailure
 	}
 	if signature := request.IsTsig(); signature != nil && writer.TsigStatus() == nil {

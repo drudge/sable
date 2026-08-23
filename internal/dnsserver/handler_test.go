@@ -30,12 +30,18 @@ func (collector *eventCollector) Record(event querylog.Event) { collector.events
 
 type responseCapture struct {
 	message *dns.Msg
+	// remoteIP overrides the querying client, so a test can send from more than
+	// one device. Empty means the default below.
+	remoteIP string
 }
 
 func (capture *responseCapture) LocalAddr() net.Addr {
 	return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8053}
 }
 func (capture *responseCapture) RemoteAddr() net.Addr {
+	if capture.remoteIP != "" {
+		return &net.UDPAddr{IP: net.ParseIP(capture.remoteIP), Port: 53000}
+	}
 	return &net.UDPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}
 }
 func (capture *responseCapture) WriteMsg(message *dns.Msg) error {
@@ -1534,6 +1540,86 @@ func TestHandlerFailsOverToNextForwarder(t *testing.T) {
 	want := []string{"192.0.2.1:53", "192.0.2.1:53", "192.0.2.2:53"}
 	if !slices.Equal(attempted, want) {
 		t.Fatalf("attempted = %v, want %v", attempted, want)
+	}
+}
+
+func TestHandlerFailsOverWhenTheFirstForwarderStalls(t *testing.T) {
+	t.Parallel()
+
+	// The failure this pins down only appears when the first forwarder fails by
+	// going silent rather than by answering with an error: the pool used to share
+	// one deadline, so a stalled upstream spent the whole query budget and every
+	// later forwarder was dialed with no time left.
+	configuration := testRuntimeConfig()
+	configuration.Forwarders = []string{"192.0.2.1:53", "192.0.2.2:53"}
+	configuration.Timeout = 300 * time.Millisecond
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	var mu sync.Mutex
+	budgets := make(map[string]time.Duration)
+	handler.upstreamExchange = func(
+		ctx context.Context,
+		request *dns.Msg,
+		forwarder string,
+		_ time.Duration,
+	) (*dns.Msg, error) {
+		deadline, bounded := ctx.Deadline()
+		if !bounded {
+			return nil, errors.New("attempt ran without a deadline")
+		}
+		mu.Lock()
+		budgets[forwarder] = time.Until(deadline)
+		mu.Unlock()
+		if forwarder == "192.0.2.1:53" {
+			<-ctx.Done()
+			return nil, errors.New("read udp 192.0.2.1:53: i/o timeout")
+		}
+		return positiveResponse(request, 60), nil
+	}
+	request := cacheRequest("stalled.example.", 1)
+	result := handler.resolve(request, runtime)
+	if result.response.Rcode != dns.RcodeSuccess || len(result.response.Answer) != 1 {
+		t.Fatalf("resolve() response = %+v, want the second forwarder to answer", result.response)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if budgets["192.0.2.2:53"] < configuration.Timeout/4 {
+		t.Fatalf("second forwarder had %v of the %v budget, want a usable share", budgets["192.0.2.2:53"], configuration.Timeout)
+	}
+}
+
+func TestExchangeContextLeavesUntriedForwardersHealthy(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Forwarders = []string{"192.0.2.1:53", "192.0.2.2:53"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	handler.upstreamExchange = func(
+		context.Context,
+		*dns.Msg,
+		string,
+		time.Duration,
+	) (*dns.Msg, error) {
+		t.Error("a spent budget still sent a query upstream")
+		return nil, errors.New("unexpected exchange")
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	_, err = handler.exchangeContext(ctx, cacheRequest("spent.example.", 1), runtime, configuration.Forwarders)
+	if !errors.Is(err, errForwarderNotTried) {
+		t.Fatalf("exchangeContext() error = %v, want it to report %v", err, errForwarderNotTried)
+	}
+	// Cooling down an endpoint that was never contacted would push a healthy
+	// upstream to the back of the pool for the next ten seconds.
+	if len(handler.upstreamHealth.retryAfter) != 0 {
+		t.Fatalf("upstream cooldowns = %v, want none for forwarders that were never queried", handler.upstreamHealth.retryAfter)
 	}
 }
 

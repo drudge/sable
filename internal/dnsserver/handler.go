@@ -935,7 +935,7 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	}
 	if len(request.Question) == 1 && handler.zoneExpired(request.Question[0].Name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
-		handler.logResolutionFailure(request, "authoritative zone expired")
+		handler.logResolutionFailure(request, responseWriterClientIP(writer), "authoritative zone expired")
 		handler.recordResponseCode(result.response.Rcode)
 		handler.writeResponse(writer, request, result.response)
 		if observer != nil {
@@ -981,7 +981,7 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 		records = handler.incrementalTransferRecords(request, zone.name, records)
 	}
 	if len(records) == 0 || (question.Qtype == dns.TypeAXFR && len(records) < 2) {
-		handler.logResolutionFailure(request, "zone transfer has no records to send", "records", len(records))
+		handler.logResolutionFailure(request, responseWriterClientIP(writer), "zone transfer has no records to send", "records", len(records))
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeServerFailure))
 		handler.serverFailures.Add(1)
 		return true
@@ -1247,7 +1247,7 @@ func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, cli
 	if len(request.Question) == 0 {
 		return resolution{response: errorResponse(request, dns.RcodeFormatError), source: querylog.SourceError}
 	}
-	if response, found := handler.resolveANAME(request, runtime); found {
+	if response, found := handler.resolveANAME(request, runtime, clientIP); found {
 		handler.authoritativeAnswers.Add(1)
 		return resolution{response: response, source: querylog.SourceAuthoritative}
 	}
@@ -1279,18 +1279,22 @@ func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, cli
 		handler.routedQueries.Add(1)
 	}
 	if runtime.staleMaxWait > 0 && runtime.cache.HasStale(request) {
-		return handler.resolveWithStaleWait(request, runtime, forwarders)
+		return handler.resolveWithStaleWait(request, runtime, forwarders, clientIP)
 	}
-	return handler.resolveShared(request, runtime, forwarders, true)
+	return handler.resolveShared(request, runtime, forwarders, true, clientIP)
 }
 
 // resolveShared coalesces concurrent identical cache misses so only one upstream
 // resolution (and one DNSSEC validation) runs for a given question at a time. The
 // followers wait for the leader's result and each receive their own copy prepared
 // for their request.
-func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool) resolution {
+//
+// Only the leader runs the resolution, so a failure is logged against the client
+// that started it. Followers asking the same question at the same moment share
+// that outcome without appearing in the line.
+func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	result, shared := handler.inflight.do(coalesceKey(request), func() resolution {
-		return handler.resolveLiveUpstream(request, runtime, forwarders, staleFallback)
+		return handler.resolveLiveUpstream(request, runtime, forwarders, staleFallback, clientIP)
 	})
 	if !shared || result.response == nil {
 		return result
@@ -1358,10 +1362,10 @@ func coalesceKey(request *dns.Msg) string {
 	return fmt.Sprintf("%s|%d|%d|%t|%t", normalizeName(question.Name), question.Qtype, question.Qclass, dnssecOK, request.CheckingDisabled)
 }
 
-func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string) resolution {
+func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string) resolution {
 	result := make(chan resolution, 1)
 	go func() {
-		result <- handler.resolveShared(request.Copy(), runtime, forwarders, false)
+		result <- handler.resolveShared(request.Copy(), runtime, forwarders, false, clientIP)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
 	defer timer.Stop()
@@ -1381,12 +1385,12 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 	}
 }
 
-func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool) resolution {
+func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	response, validation, validationErr := handler.resolveUpstream(request, runtime, forwarders)
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
 		if !request.CheckingDisabled {
-			handler.logResolutionFailure(request, "DNSSEC validation failed",
+			handler.logResolutionFailure(request, clientIP, "DNSSEC validation failed",
 				upstreamFailureFields(runtime, forwarders, validationErr)...)
 			return resolution{response: dnssecBogusResponse(request, validationErr), source: querylog.SourceError}
 		}
@@ -1397,7 +1401,7 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	}
 	if validationErr != nil && validation != validationBogus {
 		handler.upstreamErrors.Add(1)
-		handler.logResolutionFailure(request, "upstream resolution failed",
+		handler.logResolutionFailure(request, clientIP, "upstream resolution failed",
 			upstreamFailureFields(runtime, forwarders, validationErr)...)
 		if !staleFallback {
 			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
@@ -1406,7 +1410,7 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 	}
 	if response == nil {
 		handler.upstreamErrors.Add(1)
-		handler.logResolutionFailure(request, "upstream returned no response",
+		handler.logResolutionFailure(request, clientIP, "upstream returned no response",
 			upstreamFailureFields(runtime, forwarders, nil)...)
 		if !staleFallback {
 			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
@@ -1414,7 +1418,7 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 		return handler.resolveUpstreamFailure(request, runtime)
 	}
 	if response.Rcode == dns.RcodeServerFailure {
-		handler.logResolutionFailure(request, "upstream answered SERVFAIL",
+		handler.logResolutionFailure(request, clientIP, "upstream answered SERVFAIL",
 			upstreamFailureFields(runtime, forwarders, nil)...)
 	}
 	response.Id = request.Id
@@ -1466,7 +1470,7 @@ func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtim
 	return resolution{response: response, source: querylog.SourceError}
 }
 
-func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.Msg, bool) {
+func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
 	alias, found := runtime.authoritativeANAMEFor(request)
 	if !found {
 		return nil, false
@@ -1490,13 +1494,13 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.M
 		targetResponse, validation, err = handler.resolveUpstream(targetRequest, runtime, forwarders)
 		if err != nil {
 			handler.upstreamErrors.Add(1)
-			handler.logResolutionFailure(request, "ANAME target resolution failed",
+			handler.logResolutionFailure(request, clientIP, "ANAME target resolution failed",
 				append([]any{"target", alias.target}, upstreamFailureFields(runtime, forwarders, err)...)...)
 			return errorResponse(request, fallbackErrorCode), true
 		}
 		if validation == validationBogus {
 			handler.dnssecBogus.Add(1)
-			handler.logResolutionFailure(request, "ANAME target failed DNSSEC validation", "target", alias.target)
+			handler.logResolutionFailure(request, clientIP, "ANAME target failed DNSSEC validation", "target", alias.target)
 			return dnssecBogusResponse(request, errors.New("ANAME target failed DNSSEC validation")), true
 		}
 	}
@@ -1505,7 +1509,7 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime) (*dns.M
 	response.Authoritative = true
 	response.RecursionAvailable = true
 	if targetResponse.Rcode != dns.RcodeSuccess {
-		handler.logResolutionFailure(request, "ANAME target did not resolve",
+		handler.logResolutionFailure(request, clientIP, "ANAME target did not resolve",
 			"target", alias.target, "target_rcode", rcodeDescription(targetResponse.Rcode))
 		response.Rcode = dns.RcodeServerFailure
 		return response, true
@@ -2313,17 +2317,51 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 		return nil, errors.New("no forwarding endpoints are available")
 	}
 	start := handler.upstreamIndex.Add(1) - 1
+	ordered := handler.upstreamHealth.order(forwarders, start)
 	var exchangeErrors []error
-	for _, forwarder := range handler.upstreamHealth.order(forwarders, start) {
-		response, err := handler.exchangeWithRetries(ctx, request, forwarder, runtime.retryTimeout, runtime.retries)
+	for index, forwarder := range ordered {
+		attemptContext, release := forwarderBudget(ctx, len(ordered)-index)
+		response, err := handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
+		release()
 		if err == nil {
 			handler.upstreamHealth.markHealthy(forwarder)
 			return response, nil
 		}
-		handler.upstreamHealth.markUnhealthy(forwarder)
+		// A forwarder the query budget never left time to contact says nothing
+		// about that forwarder's health. Starting a cooldown for it would
+		// deprioritize a working upstream because a different one stalled.
+		if !errors.Is(err, errForwarderNotTried) {
+			handler.upstreamHealth.markUnhealthy(forwarder)
+		}
 		exchangeErrors = append(exchangeErrors, fmt.Errorf("%s: %w", forwarder, err))
 	}
 	return nil, fmt.Errorf("all forwarders failed: %w", errors.Join(exchangeErrors...))
+}
+
+// forwarderBudget reserves an equal share of the query's remaining time for
+// every forwarder that has not been tried yet.
+//
+// The whole pool used to share one deadline, so the first upstream to go silent
+// spent the entire budget on its own retries and each remaining forwarder was
+// dialed with nothing left: the dial itself failed instantly with an i/o
+// timeout and the query returned SERVFAIL without a second upstream ever seeing
+// a packet. One unreachable forwarder therefore broke resolution as completely
+// as having no failover configured at all.
+//
+// Splitting the budget trades attempts against a stalled upstream for attempts
+// against a different one, which is the better trade: a second forwarder covers
+// packet loss on the first path as well as a retry does, and covers an upstream
+// that is genuinely down, which a retry never does.
+func forwarderBudget(ctx context.Context, untried int) (context.Context, context.CancelFunc) {
+	deadline, bounded := ctx.Deadline()
+	if !bounded || untried <= 1 {
+		return context.WithCancel(ctx)
+	}
+	share := time.Until(deadline) / time.Duration(untried)
+	if share <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, share)
 }
 
 // upstreamUnhealthyCooldown is how long a forwarder that just failed is tried
@@ -2394,6 +2432,10 @@ const (
 	defaultRuntimeRetryTimeout = 1500 * time.Millisecond
 )
 
+// errForwarderNotTried reports that the surrounding deadline was already spent
+// when an endpoint came up for its turn, so no packet was ever sent to it.
+var errForwarderNotTried = errors.New("no time left in the query budget")
+
 // exchangeWithRetries sends a request to one endpoint, retrying on a transient
 // error (a dropped packet reads as a timeout) until it succeeds, the retry count
 // is spent, or the surrounding deadline passes. Each attempt waits up to
@@ -2409,7 +2451,10 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 		// the caller a nil response and a nil error.
 		if err := ctx.Err(); err != nil {
 			if lastErr == nil {
-				lastErr = err
+				// Nothing was sent at all, which is different from an endpoint
+				// that answered badly or not in time. The caller distinguishes
+				// the two so an untouched endpoint is not judged unhealthy.
+				lastErr = fmt.Errorf("%w: %w", errForwarderNotTried, err)
 			}
 			break
 		}
