@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +93,76 @@ func TestUpstreamFailureIsLogged(t *testing.T) {
 	cause, _ := attributeOf(records[0], "error")
 	if !strings.Contains(cause, "connection refused") {
 		t.Fatalf("error attribute = %q, want the upstream cause", cause)
+	}
+	client, found := attributeOf(records[0], "client")
+	if !found || client != "192.0.2.44" {
+		t.Fatalf("client attribute = %q, found = %t, want the querying device", client, found)
+	}
+}
+
+func TestUpstreamFailureIsLoggedForEachClient(t *testing.T) {
+	t.Parallel()
+
+	// Two devices hitting the same failure inside the suppression window have to
+	// produce a line each. Collapsing them would name only the first device and
+	// leave the second invisible, which is the case an operator is trying to
+	// track down when they read this log.
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	handler.upstreamExchange = func(context.Context, *dns.Msg, string, time.Duration) (*dns.Msg, error) {
+		return nil, errors.New("connection refused")
+	}
+	capture := new(logCapture)
+	handler.SetLogger(slog.New(capture))
+	request := new(dns.Msg)
+	request.SetQuestion("example.com.", dns.TypeA)
+
+	handler.ServeDNS(new(responseCapture), request)
+	handler.ServeDNS(&responseCapture{remoteIP: "192.0.2.77"}, request)
+
+	records := capture.entries()
+	if len(records) != 2 {
+		t.Fatalf("logged %d records, want one per client", len(records))
+	}
+	var clients []string
+	for _, record := range records {
+		client, _ := attributeOf(record, "client")
+		clients = append(clients, client)
+	}
+	if !slices.Equal(clients, []string{"192.0.2.44", "192.0.2.77"}) {
+		t.Fatalf("clients = %v, want both devices named", clients)
+	}
+}
+
+func TestInternalFailureOmitsTheClientAttribute(t *testing.T) {
+	t.Parallel()
+
+	// A query Sable raises for itself has no device to blame, and an empty
+	// client= would read as "unknown device" rather than "no device".
+	runtime, err := Compile(testRuntimeConfig())
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	handler.upstreamExchange = func(context.Context, *dns.Msg, string, time.Duration) (*dns.Msg, error) {
+		return nil, errors.New("connection refused")
+	}
+	capture := new(logCapture)
+	handler.SetLogger(slog.New(capture))
+	request := new(dns.Msg)
+	request.SetQuestion("example.com.", dns.TypeA)
+
+	handler.resolve(request, runtime)
+
+	records := capture.entries()
+	if len(records) != 1 {
+		t.Fatalf("logged %d records, want 1", len(records))
+	}
+	if client, found := attributeOf(records[0], "client"); found {
+		t.Fatalf("client attribute = %q, want it omitted for an internal query", client)
 	}
 }
 

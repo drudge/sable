@@ -30,12 +30,18 @@ func (collector *eventCollector) Record(event querylog.Event) { collector.events
 
 type responseCapture struct {
 	message *dns.Msg
+	// remoteIP overrides the querying client, so a test can send from more than
+	// one device. Empty means the default below.
+	remoteIP string
 }
 
 func (capture *responseCapture) LocalAddr() net.Addr {
 	return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8053}
 }
 func (capture *responseCapture) RemoteAddr() net.Addr {
+	if capture.remoteIP != "" {
+		return &net.UDPAddr{IP: net.ParseIP(capture.remoteIP), Port: 53000}
+	}
 	return &net.UDPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}
 }
 func (capture *responseCapture) WriteMsg(message *dns.Msg) error {

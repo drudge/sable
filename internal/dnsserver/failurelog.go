@@ -80,18 +80,30 @@ func (handler *Handler) SetLogger(logger *slog.Logger) {
 
 // logResolutionFailure records why a query is about to answer SERVFAIL. Query
 // logs carry only the response code, so without this the cause is invisible.
-func (handler *Handler) logResolutionFailure(request *dns.Msg, reason string, attributes ...any) {
+//
+// clientIP names the device whose query failed, which is what turns a recurring
+// failure into something an operator can act on: the runtime log alone otherwise
+// cannot say which device on the network is asking. It is empty for queries
+// Sable raises on its own behalf rather than for a client.
+func (handler *Handler) logResolutionFailure(request *dns.Msg, clientIP, reason string, attributes ...any) {
 	logger := handler.logger.Load()
 	if logger == nil || !logger.Enabled(context.Background(), slog.LevelWarn) {
 		return
 	}
 	name, recordType := questionDescription(request)
-	allowed, suppressed := handler.failureLog.allow(name + "|" + recordType + "|" + reason)
+	// The client belongs in the suppression key. Without it, the same failure
+	// hitting two devices logs once and names only whichever got there first,
+	// which is precisely the question the line is meant to answer.
+	allowed, suppressed := handler.failureLog.allow(name + "|" + recordType + "|" + reason + "|" + clientIP)
 	if !allowed {
 		return
 	}
-	fields := make([]any, 0, len(attributes)+8)
-	fields = append(fields, "name", name, "type", recordType, "reason", reason)
+	fields := make([]any, 0, len(attributes)+10)
+	fields = append(fields, "name", name, "type", recordType)
+	if clientIP != "" {
+		fields = append(fields, "client", clientIP)
+	}
+	fields = append(fields, "reason", reason)
 	fields = append(fields, attributes...)
 	if suppressed > 0 {
 		fields = append(fields, "suppressed", suppressed)
