@@ -94,6 +94,14 @@ authorities, and validates the result through the same DNSSEC pipeline used by
 forwarded responses. Optional `root_hints` entries use `IP:port` syntax.
 Conditional routes and forwarder zones continue to override direct recursion.
 
+`timeout` is the budget for the whole query, not for one upstream. In forward
+mode it is split evenly across the forwarders that have not been tried yet, so a
+forwarder that stops answering cannot spend the entire budget on its own retries
+and leave the rest of the pool with no time to be dialed. Each upstream keeps
+retrying up to `retries` times within its own share, so with several forwarders
+and a short `timeout` an upstream may get a single attempt before failover moves
+on; raise `timeout` to keep both retries and failover.
+
 To use upstream recursive services instead:
 
 ```toml

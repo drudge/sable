@@ -2313,17 +2313,51 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 		return nil, errors.New("no forwarding endpoints are available")
 	}
 	start := handler.upstreamIndex.Add(1) - 1
+	ordered := handler.upstreamHealth.order(forwarders, start)
 	var exchangeErrors []error
-	for _, forwarder := range handler.upstreamHealth.order(forwarders, start) {
-		response, err := handler.exchangeWithRetries(ctx, request, forwarder, runtime.retryTimeout, runtime.retries)
+	for index, forwarder := range ordered {
+		attemptContext, release := forwarderBudget(ctx, len(ordered)-index)
+		response, err := handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
+		release()
 		if err == nil {
 			handler.upstreamHealth.markHealthy(forwarder)
 			return response, nil
 		}
-		handler.upstreamHealth.markUnhealthy(forwarder)
+		// A forwarder the query budget never left time to contact says nothing
+		// about that forwarder's health. Starting a cooldown for it would
+		// deprioritize a working upstream because a different one stalled.
+		if !errors.Is(err, errForwarderNotTried) {
+			handler.upstreamHealth.markUnhealthy(forwarder)
+		}
 		exchangeErrors = append(exchangeErrors, fmt.Errorf("%s: %w", forwarder, err))
 	}
 	return nil, fmt.Errorf("all forwarders failed: %w", errors.Join(exchangeErrors...))
+}
+
+// forwarderBudget reserves an equal share of the query's remaining time for
+// every forwarder that has not been tried yet.
+//
+// The whole pool used to share one deadline, so the first upstream to go silent
+// spent the entire budget on its own retries and each remaining forwarder was
+// dialed with nothing left: the dial itself failed instantly with an i/o
+// timeout and the query returned SERVFAIL without a second upstream ever seeing
+// a packet. One unreachable forwarder therefore broke resolution as completely
+// as having no failover configured at all.
+//
+// Splitting the budget trades attempts against a stalled upstream for attempts
+// against a different one, which is the better trade: a second forwarder covers
+// packet loss on the first path as well as a retry does, and covers an upstream
+// that is genuinely down, which a retry never does.
+func forwarderBudget(ctx context.Context, untried int) (context.Context, context.CancelFunc) {
+	deadline, bounded := ctx.Deadline()
+	if !bounded || untried <= 1 {
+		return context.WithCancel(ctx)
+	}
+	share := time.Until(deadline) / time.Duration(untried)
+	if share <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, share)
 }
 
 // upstreamUnhealthyCooldown is how long a forwarder that just failed is tried
@@ -2394,6 +2428,10 @@ const (
 	defaultRuntimeRetryTimeout = 1500 * time.Millisecond
 )
 
+// errForwarderNotTried reports that the surrounding deadline was already spent
+// when an endpoint came up for its turn, so no packet was ever sent to it.
+var errForwarderNotTried = errors.New("no time left in the query budget")
+
 // exchangeWithRetries sends a request to one endpoint, retrying on a transient
 // error (a dropped packet reads as a timeout) until it succeeds, the retry count
 // is spent, or the surrounding deadline passes. Each attempt waits up to
@@ -2409,7 +2447,10 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 		// the caller a nil response and a nil error.
 		if err := ctx.Err(); err != nil {
 			if lastErr == nil {
-				lastErr = err
+				// Nothing was sent at all, which is different from an endpoint
+				// that answered badly or not in time. The caller distinguishes
+				// the two so an untouched endpoint is not judged unhealthy.
+				lastErr = fmt.Errorf("%w: %w", errForwarderNotTried, err)
 			}
 			break
 		}
