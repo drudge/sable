@@ -61,6 +61,10 @@
    whose panel outgrows the viewport takes the scrollbar's width out of the
    layout, and every switch between two such tabs nudges the page sideways. */
 html { min-width: 320px; background: var(--background); scroll-behavior: smooth; scrollbar-gutter: stable; }
+/* A modal dialog does not stop the page behind it from scrolling, so a wheel
+   or trackpad flick slides the background out from under the dialog. The
+   gutter reserved above means freezing the document costs no sideways nudge. */
+html:has(dialog[open]) { overflow: hidden; }
 body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--background); color: var(--foreground); font-size: 14px; }
 a { color: inherit; text-decoration: none; }
 button, input, select { color: inherit; font: inherit; }
