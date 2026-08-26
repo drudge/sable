@@ -1364,9 +1364,37 @@
 	  fill.style.width = `${Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0}%`;
 	};
 
+	const updateTopStatsDialog = (dialog) => {
+	  if (!dialog) return;
+	  const query = dialog.querySelector("[data-top-stats-search]")?.value.trim().toLowerCase() || "";
+	  const limit = Number(dialog.querySelector("[data-top-stats-limit]")?.value || 100);
+	  const rows = [...dialog.querySelectorAll("[data-top-stats-row]")];
+	  let visible = 0;
+	  let hits = 0;
+	  rows.forEach((row) => {
+		const matches = Number(row.dataset.rank) <= limit && row.dataset.search.includes(query);
+		row.hidden = !matches;
+		if (matches) {
+		  visible++;
+		  hits += Number(row.dataset.hits) || 0;
+		}
+	  });
+	  const empty = dialog.querySelector("[data-top-stats-empty]");
+	  if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+	  const count = dialog.querySelector("[data-top-stats-count]");
+	  if (count) {
+		const noun = dialog.id.includes("clients") ? "clients" : "domains";
+		count.textContent = `${visible.toLocaleString()}${query ? ` of ${Math.min(rows.length, limit).toLocaleString()}` : ""} ${noun}`;
+	  }
+	  const total = dialog.querySelector("[data-top-stats-total]");
+	  if (total) total.textContent = `${hits.toLocaleString()} hits`;
+	};
+
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
+	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
+	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
 	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
 	  root.querySelectorAll?.("[data-range-popover]").forEach(setupRangePicker);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
@@ -2025,32 +2053,6 @@
 		if (accepted) event.detail.issueRequest(true);
 	  });
 	});
-
-	const updateTopStatsDialog = (dialog) => {
-	  if (!dialog) return;
-	  const query = dialog.querySelector("[data-top-stats-search]")?.value.trim().toLowerCase() || "";
-	  const limit = Number(dialog.querySelector("[data-top-stats-limit]")?.value || 100);
-	  const rows = [...dialog.querySelectorAll("[data-top-stats-row]")];
-	  let visible = 0;
-	  let hits = 0;
-	  rows.forEach((row) => {
-		const matches = Number(row.dataset.rank) <= limit && row.dataset.search.includes(query);
-		row.hidden = !matches;
-		if (matches) {
-		  visible++;
-		  hits += Number(row.dataset.hits) || 0;
-		}
-	  });
-	  const empty = dialog.querySelector("[data-top-stats-empty]");
-	  if (empty) empty.hidden = visible !== 0 || rows.length === 0;
-	  const count = dialog.querySelector("[data-top-stats-count]");
-	  if (count) {
-		const noun = dialog.id.includes("clients") ? "clients" : "domains";
-		count.textContent = `${visible.toLocaleString()}${query ? ` of ${Math.min(rows.length, limit).toLocaleString()}` : ""} ${noun}`;
-	  }
-	  const total = dialog.querySelector("[data-top-stats-total]");
-	  if (total) total.textContent = `${hits.toLocaleString()} hits`;
-	};
 
 	document.body.addEventListener("input", (event) => {
 	  if (event.target.matches("[data-top-stats-search]")) {
