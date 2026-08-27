@@ -211,6 +211,12 @@ func TestChartTimeFormatHonorsDisplayPreference(t *testing.T) {
 	if got := chartTimeFormat(time.Hour, pages.TimeDisplay{Format: pages.TimeFormat24}); got != "15:04:05" {
 		t.Fatalf("24-hour chart format = %q", got)
 	}
+	if got := chartTimeFormat(24*time.Hour, pages.TimeDisplay{Format: pages.TimeFormat12}); got != "Jan 2, 3:04 PM" {
+		t.Fatalf("12-hour day chart format = %q", got)
+	}
+	if got := chartTimeFormat(24*time.Hour, pages.TimeDisplay{Format: pages.TimeFormat24}); got != "Jan 2, 15:04" {
+		t.Fatalf("24-hour day chart format = %q", got)
+	}
 }
 
 func TestStatsHistoryBuildsCustomRange(t *testing.T) {

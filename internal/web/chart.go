@@ -649,12 +649,12 @@ func chartTimeFormat(duration time.Duration, display pages.TimeDisplay) string {
 	}
 	if !display.TwentyFourHour() {
 		if duration == 24*time.Hour {
-			return "3:04 PM"
+			return "Jan 2, 3:04 PM"
 		}
 		return "3:04:05 PM"
 	}
 	if duration == 24*time.Hour {
-		return "15:04"
+		return "Jan 2, 15:04"
 	}
 	return "15:04:05"
 }

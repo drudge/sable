@@ -8,6 +8,7 @@ import (
 
 templ DashboardHome(view DashboardView) {
 	<div class="dashboard-page isotope-dashboard">
+		<h1 class="sr-only">Dashboard</h1>
 		@Stats(view.Stats)
 		@QueryChart(view.Chart)
 		@DashboardInsights(view.Insights, false)

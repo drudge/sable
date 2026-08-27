@@ -742,7 +742,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span><input type=\"search\" placeholder=\"Search zones...\" autocomplete=\"off\" data-zone-search></label><div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span><input type=\"search\" aria-label=\"Search zones\" placeholder=\"Search zones...\" autocomplete=\"off\" data-zone-search></label><div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1367,7 +1367,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</span><input type=\"search\" placeholder=\"Filter records...\" autocomplete=\"off\" data-record-search></label> <label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter><option value=\"all\">All Types</option>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "</span><input type=\"search\" aria-label=\"Filter zone records\" placeholder=\"Filter records...\" autocomplete=\"off\" data-record-search></label> <label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter><option value=\"all\">All Types</option>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

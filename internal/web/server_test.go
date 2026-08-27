@@ -406,6 +406,9 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
 	}
+	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
+		t.Error("dashboard does not contain its accessible page heading")
+	}
 	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
@@ -1525,7 +1528,8 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 	page := serveRequest(server, http.MethodGet, "/zones")
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "No zones found. Create your first zone to get started.") ||
 		!strings.Contains(page.Body.String(), `data-dialog-open="import-new-zone-dialog"`) ||
-		!strings.Contains(page.Body.String(), `hx-post="/ui/zones/import-new"`) {
+		!strings.Contains(page.Body.String(), `hx-post="/ui/zones/import-new"`) ||
+		!strings.Contains(page.Body.String(), `aria-label="Search zones"`) {
 		t.Fatalf("empty zones page = %d %s", page.Code, page.Body.String())
 	}
 	post := func(path string, form url.Values) *httptest.ResponseRecorder {
@@ -1550,7 +1554,8 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 	direct := serveRequest(server, http.MethodGet, "/zones/example.test")
 	if direct.Code != http.StatusOK || !strings.Contains(direct.Body.String(), "Add Record") ||
 		!strings.Contains(direct.Body.String(), `data-dialog-open="settings-selected-zone-dialog"`) ||
-		!strings.Contains(direct.Body.String(), `hx-post="/ui/zones/clone"`) {
+		!strings.Contains(direct.Body.String(), `hx-post="/ui/zones/clone"`) ||
+		!strings.Contains(direct.Body.String(), `aria-label="Filter zone records"`) {
 		t.Fatalf("direct zone page = %d %s", direct.Code, direct.Body.String())
 	}
 	if strings.Contains(direct.Body.String(), `data-dialog-url="/zones/example.test/example.test/SOA/`) {
