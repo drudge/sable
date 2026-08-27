@@ -1,23 +1,36 @@
 # Releasing Sable
 
-Sable uses Mage for every build entry point and GoReleaser for cross-platform
-release artifacts. Runtime configuration remains TOML, and the repository does
-not contain YAML. Mage writes GoReleaser's required YAML configuration to a
-temporary operating-system file for the duration of a release command.
+Sable uses Mage for build and verification entry points, GitHub Actions for
+release orchestration, and GoReleaser for cross-platform artifacts. Runtime
+configuration remains TOML. Mage writes GoReleaser's YAML configuration to a
+temporary operating-system file and removes it after each command.
+
+## Version model
+
+An annotated Git tag is the single source of truth for a published version.
+The source tree reports `dev`; normal Mage builds can override that with the
+`VERSION` environment variable, and GoReleaser injects the release tag, commit,
+and commit timestamp into published binaries and containers. Cutting a release
+therefore never rewrites documentation or version files and never adds a
+version-bump commit to `main`.
+
+Release tags must be canonical semantic versions such as `v1.0.0` or
+`v1.0.0-rc.2`. The workflow accepts the version with or without the leading
+`v`. Build metadata such as `1.0.0+build.1` is rejected because it is not safe
+to use consistently as a container tag.
 
 ## Tooling
 
-Install Mage and GoReleaser:
+Install Mage and GoReleaser for local release validation:
 
 ```sh
 go install github.com/magefile/mage@v1.17.2
 brew install goreleaser
 ```
 
-GoReleaser 2.15 or newer is required. Set `GORELEASER` when the executable has
-a nonstandard name or location. Release checks and snapshots must run from a
-Git repository with an `origin` remote because GoReleaser derives release
-metadata from Git.
+CI pins GoReleaser 2.18.0, so use 2.18 or newer locally. Set `GORELEASER` when
+the executable has a nonstandard name or location. Release checks and snapshots
+must run from a Git repository because GoReleaser derives metadata from Git.
 
 Container targets require Docker and Docker Buildx. Buildx's default `docker`
 driver cannot export manifest lists or SBOM attestations, so Mage creates and
@@ -41,74 +54,66 @@ the CLI metadata and configuration check, UDP/TCP/DoT/DoH service, zone
 CRUD/import/export and DNSSEC signing, blocking, query logging, graceful
 shutdown with cache restoration, two-node enrollment and synchronization, and
 a planned primary handoff. Every listener is also bound on loopback IPv6 and
-queried there, including an AAAA answer and its `ip6.arpa` reverse name, so a
-host without IPv6 fails the run. Set `SABLE_INTEGRATION_NO_IPV6` to skip that
-coverage on an image with IPv6 disabled. Its upstream DNS server and both Sable nodes are
-created locally in temporary workspaces, so the result is deterministic and
-does not depend on public DNS. `releaseCheck` validates the generated
-GoReleaser configuration. `snapshot` runs the full verification suite and
-writes unpublished archives and checksums to `dist/`. It deliberately does not
-require Docker. `dockerSnapshot` creates the local
+queried there. Set `SABLE_INTEGRATION_NO_IPV6` only when validating on a host
+where IPv6 is disabled. All upstream DNS and Sable nodes are local temporary
+processes, so the result is deterministic and does not use public DNS.
+
+`releaseCheck` validates the generated GoReleaser configuration. `snapshot`
+runs verification and writes unpublished archives and checksums to `dist/`
+without requiring Docker. `dockerSnapshot` creates local
 `ghcr.io/drudge/sable:<version>-snapshot-amd64` and
-`ghcr.io/drudge/sable:<version>-snapshot-arm64` images with Docker Buildx. The
-version defaults to Sable's development version and can be overridden with the
-`VERSION` environment variable.
-`dockerSmoke` additionally runs the image matching the host architecture and
-checks the CLI version output and HTTP health endpoint.
+`ghcr.io/drudge/sable:<version>-snapshot-arm64` images. The version defaults to
+`dev` and can be overridden with `VERSION`. `dockerSmoke` also starts the native
+image and checks its version output and HTTP health endpoint. `mage releaseGate`
+runs the complete pre-release gate used by CI.
 
 ## Publishing
 
-One command records the version, verifies the repository, and publishes it:
+Publishing is owned by the **Release** GitHub Actions workflow. Do not create a
+release commit or tag locally.
 
-```sh
-mage release 0.8.0-rc.2
-```
+1. Merge the intended release commit to `main` and wait for the required CI
+   checks to pass.
+2. In GitHub, open **Actions → Release → Run workflow**.
+3. Select `main`, enter the semantic version, and start the run.
+4. Approve the `release` environment deployment when prompted.
 
-The version may be given with or without its leading `v`. `release` requires a
-clean `main` checkout and a running Docker daemon. It fast-forwards `main` from
-`origin`, refuses a tag that already exists locally or on `origin`, rewrites
-every recorded version, runs `verify` and `releaseSmoke`, commits the bump,
-creates and pushes the annotated tag, and then publishes through GoReleaser.
-Set `RELEASE_BRANCH` to cut a release from another branch.
+The job refuses to run from any ref other than `main`. It validates the version,
+runs `mage releaseGate`, creates and pushes an annotated tag, authenticates to
+GitHub Container Registry, and asks GoReleaser to create a replaceable draft.
+Only after every archive, checksum, and container image is published does it
+make the GitHub release visible. The job has repository write permissions only
+for that gated run, and it never pushes a branch.
 
-The recorded versions are Mage's `developmentVersion`, `internal/version`, the
-installation and container examples in `README.md`, and the pinned installation
-example in `docs/proxmox.md`. Moving one of those references without updating
-`versionReferences` in `magefile.go` fails the release instead of leaving a
-stale version behind.
+Configure the repository's `release` environment with required reviewers before
+the first production run. Protect `main` separately with the **Quality** and
+**Release artifacts** checks; the release job is deliberately manual and is not
+a branch-protection check.
 
-Set `GITHUB_TOKEN` to a token allowed to publish releases to the repository and
-authenticate Docker to `ghcr.io` before publishing:
+If a run fails after pushing the tag, dispatch the same version again. The
+workflow checks out the existing tagged commit and replaces an existing draft,
+which makes partial publication retryable without moving the tag. It refuses to
+replace an already published release or a tag that is not reachable from
+`main`. `mage publish` is guarded for CI use and cannot publish from a developer
+workstation by accident.
 
-```sh
-printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username USERNAME --password-stdin
-mage release 0.8.0-rc.2
-```
-
-When the tag is already pushed and only the publication failed, republish it
-without repeating the bump:
-
-```sh
-mage publish
-```
+## Published artifact contract
 
 GoReleaser publishes one Sable executable per supported operating-system and
-architecture pair inside an archive with the license, README, and example TOML
-configuration, plus the Linux bootstrap installer. It also publishes
-`checksums.txt`. The executable embeds the tag
-version, commit, and commit timestamp used for the release. The same release
-publishes Linux amd64 and arm64 images under one
-`ghcr.io/drudge/sable:<version>` manifest. A stable release also publishes that
-manifest as `ghcr.io/drudge/sable:latest`, and a pre-release publishes it as
-`ghcr.io/drudge/sable:next` instead. The `next` tag keeps pointing at the last
-pre-release until another one ships, so it can trail `latest` after a stable
-release. The image is
-non-root, contains the same static `sable` executable, and persists all mutable
-state in `/data`.
+architecture pair inside an archive with the license, README, example TOML
+configuration, and Linux bootstrap installer. It also publishes
+`checksums.txt`. The executable embeds the tag version, commit, and commit
+timestamp used for the release.
 
-`sable update` installs these artifacts on running appliances, so the release
-pipeline must keep the `sable_<version>_<os>_<arch>.tar.gz` archive names, the
-`sable` executable inside each archive, and the published `checksums.txt`.
-Tags must remain semantic versions, because the update command compares the
-published tag against the embedded version to decide whether a newer release
-exists. Pre-release tags are only offered to `sable update --pre-release`.
+The same run publishes Linux amd64 and arm64 images under one
+`ghcr.io/drudge/sable:<version>` manifest. A stable release also updates
+`ghcr.io/drudge/sable:latest`; a pre-release updates
+`ghcr.io/drudge/sable:next`. The image runs as non-root, contains the same static
+`sable` executable, and persists mutable state in `/data`.
+
+`sable update` installs these artifacts on running appliances, so the pipeline
+must preserve the `sable_<version>_<os>_<arch>.tar.gz` archive names, the
+`sable` executable inside each archive, and `checksums.txt`. Tags must remain
+semantic versions because the updater compares the published tag with the
+embedded version. Pre-release tags are offered only when the pre-release channel
+is enabled.

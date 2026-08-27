@@ -1,0 +1,146 @@
+name: Release
+run-name: Release ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version to publish, with or without a leading v
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish release
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out main with complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.0
+          install-only: true
+
+      - name: Resolve release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Releases must be dispatched from main, not ${GITHUB_REF}." >&2
+            exit 1
+          fi
+
+          go tool mage validateReleaseVersion "${RELEASE_INPUT}"
+          release="${RELEASE_INPUT#v}"
+          tag="v${release}"
+
+          git fetch --force origin main --tags
+          tag_exists=false
+          if git show-ref --verify --quiet "refs/tags/${tag}"; then
+            tag_exists=true
+            release_sha="$(git rev-list -n 1 "refs/tags/${tag}")"
+
+            if ! git merge-base --is-ancestor "${release_sha}" origin/main; then
+              echo "Existing tag ${tag} is not reachable from main." >&2
+              exit 1
+            fi
+
+            tag_type="$(git cat-file -t "refs/tags/${tag}")"
+            if [[ "${tag_type}" != "tag" ]]; then
+              echo "Existing tag ${tag} is not annotated." >&2
+              exit 1
+            fi
+
+            release_draft="$(
+              gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+                --jq ".[] | select(.tag_name == \"${tag}\") | .draft"
+            )"
+            case "${release_draft}" in
+              "" | true) ;;
+              false)
+                echo "Release ${tag} is already published and cannot be replaced." >&2
+                exit 1
+                ;;
+              *)
+                echo "GitHub returned an unexpected release state for ${tag}: ${release_draft}" >&2
+                exit 1
+                ;;
+            esac
+
+            git checkout --detach "${release_sha}"
+            echo "Retrying ${tag} at ${release_sha}."
+          else
+            release_sha="${GITHUB_SHA}"
+            if ! git merge-base --is-ancestor "${release_sha}" origin/main; then
+              echo "The selected commit ${release_sha} is not reachable from main." >&2
+              exit 1
+            fi
+            echo "Preparing ${tag} at ${release_sha}."
+          fi
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "tag_exists=${tag_exists}" >> "${GITHUB_OUTPUT}"
+          echo "version=${release}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run pre-release gate
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: go tool mage releaseGate
+
+      - name: Create annotated release tag
+        if: steps.release.outputs.tag_exists != 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --annotate "${RELEASE_TAG}" --message "Sable ${RELEASE_TAG}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Publish replaceable draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SABLE_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: go tool mage publish
+
+      - name: Finalize GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release edit "${RELEASE_TAG}" --draft=false

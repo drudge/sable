@@ -51,8 +51,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/script
 Pin an explicit version when a controlled rollout is required:
 
 ```sh
-SABLE_VERSION=0.9.7-rc.1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
+SABLE_VERSION=VERSION bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
+
+Replace `VERSION` with the exact published semantic version, such as
+`1.0.0-rc.1`.
 
 Update the replica first, verify DNS and cluster synchronization, then update
 the primary. Proxmox snapshots and backups remain the rollback mechanism until
