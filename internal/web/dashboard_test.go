@@ -1,8 +1,12 @@
 package web
 
 import (
+	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/miekg/dns"
 
@@ -10,6 +14,102 @@ import (
 	"github.com/drudge/sable/internal/querylog"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
+
+func TestDashboardInsightCacheSharesConcurrentExactRange(t *testing.T) {
+	t.Parallel()
+	var cache dashboardInsightCache
+	var calls atomic.Int32
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	loader := func(context.Context, time.Time, time.Time) (querylog.Insights, error) {
+		if calls.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+		return querylog.Insights{Clients: map[string]uint64{"192.0.2.1": 7}}, nil
+	}
+	window := insightWindow{Range: "hour", Start: time.Now().Add(-time.Hour), End: time.Now(), Label: "Last hour"}
+	const readers = 12
+	var group sync.WaitGroup
+	group.Add(readers)
+	for range readers {
+		go func() {
+			defer group.Done()
+			insights, counted, err := cache.load(context.Background(), window, loader)
+			if err != nil {
+				t.Errorf("load() error = %v", err)
+				return
+			}
+			if insights.Clients["192.0.2.1"] != 7 || counted != window {
+				t.Errorf("load() = %+v, %+v", insights, counted)
+			}
+		}()
+	}
+	<-entered
+	close(release)
+	group.Wait()
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("aggregation calls = %d, want 1", got)
+	}
+}
+
+func TestDashboardInsightCacheKeepsTheWindowThatWasCounted(t *testing.T) {
+	t.Parallel()
+	var cache dashboardInsightCache
+	var calls atomic.Int32
+	loader := func(context.Context, time.Time, time.Time) (querylog.Insights, error) {
+		calls.Add(1)
+		return querylog.Insights{}, nil
+	}
+	first := insightWindow{Range: "day", Start: time.Now().Add(-24 * time.Hour), End: time.Now(), Label: "Last 24 hours"}
+	if _, counted, err := cache.load(context.Background(), first, loader); err != nil || counted != first {
+		t.Fatalf("first load = %+v, %v", counted, err)
+	}
+	second := insightWindow{Range: "day", Start: first.Start.Add(time.Second), End: first.End.Add(time.Second), Label: first.Label}
+	if _, counted, err := cache.load(context.Background(), second, loader); err != nil || counted != first {
+		t.Fatalf("cached load = %+v, %v; want first window %+v", counted, err, first)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("aggregation calls = %d, want 1", got)
+	}
+}
+
+func TestDashboardInsightCacheSerializesDifferentRanges(t *testing.T) {
+	t.Parallel()
+	var cache dashboardInsightCache
+	var active atomic.Int32
+	var maximum atomic.Int32
+	loader := func(context.Context, time.Time, time.Time) (querylog.Insights, error) {
+		current := active.Add(1)
+		for {
+			previous := maximum.Load()
+			if current <= previous || maximum.CompareAndSwap(previous, current) {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+		active.Add(-1)
+		return querylog.Insights{}, nil
+	}
+	windows := []insightWindow{
+		{Range: "hour", Start: time.Now().Add(-time.Hour), End: time.Now()},
+		{Range: "day", Start: time.Now().Add(-24 * time.Hour), End: time.Now()},
+	}
+	var group sync.WaitGroup
+	for _, window := range windows {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, _, err := cache.load(context.Background(), window, loader); err != nil {
+				t.Errorf("load() error = %v", err)
+			}
+		}()
+	}
+	group.Wait()
+	if got := maximum.Load(); got != 1 {
+		t.Fatalf("concurrent aggregations = %d, want 1", got)
+	}
+}
 
 // insightsFrom aggregates entries the way the store's GROUP BY does, so these
 // tests can keep describing the query log as rows.
