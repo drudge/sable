@@ -233,3 +233,57 @@ func TestDecodeRejectsUnknownSection(t *testing.T) {
 		t.Fatalf("decodeBody() error = %v, want an unknown section rejection", err)
 	}
 }
+
+func TestDecodeRejectsCumulativeExpandedSize(t *testing.T) {
+	manifest, err := json.Marshal(Manifest{FormatVersion: FormatVersion, Sections: []string{SectionConfiguration}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := archiveBody(t,
+		testArchiveMember{name: manifestEntry, contents: manifest},
+		testArchiveMember{name: configurationEntry, contents: []byte("sixteen bytes!!!")},
+	)
+	limit := int64(len(manifest) + len("sixteen bytes!!"))
+	if _, err := decodeBodyWithLimit(body, limit); err == nil || !strings.Contains(err.Error(), "decoded size limit") {
+		t.Fatalf("decodeBodyWithLimit() error = %v, want cumulative size rejection", err)
+	}
+}
+
+func TestDecodeRejectsDuplicateNormalizedMember(t *testing.T) {
+	manifest, err := json.Marshal(Manifest{FormatVersion: FormatVersion, Sections: []string{SectionCertificates}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := archiveBody(t,
+		testArchiveMember{name: manifestEntry, contents: manifest},
+		testArchiveMember{name: certificatesPrefix + "tls/certificate.pem", contents: []byte("first")},
+		testArchiveMember{name: certificatesPrefix + "tls/./certificate.pem", contents: []byte("second")},
+	)
+	if _, err := decodeBody(body); err == nil || !strings.Contains(err.Error(), "repeats member") {
+		t.Fatalf("decodeBody() error = %v, want duplicate member rejection", err)
+	}
+}
+
+type testArchiveMember struct {
+	name     string
+	contents []byte
+}
+
+func archiveBody(t *testing.T, members ...testArchiveMember) []byte {
+	t.Helper()
+	body := &bytes.Buffer{}
+	compressor := gzip.NewWriter(body)
+	writer := tar.NewWriter(compressor)
+	for _, member := range members {
+		if err := writeMember(writer, member.name, 0o600, member.contents); err != nil {
+			t.Fatalf("writeMember(%q) error = %v", member.name, err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressor.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return body.Bytes()
+}
