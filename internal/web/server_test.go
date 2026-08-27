@@ -385,7 +385,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	server.SetUpdateController(&testUpdateController{status: update.Status{Phase: update.PhaseIdle, CurrentVersion: "dev"}})
 	dashboardResponse := serveRequest(server, "GET", "/")
 	dashboard := dashboardResponse.Body.String()
-	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
+	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0], `<h1 class="sr-only">Dashboard</h1>`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
@@ -1489,7 +1489,8 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 	page := serveRequest(server, http.MethodGet, "/zones")
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "No zones found. Create your first zone to get started.") ||
 		!strings.Contains(page.Body.String(), `data-dialog-open="import-new-zone-dialog"`) ||
-		!strings.Contains(page.Body.String(), `hx-post="/ui/zones/import-new"`) {
+		!strings.Contains(page.Body.String(), `hx-post="/ui/zones/import-new"`) ||
+		!strings.Contains(page.Body.String(), `aria-label="Search zones"`) {
 		t.Fatalf("empty zones page = %d %s", page.Code, page.Body.String())
 	}
 	post := func(path string, form url.Values) *httptest.ResponseRecorder {
@@ -1514,7 +1515,8 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 	direct := serveRequest(server, http.MethodGet, "/zones/example.test")
 	if direct.Code != http.StatusOK || !strings.Contains(direct.Body.String(), "Add Record") ||
 		!strings.Contains(direct.Body.String(), `data-dialog-open="settings-selected-zone-dialog"`) ||
-		!strings.Contains(direct.Body.String(), `hx-post="/ui/zones/clone"`) {
+		!strings.Contains(direct.Body.String(), `hx-post="/ui/zones/clone"`) ||
+		!strings.Contains(direct.Body.String(), `aria-label="Filter zone records"`) {
 		t.Fatalf("direct zone page = %d %s", direct.Code, direct.Body.String())
 	}
 	if strings.Contains(direct.Body.String(), `data-dialog-url="/zones/example.test/example.test/SOA/`) {

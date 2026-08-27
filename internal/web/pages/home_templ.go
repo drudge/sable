@@ -35,7 +35,7 @@ func DashboardHome(view DashboardView) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"dashboard-page isotope-dashboard\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"dashboard-page isotope-dashboard\"><h1 class=\"sr-only\">Dashboard</h1>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -58,7 +58,7 @@ func DashboardHome(view DashboardView) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(view.DNSSECStatus)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 16, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 17, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -71,7 +71,7 @@ func DashboardHome(view DashboardView) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(view.Database)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 17, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 18, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -84,7 +84,7 @@ func DashboardHome(view DashboardView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(view.DNSListeners)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 18, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 19, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -97,7 +97,7 @@ func DashboardHome(view DashboardView) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(view.ConfigRevision))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 19, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 20, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -110,7 +110,7 @@ func DashboardHome(view DashboardView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(view.Version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 20, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 21, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -161,7 +161,7 @@ func DashboardInsights(view DashboardInsightsView, outOfBand bool) templ.Compone
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL("/ui/stats/insights?range=" + view.PollRange))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 34, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 35, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -246,7 +246,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 59, Col: 15}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 60, Col: 15}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -264,7 +264,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(insights.RangeLabel)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 61, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 62, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -282,7 +282,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue("top-stats-" + kind + "-dialog")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 64, Col: 100}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 65, Col: 100}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -314,7 +314,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 			var templ_7745c5c3_Var13 templ.SafeURL
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 74, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 75, Col: 107}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -327,7 +327,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 76, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 77, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -340,7 +340,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 76, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 77, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -358,7 +358,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Secondary)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 78, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 79, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 				if templ_7745c5c3_Err != nil {
@@ -371,7 +371,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(item.Secondary)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 78, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 79, Col: 55}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -389,7 +389,7 @@ func RankedPanel(title string, kind string, items []RankedStatView, insights Das
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(compactNumber(item.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 81, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 82, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -440,7 +440,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue("top-stats-" + kind + "-dialog")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 90, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 91, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -453,7 +453,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue("top-stats-" + kind + "-title")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 90, Col: 142}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 91, Col: 142}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -466,7 +466,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("top-stats-" + kind + "-title")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 92, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 93, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -479,7 +479,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 92, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 93, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -497,7 +497,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(insights.RangeLabel)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 94, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 95, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -531,7 +531,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(strings.ToLower(title))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 99, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 100, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -544,7 +544,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(topStatsPlaceholder(kind))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 99, Col: 172}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 100, Col: 172}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 		if templ_7745c5c3_Err != nil {
@@ -568,7 +568,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var27 templ.SafeURL
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 107, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 108, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 			if templ_7745c5c3_Err != nil {
@@ -581,7 +581,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(index + 1))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 107, Col: 164}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 108, Col: 164}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 			if templ_7745c5c3_Err != nil {
@@ -594,7 +594,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(item.Name + " " + item.Secondary))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 107, Col: 230}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 108, Col: 230}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
@@ -607,7 +607,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(item.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 107, Col: 267}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 108, Col: 267}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
@@ -620,7 +620,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(index + 1))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 108, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 109, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -633,7 +633,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 110, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 111, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -646,7 +646,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 110, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 111, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -664,7 +664,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Secondary)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 112, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 113, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 				if templ_7745c5c3_Err != nil {
@@ -677,7 +677,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(item.Secondary)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 112, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 113, Col: 55}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 				if templ_7745c5c3_Err != nil {
@@ -695,7 +695,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 			var templ_7745c5c3_Var36 string
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(formatNumber(item.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 115, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 116, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 			if templ_7745c5c3_Err != nil {
@@ -723,7 +723,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(min(len(items), 100)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 120, Col: 124}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 121, Col: 124}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -736,7 +736,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(topStatsNoun(kind))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 120, Col: 147}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 121, Col: 147}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -749,7 +749,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		var templ_7745c5c3_Var39 string
 		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(formatNumber(rankedTotal(firstRanked(items, 100))))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 120, Col: 235}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 121, Col: 235}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 		if templ_7745c5c3_Err != nil {
@@ -791,7 +791,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 126, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 127, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 		if templ_7745c5c3_Err != nil {
@@ -804,7 +804,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 		var templ_7745c5c3_Var42 string
 		templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(title + " chart")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 128, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 129, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 		if templ_7745c5c3_Err != nil {
@@ -840,7 +840,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.3f %.3f", item.Percent, 100-item.Percent))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 135, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 136, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 			if templ_7745c5c3_Err != nil {
@@ -853,7 +853,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var46 string
 			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.3f", item.Offset))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 136, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 137, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 			if templ_7745c5c3_Err != nil {
@@ -866,7 +866,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 137, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 138, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 			if templ_7745c5c3_Err != nil {
@@ -879,7 +879,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 138, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 139, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 			if templ_7745c5c3_Err != nil {
@@ -892,7 +892,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue(formatNumber(item.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 139, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 140, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 			if templ_7745c5c3_Err != nil {
@@ -905,7 +905,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.1f%% of total", item.Percent))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 140, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 141, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 			if templ_7745c5c3_Err != nil {
@@ -944,7 +944,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var51 string
 			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 153, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 154, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 			if templ_7745c5c3_Err != nil {
@@ -979,7 +979,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var54 string
 			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 153, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 154, Col: 132}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 			if templ_7745c5c3_Err != nil {
@@ -992,7 +992,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var55 string
 			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 153, Col: 146}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 154, Col: 146}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 			if templ_7745c5c3_Err != nil {
@@ -1005,7 +1005,7 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 			var templ_7745c5c3_Var56 string
 			templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(compactNumber(item.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 153, Col: 190}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `home.templ`, Line: 154, Col: 190}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 			if templ_7745c5c3_Err != nil {
