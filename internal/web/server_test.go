@@ -385,10 +385,13 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	server.SetUpdateController(&testUpdateController{status: update.Status{Phase: update.PhaseIdle, CurrentVersion: "dev"}})
 	dashboardResponse := serveRequest(server, "GET", "/")
 	dashboard := dashboardResponse.Body.String()
-	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0], `<h1 class="sr-only">Dashboard</h1>`} {
+	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
+	}
+	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
+		t.Error("dashboard does not contain its accessible page heading")
 	}
 	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`} {
 		if !strings.Contains(dashboard, expected) {
