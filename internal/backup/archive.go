@@ -64,6 +64,7 @@ const (
 	certificatesPrefix   = "certificates/"
 	clusterPrefix        = "cluster/"
 	maximumMemberSize    = 64 << 20
+	maximumDecodedSize   = 256 << 20
 	maximumArchiveMember = 4096
 )
 
@@ -230,6 +231,10 @@ func encodeBody(archive Archive) ([]byte, error) {
 }
 
 func decodeBody(body []byte) (Archive, error) {
+	return decodeBodyWithLimit(body, maximumDecodedSize)
+}
+
+func decodeBodyWithLimit(body []byte, maximumSize int64) (Archive, error) {
 	decompressor, err := gzip.NewReader(bytes.NewReader(body))
 	if err != nil {
 		return Archive{}, fmt.Errorf("decompress backup archive: %w", err)
@@ -238,6 +243,8 @@ func decodeBody(body []byte) (Archive, error) {
 
 	archive := Archive{}
 	manifestSeen := false
+	seen := make(map[string]struct{})
+	var decodedSize int64
 	reader := tar.NewReader(decompressor)
 	for members := 0; ; members++ {
 		if members > maximumArchiveMember {
@@ -250,12 +257,23 @@ func decodeBody(body []byte) (Archive, error) {
 		if err != nil {
 			return Archive{}, fmt.Errorf("read backup archive: %w", err)
 		}
-		if header.Typeflag != tar.TypeReg {
-			continue
-		}
 		name, err := safeRelativePath(header.Name)
 		if err != nil {
 			return Archive{}, err
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return Archive{}, fmt.Errorf("backup archive repeats member %q", name)
+		}
+		seen[name] = struct{}{}
+		if header.Size < 0 || header.Size > maximumMemberSize {
+			return Archive{}, fmt.Errorf("read %s: archive member is too large", name)
+		}
+		if decodedSize > maximumSize-header.Size {
+			return Archive{}, errors.New("backup archive expands beyond the decoded size limit")
+		}
+		decodedSize += header.Size
+		if header.Typeflag != tar.TypeReg {
+			continue
 		}
 		contents, err := readMember(reader)
 		if err != nil {
