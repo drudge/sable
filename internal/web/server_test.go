@@ -385,6 +385,15 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	server.SetUpdateController(&testUpdateController{status: update.Status{Phase: update.PhaseIdle, CurrentVersion: "dev"}})
 	dashboardResponse := serveRequest(server, "GET", "/")
 	dashboard := dashboardResponse.Body.String()
+	if server.auth != nil || server.administrator != nil {
+		t.Fatal("security-disabled server retained authentication capabilities")
+	}
+	if strings.Contains(dashboard, `href="/administration"`) {
+		t.Fatal("security-disabled dashboard advertises unavailable administration")
+	}
+	if response := serveRequest(server, http.MethodGet, "/administration"); response.Code != http.StatusNotFound {
+		t.Fatalf("security-disabled administration status = %d, want 404", response.Code)
+	}
 	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard does not contain %q", expected)
@@ -1526,12 +1535,15 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 		"Certificate Association Data", "Service Parameters", "Advanced Options", "icon-settings-2", "record-advanced-chevron",
 		"Zone Settings", "General", "Transfers &amp; Updates", `data-dialog-tab="general"`, `data-dialog-panel="transfers"`, "Zone Transfer", "AXFR or IXFR", "Transfer Policy", "Allowed Networks", "Secondary Servers",
 		"Dynamic DNS Updates", "Allow Dynamic Updates",
-		"Permissions", "DNSSEC", "Sign this zone", "Ed25519 (recommended)", "Authenticated Denial", "NSEC3 Iterations", "NSEC3 Salt", "Save DNSSEC", "Export Zone File", "Clone Zone", "Disable Zone", "Delete Zone",
+		"DNSSEC", "Sign this zone", "Ed25519 (recommended)", "Authenticated Denial", "NSEC3 Iterations", "NSEC3 Salt", "Save DNSSEC", "Export Zone File", "Clone Zone", "Disable Zone", "Delete Zone",
 		`class="record-advanced-grid"><label class="record-field"><span>TTL (seconds)</span>`,
 	} {
 		if !strings.Contains(direct.Body.String(), expected) {
 			t.Errorf("zone record editor does not contain %q", expected)
 		}
+	}
+	if strings.Contains(direct.Body.String(), `href="/administration?tab=groups"`) {
+		t.Error("security-disabled zone editor links to unavailable permission administration")
 	}
 	dnssecSettings := post("/ui/zones/dnssec", url.Values{
 		"zone": {"example.test"}, "enabled": {"true"}, "algorithm": {"ecdsa-p256-sha256"},

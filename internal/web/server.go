@@ -70,7 +70,7 @@ type Server struct {
 	// resolve, in which case the rankings fall back to local zones alone.
 	reverseNames     *reverseNameCache
 	reload           func(context.Context) error
-	auth             authenticator
+	auth             Authenticator
 	sso              ssoController
 	ssoAdmin         ssoAdministration
 	ssoStateStore    *ssoStateStore
@@ -128,7 +128,9 @@ func (server *Server) SetStatsStore(ctx context.Context, statistics statsStore) 
 	return server.history.attach(ctx, statistics)
 }
 
-type authenticator interface {
+// Authenticator is the authentication capability used by the web console.
+// Callers should pass a nil interface when security is disabled.
+type Authenticator interface {
 	SetupRequired(context.Context) (bool, error)
 	Setup(context.Context, string, string, string, string) (auth.Credentials, error)
 	Login(context.Context, string, string, string, string) (auth.Credentials, error)
@@ -159,7 +161,7 @@ func New(
 		RecentQueryEvents(context.Context, int) ([]querylog.Entry, error)
 	},
 	reload func(context.Context) error,
-	authentication authenticator,
+	authentication Authenticator,
 	securityEnabled bool,
 	setupRequired bool,
 	secureCookies bool,
@@ -633,28 +635,27 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	dnsStats := server.stats.Stats()
 	display := requestTimeDisplay(request)
 	view := pages.DashboardView{
-		Version:           version.Current().Release,
-		TimeDisplay:       display,
-		SecurityEnabled:   server.securityEnabled,
-		CanSettings:       !server.securityEnabled,
-		CanAdministration: !server.securityEnabled,
-		CanZones:          !server.securityEnabled,
-		CanBlocking:       !server.securityEnabled,
-		CanLogs:           !server.securityEnabled,
-		CanMetrics:        !server.securityEnabled,
-		CanCluster:        !server.securityEnabled,
-		Database:          server.database,
-		DNSListeners:      strings.Join(snapshot.Config.Server.DNSListen, ", "),
-		EncryptedDNS:      encryptedDNSStatus(snapshot.Config.EncryptedDNS),
-		QueryServer:       snapshot.Config.Server.DNSListen[0],
-		CacheSize:         snapshot.Config.Resolver.CacheSize,
-		ForwardRoutes:     len(snapshot.Config.Resolver.Routes),
-		LocalHosts:        len(snapshot.Config.Resolver.Hosts),
-		QueryLogStatus:    queryLogStatus(snapshot.Config.QueryLog.Enabled, server.queryLog.Stats()),
-		DNSSECStatus:      dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
-		ConfigRevision:    snapshot.Revision,
-		Stats:             statsView(server.history.totals(time.Now(), dnsStats)),
-		Chart:             server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
+		Version:         version.Current().Release,
+		TimeDisplay:     display,
+		SecurityEnabled: server.securityEnabled,
+		CanSettings:     !server.securityEnabled,
+		CanZones:        !server.securityEnabled,
+		CanBlocking:     !server.securityEnabled,
+		CanLogs:         !server.securityEnabled,
+		CanMetrics:      !server.securityEnabled,
+		CanCluster:      !server.securityEnabled,
+		Database:        server.database,
+		DNSListeners:    strings.Join(snapshot.Config.Server.DNSListen, ", "),
+		EncryptedDNS:    encryptedDNSStatus(snapshot.Config.EncryptedDNS),
+		QueryServer:     snapshot.Config.Server.DNSListen[0],
+		CacheSize:       snapshot.Config.Resolver.CacheSize,
+		ForwardRoutes:   len(snapshot.Config.Resolver.Routes),
+		LocalHosts:      len(snapshot.Config.Resolver.Hosts),
+		QueryLogStatus:  queryLogStatus(snapshot.Config.QueryLog.Enabled, server.queryLog.Stats()),
+		DNSSECStatus:    dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
+		ConfigRevision:  snapshot.Revision,
+		Stats:           statsView(server.history.totals(time.Now(), dnsStats)),
+		Chart:           server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
