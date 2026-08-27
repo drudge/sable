@@ -44,10 +44,10 @@ single-use link. The link expires after five minutes and works exactly once, so
 a backup never sits in browser history or a proxy cache waiting to be fetched
 again.
 
-The archive is held in memory and never written to the node's disk, so the
-staged link survives a page reload but not a restart of Sable. Rebuilding one
-takes a moment; the trade is that a file holding every private key on the node
-is never left lying in the data directory.
+An archive being downloaded is held in memory and never written to the node's
+disk, so the staged link survives a page reload but not a restart of Sable.
+Rebuilding one takes a moment; the trade is that a downloadable file holding
+every private key is never left lying in the data directory.
 
 Both operations show their real progress: each stage named in the bar is the
 work actually under way, and the count is the stages already finished rather
@@ -65,10 +65,19 @@ archive's unencrypted envelope header in the browser and reports which host it
 came from, when it was taken, and which Sable release wrote it. A file that is
 not a backup is called out at that point rather than after an upload.
 
-Restoring takes the file and its passphrase. It replaces zones, users, roles,
-API tokens, secrets, and trust anchors, and writes the configuration and key
-material back into place. Sable keeps serving the state it already had until it
-restarts, and the panel offers that restart when the restore finishes.
+Restoring takes the file and its passphrase, validates it, and stages both in
+files readable only by the Sable service account. Sable keeps serving the state
+it already had, and the panel offers a controlled restart after staging. Before
+the restarted process opens listeners, databases, or configuration watchers, it
+applies the zones, users, roles, API tokens, secrets, trust anchors,
+configuration, and key material.
+
+Startup first creates a sealed rollback archive of the deployment already on
+the node. Restored files use synchronized temporary files and atomic renames. A
+failure in any later section restores the rollback archive, and its durable
+marker lets the next startup recover the old deployment if the process or host
+was interrupted midway through the operation. The staged archive and its
+passphrase are removed after either a successful apply or a recovered failure.
 
 **Keep this node's configuration** restores the data but leaves the local
 `sable.toml` alone. Use it when the target node's listeners, storage, and paths
@@ -142,7 +151,8 @@ without the passphrase. Everything else needs it.
    ```
 
 Restore never discards the configuration it displaces. The file that was there
-is kept as `sable.toml.pre-restore` next to the restored one.
+is kept as `sable.toml.pre-restore` next to the restored one, in addition to the
+temporary rollback journal used while the operation is in flight.
 
 ## Restoring a cluster
 

@@ -113,6 +113,9 @@ type RestoreOptions struct {
 	Sections []string
 	// Progress, when set, receives a report as each stage begins.
 	Progress ProgressFunc
+	// skipRollback is used only while recovering an interrupted restore. A
+	// recovery must not replace the rollback journal it is consuming.
+	skipRollback bool
 }
 
 // RestoreResult reports what a restore touched so the caller can tell an
@@ -374,7 +377,7 @@ func captureTree(directory, section, entryPrefix string) ([]backup.File, error) 
 // RestoreBackup writes a sealed archive over a deployment. It is written for a
 // stopped node: a running Sable holds the configuration watcher and its own
 // view of zones, so the caller is expected to restart afterwards.
-func RestoreBackup(ctx context.Context, options RestoreOptions) (RestoreResult, error) {
+func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreResult, returnErr error) {
 	// Opening the archive is one stage because Argon2id makes it the slowest
 	// single step; the rest is one stage per section that is actually applied.
 	opening := newReporter(options.Progress, 2)
@@ -397,10 +400,24 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (RestoreResult, 
 	if err != nil {
 		return RestoreResult{}, err
 	}
-	result := RestoreResult{
+	result = RestoreResult{
 		Manifest: archive.Manifest, Sections: requested, ConfigurationPath: absolutePath,
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
 	}
+	rollback, err := beginRestoreRollback(ctx, absolutePath, options.skipRollback)
+	if err != nil {
+		return RestoreResult{}, fmt.Errorf("prepare restore rollback: %w", err)
+	}
+	committed := false
+	defer func() {
+		if committed || rollback == nil {
+			return
+		}
+		result = RestoreResult{}
+		if rollbackErr := rollback.restore(context.WithoutCancel(ctx)); rollbackErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("roll back failed restore: %w", rollbackErr))
+		}
+	}()
 	// Now that the archive is open the real section count is known, so the bar
 	// switches to a schedule it can actually finish on.
 	progress := newReporter(options.Progress, len(requested)+2)
@@ -501,6 +518,12 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (RestoreResult, 
 		}
 		result.Files += written
 	}
+	if rollback != nil {
+		if err := rollback.commit(); err != nil {
+			return result, fmt.Errorf("commit restored deployment: %w", err)
+		}
+	}
+	committed = true
 	progress.done("Restore complete")
 	return result, nil
 }
@@ -639,13 +662,13 @@ func replaceConfiguration(absolutePath string, contents []byte) (string, error) 
 	previousPath := ""
 	if existing, err := os.ReadFile(absolutePath); err == nil {
 		previousPath = absolutePath + ".pre-restore"
-		if err := os.WriteFile(previousPath, existing, 0o600); err != nil {
+		if err := atomicWriteFile(previousPath, 0o600, existing); err != nil {
 			return "", fmt.Errorf("save displaced configuration: %w", err)
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("read current configuration: %w", err)
 	}
-	if err := os.WriteFile(absolutePath, contents, 0o600); err != nil {
+	if err := atomicWriteFile(absolutePath, 0o600, contents); err != nil {
 		return "", fmt.Errorf("write restored configuration: %w", err)
 	}
 	return previousPath, nil
@@ -655,10 +678,7 @@ func writeRestoredFile(destination string, mode fs.FileMode, contents []byte) er
 	if mode.Perm() == 0 {
 		mode = 0o600
 	}
-	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(destination), err)
-	}
-	return os.WriteFile(destination, contents, mode.Perm())
+	return atomicWriteFile(destination, mode.Perm(), contents)
 }
 
 // safeJoin keeps a restored archive member inside its destination directory.
@@ -777,8 +797,8 @@ func (backups *consoleBackups) CreateBackup(ctx context.Context, passphrase stri
 	})
 }
 
-func (backups *consoleBackups) RestoreBackup(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(web.BackupProgress)) (web.BackupSummary, error) {
-	result, err := RestoreBackup(ctx, RestoreOptions{
+func (backups *consoleBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(web.BackupProgress)) (web.BackupSummary, error) {
+	result, err := StageRestore(RestoreOptions{
 		ConfigurationPath: backups.configurationPath,
 		Contents:          contents,
 		Passphrase:        passphrase,

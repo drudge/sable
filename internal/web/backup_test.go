@@ -59,7 +59,7 @@ func (stub *stubBackups) CreateBackup(_ context.Context, passphrase string, prog
 	return stub.contents, nil
 }
 
-func (stub *stubBackups) RestoreBackup(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error) {
+func (stub *stubBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error) {
 	stub.mu.Lock()
 	stub.restored, stub.lastPassphrase, stub.keptLocal = contents, passphrase, keepConfiguration
 	stub.mu.Unlock()
@@ -335,7 +335,7 @@ func TestBackupDownloadNeverEchoesThePassphrase(t *testing.T) {
 	}
 }
 
-func TestBackupRestoreAppliesTheUploadedArchive(t *testing.T) {
+func TestBackupRestoreStagesTheUploadedArchive(t *testing.T) {
 	archive := sealedArchive(t)
 	stub := &stubBackups{summary: BackupSummary{
 		Sections: []string{backup.SectionZones, backup.SectionAuthorization}, Zones: 3, Users: 2,
@@ -358,7 +358,7 @@ func TestBackupRestoreAppliesTheUploadedArchive(t *testing.T) {
 	if !stub.keptConfiguration() {
 		t.Fatal("keep_configuration did not reach the restore routine")
 	}
-	if !strings.Contains(finished, "until it restarts") {
+	if !strings.Contains(finished, "restart to apply") {
 		t.Fatalf("panel does not tell the operator a restart is needed:\n%s", finished)
 	}
 }
@@ -562,7 +562,7 @@ func TestRestoreNoticeOmitsRestartWithoutAController(t *testing.T) {
 	if strings.Contains(notice, "toast-actions") {
 		t.Fatalf("a node without a restart controller offered the button:\n%s", notice)
 	}
-	if !strings.Contains(notice, "until it restarts") {
+	if !strings.Contains(notice, "restart to apply") {
 		t.Fatalf("the notice does not say a restart is still needed:\n%s", notice)
 	}
 }
