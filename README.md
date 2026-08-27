@@ -189,7 +189,7 @@ by a durable rollback journal. Restoring onto a fresh instance is covered in
 For live development, use the pinned Air workflow:
 
 ```sh
-go install github.com/magefile/mage@v1.17.1
+go install github.com/magefile/mage@v1.17.2
 mage dev
 ```
 

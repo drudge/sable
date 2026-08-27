@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	airVersion                = "v1.65.1"
+	airVersion                = "v1.67.4"
 	developmentVersion        = "0.9.6-rc.4"
 	goExperiment              = "jsonv2"
 	releasePackage            = "github.com/drudge/sable/internal/version"
