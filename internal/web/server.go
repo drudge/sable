@@ -87,6 +87,7 @@ type Server struct {
 	sessionCookie    string
 	setupRequired    atomic.Bool
 	history          *statsHistory
+	insightCache     dashboardInsightCache
 	historyStop      chan struct{}
 	historyStopOnce  sync.Once
 	blockLists       *blockcompiler.Updater
@@ -510,14 +511,14 @@ func (server *Server) dashboardInsightsView(request *http.Request, window insigh
 	if !ok {
 		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
 	}
-	insights, err := reader.QueryLogInsights(request.Context(), window.Start, window.End)
+	insights, countedWindow, err := server.insightCache.load(request.Context(), window, reader.QueryLogInsights)
 	if err != nil {
 		server.logger.Warn("build dashboard insights", "error", err)
 		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
 	}
 	view := dashboardInsights(
 		insights,
-		window,
+		countedWindow,
 		server.config.Current().Config.Resolver.Hosts,
 		server.zones.Current().Zones,
 	)
