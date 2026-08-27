@@ -179,8 +179,10 @@ contains the vault key, so an unsealed copy would expose every private key on
 the node; a lost passphrase is a lost backup.
 
 The same operations live in the console under **Settings → Backup**, behind
-their own `backup.create` and `backup.restore` permissions. Restoring onto a
-fresh instance is covered in [the backup guide](docs/backup.md).
+their own `backup.create` and `backup.restore` permissions. Console restores
+are staged, applied before startup during a controlled restart, and protected
+by a durable rollback journal. Restoring onto a fresh instance is covered in
+[the backup guide](docs/backup.md).
 
 ## Development
 

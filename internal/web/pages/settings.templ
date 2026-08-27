@@ -554,7 +554,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 					} else if view.Running("restore") {
 						@BackupProgress(*view.Job)
 					} else {
-						<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Restoring replaces what is here now</strong><span>Zones, users, roles, API tokens, and secrets are swapped for the ones in the archive. The configuration this node is running is kept alongside the restored one. Sable keeps serving the old state until it restarts.</span></p></div>
+						<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Restoring replaces what is here now</strong><span>Sable validates and stages the archive while this node keeps serving its current state. A controlled restart applies the zones, users, roles, API tokens, secrets, and configuration with automatic rollback if any step fails.</span></p></div>
 						<form class="backup-form" hx-post="/ui/backup/restore" hx-target="#backup-panel" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disabled-elt="find button[type='submit']" hx-confirm="Restore this backup? Every zone, user, role, API token, and secret on this node is replaced." data-confirm-title="Restore backup?" data-confirm-action="Restore Backup" data-backup-restore-form>
 							<div class="field-control">
 								<span>Backup File</span>

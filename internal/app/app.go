@@ -41,6 +41,20 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	// failures without feeding them back into the buffer it drains.
 	baseLogger := logger
 	logger = slog.New(serverlog.NewHandler(logger.Handler(), runtimeLogs))
+	absoluteConfigurationPath, err := config.AbsolutePath(configurationPath)
+	if err != nil {
+		return err
+	}
+	if recovered, recoverErr := recoverInterruptedRestore(ctx, absoluteConfigurationPath); recoverErr != nil {
+		return fmt.Errorf("recover interrupted restore: %w", recoverErr)
+	} else if recovered {
+		logger.Warn("recovered deployment after an interrupted restore")
+	}
+	if applied, applyErr := applyStagedRestore(ctx, absoluteConfigurationPath); applyErr != nil {
+		return fmt.Errorf("apply staged restore: %w", applyErr)
+	} else if applied {
+		logger.Warn("applied staged deployment restore")
+	}
 	absolutePath, initial, err := loadConfiguration(configurationPath)
 	if err != nil {
 		return err

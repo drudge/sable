@@ -87,11 +87,12 @@ type BackupProgress struct {
 	Total int
 }
 
-// backupController captures and applies deployment backups. Both calls report
-// their stages so the console can show real movement instead of a spinner.
+// backupController captures deployment backups and stages restores for the next
+// controlled restart. Both calls report their stages so the console can show
+// real movement instead of a spinner.
 type backupController interface {
 	CreateBackup(ctx context.Context, passphrase string, progress func(BackupProgress)) ([]byte, error)
-	RestoreBackup(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error)
+	StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error)
 }
 
 // SetBackupController wires backup and restore into the console.
@@ -204,7 +205,7 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 }
 
 func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConfiguration bool, filename string) {
-	summary, err := server.backups.RestoreBackup(
+	summary, err := server.backups.StageRestore(
 		context.Background(), contents, passphrase, keepConfiguration, server.reportBackupProgress,
 	)
 	if err != nil {
@@ -216,7 +217,7 @@ func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConf
 		server.failBackupJob("Could not restore the backup: " + err.Error())
 		return
 	}
-	server.logger.Warn("restored deployment backup", "file", filename, "sections", strings.Join(summary.Sections, ","))
+	server.logger.Warn("staged deployment backup restore", "file", filename, "sections", strings.Join(summary.Sections, ","))
 	server.finishBackupJob(func(job *backupJob) { job.message = restoreMessage(summary) })
 }
 
@@ -390,8 +391,8 @@ var sectionLabels = map[string]string{
 	backup.SectionCluster:       "cluster state",
 }
 
-// restoreMessage tells an operator what landed and that the node is running
-// the previous state until it restarts.
+// restoreMessage tells an operator what is staged and that the node is still
+// running the previous state until a controlled restart applies it.
 func restoreMessage(summary BackupSummary) string {
 	sections := make([]string, 0, len(summary.Sections))
 	for _, section := range summary.Sections {
@@ -423,7 +424,7 @@ func restoreMessage(summary BackupSummary) string {
 	}
 	// The restart is offered as a button beside this notice, so the sentence
 	// states what is true rather than repeating the instruction.
-	return "Restored " + restored + ". Sable keeps serving the old state until it restarts."
+	return "Staged " + restored + ". Sable keeps serving the old state; restart to apply the restore."
 }
 
 func pluralize(count int, singular, plural string) string {
