@@ -187,7 +187,7 @@ fresh instance is covered in [the backup guide](docs/backup.md).
 For live development, use the pinned Air workflow:
 
 ```sh
-go install github.com/magefile/mage@v1.17.1
+go install github.com/magefile/mage@v1.17.2
 mage dev
 ```
 
