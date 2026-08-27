@@ -31,7 +31,7 @@ func (authenticator avatarAuthenticator) Avatar(context.Context, auth.Principal)
 	return authenticator.avatar, nil
 }
 
-func avatarTestServer(t *testing.T, authenticator authenticator) *Server {
+func avatarTestServer(t *testing.T, authenticator Authenticator) *Server {
 	t.Helper()
 	server, err := New(
 		slog.New(slog.NewTextHandler(io.Discard, nil)),

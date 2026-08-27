@@ -306,6 +306,10 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	)
 	go unifiSync.Run(zoneRefreshContext)
 
+	var webAuthentication web.Authenticator
+	if authentication != nil {
+		webAuthentication = authentication
+	}
 	webServer, err = web.New(
 		logger,
 		handler,
@@ -315,7 +319,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		queryRecorder,
 		database,
 		configurationManager.Reload,
-		authentication,
+		webAuthentication,
 		initial.Security.Enabled,
 		setupRequired,
 		initial.Security.SecureCookies,

@@ -30,6 +30,10 @@ type administrator interface {
 }
 
 func (server *Server) administrationPage(writer http.ResponseWriter, request *http.Request) {
+	if server.administrator == nil {
+		http.NotFound(writer, request)
+		return
+	}
 	server.renderAdministration(writer, request, http.StatusOK, "", "")
 }
 
