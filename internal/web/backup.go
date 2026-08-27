@@ -136,9 +136,12 @@ func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.R
 
 	// The operation outlives the request that started it, so it runs on a
 	// background context; a browser that navigates away must not abort a
-	// restore halfway through.
-	go server.runBackupJob(passphrase)
+	// backup halfway through.
+	// Render the accepted state before work can finish. A fast job must not let
+	// this response consume the one-shot completion notice before the browser's
+	// polling request can receive it.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
+	go server.runBackupJob(passphrase)
 }
 
 func (server *Server) runBackupJob(passphrase string) {
@@ -200,8 +203,11 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 	keepConfiguration := request.FormValue("keep_configuration") == "on"
 	server.recordControlPlaneAudit(request, "backup.restore", "started a restore from "+header.Filename)
 
-	go server.runRestoreJob(contents, passphrase, keepConfiguration, header.Filename)
+	// Establish the polling response before a fast restore can publish its
+	// one-shot result; otherwise this request could consume the result before
+	// the browser has rendered the response.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
+	go server.runRestoreJob(contents, passphrase, keepConfiguration, header.Filename)
 }
 
 func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConfiguration bool, filename string) {

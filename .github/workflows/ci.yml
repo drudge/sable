@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "${unformatted}" ]]; then
+            printf 'Files requiring gofmt:\n%s\n' "${unformatted}"
+            exit 1
+          fi
+
+      - name: Verify module files
+        shell: bash
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Verify generated code, tests, and static analysis
+        run: go tool mage verify
+
+      - name: Run race detector
+        run: go tool mage race
+
+      - name: Scan reachable dependencies
+        run: go tool govulncheck ./...

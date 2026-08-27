@@ -29,7 +29,6 @@ const (
 	releasePackage            = "github.com/drudge/sable/internal/version"
 	containerImage            = "ghcr.io/drudge/sable"
 	releaseBuilder            = "sable-release"
-	templCommand              = "github.com/a-h/templ/cmd/templ"
 	clusterReplicaDirectory   = "_work/cluster-dev/replica"
 	releaseBranch             = "main"
 	recordedVersionPattern    = `[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?`
@@ -135,12 +134,12 @@ var Default = Build
 
 // Generate regenerates templ components.
 func Generate(ctx context.Context) error {
-	return run(ctx, nil, "go", "run", "-mod=mod", templCommand, "generate", "-path", "internal/web/pages")
+	return run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages")
 }
 
 // CheckGenerated verifies that generated templ components are current.
 func CheckGenerated(ctx context.Context) error {
-	return run(ctx, nil, "go", "run", "-mod=mod", templCommand, "generate", "-path", "internal/web/pages", "-check")
+	return run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages", "-check")
 }
 
 // Format formats application and Mage source files.

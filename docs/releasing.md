@@ -10,7 +10,7 @@ temporary operating-system file for the duration of a release command.
 Install Mage and GoReleaser:
 
 ```sh
-go install github.com/magefile/mage@v1.17.1
+go install github.com/magefile/mage@v1.17.2
 brew install goreleaser
 ```
 
