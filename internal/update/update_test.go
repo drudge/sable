@@ -17,6 +17,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/drudge/sable/internal/version"
 )
 
 func TestIsNewerTreatsDevelopmentBuildsAsOutdated(t *testing.T) {
@@ -191,6 +193,10 @@ func TestApplySkipsPreReleasesUnlessRequested(t *testing.T) {
 }
 
 func TestApplyReportsAnUpToDateInstallation(t *testing.T) {
+	originalRelease := version.Release
+	version.Release = "0.0.1"
+	t.Cleanup(func() { version.Release = originalRelease })
+
 	server := releaseServer(t, "v0.0.1", false, nil)
 	result, err := Apply(context.Background(), Options{APIBaseURL: server.URL})
 	if err != nil {

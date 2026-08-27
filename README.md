@@ -57,7 +57,7 @@ promotion is manual. See [the roadmap](docs/roadmap.md).
 ## Requirements
 
 - Go 1.27 or newer
-- Mage 1.17.1 or newer for build and development targets
+- Mage 1.17.2 or newer for build and development targets
 
 The build pins the Go 1.27 toolchain and enables the JSON v2 experiment
 (`GOEXPERIMENT=jsonv2`), which the console requires for its
@@ -100,9 +100,9 @@ installer:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
 
-Set `SABLE_VERSION=0.9.7-rc.1` to install a specific release. Re-running either
-installer updates the executable and service definition without replacing
-`/etc/sable/sable.toml` or `/var/lib/sable`.
+Set `SABLE_VERSION=VERSION` (for example, `1.0.0-rc.1`) to install a specific
+release. Re-running either installer updates the executable and service
+definition without replacing `/etc/sable/sable.toml` or `/var/lib/sable`.
 
 ## Updating
 
@@ -119,7 +119,7 @@ sudo sable update
 | --- | --- |
 | `--check` | Report the available release without installing it |
 | `--pre-release` | Consider pre-release builds when selecting the newest release |
-| `--version v0.9.7-rc.1` | Install a specific release tag, including older ones |
+| `--version vX.Y.Z` | Install a specific release tag, including older ones |
 | `--no-restart` | Replace the executable but leave the service running the old build |
 
 The previous executable is kept until the downloaded build has been run once,
@@ -229,10 +229,10 @@ mage releaseSmoke
 temporary workspaces, and verifies the release-critical standalone and
 two-node-cluster workflows without using public DNS or other internet services.
 
-The repository intentionally contains no YAML. Build and verification entry
-points live in `magefile.go`; Sable node/bootstrap configuration is TOML. Zones
-and records are operational data in SQLite or PostgreSQL, with zone text files
-used for import/export. Run `mage -l` to list the available targets.
+Build and verification entry points live in `magefile.go`; GitHub Actions YAML
+only orchestrates those targets. Sable node/bootstrap configuration remains
+TOML. Zones and records are operational data in SQLite or PostgreSQL, with zone
+text files used for import/export. Run `mage -l` to list the available targets.
 
 ## Build and release
 
@@ -252,11 +252,11 @@ checksums. `dockerSnapshot` produces local amd64 and arm64 images, while
 `dockerSmoke` starts the native image and verifies its embedded executable and
 health endpoint. Archive snapshots remain usable without a running Docker
 daemon. Tagged releases also publish a multi-architecture image to
-`ghcr.io/drudge/sable`. GoReleaser requires YAML internally, so Mage creates its
-configuration as a temporary file outside the repository and removes it after
-each command; no YAML is checked in. `mage release 0.8.0-rc.2` performs a whole
-release: it records the version everywhere it appears, verifies the repository,
-commits, tags, pushes, and publishes. See
+`ghcr.io/drudge/sable`. Mage creates GoReleaser's configuration as a temporary
+file outside the repository and removes it after each command. The GitHub
+Actions release workflow validates protected `main`, creates an annotated tag,
+and publishes the release; that tag is the single source of release version
+information, so publishing never rewrites or commits source files. See
 [the release guide](docs/releasing.md).
 
 ## Container quick start
@@ -274,8 +274,11 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
   --env TZ=America/New_York \
-  ghcr.io/drudge/sable:0.9.7-rc.1
+  ghcr.io/drudge/sable:next
 ```
+
+`next` tracks the newest pre-release. Use `latest` for the newest stable release
+or an exact semantic version for a pinned deployment.
 
 The console renders timestamps in the timezone reported by your browser, so
 `TZ` is only the fallback used before that preference is known. Containers
