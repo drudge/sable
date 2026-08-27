@@ -38,6 +38,12 @@ const (
 	maximumFormBytes        = 64 << 10
 	maximumZoneImportBytes  = 16 << 20
 	defaultRecentQueryLimit = 50
+	webReadHeaderTimeout    = 5 * time.Second
+	webRequestBodyTimeout   = 30 * time.Second
+	webReadTimeout          = 5 * time.Minute
+	webWriteTimeout         = 5 * time.Minute
+	webIdleTimeout          = 60 * time.Second
+	webMaximumHeaderBytes   = 64 << 10
 )
 
 //go:embed assets/*
@@ -347,11 +353,37 @@ func New(
 		rootHandler = rootMux
 	}
 	server.httpServer = &http.Server{
-		Handler:           rootHandler,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		Handler:           requestBodyDeadline(rootHandler),
+		ReadHeaderTimeout: webReadHeaderTimeout,
+		ReadTimeout:       webReadTimeout,
+		WriteTimeout:      webWriteTimeout,
+		IdleTimeout:       webIdleTimeout,
+		MaxHeaderBytes:    webMaximumHeaderBytes,
 	}
 	return server, nil
+}
+
+// requestBodyDeadline gives ordinary console and API requests a much shorter
+// body window than the server-wide ceiling retained for the explicitly bounded
+// archive and import endpoints.
+func requestBodyDeadline(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_ = http.NewResponseController(writer).SetReadDeadline(time.Now().Add(requestBodyTimeout(request.URL.Path)))
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func requestBodyTimeout(path string) time.Duration {
+	switch path {
+	case "/ui/backup/restore",
+		"/ui/zones/import",
+		"/ui/zones/import-new",
+		"/ui/blocking/domains/import",
+		"/ui/blocking/allowed/import":
+		return webReadTimeout
+	default:
+		return webRequestBodyTimeout
+	}
 }
 
 func (server *Server) sharedDoHHandler(next http.Handler) http.Handler {

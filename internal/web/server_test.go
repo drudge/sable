@@ -377,6 +377,13 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	if server.httpServer.ReadHeaderTimeout != webReadHeaderTimeout ||
+		server.httpServer.ReadTimeout != webReadTimeout ||
+		server.httpServer.WriteTimeout != webWriteTimeout ||
+		server.httpServer.IdleTimeout != webIdleTimeout ||
+		server.httpServer.MaxHeaderBytes != webMaximumHeaderBytes {
+		t.Fatalf("HTTP server limits are not fully configured: %+v", server.httpServer)
+	}
 	clusterService, err := clusterstate.Open(clusterstate.Options{DataDirectory: clusterDirectory, NodeName: "dns-1", Version: "dev", StartedAt: time.Now()})
 	if err != nil {
 		t.Fatal(err)
@@ -655,6 +662,26 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	} {
 		if !strings.Contains(metricsResponse.Body.String(), expected) {
 			t.Errorf("metrics do not contain %q", expected)
+		}
+	}
+}
+
+func TestRequestBodyTimeoutReservesTheLongWindowForBoundedUploads(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/ui/backup/restore",
+		"/ui/zones/import",
+		"/ui/zones/import-new",
+		"/ui/blocking/domains/import",
+		"/ui/blocking/allowed/import",
+	} {
+		if timeout := requestBodyTimeout(path); timeout != webReadTimeout {
+			t.Errorf("requestBodyTimeout(%q) = %s, want %s", path, timeout, webReadTimeout)
+		}
+	}
+	for _, path := range []string{"/setup", "/login", "/api/v1/cluster/enroll", "/dns-query"} {
+		if timeout := requestBodyTimeout(path); timeout != webRequestBodyTimeout {
+			t.Errorf("requestBodyTimeout(%q) = %s, want %s", path, timeout, webRequestBodyTimeout)
 		}
 	}
 }
