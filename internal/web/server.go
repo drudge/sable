@@ -1184,17 +1184,18 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 }
 
 type queryLogAPIEntry struct {
-	ID           int64           `json:"id"`
-	OccurredAt   time.Time       `json:"occurred_at"`
-	ClientIP     string          `json:"client_ip"`
-	Name         string          `json:"name"`
-	RecordType   uint16          `json:"record_type"`
-	Class        uint16          `json:"class"`
-	ResponseCode int             `json:"response_code"`
-	Source       querylog.Source `json:"source"`
-	Protocol     string          `json:"protocol"`
-	Answer       string          `json:"answer"`
-	DurationUS   int64           `json:"duration_us"`
+	ID           int64             `json:"id"`
+	OccurredAt   time.Time         `json:"occurred_at"`
+	ClientIP     string            `json:"client_ip"`
+	Name         string            `json:"name"`
+	RecordType   uint16            `json:"record_type"`
+	Class        uint16            `json:"class"`
+	ResponseCode int               `json:"response_code"`
+	Source       querylog.Source   `json:"source"`
+	Protocol     string            `json:"protocol"`
+	Answer       string            `json:"answer"`
+	DurationUS   int64             `json:"duration_us"`
+	Decision     querylog.Decision `json:"decision"`
 }
 
 func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
@@ -1212,6 +1213,7 @@ func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
 			Protocol:     entry.Protocol,
 			Answer:       entry.Answer,
 			DurationUS:   entry.Duration.Microseconds(),
+			Decision:     entry.Decision,
 		})
 	}
 	return result

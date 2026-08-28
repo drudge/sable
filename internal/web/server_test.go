@@ -168,6 +168,7 @@ func (testQueryLog) RecentQueryEvents(context.Context, int) ([]querylog.Entry, e
 			OccurredAt: time.Now(), ClientIP: "192.0.2.1", Name: "example.com",
 			RecordType: 1, Class: 1, ResponseCode: 0, Source: querylog.SourceCache,
 			Duration: 25 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache},
 		},
 	}}, nil
 }
@@ -626,7 +627,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		}
 	}
 	queryLogAPIResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=1")
-	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") {
+	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") || !strings.Contains(queryLogAPIResponse.Body.String(), `"decision":{"policy":"no_match","cache":"hit","resolver":"cache"}`) {
 		t.Fatalf("query log API response = %d %s", queryLogAPIResponse.Code, queryLogAPIResponse.Body.String())
 	}
 	invalidLimitResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=invalid")

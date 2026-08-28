@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -178,6 +179,7 @@ func (store *Store) migrateQueryLogSchema(ctx context.Context) error {
 	for _, column := range []struct{ name, definition string }{
 		{"protocol", "TEXT NOT NULL DEFAULT ''"},
 		{"answer", "TEXT NOT NULL DEFAULT ''"},
+		{"decision", "TEXT NOT NULL DEFAULT '{}'"},
 	} {
 		exists, err := store.tableHasColumn(ctx, "sable_query_log", column.name)
 		if err != nil {
@@ -236,6 +238,11 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 	}
 	defer statement.Close()
 	for _, event := range events {
+		decision, err := json.Marshal(event.Decision)
+		if err != nil {
+			_ = transaction.Rollback()
+			return fmt.Errorf("encode query decision: %w", err)
+		}
 		if _, err := statement.ExecContext(
 			ctx,
 			event.OccurredAt.UTC(),
@@ -247,6 +254,7 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 			event.Source,
 			event.Protocol,
 			event.Answer,
+			string(decision),
 			event.Duration.Microseconds(),
 		); err != nil {
 			_ = transaction.Rollback()
@@ -284,7 +292,7 @@ func (store *Store) RecentQueryEvents(ctx context.Context, limit int) ([]querylo
 		placeholder = "$1"
 	}
 	rows, err := store.database.QueryContext(ctx, `
-SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us
+SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
 FROM sable_query_log
 ORDER BY id DESC
 LIMIT `+placeholder, limit)
@@ -296,6 +304,7 @@ LIMIT `+placeholder, limit)
 	for rows.Next() {
 		var entry querylog.Entry
 		var source string
+		var decision string
 		var durationMicroseconds int64
 		if err := rows.Scan(
 			&entry.ID,
@@ -308,11 +317,15 @@ LIMIT `+placeholder, limit)
 			&source,
 			&entry.Protocol,
 			&entry.Answer,
+			&decision,
 			&durationMicroseconds,
 		); err != nil {
 			return nil, fmt.Errorf("scan recent query event: %w", err)
 		}
 		entry.Source = querylog.Source(source)
+		if err := json.Unmarshal([]byte(decision), &entry.Decision); err != nil {
+			return nil, fmt.Errorf("decode recent query decision: %w", err)
+		}
 		entry.Duration = time.Duration(durationMicroseconds) * time.Microsecond
 		entries = append(entries, entry)
 	}
@@ -396,7 +409,7 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	selectArguments := append([]any(nil), arguments...)
 	selectArguments = append(selectArguments, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	rows, err := store.database.QueryContext(ctx, `
-SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us
+SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
 FROM sable_query_log`+where+`
 ORDER BY id DESC
 LIMIT `+store.placeholder(len(selectArguments)-1)+` OFFSET `+store.placeholder(len(selectArguments)), selectArguments...)
@@ -419,14 +432,18 @@ func scanQueryEvents(rows *sql.Rows, capacity int) ([]querylog.Entry, error) {
 	for rows.Next() {
 		var entry querylog.Entry
 		var source string
+		var decision string
 		var durationMicroseconds int64
 		if err := rows.Scan(
 			&entry.ID, &entry.OccurredAt, &entry.ClientIP, &entry.Name,
-			&entry.RecordType, &entry.Class, &entry.ResponseCode, &source, &entry.Protocol, &entry.Answer, &durationMicroseconds,
+			&entry.RecordType, &entry.Class, &entry.ResponseCode, &source, &entry.Protocol, &entry.Answer, &decision, &durationMicroseconds,
 		); err != nil {
 			return nil, fmt.Errorf("scan query event: %w", err)
 		}
 		entry.Source = querylog.Source(source)
+		if err := json.Unmarshal([]byte(decision), &entry.Decision); err != nil {
+			return nil, fmt.Errorf("decode query decision: %w", err)
+		}
 		entry.Duration = time.Duration(durationMicroseconds) * time.Microsecond
 		entries = append(entries, entry)
 	}
@@ -453,6 +470,7 @@ CREATE TABLE IF NOT EXISTS sable_query_log (
     source TEXT NOT NULL,
 	protocol TEXT NOT NULL DEFAULT '',
 	answer TEXT NOT NULL DEFAULT '',
+	decision TEXT NOT NULL DEFAULT '{}',
     duration_us BIGINT NOT NULL
 )`, primaryKey)
 }
@@ -460,12 +478,12 @@ CREATE TABLE IF NOT EXISTS sable_query_log (
 func (store *Store) queryLogInsert() string {
 	if store.driver == "postgres" {
 		return `INSERT INTO sable_query_log
-(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 	}
 	return `INSERT INTO sable_query_log
-(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 }
 
 func databaseDriverName(driver string) (string, error) {
