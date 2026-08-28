@@ -668,12 +668,18 @@ func TestForwarderAndStubZonesRouteTheirEntireNamespace(t *testing.T) {
 		endpoints = append(endpoints, endpoint)
 		return positiveResponse(request, 60), nil
 	}
-	for _, name := range []string{"api.forward.test.", "deep.service.stub.test."} {
+	for _, testCase := range []struct{ name, route string }{
+		{name: "api.forward.test.", route: "forward.test"},
+		{name: "deep.service.stub.test.", route: "stub.test"},
+	} {
 		request := new(dns.Msg)
-		request.SetQuestion(name, dns.TypeA)
+		request.SetQuestion(testCase.name, dns.TypeA)
 		result := handler.resolveForClient(request, runtime, "192.0.2.1")
 		if result.source != querylog.SourceUpstream || result.response.Rcode != dns.RcodeSuccess {
-			t.Fatalf("resolve %s = source %q response %+v", name, result.source, result.response)
+			t.Fatalf("resolve %s = source %q response %+v", testCase.name, result.source, result.response)
+		}
+		if result.decision.Resolver != querylog.ResolverForwarded || result.decision.Route != testCase.route || result.decision.Cache != querylog.CacheMiss {
+			t.Fatalf("route decision for %s = %+v", testCase.name, result.decision)
 		}
 	}
 	if !slices.Equal(endpoints, []string{"tls://dns.forwarder.test:853", "udp://192.0.2.54:53"}) {
@@ -885,6 +891,9 @@ func TestHandlerReportsBlockedQueryWithoutCallingUpstream(t *testing.T) {
 	if event.Source != querylog.SourceBlocked || event.ClientIP != "192.0.2.44" {
 		t.Fatalf("event = %+v, want blocked source and client IP", event)
 	}
+	if event.Decision.Policy != querylog.PolicyBlocked || event.Decision.PolicyRule != "ads.example" || event.Decision.Resolver != querylog.ResolverBlocked {
+		t.Fatalf("blocked decision = %+v", event.Decision)
+	}
 }
 
 func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
@@ -923,7 +932,7 @@ func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
 	}
 
 	request.SetQuestion("safe.ads.example.", dns.TypeA)
-	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream {
+	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream || got.decision.Policy != querylog.PolicyAllowed || got.decision.PolicyRule != "safe.ads.example" {
 		t.Fatalf("allowed override source = %q, want upstream", got.source)
 	}
 	request.SetQuestion("child.safe.ads.example.", dns.TypeA)
@@ -935,7 +944,7 @@ func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
 		t.Fatalf("wildcard allowed apex source = %q, want blocked", got.source)
 	}
 	request.SetQuestion("cdn.trusted.ads.example.", dns.TypeA)
-	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream {
+	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream || got.decision.Policy != querylog.PolicyAllowed || got.decision.PolicyRule != "*.trusted.ads.example" {
 		t.Fatalf("wildcard allowed subdomain source = %q, want upstream", got.source)
 	}
 	request.SetQuestion("deep.cdn.trusted.ads.example.", dns.TypeA)
@@ -943,7 +952,7 @@ func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
 		t.Fatalf("wildcard allowed nested subdomain source = %q, want upstream", got.source)
 	}
 	request.SetQuestion("pixel.ads.example.", dns.TypeA)
-	if got := handler.resolveForClient(request, runtime, "198.51.100.8"); got.source != querylog.SourceUpstream {
+	if got := handler.resolveForClient(request, runtime, "198.51.100.8"); got.source != querylog.SourceUpstream || got.decision.Policy != querylog.PolicyClientBypass || got.decision.PolicyRule != "" {
 		t.Fatalf("bypass source = %q, want upstream", got.source)
 	}
 
@@ -951,7 +960,7 @@ func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
 	if !handler.BlockingPaused() {
 		t.Fatal("BlockingPaused() = false after pause")
 	}
-	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream {
+	if got := handler.resolveForClient(request, runtime, "192.0.2.4"); got.source != querylog.SourceUpstream || got.decision.Policy != querylog.PolicyPaused {
 		t.Fatalf("paused source = %q, want upstream", got.source)
 	}
 	handler.ResumeBlocking()
@@ -1016,6 +1025,9 @@ func TestHandlerServesAndReportsCacheHit(t *testing.T) {
 	}
 	if event.Source != querylog.SourceCache || event.Protocol != "UDP" || !strings.Contains(event.Answer, "A ") {
 		t.Fatalf("event = %+v, want cached UDP answer", event)
+	}
+	if event.Decision.Cache != querylog.CacheHit || event.Decision.Resolver != querylog.ResolverCache {
+		t.Fatalf("cache decision = %+v", event.Decision)
 	}
 	if handler.Stats().CacheHits != 1 {
 		t.Fatalf("CacheHits = %d, want 1", handler.Stats().CacheHits)

@@ -1773,6 +1773,31 @@
 		item.textContent = answer;
 		answerList.append(item);
 	  });
+	  const explainAvailable = row.dataset.queryDetailExplainAvailable === "true";
+	  const explainPath = dialog.querySelector("[data-query-detail-explain-path]");
+	  const explainLegacy = dialog.querySelector("[data-query-detail-explain-legacy]");
+	  const explainSummary = dialog.querySelector("[data-query-detail-explain-summary]");
+	  if (explainPath) explainPath.hidden = !explainAvailable;
+	  if (explainLegacy) explainLegacy.hidden = explainAvailable;
+	  if (explainSummary) {
+		explainSummary.textContent = row.dataset.queryDetailExplainSummary || "See how Sable handled this query.";
+		explainSummary.hidden = !explainAvailable;
+	  }
+	  const decisionSteps = {
+		policy: [row.dataset.queryDetailPolicyLabel, row.dataset.queryDetailPolicyDetail],
+		cache: [row.dataset.queryDetailCacheLabel, ""],
+		resolver: [row.dataset.queryDetailResolverLabel, row.dataset.queryDetailResolverDetail],
+		dnssec: [row.dataset.queryDetailDnssecLabel, ""],
+	  };
+	  Object.entries(decisionSteps).forEach(([name, [label, detail]]) => {
+		const step = dialog.querySelector(`[data-query-decision-step="${name}"]`);
+		if (!step) return;
+		step.hidden = !label;
+		step.querySelector("[data-query-decision-label]").textContent = label || "";
+		const detailTarget = step.querySelector("[data-query-decision-detail]");
+		detailTarget.textContent = detail || "";
+		detailTarget.hidden = !detail;
+	  });
 	  const domain = row.dataset.queryDetailName || "";
 	  dialog.querySelectorAll("[data-query-detail-domain]").forEach((input) => { input.value = domain; });
 	  const policyActions = dialog.querySelector("[data-query-detail-policy-actions]");

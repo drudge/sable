@@ -228,6 +228,18 @@ type QueryLogEntryView struct {
 	Protocol   string
 	Answers    []string
 	Duration   string
+	Decision   QueryDecisionView
+}
+
+type QueryDecisionView struct {
+	Available      bool
+	Summary        string
+	Policy         string
+	PolicyDetail   string
+	Cache          string
+	Resolver       string
+	ResolverDetail string
+	DNSSEC         string
 }
 
 templ Dashboard(view DashboardView) {

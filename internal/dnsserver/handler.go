@@ -291,6 +291,7 @@ type observerHolder struct {
 type resolution struct {
 	response         *dns.Msg
 	source           querylog.Source
+	decision         querylog.Decision
 	transientFailure bool
 }
 
@@ -1245,43 +1246,81 @@ func (handler *Handler) resolve(request *dns.Msg, runtime *Runtime) resolution {
 
 func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, clientIP string) resolution {
 	if len(request.Question) == 0 {
-		return resolution{response: errorResponse(request, dns.RcodeFormatError), source: querylog.SourceError}
+		return resolution{response: errorResponse(request, dns.RcodeFormatError), source: querylog.SourceError,
+			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}}
 	}
 	if response, found := handler.resolveANAME(request, runtime, clientIP); found {
 		handler.authoritativeAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceAuthoritative}
+		return resolution{response: response, source: querylog.SourceAuthoritative,
+			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
 	}
 	if response, found := runtime.authoritativeResponse(request); found {
 		handler.authoritativeAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceAuthoritative}
+		return resolution{response: response, source: querylog.SourceAuthoritative,
+			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
 	}
 	if response, found := runtime.localResponse(request); found {
 		handler.localAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceLocal}
+		return resolution{response: response, source: querylog.SourceLocal,
+			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverLocal}}
 	}
 
-	if runtime.blocking && !handler.BlockingPaused() && !runtime.clientBypasses(clientIP) &&
-		!runtime.matchesAllowed(request.Question[0].Name) && runtime.matchesBlocked(request.Question[0].Name) {
+	policy, policyRule := runtime.policyDecision(request.Question[0].Name, clientIP, handler.BlockingPaused())
+	if policy == querylog.PolicyBlocked {
 		handler.blocked.Add(1)
-		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked}
+		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
+			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Resolver: querylog.ResolverBlocked}}
 	}
 	if response, found, prefetch := runtime.cache.GetWithPrefetch(request); found {
 		handler.cacheHits.Add(1)
 		if prefetch {
 			handler.prefetch(request, runtime)
 		}
-		return resolution{response: response, source: querylog.SourceCache}
+		return resolution{response: response, source: querylog.SourceCache,
+			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}}
 	}
 	handler.cacheMisses.Add(1)
 
-	forwarders, routed := runtime.forwardersFor(request.Question[0].Name)
-	if routed {
+	forwarders, route := runtime.forwardersAndRouteFor(request.Question[0].Name)
+	if route != "" {
 		handler.routedQueries.Add(1)
 	}
+	var result resolution
 	if runtime.staleMaxWait > 0 && runtime.cache.HasStale(request) {
-		return handler.resolveWithStaleWait(request, runtime, forwarders, clientIP)
+		result = handler.resolveWithStaleWait(request, runtime, forwarders, clientIP)
+	} else {
+		result = handler.resolveShared(request, runtime, forwarders, true, clientIP)
 	}
-	return handler.resolveShared(request, runtime, forwarders, true, clientIP)
+	result.decision.Policy = policy
+	result.decision.PolicyRule = policyRule
+	if result.decision.Cache == "" {
+		result.decision.Cache = querylog.CacheMiss
+	}
+	if result.decision.Resolver == "" {
+		result.decision.Resolver = resolverDecision(runtime, forwarders)
+	}
+	result.decision.Route = route
+	return result
+}
+
+func resolverDecision(runtime *Runtime, forwarders []string) querylog.ResolverDecision {
+	if len(forwarders) > 0 || runtime.mode == "forward" {
+		return querylog.ResolverForwarded
+	}
+	return querylog.ResolverRecursive
+}
+
+func dnssecDecision(validation validationState) querylog.DNSSECDecision {
+	switch validation {
+	case validationSecure:
+		return querylog.DNSSECSecure
+	case validationInsecure:
+		return querylog.DNSSECInsecure
+	case validationBogus:
+		return querylog.DNSSECBogus
+	default:
+		return querylog.DNSSECIndeterminate
+	}
 }
 
 // resolveShared coalesces concurrent identical cache misses so only one upstream
@@ -1379,7 +1418,8 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 		if response, found := runtime.cache.GetStale(request); found {
 			handler.cacheHits.Add(1)
 			prepareResponseForClient(response, request)
-			return resolution{response: response, source: querylog.SourceCache}
+			return resolution{response: response, source: querylog.SourceCache,
+				decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}
 		}
 		return <-result
 	}
@@ -1387,12 +1427,14 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 
 func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	response, validation, validationErr := handler.resolveUpstream(request, runtime, forwarders)
+	decision := querylog.Decision{Resolver: resolverDecision(runtime, forwarders), DNSSEC: dnssecDecision(validation)}
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
 		if !request.CheckingDisabled {
 			handler.logResolutionFailure(request, clientIP, "DNSSEC validation failed",
 				upstreamFailureFields(runtime, forwarders, validationErr)...)
-			return resolution{response: dnssecBogusResponse(request, validationErr), source: querylog.SourceError}
+			decision.Resolver = querylog.ResolverError
+			return resolution{response: dnssecBogusResponse(request, validationErr), source: querylog.SourceError, decision: decision}
 		}
 	} else if validation == validationSecure {
 		handler.dnssecSecure.Add(1)
@@ -1404,7 +1446,8 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 		handler.logResolutionFailure(request, clientIP, "upstream resolution failed",
 			upstreamFailureFields(runtime, forwarders, validationErr)...)
 		if !staleFallback {
-			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
+			decision.Resolver = querylog.ResolverError
+			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, decision: decision, transientFailure: true}
 		}
 		return handler.resolveUpstreamFailure(request, runtime)
 	}
@@ -1413,7 +1456,8 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 		handler.logResolutionFailure(request, clientIP, "upstream returned no response",
 			upstreamFailureFields(runtime, forwarders, nil)...)
 		if !staleFallback {
-			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, transientFailure: true}
+			decision.Resolver = querylog.ResolverError
+			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, decision: decision, transientFailure: true}
 		}
 		return handler.resolveUpstreamFailure(request, runtime)
 	}
@@ -1435,7 +1479,7 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 		runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 	}
 	prepareResponseForClient(response, request)
-	return resolution{response: response, source: querylog.SourceUpstream}
+	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
@@ -1461,13 +1505,15 @@ func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtim
 	if response, found := runtime.cache.GetStale(request); found {
 		handler.cacheHits.Add(1)
 		prepareResponseForClient(response, request)
-		return resolution{response: response, source: querylog.SourceCache}
+		return resolution{response: response, source: querylog.SourceCache,
+			decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}
 	}
 	response := errorResponse(request, fallbackErrorCode)
 	// A synthesised failure carries no records, so there is nothing a client that
 	// set DO would be missing and no reason to make it refetch the same failure.
 	runtime.cache.Set(request, response, true)
-	return resolution{response: response, source: querylog.SourceError}
+	return resolution{response: response, source: querylog.SourceError,
+		decision: querylog.Decision{Resolver: querylog.ResolverError}}
 }
 
 func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
@@ -2239,6 +2285,13 @@ func (handler *Handler) recordQuery(
 		return
 	}
 	question := request.Question[0]
+	decision := result.decision
+	if decision.Policy == "" {
+		decision.Policy = querylog.PolicyNotEvaluated
+	}
+	if decision.Resolver == "" {
+		decision.Resolver = resolverDecisionForSource(result.source)
+	}
 	observer.Record(querylog.Event{
 		OccurredAt:   startedAt,
 		ClientIP:     responseWriterClientIP(writer),
@@ -2250,7 +2303,25 @@ func (handler *Handler) recordQuery(
 		Protocol:     queryProtocol(writer),
 		Answer:       queryAnswer(result.response),
 		Duration:     time.Since(startedAt),
+		Decision:     decision,
 	})
+}
+
+func resolverDecisionForSource(source querylog.Source) querylog.ResolverDecision {
+	switch source {
+	case querylog.SourceAuthoritative:
+		return querylog.ResolverAuthoritative
+	case querylog.SourceLocal:
+		return querylog.ResolverLocal
+	case querylog.SourceBlocked:
+		return querylog.ResolverBlocked
+	case querylog.SourceCache:
+		return querylog.ResolverCache
+	case querylog.SourceUpstream:
+		return querylog.ResolverForwarded
+	default:
+		return querylog.ResolverError
+	}
 }
 
 func queryProtocol(writer dns.ResponseWriter) string {
@@ -2595,10 +2666,18 @@ func dnssecRuntimeSignature(configuration RuntimeConfig) string {
 }
 
 func (runtime *Runtime) forwardersFor(name string) ([]string, bool) {
+	forwarders, route := runtime.forwardersAndRouteFor(name)
+	return forwarders, route != ""
+}
+
+// forwardersAndRouteFor returns the selected endpoints and the normalized
+// conditional-forwarding suffix that selected them. The endpoints stay in
+// memory; only the suffix is safe and useful enough for a persisted decision.
+func (runtime *Runtime) forwardersAndRouteFor(name string) ([]string, string) {
 	name = normalizeName(name)
 	for name != "" {
 		if forwarders, found := runtime.routes[name]; found {
-			return forwarders, true
+			return forwarders, name
 		}
 		separator := strings.IndexByte(name, '.')
 		if separator < 0 {
@@ -2607,9 +2686,9 @@ func (runtime *Runtime) forwardersFor(name string) ([]string, bool) {
 		name = name[separator+1:]
 	}
 	if runtime.mode == "recursive" {
-		return nil, false
+		return nil, ""
 	}
-	return runtime.forwarders, false
+	return runtime.forwarders, ""
 }
 
 func upstreamSignature(forwarders []string, routes map[string][]string) string {
@@ -2653,39 +2732,64 @@ func responseWriterClientIP(writer dns.ResponseWriter) string {
 }
 
 func (runtime *Runtime) matchesBlocked(name string) bool {
-	return matchesDomainSet(runtime.blocked, name)
+	return matchingDomainRule(runtime.blocked, name) != ""
 }
 
 func (runtime *Runtime) matchesAllowed(name string) bool {
+	return runtime.matchingAllowedRule(name) != ""
+}
+
+func (runtime *Runtime) matchingAllowedRule(name string) string {
 	name = normalizeName(name)
 	if _, found := runtime.allowedExact[name]; found {
-		return true
+		return name
 	}
 	for {
 		separator := strings.IndexByte(name, '.')
 		if separator < 0 {
-			return false
+			return ""
 		}
 		name = name[separator+1:]
 		if _, found := runtime.allowedWildcard[name]; found {
-			return true
+			return "*." + name
 		}
 	}
 }
 
-func matchesDomainSet(domains map[string]struct{}, name string) bool {
+func matchingDomainRule(domains map[string]struct{}, name string) string {
 	name = normalizeName(name)
 	for name != "" {
 		if _, found := domains[name]; found {
-			return true
+			return name
 		}
 		separator := strings.IndexByte(name, '.')
 		if separator < 0 {
-			return false
+			return ""
 		}
 		name = name[separator+1:]
 	}
-	return false
+	return ""
+}
+
+func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (querylog.PolicyDecision, string) {
+	if !runtime.blocking {
+		return querylog.PolicyDisabled, ""
+	}
+	if paused {
+		return querylog.PolicyPaused, ""
+	}
+	if runtime.clientBypasses(clientIP) {
+		// The fact that the client bypassed policy is useful; persisting the
+		// matching address or network would duplicate sensitive configuration.
+		return querylog.PolicyClientBypass, ""
+	}
+	if rule := runtime.matchingAllowedRule(name); rule != "" {
+		return querylog.PolicyAllowed, rule
+	}
+	if rule := matchingDomainRule(runtime.blocked, name); rule != "" {
+		return querylog.PolicyBlocked, rule
+	}
+	return querylog.PolicyNoMatch, ""
 }
 
 func (runtime *Runtime) clientBypasses(value string) bool {

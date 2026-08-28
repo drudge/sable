@@ -168,6 +168,7 @@ func (testQueryLog) RecentQueryEvents(context.Context, int) ([]querylog.Entry, e
 			OccurredAt: time.Now(), ClientIP: "192.0.2.1", Name: "example.com",
 			RecordType: 1, Class: 1, ResponseCode: 0, Source: querylog.SourceCache,
 			Duration: 25 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache},
 		},
 	}}, nil
 }
@@ -186,6 +187,24 @@ func (log testQueryLog) QueryEvents(ctx context.Context, filter querylog.Filter)
 		return querylog.Page{}, err
 	}
 	return querylog.Page{Entries: entries, Page: 1, PageSize: filter.PageSize, TotalEntries: len(entries), TotalPages: 1}, nil
+}
+
+func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
+	t.Parallel()
+
+	view := queryDecisionView(querylog.Decision{
+		Policy: querylog.PolicyAllowed, PolicyRule: "internal.example.", Cache: querylog.CacheMiss,
+		Resolver: querylog.ResolverForwarded, Route: "corp.example.", DNSSEC: querylog.DNSSECSecure,
+	})
+	if !view.Available || view.Policy != "Allowed by policy" || view.PolicyDetail != "Matched internal.example." {
+		t.Fatalf("policy explanation = %+v", view)
+	}
+	if view.Cache != "Cache miss" || view.Resolver != "Forwarded upstream" || view.ResolverDetail != "Conditional route: corp.example." {
+		t.Fatalf("resolution explanation = %+v", view)
+	}
+	if view.DNSSEC != "DNSSEC secure" || !strings.Contains(view.Summary, "conditional route") {
+		t.Fatalf("DNSSEC/summary explanation = %+v", view)
+	}
 }
 
 func TestDNSQueryResultIncludesIsotopeActionsAndCopyTargets(t *testing.T) {
@@ -644,7 +663,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		}
 	}
 	queryLogAPIResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=1")
-	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") {
+	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") || !strings.Contains(queryLogAPIResponse.Body.String(), `"decision":{"policy":"no_match","cache":"hit","resolver":"cache"}`) {
 		t.Fatalf("query log API response = %d %s", queryLogAPIResponse.Code, queryLogAPIResponse.Body.String())
 	}
 	invalidLimitResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=invalid")
