@@ -34,6 +34,7 @@ import (
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/update"
+	webassets "github.com/drudge/sable/internal/web/assets"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -433,6 +434,16 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	}
 	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
 		t.Error("dashboard does not contain its accessible page heading")
+	}
+	for _, name := range []string{"bootstrap.js", "app.css", "app.js", "htmx.min.js", "sable-mark.svg", "sable-icon-180.png"} {
+		if path := webassets.URL(name); !strings.Contains(dashboard, path) {
+			t.Errorf("dashboard does not contain fingerprinted asset %q", path)
+		}
+	}
+	appScript := `<script src="` + webassets.URL("app.js") + `" defer></script>`
+	htmxScript := `<script src="` + webassets.URL("htmx.min.js") + `" defer></script>`
+	if !strings.Contains(dashboard, appScript) || !strings.Contains(dashboard, htmxScript) || strings.Index(dashboard, appScript) > strings.Index(dashboard, htmxScript) {
+		t.Error("deferred application script must register before htmx initializes")
 	}
 	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range"} {
 		if !strings.Contains(dashboard, expected) {

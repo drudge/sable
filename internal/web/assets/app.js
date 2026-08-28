@@ -8,24 +8,6 @@
   const OVERVIEW_SCOPE_ALL = "all";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
-  const dark = currentTheme() === "dark" || (currentTheme() === "system" && systemDark());
-  document.documentElement.classList.toggle("dark", dark);
-
-  if (localStorage.getItem(sidebarKey) === "true") {
-    document.documentElement.classList.add("sidebar-collapsed");
-  }
-
-  // Timestamps render on the server, so tell it which zone this browser is in.
-  // Without this a server running on UTC shows every time shifted.
-  const timeZoneCookie = "sable_time_zone";
-  const readCookie = (name) => document.cookie.split("; ").find((entry) => entry.startsWith(`${name}=`))?.slice(name.length + 1) ?? "";
-  let browserTimeZone = "";
-  try { browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { browserTimeZone = ""; }
-  if (/^[A-Za-z0-9_+\-/]{1,64}$/.test(browserTimeZone) && readCookie(timeZoneCookie) !== browserTimeZone) {
-    document.cookie = `${timeZoneCookie}=${browserTimeZone}; Path=/; Max-Age=31536000; SameSite=Lax`;
-    // Only reload once the cookie actually stuck, otherwise this would loop.
-    if (readCookie(timeZoneCookie) === browserTimeZone) window.location.reload();
-  }
 
 	document.addEventListener("DOMContentLoaded", () => {
 	const replicaLocalMutation = (path) => {
