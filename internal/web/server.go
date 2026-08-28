@@ -1178,9 +1178,90 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 			Protocol:   entry.Protocol,
 			Answers:    strings.Split(entry.Answer, "\n"),
 			Duration:   entry.Duration.Round(time.Microsecond).String(),
+			Decision:   queryDecisionView(entry.Decision),
 		})
 	}
 	return views
+}
+
+func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
+	view := pages.QueryDecisionView{
+		Available: decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
+	}
+	switch decision.Policy {
+	case querylog.PolicyNotEvaluated:
+		view.Policy = "Policy not evaluated"
+		view.PolicyDetail = "Authoritative and local answers take precedence."
+	case querylog.PolicyDisabled:
+		view.Policy = "Blocking disabled"
+	case querylog.PolicyPaused:
+		view.Policy = "Blocking paused"
+	case querylog.PolicyClientBypass:
+		view.Policy = "Client bypassed blocking"
+	case querylog.PolicyAllowed:
+		view.Policy = "Allowed by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+	case querylog.PolicyBlocked:
+		view.Policy = "Blocked by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+	case querylog.PolicyNoMatch:
+		view.Policy = "No blocking rule matched"
+	}
+	switch decision.Cache {
+	case querylog.CacheHit:
+		view.Cache = "Cache hit"
+	case querylog.CacheMiss:
+		view.Cache = "Cache miss"
+	case querylog.CacheStale:
+		view.Cache = "Served stale cache"
+	}
+	switch decision.Resolver {
+	case querylog.ResolverAuthoritative:
+		view.Resolver = "Answered by an authoritative zone"
+		view.Summary = "Sable answered from an authoritative zone it serves."
+	case querylog.ResolverLocal:
+		view.Resolver = "Answered by a local host override"
+		view.Summary = "Sable answered from a local host override."
+	case querylog.ResolverBlocked:
+		view.Resolver = "Synthesized a blocking response"
+		view.Summary = "Sable blocked this query before resolution."
+	case querylog.ResolverCache:
+		view.Resolver = "Returned a cached response"
+		view.Summary = "Sable answered this query from its cache."
+	case querylog.ResolverForwarded:
+		view.Resolver = "Forwarded upstream"
+		view.Summary = "Sable forwarded this query to its configured upstream resolvers."
+		if decision.Route != "" {
+			view.ResolverDetail = "Conditional route: " + decision.Route
+			view.Summary = "Sable matched a conditional route and forwarded the query."
+		} else {
+			view.ResolverDetail = "Default forwarders"
+		}
+	case querylog.ResolverRecursive:
+		view.Resolver = "Resolved recursively"
+		view.Summary = "Sable resolved this query recursively."
+	case querylog.ResolverError:
+		view.Resolver = "Resolution failed"
+		view.Summary = "Sable could not complete resolution."
+	}
+	switch decision.DNSSEC {
+	case querylog.DNSSECSecure:
+		view.DNSSEC = "DNSSEC secure"
+	case querylog.DNSSECInsecure:
+		view.DNSSEC = "DNSSEC insecure"
+	case querylog.DNSSECBogus:
+		view.DNSSEC = "DNSSEC bogus"
+	case querylog.DNSSECIndeterminate:
+		view.DNSSEC = "DNSSEC not validated"
+	}
+	return view
+}
+
+func matchedDecisionRule(rule string) string {
+	if rule == "" {
+		return ""
+	}
+	return "Matched " + rule
 }
 
 type queryLogAPIEntry struct {

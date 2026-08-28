@@ -245,6 +245,14 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		data-query-detail-protocol={ entry.Protocol }
 		data-query-detail-duration={ entry.Duration }
 		data-query-detail-answers={ strings.Join(entry.Answers, "\n") }
+		data-query-detail-explain-available={ fmt.Sprint(entry.Decision.Available) }
+		data-query-detail-explain-summary={ entry.Decision.Summary }
+		data-query-detail-policy-label={ entry.Decision.Policy }
+		data-query-detail-policy-detail={ entry.Decision.PolicyDetail }
+		data-query-detail-cache-label={ entry.Decision.Cache }
+		data-query-detail-resolver-label={ entry.Decision.Resolver }
+		data-query-detail-resolver-detail={ entry.Decision.ResolverDetail }
+		data-query-detail-dnssec-label={ entry.Decision.DNSSEC }
 	>
 		// The client and the protocol ride under the timestamp, and the answers
 		// under the domain, so the narrow layout can drop those columns without
@@ -285,6 +293,16 @@ templ QueryDetailDialog(canBlocking bool) {
 				<h3 id="query-detail-answer-title">Answer</h3>
 				<div data-query-detail-answers><span>—</span></div>
 			</section>
+			<section class="query-detail-explain" aria-labelledby="query-detail-explain-title">
+				<div class="query-detail-section-heading"><h3 id="query-detail-explain-title">Why this answer?</h3><p data-query-detail-explain-summary></p></div>
+				<ol class="query-decision-path" data-query-detail-explain-path>
+					@QueryDecisionStep("policy", "Policy")
+					@QueryDecisionStep("cache", "Cache")
+					@QueryDecisionStep("resolver", "Resolver")
+					@QueryDecisionStep("dnssec", "DNSSEC")
+				</ol>
+				<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden>Decision details were not recorded for this older query.</p>
+			</section>
 		</div>
 		<footer class="query-detail-footer">
 			<button class="button outline" type="button" data-dialog-close>Close</button>
@@ -296,6 +314,10 @@ templ QueryDetailDialog(canBlocking bool) {
 			}
 		</footer>
 	</dialog>
+}
+
+templ QueryDecisionStep(name, title string) {
+	<li data-query-decision-step={ name }><span class="query-decision-marker" aria-hidden="true"></span><div><span class="query-decision-kind">{ title }</span><strong data-query-decision-label></strong><span data-query-decision-detail hidden></span></div></li>
 }
 
 templ QueryPolicyAction(domain, action, icon, label string) {

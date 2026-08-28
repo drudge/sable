@@ -189,6 +189,24 @@ func (log testQueryLog) QueryEvents(ctx context.Context, filter querylog.Filter)
 	return querylog.Page{Entries: entries, Page: 1, PageSize: filter.PageSize, TotalEntries: len(entries), TotalPages: 1}, nil
 }
 
+func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
+	t.Parallel()
+
+	view := queryDecisionView(querylog.Decision{
+		Policy: querylog.PolicyAllowed, PolicyRule: "internal.example.", Cache: querylog.CacheMiss,
+		Resolver: querylog.ResolverForwarded, Route: "corp.example.", DNSSEC: querylog.DNSSECSecure,
+	})
+	if !view.Available || view.Policy != "Allowed by policy" || view.PolicyDetail != "Matched internal.example." {
+		t.Fatalf("policy explanation = %+v", view)
+	}
+	if view.Cache != "Cache miss" || view.Resolver != "Forwarded upstream" || view.ResolverDetail != "Conditional route: corp.example." {
+		t.Fatalf("resolution explanation = %+v", view)
+	}
+	if view.DNSSEC != "DNSSEC secure" || !strings.Contains(view.Summary, "conditional route") {
+		t.Fatalf("DNSSEC/summary explanation = %+v", view)
+	}
+}
+
 func TestDNSQueryResultIncludesIsotopeActionsAndCopyTargets(t *testing.T) {
 	t.Parallel()
 
