@@ -382,6 +382,11 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		testStats{snapshot: dnsserver.Stats{
 			Queries: 42, LocalAnswers: 5, LocalHosts: 2, CacheEntries: 1, CacheHits: 12,
 			StartedAt: time.Now().Add(-time.Minute),
+			Latency: []dnsserver.DNSLatencyHistogram{{
+				Source: "cache", Protocol: "udp", Cache: "hit", ResponseCode: "NOERROR",
+				Count: 2, SumNanoseconds: uint64(1500 * time.Microsecond),
+				Buckets: []dnsserver.DNSLatencyBucket{{UpperBoundNanoseconds: uint64(time.Millisecond), Count: 1}},
+			}},
 		}},
 		testConfiguration{snapshot: config.Snapshot{Config: configuration, Revision: 7}},
 		testZones{},
@@ -429,7 +434,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
 		t.Error("dashboard does not contain its accessible page heading")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", "Last hour"} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range"} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
@@ -479,13 +484,28 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if insightsResponse.Code != http.StatusOK || !strings.Contains(insightsResponse.Body.String(), `id="dashboard-insights"`) {
 		t.Fatalf("hour insights response = %d %s", insightsResponse.Code, insightsResponse.Body.String())
 	}
+	for _, expected := range []string{`data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`, "Last hour"} {
+		if !strings.Contains(insightsResponse.Body.String(), expected) {
+			t.Errorf("loaded insights markup does not contain %q", expected)
+		}
+	}
 	if strings.Contains(insightsResponse.Body.String(), "hx-swap-oob") {
 		t.Error("polled insights should replace themselves rather than swap out of band")
 	}
-	// A week of the query log is aggregated only when the range picker asks for
-	// it, so the polling endpoint refuses the wide ranges outright.
-	if response := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=week"); response.Code != http.StatusBadRequest {
-		t.Fatalf("week insights status = %d, want 400", response.Code)
+	weekInsights := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=week")
+	if weekInsights.Code != http.StatusOK || !strings.Contains(weekInsights.Body.String(), "Last 7 days") {
+		t.Fatalf("week insights response = %d %s", weekInsights.Code, weekInsights.Body.String())
+	}
+	if strings.Contains(weekInsights.Body.String(), `hx-trigger="every 60s"`) {
+		t.Error("week insights should load on demand rather than poll")
+	}
+	customInsightsPath := "/ui/stats/insights?range=custom&start=" + url.QueryEscape(now.Add(-time.Hour).UTC().Format(time.RFC3339Nano)) + "&end=" + url.QueryEscape(now.UTC().Format(time.RFC3339Nano))
+	customInsights := serveRequest(server, http.MethodGet, customInsightsPath)
+	if customInsights.Code != http.StatusOK || !strings.Contains(customInsights.Body.String(), "Custom range") {
+		t.Fatalf("custom insights response = %d %s", customInsights.Code, customInsights.Body.String())
+	}
+	if response := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=custom&start=nope&end=still-nope"); response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid custom insights status = %d, want 400", response.Code)
 	}
 	if response := serveRequest(server, http.MethodGet, "/ui/stats/insights?range=forever"); response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid insights range status = %d, want 400", response.Code)
@@ -645,7 +665,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 
 	healthResponse := serveRequest(server, "GET", "/api/v1/health")
 	if healthResponse.Code != 200 {
-		t.Fatalf("health status = %d, want 200", healthResponse.Code)
+		t.Fatalf("health status = %d, want 200: %s", healthResponse.Code, healthResponse.Body.String())
 	}
 	if healthResponse.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("Content-Security-Policy header is empty")
@@ -709,6 +729,10 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		`sable_cluster_node_connected{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 1`,
 		`sable_cluster_node_synchronized{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 1`,
 		`sable_cluster_node_replication_lag_generations{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 0`,
+		`sable_dns_response_duration_seconds_bucket{source="cache",protocol="udp",cache="hit",rcode="NOERROR",le="0.001"} 1`,
+		`sable_dns_response_duration_seconds_bucket{source="cache",protocol="udp",cache="hit",rcode="NOERROR",le="+Inf"} 2`,
+		`sable_dns_response_duration_seconds_sum{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 0.0015`,
+		`sable_dns_response_duration_seconds_count{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 2`,
 	} {
 		if !strings.Contains(metricsResponse.Body.String(), expected) {
 			t.Errorf("metrics do not contain %q", expected)

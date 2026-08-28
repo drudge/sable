@@ -36,6 +36,22 @@ type insightWindow struct {
 	Label string
 }
 
+func (window insightWindow) loadURL() string {
+	values := url.Values{"range": []string{window.Range}}
+	if window.Range == "custom" {
+		values.Set("start", window.Start.UTC().Format(time.RFC3339Nano))
+		values.Set("end", window.End.UTC().Format(time.RFC3339Nano))
+	}
+	return "/ui/stats/insights?" + values.Encode()
+}
+
+func loadingDashboardInsights(window insightWindow) pages.DashboardInsightsView {
+	return pages.DashboardInsightsView{
+		RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(),
+		PollRange: window.pollRange(), LoadURL: window.loadURL(), Loading: true,
+	}
+}
+
 // insightPollRanges are the chart ranges whose rankings are cheap enough to
 // recount on a timer. A week or more of the query log is aggregated only when
 // an operator asks for it, which is what the range picker is for.

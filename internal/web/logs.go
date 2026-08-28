@@ -216,10 +216,16 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 		view.Entries[index].OccurredAt = pages.FormatShortDateTime(result.Entries[index].OccurredAt, requestTimeDisplay(request), true)
 	}
 	view.CopyText = queryLogText(result.Entries)
-	view.FirstURL = queryLogPanelURL(raw, 1)
-	view.PreviousURL = queryLogPanelURL(raw, max(1, result.Page-1))
-	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1))
-	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages))
+	var firstID, lastID int64
+	if len(result.Entries) > 0 {
+		firstID = result.Entries[0].ID
+		lastID = result.Entries[len(result.Entries)-1].ID
+		view.NewestID = firstID
+	}
+	view.FirstURL = queryLogPanelURL(raw, 1, 0, "", result.TotalEntries)
+	view.PreviousURL = queryLogPanelURL(raw, max(1, result.Page-1), firstID, "newer", result.TotalEntries)
+	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), lastID, "older", result.TotalEntries)
+	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages), 0, "oldest", result.TotalEntries)
 	view.ExportURL = "/api/v1/logs/queries/export?" + exportQueryValues(raw).Encode()
 	return view
 }
@@ -232,6 +238,15 @@ func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
 		ClientIP: values.Get("client_ip"), Name: values.Get("name"),
 		Source: querylog.Source(values.Get("source")), Protocol: values.Get("protocol"),
 	}
+	filter.Cursor = parsePositiveInt64(values.Get("cursor"))
+	switch values.Get("direction") {
+	case "older", "newer", "oldest":
+		filter.Direction = values.Get("direction")
+	}
+	filter.KnownTotal = parseBoundedInt(values.Get("known_total"), 0, 0, 1_000_000_000)
+	_, filter.UseKnownTotal = values["known_total"]
+	filter.AfterID = parsePositiveInt64(values.Get("after_id"))
+	filter.Incremental = values.Get("live") == "1" && filter.UseKnownTotal
 	if value := strings.ToUpper(strings.TrimSpace(values.Get("record_type"))); value != "" && value != "ALL" {
 		for _, item := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' }) {
 			if number, found := dns.StringToType[item]; found {
@@ -299,10 +314,25 @@ func parseBoundedInt(raw string, fallback, minimum, maximum int) int {
 	return value
 }
 
-func queryLogPanelURL(values url.Values, page int) string {
+func parsePositiveInt64(raw string) int64 {
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 1 {
+		return 0
+	}
+	return value
+}
+
+func queryLogPanelURL(values url.Values, page int, cursor int64, direction string, total int) string {
 	copy := exportQueryValues(values)
 	copy.Set("page", strconv.Itoa(page))
 	copy.Set("live", "0")
+	copy.Set("known_total", strconv.Itoa(total))
+	if cursor > 0 {
+		copy.Set("cursor", strconv.FormatInt(cursor, 10))
+	}
+	if direction != "" {
+		copy.Set("direction", direction)
+	}
 	return "/ui/logs/queries?" + copy.Encode()
 }
 
