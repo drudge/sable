@@ -91,14 +91,26 @@ type Entry struct {
 }
 
 type Filter struct {
-	Page         int
-	PageSize     int
-	ClientIP     string
-	Name         string
-	RecordTypes  []uint16
-	ResponseCode *int
-	Source       Source
-	Protocol     string
+	Page     int
+	PageSize int
+	// Cursor and Direction select an adjacent page by primary key. Page remains
+	// the human-facing page number; cursor navigation avoids making the database
+	// discard every preceding row as OFFSET does on deep histories.
+	Cursor    int64
+	Direction string
+	// KnownTotal avoids recounting an unchanged result set while paging. AfterID
+	// lets a live first page count only rows that arrived since its previous
+	// refresh instead of recounting the retained history.
+	KnownTotal    int
+	UseKnownTotal bool
+	AfterID       int64
+	Incremental   bool
+	ClientIP      string
+	Name          string
+	RecordTypes   []uint16
+	ResponseCode  *int
+	Source        Source
+	Protocol      string
 	// Exact turns the client and domain filters into equality tests. The
 	// search boxes want a substring so an operator can type half an address,
 	// but a link that arrives from a dashboard ranking already knows the whole
