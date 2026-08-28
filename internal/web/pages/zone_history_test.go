@@ -27,7 +27,7 @@ func TestZoneHistoryDialogLazyLoadsRevisionDiffs(t *testing.T) {
 func TestZoneHistoryLivesInDetailActionMenu(t *testing.T) {
 	t.Parallel()
 	markup := renderComponent(t, ZoneActionMenu(ZoneView{
-		Name: "example.test",
+		Name:    "example.test",
 		History: []ZoneRevisionView{{Number: 1, Current: true}},
 	}, "detail-menu", "zone-history-dialog", "settings-dialog", "dnssec-dialog", "clone-dialog", "delete-dialog"))
 	for _, expected := range []string{`data-dialog-open="zone-history-dialog"`, `icon-clock`, ">History<"} {
