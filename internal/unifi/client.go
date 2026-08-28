@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -209,6 +210,9 @@ type clientPayload struct {
 	OverrideNetworkID      string `json:"virtual_network_override_id"`
 	OverrideNetworkEnabled bool   `json:"virtual_network_override_enabled"`
 	LastNetworkID          string `json:"last_connection_network_id"`
+	// IPv6Addresses is every IPv6 address the controller has observed on the
+	// client, link-local noise included. Only active clients carry it.
+	IPv6Addresses []string `json:"ipv6_addresses"`
 }
 
 // networkID resolves the network an entry belongs to. The controller fills
@@ -281,9 +285,35 @@ func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool)
 		MAC:       strings.ToLower(strings.TrimSpace(payload.MAC)),
 		Hostname:  name,
 		Address:   address.Unmap(),
+		IPv6:      publishableIPv6(payload.IPv6Addresses),
 		NetworkID: payload.networkID(),
 		Reserved:  reserved,
 	}, true
+}
+
+// publishableIPv6 keeps the observed IPv6 addresses worth naming: global
+// unicast and unique-local addresses, deduplicated and sorted so one
+// controller read compares equal to the next. Link-local, loopback,
+// multicast, and IPv4-mapped forms identify nothing durable and are dropped.
+func publishableIPv6(values []string) []netip.Addr {
+	addresses := make([]netip.Addr, 0, len(values))
+	for _, value := range values {
+		address, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err != nil {
+			continue
+		}
+		address = address.Unmap()
+		if !address.Is6() || !address.IsGlobalUnicast() {
+			continue
+		}
+		addresses = append(addresses, address)
+	}
+	slices.SortFunc(addresses, netip.Addr.Compare)
+	addresses = slices.Compact(addresses)
+	if len(addresses) == 0 {
+		return nil
+	}
+	return addresses
 }
 
 // get calls a Network application endpoint, authenticating with the API key
