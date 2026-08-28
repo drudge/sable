@@ -54,6 +54,16 @@ func (capture *responseCapture) TsigStatus() error                { return nil }
 func (capture *responseCapture) TsigTimersOnly(bool)              {}
 func (capture *responseCapture) Hijack()                          {}
 
+type countingRemoteWriter struct {
+	responseCapture
+	remoteCalls int
+}
+
+func (writer *countingRemoteWriter) RemoteAddr() net.Addr {
+	writer.remoteCalls++
+	return writer.responseCapture.RemoteAddr()
+}
+
 // discardWriter drops the reply so a handler benchmark measures resolution
 // rather than the copy responseCapture makes to inspect it.
 type discardWriter struct{}
@@ -893,6 +903,106 @@ func TestHandlerReportsBlockedQueryWithoutCallingUpstream(t *testing.T) {
 	}
 	if event.Decision.Policy != querylog.PolicyBlocked || event.Decision.PolicyRule != "ads.example" || event.Decision.Resolver != querylog.ResolverBlocked {
 		t.Fatalf("blocked decision = %+v", event.Decision)
+	}
+}
+
+func TestHandlerCapturesClientAddressOncePerQuery(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Blocking = true
+	configuration.BlockedDomains = []string{"ads.example"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	collector := &eventCollector{events: make(chan querylog.Event, 1)}
+	handler.SetQueryObserver(collector)
+	request := new(dns.Msg)
+	request.SetQuestion("pixel.ads.example.", dns.TypeA)
+	writer := new(countingRemoteWriter)
+
+	handler.ServeDNS(writer, request)
+	event := <-collector.events
+	if writer.remoteCalls != 1 {
+		t.Fatalf("RemoteAddr() called %d times, want 1", writer.remoteCalls)
+	}
+	if event.ClientIP != "192.0.2.44" {
+		t.Fatalf("event client IP = %q, want 192.0.2.44", event.ClientIP)
+	}
+}
+
+func TestQueryAnswerMatchesExistingPresentation(t *testing.T) {
+	t.Parallel()
+
+	response := new(dns.Msg)
+	for _, value := range []string{
+		"example.test. 300 IN A 192.0.2.10",
+		"example.test. 300 IN AAAA 2001:db8::10",
+		"www.example.test. 300 IN CNAME example.test.",
+		"example.test. 300 IN NS ns1.example.test.",
+		"10.2.0.192.in-addr.arpa. 300 IN PTR example.test.",
+		"example.test. 300 IN MX 10 mail.example.test.",
+		`example.test. 300 IN TXT "hello  world" "quoted\"value"`,
+		"_dns._udp.example.test. 300 IN SRV 10 20 53 ns1.example.test.",
+		"example.test. 300 IN SOA ns1.example.test. hostmaster.example.test. 42 3600 600 1209600 300",
+		`example.test. 300 IN CAA 0 issue "letsencrypt.org"`,
+	} {
+		response.Answer = append(response.Answer, mustRR(t, value))
+	}
+
+	if got, want := queryAnswer(response), legacyQueryAnswer(response); got != want {
+		t.Fatalf("queryAnswer() = %q, want existing presentation %q", got, want)
+	}
+}
+
+func legacyQueryAnswer(response *dns.Msg) string {
+	if response == nil || len(response.Answer) == 0 {
+		return ""
+	}
+	const maximumAnswerBytes = 16 << 10
+	var result strings.Builder
+	for index, record := range response.Answer {
+		if index == 64 {
+			break
+		}
+		fields := strings.Fields(record.String())
+		if len(fields) < 4 {
+			continue
+		}
+		value := strings.Join(fields[3:], " ")
+		if result.Len()+len(value)+1 > maximumAnswerBytes {
+			break
+		}
+		if result.Len() > 0 {
+			result.WriteByte('\n')
+		}
+		result.WriteString(value)
+	}
+	return result.String()
+}
+
+func TestCoalesceKeySeparatesDNSSECIntent(t *testing.T) {
+	t.Parallel()
+
+	request := new(dns.Msg)
+	request.SetQuestion("WWW.Example.TEST.", dns.TypeA)
+	base := coalesceKey(request)
+	request.Question[0].Name = "www.example.test."
+	if got := coalesceKey(request); got != base {
+		t.Fatalf("normalized key = %+v, want %+v", got, base)
+	}
+
+	request.SetEdns0(dns.DefaultMsgSize, true)
+	if got := coalesceKey(request); got == base {
+		t.Fatal("DNSSEC OK query reused the non-DNSSEC in-flight key")
+	}
+	request.CheckingDisabled = true
+	withCD := coalesceKey(request)
+	request.CheckingDisabled = false
+	if got := coalesceKey(request); got == withCD {
+		t.Fatal("checking-disabled query reused the validating in-flight key")
 	}
 }
 
@@ -1833,6 +1943,39 @@ func BenchmarkServeDNSCacheHitParallel(b *testing.B) {
 			handler.ServeDNS(discardWriter{}, local)
 		}
 	})
+}
+
+var benchmarkInflightKeyValue inflightKey
+var benchmarkAnswerValue string
+
+func BenchmarkCoalesceKey(b *testing.B) {
+	request := new(dns.Msg)
+	request.SetQuestion("www.Example.COM.", dns.TypeAAAA)
+	request.SetEdns0(dns.DefaultMsgSize, true)
+	request.CheckingDisabled = true
+	b.ReportAllocs()
+	for b.Loop() {
+		benchmarkInflightKeyValue = coalesceKey(request)
+	}
+}
+
+func BenchmarkQueryAnswer(b *testing.B) {
+	response := new(dns.Msg)
+	for _, value := range []string{
+		"example.com. 300 IN A 192.0.2.10",
+		"example.com. 300 IN AAAA 2001:db8::10",
+		`example.com. 300 IN TXT "v=spf1 include:example.net -all"`,
+	} {
+		record, err := dns.NewRR(value)
+		if err != nil {
+			b.Fatal(err)
+		}
+		response.Answer = append(response.Answer, record)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		benchmarkAnswerValue = queryAnswer(response)
+	}
 }
 
 // BenchmarkWireRoundTrip measures what miekg/dns spends per query outside the

@@ -199,7 +199,7 @@ func (handler *Handler) SetZoneExpired(zoneName string, expired bool) {
 
 func (handler *Handler) Notifications() <-chan ZoneNotification { return handler.notifications }
 
-func (handler *Handler) serveNotify(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime) bool {
+func (handler *Handler) serveNotify(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime, clientIP string) bool {
 	if request.Opcode != dns.OpcodeNotify {
 		return false
 	}
@@ -226,7 +226,7 @@ func (handler *Handler) serveNotify(writer dns.ResponseWriter, request *dns.Msg,
 		_ = writer.WriteMsg(response)
 		return true
 	}
-	source := responseWriterClientIP(writer)
+	source := clientIP
 	if !notifySourceAllowed(source, managed.primaries, runtime.timeout) {
 		response.Rcode = dns.RcodeRefused
 		handler.recordResponseCode(response.Rcode)

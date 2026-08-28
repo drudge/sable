@@ -919,40 +919,42 @@ func (handler *Handler) SetQueryObserver(observer querylog.Observer) {
 
 func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	observer := handler.activeQueryObserver()
+	client := queryClient{ip: responseWriterClientIP(writer)}
 	var startedAt time.Time
 	if observer != nil {
 		startedAt = time.Now()
+		client.protocol = queryProtocol(writer)
 	}
 	handler.queries.Add(1)
 	runtime := handler.runtime.Load()
-	if handler.serveDynamicUpdate(writer, request, runtime, observer, startedAt) {
+	if handler.serveDynamicUpdate(writer, request, runtime, observer, client, startedAt) {
 		return
 	}
-	if handler.serveNotify(writer, request, runtime) {
+	if handler.serveNotify(writer, request, runtime, client.ip) {
 		return
 	}
-	if handler.serveZoneTransfer(writer, request, runtime) {
+	if handler.serveZoneTransfer(writer, request, runtime, client.ip) {
 		return
 	}
 	if len(request.Question) == 1 && handler.zoneExpired(request.Question[0].Name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
-		handler.logResolutionFailure(request, responseWriterClientIP(writer), "authoritative zone expired")
+		handler.logResolutionFailure(request, client.ip, "authoritative zone expired")
 		handler.recordResponseCode(result.response.Rcode)
 		handler.writeResponse(writer, request, result.response)
 		if observer != nil {
-			handler.recordQuery(observer, writer, request, result, startedAt)
+			handler.recordQuery(observer, client, request, result, startedAt)
 		}
 		return
 	}
-	result := handler.resolveForClient(request, runtime, responseWriterClientIP(writer))
+	result := handler.resolveForClient(request, runtime, client.ip)
 	handler.recordResponseCode(result.response.Rcode)
 	handler.writeResponse(writer, request, result.response)
 	if observer != nil {
-		handler.recordQuery(observer, writer, request, result, startedAt)
+		handler.recordQuery(observer, client, request, result, startedAt)
 	}
 }
 
-func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime) bool {
+func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime, clientIP string) bool {
 	if request.Opcode != dns.OpcodeQuery || len(request.Question) != 1 {
 		return false
 	}
@@ -965,7 +967,7 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 	// nil), so a transfer over DoH would treat any request bearing the key name
 	// as authenticated. Refuse DoH outright, as serveDynamicUpdate and
 	// serveNotify already do, so TSIG stays the authenticator it is meant to be.
-	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(responseWriterClientIP(writer)) ||
+	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(clientIP) ||
 		writer.LocalAddr() == nil || !strings.HasPrefix(writer.LocalAddr().Network(), "tcp") ||
 		handler.zoneExpired(question.Name) {
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeRefused))
@@ -982,7 +984,7 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 		records = handler.incrementalTransferRecords(request, zone.name, records)
 	}
 	if len(records) == 0 || (question.Qtype == dns.TypeAXFR && len(records) < 2) {
-		handler.logResolutionFailure(request, responseWriterClientIP(writer), "zone transfer has no records to send", "records", len(records))
+		handler.logResolutionFailure(request, clientIP, "zone transfer has no records to send", "records", len(records))
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeServerFailure))
 		handler.serverFailures.Add(1)
 		return true
@@ -1353,7 +1355,15 @@ func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwar
 // The first caller runs the work; the rest wait and receive its result.
 type inflightGroup struct {
 	mu    sync.Mutex
-	calls map[string]*inflightCall
+	calls map[inflightKey]*inflightCall
+}
+
+type inflightKey struct {
+	name             string
+	recordType       uint16
+	class            uint16
+	dnssecOK         bool
+	checkingDisabled bool
 }
 
 type inflightCall struct {
@@ -1362,14 +1372,14 @@ type inflightCall struct {
 }
 
 func newInflightGroup() *inflightGroup {
-	return &inflightGroup{calls: make(map[string]*inflightCall)}
+	return &inflightGroup{calls: make(map[inflightKey]*inflightCall)}
 }
 
 // do runs fn for key unless a call is already in flight, in which case it waits
 // for that call and returns its result. The bool reports whether the result was
 // shared with an in-flight call (true for waiters), so the caller knows it must
 // copy a shared response before mutating it.
-func (group *inflightGroup) do(key string, fn func() resolution) (resolution, bool) {
+func (group *inflightGroup) do(key inflightKey, fn func() resolution) (resolution, bool) {
 	group.mu.Lock()
 	if call, ok := group.calls[key]; ok {
 		group.mu.Unlock()
@@ -1392,13 +1402,19 @@ func (group *inflightGroup) do(key string, fn func() resolution) (resolution, bo
 // coalesceKey identifies queries that share an upstream answer: the same name,
 // type, and class, and the same DNSSEC intent (DO/CD), since those change what a
 // resolver returns and caches.
-func coalesceKey(request *dns.Msg) string {
+func coalesceKey(request *dns.Msg) inflightKey {
 	question := request.Question[0]
 	dnssecOK := false
 	if option := request.IsEdns0(); option != nil {
 		dnssecOK = option.Do()
 	}
-	return fmt.Sprintf("%s|%d|%d|%t|%t", normalizeName(question.Name), question.Qtype, question.Qclass, dnssecOK, request.CheckingDisabled)
+	return inflightKey{
+		name:             normalizeName(question.Name),
+		recordType:       question.Qtype,
+		class:            question.Qclass,
+		dnssecOK:         dnssecOK,
+		checkingDisabled: request.CheckingDisabled,
+	}
 }
 
 func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string) resolution {
@@ -2274,9 +2290,14 @@ func (handler *Handler) writeResponse(writer dns.ResponseWriter, request, respon
 	}
 }
 
+type queryClient struct {
+	ip       string
+	protocol string
+}
+
 func (handler *Handler) recordQuery(
 	observer querylog.Observer,
-	writer dns.ResponseWriter,
+	client queryClient,
 	request *dns.Msg,
 	result resolution,
 	startedAt time.Time,
@@ -2294,13 +2315,13 @@ func (handler *Handler) recordQuery(
 	}
 	observer.Record(querylog.Event{
 		OccurredAt:   startedAt,
-		ClientIP:     responseWriterClientIP(writer),
+		ClientIP:     client.ip,
 		Name:         normalizeName(question.Name),
 		RecordType:   question.Qtype,
 		Class:        question.Qclass,
 		ResponseCode: result.response.Rcode,
 		Source:       result.source,
-		Protocol:     queryProtocol(writer),
+		Protocol:     client.protocol,
 		Answer:       queryAnswer(result.response),
 		Duration:     time.Since(startedAt),
 		Decision:     decision,
@@ -2353,11 +2374,10 @@ func queryAnswer(response *dns.Msg) string {
 		if index == 64 {
 			break
 		}
-		fields := strings.Fields(record.String())
-		if len(fields) < 4 {
+		value := queryRecordAnswer(record)
+		if value == "" {
 			continue
 		}
-		value := strings.Join(fields[3:], " ")
 		if result.Len()+len(value)+1 > maximumAnswerBytes {
 			break
 		}
@@ -2367,6 +2387,68 @@ func queryAnswer(response *dns.Msg) string {
 		result.WriteString(value)
 	}
 	return result.String()
+}
+
+func queryRecordAnswer(record dns.RR) string {
+	switch value := record.(type) {
+	case *dns.A:
+		if value.A == nil {
+			return "A"
+		}
+		return "A " + value.A.String()
+	case *dns.AAAA:
+		if value.AAAA == nil {
+			return "AAAA"
+		}
+		address := value.AAAA.String()
+		if value.AAAA.To4() != nil {
+			address = "::ffff:" + address
+		}
+		return "AAAA " + address
+	default:
+		return queryRecordAnswerString(record.String())
+	}
+}
+
+func queryRecordAnswerString(record string) string {
+	index := 0
+	for field := 0; field < 3; field++ {
+		index = skipQueryAnswerSpace(record, index)
+		index = skipQueryAnswerField(record, index)
+	}
+	var answer strings.Builder
+	answer.Grow(len(record) - index)
+	for {
+		index = skipQueryAnswerSpace(record, index)
+		if index == len(record) {
+			break
+		}
+		fieldEnd := skipQueryAnswerField(record, index)
+		if answer.Len() > 0 {
+			answer.WriteByte(' ')
+		}
+		answer.WriteString(record[index:fieldEnd])
+		index = fieldEnd
+	}
+	return answer.String()
+}
+
+func skipQueryAnswerSpace(value string, index int) int {
+	for index < len(value) && isQueryAnswerSpace(value[index]) {
+		index++
+	}
+	return index
+}
+
+func skipQueryAnswerField(value string, index int) int {
+	for index < len(value) && !isQueryAnswerSpace(value[index]) {
+		index++
+	}
+	return index
+}
+
+func isQueryAnswerSpace(value byte) bool {
+	return value == ' ' || value == '\t' || value == '\n' || value == '\r'
 }
 
 func (handler *Handler) activeQueryObserver() querylog.Observer {
@@ -2723,6 +2805,16 @@ func responseWriterClientIP(writer dns.ResponseWriter) string {
 	address := writer.RemoteAddr()
 	if address == nil {
 		return ""
+	}
+	switch address := address.(type) {
+	case *net.UDPAddr:
+		if client := address.AddrPort().Addr(); client.IsValid() {
+			return client.Unmap().String()
+		}
+	case *net.TCPAddr:
+		if client := address.AddrPort().Addr(); client.IsValid() {
+			return client.Unmap().String()
+		}
 	}
 	host, _, err := net.SplitHostPort(address.String())
 	if err != nil {
