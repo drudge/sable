@@ -772,7 +772,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 			view.Clients = dashboardClientSample(entries)
 		}
 	}
-	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
+	if err := pages.Stats(view, "All time", false).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render runtime statistics", "error", err)
 	}
 }
@@ -808,6 +808,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			server.logger.Error("render custom query statistics", "error", err)
 			return
 		}
+		server.renderChartStats(writer, request, view)
 		if withInsights {
 			window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
 			server.renderInsights(writer, request, window)
@@ -824,8 +825,18 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		server.logger.Error("render query statistics", "error", err)
 		return
 	}
+	server.renderChartStats(writer, request, view)
 	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
 		server.renderInsights(writer, request, window)
+	}
+}
+
+// renderChartStats updates the headline metrics alongside an htmx chart swap.
+// The chart remains the regular response target; this sibling is applied out
+// of band so every range control changes the whole dashboard consistently.
+func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
+	if err := pages.Stats(view.Stats, view.RangeLabel, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render chart statistics overview", "error", err)
 	}
 }
 

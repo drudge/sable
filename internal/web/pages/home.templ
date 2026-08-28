@@ -9,7 +9,7 @@ import (
 templ DashboardHome(view DashboardView) {
 	<div class="dashboard-page isotope-dashboard">
 		<h1 class="sr-only">Dashboard</h1>
-		@Stats(view.Stats)
+		@Stats(view.Chart.Stats, view.Chart.RangeLabel, false)
 		@QueryChart(view.Chart)
 		@DashboardInsights(view.Insights, false)
 		<footer class="dashboard-footer">
