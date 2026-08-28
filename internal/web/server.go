@@ -483,6 +483,7 @@ func (server *Server) dashboard(writer http.ResponseWriter, request *http.Reques
 
 func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	view := server.consoleView(request)
+	view.StatsScope = dashboardStatsScope(request)
 	if !view.CanLogs {
 		return view
 	}
@@ -761,8 +762,13 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
 	view := server.lifetimeStatsView(request)
 	chart := server.history.view(request.Context(), "hour", time.Now(), server.stats.Stats(), requestTimeDisplay(request))
+	scope := dashboardStatsScope(request)
+	values := view
+	if scope == pages.StatsScopeRange {
+		values = chart.Stats
+	}
 	overview := pages.StatsOverviewView{
-		Values: view, Lifetime: view, Scope: pages.StatsScopeAll,
+		Values: values, Lifetime: view, Scope: scope,
 		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
 		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
 	}
@@ -797,6 +803,7 @@ func (server *Server) canReadLogs(request *http.Request) bool {
 }
 
 func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {
+	server.rememberDashboardStatsScope(writer, request)
 	rangeName := request.URL.Query().Get("range")
 	display := requestTimeDisplay(request)
 	location := display.Location
@@ -847,10 +854,9 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 // of band so every range control changes the whole dashboard consistently.
 func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
 	lifetime := server.lifetimeStatsView(request)
-	scope := pages.StatsScopeAll
+	scope := dashboardStatsScope(request)
 	values := lifetime
-	if request.URL.Query().Get("stats_scope") == pages.StatsScopeRange {
-		scope = pages.StatsScopeRange
+	if scope == pages.StatsScopeRange {
 		values = view.Stats
 	}
 	overview := pages.StatsOverviewView{

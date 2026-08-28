@@ -1322,8 +1322,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 
 @media (max-width: 639px) {
 	.toast-region { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
-	.stats-overview-header { align-items: flex-start; }
-	.stats-overview-controls { flex-direction: column-reverse; align-items: flex-end; }
+	.stats-overview-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .375rem 1rem; }
+	.stats-overview-controls { display: contents; }
+	.stats-scope-toggle { grid-column: 2; grid-row: 1; }
+	.stats-range-label { grid-column: 1; grid-row: 2; justify-self: start; }
 	.stats-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
   .stat-card, .summary-card { min-height: 5.5rem; padding: 0.7rem 0.75rem; }
   .stat-card strong, .summary-card strong { font-size: 1.25rem; }

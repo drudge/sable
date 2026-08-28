@@ -24,10 +24,17 @@ templ DashboardHome(view DashboardView) {
 }
 
 func dashboardStatsOverview(view DashboardView) StatsOverviewView {
+	scope := view.StatsScope
+	values := view.Stats
+	if scope == StatsScopeRange {
+		values = view.Chart.Stats
+	} else {
+		scope = StatsScopeAll
+	}
 	return StatsOverviewView{
-		Values:      view.Stats,
+		Values:      values,
 		Lifetime:    view.Stats,
-		Scope:       StatsScopeAll,
+		Scope:       scope,
 		RangeName:   view.Chart.ActiveRange,
 		RangeLabel:  view.Chart.RangeLabel,
 		CustomStart: view.Chart.CustomStart,

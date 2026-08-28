@@ -41,6 +41,7 @@ type DashboardView struct {
 	DNSSECStatus   string
 	ConfigRevision uint64
 	Stats          StatsView
+	StatsScope     string
 	Chart          QueryChartView
 	Insights       DashboardInsightsView
 }
@@ -683,7 +684,7 @@ templ Stats(view StatsOverviewView) {
 				}
 				<div class="stats-scope-toggle" role="group" aria-label="Overview time scope">
 					@StatsScopeButton("All time", StatsScopeAll, view)
-					@StatsScopeButton("Follow query stats", StatsScopeRange, view)
+					@StatsScopeButton("Chart range", StatsScopeRange, view)
 				</div>
 			</div>
 		</header>
@@ -718,8 +719,9 @@ templ StatsScopeButton(label string, scope string, view StatsOverviewView) {
 
 func statsScopeURL(scope string, view StatsOverviewView) templ.SafeURL {
 	parameters := url.Values{
-		"range":       []string{view.RangeName},
-		"stats_scope": []string{scope},
+		"range":          []string{view.RangeName},
+		"remember_scope": []string{"1"},
+		"stats_scope":    []string{scope},
 	}
 	if view.RangeName == "custom" {
 		parameters.Set("start", view.CustomStart)
