@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
 
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/forwarding"
@@ -21,20 +22,23 @@ import (
 //
 // TCP and DoT connections are held in a small idle pool per endpoint and handed
 // out for exclusive use, so one query ever owns a connection at a time and no
-// response demultiplexing is needed. DoT and DoQ additionally share a TLS client
-// session cache, so even a fresh dial resumes the session instead of running a
-// full handshake.
+// response demultiplexing is needed. DoQ keeps one connection per endpoint and
+// opens a stream per query, allowing concurrent exchanges without additional
+// handshakes. DoT and DoQ also share a TLS client session cache for re-dials.
 type forwarderPool struct {
-	mu       sync.Mutex
-	idle     map[string][]idleConnection
-	sessions tls.ClientSessionCache
+	mu             sync.Mutex
+	idle           map[string][]idleConnection
+	doqConnections map[string]*pooledDoQConnection
+	sessions       tls.ClientSessionCache
+	closed         bool
 
 	maxIdlePerHost int
 	idleTimeout    time.Duration
 
 	// tlsConfig builds the client TLS configuration for a DoT dial. It is a field
 	// so tests can trust a self-signed upstream; production uses defaultTLSConfig.
-	tlsConfig func(host string) *tls.Config
+	tlsConfig    func(host string) *tls.Config
+	doqTLSConfig func(host string) *tls.Config
 }
 
 type idleConnection struct {
@@ -42,15 +46,33 @@ type idleConnection struct {
 	expiry     time.Time
 }
 
+type pooledDoQConnection struct {
+	connection *quic.Conn
+	ready      chan struct{}
+}
+
+var errForwarderPoolClosed = errors.New("forwarder connection pool is closed")
+
 func newForwarderPool() *forwarderPool {
 	pool := &forwarderPool{
 		idle:           make(map[string][]idleConnection),
+		doqConnections: make(map[string]*pooledDoQConnection),
 		sessions:       tls.NewLRUClientSessionCache(0),
 		maxIdlePerHost: 8,
 		idleTimeout:    30 * time.Second,
 	}
 	pool.tlsConfig = pool.defaultTLSConfig
+	pool.doqTLSConfig = pool.defaultDoQTLSConfig
 	return pool
+}
+
+func (pool *forwarderPool) defaultDoQTLSConfig(host string) *tls.Config {
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		ServerName:         host,
+		NextProtos:         []string{"doq"},
+		ClientSessionCache: pool.sessions,
+	}
 }
 
 func (pool *forwarderPool) defaultTLSConfig(host string) *tls.Config {
@@ -63,6 +85,9 @@ func (pool *forwarderPool) defaultTLSConfig(host string) *tls.Config {
 
 // exchange satisfies upstreamExchangeFunc.
 func (pool *forwarderPool) exchange(ctx context.Context, request *dns.Msg, forwarder string, timeout time.Duration) (*dns.Msg, error) {
+	if pool.isClosed() {
+		return nil, errForwarderPoolClosed
+	}
 	protocol, address, err := forwarding.ParseEndpoint(forwarder)
 	if err != nil {
 		return nil, err
@@ -73,13 +98,133 @@ func (pool *forwarderPool) exchange(ctx context.Context, request *dns.Msg, forwa
 		if splitErr != nil {
 			return nil, splitErr
 		}
-		response, _, exchangeErr := dnsclient.ExchangeQUICWithSessions(ctx, request, address, host, timeout, pool.sessions)
-		return response, exchangeErr
+		return pool.exchangeQUIC(ctx, request, address, host, timeout)
 	case "udp":
 		return pool.exchangeUDP(ctx, request, address, timeout)
 	default: // tcp, tls
 		return pool.exchangeStream(ctx, request, protocol, address, timeout)
 	}
+}
+
+func (pool *forwarderPool) exchangeQUIC(
+	ctx context.Context,
+	request *dns.Msg,
+	address, host string,
+	timeout time.Duration,
+) (*dns.Msg, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	key := "quic|" + address
+	var exchangeErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		connection, err := pool.doqConnection(ctx, key, address, host, timeout)
+		if err != nil {
+			return nil, err
+		}
+		response, err := dnsclient.ExchangeQUICConnection(ctx, request, connection)
+		if err == nil {
+			return response, nil
+		}
+		exchangeErr = err
+		if ctx.Err() != nil || connection.Context().Err() == nil {
+			return nil, err
+		}
+		pool.discardDoQConnection(key, connection)
+	}
+	return nil, exchangeErr
+}
+
+// doqConnection returns the live connection for an endpoint. The ready channel
+// makes concurrent first queries share one dial instead of creating a handshake
+// stampede, while established QUIC streams remain fully concurrent.
+func (pool *forwarderPool) doqConnection(
+	ctx context.Context,
+	key, address, host string,
+	timeout time.Duration,
+) (*quic.Conn, error) {
+	for {
+		pool.mu.Lock()
+		if pool.closed {
+			pool.mu.Unlock()
+			return nil, errForwarderPoolClosed
+		}
+		if state := pool.doqConnections[key]; state != nil {
+			if state.connection != nil {
+				if state.connection.Context().Err() == nil {
+					connection := state.connection
+					pool.mu.Unlock()
+					return connection, nil
+				}
+				delete(pool.doqConnections, key)
+				pool.mu.Unlock()
+				continue
+			}
+			ready := state.ready
+			pool.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ready:
+				continue
+			}
+		}
+
+		state := &pooledDoQConnection{ready: make(chan struct{})}
+		pool.doqConnections[key] = state
+		pool.mu.Unlock()
+
+		connection, err := pool.dialDoQ(ctx, address, host, timeout)
+		pool.mu.Lock()
+		current, owned := pool.doqConnections[key]
+		if owned && current == state && !pool.closed {
+			if err == nil {
+				state.connection = connection
+			} else {
+				delete(pool.doqConnections, key)
+			}
+			ready := state.ready
+			state.ready = nil
+			close(ready)
+			pool.mu.Unlock()
+			return connection, err
+		}
+		pool.mu.Unlock()
+		if connection != nil {
+			_ = connection.CloseWithError(0, "")
+		}
+		return nil, errForwarderPoolClosed
+	}
+}
+
+func (pool *forwarderPool) dialDoQ(ctx context.Context, address, host string, timeout time.Duration) (*quic.Conn, error) {
+	configuration := pool.doqTLSConfig(host)
+	if configuration == nil {
+		configuration = new(tls.Config)
+	} else {
+		configuration = configuration.Clone()
+	}
+	configuration.MinVersion = tls.VersionTLS13
+	configuration.ServerName = host
+	configuration.NextProtos = []string{"doq"}
+	if configuration.ClientSessionCache == nil {
+		configuration.ClientSessionCache = pool.sessions
+	}
+	return quic.DialAddr(ctx, address, configuration, &quic.Config{
+		HandshakeIdleTimeout: timeout,
+		MaxIdleTimeout:       pool.idleTimeout,
+	})
+}
+
+func (pool *forwarderPool) discardDoQConnection(key string, connection *quic.Conn) {
+	pool.mu.Lock()
+	if current := pool.doqConnections[key]; current != nil && current.connection == connection {
+		delete(pool.doqConnections, key)
+	}
+	pool.mu.Unlock()
+	_ = connection.CloseWithError(0, "")
 }
 
 func (pool *forwarderPool) exchangeUDP(ctx context.Context, request *dns.Msg, address string, timeout time.Duration) (*dns.Msg, error) {
@@ -201,4 +346,45 @@ func (pool *forwarderPool) store(key string, connections []idleConnection) {
 		return
 	}
 	pool.idle[key] = connections
+}
+
+func (pool *forwarderPool) isClosed() bool {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	return pool.closed
+}
+
+func (pool *forwarderPool) Close() {
+	pool.mu.Lock()
+	if pool.closed {
+		pool.mu.Unlock()
+		return
+	}
+	pool.closed = true
+	streams := make([]*dns.Conn, 0)
+	for _, connections := range pool.idle {
+		for _, connection := range connections {
+			streams = append(streams, connection.connection)
+		}
+	}
+	doq := make([]*quic.Conn, 0, len(pool.doqConnections))
+	for _, state := range pool.doqConnections {
+		if state.connection != nil {
+			doq = append(doq, state.connection)
+		}
+		if state.ready != nil {
+			close(state.ready)
+			state.ready = nil
+		}
+	}
+	clear(pool.idle)
+	clear(pool.doqConnections)
+	pool.mu.Unlock()
+
+	for _, connection := range streams {
+		_ = connection.Close()
+	}
+	for _, connection := range doq {
+		_ = connection.CloseWithError(0, "")
+	}
 }
