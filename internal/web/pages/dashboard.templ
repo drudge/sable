@@ -677,15 +677,15 @@ templ Stats(view StatsOverviewView) {
 		}
 	>
 		<header class="stats-overview-header">
-			<h2 id="stats-overview-title">Overview</h2>
-			<div class="stats-overview-controls">
+			<div class="stats-overview-heading">
+				<h2 id="stats-overview-title">Overview</h2>
 				if view.Scope == StatsScopeRange {
 					<span class="stats-range-label">{ view.RangeLabel }</span>
 				}
-				<div class="stats-scope-toggle" role="group" aria-label="Overview time scope">
-					@StatsScopeButton("All time", StatsScopeAll, view)
-					@StatsScopeButton("Chart range", StatsScopeRange, view)
-				</div>
+			</div>
+			<div class="stats-scope-toggle" role="group" aria-label="Overview time scope">
+				@StatsScopeButton("All time", StatsScopeAll, view)
+				@StatsScopeButton("Chart range", StatsScopeRange, view)
 			</div>
 		</header>
 		<div class="stats-grid primary-stats">
