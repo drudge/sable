@@ -585,7 +585,7 @@ templ ZoneListView(view ZonesPageView) {
 						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
 						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
 					</a>
-					@ZoneActionMenu(zone, "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
+					@ZoneActionMenu(zone, "", "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
 					<a class="zone-row-chevron" href={ zoneHref(zone.Name) } aria-label={ "Open " + zone.Name }>@Icon("chevron-right")</a>
 				</div>
 				if zone.CanSettings {
@@ -622,10 +622,7 @@ templ ZoneDetailView(zone ZoneView) {
 			</div>
 			<div class="zone-records-actions">
 				<a class="icon-button" href={ zoneHref(zone.Name) } aria-label="Refresh records" title="Refresh records">@Icon("refresh")</a>
-				if len(zone.History) > 0 || zone.HistoryError != "" {
-					<button class="button outline zone-primary-action" type="button" data-dialog-open="zone-history-dialog">@Icon("history")<span>History</span></button>
-				}
-				@ZoneActionMenu(zone, "detail-menu", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
+				@ZoneActionMenu(zone, "detail-menu", "zone-history-dialog", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
 				if zoneCanResync(zone) && zone.CanTransfer {
 					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit">@Icon("refresh")<span>Resync</span></button></form>
 				}
@@ -748,12 +745,15 @@ templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
 
 func zoneHistoryChangeSymbol(kind string) string { if kind == "added" { return "+" }; if kind == "removed" { return "−" }; return "~" }
 
-templ ZoneActionMenu(zone ZoneView, className, settingsID, dnssecID, cloneID, deleteID string) {
+templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, cloneID, deleteID string) {
 	<details class={ "zone-action-menu " + className }>
 		<summary class={ ifThen(className == "", "icon-button zone-more-button", "icon-button") } aria-label={ "Actions for " + zone.Name }>@Icon("more-vertical")</summary>
 		<div class="zone-menu-content">
 			if zone.CanSettings {
 				<button type="button" data-dialog-open={ settingsID }>@Icon("sliders")<span>Zone Settings</span></button>
+			}
+			if historyID != "" && (len(zone.History) > 0 || zone.HistoryError != "") {
+				<button type="button" data-dialog-open={ historyID }>@Icon("clock")<span>History</span></button>
 			}
 			if zone.CanManagePermissions {
 				<a href="/administration?tab=groups" title="Manage zone access through groups">@Icon("key")<span>Permissions</span></a>

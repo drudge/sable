@@ -24,6 +24,19 @@ func TestZoneHistoryDialogLazyLoadsRevisionDiffs(t *testing.T) {
 	}
 }
 
+func TestZoneHistoryLivesInDetailActionMenu(t *testing.T) {
+	t.Parallel()
+	markup := renderComponent(t, ZoneActionMenu(ZoneView{
+		Name: "example.test",
+		History: []ZoneRevisionView{{Number: 1, Current: true}},
+	}, "detail-menu", "zone-history-dialog", "settings-dialog", "dnssec-dialog", "clone-dialog", "delete-dialog"))
+	for _, expected := range []string{`data-dialog-open="zone-history-dialog"`, `icon-clock`, ">History<"} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("zone action menu does not contain %q: %s", expected, markup)
+		}
+	}
+}
+
 func TestZoneRevisionDiffOffersReversibleRestore(t *testing.T) {
 	t.Parallel()
 	markup := renderComponent(t, ZoneRevisionDiff(ZoneRevisionDiffView{
