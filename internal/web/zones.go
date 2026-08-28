@@ -30,6 +30,12 @@ type zoneEditor interface {
 	UpdateZones(context.Context, func(*[]zonemodel.Zone) error) error
 }
 
+type zoneRevisionStore interface {
+	ListZoneRevisions(context.Context, string, int) ([]zonemodel.Revision, error)
+	ZoneRevision(context.Context, string, uint64) (zonemodel.Revision, error)
+	PreviousZoneRevision(context.Context, string, uint64) (zonemodel.Revision, error)
+}
+
 type zoneNotifier interface {
 	NotifyZone(context.Context, string, []string) []error
 }
@@ -113,6 +119,18 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CanDelete:            server.zoneAuthorized(principal, auth.PermissionZonesDelete, zone),
 			CanCreate:            !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
 			CanManagePermissions: console.CanAdministration,
+		}
+		if zone.Name == selected {
+			zoneView.Revision = zone.Revision
+			if history, ok := server.zones.(zoneRevisionStore); ok {
+				revisions, err := history.ListZoneRevisions(request.Context(), zone.Name, 20)
+				if err != nil && !errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
+					zoneView.HistoryError = "Change history is temporarily unavailable."
+					server.logger.Warn("load zone revision history", "zone", zone.Name, "error", err)
+				} else {
+					zoneView.History = zoneRevisionViews(revisions, zone.Revision, console.TimeDisplay)
+				}
+			}
 		}
 		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeDisplay)
 		for _, record := range zone.Records {
@@ -372,7 +390,14 @@ func (server *Server) authorizeZoneMutation(request *http.Request) error {
 		"/ui/zones/records/add":       auth.PermissionZonesRecords,
 		"/ui/zones/records/update":    auth.PermissionZonesRecords,
 		"/ui/zones/records/delete":    auth.PermissionZonesRecords,
+		"/ui/zones/rollback":          auth.PermissionZonesRecords,
 	}[request.URL.Path]
+	if request.URL.Path == "/ui/zones/rollback" {
+		if err := server.authorizeExistingZone(principal, auth.PermissionZonesRecords, request.FormValue("zone")); err != nil {
+			return err
+		}
+		return server.authorizeExistingZone(principal, auth.PermissionZonesSettings, request.FormValue("zone"))
+	}
 	if request.URL.Path == "/ui/zones/clone" {
 		if !auth.Authorize(principal, auth.PermissionZonesCreate, "", "") {
 			return auth.ErrForbidden
@@ -429,6 +454,7 @@ func zoneMutationAction(path string) string {
 		"/ui/zones/dnssec":            "zone.dnssec.settings",
 		"/ui/zones/dnssec/rollover":   "zone.dnssec.rollover",
 		"/ui/zones/dnssec/confirm-ds": "zone.dnssec.confirm_ds",
+		"/ui/zones/rollback":          "zone.rollback",
 	}
 	if action := actions[path]; action != "" {
 		return action
@@ -447,6 +473,9 @@ func (server *Server) auditZoneMutation(request *http.Request, zone string) {
 	event := auth.AuditEvent{
 		OccurredAt: time.Now(), Action: action, ClientIP: requestClientIP(request),
 		UserAgent: request.UserAgent(), Details: "zone=" + zone,
+	}
+	if action == "zone.rollback" {
+		event.Details += " revision=" + request.FormValue("revision")
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok && principal.UserID != 0 {
 		event.UserID = &principal.UserID

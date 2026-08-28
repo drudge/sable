@@ -70,6 +70,9 @@ type ZoneView struct {
 	DNSSECNextAction string
 	DNSSECKeys []DNSSECKeyView
 	Records      []ZoneRecordView
+	Revision     uint64
+	History      []ZoneRevisionView
+	HistoryError string
 	CanSettings  bool
 	CanRecords   bool
 	CanTransfer  bool
@@ -79,6 +82,32 @@ type ZoneView struct {
 	CanDelete    bool
 	CanCreate    bool
 	CanManagePermissions bool
+}
+
+type ZoneRevisionView struct {
+	Number     uint64
+	Kind       string
+	KindLabel  string
+	OccurredAt string
+	Current    bool
+}
+
+type ZoneRevisionDiffView struct {
+	ZoneName       string
+	Revision       uint64
+	Summary        string
+	Notice         string
+	Error          string
+	Changes        []ZoneRevisionChangeView
+	HiddenChanges  int
+	CanRollback    bool
+}
+
+type ZoneRevisionChangeView struct {
+	Kind   string
+	Label  string
+	Before string
+	After  string
 }
 
 type DNSSECKeyView struct {
@@ -556,7 +585,7 @@ templ ZoneListView(view ZonesPageView) {
 						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
 						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
 					</a>
-					@ZoneActionMenu(zone, "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
+					@ZoneActionMenu(zone, "", "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
 					<a class="zone-row-chevron" href={ zoneHref(zone.Name) } aria-label={ "Open " + zone.Name }>@Icon("chevron-right")</a>
 				</div>
 				if zone.CanSettings {
@@ -593,7 +622,7 @@ templ ZoneDetailView(zone ZoneView) {
 			</div>
 			<div class="zone-records-actions">
 				<a class="icon-button" href={ zoneHref(zone.Name) } aria-label="Refresh records" title="Refresh records">@Icon("refresh")</a>
-				@ZoneActionMenu(zone, "detail-menu", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
+				@ZoneActionMenu(zone, "detail-menu", "zone-history-dialog", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
 				if zoneCanResync(zone) && zone.CanTransfer {
 					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit">@Icon("refresh")<span>Resync</span></button></form>
 				}
@@ -648,15 +677,85 @@ templ ZoneDetailView(zone ZoneView) {
 		if zone.CanDelete {
 			@DeleteZoneDialog(zone, "delete-selected-zone-dialog")
 		}
+		if len(zone.History) > 0 || zone.HistoryError != "" {
+			@ZoneHistoryDialog(zone)
+		}
 	</div>
 }
 
-templ ZoneActionMenu(zone ZoneView, className, settingsID, dnssecID, cloneID, deleteID string) {
+templ ZoneHistoryDialog(zone ZoneView) {
+	<dialog class="custom-server-dialog zone-history-dialog" id="zone-history-dialog" aria-labelledby="zone-history-title">
+		<header class="zone-history-header"><div><span>Change Center</span><h2 id="zone-history-title">{ zone.Name }</h2><p>Review durable zone snapshots and restore an earlier state as a new revision.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close change history">@Icon("x")</button></header>
+		<div class="zone-history-list">
+			if zone.HistoryError != "" {
+				<div class="zone-history-empty">{ zone.HistoryError }</div>
+			} else if len(zone.History) == 0 {
+				<div class="zone-history-empty">No revisions have been recorded for this zone.</div>
+			}
+			for _, revision := range zone.History {
+				<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#zone-history-revision-" + fmt.Sprint(revision.Number) } hx-swap="innerHTML">
+					<summary><span class={ "zone-history-marker " + revision.Kind } aria-hidden="true"></span><div><span><strong>Revision { fmt.Sprint(revision.Number) }</strong><span class={ "zone-history-kind " + revision.Kind }>{ revision.KindLabel }</span>
+						if revision.Current {
+							<span class="current-badge">Current</span>
+						}
+					</span><small>{ revision.OccurredAt }</small></div>@Icon("chevron-down")</summary>
+					<div class="zone-history-diff" id={ "zone-history-revision-" + fmt.Sprint(revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
+				</details>
+			}
+		</div>
+	</dialog>
+}
+
+func zoneHistoryDiffURL(name string, revision uint64) string {
+	return "/ui/zones/history/diff?zone=" + url.QueryEscape(name) + "&revision=" + strconv.FormatUint(revision, 10)
+}
+
+templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
+	if view.Error != "" {
+		<p class="zone-history-notice error">{ view.Error }</p>
+	} else {
+		<div class="zone-history-diff-heading">
+			<p class="zone-history-summary">{ view.Summary }</p>
+			if view.CanRollback {
+				<form class="zone-history-rollback" hx-post="/ui/zones/rollback" hx-target="#zones-content" hx-swap="outerHTML" hx-confirm={ "Restore revision " + fmt.Sprint(view.Revision) + "? Sable will preserve the zone identity, advance its SOA serial, and save the restored state as a new revision." } data-confirm-title="Restore this revision?" data-confirm-action="Restore Revision">
+					<input type="hidden" name="zone" value={ view.ZoneName }/><input type="hidden" name="revision" value={ fmt.Sprint(view.Revision) }/><button class="button outline compact" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore revision</span></button>
+				</form>
+			}
+		</div>
+		if view.Notice != "" {
+			<p class="zone-history-notice">{ view.Notice }</p>
+		}
+		if len(view.Changes) > 0 {
+			<ul class="zone-history-changes">
+				for _, change := range view.Changes {
+					<li class={ change.Kind }><span class="zone-history-change-kind" aria-hidden="true">{ zoneHistoryChangeSymbol(change.Kind) }</span><div><strong>{ change.Label }</strong>
+						if change.Before != "" {
+							<span><small>Before</small>{ change.Before }</span>
+						}
+						if change.After != "" {
+							<span><small>After</small>{ change.After }</span>
+						}
+					</div></li>
+				}
+			</ul>
+		}
+		if view.HiddenChanges > 0 {
+			<p class="zone-history-notice">{ fmt.Sprint(view.HiddenChanges) } additional changes are not shown.</p>
+		}
+	}
+}
+
+func zoneHistoryChangeSymbol(kind string) string { if kind == "added" { return "+" }; if kind == "removed" { return "−" }; return "~" }
+
+templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, cloneID, deleteID string) {
 	<details class={ "zone-action-menu " + className }>
 		<summary class={ ifThen(className == "", "icon-button zone-more-button", "icon-button") } aria-label={ "Actions for " + zone.Name }>@Icon("more-vertical")</summary>
 		<div class="zone-menu-content">
 			if zone.CanSettings {
 				<button type="button" data-dialog-open={ settingsID }>@Icon("sliders")<span>Zone Settings</span></button>
+			}
+			if historyID != "" && (len(zone.History) > 0 || zone.HistoryError != "") {
+				<button type="button" data-dialog-open={ historyID }>@Icon("clock")<span>History</span></button>
 			}
 			if zone.CanManagePermissions {
 				<a href="/administration?tab=groups" title="Manage zone access through groups">@Icon("key")<span>Permissions</span></a>

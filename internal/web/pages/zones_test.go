@@ -47,7 +47,7 @@ func TestZoneDNSSECMenuAndDialogPerZoneType(t *testing.T) {
 			t.Parallel()
 
 			zone := ZoneView{Name: "signed.test", Type: testCase.zoneType, CanDNSSEC: true}
-			menu := renderComponent(t, ZoneActionMenu(zone, "", "settings-dialog", "dnssec-dialog", "clone-dialog", "delete-dialog"))
+			menu := renderComponent(t, ZoneActionMenu(zone, "", "", "settings-dialog", "dnssec-dialog", "clone-dialog", "delete-dialog"))
 			if !strings.Contains(menu, testCase.menu) {
 				t.Fatalf("%s action menu does not contain %q: %s", testCase.zoneType, testCase.menu, menu)
 			}
