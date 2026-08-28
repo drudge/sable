@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -182,6 +183,27 @@ func TestZoneStorePersistsAtomicPerZoneRevisions(t *testing.T) {
 	}
 	if revisions != 2 {
 		t.Fatalf("stored revisions = %d, want 2", revisions)
+	}
+	history, err := storage.ListZoneRevisions(ctx, "example.test", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].Number != 2 || history[0].Zone.Name != "" || history[1].ChangeKind != "created" {
+		t.Fatalf("revision metadata = %#v", history)
+	}
+	revision, err := storage.ZoneRevision(ctx, "example.test", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revision.Zone.Records[2].Value != "192.0.2.99" || revision.Zone.Revision != 2 {
+		t.Fatalf("loaded revision = %#v", revision)
+	}
+	previous, err := storage.PreviousZoneRevision(ctx, "example.test", 2)
+	if err != nil || previous.Number != 1 || previous.Zone.Records[2].Value == "192.0.2.99" {
+		t.Fatalf("previous revision = %#v, %v", previous, err)
+	}
+	if _, err := storage.ZoneRevision(ctx, "example.test", 99); !errors.Is(err, zone.ErrRevisionNotFound) {
+		t.Fatalf("missing revision error = %v", err)
 	}
 	if _, err := storage.ReplaceZones(ctx, unchanged, nil); err != nil {
 		t.Fatal(err)

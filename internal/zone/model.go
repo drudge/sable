@@ -27,6 +27,11 @@ const (
 	defaultKeyRetirement = 7 * 24 * time.Hour
 )
 
+var (
+	ErrRevisionHistoryUnavailable = errors.New("zone revision history is unavailable")
+	ErrRevisionNotFound           = errors.New("zone revision was not found")
+)
+
 // Duration preserves the convenient Duration field used by the control plane
 // while keeping zone persistence independent from the TOML configuration model.
 type Duration struct {
@@ -138,6 +143,17 @@ type Snapshot struct {
 	Zones    []Zone
 	Revision uint64
 	LoadedAt time.Time
+}
+
+// Revision describes one durable zone snapshot. List operations intentionally
+// leave Zone empty so a history menu stays cheap even for very large zones;
+// callers load a snapshot only when they need to inspect or restore it.
+type Revision struct {
+	ZoneName   string
+	Number     uint64
+	ChangeKind string
+	CreatedAt  time.Time
+	Zone       Zone
 }
 
 func Clone(zones []Zone) []Zone {

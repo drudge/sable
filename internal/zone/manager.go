@@ -15,6 +15,12 @@ type Repository interface {
 	ReplaceZones(context.Context, []Zone, []Zone) ([]Zone, error)
 }
 
+type revisionRepository interface {
+	ListZoneRevisions(context.Context, string, int) ([]Revision, error)
+	ZoneRevision(context.Context, string, uint64) (Revision, error)
+	PreviousZoneRevision(context.Context, string, uint64) (Revision, error)
+}
+
 type PrepareFunc func(context.Context, *[]Zone) error
 type ValidateFunc func([]Zone) error
 type ApplyFunc func(context.Context, []Zone, []Zone) error
@@ -80,6 +86,30 @@ func (manager *Manager) Current() Snapshot {
 // not be mutated.
 func (manager *Manager) CurrentRef() Snapshot {
 	return *manager.current.Load()
+}
+
+func (manager *Manager) ListZoneRevisions(ctx context.Context, name string, limit int) ([]Revision, error) {
+	repository, ok := manager.repository.(revisionRepository)
+	if !ok {
+		return nil, ErrRevisionHistoryUnavailable
+	}
+	return repository.ListZoneRevisions(ctx, name, limit)
+}
+
+func (manager *Manager) ZoneRevision(ctx context.Context, name string, revision uint64) (Revision, error) {
+	repository, ok := manager.repository.(revisionRepository)
+	if !ok {
+		return Revision{}, ErrRevisionHistoryUnavailable
+	}
+	return repository.ZoneRevision(ctx, name, revision)
+}
+
+func (manager *Manager) PreviousZoneRevision(ctx context.Context, name string, revision uint64) (Revision, error) {
+	repository, ok := manager.repository.(revisionRepository)
+	if !ok {
+		return Revision{}, ErrRevisionHistoryUnavailable
+	}
+	return repository.PreviousZoneRevision(ctx, name, revision)
 }
 
 func (manager *Manager) UpdateZones(ctx context.Context, mutate func(*[]Zone) error) error {

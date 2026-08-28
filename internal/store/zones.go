@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -671,6 +672,73 @@ VALUES (`+store.placeholders(5)+`)`, current.Name, revision, changeKind, string(
 		return fmt.Errorf("append revision for zone %q: %w", current.Name, err)
 	}
 	return nil
+}
+
+func (store *Store) ListZoneRevisions(ctx context.Context, zoneName string, limit int) ([]zone.Revision, error) {
+	if limit <= 0 {
+		return []zone.Revision{}, nil
+	}
+	rows, err := store.database.QueryContext(ctx, `
+SELECT zone_name, revision, change_kind, created_at
+FROM sable_zone_revisions
+WHERE zone_name = `+store.placeholder(1)+`
+ORDER BY revision DESC
+LIMIT `+store.placeholder(2), zoneName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list revisions for zone %q: %w", zoneName, err)
+	}
+	defer rows.Close()
+
+	revisions := make([]zone.Revision, 0, limit)
+	for rows.Next() {
+		var revision zone.Revision
+		var number int64
+		if err := rows.Scan(&revision.ZoneName, &number, &revision.ChangeKind, &revision.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan revision for zone %q: %w", zoneName, err)
+		}
+		revision.Number = uint64(number)
+		revisions = append(revisions, revision)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate revisions for zone %q: %w", zoneName, err)
+	}
+	return revisions, nil
+}
+
+func (store *Store) ZoneRevision(ctx context.Context, zoneName string, revision uint64) (zone.Revision, error) {
+	return store.loadZoneRevision(ctx, `
+SELECT zone_name, revision, change_kind, snapshot_json, created_at
+FROM sable_zone_revisions
+WHERE zone_name = `+store.placeholder(1)+` AND revision = `+store.placeholder(2), zoneName, revision)
+}
+
+func (store *Store) PreviousZoneRevision(ctx context.Context, zoneName string, revision uint64) (zone.Revision, error) {
+	return store.loadZoneRevision(ctx, `
+SELECT zone_name, revision, change_kind, snapshot_json, created_at
+FROM sable_zone_revisions
+WHERE zone_name = `+store.placeholder(1)+` AND revision < `+store.placeholder(2)+`
+ORDER BY revision DESC
+LIMIT 1`, zoneName, revision)
+}
+
+func (store *Store) loadZoneRevision(ctx context.Context, query, zoneName string, revision uint64) (zone.Revision, error) {
+	var result zone.Revision
+	var number int64
+	var snapshot string
+	err := store.database.QueryRowContext(ctx, query, zoneName, revision).Scan(
+		&result.ZoneName, &number, &result.ChangeKind, &snapshot, &result.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return zone.Revision{}, zone.ErrRevisionNotFound
+	}
+	if err != nil {
+		return zone.Revision{}, fmt.Errorf("load revision %d for zone %q: %w", revision, zoneName, err)
+	}
+	if err := json.Unmarshal([]byte(snapshot), &result.Zone); err != nil {
+		return zone.Revision{}, fmt.Errorf("decode revision %d for zone %q: %w", revision, zoneName, err)
+	}
+	result.Number = uint64(number)
+	return result, nil
 }
 
 func (store *Store) pruneZoneRevisions(ctx context.Context, transaction *sql.Tx, zoneName string, revision uint64) error {
