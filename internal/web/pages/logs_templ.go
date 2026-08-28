@@ -1405,7 +1405,7 @@ func QueryLogsPanel(view QueryLogsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 136, "<div class=\"table-scroll query-log-table-scroll\"><table class=\"query-log-table full isotope-query-log-table\"><thead><tr><th>Timestamp</th><th class=\"query-col-client\">Client IP</th><th>Domain</th><th class=\"query-col-type\">Type</th><th class=\"query-col-source\">Response</th><th>Status</th><th class=\"query-col-protocol\">Protocol</th><th class=\"query-col-answer\">Answer</th><th class=\"query-col-actions\"><span class=\"sr-only\">Actions</span></th></tr></thead><tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 136, "<div class=\"table-scroll query-log-table-scroll\"><table class=\"query-log-table full isotope-query-log-table\"><thead><tr><th class=\"query-col-time\">Timestamp</th><th class=\"query-col-client\">Client IP</th><th class=\"query-col-domain\">Domain</th><th class=\"query-col-type\">Type</th><th class=\"query-col-source\">Response</th><th class=\"query-col-status\">Status</th><th class=\"query-col-protocol\">Protocol</th><th class=\"query-col-answer\">Answer</th><th class=\"query-col-actions\"><span class=\"sr-only\">Actions</span></th></tr></thead><tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1938,14 +1938,14 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "\"><td class=\"query-time\"><time>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "\"><td class=\"query-time query-col-time\"><time>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var84 string
 		templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(entry.OccurredAt)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 		if templ_7745c5c3_Err != nil {
@@ -1958,7 +1958,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var85 string
 		templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinStringErrs(entry.ClientIP)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 121}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 136}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 		if templ_7745c5c3_Err != nil {
@@ -1971,7 +1971,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var86 string
 		templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(entry.Protocol != "", entry.Protocol, "—"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 189}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 204}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 		if templ_7745c5c3_Err != nil {
@@ -1984,7 +1984,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var87 string
 		templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(entry.RecordType)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 247}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 262}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 		if templ_7745c5c3_Err != nil {
@@ -1997,7 +1997,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var88 string
 		templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(logSourceLabel(entry.Source))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 317}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 332}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 		if templ_7745c5c3_Err != nil {
@@ -2010,20 +2010,20 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var89 string
 		templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(entry.ClientIP)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 389}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 404}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "</code></td><td class=\"query-name\" title=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "</code></td><td class=\"query-name query-col-domain\" title=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var90 string
 		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.ResolveAttributeValue(entry.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 444}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 476}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var90)
 		if templ_7745c5c3_Err != nil {
@@ -2036,7 +2036,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var91 string
 		templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(entry.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 489}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 521}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 		if templ_7745c5c3_Err != nil {
@@ -2057,7 +2057,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var92 string
 		templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(entry.RecordType)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 674}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 706}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 		if templ_7745c5c3_Err != nil {
@@ -2092,13 +2092,13 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var95 string
 		templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(logSourceLabel(entry.Source))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 800}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 832}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 201, "</span></td><td>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 201, "</span></td><td class=\"query-col-status\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2127,7 +2127,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var98 string
 		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(rcodeDisplay(entry.Status))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 898}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 955}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 		if templ_7745c5c3_Err != nil {
@@ -2140,7 +2140,7 @@ func QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) templ.Component
 		var templ_7745c5c3_Var99 string
 		templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(entry.Protocol != "", entry.Protocol, "—"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 1011}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 260, Col: 1068}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 		if templ_7745c5c3_Err != nil {
@@ -2232,7 +2232,7 @@ func QueryDetailDialog(canBlocking bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, "</button></header><div class=\"query-detail-body\"><div class=\"query-detail-result\" aria-label=\"Query result\"><span class=\"source-pill\" data-query-detail-source>—</span> <span class=\"rcode\" data-query-detail-status>—</span></div><dl class=\"query-detail-grid\"><div><dt>Timestamp</dt><dd data-query-detail-value=\"time\">—</dd></div><div><dt>Client</dt><dd><code data-query-detail-value=\"client\">—</code></dd></div><div><dt>Query type</dt><dd data-query-detail-value=\"type\">—</dd></div><div><dt>Protocol</dt><dd data-query-detail-value=\"protocol\">—</dd></div><div><dt>Duration</dt><dd data-query-detail-value=\"duration\">—</dd></div></dl><section class=\"query-detail-answer\" aria-labelledby=\"query-detail-answer-title\"><h3 id=\"query-detail-answer-title\">Answer</h3><div data-query-detail-answers><span>—</span></div></section><section class=\"query-detail-explain\" aria-labelledby=\"query-detail-explain-title\"><div class=\"query-detail-section-heading\"><h3 id=\"query-detail-explain-title\">Why this answer?</h3><p data-query-detail-explain-summary></p></div><ol class=\"query-decision-path\" data-query-detail-explain-path>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, "</button></header><div class=\"query-detail-body\"><div class=\"query-detail-result\" aria-label=\"Query result\"><span class=\"source-pill\" data-query-detail-source>—</span> <span class=\"rcode\" data-query-detail-status>—</span></div><dl class=\"query-detail-grid\"><div class=\"query-detail-fact-wide\"><dt>Timestamp</dt><dd data-query-detail-value=\"time\">—</dd></div><div class=\"query-detail-fact-wide\"><dt>Client</dt><dd><code data-query-detail-value=\"client\">—</code></dd></div><div><dt>Query type</dt><dd data-query-detail-value=\"type\">—</dd></div><div><dt>Protocol</dt><dd data-query-detail-value=\"protocol\">—</dd></div><div><dt>Duration</dt><dd data-query-detail-value=\"duration\">—</dd></div></dl><section class=\"query-detail-answer\" aria-labelledby=\"query-detail-answer-title\"><h3 id=\"query-detail-answer-title\">Answer</h3><div data-query-detail-answers><span>—</span></div></section><section class=\"query-detail-explain\" aria-labelledby=\"query-detail-explain-title\"><div class=\"query-detail-section-heading\"><h3 id=\"query-detail-explain-title\">Why this answer?</h3><p data-query-detail-explain-summary></p></div><ol class=\"query-decision-path\" data-query-detail-explain-path>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

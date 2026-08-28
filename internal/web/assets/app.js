@@ -5,6 +5,7 @@
   // same shape the server renders.
   const APP_NAME = "Sable";
   const TITLE_SEPARATOR = " \u00b7 ";
+  const OVERVIEW_SCOPE_ALL = "all";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
   const dark = currentTheme() === "dark" || (currentTheme() === "system" && systemDark());
@@ -2100,6 +2101,11 @@
 	});
 
 	// Keep the live chart refresh from replacing an open custom-range picker.
+	document.body.addEventListener("htmx:configRequest", (event) => {
+	  const source = event.detail?.elt;
+	  if (!source?.closest?.("#query-statistics")) return;
+	  event.detail.parameters.stats_scope = document.querySelector("#runtime-stats")?.dataset.statsScope || OVERVIEW_SCOPE_ALL;
+	});
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
 	  if (source?.id === "query-statistics" && source.querySelector("[data-chart-range-popover]:not([hidden])")) {

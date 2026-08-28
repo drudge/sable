@@ -483,6 +483,7 @@ func (server *Server) dashboard(writer http.ResponseWriter, request *http.Reques
 
 func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	view := server.consoleView(request)
+	view.StatsScope = dashboardStatsScope(request)
 	if !view.CanLogs {
 		return view
 	}
@@ -759,6 +760,24 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
+	view := server.lifetimeStatsView(request)
+	chart := server.history.view(request.Context(), "hour", time.Now(), server.stats.Stats(), requestTimeDisplay(request))
+	scope := dashboardStatsScope(request)
+	values := view
+	if scope == pages.StatsScopeRange {
+		values = chart.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: view, Scope: scope,
+		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
+		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render runtime statistics", "error", err)
+	}
+}
+
+func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
 	view := statsView(server.history.totals(time.Now(), server.stats.Stats()))
 	// The client and dropped counts come from the query log rather than the
 	// resolver counters, so the refreshed cards have to repeat the read the
@@ -772,9 +791,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 			view.Clients = dashboardClientSample(entries)
 		}
 	}
-	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render runtime statistics", "error", err)
-	}
+	return view
 }
 
 func (server *Server) canReadLogs(request *http.Request) bool {
@@ -786,6 +803,7 @@ func (server *Server) canReadLogs(request *http.Request) bool {
 }
 
 func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {
+	server.rememberDashboardStatsScope(writer, request)
 	rangeName := request.URL.Query().Get("range")
 	display := requestTimeDisplay(request)
 	location := display.Location
@@ -808,6 +826,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			server.logger.Error("render custom query statistics", "error", err)
 			return
 		}
+		server.renderChartStats(writer, request, view)
 		if withInsights {
 			window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
 			server.renderInsights(writer, request, window)
@@ -824,8 +843,30 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		server.logger.Error("render query statistics", "error", err)
 		return
 	}
+	server.renderChartStats(writer, request, view)
 	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
 		server.renderInsights(writer, request, window)
+	}
+}
+
+// renderChartStats updates the headline metrics alongside an htmx chart swap.
+// The chart remains the regular response target; this sibling is applied out
+// of band so every range control changes the whole dashboard consistently.
+func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
+	lifetime := server.lifetimeStatsView(request)
+	scope := dashboardStatsScope(request)
+	values := lifetime
+	if scope == pages.StatsScopeRange {
+		values = view.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: lifetime, Scope: scope,
+		RangeName: view.ActiveRange, RangeLabel: view.RangeLabel,
+		CustomStart: view.CustomStart, CustomEnd: view.CustomEnd,
+		OutOfBand: true,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render chart statistics overview", "error", err)
 	}
 }
 

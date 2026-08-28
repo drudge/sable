@@ -206,7 +206,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 		} else if len(view.Entries) == 0 {
 			<div class="logs-empty">No DNS queries match these filters.</div>
 		} else {
-			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th>Timestamp</th><th class="query-col-client">Client IP</th><th>Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th>Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
@@ -257,7 +257,7 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		// The client and the protocol ride under the timestamp, and the answers
 		// under the domain, so the narrow layout can drop those columns without
 		// dropping what they said.
-		<td class="query-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
+		<td class="query-time query-col-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name query-col-domain" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td class="query-col-status"><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
 		<td class="query-answers query-col-answer">@QueryAnswers(entry.Answers)</td>
 		<td class="query-row-actions">
 			<button class="query-detail-button" type="button" data-query-detail-button aria-label={ "View details for " + entry.Name } title="View query details">@Icon("chevron-right")</button>
@@ -283,8 +283,8 @@ templ QueryDetailDialog(canBlocking bool) {
 				<span class="rcode" data-query-detail-status>—</span>
 			</div>
 			<dl class="query-detail-grid">
-				<div><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
-				<div><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
+				<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
+				<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
 				<div><dt>Query type</dt><dd data-query-detail-value="type">—</dd></div>
 				<div><dt>Protocol</dt><dd data-query-detail-value="protocol">—</dd></div>
 				<div><dt>Duration</dt><dd data-query-detail-value="duration">—</dd></div>
