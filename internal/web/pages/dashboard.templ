@@ -56,6 +56,8 @@ type DashboardInsightsView struct {
 	// is empty for the wide ranges, whose counts are recounted only when the
 	// range picker asks for them.
 	PollRange       string
+	LoadURL         string
+	Loading         bool
 	TopClients      []RankedStatView
 	TopDomains      []RankedStatView
 	TopBlocked      []RankedStatView

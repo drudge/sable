@@ -491,7 +491,7 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	// The rankings open on whatever range the chart opens on, so the panels and
 	// the plot above them always answer for the same window.
 	if window, valid := chartInsightWindow(view.Chart.ActiveRange, time.Now()); valid {
-		view.Insights = server.dashboardInsightsView(request, window)
+		view.Insights = loadingDashboardInsights(window)
 	}
 	return view
 }
@@ -864,13 +864,13 @@ func (server *Server) renderChartStats(writer http.ResponseWriter, request *http
 	}
 }
 
-// dashboardInsightsPanel recounts the rankings on their own timer. Only the
-// short ranges are allowed here: a new client should appear in the panels
-// without a page reload, while a week-wide aggregate stays a click.
+// dashboardInsightsPanel loads rankings independently from the initial page.
+// Short ranges continue polling; wider and custom ranges use the same endpoint
+// once after the operator selects them.
 func (server *Server) dashboardInsightsPanel(writer http.ResponseWriter, request *http.Request) {
-	window, valid := chartInsightWindow(request.URL.Query().Get("range"), time.Now())
-	if !valid || window.pollRange() == "" {
-		http.Error(writer, "range must be hour or day", http.StatusBadRequest)
+	window, valid := requestedInsightWindow(request)
+	if !valid {
+		http.Error(writer, "range must be hour, day, week, month, year, or a valid custom window", http.StatusBadRequest)
 		return
 	}
 	if !server.canReadLogs(request) {
@@ -886,10 +886,23 @@ func (server *Server) dashboardInsightsPanel(writer http.ResponseWriter, request
 // renderInsights appends the rankings as an out-of-band swap so one range click
 // updates the chart and the panels below it together.
 func (server *Server) renderInsights(writer http.ResponseWriter, request *http.Request, window insightWindow) {
-	insights := server.dashboardInsightsView(request, window)
+	insights := loadingDashboardInsights(window)
 	if err := pages.DashboardInsights(insights, true).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render dashboard insights", "error", err)
 	}
+}
+
+func requestedInsightWindow(request *http.Request) (insightWindow, bool) {
+	rangeName := request.URL.Query().Get("range")
+	if rangeName != "custom" {
+		return chartInsightWindow(rangeName, time.Now())
+	}
+	start, startErr := time.Parse(time.RFC3339Nano, request.URL.Query().Get("start"))
+	end, endErr := time.Parse(time.RFC3339Nano, request.URL.Query().Get("end"))
+	if startErr != nil || endErr != nil || !start.Before(end) {
+		return insightWindow{}, false
+	}
+	return insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}, true
 }
 
 func (server *Server) query(writer http.ResponseWriter, request *http.Request) {

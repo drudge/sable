@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+
+	webassets "github.com/drudge/sable/internal/web/assets"
 )
 
 const (
@@ -106,10 +108,11 @@ func TestReleaseBinarySmoke(t *testing.T) {
 func verifyEmbeddedReleaseConsole(t *testing.T, client *http.Client, httpsAddress string) {
 	t.Helper()
 	page := releaseSmokeGET(t, client, "https://"+httpsAddress+"/")
-	if !strings.Contains(page, "Sable") || !strings.Contains(page, "/assets/app.css") {
+	stylesheetPath := webassets.URL("app.css")
+	if !strings.Contains(page, "Sable") || !strings.Contains(page, stylesheetPath) {
 		t.Fatalf("embedded console shell is incomplete: %s", page)
 	}
-	stylesheet := releaseSmokeGET(t, client, "https://"+httpsAddress+"/assets/app.css")
+	stylesheet := releaseSmokeGET(t, client, "https://"+httpsAddress+stylesheetPath)
 	if !strings.Contains(stylesheet, "--background") {
 		t.Fatal("embedded console stylesheet is incomplete")
 	}

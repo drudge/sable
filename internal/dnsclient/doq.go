@@ -55,12 +55,9 @@ func ExchangeQUICWithSessions(
 	if strings.TrimSpace(serverName) == "" {
 		serverName = host
 	}
-	wire, err := message.Pack()
+	wire, err := packDoQRequest(message)
 	if err != nil {
-		return nil, 0, fmt.Errorf("pack DNS request: %w", err)
-	}
-	if len(wire) > doqMaxMessageBytes {
-		return nil, 0, errors.New("DNS request exceeds the DoQ message limit")
+		return nil, 0, err
 	}
 
 	if timeout > 0 {
@@ -84,15 +81,45 @@ func ExchangeQUICWithSessions(
 	}
 	defer func() { _ = connection.CloseWithError(0, "") }()
 
-	response, err := exchangeDoQStream(ctx, connection, wire)
+	response, err := exchangePackedQUIC(ctx, message.Id, connection, wire)
 	elapsed := time.Since(started)
 	if err != nil {
 		return nil, elapsed, err
 	}
-	if response.Id != message.Id {
-		return nil, elapsed, errors.New("DoQ response ID does not match request")
-	}
 	return response, elapsed, nil
+}
+
+// ExchangeQUICConnection exchanges one DNS request on a new stream of an
+// established QUIC connection. Connections are safe to share across calls:
+// QUIC multiplexes the streams and each one carries exactly one DNS exchange.
+func ExchangeQUICConnection(ctx context.Context, message *dns.Msg, connection *quic.Conn) (*dns.Msg, error) {
+	wire, err := packDoQRequest(message)
+	if err != nil {
+		return nil, err
+	}
+	return exchangePackedQUIC(ctx, message.Id, connection, wire)
+}
+
+func packDoQRequest(message *dns.Msg) ([]byte, error) {
+	wire, err := message.Pack()
+	if err != nil {
+		return nil, fmt.Errorf("pack DNS request: %w", err)
+	}
+	if len(wire) > doqMaxMessageBytes {
+		return nil, errors.New("DNS request exceeds the DoQ message limit")
+	}
+	return wire, nil
+}
+
+func exchangePackedQUIC(ctx context.Context, requestID uint16, connection *quic.Conn, wire []byte) (*dns.Msg, error) {
+	response, err := exchangeDoQStream(ctx, connection, wire)
+	if err != nil {
+		return nil, err
+	}
+	if response.Id != requestID {
+		return nil, errors.New("DoQ response ID does not match request")
+	}
+	return response, nil
 }
 
 func exchangeDoQStream(ctx context.Context, connection *quic.Conn, wire []byte) (*dns.Msg, error) {
