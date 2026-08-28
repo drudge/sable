@@ -3,10 +3,12 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -122,6 +124,7 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(&output, "# TYPE %s %s\n", metric.name, metric.metricType)
 		fmt.Fprintf(&output, "%s %d\n", metric.name, metric.value)
 	}
+	writeDNSLatencyMetrics(&output, dnsStats.Latency)
 	for _, metric := range []struct{ name, help string }{
 		{"sable_cluster_node_connected", "Whether the cluster node is currently connected."},
 		{"sable_cluster_node_synchronized", "Whether the cluster node is synchronized to the current generation."},
@@ -159,6 +162,23 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Content-Type", prometheusContentType)
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte(output.String()))
+}
+
+func writeDNSLatencyMetrics(output *strings.Builder, histograms []dnsserver.DNSLatencyHistogram) {
+	const metricName = "sable_dns_response_duration_seconds"
+	fmt.Fprintln(output, "# HELP "+metricName+" DNS response handling duration by bounded response source and transport.")
+	fmt.Fprintln(output, "# TYPE "+metricName+" histogram")
+	for _, histogram := range histograms {
+		labels := `source="` + prometheusLabel(histogram.Source) + `",protocol="` + prometheusLabel(histogram.Protocol) +
+			`",cache="` + prometheusLabel(histogram.Cache) + `",rcode="` + prometheusLabel(histogram.ResponseCode) + `"`
+		for _, bucket := range histogram.Buckets {
+			upperBound := strconv.FormatFloat(time.Duration(bucket.UpperBoundNanoseconds).Seconds(), 'g', -1, 64)
+			fmt.Fprintf(output, "%s_bucket{%s,le=\"%s\"} %d\n", metricName, labels, upperBound, bucket.Count)
+		}
+		fmt.Fprintf(output, "%s_bucket{%s,le=\"+Inf\"} %d\n", metricName, labels, histogram.Count)
+		fmt.Fprintf(output, "%s_sum{%s} %s\n", metricName, labels, strconv.FormatFloat(time.Duration(histogram.SumNanoseconds).Seconds(), 'g', -1, 64))
+		fmt.Fprintf(output, "%s_count{%s} %d\n", metricName, labels, histogram.Count)
+	}
 }
 
 func blockListSourceMetricValue(name string, source blockcompiler.SourceHealth) uint64 {
