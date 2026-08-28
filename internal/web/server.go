@@ -3,11 +3,9 @@ package web
 import (
 	"context"
 	"crypto/tls"
-	"embed"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -30,6 +28,7 @@ import (
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
+	webassets "github.com/drudge/sable/internal/web/assets"
 	"github.com/drudge/sable/internal/web/pages"
 	"github.com/drudge/sable/internal/zone"
 )
@@ -45,9 +44,6 @@ const (
 	webIdleTimeout          = 60 * time.Second
 	webMaximumHeaderBytes   = 64 << 10
 )
-
-//go:embed assets/*
-var embeddedAssets embed.FS
 
 type Server struct {
 	httpServer    *http.Server
@@ -173,10 +169,6 @@ func New(
 	setupRequired bool,
 	secureCookies bool,
 ) (*Server, error) {
-	assets, err := fs.Sub(embeddedAssets, "assets")
-	if err != nil {
-		return nil, fmt.Errorf("prepare embedded assets: %w", err)
-	}
 	server := &Server{
 		logger: logger, stats: stats, config: configuration, zones: zones, database: database,
 		queryLog: queryLog, queries: queries, reload: reload,
@@ -203,7 +195,7 @@ func New(
 	}
 	server.setupRequired.Store(setupRequired)
 	mux := http.NewServeMux()
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assets))))
+	mux.Handle("GET /assets/", webassets.Handler())
 	mux.HandleFunc("POST "+ssoStartPath, server.startSSO)
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
