@@ -171,6 +171,15 @@ button { cursor: pointer; }
 .mobile-header { display: none; }
 .content { width: 100%; padding: 1.5rem; }
 .dashboard-page { display: grid; gap: 1rem; }
+.stats-overview { display: grid; gap: .625rem; }
+.stats-overview-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.stats-overview-heading { display: flex; align-items: center; gap: .5rem; }
+.stats-overview-header h2 { margin: 0; font-size: .875rem; font-weight: 600; }
+.stats-range-label { border: 1px solid var(--border); border-radius: 999px; background: var(--card); padding: .2rem .625rem; color: var(--muted-foreground); font-size: .6875rem; font-weight: 500; }
+.stats-scope-toggle { display: flex; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.stats-scope-toggle button { height: 1.75rem; border: 0; border-radius: .375rem; padding: 0 .75rem; background: transparent; color: var(--muted-foreground); font-size: .75rem; }
+.stats-scope-toggle button.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.stats-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; }
 .stat-card { display: flex; min-width: 0; min-height: 6rem; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: white; text-align: left; }
 .stat-card strong { overflow: hidden; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
@@ -1313,7 +1322,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 
 @media (max-width: 639px) {
 	.toast-region { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
-  .stats-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+	.stats-overview-header { align-items: flex-start; }
+	.stats-overview-heading { flex-direction: column; align-items: flex-start; gap: .25rem; }
+	.stats-grid, .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
   .stat-card, .summary-card { min-height: 5.5rem; padding: 0.7rem 0.75rem; }
   .stat-card strong, .summary-card strong { font-size: 1.25rem; }
   .card-header, .panel-header { padding-inline: 1rem; }

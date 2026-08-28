@@ -135,6 +135,12 @@ func TestStatsHistoryBuildsRealCounterDeltaSeries(t *testing.T) {
 	if view.Blocked == "" || view.CacheHits == "" {
 		t.Fatalf("chart coordinates = blocked %q cache %q", view.Blocked, view.CacheHits)
 	}
+	if view.RangeLabel != "Last hour" {
+		t.Fatalf("overview range label = %q, want Last hour", view.RangeLabel)
+	}
+	if view.Stats.Queries != 5 || view.Stats.Blocked != 1 || view.Stats.CacheHits != 3 || view.Stats.CacheHitRatio != "100.0%" {
+		t.Fatalf("range overview = %+v, want 5 queries, 1 blocked, 3 cache hits, and a 100%% hit rate", view.Stats)
+	}
 	wantCustomStart := started.Add(5 * time.Second).Add(-7 * 24 * time.Hour).Local().Format("2006-01-02T15:04")
 	if view.CustomStart != wantCustomStart {
 		t.Fatalf("default custom start = %q, want %q", view.CustomStart, wantCustomStart)
