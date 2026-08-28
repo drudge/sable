@@ -57,6 +57,7 @@ func (handler *Handler) serveDynamicUpdate(
 	request *dns.Msg,
 	runtime *Runtime,
 	observer querylog.Observer,
+	client queryClient,
 	startedAt time.Time,
 ) bool {
 	if request.Opcode != dns.OpcodeUpdate {
@@ -68,7 +69,7 @@ func (handler *Handler) serveDynamicUpdate(
 	response.Authoritative = true
 	result := ZoneUpdateResult{Rcode: dns.RcodeFormatError}
 	updateRequest := ZoneUpdateRequest{
-		Prerequisites: request.Answer, Updates: request.Ns, Source: responseWriterClientIP(writer),
+		Prerequisites: request.Answer, Updates: request.Ns, Source: client.ip,
 	}
 	if signature := request.IsTsig(); signature != nil {
 		updateRequest.KeyName = signature.Hdr.Name
@@ -113,7 +114,7 @@ func (handler *Handler) serveDynamicUpdate(
 	handler.recordResponseCode(response.Rcode)
 	handler.writeResponse(writer, request, response)
 	if observer != nil {
-		handler.recordQuery(observer, writer, request, resolution{response: response, source: querylog.SourceAuthoritative}, startedAt)
+		handler.recordQuery(observer, client, request, resolution{response: response, source: querylog.SourceAuthoritative}, startedAt)
 	}
 	return true
 }
