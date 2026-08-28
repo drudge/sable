@@ -1922,10 +1922,32 @@ func benchmarkCacheHitHandler(b *testing.B) (*Handler, *dns.Msg) {
 	return handler, request
 }
 
+var benchmarkQueryEvent querylog.Event
+
+type benchmarkQueryObserver struct{}
+
+func (benchmarkQueryObserver) Enabled() bool { return true }
+
+func (benchmarkQueryObserver) Record(event querylog.Event) {
+	benchmarkQueryEvent = event
+}
+
 // BenchmarkServeDNSCacheHit measures the whole per-query handler cost for a
 // cache hit, which is the steady state the dnsperf comparison exercises.
 func BenchmarkServeDNSCacheHit(b *testing.B) {
 	handler, request := benchmarkCacheHitHandler(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		handler.ServeDNS(discardWriter{}, request)
+	}
+}
+
+// BenchmarkServeDNSCacheHitWithLogging keeps the default query-observer path in
+// the regression suite. Formatting the persisted answer and decision is part of
+// Sable's normal production cost even though persistence itself is asynchronous.
+func BenchmarkServeDNSCacheHitWithLogging(b *testing.B) {
+	handler, request := benchmarkCacheHitHandler(b)
+	handler.SetQueryObserver(benchmarkQueryObserver{})
 	b.ReportAllocs()
 	for b.Loop() {
 		handler.ServeDNS(discardWriter{}, request)

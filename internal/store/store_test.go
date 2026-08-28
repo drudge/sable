@@ -53,6 +53,13 @@ func TestOpenMigratesExistingQueryLogForDecisions(t *testing.T) {
 		database.Close()
 		t.Fatal(err)
 	}
+	_, err = database.Exec(`INSERT INTO sable_query_log
+		(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, time.Now(), "192.0.2.10", "Legacy.Example.", 1, 1, 0, "cache", "UDP", "", 10)
+	if err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -62,17 +69,13 @@ func TestOpenMigratesExistingQueryLogForDecisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	hasDecision, err := opened.tableHasColumn(context.Background(), "sable_query_log", "decision")
-	if err != nil || !hasDecision {
-		t.Fatalf("decision column = %v, %v", hasDecision, err)
+	for _, column := range []string{"decision", "client_ip_key", "name_key"} {
+		exists, err := opened.tableHasColumn(context.Background(), "sable_query_log", column)
+		if err != nil || !exists {
+			t.Fatalf("%s column = %v, %v", column, exists, err)
+		}
 	}
-	_, err = opened.database.Exec(`INSERT INTO sable_query_log
-		(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, time.Now(), "192.0.2.10", "legacy.example", 1, 1, 0, "cache", "UDP", "", 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, err := opened.QueryEvents(context.Background(), querylog.Filter{Page: 1, PageSize: 25})
+	page, err := opened.QueryEvents(context.Background(), querylog.Filter{Page: 1, PageSize: 25, ClientIP: "192.0.2.10", Name: "legacy.example", Exact: true})
 	if err != nil || len(page.Entries) != 1 || page.Entries[0].Decision != (querylog.Decision{}) {
 		t.Fatalf("legacy query decision = %+v, %v", page.Entries, err)
 	}
@@ -700,6 +703,12 @@ func TestWriteQueryEventsPersistsBatch(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("query log rows after prune = %d, want 0", count)
+	}
+	if err := opened.database.QueryRow("SELECT COUNT(*) FROM sable_query_log_rollup").Scan(&count); err != nil {
+		t.Fatalf("count pruned query log rollups: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("query log rollups after prune = %d, want 0", count)
 	}
 }
 

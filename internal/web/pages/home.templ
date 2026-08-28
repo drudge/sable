@@ -50,7 +50,11 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 	<div
 		class="dashboard-insights"
 		id="dashboard-insights"
-		if view.PollRange != "" {
+		if view.Loading && view.LoadURL != "" {
+			hx-get={ templ.SafeURL(view.LoadURL) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+		} else if view.PollRange != "" {
 			hx-get={ templ.SafeURL("/ui/stats/insights?range=" + view.PollRange) }
 			hx-trigger="every 60s"
 			hx-swap="outerHTML"
@@ -58,17 +62,24 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 		if outOfBand {
 			hx-swap-oob="outerHTML"
 		}
-	>
-		<section class="dashboard-rankings" aria-label="Query rankings">
-			@RankedPanel("Top Clients", "clients", view.TopClients, view)
-			@RankedPanel("Top Domains", "domains", view.TopDomains, view)
-			@RankedPanel("Top Blocked Domains", "blocked", view.TopBlocked, view)
-		</section>
-		<section class="dashboard-distributions" aria-label="Query distributions">
-			@DistributionPanel("Query Types", view.QueryTypes)
-			@DistributionPanel("Response Sources", view.ResponseSources)
-			@DistributionPanel("Response Codes", view.ResponseCodes)
-		</section>
+		>
+		if view.Loading {
+			<div class="dashboard-insights-loading card" role="status" aria-live="polite">
+				@Icon("refresh")
+				<span>Loading query insights…</span>
+			</div>
+		} else {
+			<section class="dashboard-rankings" aria-label="Query rankings">
+				@RankedPanel("Top Clients", "clients", view.TopClients, view)
+				@RankedPanel("Top Domains", "domains", view.TopDomains, view)
+				@RankedPanel("Top Blocked Domains", "blocked", view.TopBlocked, view)
+			</section>
+			<section class="dashboard-distributions" aria-label="Query distributions">
+				@DistributionPanel("Query Types", view.QueryTypes)
+				@DistributionPanel("Response Sources", view.ResponseSources)
+				@DistributionPanel("Response Codes", view.ResponseCodes)
+			</section>
+		}
 	</div>
 }
 

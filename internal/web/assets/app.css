@@ -303,6 +303,8 @@ button { cursor: pointer; }
 
 .isotope-dashboard { gap: 1rem; }
 .dashboard-insights { display: grid; gap: 1rem; }
+.dashboard-insights-loading { display: flex; min-height: 8rem; align-items: center; justify-content: center; gap: .75rem; color: var(--muted-foreground); }
+.dashboard-insights-loading .nav-icon { width: 1.1rem; height: 1.1rem; animation: blocking-refresh-spin 800ms linear infinite; }
 .dashboard-rankings, .dashboard-distributions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 .ranking-card, .distribution-card { display: flex; min-width: 0; flex-direction: column; }
 .ranking-card > header, .distribution-card > header { display: flex; min-height: 4.25rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem .75rem; }

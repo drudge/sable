@@ -204,31 +204,32 @@ type BlockListStats struct {
 }
 
 type Stats struct {
-	Queries                  uint64             `json:"queries"`
-	NoError                  uint64             `json:"no_error"`
-	ServerFailures           uint64             `json:"server_failures"`
-	NXDomain                 uint64             `json:"nx_domain"`
-	Refused                  uint64             `json:"refused"`
-	Blocked                  uint64             `json:"blocked"`
-	Failures                 uint64             `json:"failures"`
-	UpstreamErrors           uint64             `json:"upstream_errors"`
-	CacheHits                uint64             `json:"cache_hits"`
-	CacheMisses              uint64             `json:"cache_misses"`
-	CacheEntries             int                `json:"cache_entries"`
-	RoutedQueries            uint64             `json:"routed_queries"`
-	LocalAnswers             uint64             `json:"local_answers"`
-	AuthoritativeAnswers     uint64             `json:"authoritative_answers"`
-	LocalHosts               int                `json:"local_hosts"`
-	Zones                    int                `json:"zones"`
-	BlockedDomains           int                `json:"blocked_domains"`
-	BlockLists               int                `json:"block_lists"`
-	BlockSources             []BlockListStats   `json:"block_sources"`
-	StartedAt                time.Time          `json:"started_at"`
-	DNSSECSecure             uint64             `json:"dnssec_secure"`
-	DNSSECInsecure           uint64             `json:"dnssec_insecure"`
-	DNSSECBogus              uint64             `json:"dnssec_bogus"`
-	DNSSECTrustAnchorUpdates bool               `json:"dnssec_trust_anchor_updates"`
-	DNSSECTrustAnchors       trustanchor.Status `json:"dnssec_trust_anchors"`
+	Queries                  uint64                `json:"queries"`
+	NoError                  uint64                `json:"no_error"`
+	ServerFailures           uint64                `json:"server_failures"`
+	NXDomain                 uint64                `json:"nx_domain"`
+	Refused                  uint64                `json:"refused"`
+	Blocked                  uint64                `json:"blocked"`
+	Failures                 uint64                `json:"failures"`
+	UpstreamErrors           uint64                `json:"upstream_errors"`
+	CacheHits                uint64                `json:"cache_hits"`
+	CacheMisses              uint64                `json:"cache_misses"`
+	CacheEntries             int                   `json:"cache_entries"`
+	RoutedQueries            uint64                `json:"routed_queries"`
+	LocalAnswers             uint64                `json:"local_answers"`
+	AuthoritativeAnswers     uint64                `json:"authoritative_answers"`
+	LocalHosts               int                   `json:"local_hosts"`
+	Zones                    int                   `json:"zones"`
+	BlockedDomains           int                   `json:"blocked_domains"`
+	BlockLists               int                   `json:"block_lists"`
+	BlockSources             []BlockListStats      `json:"block_sources"`
+	StartedAt                time.Time             `json:"started_at"`
+	DNSSECSecure             uint64                `json:"dnssec_secure"`
+	DNSSECInsecure           uint64                `json:"dnssec_insecure"`
+	DNSSECBogus              uint64                `json:"dnssec_bogus"`
+	DNSSECTrustAnchorUpdates bool                  `json:"dnssec_trust_anchor_updates"`
+	DNSSECTrustAnchors       trustanchor.Status    `json:"dnssec_trust_anchors"`
+	Latency                  []DNSLatencyHistogram `json:"latency"`
 }
 
 type Handler struct {
@@ -259,6 +260,7 @@ type Handler struct {
 	startedAt            time.Time
 	observer             atomic.Pointer[observerHolder]
 	upstreamExchange     upstreamExchangeFunc
+	forwarderConnections *forwarderPool
 	upstreamHealth       *upstreamHealthTracker
 	inflight             *inflightGroup
 	zoneTransfer         zoneTransferFunc
@@ -272,6 +274,7 @@ type Handler struct {
 	zoneUpdateAuditor    atomic.Pointer[zoneUpdateAuditorHolder]
 	logger               atomic.Pointer[slog.Logger]
 	failureLog           *failureLogLimiter
+	latency              dnsLatencyHistograms
 }
 
 type ZoneNotification struct {
@@ -660,8 +663,9 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 }
 
 func NewHandler(runtime *Runtime) *Handler {
+	forwarders := newForwarderPool()
 	handler := &Handler{
-		startedAt: time.Now(), upstreamExchange: newForwarderPool().exchange,
+		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
 		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
@@ -720,6 +724,9 @@ func (handler *Handler) Close() {
 	// there is nothing to wait for.
 	if handler.maintenanceStarted.Swap(true) {
 		<-handler.maintenanceDone
+	}
+	if handler.forwarderConnections != nil {
+		handler.forwarderConnections.Close()
 	}
 }
 
@@ -918,13 +925,25 @@ func (handler *Handler) SetQueryObserver(observer querylog.Observer) {
 }
 
 func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
-	observer := handler.activeQueryObserver()
-	client := queryClient{ip: responseWriterClientIP(writer)}
-	var startedAt time.Time
-	if observer != nil {
-		startedAt = time.Now()
-		client.protocol = queryProtocol(writer)
+	startedAt := time.Now()
+	latencySource := querylog.Source("control")
+	if request.Opcode == dns.OpcodeUpdate {
+		latencySource = querylog.SourceAuthoritative
+	} else if request.Opcode == dns.OpcodeQuery {
+		latencySource = querylog.SourceError
+		if len(request.Question) == 1 && (request.Question[0].Qtype == dns.TypeAXFR || request.Question[0].Qtype == dns.TypeIXFR) {
+			latencySource = querylog.Source("control")
+		}
 	}
+	protocol := queryProtocol(writer)
+	client := queryClient{ip: responseWriterClientIP(writer), protocol: protocol}
+	latencyCache := querylog.CacheDecision("")
+	latencyResponseCode := -1
+	defer func() {
+		handler.latency.observe(latencySource, protocol, latencyCache, latencyResponseCode, time.Since(startedAt))
+	}()
+
+	observer := handler.activeQueryObserver()
 	handler.queries.Add(1)
 	runtime := handler.runtime.Load()
 	if handler.serveDynamicUpdate(writer, request, runtime, observer, client, startedAt) {
@@ -938,6 +957,7 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	}
 	if len(request.Question) == 1 && handler.zoneExpired(request.Question[0].Name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
+		latencyResponseCode = result.response.Rcode
 		handler.logResolutionFailure(request, client.ip, "authoritative zone expired")
 		handler.recordResponseCode(result.response.Rcode)
 		handler.writeResponse(writer, request, result.response)
@@ -947,6 +967,9 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 		return
 	}
 	result := handler.resolveForClient(request, runtime, client.ip)
+	latencySource = result.source
+	latencyCache = result.decision.Cache
+	latencyResponseCode = result.response.Rcode
 	handler.recordResponseCode(result.response.Rcode)
 	handler.writeResponse(writer, request, result.response)
 	if observer != nil {
@@ -1656,6 +1679,7 @@ func (handler *Handler) Stats() Stats {
 		DNSSECBogus:              handler.dnssecBogus.Load(),
 		DNSSECTrustAnchorUpdates: runtime.managedTrustAnchors,
 		DNSSECTrustAnchors:       anchorStatus,
+		Latency:                  handler.latency.snapshot(),
 	}
 }
 
