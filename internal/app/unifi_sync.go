@@ -387,19 +387,40 @@ func desiredUniFiRecords(settings config.UniFi, inventory unifi.Inventory) (map[
 			if !mapping.Reverse {
 				continue
 			}
-			reverseZoneName, ok := reverseZoneFor(reverseZones, host.Address)
-			if !ok {
-				continue
+			for _, address := range hostAddresses(host) {
+				reverseZoneName, ok := reverseZoneFor(reverseZones, address)
+				if !ok {
+					// The controller declares IPv4 subnets ahead of time, but
+					// the IPv6 prefixes clients actually use arrive by
+					// delegation and rotate, so their /64 reverse zones are
+					// derived from the addresses in use. An IPv4 address
+					// outside every declared subnet stays unpublished.
+					if !address.Is6() {
+						continue
+					}
+					prefix, err := address.Prefix(64)
+					if err != nil {
+						continue
+					}
+					name, err := dnsname.ReverseZone(prefix)
+					if err != nil {
+						skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, address, err))
+						continue
+					}
+					reverseZones[prefix] = name
+					ensure(name, mapping.TTL)
+					reverseZoneName = name
+				}
+				reverseName, err := dnsname.ReverseName(address)
+				if err != nil {
+					skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, address, err))
+					continue
+				}
+				zones[reverseZoneName].records = append(zones[reverseZoneName].records, zone.Record{
+					Name: unifi.RelativeOwner(reverseName, reverseZoneName), Type: "PTR",
+					Value: fqdn + ".", TTL: mapping.TTL, Source: zone.SourceUniFi,
+				})
 			}
-			reverseName, err := dnsname.ReverseName(host.Address)
-			if err != nil {
-				skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, host.Address, err))
-				continue
-			}
-			zones[reverseZoneName].records = append(zones[reverseZoneName].records, zone.Record{
-				Name: unifi.RelativeOwner(reverseName, reverseZoneName), Type: "PTR",
-				Value: fqdn + ".", TTL: mapping.TTL, Source: zone.SourceUniFi,
-			})
 		}
 	}
 	for _, entry := range zones {
@@ -407,6 +428,19 @@ func desiredUniFiRecords(settings config.UniFi, inventory unifi.Inventory) (map[
 	}
 	sort.Strings(skipped)
 	return zones, skipped, nil
+}
+
+// hostAddresses lists every address a host publishes reverse records for: the
+// primary lease or reservation plus each observed IPv6 address.
+func hostAddresses(host unifi.Host) []netip.Addr {
+	addresses := make([]netip.Addr, 0, 1+len(host.IPv6))
+	addresses = append(addresses, host.Address)
+	for _, address := range host.IPv6 {
+		if address != host.Address {
+			addresses = append(addresses, address)
+		}
+	}
+	return addresses
 }
 
 // reverseZoneFor finds the reverse zone covering an address, preferring the
@@ -485,7 +519,30 @@ func planUniFiZones(zones *[]zone.Zone, desired map[string]*desiredZone, now tim
 			zone.AdvanceSerial(target, now)
 		}
 	}
+	// Reverse zones are derived from the addresses in use, and delegated IPv6
+	// prefixes come and go with the upstream, so a prefix that disappears would
+	// otherwise strand its synchronized PTR records forever. A reverse zone the
+	// mapping no longer produces has its synchronized records retired; the zone
+	// itself stays behind because the operator may have added records of their
+	// own.
+	for index := range *zones {
+		target := &(*zones)[index]
+		if target.Type != "primary" || !isReverseZoneName(target.Name) {
+			continue
+		}
+		if _, wanted := desired[target.Name]; wanted {
+			continue
+		}
+		if applyUniFiRecords(target, nil, &plan) {
+			zone.AdvanceSerial(target, now)
+		}
+	}
 	return plan
+}
+
+// isReverseZoneName reports whether a zone holds reverse mappings.
+func isReverseZoneName(name string) bool {
+	return strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa")
 }
 
 // applyUniFiRecords replaces the synchronizer-owned records in one zone and

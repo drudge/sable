@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,8 +25,8 @@ const (
 		{"mac":"aa:bb:cc:dd:ee:02","name":"Ignored","fixed_ip":"192.168.1.11","use_fixedip":false,"network_id":"net-lan"}
 	]}`
 	activeFixture = `{"data":[
-		{"mac":"aa:bb:cc:dd:ee:01","name":"Printer","ip":"192.168.1.99","network_id":"net-lan"},
-		{"mac":"aa:bb:cc:dd:ee:03","hostname":"Laptop","ip":"192.168.30.50","network_id":"net-iot"},
+		{"mac":"aa:bb:cc:dd:ee:01","name":"Printer","ip":"192.168.1.99","network_id":"net-lan","ipv6_addresses":["2001:db8:0:1:aa:bb:cc:1","fe80::9"]},
+		{"mac":"aa:bb:cc:dd:ee:03","hostname":"Laptop","ip":"192.168.30.50","network_id":"net-iot","ipv6_addresses":["fd00::5","fe80::1","2001:db8:0:1:1:2:3:4","2001:db8:0:1:1:2:3:4","::ffff:192.0.2.1","ff02::1","::","bogus"]},
 		{"mac":"aa:bb:cc:dd:ee:04","ip":"192.168.30.51","network_id":"net-iot"},
 		{"mac":"aa:bb:cc:dd:ee:05","name":"Broken","ip":"not-an-address","network_id":"net-iot"}
 	]}`
@@ -120,6 +121,31 @@ func TestInventoryPrefersReservationOverActiveLease(t *testing.T) {
 	}
 	if printer.Address != netip.MustParseAddr("192.168.1.10") {
 		t.Fatalf("printer address = %s, want the reserved 192.168.1.10", printer.Address)
+	}
+}
+
+// The controller reports every IPv6 address it has seen on a client. Only the
+// global and unique-local ones name anything, and a reservation carries none
+// at all, so the merged host must keep the active lease's filtered set.
+func TestInventoryFiltersObservedIPv6(t *testing.T) {
+	server := httptest.NewTLSServer(fixtureHandler(t, func(*http.Request) bool { return true }))
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	byMAC := make(map[string]Host, len(inventory.Hosts))
+	for _, host := range inventory.Hosts {
+		byMAC[host.MAC] = host
+	}
+	laptop := []netip.Addr{netip.MustParseAddr("2001:db8:0:1:1:2:3:4"), netip.MustParseAddr("fd00::5")}
+	if !slices.Equal(byMAC["aa:bb:cc:dd:ee:03"].IPv6, laptop) {
+		t.Fatalf("laptop IPv6 = %v, want the sorted global and unique-local addresses %v", byMAC["aa:bb:cc:dd:ee:03"].IPv6, laptop)
+	}
+	printer := []netip.Addr{netip.MustParseAddr("2001:db8:0:1:aa:bb:cc:1")}
+	if !slices.Equal(byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer) {
+		t.Fatalf("printer IPv6 = %v, want the active lease's %v inherited by the winning reservation", byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer)
 	}
 }
 
