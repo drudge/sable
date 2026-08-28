@@ -63,6 +63,7 @@ type QueryLogsView struct {
 	End          string
 	Exact        bool
 	Live         bool
+	NewestID     int64
 	FiltersOpen  bool
 	CanBlocking  bool
 	CopyText     string
@@ -451,6 +452,8 @@ func queryPanelLiveURL(view QueryLogsView) string {
 	}
 	if view.Live {
 		values.Set("live", "1")
+		values.Set("known_total", fmt.Sprint(view.TotalEntries))
+		values.Set("after_id", fmt.Sprint(view.NewestID))
 	}
 	if view.FiltersOpen {
 		values.Set("filters", "1")

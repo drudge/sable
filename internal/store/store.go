@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -131,7 +132,7 @@ func (store *Store) migrate(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS sable_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
-)`, store.queryLogTable(), store.serverLogTable(), store.cacheTable(), `
+)`, store.queryLogTable(), store.queryLogRollupTable(), store.serverLogTable(), store.cacheTable(), `
 CREATE INDEX IF NOT EXISTS sable_query_log_occurred_at_idx
 ON sable_query_log (occurred_at)`, `
 CREATE INDEX IF NOT EXISTS sable_server_log_occurred_at_idx
@@ -150,6 +151,9 @@ ON sable_server_log (occurred_at)`}
 	}
 	if err := store.migrateQueryLogSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
+	}
+	if err := store.migrateQueryLogIndexes(ctx); err != nil {
+		return fmt.Errorf("migrate %s query log indexes: %w", store.driver, err)
 	}
 	if err := store.migrateZoneRecordSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
@@ -180,6 +184,8 @@ func (store *Store) migrateQueryLogSchema(ctx context.Context) error {
 		{"protocol", "TEXT NOT NULL DEFAULT ''"},
 		{"answer", "TEXT NOT NULL DEFAULT ''"},
 		{"decision", "TEXT NOT NULL DEFAULT '{}'"},
+		{"client_ip_key", "TEXT NOT NULL DEFAULT ''"},
+		{"name_key", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		exists, err := store.tableHasColumn(ctx, "sable_query_log", column.name)
 		if err != nil {
@@ -189,6 +195,27 @@ func (store *Store) migrateQueryLogSchema(ctx context.Context) error {
 			if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_query_log ADD COLUMN "+column.name+" "+column.definition); err != nil {
 				return fmt.Errorf("add query log %s: %w", column.name, err)
 			}
+		}
+	}
+	if _, err := store.database.ExecContext(ctx, `
+UPDATE sable_query_log
+SET client_ip_key = LOWER(client_ip), name_key = RTRIM(LOWER(name), '.')
+WHERE client_ip_key = '' OR name_key = ''`); err != nil {
+		return fmt.Errorf("backfill query log search keys: %w", err)
+	}
+	return nil
+}
+
+func (store *Store) migrateQueryLogIndexes(ctx context.Context) error {
+	for _, statement := range []string{`
+CREATE INDEX IF NOT EXISTS sable_query_log_client_key_idx
+ON sable_query_log (client_ip_key, id DESC)`, `
+CREATE INDEX IF NOT EXISTS sable_query_log_name_key_idx
+ON sable_query_log (name_key, id DESC)`, `
+CREATE INDEX IF NOT EXISTS sable_query_log_rollup_bucket_idx
+ON sable_query_log_rollup (bucket_start)`} {
+		if _, err := store.database.ExecContext(ctx, statement); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -247,7 +274,9 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 			ctx,
 			event.OccurredAt.UTC(),
 			event.ClientIP,
+			queryLogClientKey(event.ClientIP),
 			event.Name,
+			queryLogDomainKey(event.Name),
 			event.RecordType,
 			event.Class,
 			event.ResponseCode,
@@ -261,6 +290,10 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 			return fmt.Errorf("insert query log event: %w", err)
 		}
 	}
+	if err := store.writeQueryLogRollups(ctx, transaction, events); err != nil {
+		_ = transaction.Rollback()
+		return err
+	}
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit query log batch: %w", err)
 	}
@@ -268,16 +301,24 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 }
 
 func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) error {
-	placeholder := "?"
-	if store.driver == "postgres" {
-		placeholder = "$1"
+	transaction, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin query log prune: %w", err)
 	}
-	if _, err := store.database.ExecContext(
-		ctx,
-		"DELETE FROM sable_query_log WHERE occurred_at < "+placeholder,
-		before.UTC(),
-	); err != nil {
+	placeholder := store.placeholder(1)
+	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log WHERE occurred_at < "+placeholder, before.UTC()); err != nil {
+		_ = transaction.Rollback()
 		return fmt.Errorf("prune query log: %w", err)
+	}
+	// Drop the cutoff minute as well because its aggregate can include rows
+	// from before the exact cutoff. Surviving rows in that partial minute remain
+	// available through the raw log boundary query.
+	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log_rollup WHERE bucket_start <= "+placeholder, before.UTC().Truncate(time.Minute)); err != nil {
+		_ = transaction.Rollback()
+		return fmt.Errorf("prune query log rollups: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit query log prune: %w", err)
 	}
 	return nil
 }
@@ -352,16 +393,16 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	}
 	if value := strings.TrimSpace(filter.ClientIP); value != "" {
 		if filter.Exact {
-			addCondition("LOWER(client_ip)", "=", strings.ToLower(value))
+			addCondition("client_ip_key", "=", queryLogClientKey(value))
 		} else {
-			addCondition("LOWER(client_ip)", "LIKE", "%"+strings.ToLower(value)+"%")
+			addCondition("client_ip_key", "LIKE", "%"+queryLogClientKey(value)+"%")
 		}
 	}
 	if value := strings.TrimSpace(filter.Name); value != "" {
 		if filter.Exact {
 			addCondition(queryLogDomainExpression, "=", queryLogDomainKey(value))
 		} else {
-			addCondition("LOWER(name)", "LIKE", "%"+strings.ToLower(value)+"%")
+			addCondition(queryLogDomainExpression, "LIKE", "%"+queryLogDomainKey(value)+"%")
 		}
 	}
 	if !filter.Since.IsZero() {
@@ -387,18 +428,24 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	if filter.Protocol != "" {
 		addCondition("protocol", "=", strings.ToUpper(filter.Protocol))
 	}
-	where := ""
-	if len(conditions) > 0 {
-		where = " WHERE " + strings.Join(conditions, " AND ")
+	total := filter.KnownTotal
+	countConditions := append([]string(nil), conditions...)
+	countArguments := append([]any(nil), arguments...)
+	if filter.Incremental {
+		countArguments = append(countArguments, filter.AfterID)
+		countConditions = append(countConditions, "id > "+store.placeholder(len(countArguments)))
 	}
-
-	var total int
-	if err := store.database.QueryRowContext(
-		ctx,
-		"SELECT COUNT(*) FROM sable_query_log"+where,
-		arguments...,
-	).Scan(&total); err != nil {
-		return querylog.Page{}, fmt.Errorf("count query events: %w", err)
+	if !filter.UseKnownTotal || filter.Incremental {
+		countWhere := queryLogWhere(countConditions)
+		var counted int
+		if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_query_log"+countWhere, countArguments...).Scan(&counted); err != nil {
+			return querylog.Page{}, fmt.Errorf("count query events: %w", err)
+		}
+		if filter.Incremental {
+			total += counted
+		} else {
+			total = counted
+		}
 	}
 	totalPages := 0
 	if total > 0 {
@@ -406,25 +453,65 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 		filter.Page = min(filter.Page, totalPages)
 	}
 
+	selectConditions := append([]string(nil), conditions...)
 	selectArguments := append([]any(nil), arguments...)
-	selectArguments = append(selectArguments, filter.PageSize, (filter.Page-1)*filter.PageSize)
-	rows, err := store.database.QueryContext(ctx, `
-SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
-FROM sable_query_log`+where+`
-ORDER BY id DESC
-LIMIT `+store.placeholder(len(selectArguments)-1)+` OFFSET `+store.placeholder(len(selectArguments)), selectArguments...)
+	order := "DESC"
+	useOffset := false
+	switch filter.Direction {
+	case "older":
+		if filter.Cursor > 0 {
+			selectArguments = append(selectArguments, filter.Cursor)
+			selectConditions = append(selectConditions, "id < "+store.placeholder(len(selectArguments)))
+		}
+	case "newer":
+		if filter.Cursor > 0 {
+			selectArguments = append(selectArguments, filter.Cursor)
+			selectConditions = append(selectConditions, "id > "+store.placeholder(len(selectArguments)))
+			order = "ASC"
+		}
+	case "oldest":
+		order = "ASC"
+	default:
+		useOffset = filter.Page > 1
+	}
+	selectWhere := queryLogWhere(selectConditions)
+	selectionLimit := filter.PageSize
+	if filter.Direction == "oldest" && total%filter.PageSize != 0 {
+		selectionLimit = total % filter.PageSize
+	}
+	selectArguments = append(selectArguments, selectionLimit)
+	query := `
+	SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
+	FROM sable_query_log` + selectWhere + `
+	ORDER BY id ` + order + `
+	LIMIT ` + store.placeholder(len(selectArguments))
+	if useOffset {
+		selectArguments = append(selectArguments, (filter.Page-1)*filter.PageSize)
+		query += ` OFFSET ` + store.placeholder(len(selectArguments))
+	}
+	rows, err := store.database.QueryContext(ctx, query, selectArguments...)
 	if err != nil {
 		return querylog.Page{}, fmt.Errorf("query events: %w", err)
 	}
 	defer rows.Close()
-	entries, err := scanQueryEvents(rows, filter.PageSize)
+	entries, err := scanQueryEvents(rows, selectionLimit)
 	if err != nil {
 		return querylog.Page{}, err
+	}
+	if order == "ASC" {
+		slices.Reverse(entries)
 	}
 	return querylog.Page{
 		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
 		TotalEntries: total, TotalPages: totalPages,
 	}, nil
+}
+
+func queryLogWhere(conditions []string) string {
+	if len(conditions) == 0 {
+		return ""
+	}
+	return " WHERE " + strings.Join(conditions, " AND ")
 }
 
 func scanQueryEvents(rows *sql.Rows, capacity int) ([]querylog.Entry, error) {
@@ -461,9 +548,11 @@ func (store *Store) queryLogTable() string {
 	return fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS sable_query_log (
     id %s,
-    occurred_at TIMESTAMP NOT NULL,
-    client_ip TEXT NOT NULL,
-    name TEXT NOT NULL,
+	occurred_at TIMESTAMP NOT NULL,
+	client_ip TEXT NOT NULL,
+	client_ip_key TEXT NOT NULL DEFAULT '',
+	name TEXT NOT NULL,
+	name_key TEXT NOT NULL DEFAULT '',
     record_type INTEGER NOT NULL,
     class INTEGER NOT NULL,
     response_code INTEGER NOT NULL,
@@ -478,12 +567,12 @@ CREATE TABLE IF NOT EXISTS sable_query_log (
 func (store *Store) queryLogInsert() string {
 	if store.driver == "postgres" {
 		return `INSERT INTO sable_query_log
-(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+(occurred_at, client_ip, client_ip_key, name, name_key, record_type, class, response_code, source, protocol, answer, decision, duration_us)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	}
 	return `INSERT INTO sable_query_log
-(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+(occurred_at, client_ip, client_ip_key, name, name_key, record_type, class, response_code, source, protocol, answer, decision, duration_us)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 }
 
 func databaseDriverName(driver string) (string, error) {
