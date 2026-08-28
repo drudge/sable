@@ -759,6 +759,19 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
+	view := server.lifetimeStatsView(request)
+	chart := server.history.view(request.Context(), "hour", time.Now(), server.stats.Stats(), requestTimeDisplay(request))
+	overview := pages.StatsOverviewView{
+		Values: view, Lifetime: view, Scope: pages.StatsScopeAll,
+		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
+		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render runtime statistics", "error", err)
+	}
+}
+
+func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
 	view := statsView(server.history.totals(time.Now(), server.stats.Stats()))
 	// The client and dropped counts come from the query log rather than the
 	// resolver counters, so the refreshed cards have to repeat the read the
@@ -772,9 +785,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 			view.Clients = dashboardClientSample(entries)
 		}
 	}
-	if err := pages.Stats(view, "All time", false).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render runtime statistics", "error", err)
-	}
+	return view
 }
 
 func (server *Server) canReadLogs(request *http.Request) bool {
@@ -835,7 +846,20 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 // The chart remains the regular response target; this sibling is applied out
 // of band so every range control changes the whole dashboard consistently.
 func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
-	if err := pages.Stats(view.Stats, view.RangeLabel, true).Render(request.Context(), writer); err != nil {
+	lifetime := server.lifetimeStatsView(request)
+	scope := pages.StatsScopeAll
+	values := lifetime
+	if request.URL.Query().Get("stats_scope") == pages.StatsScopeRange {
+		scope = pages.StatsScopeRange
+		values = view.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: lifetime, Scope: scope,
+		RangeName: view.ActiveRange, RangeLabel: view.RangeLabel,
+		CustomStart: view.CustomStart, CustomEnd: view.CustomEnd,
+		OutOfBand: true,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render chart statistics overview", "error", err)
 	}
 }

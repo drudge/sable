@@ -9,7 +9,7 @@ import (
 templ DashboardHome(view DashboardView) {
 	<div class="dashboard-page isotope-dashboard">
 		<h1 class="sr-only">Dashboard</h1>
-		@Stats(view.Chart.Stats, view.Chart.RangeLabel, false)
+		@Stats(dashboardStatsOverview(view))
 		@QueryChart(view.Chart)
 		@DashboardInsights(view.Insights, false)
 		<footer class="dashboard-footer">
@@ -21,6 +21,18 @@ templ DashboardHome(view DashboardView) {
 			<span>v{ view.Version }</span>
 		</footer>
 	</div>
+}
+
+func dashboardStatsOverview(view DashboardView) StatsOverviewView {
+	return StatsOverviewView{
+		Values:      view.Stats,
+		Lifetime:    view.Stats,
+		Scope:       StatsScopeAll,
+		RangeName:   view.Chart.ActiveRange,
+		RangeLabel:  view.Chart.RangeLabel,
+		CustomStart: view.Chart.CustomStart,
+		CustomEnd:   view.Chart.CustomEnd,
+	}
 }
 
 // DashboardInsights carries the rankings and distributions for one time range.

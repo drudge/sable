@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -123,6 +124,26 @@ type StatsView struct {
 	BlockedDomains int
 	BlockLists     int
 	Uptime         string
+}
+
+const (
+	StatsScopeAll   = "all"
+	StatsScopeRange = "range"
+)
+
+// StatsOverviewView keeps the displayed values separate from the lifetime
+// totals. Most counters can follow the chart range, while counters that are not
+// retained in historical buckets remain honest about using their original
+// lifetime or recent-sample value.
+type StatsOverviewView struct {
+	Values      StatsView
+	Lifetime    StatsView
+	Scope       string
+	RangeName   string
+	RangeLabel  string
+	CustomStart string
+	CustomEnd   string
+	OutOfBand   bool
 }
 
 type QueryView struct {
@@ -648,21 +669,77 @@ templ RecentQueryLog(entries []QueryLogEntryView) {
 	}
 }
 
-templ Stats(view StatsView, rangeLabel string, outOfBand bool) {
-	<section id="runtime-stats" class="stats-overview" aria-labelledby="stats-overview-title"
-		if outOfBand {
+templ Stats(view StatsOverviewView) {
+	<section id="runtime-stats" class="stats-overview" aria-labelledby="stats-overview-title" data-stats-scope={ view.Scope }
+		if view.OutOfBand {
 			hx-swap-oob="outerHTML"
 		}
 	>
-		<header class="stats-overview-header"><h2 id="stats-overview-title">Overview</h2><span>{ rangeLabel }</span></header>
+		<header class="stats-overview-header">
+			<h2 id="stats-overview-title">Overview</h2>
+			<div class="stats-overview-controls">
+				if view.Scope == StatsScopeRange {
+					<span class="stats-range-label">{ view.RangeLabel }</span>
+				}
+				<div class="stats-scope-toggle" role="group" aria-label="Overview time scope">
+					@StatsScopeButton("All time", StatsScopeAll, view)
+					@StatsScopeButton("Follow query stats", StatsScopeRange, view)
+				</div>
+			</div>
+		</header>
 		<div class="stats-grid primary-stats">
-			@StatCard("Queries", formatNumber(view.Queries), "Total in range", "queries")
-			@StatCard("Server failures", formatNumber(view.ServerFailures), percent(view.ServerFailures, view.Queries), "failures")
-			@StatCard("Blocked", formatNumber(view.Blocked), percent(view.Blocked, view.Queries), "blocked")
-			@StatCard("Cache hit rate", view.CacheHitRatio, compactNumber(view.CacheHits) + " hits", "cache")
+			@StatCard("Total Queries", formatNumber(view.Values.Queries), "100%", "blue")
+			@StatCard("No Error", formatNumber(view.Values.NoError), percent(view.Values.NoError, view.Values.Queries), "green")
+			@StatCard("Server Failure", formatNumber(view.Values.ServerFailures), percent(view.Values.ServerFailures, view.Values.Queries), "red")
+			@StatCard("NX Domain", formatNumber(view.Values.NXDomain), percent(view.Values.NXDomain, view.Values.Queries), "slate")
+			@StatCard("Refused", formatNumber(view.Values.Refused), percent(view.Values.Refused, view.Values.Queries), "teal")
+			@StatCard("Authoritative", formatNumber(view.Lifetime.AuthoritativeAnswers), nonRangedStatDetail(percent(view.Lifetime.AuthoritativeAnswers, view.Lifetime.Queries), view.Scope), "sky")
+			@StatCard("Recursive", formatNumber(view.Values.Recursive), percent(view.Values.Recursive, view.Values.Queries), "emerald")
+			@StatCard("Cached", formatNumber(view.Values.CacheHits), percent(view.Values.CacheHits, view.Values.Queries), "amber")
+			@StatCard("Blocked", formatNumber(view.Values.Blocked), percent(view.Values.Blocked, view.Values.Queries), "orange")
+			@StatCard("Dropped", formatNumber(view.Lifetime.Dropped), nonRangedStatDetail(percent(view.Lifetime.Dropped, view.Lifetime.Queries), view.Scope), "rose")
+			@StatCard("Clients", formatNumber(uint64(view.Lifetime.Clients)), clientsStatDetail(view.Scope), "purple")
+			@StatCard("Cache Hit Rate", view.Values.CacheHitRatio, compactNumber(view.Values.CacheHits) + " hits", "cyan")
 		</div>
 	</section>
 	// The chart refresh owns polling so its cards and plot cannot drift apart.
+}
+
+templ StatsScopeButton(label string, scope string, view StatsOverviewView) {
+	<button
+		type="button"
+		class={ ifThen(view.Scope == scope, "active", "") }
+		aria-pressed={ fmt.Sprint(view.Scope == scope) }
+		hx-get={ statsScopeURL(scope, view) }
+		hx-target="#query-statistics"
+		hx-swap="outerHTML"
+	>{ label }</button>
+}
+
+func statsScopeURL(scope string, view StatsOverviewView) templ.SafeURL {
+	parameters := url.Values{
+		"range":       []string{view.RangeName},
+		"stats_scope": []string{scope},
+	}
+	if view.RangeName == "custom" {
+		parameters.Set("start", view.CustomStart)
+		parameters.Set("end", view.CustomEnd)
+	}
+	return templ.SafeURL("/ui/stats/chart?" + parameters.Encode())
+}
+
+func nonRangedStatDetail(detail string, scope string) string {
+	if scope == StatsScopeRange {
+		return detail + " · all time"
+	}
+	return detail
+}
+
+func clientsStatDetail(scope string) string {
+	if scope == StatsScopeRange {
+		return "Recent sample · not ranged"
+	}
+	return "Recent sample"
 }
 
 templ QueryChart(view QueryChartView) {
@@ -781,9 +858,9 @@ templ RangeOption(label string, value string, active string) {
 
 templ StatCard(label string, value string, subValue string, color string) {
 	<article class={ "stat-card " + color }>
-		<div class="stat-card-label"><i aria-hidden="true"></i>{ label }</div>
 		<strong>{ value }</strong>
 		<span>{ subValue }</span>
+		<div>{ label }</div>
 	</article>
 }
 

@@ -410,22 +410,32 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
 		t.Error("dashboard does not contain its accessible page heading")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`, `id="runtime-stats"`, `id="stats-overview-title"`, "Last hour"} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Follow query stats", "Last hour"} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
 	}
-	if cards := strings.Count(dashboard, `class="stat-card `); cards != 4 {
-		t.Errorf("dashboard stat card count = %d, want 4 primary metrics", cards)
+	if cards := strings.Count(dashboard, `class="stat-card `); cards != 12 {
+		t.Errorf("dashboard stat card count = %d, want all 12 metrics", cards)
 	}
 	chartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day")
 	if chartResponse.Code != http.StatusOK || !strings.Contains(chartResponse.Body.String(), `data-range="day"`) {
 		t.Fatalf("day chart response = %d %s", chartResponse.Code, chartResponse.Body.String())
 	}
-	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerHTML"`, "Last 24 hours"} {
+	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerHTML"`, `data-stats-scope="all"`, "All time"} {
 		if !strings.Contains(chartResponse.Body.String(), expected) {
 			t.Errorf("day chart response does not contain %q", expected)
 		}
+	}
+	rangedChartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day&stats_scope=range")
+	rangedChart := rangedChartResponse.Body.String()
+	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Follow query stats", "· all time", "Recent sample · not ranged"} {
+		if rangedChartResponse.Code != http.StatusOK || !strings.Contains(rangedChart, expected) {
+			t.Errorf("ranged day chart response does not contain %q", expected)
+		}
+	}
+	if cards := strings.Count(rangedChart, `class="stat-card `); cards != 12 {
+		t.Errorf("ranged dashboard stat card count = %d, want all 12 metrics", cards)
 	}
 	now := time.Now().Truncate(time.Minute)
 	customChartPath := "/ui/stats/chart?range=custom&start=" + now.Add(-time.Hour).Format("2006-01-02T15:04") + "&end=" + now.Format("2006-01-02T15:04")
