@@ -259,6 +259,7 @@ type Handler struct {
 	startedAt            time.Time
 	observer             atomic.Pointer[observerHolder]
 	upstreamExchange     upstreamExchangeFunc
+	forwarderConnections *forwarderPool
 	upstreamHealth       *upstreamHealthTracker
 	inflight             *inflightGroup
 	zoneTransfer         zoneTransferFunc
@@ -660,8 +661,9 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 }
 
 func NewHandler(runtime *Runtime) *Handler {
+	forwarders := newForwarderPool()
 	handler := &Handler{
-		startedAt: time.Now(), upstreamExchange: newForwarderPool().exchange,
+		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
 		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
@@ -720,6 +722,9 @@ func (handler *Handler) Close() {
 	// there is nothing to wait for.
 	if handler.maintenanceStarted.Swap(true) {
 		<-handler.maintenanceDone
+	}
+	if handler.forwarderConnections != nil {
+		handler.forwarderConnections.Close()
 	}
 }
 
