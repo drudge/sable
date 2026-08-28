@@ -353,6 +353,18 @@ func applyUpdateOperation(zone *zonemodel.Zone, update dns.RR, now time.Time) (b
 		if err != nil {
 			return false, err
 		}
+		// RFC 2136 §3.4.2.2: an add that would leave a CNAME sharing its name
+		// with other data is silently ignored rather than refused, and a new
+		// CNAME replaces the one already at the name.
+		if header.Rrtype == dns.TypeCNAME {
+			if hasActiveConfiguredRecord(*zone, header.Name, now, zonemodel.ConflictsWithCNAME) {
+				return false, nil
+			}
+		} else if zonemodel.ConflictsWithCNAME(dns.TypeToString[header.Rrtype]) {
+			if hasActiveConfiguredRecord(*zone, header.Name, now, func(recordType string) bool { return recordType == "CNAME" }) {
+				return false, nil
+			}
+		}
 		changed := false
 		for index := len(zone.Records) - 1; index >= 0; index-- {
 			existing, parseErr := configuredRecordRR(*zone, zone.Records[index])
@@ -363,6 +375,11 @@ func applyUpdateOperation(zone *zonemodel.Zone, update dns.RR, now time.Time) (b
 				zone.Records = slices.Delete(zone.Records, index, index+1)
 				changed = true
 			}
+		}
+		if header.Rrtype == dns.TypeCNAME {
+			changed = deleteConfiguredRecords(zone, func(record zonemodel.Record, rr dns.RR) bool {
+				return strings.ToUpper(strings.TrimSpace(record.Type)) == "CNAME" && strings.EqualFold(rr.Header().Name, header.Name)
+			}) || changed
 		}
 		zone.Records = append(zone.Records, candidate)
 		return true, nil
@@ -393,6 +410,25 @@ func applyUpdateOperation(zone *zonemodel.Zone, update dns.RR, now time.Time) (b
 func isManagedDNSSECType(recordType uint16) bool {
 	return recordType == dns.TypeDNSKEY || recordType == dns.TypeRRSIG || recordType == dns.TypeNSEC ||
 		recordType == dns.TypeNSEC3 || recordType == dns.TypeNSEC3PARAM
+}
+
+// hasActiveConfiguredRecord reports whether a served record at owner matches.
+// It reads the configured type rather than the compiled RR so an ANAME is not
+// mistaken for the CNAME it is flattened into.
+func hasActiveConfiguredRecord(zone zonemodel.Zone, owner string, now time.Time, matches func(string) bool) bool {
+	for _, record := range zone.Records {
+		if record.Disabled || (!record.ExpiresAt.IsZero() && !record.ExpiresAt.After(now)) {
+			continue
+		}
+		recordOwner, ok := absoluteUpdateOwner(zone.Name, record.Name)
+		if !ok || !strings.EqualFold(recordOwner, owner) {
+			continue
+		}
+		if matches(strings.ToUpper(strings.TrimSpace(record.Type))) {
+			return true
+		}
+	}
+	return false
 }
 
 func deleteConfiguredRecords(zone *zonemodel.Zone, remove func(zonemodel.Record, dns.RR) bool) bool {

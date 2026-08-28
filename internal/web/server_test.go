@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1936,6 +1937,112 @@ func TestZoneEditorCreatesAndResyncsSecondaryStubAndForwarderZones(t *testing.T)
 	detail := serveRequest(server, http.MethodGet, "/zones/secondary.test")
 	if !strings.Contains(detail.Body.String(), "Resync") || strings.Contains(detail.Body.String(), ">Add Record<") || strings.Contains(detail.Body.String(), "Edit A record") {
 		t.Fatalf("secondary detail actions are not read-only: %s", detail.Body.String())
+	}
+}
+
+func TestZoneRecordWritesEnforceCNAMEExclusivity(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
+		configuration, configuration.zoneStore(), "sqlite",
+		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	post := func(path string, form url.Values) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+	created := post("/ui/zones/add", url.Values{
+		"name": {"example.test"}, "primary_ns": {"ns1.example.test"},
+		"responsible": {"hostmaster@example.test"}, "default_ttl": {"300"},
+	})
+	if created.Code != http.StatusOK || len(configuration.zoneSnapshot.Zones) != 1 {
+		t.Fatalf("create zone response = %d %s", created.Code, created.Body.String())
+	}
+	for _, seed := range []url.Values{
+		{"zone": {"example.test"}, "name": {"www"}, "type": {"A"}, "value": {"192.0.2.10"}, "ttl": {"300"}},
+		{"zone": {"example.test"}, "name": {"alias"}, "type": {"CNAME"}, "value": {"target.example.test."}, "ttl": {"300"}},
+	} {
+		if seeded := post("/ui/zones/records/add", seed); seeded.Code != http.StatusOK || !strings.Contains(seeded.Body.String(), "Record added") {
+			t.Fatalf("seed record response = %d %s", seeded.Code, seeded.Body.String())
+		}
+	}
+
+	tests := []struct {
+		name    string
+		path    string
+		form    url.Values
+		wantErr string
+	}{
+		{
+			name: "cname rejected where an address exists",
+			path: "/ui/zones/records/add",
+			form: url.Values{
+				"zone": {"example.test"}, "name": {"www"}, "type": {"CNAME"},
+				"value": {"target.example.test."}, "ttl": {"300"},
+			},
+			wantErr: "cannot share the name",
+		},
+		{
+			name: "address rejected where a cname exists",
+			path: "/ui/zones/records/add",
+			form: url.Values{
+				"zone": {"example.test"}, "name": {"alias"}, "type": {"AAAA"},
+				"value": {"2001:db8::1"}, "ttl": {"300"},
+			},
+			wantErr: "cannot share the name",
+		},
+		{
+			name: "second cname rejected at the same name",
+			path: "/ui/zones/records/add",
+			form: url.Values{
+				"zone": {"example.test"}, "name": {"alias"}, "type": {"CNAME"},
+				"value": {"other.example.test."}, "ttl": {"300"},
+			},
+			wantErr: "a name can hold only one",
+		},
+		{
+			name: "rename rejected onto a cname name",
+			path: "/ui/zones/records/update",
+			form: url.Values{
+				"zone": {"example.test"}, "name": {"www"}, "type": {"A"},
+				"value": {"192.0.2.10"}, "ttl": {"300"},
+				"new_name": {"alias"}, "new_value": {"192.0.2.10"}, "new_ttl": {"300"},
+				"enabled": {"true"}, "new_expiry_ttl": {"0"},
+			},
+			wantErr: "cannot share the name",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before := zonemodel.Clone(configuration.zoneSnapshot.Zones)
+			response := post(test.path, test.form)
+			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.wantErr) {
+				t.Fatalf("record write response = %d %s, want error %q", response.Code, response.Body.String(), test.wantErr)
+			}
+			if !reflect.DeepEqual(before, configuration.zoneSnapshot.Zones) {
+				t.Fatalf("rejected write still changed the zone: %+v", configuration.zoneSnapshot.Zones[0].Records)
+			}
+		})
+	}
+
+	edited := post("/ui/zones/records/update", url.Values{
+		"zone": {"example.test"}, "name": {"alias"}, "type": {"CNAME"},
+		"value": {"target.example.test."}, "ttl": {"300"},
+		"new_name": {"alias"}, "new_value": {"other.example.test."}, "new_ttl": {"300"},
+		"enabled": {"true"}, "new_expiry_ttl": {"0"},
+	})
+	if edited.Code != http.StatusOK || !strings.Contains(edited.Body.String(), "Record updated") {
+		t.Fatalf("editing the CNAME itself = %d %s", edited.Code, edited.Body.String())
 	}
 }
 

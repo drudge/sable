@@ -171,6 +171,120 @@ func TestDynamicZoneUpdaterPersistsAuditsAndNotifies(t *testing.T) {
 	}
 }
 
+func TestApplyDynamicZoneUpdateEnforcesCNAMEExclusivity(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		extra   []zonemodel.Record
+		insert  string
+		changed bool
+		verify  func(*testing.T, zonemodel.Zone)
+	}{
+		{
+			name:    "cname add is ignored when other data exists",
+			insert:  "www.example.test. 300 IN CNAME target.example.test.",
+			changed: false,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "www", "CNAME") != 0 {
+					t.Fatalf("CNAME was added next to existing data: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "address add is ignored when a cname exists",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "CNAME", TTL: 300, Value: "target.example.test."}},
+			insert:  "alias.example.test. 300 IN A 192.0.2.20",
+			changed: false,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "A") != 0 {
+					t.Fatalf("address was added next to a CNAME: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "cname add replaces the existing cname",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "CNAME", TTL: 300, Value: "old.example.test."}},
+			insert:  "alias.example.test. 300 IN CNAME new.example.test.",
+			changed: true,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "CNAME") != 1 || !hasConfiguredRecord(zone, "alias", "CNAME", "new.example.test.") {
+					t.Fatalf("CNAME was not replaced: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "identical cname add changes nothing",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "CNAME", TTL: 300, Value: "target.example.test."}},
+			insert:  "alias.example.test. 300 IN CNAME target.example.test.",
+			changed: false,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "CNAME") != 1 {
+					t.Fatalf("CNAME record count changed: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "rrsig coexists with a cname",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "CNAME", TTL: 300, Value: "target.example.test."}},
+			insert:  "alias.example.test. 300 IN RRSIG CNAME 15 3 300 20260901000000 20260801000000 12345 example.test. dGVzdA==",
+			changed: true,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "RRSIG") != 1 || configuredRecordCount(zone, "alias", "CNAME") != 1 {
+					t.Fatalf("DNSSEC material did not coexist with the CNAME: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "disabled data does not block a cname add",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "A", TTL: 300, Value: "192.0.2.20", Disabled: true}},
+			insert:  "alias.example.test. 300 IN CNAME target.example.test.",
+			changed: true,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "CNAME") != 1 {
+					t.Fatalf("CNAME was not added next to disabled data: %+v", zone.Records)
+				}
+			},
+		},
+		{
+			name:    "aname blocks a cname add",
+			extra:   []zonemodel.Record{{Name: "alias", Type: "ANAME", TTL: 300, Value: "target.example.test."}},
+			insert:  "alias.example.test. 300 IN CNAME other.example.test.",
+			changed: false,
+			verify: func(t *testing.T, zone zonemodel.Zone) {
+				if configuredRecordCount(zone, "alias", "CNAME") != 0 || configuredRecordCount(zone, "alias", "ANAME") != 1 {
+					t.Fatalf("ANAME was not preserved: %+v", zone.Records)
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			zone := dynamicUpdateTestZone()
+			zone.Records = append(zone.Records, test.extra...)
+			message := new(dns.Msg)
+			message.SetUpdate("example.test.")
+			message.Insert([]dns.RR{mustRR(t, test.insert)})
+			changed, rcode, err := applyDynamicZoneUpdate(&zone, nil, message.Ns, time.Now())
+			if err != nil || rcode != dns.RcodeSuccess || changed != test.changed {
+				t.Fatalf("applyDynamicZoneUpdate() = changed %t, rcode %s, error %v, want changed %t",
+					changed, dns.RcodeToString[rcode], err, test.changed)
+			}
+			test.verify(t, zone)
+		})
+	}
+}
+
+func configuredRecordCount(zone zonemodel.Zone, name, recordType string) int {
+	count := 0
+	for _, record := range zone.Records {
+		if record.Name == name && record.Type == recordType {
+			count++
+		}
+	}
+	return count
+}
+
 func dynamicUpdateTestZone() zonemodel.Zone {
 	return zonemodel.Zone{
 		Name: "example.test", Type: "primary", DefaultTTL: 300,
