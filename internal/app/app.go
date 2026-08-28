@@ -149,6 +149,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
+	warnCNAMEConflicts(logger, zoneManager.Current().Zones)
 	runtime, err := compileRuntime(
 		hydrateTSIGKeys(ctx, tsigSecrets, initial, logger),
 		zoneManager.Current().Zones,
@@ -754,6 +755,20 @@ func logCatalogEvents(logger *slog.Logger, events []zone.CatalogEvent) {
 		case zone.CatalogMemberHandedOver:
 			logger.Info("catalog took over zone",
 				"catalog", event.Catalog, "zone", event.Zone, "detail", event.Detail)
+		}
+	}
+}
+
+// warnCNAMEConflicts surfaces names where a CNAME coexists with other records.
+// Such data predates the write-time exclusivity check (or arrived over a zone
+// transfer), so it is loaded and served as-is rather than refused, but until a
+// record is removed resolvers see different answers depending on query type.
+func warnCNAMEConflicts(logger *slog.Logger, configuredZones []zone.Zone) {
+	now := time.Now()
+	for _, current := range configuredZones {
+		for _, name := range zone.CNAMEConflicts(current, now) {
+			logger.Warn("CNAME record shares its name with other records; answers differ by query type until one is removed",
+				"zone", current.Name, "name", name)
 		}
 	}
 }

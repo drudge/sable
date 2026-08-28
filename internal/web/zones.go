@@ -1095,6 +1095,9 @@ func (server *Server) addZoneRecord(writer http.ResponseWriter, request *http.Re
 			return errors.New("Sable manages the zone SOA record")
 		}
 		zone.Records = append(zone.Records, record)
+		if err := zonemodel.CheckCNAMEExclusivity(*zone, record.Name, time.Now()); err != nil {
+			return err
+		}
 		if record.Type == "NS" {
 			if err := syncZoneNSGlue(zone, "", record.Value, request.FormValue("glue_addresses")); err != nil {
 				return err
@@ -1195,6 +1198,9 @@ func (server *Server) updateZoneRecord(writer http.ResponseWriter, request *http
 			Name: newName, Type: recordType, Value: newValue, TTL: newTTL,
 			Comments: strings.TrimSpace(request.FormValue("new_comments")),
 			Disabled: recordType != "SOA" && request.FormValue("enabled") != "true", ExpiresAt: expiresAt,
+		}
+		if err := zonemodel.CheckCNAMEExclusivity(*zone, newName, time.Now()); err != nil {
+			return err
 		}
 		if recordType == "NS" {
 			if err := syncZoneNSGlue(zone, originalValue, newValue, request.FormValue("new_glue_addresses")); err != nil {
@@ -1993,6 +1999,18 @@ func mergeImportedRecords(zone *zonemodel.Zone, imported []zonemodel.Record, ove
 		}
 	}
 	zone.Records = merged
+	// Only the names the import wrote are checked, so a conflict that predates
+	// this import never blocks records elsewhere in the zone.
+	checked := make(map[string]struct{}, len(imported))
+	for _, record := range imported {
+		if _, done := checked[record.Name]; done {
+			continue
+		}
+		checked[record.Name] = struct{}{}
+		if err := zonemodel.CheckCNAMEExclusivity(*zone, record.Name, now); err != nil {
+			return err
+		}
+	}
 	if !overwriteSOASerial || importedSOA < 0 {
 		advanceSOASerial(zone, now)
 	}
