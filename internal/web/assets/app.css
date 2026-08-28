@@ -2435,11 +2435,17 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 }
 
 @media (max-width: 640px) {
-	.query-row-actions { width: 2.25rem; padding-left: 0 !important; }
-	.query-col-actions { width: 2.25rem; padding-left: 0 !important; }
+	.isotope-query-log-table { table-layout: fixed; }
+	.query-log-table.full th, .query-log-table.full td { padding-inline: .4rem; }
+	.query-col-time { width: 7.25rem; }
+	.query-col-status { width: 5rem; }
+	.query-row-actions, .query-col-actions { position: sticky; right: 0; width: 2.5rem; padding-inline: .25rem !important; }
+	.query-row-actions { z-index: 1; background: var(--card); }
+	.query-col-actions { z-index: 3; background: color-mix(in oklch, var(--muted) 82%, transparent); }
+	.isotope-query-log-table tr:hover .query-row-actions { background: color-mix(in oklch, var(--muted) 50%, var(--card)); }
 	.query-row-actions form { display: none; }
 	.query-detail-button { width: 2rem; height: 2rem; }
-	.isotope-query-log-table .query-name { max-width: 7rem; }
+	.isotope-query-log-table .query-name { max-width: none; }
 	.query-detail-dialog { inset: auto 0 0; width: 100vw; height: auto; max-height: 88dvh; border-top: 1px solid var(--border); border-left: 0; border-radius: 1rem 1rem 0 0; }
 	.query-detail-dialog[open] { animation-name: query-detail-mobile-in; }
 	@keyframes query-detail-mobile-in { from { opacity: 0; translate: 0 2rem; } to { opacity: 1; translate: 0 0; } }
