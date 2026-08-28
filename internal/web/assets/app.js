@@ -1270,6 +1270,7 @@
 	  const inUse = () => {
 		const active = document.activeElement;
 		if (active && panel.contains(active) && active.matches("input, select, textarea")) return true;
+		if (panel.querySelector("dialog[open]")) return true;
 		return performance.now() < holdUntil;
 	  };
 	  panel.addEventListener("pointerdown", (event) => {
@@ -1741,6 +1742,45 @@
 	  dialog.querySelector("[data-token-owner]")?.dispatchEvent(new Event("change", {bubbles: true}));
 	  if (dialog.id === "create-user-dialog") dialog.querySelector('input[name="roles"]')?.dispatchEvent(new Event("change", {bubbles: true}));
 	};
+	const showQueryDetail = (row) => {
+	  const dialog = document.getElementById("query-detail-dialog");
+	  if (!row || !dialog) return;
+	  const values = {
+		name: row.dataset.queryDetailName,
+		time: row.dataset.queryDetailTime,
+		client: row.dataset.queryDetailClient,
+		type: row.dataset.queryDetailType,
+		protocol: row.dataset.queryDetailProtocol,
+		duration: row.dataset.queryDetailDuration,
+	  };
+	  dialog.querySelectorAll("[data-query-detail-value]").forEach((target) => {
+		target.textContent = values[target.dataset.queryDetailValue] || "—";
+	  });
+	  const source = row.dataset.queryDetailSource || "";
+	  const sourceBadge = dialog.querySelector("[data-query-detail-source]");
+	  const knownSources = new Set(["authoritative", "upstream", "cache", "blocked", "local", "error"]);
+	  sourceBadge.textContent = row.dataset.queryDetailSourceLabel || "—";
+	  sourceBadge.className = `source-pill${knownSources.has(source) ? ` source-${source}` : ""}`;
+	  const statusBadge = dialog.querySelector("[data-query-detail-status]");
+	  statusBadge.textContent = row.dataset.queryDetailStatusLabel || "—";
+	  const statusClass = ["success", "warning", "error"].find((name) => row.querySelector(".rcode")?.classList.contains(name)) || "error";
+	  statusBadge.className = `rcode ${statusClass}`;
+	  const answers = (row.dataset.queryDetailAnswers || "").split("\n").filter(Boolean);
+	  const answerList = dialog.querySelector("[data-query-detail-answers]");
+	  answerList.replaceChildren();
+	  (answers.length ? answers : ["—"]).forEach((answer) => {
+		const item = document.createElement(answers.length ? "code" : "span");
+		item.textContent = answer;
+		answerList.append(item);
+	  });
+	  const domain = row.dataset.queryDetailName || "";
+	  dialog.querySelectorAll("[data-query-detail-domain]").forEach((input) => { input.value = domain; });
+	  const policyActions = dialog.querySelector("[data-query-detail-policy-actions]");
+	  if (policyActions) policyActions.hidden = !domain;
+	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
+	  if (blockAction) blockAction.hidden = source === "blocked";
+	  showRoutedDialog(dialog);
+	};
 	const syncRoutedDialogs = () => {
 	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url]")];
 	  dialogs.forEach(setupRoutedDialog);
@@ -1800,6 +1840,13 @@
 	  if (replicaDisabled) {
 		event.preventDefault();
 		event.stopPropagation();
+		return;
+	  }
+	  const queryRow = event.target.closest?.("[data-query-detail-row]");
+	  const queryDetailButton = event.target.closest?.("[data-query-detail-button]");
+	  const queryInteractive = event.target.closest?.("button, a, input, select, textarea, label, form");
+	  if (queryRow && (queryDetailButton || (!queryInteractive && !window.getSelection()?.toString()))) {
+		showQueryDetail(queryRow);
 		return;
 	  }
 	  const dialogRow = event.target.closest("[data-dialog-open]");
@@ -1927,6 +1974,10 @@
 	document.body.addEventListener("input", (event) => {
 	  const form = event.target.closest?.("[data-passphrase-pair]");
 	  if (form) syncPassphrasePair(form);
+	});
+	document.body.addEventListener("htmx:afterRequest", (event) => {
+	  const policy = event.detail?.elt?.closest?.("[data-query-detail-policy]");
+	  if (policy && event.detail.successful) policy.closest("dialog")?.close();
 	});
 
 	// Read the unencrypted envelope header so a file identifies itself before

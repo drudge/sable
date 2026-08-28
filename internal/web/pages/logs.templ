@@ -206,11 +206,12 @@ templ QueryLogsPanel(view QueryLogsView) {
 		} else if len(view.Entries) == 0 {
 			<div class="logs-empty">No DNS queries match these filters.</div>
 		} else {
-			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th>Timestamp</th><th class="query-col-client">Client IP</th><th>Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th>Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
 			</tbody></table></div>
+			@QueryDetailDialog(view.CanBlocking)
 		}
 		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 	</section>
@@ -231,13 +232,27 @@ templ QueryAnswers(answers []string) {
 }
 
 templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
-	<tr data-query-result-row>
+	<tr
+		data-query-result-row
+		data-query-detail-row
+		data-query-detail-time={ entry.OccurredAt }
+		data-query-detail-client={ entry.ClientIP }
+		data-query-detail-name={ entry.Name }
+		data-query-detail-type={ entry.RecordType }
+		data-query-detail-source={ entry.Source }
+		data-query-detail-source-label={ logSourceLabel(entry.Source) }
+		data-query-detail-status-label={ rcodeDisplay(entry.Status) }
+		data-query-detail-protocol={ entry.Protocol }
+		data-query-detail-duration={ entry.Duration }
+		data-query-detail-answers={ strings.Join(entry.Answers, "\n") }
+	>
 		// The client and the protocol ride under the timestamp, and the answers
 		// under the domain, so the narrow layout can drop those columns without
 		// dropping what they said.
-		<td class="query-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
+		<td class="query-time query-col-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name query-col-domain" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td class="query-col-status"><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
 		<td class="query-answers query-col-answer">@QueryAnswers(entry.Answers)</td>
 		<td class="query-row-actions">
+			<button class="query-detail-button" type="button" data-query-detail-button aria-label={ "View details for " + entry.Name } title="View query details">@Icon("chevron-right")</button>
 			if canBlocking && entry.Name != "" {
 				if entry.Source != "blocked" {
 					@QueryPolicyAction(entry.Name, "block", "shield-x", "Block "+entry.Name)
@@ -246,6 +261,41 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 			}
 		</td>
 	</tr>
+}
+
+templ QueryDetailDialog(canBlocking bool) {
+	<dialog class="query-detail-dialog" id="query-detail-dialog" aria-labelledby="query-detail-title">
+		<header class="query-detail-header">
+			<div><span>Query details</span><h2 id="query-detail-title" data-query-detail-value="name">—</h2></div>
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close query details">@Icon("x")</button>
+		</header>
+		<div class="query-detail-body">
+			<div class="query-detail-result" aria-label="Query result">
+				<span class="source-pill" data-query-detail-source>—</span>
+				<span class="rcode" data-query-detail-status>—</span>
+			</div>
+			<dl class="query-detail-grid">
+				<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
+				<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
+				<div><dt>Query type</dt><dd data-query-detail-value="type">—</dd></div>
+				<div><dt>Protocol</dt><dd data-query-detail-value="protocol">—</dd></div>
+				<div><dt>Duration</dt><dd data-query-detail-value="duration">—</dd></div>
+			</dl>
+			<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
+				<h3 id="query-detail-answer-title">Answer</h3>
+				<div data-query-detail-answers><span>—</span></div>
+			</section>
+		</div>
+		<footer class="query-detail-footer">
+			<button class="button outline" type="button" data-dialog-close>Close</button>
+			if canBlocking {
+				<div class="query-detail-policy-actions" data-query-detail-policy-actions>
+					<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
+					<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+				</div>
+			}
+		</footer>
+	</dialog>
 }
 
 templ QueryPolicyAction(domain, action, icon, label string) {
