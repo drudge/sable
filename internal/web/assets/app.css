@@ -2371,7 +2371,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1.25rem; }
 .query-detail-policy-actions { display: flex; gap: .5rem; }
 .query-detail-policy-actions form { display: inline-flex; }
-.query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; }
+.query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
+.query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: 1.25rem; }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
