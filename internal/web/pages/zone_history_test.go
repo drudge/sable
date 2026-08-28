@@ -48,10 +48,13 @@ func TestZoneRevisionDiffOffersReversibleRestore(t *testing.T) {
 	}))
 	for _, expected := range []string{
 		"1 added · 1 changed", "A www → 192.0.2.10", "Before", "600s",
-		`hx-post="/ui/zones/rollback"`, `name="revision" value="2"`, "save the restored state as a new revision",
+		`hx-post="/ui/zones/rollback"`, `name="revision" value="2"`, `icon-rotate-ccw`, "save the restored state as a new revision",
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("revision diff does not contain %q: %s", expected, markup)
 		}
+	}
+	if restore, changes := strings.Index(markup, `hx-post="/ui/zones/rollback"`), strings.Index(markup, `class="zone-history-changes"`); restore < 0 || changes < 0 || restore > changes {
+		t.Errorf("restore action should appear before the revision changes: %s", markup)
 	}
 }

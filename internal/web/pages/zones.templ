@@ -714,7 +714,14 @@ templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
 	if view.Error != "" {
 		<p class="zone-history-notice error">{ view.Error }</p>
 	} else {
-		<p class="zone-history-summary">{ view.Summary }</p>
+		<div class="zone-history-diff-heading">
+			<p class="zone-history-summary">{ view.Summary }</p>
+			if view.CanRollback {
+				<form class="zone-history-rollback" hx-post="/ui/zones/rollback" hx-target="#zones-content" hx-swap="outerHTML" hx-confirm={ "Restore revision " + fmt.Sprint(view.Revision) + "? Sable will preserve the zone identity, advance its SOA serial, and save the restored state as a new revision." } data-confirm-title="Restore this revision?" data-confirm-action="Restore Revision">
+					<input type="hidden" name="zone" value={ view.ZoneName }/><input type="hidden" name="revision" value={ fmt.Sprint(view.Revision) }/><button class="button outline compact" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore revision</span></button>
+				</form>
+			}
+		</div>
 		if view.Notice != "" {
 			<p class="zone-history-notice">{ view.Notice }</p>
 		}
@@ -734,11 +741,6 @@ templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
 		}
 		if view.HiddenChanges > 0 {
 			<p class="zone-history-notice">{ fmt.Sprint(view.HiddenChanges) } additional changes are not shown.</p>
-		}
-		if view.CanRollback {
-			<form class="zone-history-rollback" hx-post="/ui/zones/rollback" hx-target="#zones-content" hx-swap="outerHTML" hx-confirm={ "Restore revision " + fmt.Sprint(view.Revision) + "? Sable will preserve the zone identity, advance its SOA serial, and save the restored state as a new revision." } data-confirm-title="Restore this revision?" data-confirm-action="Restore Revision">
-				<input type="hidden" name="zone" value={ view.ZoneName }/><input type="hidden" name="revision" value={ fmt.Sprint(view.Revision) }/><button class="button outline" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore revision { fmt.Sprint(view.Revision) }</span></button>
-			</form>
 		}
 	}
 }
