@@ -382,6 +382,11 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		testStats{snapshot: dnsserver.Stats{
 			Queries: 42, LocalAnswers: 5, LocalHosts: 2, CacheEntries: 1, CacheHits: 12,
 			StartedAt: time.Now().Add(-time.Minute),
+			Latency: []dnsserver.DNSLatencyHistogram{{
+				Source: "cache", Protocol: "udp", Cache: "hit", ResponseCode: "NOERROR",
+				Count: 2, SumNanoseconds: uint64(1500 * time.Microsecond),
+				Buckets: []dnsserver.DNSLatencyBucket{{UpperBoundNanoseconds: uint64(time.Millisecond), Count: 1}},
+			}},
 		}},
 		testConfiguration{snapshot: config.Snapshot{Config: configuration, Revision: 7}},
 		testZones{},
@@ -645,7 +650,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 
 	healthResponse := serveRequest(server, "GET", "/api/v1/health")
 	if healthResponse.Code != 200 {
-		t.Fatalf("health status = %d, want 200", healthResponse.Code)
+		t.Fatalf("health status = %d, want 200: %s", healthResponse.Code, healthResponse.Body.String())
 	}
 	if healthResponse.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("Content-Security-Policy header is empty")
@@ -709,6 +714,10 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		`sable_cluster_node_connected{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 1`,
 		`sable_cluster_node_synchronized{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 1`,
 		`sable_cluster_node_replication_lag_generations{node_id="` + clusterMetricsState.NodeID + `",node="dns-1",role="primary"} 0`,
+		`sable_dns_response_duration_seconds_bucket{source="cache",protocol="udp",cache="hit",rcode="NOERROR",le="0.001"} 1`,
+		`sable_dns_response_duration_seconds_bucket{source="cache",protocol="udp",cache="hit",rcode="NOERROR",le="+Inf"} 2`,
+		`sable_dns_response_duration_seconds_sum{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 0.0015`,
+		`sable_dns_response_duration_seconds_count{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 2`,
 	} {
 		if !strings.Contains(metricsResponse.Body.String(), expected) {
 			t.Errorf("metrics do not contain %q", expected)
