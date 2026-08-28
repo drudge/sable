@@ -495,6 +495,74 @@ func TestUniFiSyncCollapsesDuplicateNames(t *testing.T) {
 	}
 }
 
+// Clients hold rotating SLAAC addresses on prefixes the controller never
+// declares, so the reverse mapping derives each /64 zone from the addresses in
+// use and publishes one PTR per address without inventing forward records.
+func TestUniFiSyncPublishesIPv6Reverse(t *testing.T) {
+	editor := &stubZoneEditor{}
+	inventory := testInventory()
+	inventory.Hosts[1].IPv6 = []netip.Addr{
+		netip.MustParseAddr("2001:db8:0:1:aaaa::5"),
+		netip.MustParseAddr("2001:db8:0:1:bbbb::6"),
+	}
+	syncer := newTestSyncer(t, testSettings(mapping("net-iot", "IoT", "clients.example.net")), editor, &stubReader{inventory: inventory})
+
+	syncer.runOnce(t.Context())
+
+	if status := syncer.Status(); status.LastError != "" {
+		t.Fatalf("sync reported %q", status.LastError)
+	}
+	reverse := editor.zone(t, "1.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+	for _, owner := range []string{"5.0.0.0.0.0.0.0.0.0.0.0.a.a.a.a", "6.0.0.0.0.0.0.0.0.0.0.0.b.b.b.b"} {
+		if got := recordValue(t, reverse, owner, "PTR"); got != "laptop.iot.clients.example.net." {
+			t.Fatalf("PTR %s = %q, want the laptop's forward name", owner, got)
+		}
+	}
+	v4 := editor.zone(t, "30.168.192.in-addr.arpa")
+	if got := recordValue(t, v4, "50", "PTR"); got != "laptop.iot.clients.example.net." {
+		t.Fatalf("IPv4 PTR = %q", got)
+	}
+	forward := editor.zone(t, "clients.example.net")
+	for _, record := range forward.Records {
+		if record.Type == "AAAA" {
+			t.Fatalf("observed IPv6 addresses must stay out of the forward zone: %+v", record)
+		}
+	}
+	if err := zone.ValidateAll(editor.Current().Zones, nil); err != nil {
+		t.Fatalf("synchronized zones failed validation: %v", err)
+	}
+}
+
+// A delegated prefix that rotates away must not strand its PTR records: the
+// next sync retires them and publishes the replacement prefix's zone.
+func TestUniFiSyncRetiresReverseRecordsForVanishedPrefixes(t *testing.T) {
+	editor := &stubZoneEditor{}
+	inventory := testInventory()
+	inventory.Hosts[1].IPv6 = []netip.Addr{netip.MustParseAddr("2001:db8:0:1:aaaa::5")}
+	reader := &stubReader{inventory: inventory}
+	syncer := newTestSyncer(t, testSettings(mapping("net-iot", "IoT", "clients.example.net")), editor, reader)
+	syncer.runOnce(t.Context())
+
+	rotated := testInventory()
+	rotated.Hosts[1].IPv6 = []netip.Addr{netip.MustParseAddr("2001:db8:0:2:aaaa::5")}
+	reader.inventory = rotated
+	syncer.runOnce(t.Context())
+
+	stale := editor.zone(t, "1.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+	for _, record := range stale.Records {
+		if record.Source == zone.SourceUniFi {
+			t.Fatalf("stale PTR survived the prefix rotation: %+v", record)
+		}
+	}
+	replacement := editor.zone(t, "2.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa")
+	if got := recordValue(t, replacement, "5.0.0.0.0.0.0.0.0.0.0.0.a.a.a.a", "PTR"); got != "laptop.iot.clients.example.net." {
+		t.Fatalf("replacement PTR = %q", got)
+	}
+	if status := syncer.Status(); status.Removed == 0 {
+		t.Fatalf("status did not report the retired records: %+v", status)
+	}
+}
+
 // Reviewing an already-synchronized setup must still show what the mapping
 // produces, or the wizard's review step looks empty.
 func TestUniFiPreviewReportsPublishedRecordsWhenNothingChanges(t *testing.T) {

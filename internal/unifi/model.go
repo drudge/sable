@@ -54,11 +54,15 @@ func (network Network) Addressable() bool {
 }
 
 // Host is one address the controller knows about. Reserved marks a
-// configured fixed-IP reservation rather than an observed lease.
+// configured fixed-IP reservation rather than an observed lease. IPv6 lists
+// the global and unique-local addresses the controller has observed on the
+// host; SLAAC privacy rotation changes that set between reads, so consumers
+// republish it wholesale rather than tracking any one address.
 type Host struct {
 	MAC       string
 	Hostname  string
 	Address   netip.Addr
+	IPv6      []netip.Addr
 	NetworkID string
 	Reserved  bool
 }
@@ -94,7 +98,9 @@ func (inventory Inventory) HostCounts() map[string]int {
 // the operator chose, and an entry without a usable hostname loses to one that
 // has a name so a nameless active client cannot mask a named reservation. The
 // winner inherits a network the loser knew about, because the reservation that
-// carries the right address often does not say which network it is on.
+// carries the right address often does not say which network it is on, and it
+// inherits the loser's observed IPv6 addresses for the same reason: only the
+// active lease reports them.
 func mergeHosts(reserved, active []Host) []Host {
 	byMAC := make(map[string]Host, len(reserved)+len(active))
 	for _, host := range slices.Concat(active, reserved) {
@@ -103,10 +109,17 @@ func mergeHosts(reserved, active []Host) []Host {
 		}
 		existing, found := byMAC[host.MAC]
 		if found && existing.Reserved && !host.Reserved {
+			if len(existing.IPv6) == 0 {
+				existing.IPv6 = host.IPv6
+				byMAC[host.MAC] = existing
+			}
 			continue
 		}
 		if found && host.NetworkID == "" {
 			host.NetworkID = existing.NetworkID
+		}
+		if found && len(host.IPv6) == 0 {
+			host.IPv6 = existing.IPv6
 		}
 		byMAC[host.MAC] = host
 	}
