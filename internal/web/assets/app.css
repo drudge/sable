@@ -2331,12 +2331,14 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-fold, .query-fold-tight { display: none; }
 .query-name-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotope-query-log-table tr[data-query-detail-row] { cursor: pointer; }
-.query-col-actions, .query-row-actions { width: 6rem; text-align: right; }
+.query-col-actions, .query-row-actions { width: 4.25rem; text-align: right; }
+.query-row-actions { white-space: nowrap; }
 .query-row-actions form { display: inline-flex; }
 .query-row-actions > * { vertical-align: middle; }
-.query-detail-button, .query-policy-action { display: inline-grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
+.query-detail-button, .query-policy-action { width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
+.query-detail-button { display: none; }
 .query-detail-button:hover, .query-detail-button:focus-visible { background: var(--accent); color: var(--foreground); }
-.query-policy-action { opacity: 0; transition: opacity 140ms, color 140ms, background 140ms; }
+.query-policy-action { display: inline-grid; opacity: 0; transition: opacity 140ms, color 140ms, background 140ms; }
 .isotope-query-log-table tr:hover .query-policy-action, .query-row-actions:focus-within .query-policy-action { opacity: 1; }
 .query-policy-action:hover { background: var(--accent); }
 .query-policy-action.block:hover { color: #ef4444; }
@@ -2446,7 +2448,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.query-col-actions { z-index: 3; background: color-mix(in oklch, var(--muted) 82%, transparent); }
 	.isotope-query-log-table tr:hover .query-row-actions { background: color-mix(in oklch, var(--muted) 50%, var(--card)); }
 	.query-row-actions form { display: none; }
-	.query-detail-button { width: 2rem; height: 2rem; }
+	.query-detail-button { display: inline-grid; width: 2rem; height: 2rem; }
 	.isotope-query-log-table .query-name { max-width: none; }
 	.query-detail-dialog { inset: auto 0 0; width: 100vw; height: auto; max-height: 88dvh; border-top: 1px solid var(--border); border-left: 0; border-radius: 1rem 1rem 0 0; }
 	.query-detail-dialog[open] { animation-name: query-detail-mobile-in; }
