@@ -1063,6 +1063,49 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .record-ttl { color: var(--muted-foreground); font-size: .72rem; text-align: right; font-variant-numeric: tabular-nums; }
 .record-open-button { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; color: var(--muted-foreground); }
 .record-open-button:hover { background: var(--accent); color: var(--foreground); }
+.zone-history-dialog { width: min(52rem, calc(100vw - 2rem)); max-width: 52rem; max-height: 85dvh; overflow: hidden; padding: 0; }
+.zone-history-dialog[open] { display: flex; flex-direction: column; gap: 0; }
+.zone-history-header { position: relative; display: grid; gap: .25rem; border-bottom: 1px solid var(--border); padding: 1rem 3.5rem 1rem 1.25rem; }
+.zone-history-header > div { display: grid; gap: .2rem; }
+.zone-history-header > div > span { color: var(--muted-foreground); font-size: .65rem; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; }
+.zone-history-header h2 { overflow: hidden; margin: 0; font: 600 1rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.zone-history-header p { margin: 0; color: var(--muted-foreground); font-size: .78rem; }
+.zone-history-list { min-height: 8rem; overflow-y: auto; }
+.zone-history-empty { padding: 3rem 1.25rem; color: var(--muted-foreground); font-size: .875rem; text-align: center; }
+.zone-history-entry { border-bottom: 1px solid var(--border); }
+.zone-history-entry:last-child { border-bottom: 0; }
+.zone-history-entry > summary { display: grid; min-height: 4.25rem; grid-template-columns: .65rem minmax(0, 1fr) 1rem; align-items: center; gap: .75rem; padding: .75rem 1.25rem; cursor: pointer; list-style: none; }
+.zone-history-entry > summary::-webkit-details-marker { display: none; }
+.zone-history-entry > summary:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.zone-history-entry > summary > div { display: grid; min-width: 0; gap: .25rem; }
+.zone-history-entry > summary > div > span { display: flex; align-items: center; gap: .45rem; }
+.zone-history-entry > summary strong { font-size: .82rem; }
+.zone-history-entry > summary small { color: var(--muted-foreground); font-size: .7rem; }
+.zone-history-entry > summary > .nav-icon { width: 1rem; height: 1rem; color: var(--muted-foreground); transition: rotate 140ms; }
+.zone-history-entry[open] > summary > .nav-icon { rotate: 180deg; }
+.zone-history-marker { width: .55rem; height: .55rem; border-radius: 999px; background: #3b82f6; box-shadow: 0 0 0 3px rgb(59 130 246 / .12); }
+.zone-history-marker.created { background: #22c55e; box-shadow: 0 0 0 3px rgb(34 197 94 / .12); }
+.zone-history-marker.deleted { background: #ef4444; box-shadow: 0 0 0 3px rgb(239 68 68 / .12); }
+.zone-history-kind { border-radius: 999px; background: rgb(59 130 246 / .1); padding: .12rem .42rem; color: #3b82f6; font-size: .63rem; font-weight: 600; }
+.zone-history-kind.created { background: rgb(34 197 94 / .1); color: #22c55e; }
+.zone-history-kind.deleted { background: rgb(239 68 68 / .1); color: #ef4444; }
+.zone-history-diff { display: grid; gap: .85rem; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 25%, transparent); padding: 1rem 1.25rem 1rem 2.65rem; }
+.zone-history-loading, .zone-history-summary, .zone-history-notice { margin: 0; color: var(--muted-foreground); font-size: .78rem; }
+.zone-history-summary { color: var(--foreground); font-weight: 500; }
+.zone-history-notice { border-left: 2px solid var(--border); padding-left: .65rem; line-height: 1.45; }
+.zone-history-notice.error { border-color: var(--destructive); color: var(--destructive); }
+.zone-history-changes { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.zone-history-changes li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .5rem; }
+.zone-history-change-kind { display: grid; width: 1.25rem; height: 1.25rem; place-items: center; border-radius: .3rem; background: rgb(59 130 246 / .1); color: #3b82f6; font: 700 .7rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.zone-history-changes .added .zone-history-change-kind { background: rgb(34 197 94 / .1); color: #22c55e; }
+.zone-history-changes .removed .zone-history-change-kind { background: rgb(239 68 68 / .1); color: #ef4444; }
+.zone-history-changes li > div { display: grid; min-width: 0; gap: .18rem; }
+.zone-history-changes strong { overflow-wrap: anywhere; font: 500 .74rem/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.zone-history-changes li > div > span { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: .4rem; color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
+.zone-history-changes li > div > span small { color: color-mix(in oklch, var(--muted-foreground) 70%, transparent); font-size: .62rem; font-weight: 600; letter-spacing: .035em; text-transform: uppercase; }
+.zone-history-rollback { display: flex; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: .85rem; }
+.zone-history-rollback .button { gap: .4rem; }
+.zone-history-rollback .nav-icon { width: .9rem; height: .9rem; }
 .record-open-button .nav-icon { width: 1rem; height: 1rem; }
 .record-open-placeholder { width: 1.5rem; }
 .isotope-zone-dialog { width: min(32rem, calc(100vw - 2rem)); }
@@ -1398,6 +1441,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.zone-records-actions { gap: .3rem; }
 	.zone-records-actions .zone-primary-action { width: 2.25rem; padding: 0; }
 	.zone-records-actions .zone-primary-action span { display: none; }
+	.zone-history-dialog { width: calc(100vw - 1rem); max-height: 92dvh; }
+	.zone-history-header p { display: none; }
+	.zone-history-entry > summary { padding-inline: .85rem; }
+	.zone-history-diff { padding: .85rem; }
 	.zone-record-filter-bar { flex-direction: row; }
 	.zone-record-type-filter { width: 7.5rem; }
 	.isotope-record-row { grid-template-columns: 3.25rem minmax(0, 1fr) 3.5rem 1.25rem; gap: .5rem; padding-inline: .75rem; }

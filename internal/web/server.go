@@ -297,6 +297,8 @@ func New(
 	mux.HandleFunc("POST /ui/zones/records/add", server.addZoneRecord)
 	mux.HandleFunc("POST /ui/zones/records/update", server.updateZoneRecord)
 	mux.HandleFunc("POST /ui/zones/records/delete", server.deleteZoneRecord)
+	mux.HandleFunc("GET /ui/zones/history/diff", server.zoneRevisionDiff)
+	mux.HandleFunc("POST /ui/zones/rollback", server.rollbackZone)
 	mux.HandleFunc("POST /ui/zones/import", server.importZone)
 	mux.HandleFunc("POST /ui/zones/import-new", server.importNewZone)
 	mux.HandleFunc("POST /ui/blocking/reload", server.reloadBlockingUI)
