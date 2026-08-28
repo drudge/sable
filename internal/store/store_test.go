@@ -28,6 +28,56 @@ func TestOpenSQLiteCreatesDatabaseAndRunsMigrations(t *testing.T) {
 	}
 }
 
+func TestOpenMigratesExistingQueryLogForDecisions(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "sable.db")
+	database, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = database.Exec(`CREATE TABLE sable_query_log (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		occurred_at TIMESTAMP NOT NULL,
+		client_ip TEXT NOT NULL,
+		name TEXT NOT NULL,
+		record_type INTEGER NOT NULL,
+		class INTEGER NOT NULL,
+		response_code INTEGER NOT NULL,
+		source TEXT NOT NULL,
+		protocol TEXT NOT NULL DEFAULT '',
+		answer TEXT NOT NULL DEFAULT '',
+		duration_us BIGINT NOT NULL
+	)`)
+	if err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	opened, err := Open(context.Background(), "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	hasDecision, err := opened.tableHasColumn(context.Background(), "sable_query_log", "decision")
+	if err != nil || !hasDecision {
+		t.Fatalf("decision column = %v, %v", hasDecision, err)
+	}
+	_, err = opened.database.Exec(`INSERT INTO sable_query_log
+		(occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, duration_us)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, time.Now(), "192.0.2.10", "legacy.example", 1, 1, 0, "cache", "UDP", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := opened.QueryEvents(context.Background(), querylog.Filter{Page: 1, PageSize: 25})
+	if err != nil || len(page.Entries) != 1 || page.Entries[0].Decision != (querylog.Decision{}) {
+		t.Fatalf("legacy query decision = %+v, %v", page.Entries, err)
+	}
+}
+
 func TestBuiltInAPIAdministratorIsAPISurfaceOnly(t *testing.T) {
 	t.Parallel()
 
@@ -608,6 +658,7 @@ func TestWriteQueryEventsPersistsBatch(t *testing.T) {
 			OccurredAt: time.Now(), ClientIP: "192.0.2.10", Name: "example.com",
 			RecordType: 1, Class: 1, ResponseCode: 0, Source: querylog.SourceCache,
 			Protocol: "UDP", Answer: "A 192.0.2.20", Duration: 50 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache},
 		},
 		{
 			OccurredAt: time.Now(), ClientIP: "192.0.2.11", Name: "blocked.example",
@@ -638,7 +689,7 @@ func TestWriteQueryEventsPersistsBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryEvents() error = %v", err)
 	}
-	if filtered.TotalEntries != 1 || len(filtered.Entries) != 1 || filtered.Entries[0].Protocol != "UDP" || filtered.Entries[0].Answer != "A 192.0.2.20" {
+	if filtered.TotalEntries != 1 || len(filtered.Entries) != 1 || filtered.Entries[0].Protocol != "UDP" || filtered.Entries[0].Answer != "A 192.0.2.20" || filtered.Entries[0].Decision.Cache != querylog.CacheHit {
 		t.Fatalf("QueryEvents() = %+v, want filtered UDP answer", filtered)
 	}
 	if err := opened.PruneQueryEvents(context.Background(), time.Now().Add(time.Hour)); err != nil {

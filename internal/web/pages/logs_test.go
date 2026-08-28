@@ -31,6 +31,34 @@ func TestQueryLogPanelShowsAppliedFiltersAsTokens(t *testing.T) {
 	}
 }
 
+func TestQueryLogPanelRendersOneReusableDetailDrawer(t *testing.T) {
+	t.Parallel()
+
+	view := QueryLogsView{
+		PageSize:    25,
+		CanBlocking: true,
+		Entries: []QueryLogEntryView{
+			{OccurredAt: "Aug 28, 1:00 PM", ClientIP: "10.0.0.2", Name: "one.example", RecordType: "A", Status: "NOERROR", Source: "cache", Protocol: "UDP", Answers: []string{"192.0.2.1"}, Duration: "120µs", Decision: QueryDecisionView{Available: true, Summary: "Sable answered this query from its cache.", Policy: "No blocking rule matched", Cache: "Cache hit", Resolver: "Returned a cached response"}},
+			{OccurredAt: "Aug 28, 1:01 PM", ClientIP: "10.0.0.3", Name: "two.example", RecordType: "AAAA", Status: "NXDOMAIN", Source: "upstream", Protocol: "TCP", Duration: "2ms"},
+		},
+	}
+	panel := renderComponent(t, QueryLogsPanel(view))
+	for _, expected := range []string{
+		`data-query-detail-row`, `data-query-detail-duration="120µs"`, `data-query-detail-answers="192.0.2.1"`,
+		`aria-label="View details for one.example"`, `id="query-detail-dialog"`, "Query details",
+		`data-query-detail-policy="block"`, `data-query-detail-policy="allow"`,
+		`data-query-detail-explain-available="true"`, `data-query-detail-cache-label="Cache hit"`,
+		`id="query-detail-explain-title"`, `data-query-decision-step="resolver"`, "Why this answer?",
+	} {
+		if !strings.Contains(panel, expected) {
+			t.Errorf("query log detail markup does not contain %q", expected)
+		}
+	}
+	if dialogs := strings.Count(panel, `id="query-detail-dialog"`); dialogs != 1 {
+		t.Errorf("query detail dialog count = %d, want one reusable dialog", dialogs)
+	}
+}
+
 // The live refresh replaces the whole panel, so its URL has to carry every
 // filter or a filtered panel quietly widens to every row once polling starts.
 func TestQueryPanelLiveURLKeepsTheWholeFilter(t *testing.T) {

@@ -5,6 +5,7 @@
   // same shape the server renders.
   const APP_NAME = "Sable";
   const TITLE_SEPARATOR = " \u00b7 ";
+  const OVERVIEW_SCOPE_ALL = "all";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
   const dark = currentTheme() === "dark" || (currentTheme() === "system" && systemDark());
@@ -1269,6 +1270,7 @@
 	  const inUse = () => {
 		const active = document.activeElement;
 		if (active && panel.contains(active) && active.matches("input, select, textarea")) return true;
+		if (panel.querySelector("dialog[open]")) return true;
 		return performance.now() < holdUntil;
 	  };
 	  panel.addEventListener("pointerdown", (event) => {
@@ -1740,6 +1742,70 @@
 	  dialog.querySelector("[data-token-owner]")?.dispatchEvent(new Event("change", {bubbles: true}));
 	  if (dialog.id === "create-user-dialog") dialog.querySelector('input[name="roles"]')?.dispatchEvent(new Event("change", {bubbles: true}));
 	};
+	const showQueryDetail = (row) => {
+	  const dialog = document.getElementById("query-detail-dialog");
+	  if (!row || !dialog) return;
+	  const values = {
+		name: row.dataset.queryDetailName,
+		time: row.dataset.queryDetailTime,
+		client: row.dataset.queryDetailClient,
+		type: row.dataset.queryDetailType,
+		protocol: row.dataset.queryDetailProtocol,
+		duration: row.dataset.queryDetailDuration,
+	  };
+	  dialog.querySelectorAll("[data-query-detail-value]").forEach((target) => {
+		target.textContent = values[target.dataset.queryDetailValue] || "—";
+	  });
+	  const source = row.dataset.queryDetailSource || "";
+	  const sourceBadge = dialog.querySelector("[data-query-detail-source]");
+	  const knownSources = new Set(["authoritative", "upstream", "cache", "blocked", "local", "error"]);
+	  sourceBadge.textContent = row.dataset.queryDetailSourceLabel || "—";
+	  sourceBadge.className = `source-pill${knownSources.has(source) ? ` source-${source}` : ""}`;
+	  const statusBadge = dialog.querySelector("[data-query-detail-status]");
+	  statusBadge.textContent = row.dataset.queryDetailStatusLabel || "—";
+	  const statusClass = ["success", "warning", "error"].find((name) => row.querySelector(".rcode")?.classList.contains(name)) || "error";
+	  statusBadge.className = `rcode ${statusClass}`;
+	  const answers = (row.dataset.queryDetailAnswers || "").split("\n").filter(Boolean);
+	  const answerList = dialog.querySelector("[data-query-detail-answers]");
+	  answerList.replaceChildren();
+	  (answers.length ? answers : ["—"]).forEach((answer) => {
+		const item = document.createElement(answers.length ? "code" : "span");
+		item.textContent = answer;
+		answerList.append(item);
+	  });
+	  const explainAvailable = row.dataset.queryDetailExplainAvailable === "true";
+	  const explainPath = dialog.querySelector("[data-query-detail-explain-path]");
+	  const explainLegacy = dialog.querySelector("[data-query-detail-explain-legacy]");
+	  const explainSummary = dialog.querySelector("[data-query-detail-explain-summary]");
+	  if (explainPath) explainPath.hidden = !explainAvailable;
+	  if (explainLegacy) explainLegacy.hidden = explainAvailable;
+	  if (explainSummary) {
+		explainSummary.textContent = row.dataset.queryDetailExplainSummary || "See how Sable handled this query.";
+		explainSummary.hidden = !explainAvailable;
+	  }
+	  const decisionSteps = {
+		policy: [row.dataset.queryDetailPolicyLabel, row.dataset.queryDetailPolicyDetail],
+		cache: [row.dataset.queryDetailCacheLabel, ""],
+		resolver: [row.dataset.queryDetailResolverLabel, row.dataset.queryDetailResolverDetail],
+		dnssec: [row.dataset.queryDetailDnssecLabel, ""],
+	  };
+	  Object.entries(decisionSteps).forEach(([name, [label, detail]]) => {
+		const step = dialog.querySelector(`[data-query-decision-step="${name}"]`);
+		if (!step) return;
+		step.hidden = !label;
+		step.querySelector("[data-query-decision-label]").textContent = label || "";
+		const detailTarget = step.querySelector("[data-query-decision-detail]");
+		detailTarget.textContent = detail || "";
+		detailTarget.hidden = !detail;
+	  });
+	  const domain = row.dataset.queryDetailName || "";
+	  dialog.querySelectorAll("[data-query-detail-domain]").forEach((input) => { input.value = domain; });
+	  const policyActions = dialog.querySelector("[data-query-detail-policy-actions]");
+	  if (policyActions) policyActions.hidden = !domain;
+	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
+	  if (blockAction) blockAction.hidden = source === "blocked";
+	  showRoutedDialog(dialog);
+	};
 	const syncRoutedDialogs = () => {
 	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url]")];
 	  dialogs.forEach(setupRoutedDialog);
@@ -1799,6 +1865,13 @@
 	  if (replicaDisabled) {
 		event.preventDefault();
 		event.stopPropagation();
+		return;
+	  }
+	  const queryRow = event.target.closest?.("[data-query-detail-row]");
+	  const queryDetailButton = event.target.closest?.("[data-query-detail-button]");
+	  const queryInteractive = event.target.closest?.("button, a, input, select, textarea, label, form");
+	  if (queryRow && (queryDetailButton || (!queryInteractive && !window.getSelection()?.toString()))) {
+		showQueryDetail(queryRow);
 		return;
 	  }
 	  const dialogRow = event.target.closest("[data-dialog-open]");
@@ -1927,6 +2000,10 @@
 	  const form = event.target.closest?.("[data-passphrase-pair]");
 	  if (form) syncPassphrasePair(form);
 	});
+	document.body.addEventListener("htmx:afterRequest", (event) => {
+	  const policy = event.detail?.elt?.closest?.("[data-query-detail-policy]");
+	  if (policy && event.detail.successful) policy.closest("dialog")?.close();
+	});
 
 	// Read the unencrypted envelope header so a file identifies itself before
 	// anyone commits to replacing a deployment with it.
@@ -2024,6 +2101,11 @@
 	});
 
 	// Keep the live chart refresh from replacing an open custom-range picker.
+	document.body.addEventListener("htmx:configRequest", (event) => {
+	  const source = event.detail?.elt;
+	  if (!source?.closest?.("#query-statistics")) return;
+	  event.detail.parameters.stats_scope = document.querySelector("#runtime-stats")?.dataset.statsScope || OVERVIEW_SCOPE_ALL;
+	});
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
 	  if (source?.id === "query-statistics" && source.querySelector("[data-chart-range-popover]:not([hidden])")) {

@@ -98,6 +98,20 @@ func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain
 		OccurredAt: at, ClientIP: client.address, Name: domain.name + ".",
 		RecordType: seedRecordType(random), Class: 1, ResponseCode: responseCode,
 		Source: domain.source, Protocol: seedProtocol(random), Answer: answer, Duration: duration,
+		Decision: seedQueryDecision(domain),
+	}
+}
+
+func seedQueryDecision(domain queryDomain) querylog.Decision {
+	switch domain.source {
+	case querylog.SourceBlocked:
+		return querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: domain.name + ".", Resolver: querylog.ResolverBlocked}
+	case querylog.SourceAuthoritative:
+		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}
+	case querylog.SourceCache:
+		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}
+	default:
+		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheMiss, Resolver: querylog.ResolverForwarded, DNSSEC: querylog.DNSSECIndeterminate}
 	}
 }
 

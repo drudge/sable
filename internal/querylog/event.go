@@ -13,6 +13,64 @@ const (
 	SourceError         Source = "error"
 )
 
+// PolicyDecision records how the blocking policy treated a query. The values
+// are deliberately classifications rather than a trace of the full policy or
+// client configuration, keeping persisted explanations useful without turning
+// the query log into a configuration snapshot.
+type PolicyDecision string
+
+const (
+	PolicyNotEvaluated PolicyDecision = "not_evaluated"
+	PolicyDisabled     PolicyDecision = "disabled"
+	PolicyPaused       PolicyDecision = "paused"
+	PolicyClientBypass PolicyDecision = "client_bypass"
+	PolicyAllowed      PolicyDecision = "allowed"
+	PolicyBlocked      PolicyDecision = "blocked"
+	PolicyNoMatch      PolicyDecision = "no_match"
+)
+
+type CacheDecision string
+
+const (
+	CacheHit   CacheDecision = "hit"
+	CacheMiss  CacheDecision = "miss"
+	CacheStale CacheDecision = "stale"
+)
+
+type ResolverDecision string
+
+const (
+	ResolverAuthoritative ResolverDecision = "authoritative"
+	ResolverLocal         ResolverDecision = "local"
+	ResolverBlocked       ResolverDecision = "blocked"
+	ResolverCache         ResolverDecision = "cache"
+	ResolverForwarded     ResolverDecision = "forwarded"
+	ResolverRecursive     ResolverDecision = "recursive"
+	ResolverError         ResolverDecision = "error"
+)
+
+type DNSSECDecision string
+
+const (
+	DNSSECSecure        DNSSECDecision = "secure"
+	DNSSECInsecure      DNSSECDecision = "insecure"
+	DNSSECBogus         DNSSECDecision = "bogus"
+	DNSSECIndeterminate DNSSECDecision = "indeterminate"
+)
+
+// Decision is a bounded, privacy-aware explanation of the resolver path. It
+// intentionally omits upstream addresses, retry errors, payloads, and client
+// bypass rules. PolicyRule and Route only contain normalized DNS suffixes that
+// are already represented by the logged query or Sable's DNS configuration.
+type Decision struct {
+	Policy     PolicyDecision   `json:"policy,omitempty"`
+	PolicyRule string           `json:"policy_rule,omitempty"`
+	Cache      CacheDecision    `json:"cache,omitempty"`
+	Resolver   ResolverDecision `json:"resolver,omitempty"`
+	Route      string           `json:"route,omitempty"`
+	DNSSEC     DNSSECDecision   `json:"dnssec,omitempty"`
+}
+
 type Event struct {
 	OccurredAt   time.Time     `json:"occurred_at"`
 	ClientIP     string        `json:"client_ip"`
@@ -24,6 +82,7 @@ type Event struct {
 	Protocol     string        `json:"protocol"`
 	Answer       string        `json:"answer"`
 	Duration     time.Duration `json:"duration_ns"`
+	Decision     Decision      `json:"decision,omitempty"`
 }
 
 type Entry struct {

@@ -428,6 +428,7 @@ func (history *statsHistory) buildView(
 	}
 	view := pages.QueryChartView{
 		ActiveRange: rangeName,
+		RangeLabel:  chartRangeLabel(rangeName),
 		StartLabel:  display.In(start).Format(format),
 		EndLabel:    display.In(end).Format(format),
 		CustomStart: display.In(customStart).Format("2006-01-02T15:04"),
@@ -438,6 +439,7 @@ func (history *statsHistory) buildView(
 	}
 	view.Live = history.serving(end)
 	points := history.points(ctx, start, end)
+	view.Stats = chartStats(points)
 	if len(points) < 2 {
 		return view
 	}
@@ -457,6 +459,26 @@ func (history *statsHistory) buildView(
 	view.Blocked = chartCoordinates(points, maximum, func(point chartPoint) uint64 { return point.blocked })
 	view.CacheHits = chartCoordinates(points, maximum, func(point chartPoint) uint64 { return point.cacheHits })
 	view.HoverData = chartHoverData(points, maximum, chartTooltipFormat(end.Sub(start), display), display)
+	return view
+}
+
+// chartStats keeps the dashboard overview on the same buckets as the plot.
+// Summing the plotted points also means a custom range and an empty range have
+// the same semantics everywhere on the dashboard.
+func chartStats(points []chartPoint) pages.StatsView {
+	var view pages.StatsView
+	for _, point := range points {
+		view.Queries += point.total
+		view.NoError += point.successful
+		view.ServerFailures += point.serverFailure
+		view.NXDomain += point.nxDomain
+		view.Refused += point.refused
+		view.Recursive += point.recursive
+		view.Blocked += point.blocked
+		view.CacheHits += point.cacheHits
+		view.CacheMisses += point.recursive - point.cacheHits
+	}
+	view.CacheHitRatio = cacheHitRatio(view.CacheHits, view.CacheMisses)
 	return view
 }
 

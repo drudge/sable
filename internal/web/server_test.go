@@ -168,6 +168,7 @@ func (testQueryLog) RecentQueryEvents(context.Context, int) ([]querylog.Entry, e
 			OccurredAt: time.Now(), ClientIP: "192.0.2.1", Name: "example.com",
 			RecordType: 1, Class: 1, ResponseCode: 0, Source: querylog.SourceCache,
 			Duration: 25 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache},
 		},
 	}}, nil
 }
@@ -186,6 +187,24 @@ func (log testQueryLog) QueryEvents(ctx context.Context, filter querylog.Filter)
 		return querylog.Page{}, err
 	}
 	return querylog.Page{Entries: entries, Page: 1, PageSize: filter.PageSize, TotalEntries: len(entries), TotalPages: 1}, nil
+}
+
+func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
+	t.Parallel()
+
+	view := queryDecisionView(querylog.Decision{
+		Policy: querylog.PolicyAllowed, PolicyRule: "internal.example.", Cache: querylog.CacheMiss,
+		Resolver: querylog.ResolverForwarded, Route: "corp.example.", DNSSEC: querylog.DNSSECSecure,
+	})
+	if !view.Available || view.Policy != "Allowed by policy" || view.PolicyDetail != "Matched internal.example." {
+		t.Fatalf("policy explanation = %+v", view)
+	}
+	if view.Cache != "Cache miss" || view.Resolver != "Forwarded upstream" || view.ResolverDetail != "Conditional route: corp.example." {
+		t.Fatalf("resolution explanation = %+v", view)
+	}
+	if view.DNSSEC != "DNSSEC secure" || !strings.Contains(view.Summary, "conditional route") {
+		t.Fatalf("DNSSEC/summary explanation = %+v", view)
+	}
 }
 
 func TestDNSQueryResultIncludesIsotopeActionsAndCopyTargets(t *testing.T) {
@@ -410,14 +429,32 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
 		t.Error("dashboard does not contain its accessible page heading")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `data-dialog-open="top-stats-clients-dialog"`, `data-top-stats-search`, `data-top-stats-limit`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="every 60s"`, `/logs?tab=queries&amp;`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", "Last hour"} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
 	}
+	if cards := strings.Count(dashboard, `class="stat-card `); cards != 12 {
+		t.Errorf("dashboard stat card count = %d, want all 12 metrics", cards)
+	}
 	chartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day")
 	if chartResponse.Code != http.StatusOK || !strings.Contains(chartResponse.Body.String(), `data-range="day"`) {
 		t.Fatalf("day chart response = %d %s", chartResponse.Code, chartResponse.Body.String())
+	}
+	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerHTML"`, `data-stats-scope="all"`, "All time"} {
+		if !strings.Contains(chartResponse.Body.String(), expected) {
+			t.Errorf("day chart response does not contain %q", expected)
+		}
+	}
+	rangedChartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day&stats_scope=range")
+	rangedChart := rangedChartResponse.Body.String()
+	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Chart range", "· all time", "Recent sample · not ranged"} {
+		if rangedChartResponse.Code != http.StatusOK || !strings.Contains(rangedChart, expected) {
+			t.Errorf("ranged day chart response does not contain %q", expected)
+		}
+	}
+	if cards := strings.Count(rangedChart, `class="stat-card `); cards != 12 {
+		t.Errorf("ranged dashboard stat card count = %d, want all 12 metrics", cards)
 	}
 	now := time.Now().Truncate(time.Minute)
 	customChartPath := "/ui/stats/chart?range=custom&start=" + now.Add(-time.Hour).Format("2006-01-02T15:04") + "&end=" + now.Format("2006-01-02T15:04")
@@ -626,7 +663,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		}
 	}
 	queryLogAPIResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=1")
-	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") {
+	if queryLogAPIResponse.Code != 200 || !strings.Contains(queryLogAPIResponse.Body.String(), "example.com") || !strings.Contains(queryLogAPIResponse.Body.String(), `"decision":{"policy":"no_match","cache":"hit","resolver":"cache"}`) {
 		t.Fatalf("query log API response = %d %s", queryLogAPIResponse.Code, queryLogAPIResponse.Body.String())
 	}
 	invalidLimitResponse := serveRequest(server, "GET", "/api/v1/query-log?limit=invalid")

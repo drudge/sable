@@ -485,6 +485,7 @@ func (server *Server) dashboard(writer http.ResponseWriter, request *http.Reques
 
 func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	view := server.consoleView(request)
+	view.StatsScope = dashboardStatsScope(request)
 	if !view.CanLogs {
 		return view
 	}
@@ -761,6 +762,24 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
+	view := server.lifetimeStatsView(request)
+	chart := server.history.view(request.Context(), "hour", time.Now(), server.stats.Stats(), requestTimeDisplay(request))
+	scope := dashboardStatsScope(request)
+	values := view
+	if scope == pages.StatsScopeRange {
+		values = chart.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: view, Scope: scope,
+		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
+		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render runtime statistics", "error", err)
+	}
+}
+
+func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
 	view := statsView(server.history.totals(time.Now(), server.stats.Stats()))
 	// The client and dropped counts come from the query log rather than the
 	// resolver counters, so the refreshed cards have to repeat the read the
@@ -774,9 +793,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 			view.Clients = dashboardClientSample(entries)
 		}
 	}
-	if err := pages.Stats(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render runtime statistics", "error", err)
-	}
+	return view
 }
 
 func (server *Server) canReadLogs(request *http.Request) bool {
@@ -788,6 +805,7 @@ func (server *Server) canReadLogs(request *http.Request) bool {
 }
 
 func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {
+	server.rememberDashboardStatsScope(writer, request)
 	rangeName := request.URL.Query().Get("range")
 	display := requestTimeDisplay(request)
 	location := display.Location
@@ -810,6 +828,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			server.logger.Error("render custom query statistics", "error", err)
 			return
 		}
+		server.renderChartStats(writer, request, view)
 		if withInsights {
 			window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
 			server.renderInsights(writer, request, window)
@@ -826,8 +845,30 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		server.logger.Error("render query statistics", "error", err)
 		return
 	}
+	server.renderChartStats(writer, request, view)
 	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
 		server.renderInsights(writer, request, window)
+	}
+}
+
+// renderChartStats updates the headline metrics alongside an htmx chart swap.
+// The chart remains the regular response target; this sibling is applied out
+// of band so every range control changes the whole dashboard consistently.
+func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
+	lifetime := server.lifetimeStatsView(request)
+	scope := dashboardStatsScope(request)
+	values := lifetime
+	if scope == pages.StatsScopeRange {
+		values = view.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: lifetime, Scope: scope,
+		RangeName: view.ActiveRange, RangeLabel: view.RangeLabel,
+		CustomStart: view.CustomStart, CustomEnd: view.CustomEnd,
+		OutOfBand: true,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render chart statistics overview", "error", err)
 	}
 }
 
@@ -1180,23 +1221,105 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 			Protocol:   entry.Protocol,
 			Answers:    strings.Split(entry.Answer, "\n"),
 			Duration:   entry.Duration.Round(time.Microsecond).String(),
+			Decision:   queryDecisionView(entry.Decision),
 		})
 	}
 	return views
 }
 
+func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
+	view := pages.QueryDecisionView{
+		Available: decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
+	}
+	switch decision.Policy {
+	case querylog.PolicyNotEvaluated:
+		view.Policy = "Policy not evaluated"
+		view.PolicyDetail = "Authoritative and local answers take precedence."
+	case querylog.PolicyDisabled:
+		view.Policy = "Blocking disabled"
+	case querylog.PolicyPaused:
+		view.Policy = "Blocking paused"
+	case querylog.PolicyClientBypass:
+		view.Policy = "Client bypassed blocking"
+	case querylog.PolicyAllowed:
+		view.Policy = "Allowed by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+	case querylog.PolicyBlocked:
+		view.Policy = "Blocked by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+	case querylog.PolicyNoMatch:
+		view.Policy = "No blocking rule matched"
+	}
+	switch decision.Cache {
+	case querylog.CacheHit:
+		view.Cache = "Cache hit"
+	case querylog.CacheMiss:
+		view.Cache = "Cache miss"
+	case querylog.CacheStale:
+		view.Cache = "Served stale cache"
+	}
+	switch decision.Resolver {
+	case querylog.ResolverAuthoritative:
+		view.Resolver = "Answered by an authoritative zone"
+		view.Summary = "Sable answered from an authoritative zone it serves."
+	case querylog.ResolverLocal:
+		view.Resolver = "Answered by a local host override"
+		view.Summary = "Sable answered from a local host override."
+	case querylog.ResolverBlocked:
+		view.Resolver = "Synthesized a blocking response"
+		view.Summary = "Sable blocked this query before resolution."
+	case querylog.ResolverCache:
+		view.Resolver = "Returned a cached response"
+		view.Summary = "Sable answered this query from its cache."
+	case querylog.ResolverForwarded:
+		view.Resolver = "Forwarded upstream"
+		view.Summary = "Sable forwarded this query to its configured upstream resolvers."
+		if decision.Route != "" {
+			view.ResolverDetail = "Conditional route: " + decision.Route
+			view.Summary = "Sable matched a conditional route and forwarded the query."
+		} else {
+			view.ResolverDetail = "Default forwarders"
+		}
+	case querylog.ResolverRecursive:
+		view.Resolver = "Resolved recursively"
+		view.Summary = "Sable resolved this query recursively."
+	case querylog.ResolverError:
+		view.Resolver = "Resolution failed"
+		view.Summary = "Sable could not complete resolution."
+	}
+	switch decision.DNSSEC {
+	case querylog.DNSSECSecure:
+		view.DNSSEC = "DNSSEC secure"
+	case querylog.DNSSECInsecure:
+		view.DNSSEC = "DNSSEC insecure"
+	case querylog.DNSSECBogus:
+		view.DNSSEC = "DNSSEC bogus"
+	case querylog.DNSSECIndeterminate:
+		view.DNSSEC = "DNSSEC not validated"
+	}
+	return view
+}
+
+func matchedDecisionRule(rule string) string {
+	if rule == "" {
+		return ""
+	}
+	return "Matched " + rule
+}
+
 type queryLogAPIEntry struct {
-	ID           int64           `json:"id"`
-	OccurredAt   time.Time       `json:"occurred_at"`
-	ClientIP     string          `json:"client_ip"`
-	Name         string          `json:"name"`
-	RecordType   uint16          `json:"record_type"`
-	Class        uint16          `json:"class"`
-	ResponseCode int             `json:"response_code"`
-	Source       querylog.Source `json:"source"`
-	Protocol     string          `json:"protocol"`
-	Answer       string          `json:"answer"`
-	DurationUS   int64           `json:"duration_us"`
+	ID           int64             `json:"id"`
+	OccurredAt   time.Time         `json:"occurred_at"`
+	ClientIP     string            `json:"client_ip"`
+	Name         string            `json:"name"`
+	RecordType   uint16            `json:"record_type"`
+	Class        uint16            `json:"class"`
+	ResponseCode int               `json:"response_code"`
+	Source       querylog.Source   `json:"source"`
+	Protocol     string            `json:"protocol"`
+	Answer       string            `json:"answer"`
+	DurationUS   int64             `json:"duration_us"`
+	Decision     querylog.Decision `json:"decision"`
 }
 
 func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
@@ -1214,6 +1337,7 @@ func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
 			Protocol:     entry.Protocol,
 			Answer:       entry.Answer,
 			DurationUS:   entry.Duration.Microseconds(),
+			Decision:     entry.Decision,
 		})
 	}
 	return result
