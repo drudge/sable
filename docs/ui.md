@@ -24,8 +24,64 @@ removed.
 ## Implementation constraints
 
 The console is compiled into the Sable binary. Pages use templ, interactions
-use htmx plus small dependency-free JavaScript helpers, and assets are embedded
-with `go:embed`. There is no Node.js runtime or separately deployed frontend.
+use vendored htmx 4 plus small dependency-free JavaScript helpers, and assets
+are embedded with `go:embed`. There is no Node.js runtime or separately
+deployed frontend. Every asset URL contains a content fingerprint; immutable
+assets are served precompressed when the browser accepts gzip.
+
+The application helper is registered before htmx initializes. It adds CSRF
+headers, initializes controls in the original document and later fragments,
+and owns behavior that should not be encoded as server state: themes, sidebar
+preference, routed dialogs, confirmation dialogs, range pickers, tabs, upload
+progress, and small visual transitions. A helper must be safe to run more than
+once because htmx can process a newly swapped subtree at any time.
+
+### Fragment contract
+
+- Page routes render complete documents. `/ui/` routes render the smallest
+  complete fragment that owns the state being changed.
+- Successful mutations return a rendered replacement, a no-content response,
+  or an `HX-Redirect`/`HX-Replace-Url` instruction. They do not ask client code
+  to recreate server-owned markup.
+- htmx 4 swaps error responses by default. Sable admits a non-2xx body into a
+  target only when the server marks it with
+  `X-Sable-Console-Fragment: true`; bare server and proxy errors remain outside
+  the page instead of replacing a form with arbitrary text.
+- Long-running backup, update, certificate, and cluster operations own their
+  busy state and polling surface. Buttons use `hx-disable` or an equivalent
+  local guard so a repeated click cannot start the same operation twice.
+- A replica renders primary-only controls as unavailable while keeping
+  node-local actions such as DNS queries, cache operations, certificate work,
+  session revocation, cluster leave, and recovery promotion available.
+
+### Interaction and navigation contract
+
+- Native `<dialog>` elements provide focus containment and escape behavior.
+  `data-dialog-open`, `data-dialog-close`, and `data-dialog-url` connect buttons,
+  routed URLs, history state, and deep links without duplicating dialog logic.
+- Local tab strips support arrow-key navigation, update the relevant document
+  title, and preserve a meaningful URL when the selected tab is shareable.
+- Dashboard chart range, ranking, and query-log links must describe the same
+  time window. Exact ranked values must not broaden into substring filters.
+- Query detail rows expose persisted policy, cache, resolver, route, and DNSSEC
+  decisions. Policy shortcuts remain permission-aware and retain a usable
+  mobile disclosure control.
+- The zone Change Center shows bounded diffs and describes rollback as creating
+  a new revision; the UI must never imply that durable history is rewritten.
+- Cluster node links open the member's advertised console. DNS client presets
+  may use the member's pinned certificate authority for DoH but must never
+  disable TLS verification globally.
+
+### Accessibility and responsive verification
+
+Interactive work is not complete until it has keyboard focus treatment, an
+accessible name, a useful disabled reason, a reduced-motion behavior where
+animation is nonessential, and a live-region or status treatment for background
+progress. Controls removed by authorization should not leave empty navigation
+groups or keyboard stops.
 
 Visual changes should be checked at desktop, tablet, and phone widths against
-the corresponding Isotope screen before they are considered complete.
+the corresponding Isotope screen before they are considered complete. Run
+`mage screenshots` for the deterministic desktop fixture, then manually exercise
+dialogs, forms, tabs, filters, error responses, and mobile disclosures in a real
+browser; screenshot capture proves rendering, not interaction behavior.

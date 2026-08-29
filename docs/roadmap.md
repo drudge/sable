@@ -1,82 +1,128 @@
 # Sable roadmap
 
-The ordering is deliberate: establish correctness and measurable data-plane
-performance before expanding the administrative surface.
+Sable is pre-1.0, but the original foundation, recursive, authoritative,
+clustering, and certificate milestones are substantially delivered. This
+roadmap separates what is present on `main` from work that remains; a bullet in
+the delivered section is a current capability, while a bullet in a future
+section is not a release claim.
 
-## Milestone 0 — foundation
+The ordering remains deliberate: correctness and measurable data-plane
+behavior come before a broader administrative or plugin surface.
 
-- Single static executable and Go 1.27 toolchain
-- Strict TOML configuration and transactional file reload
-- UDP/TCP forwarding, TCP truncation retry, and domain blocking
-- Bounded sharded positive/negative cache with TTL aging
-- Conditional forwarding with longest-suffix routing and pool failover
-- Managed domain/hosts/Adblock file compilation and automatic file reload
-- Scheduled HTTP(S) block-list subscriptions with transactional refresh
-- Asynchronous batched query logging with retention and live console/API views
-- DNS client, SQLite/PostgreSQL adapters, embedded templ + htmx console
-- DoT and RFC 8484 DoH server/client transports with atomic certificate reload
-- Hot-reloadable local A/AAAA overrides and Prometheus metrics
-- Primary authoritative zones with transactional database/console record editing and negative answers
-- First-run authentication, group-authorized API tokens, CSRF defense, audit events, and encrypted secrets
-- User administration, built-in/custom RBAC, password/account lifecycle,
-  session/token revocation, and audit-log UI
-- Revisioned runtime Settings UI with atomic persistence and hot application
-- Tests, race detection, microbenchmarks, and release build metadata
+## Delivered platform
 
-## Milestone 1 — production recursive service
+### Resolver and policy
 
-- Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover, authenticated denial, negative trust anchors, and AD/CD/DO semantics
-- Cache prefetch, plus per-source block-list health with exponential retry backoff
-- RFC 9250 DNS-over-QUIC server and client transports
-- Encrypted-transport load benchmarks
-- OpenTelemetry metrics and expanded structured query-log controls
-- OpenID Connect single sign-on with delegated group-to-role synchronization is implemented
+- One static Go 1.27 executable with UDP, TCP, DoT, RFC 8484 DoH, and RFC 9250
+  DoQ server and client transports
+- Direct iterative recursion, longest-suffix conditional forwarding, pool
+  failover, TCP truncation retry, and reusable upstream TLS/QUIC connections
+- Recursive DNSSEC validation with persistent RFC 5011 rollover, authenticated
+  NSEC/NSEC3 denial, negative trust anchors, and AD/CD/DO semantics
+- Bounded positive/negative cache with serve-stale behavior and hit-rate-driven
+  prefetch
+- Local overrides, domain blocking and allowed rules, client bypasses, and
+  scheduled HTTP(S) block-list subscriptions with transactional refresh,
+  per-source health, and exponential retry backoff
 
-## Milestone 2 — authoritative DNS
+### Authoritative DNS
 
-- Primary zones, authoritative negative answers, and database-backed console record editing
-- Primary-zone AXFR and journaled IXFR with full-transfer fallback, transfer ACLs, and targeted NOTIFY
-- Secondary AXFR ingestion plus incremental IXFR resync, Stub synchronization, and Forwarder zones
-- Automatic SOA refresh/retry/expiry scheduling
-- TSIG-authenticated RFC 2136 dynamic updates with prerequisites, transactional persistence, IXFR journaling, and NOTIFY
-- Automatic DNSSEC signing with encrypted Ed25519/ECDSA KSK/ZSK lifecycles, DNSKEY/DS publication, NSEC/NSEC3 proofs, scheduled re-signing, prepublished ZSK rollover, and parent-confirmed double-KSK rollover
-- RFC 9432 catalog zones on both sides: published catalogs maintained from member
-  zones and served over AXFR/IXFR, and subscribed catalogs that provision and
-  withdraw secondary zones, with broken-catalog, ownership, and change-of-ownership
-  handling
-- Expanded RFC-compliant record validation
-- Import/export and migration tooling
+- Primary and Secondary zones with authoritative negative answers, automatic
+  SOA refresh/retry/expiry, AXFR, journaled IXFR with full-transfer fallback,
+  transfer ACLs, and targeted NOTIFY
+- Stub and prioritized Forwarder zones, Alias zones that follow a source, and
+  RFC 9432 Catalog publication and subscription
+- TSIG-authenticated RFC 2136 dynamic updates with prerequisites,
+  transactional persistence, IXFR journaling, and NOTIFY
+- Automatic Ed25519/ECDSA DNSSEC signing with DNSKEY/DS publication,
+  NSEC/NSEC3 proofs, scheduled re-signing, prepublished ZSK rollover, and
+  parent-confirmed double-KSK rollover
+- Strict record validation, standard zone-file import/export, transactional
+  SQLite/PostgreSQL storage, retained revisions, visual change inspection, and
+  rollback to an earlier zone revision
 
-## Milestone 3 — HA and clustering
+### Operations, identity, and observability
 
-- Durable primary/replica identity, single-use enrollment, signed generation
-  synchronization, manual promotion, and real-time per-node observability
-- Discovery and certificate lifecycle automation
-- Content-addressed configuration/zone snapshots with apply-before-commit replica activation
-- Authorization identity, role, token, and revocation replication is implemented
-- Conflict-free telemetry aggregation outside the replication path
-- Fault-injection, partition, recovery, and compatibility suites
+- Strict TOML configuration, transactional file and Settings UI updates,
+  atomic runtime activation, and last-known-good listener behavior
+- First-run authentication, Argon2id passwords, users, built-in/custom RBAC,
+  Web/API and per-zone grants, revocable sessions/tokens, persistent audit
+  events, and encrypted secrets
+- OpenID Connect with discovery caching, PKCE, guided configuration,
+  just-in-time provisioning, verified-email linking, and delegated
+  group-to-role synchronization
+- Non-blocking retained query logs with cursor pagination, minute rollups,
+  selected-range rankings, and bounded explanations of the policy, cache,
+  resolver, route, and DNSSEC path taken by each query
+- Prometheus health and performance metrics, including DNS latency histograms
+  partitioned by bounded source, protocol, cache, and response-code labels
+- A server-rendered templ and htmx 4 console with embedded fingerprinted,
+  compressed assets and responsive dashboard, log, zone, cluster, security,
+  integration, certificate, update, and backup workflows
+- Unit, integration, race, allocation, microbenchmark, deterministic binary and
+  cluster smoke, multi-architecture container smoke, and reachable-dependency
+  vulnerability gates
 
-## Milestone 4 — certificates and ecosystem
+### Clustering, certificates, and ecosystem
 
-- DNS-01 ACME with automatic renewal is implemented
-- Cloudflare, Porkbun, Namecheap, GoDaddy, DigitalOcean, Hetzner, Route 53,
-  OVHcloud, and RFC 2136 providers are implemented
-- A local DNS-01 provider that answers challenges from Sable's own primary
-  zones, without an external account or a loopback RFC 2136 configuration,
-  remains future work
-- External command providers remain future work. HTTP-01 is deliberately out of
-  scope: it requires a publicly reachable port 80, which most deployments do not
-  have, and it cannot issue wildcard certificates
-- UniFi DHCP integration is implemented: a console setup wizard maps UniFi
-  networks to zones and publishes reservations and connected clients as
-  integration-owned forward and reverse records
-- Whole-deployment backup and restore is implemented: a passphrase-sealed
-  archive carries configuration, zones, authorization, encrypted secrets with
-  the vault key that opens them, trust anchors, TLS material, and cluster
-  membership, and restores onto a fresh node from the console or the CLI
-- Applications/plugins and expanded migration tooling remain future work
+- Durable primary/replica identity, short-lived single-use enrollment, signed
+  monotonically numbered generations, manual promotion, and real-time per-node
+  synchronization status
+- Content-addressed configuration, zone, authorization, policy, and secret
+  snapshots with apply-before-commit replica activation and replicated token
+  revocation
+- Node-specific console links and DNS client presets for querying advertised
+  cluster DoH endpoints
+- Generated/imported certificate key pairs and DNS-01 ACME issuance with
+  automatic renewal through Cloudflare, Porkbun, Namecheap, GoDaddy,
+  DigitalOcean, Hetzner, Route 53, OVHcloud, and RFC 2136
+- UniFi synchronization with guided network-to-zone mapping and
+  integration-owned A, AAAA, and IPv4/IPv6 PTR records
+- Passphrase-sealed whole-deployment backup and atomic restore covering
+  configuration, zones, authorization, encrypted secrets and their vault key,
+  trust anchors, TLS material, and cluster membership
+- Hardened systemd installation, verified self-update, cross-platform archives,
+  non-root multi-architecture containers, and gated release publication
 
-Technitium feature parity is tracked as observable behavior, not copied code.
-Compatibility fixtures will be clean-room tests built from public DNS standards
-and independently observed inputs and outputs.
+## Next milestones
+
+### High availability and recovery confidence
+
+- Automatic partition-safe failover or an explicitly documented alternative;
+  today replicas keep serving DNS but promotion and write recovery are manual
+- Fault-injection coverage for lost, delayed, duplicated, and reordered cluster
+  traffic, plus partition, rejoin, interrupted-activation, and disaster-recovery
+  scenarios
+- Cross-version cluster, backup, zone-transfer, and update compatibility suites
+- Automatic peer discovery where it can be implemented without weakening the
+  explicit trust and enrollment model
+
+### Performance and observability
+
+- Reproducible encrypted-transport capacity profiles for DoT, DoH, and DoQ in
+  addition to the managed UDP/TCP comparison and in-process regression suite
+- OpenTelemetry export while preserving the current Prometheus endpoint
+- Cluster-wide telemetry aggregation outside the replicated control-plane
+  snapshot path
+- Published capacity envelopes and regression budgets for supported deployment
+  sizes
+
+### Ecosystem and migration
+
+- A local DNS-01 provider that answers challenges from Sable's own Primary
+  zones without an external account or loopback RFC 2136 configuration
+- External-command DNS providers with a constrained credential and execution
+  model
+- Applications/plugins and a stable extension contract
+- Expanded migration tooling and clean-room compatibility fixtures based on
+  public DNS standards and independently observed behavior
+
+## Deliberate boundaries
+
+- HTTP-01 is out of scope because it requires a publicly reachable port 80 and
+  cannot issue wildcard certificates.
+- Browser sessions, audit history, token-use timestamps, caches, listener and
+  certificate configuration, database paths, and security bootstrap remain
+  node-local rather than replicated cluster state.
+- Technitium compatibility is tracked as observable behavior; its code is not
+  copied.

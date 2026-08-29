@@ -16,13 +16,21 @@ route queries through the administrative HTTP server.
 
 The data plane includes a bounded sharded LRU cache. Cache entries preserve DNS
 request variation, age TTLs on every hit, use SOA TTL/MINIMUM for negative
-answers, and are reused across compatible hot reloads. The next increments are
-DNSSEC validation, cache prefetch, and DoQ listeners.
+answers, and are reused across compatible hot reloads. Serve-stale behavior and
+hit-rate-driven prefetch refresh popular answers without making a cache hit wait
+on an upstream query. Recursive answers pass through DNSSEC validation before
+they enter the cache, and UDP, TCP, DoT, DoH, and DoQ all use the same handler.
 
 Default and conditional forwarding pools use round-robin selection with an
 overall query deadline divided across failover attempts. Conditional routes use
 longest-suffix matching, so a narrow zone overrides a broader parent route
-without a trie allocation on each request.
+without a trie allocation on each request. Compatible upstream DoT and DoQ
+connections are multiplexed and reused rather than established for every query.
+
+Each completed request records one bounded-cardinality latency observation by
+response source, transport, cache result, and response code. The handler keeps
+the histogram buckets in atomics and exposes snapshots to Prometheus; it never
+allocates a label map or writes telemetry to SQL on the request path.
 
 Local A/AAAA overrides compile into immutable record templates indexed by the
 normalized name. Queries use one map lookup and construct only the response
@@ -89,16 +97,21 @@ SQLite/PostgreSQL DSN and web-listener changes currently request a controlled
 restart because neither can be switched without changing control-plane state.
 The Settings UI uses the same transaction: editable DNS service, resolver,
 DNSSEC, encrypted-DNS, and query-log values are cloned, validated, written
-atomically, activated, and only then published as a new revision. Node-local
-bootstrap values remain explicit read-only fields until a controlled-restart
-workflow is available. This cluster/local scope split is also the boundary the
-replicated control plane will consume.
+atomically, activated, and only then published as a new revision. Generic
+node-local bootstrap values remain explicit read-only fields; workflows that
+must change node identity or staged restore state request a controlled restart
+through the process supervisor. This cluster/local scope split is also the
+replication boundary.
 
-`internal/web` embeds generated `templ` components, htmx, and CSS using Go's
-embed support. It renders on the server and returns small HTML fragments for
-reactive updates. There is no Node.js runtime in production.
+`internal/web` embeds generated `templ` components, vendored htmx 4, JavaScript,
+and CSS using Go's embed support. Assets are content-fingerprinted, precompressed,
+and served with immutable caching. Pages render on the server and return small
+HTML fragments for reactive updates. An explicit response header distinguishes
+complete error fragments that htmx may safely swap from bare server failures.
+There is no Node.js runtime in production.
 The same management listener exposes Prometheus text metrics from atomic runtime
-counters; metric collection is outside the DNS request path.
+counters and latency histograms; metric collection is outside the DNS request
+path.
 
 `internal/auth` owns credential hashing, bounded login verification, opaque
 sessions, CSRF validation, and group-authorized API tokens. Only SHA-256 token
@@ -113,9 +126,10 @@ disabling, deleting, or demoting the final active administrator. Password resets
 and account disablement revoke existing sessions. Administration listing uses a
 fixed number of queries rather than one query per user or group. The web
 middleware leaves DNS, DoT, DoH, and DoQ listeners untouched while protecting the
-management UI, APIs, and metrics. `internal/secrets` encrypts
-future provider credentials using AES-256-GCM with the secret name as associated
-data; its master key is stored outside the database with owner-only permissions.
+management UI, APIs, and metrics. `internal/secrets` encrypts DNSSEC private
+keys, TSIG shared secrets, UniFi and OpenID Connect credentials, and ACME
+provider credentials using AES-256-GCM with the secret name as associated data;
+its master key is stored outside the database with owner-only permissions.
 
 ## Persistence
 
@@ -127,7 +141,18 @@ configuration; zone files remain import/export interchange.
 Query events enter a bounded non-blocking channel and are written in database
 transactions by a separate worker. Queue saturation drops telemetry rather than
 adding latency to DNS; counters expose every drop and write failure. Retention
-sweeps keep the table bounded over time.
+sweeps keep the table bounded over time. Each row carries a privacy-aware,
+bounded explanation of the policy, cache, route, resolver, and DNSSEC decisions.
+The same transaction updates per-minute rollups used by wide dashboard ranges;
+cursor pagination keeps deep query-log browsing from paying an ever-growing SQL
+offset cost.
+
+Every zone mutation also stores a retained durable snapshot. The Change Center
+loads adjacent revisions to render bounded setting and record diffs. Restoring
+an earlier state preserves the stable zone identity, advances its SOA serial,
+and commits the result as a new revision, so rollback follows the same
+validation, DNSSEC signing, IXFR, activation, and NOTIFY path as an ordinary
+edit.
 
 RFC 2136 UPDATE messages are admitted only on wire DNS transports, authenticated
 against the Primary zone's configured TSIG key, and handed to the zone manager
@@ -142,17 +167,18 @@ mixed, and common Adblock rules compile into the same immutable suffix map as
 inline policy. File changes build a complete candidate before the atomic swap;
 unreadable sources preserve the active policy.
 
-## Clustering direction
+## Clustering
 
 Sable uses a primary/replica control plane designed for one- and two-server
 deployments. One primary accepts configuration changes. Replicas pull signed,
 monotonically numbered generations containing authoritative zones, resolver and
-cache policy, TSIG keys, blocking policy, and query-log enablement. TSIG secrets
-travel with that generation over the mutually authenticated enrollment channel
-and land in each replica's own encrypted vault, so no node keeps them in its
-configuration file. Every node continues answering DNS from its local in-memory
-runtime state. Losing the
-primary therefore affects configuration writes, not DNS service. An
+cache policy, TSIG keys, blocking and query-log settings, UniFi and OpenID
+Connect configuration, users, roles, grants, federated identities, and API-token
+hashes. Replicated credentials travel over the authenticated enrollment and
+synchronization channel and land in each node's own encrypted vault, so no node
+keeps them in plain-text configuration. Every node continues answering DNS from
+its local in-memory runtime state. Losing the primary therefore affects
+configuration writes, not DNS service. An
 administrator can manually promote a replica after confirming the former
 primary is offline; Sable does not require a third voter or claim automatic
 partition-safe failover.
@@ -164,17 +190,21 @@ owner-only permissions before the manifest atomically points at them. They live
 outside TOML and the application database. Short-lived enrollment secrets are
 stored only as SHA-256 digests and consumed once. Subsequent synchronization
 requests are authenticated with a cluster secret and sent only to advertised
-HTTPS URLs.
+HTTPS URLs. Enrollment bundles carry the cluster trust anchor, and each member's
+certificate authority is retained with its membership. The web DNS client can
+reuse that pinned trust to query a member's advertised DoH endpoint without
+weakening TLS verification for unrelated servers.
 
 The Cluster console and `/api/v1/cluster` expose role, applied/current
 generation, lag, last contact, and last successful synchronization. Prometheus
 exports the same aggregate and per-node gauges. A replica validates the snapshot
 digest, applies runtime configuration, zones, users, groups, permission grants,
-and API-token hashes, and advances its durable manifest only after activation
-succeeds. A removed token is absent from the next authoritative snapshot, so
-revocation follows the same atomic path. Control-plane HTTP writes and RFC 2136
-updates are rejected on replicas. Browser sessions, audit history, token usage
-timestamps, caches, certificates, listeners, database paths, and other
+API-token hashes, linked identities, and encrypted application credentials, and
+advances its durable manifest only after activation succeeds. A removed token
+is absent from the next authoritative snapshot, so revocation follows the same
+atomic path. Control-plane HTTP writes and RFC 2136 updates are rejected on
+replicas. Browser sessions, audit history, token usage timestamps, caches,
+certificates, listeners, database paths, callback overrides, and other
 node-local state are not replicated. A changed password invalidates that user's
 local sessions as the authorization snapshot is applied. Keeping synchronization
 outside the DNS request path means it adds no SQL or network work to ordinary

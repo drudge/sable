@@ -241,7 +241,12 @@ blocking policy and forwarding and update through the transactional TOML reload.
 
 Authoritative zones are control-plane data, not node configuration. Sable stores zones and ordered records transactionally in the configured SQLite or PostgreSQL database. The DNS request path never queries SQL: startup and mutations compile immutable in-memory zone indexes, then atomically publish the new runtime snapshot.
 
-Create Primary, Secondary, Stub, Forwarder, Alias, and Catalog zones in the console or through the zone API. Standard RFC 1035 zone files are the import/export interchange format. The database keeps a monotonically increasing revision per zone and retains recent revision snapshots so durable IXFR reconstruction can be added without changing the storage model.
+Create Primary, Secondary, Stub, Forwarder, Alias, and Catalog zones in the
+console or through the zone API. Standard RFC 1035 zone files are the
+import/export interchange format. The database keeps a monotonically increasing
+revision and retained snapshot history per zone. Activated Primary-zone changes
+also feed the bounded IXFR journal; a requester whose serial has fallen outside
+that retained history receives an AXFR fallback.
 
 TSIG keys are managed in **Settings → TSIG**. A key has two halves that are stored differently. The name and algorithm are identifiers that zones and cluster members have to agree on, so they live in `sable.toml` under `[[tsig_keys]]`. The shared secret is credential material, so it is held in the node's encrypted vault alongside DNSSEC private keys and ACME provider credentials, and never appears in the configuration file or its backups.
 
@@ -250,6 +255,14 @@ Leave the secret blank when adding a key and Sable generates one sized to the al
 A zone stores only the canonical key name it references, and the zone forms pick from the configured keys rather than accepting free text. Changing or removing a configured TSIG key is rejected while a zone still depends on it.
 
 Primary zones require one apex SOA and at least one apex NS record. Console and RFC 2136 mutations commit one zone transaction, advance the SOA serial, re-sign DNSSEC zones when needed, atomically activate the new in-memory runtime, and send NOTIFY after activation. Zone transfers, ACLs, DNSSEC policy, rollover state references, comments, disabled records, and record expiry metadata are all durable database fields.
+
+Open **Zones → Actions → Change Center** to inspect the retained revisions for a
+zone. Each revision shows setting and record differences from its predecessor.
+Restoring an earlier state preserves the zone's stable identity, advances its
+SOA serial beyond the current value, and saves the restored state as a new
+revision; it never moves history backwards or bypasses validation, signing,
+IXFR journaling, runtime activation, or NOTIFY. Catalog-managed zones are
+restored through their owning catalog rather than locally.
 
 Secondary zones perform AXFR ingestion and SOA-driven IXFR refresh. Stub zones retain their authority metadata and route queries to their primary pool. Forwarder zones use FWD records whose value is protocol, priority, and address. All types remain linkable through the zone UI.
 
@@ -494,6 +507,19 @@ controlled restart because they define the lifetime of the asynchronous worker.
 When the queue is saturated, Sable drops telemetry and increments an exposed
 counter instead of blocking DNS requests.
 
+Each persisted event includes the bounded decision metadata behind the answer:
+blocking-policy outcome and matched suffix, cache hit/miss/stale state, resolver
+path, conditional route, and DNSSEC result. The Logs page exposes that detail in
+an expandable row and can turn a queried domain into an allowed or blocked rule
+when the signed-in operator has permission.
+
+Deep history uses cursor navigation rather than an ever-growing SQL offset. The
+writer also updates per-minute rollups for clients, domains, blocked domains,
+record types, response sources, and response codes in the same database
+transaction as the raw events. Dashboard rankings therefore count the exact
+selected time range even when it spans far more rows than one log page. Raw
+event retention and rollup retention follow query-log retention together.
+
 ## Server logging
 
 ```toml
@@ -531,6 +557,14 @@ so the dashboard chart keeps its hour, day, week, month, and year ranges across
 restarts, and the stat cards keep counting instead of returning to zero. Buckets
 older than 400 days are pruned hourly; lifetime totals are stored separately and
 survive pruning. Downtime is drawn as a gap rather than being smoothed over.
+
+The range picker drives the top-client, top-domain, top-blocked, query-type,
+response-source, and response-code panels as well as the chart. Following a
+ranked value to the query log preserves the same start/end window and exact
+match. Operators may choose whether the headline metric cards show lifetime
+totals or the active chart range; that preference is stored in a browser cookie.
+Short ranges refresh live, while wider database aggregations run only when the
+operator selects them.
 
 There is nothing to configure. The `sable_*` Prometheus counters continue to
 report this process only, which is what scrapers expect from a counter.
@@ -811,6 +845,13 @@ unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is
 performed on the replica being promoted and requires confirmation that the
 former primary is offline.
 
+The Cluster page links each member's advertised console and makes that member
+available as a DNS client preset. A node preset uses the advertised HTTPS URL's
+`/dns-query` endpoint and the certificate authority pinned during enrollment,
+so a private cluster CA works without disabling TLS verification. See the
+[clustering guide](clustering.md) for initial setup, planned handoff, recovery
+promotion, rolling updates, removal, and restore behavior.
+
 ## DNS client transports
 
 The CLI and embedded console support `udp`, `tcp`, `tcp-tls`, `quic`, and
@@ -830,6 +871,14 @@ sable query --transport doh --server https://dns.example/dns-query example.com H
 It includes build identity, uptime, DNS query outcomes, local and authoritative
 answers, zone count, cache hits/misses and occupancy, compiled policy sizes,
 per-source block-list download health, and asynchronous query-log
-queue/persistence health. Assign `metrics.read` on the API surface to a group,
-create a token using that group, and send it as
-`Authorization: Bearer sable_pat_...`.
+queue/persistence health. `sable_dns_response_duration_seconds` is a Prometheus
+histogram partitioned by the bounded `source`, `protocol`, `cache`, and `rcode`
+labels; use it for end-to-end handler latency without introducing unbounded
+domain or client labels. Cluster metrics expose aggregate membership/current
+generation status plus connected, synchronized, and generation-lag gauges for
+each enrolled node.
+
+Assign `metrics.read` on the API surface to a group, create a token using that
+group, and send it as `Authorization: Bearer sable_pat_...`. The
+[operations guide](operations.md) includes health, log, metric, update, and
+backup checks suitable for a production runbook.
