@@ -1,0 +1,114 @@
+package pages
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCommandPaletteExposesKeyboardCombobox(t *testing.T) {
+	t.Parallel()
+
+	page := renderComponent(t, AppDocument(DashboardView{}, "Dashboard", "dashboard", Empty()))
+	for _, expected := range []string{
+		`id="command-palette"`, `data-command-palette`, `aria-labelledby="command-palette-title"`,
+		`id="command-palette-input"`, `role="combobox"`, `aria-autocomplete="list"`,
+		`id="command-palette-results"`, `role="listbox"`, `data-command-item`,
+		`data-command-search-scope`, `data-command-search-back`, `data-command-search-modes`,
+		`role="radiogroup"`, `aria-label="Search query logs by"`,
+		`aria-keyshortcuts="Meta+K Control+K"`, `data-command-shortcut`,
+		`id="command-action-query"`, `data-command-focus="#query-name"`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("command palette markup does not contain %q", expected)
+		}
+	}
+	if triggers := strings.Count(page, `data-command-open`); triggers != 2 {
+		t.Errorf("command palette triggers = %d, want desktop and mobile triggers", triggers)
+	}
+}
+
+func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
+	t.Parallel()
+
+	fullAccess := DashboardView{
+		SecurityEnabled: true,
+		CanSettings:     true, CanWriteSettings: true,
+		CanAdministration: true, CanWriteUsers: true,
+		CanZones: true, CanCreateZones: true,
+		CanBlocking: true, CanWriteBlocking: true,
+		BlockingEnabled: true, HasRemoteBlockLists: true,
+		CanLogs: true, CanCluster: true,
+	}
+	page := renderComponent(t, CommandPalette(fullAccess))
+	for _, expected := range []string{
+		`id="command-page-zones"`, `id="command-page-query-logs"`,
+		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `data-command-dialog="import-new-zone-dialog"`, `id="command-action-block-domain"`,
+		`id="command-action-search-server-logs"`, `id="command-action-search-query-logs"`, `id="command-action-search-cache"`,
+		`id="command-action-search-blocked"`, `data-command-focus="[data-domain-search=domains]"`,
+		`id="command-action-search-allowed"`, `data-command-focus="[data-domain-search=allowed]"`,
+		`data-command-search-mode-label="Domain"`, `data-command-search-alt-label="Client IP"`,
+		`data-command-search-alt-param="client_ip"`, `data-command-search-alt-focus="#query-log-filters input[name=&#39;client_ip&#39;]"`,
+		`data-command-search-alt-prompt="Search query logs by client IP…"`,
+		`data-command-focus="#cache-browser-dialog [data-cache-search]"`, `data-command-search-prompt="Search cached domains…"`,
+		`data-command-search="true"`, `data-command-search-param="search"`, `data-command-search-param="name"`,
+		`id="command-action-pause-blocking-5"`,
+		`id="command-action-pause-blocking-15"`, `id="command-action-pause-blocking-30"`,
+		`id="command-action-pause-blocking-60"`, `id="command-action-resume-blocking"`,
+		`id="command-action-update-block-lists"`, `data-command-post="/ui/blocking/pause"`,
+		`id="command-action-flush-cache"`, `id="command-action-create-token"`,
+		`id="command-action-add-user"`, `id="command-action-add-group"`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("full-access command palette does not contain %q", expected)
+		}
+	}
+	fullAccess.ControlPlaneReadOnly = true
+	replica := renderComponent(t, CommandPalette(fullAccess))
+	for _, forbidden := range []string{
+		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `id="command-action-block-domain"`,
+		`id="command-action-pause-blocking-5"`, `id="command-action-resume-blocking"`, `id="command-action-update-block-lists"`,
+		`id="command-action-create-token"`, `id="command-action-add-user"`,
+	} {
+		if strings.Contains(replica, forbidden) {
+			t.Errorf("replica command palette unexpectedly contains %q", forbidden)
+		}
+	}
+	for _, local := range []string{`id="command-action-query"`, `id="command-action-browse-cache"`, `id="command-action-flush-cache"`} {
+		if !strings.Contains(replica, local) {
+			t.Errorf("replica command palette lost node-local action %q", local)
+		}
+	}
+
+	restricted := renderComponent(t, CommandPalette(DashboardView{}))
+	for _, forbidden := range []string{`id="command-page-zones"`, `id="command-page-settings"`, `id="command-page-administration"`} {
+		if strings.Contains(restricted, forbidden) {
+			t.Errorf("restricted command palette unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestCommandPaletteRendersSearchableEntities(t *testing.T) {
+	t.Parallel()
+
+	page := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{
+		{ID: "command-zone-penree", Label: "penree.net", Description: "Primary DNS zone", Icon: "globe", Kind: "Zone", Keywords: "dns zone primary", Href: "/zones/penree.net"},
+		{ID: "command-zone-search-penree", Label: "Search in penree.net", Description: "Filter records in this zone", Icon: "search", Kind: "Search", Keywords: "dns records", Route: "/zones/penree.net", Focus: "[data-record-search]", SearchPrompt: "Search records in penree.net…"},
+		{ID: "command-integration-unifi", Label: "Edit UniFi Setup", Description: "Edit controller and network mappings", Icon: "wifi-sync", Kind: "Integration", Keywords: "unifi", Href: "/integrations?setup=unifi"},
+	}}))
+	for _, expected := range []string{
+		`id="command-zones-title"`, `>Zones</h3>`, `id="command-search-title"`, `>Search actions</h3>`,
+		`id="command-integrations-title"`, `>Integrations</h3>`, `data-command-label="penree.net"`,
+		`data-command-href="/zones/penree.net"`, `>Zone</span>`,
+		`data-command-label="Search in penree.net"`, `data-command-route="/zones/penree.net"`,
+		`data-command-focus="[data-record-search]"`, `data-command-search="true"`,
+		`data-command-search-prompt="Search records in penree.net…"`, `>Search</span>`,
+		`data-command-label="Edit UniFi Setup"`, `data-command-href="/integrations?setup=unifi"`, `>Integration</span>`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("entity command palette does not contain %q", expected)
+		}
+	}
+	if strings.Contains(page, `>Sable</h3>`) {
+		t.Error("entity command palette still contains the catch-all Sable group")
+	}
+}

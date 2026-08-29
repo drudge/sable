@@ -231,7 +231,7 @@ templ IntegrationsContent(view IntegrationsPageView) {
 }
 
 templ SSOCard(view SSOAppView) {
-	<section class="card integration-card" id="sso-card">
+	<section class="card integration-card" id="sso-card" tabindex="-1">
 		<header>
 			<div class="integration-card-identity">
 				<span class="integration-card-glyph">@Icon("key-round")</span>
@@ -330,7 +330,7 @@ templ RemoveSSODialog(view SSOAppView) {
 }
 
 templ UniFiCard(view UniFiAppView) {
-	<section class="card integration-card">
+	<section class="card integration-card" id="unifi-card" tabindex="-1">
 		<header>
 			<div class="integration-card-identity">
 				<span class="integration-card-glyph">@Icon("wifi-sync")</span>
