@@ -54,11 +54,11 @@ templ AdministrationContent(view AdministrationPageView) {
 				@ControlTab(tab.Value, tab.Label, administrationTabCount(view, tab.Value), view.ActiveTab, false, tab.Icon)
 			}
 		</div>
-		<div class="isotope-tab-panel" data-isotope-panel="users" hidden?={ view.ActiveTab != "users" }>@UsersPanel(view)</div>
-		<div class="isotope-tab-panel" data-isotope-panel="groups" hidden?={ view.ActiveTab != "groups" }>@GroupsPanel(view)</div>
-		<div class="isotope-tab-panel" data-isotope-panel="permissions" hidden?={ view.ActiveTab != "permissions" }>@PermissionsPanel(view)</div>
-		<div class="isotope-tab-panel" data-isotope-panel="sessions" hidden?={ view.ActiveTab != "sessions" }>@SessionsPanel(view)</div>
-		<div class="isotope-tab-panel" data-isotope-panel="tokens" hidden?={ view.ActiveTab != "tokens" }>@TokensPanel(view)</div>
+		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="users" hidden?={ view.ActiveTab != "users" }>@UsersPanel(view)</div>
+		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="groups" hidden?={ view.ActiveTab != "groups" }>@GroupsPanel(view)</div>
+		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="permissions" hidden?={ view.ActiveTab != "permissions" }>@PermissionsPanel(view)</div>
+		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="sessions" hidden?={ view.ActiveTab != "sessions" }>@SessionsPanel(view)</div>
+		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="tokens" hidden?={ view.ActiveTab != "tokens" }>@TokensPanel(view)</div>
 		@CreateUserDialog(view.Roles, view.Console.ControlPlaneReadOnly)
 		@CreateGroupDialog(view)
 		@CreateTokenDialog(view)
@@ -74,7 +74,7 @@ templ AdministrationContent(view AdministrationPageView) {
 }
 
 templ ControlTab(value, label string, count int, active string, disabled bool, icon string) {
-	<button class={ ifThen(active == value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ value } data-tab-title={ label } aria-selected={ fmt.Sprint(active == value) } disabled?={ disabled }>
+	<button class={ ifThen(active == value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ value } data-tab-title={ label } aria-selected={ fmt.Sprint(active == value) } tabindex={ ifThen(active == value, "0", "-1") } disabled?={ disabled }>
 		if icon != "" {
 			@Icon(icon)
 		}
@@ -96,9 +96,9 @@ templ UsersPanel(view AdministrationPageView) {
 					<button type="button" class="admin-mobile-row" data-dialog-open={ adminUserDialogID(user.ID) }><div><strong>{ user.Username }</strong><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span><small>{ administrationUserName(user) }</small><span class="mobile-role-list">{ adminRoles(user.Roles) }</span></div>@Icon("chevron-right")</button>
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th></th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Users</caption><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>
 				for _, user := range view.Users {
-					<tr data-dialog-open={ adminUserDialogID(user.ID) } tabindex="0"><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span>
+					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span>
 						if len(user.Identities) > 0 {
 							<span class="status-badge sso-badge" title={ userIdentitySummary(user) }>SSO</span>
 						}
@@ -106,7 +106,7 @@ templ UsersPanel(view AdministrationPageView) {
 						for _, role := range user.Roles {
 							<span>{ role }</span>
 						}
-					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td>@Icon("chevron-right")</td></tr>
+					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td><button class="icon-button" type="button" data-dialog-open={ adminUserDialogID(user.ID) } aria-label={ "Edit " + user.Username }>@Icon("chevron-right")</button></td></tr>
 				}
 			</tbody></table></div>
 		}
@@ -124,7 +124,7 @@ templ GroupsPanel(view AdministrationPageView) {
 					<button type="button" class="admin-mobile-row" disabled?={ role.BuiltIn } data-dialog-open={ adminGroupDialogID(role.ID) }><div><strong>{ role.Name }</strong><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span><small>{ role.Description }</small></div>@Icon("chevron-right")</button>
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Name</th><th>Members</th><th>Description</th><th></th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Groups</caption><thead><tr><th>Name</th><th>Members</th><th>Description</th><th>Actions</th></tr></thead><tbody>
 				for _, role := range view.Roles {
 					<tr><td><strong>{ role.Name }</strong>
 						if role.BuiltIn {
@@ -152,7 +152,7 @@ templ PermissionsPanel(view AdministrationPageView) {
 					<article class="admin-mobile-row static"><div><strong>{ permission }</strong><small>{ fmt.Sprint(permissionRoleCount(view.Roles, permission)) } groups</small></div>@Icon("chevron-right")</article>
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Permission</th><th>Web UI Groups</th><th>API Groups</th><th>Resource</th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Permissions by group and interface</caption><thead><tr><th>Permission</th><th>Web UI Groups</th><th>API Groups</th><th>Resource</th></tr></thead><tbody>
 				for _, permission := range view.Permissions {
 					<tr><td><strong>{ permission }</strong></td><td><div class="table-badges">
 						for _, role := range permissionRolesForSurface(view.Roles, permission, auth.SurfaceWeb) {
@@ -180,7 +180,7 @@ templ SessionsPanel(view AdministrationPageView) {
 					@SessionMobileRow(view, session)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Session</th><th>Created</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Active sessions</caption><thead><tr><th>Username</th><th>Session</th><th>Created</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
 				for _, session := range view.Sessions {
 					<tr><td><strong>{ session.Username }</strong>
 						if session.Current {
@@ -204,7 +204,7 @@ templ TokensPanel(view AdministrationPageView) {
 					@TokenMobileRow(view, token)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><thead><tr><th>Username</th><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">API tokens</caption><thead><tr><th>Username</th><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
 				for _, token := range view.Tokens {
 					<tr><td><strong>{ token.Username }</strong></td><td><code>{ token.Name }</code></td><td><div class="table-badges">
 						for _, group := range token.Groups {
@@ -233,7 +233,7 @@ templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
 templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</small></article> }
 
 templ CreateTokenDialog(view AdministrationPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog"><div class="dialog-header"><h2>Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
+	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog" aria-labelledby="create-token-title"><div class="dialog-header"><h2 id="create-token-title">Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
 		<label><span>Expiration</span><select name="expiration" required>
 			<option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option>
 			<option value="24h">1 day</option>
@@ -262,8 +262,8 @@ templ CreateTokenDialog(view AdministrationPageView) {
 }
 
 templ CreateUserDialog(roles []auth.Role, readOnly bool) {
-	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id="create-user-dialog" data-dialog-tabs>
-		<div class="dialog-header"><h2>Add User</h2><p>Create a user or API-only identity</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id="create-user-dialog" data-dialog-tabs aria-labelledby="create-user-title">
+		<div class="dialog-header"><h2 id="create-user-title">Add User</h2><p>Create a user or API-only identity</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<div class="dialog-tab-list" role="tablist" aria-label="New user settings"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Group Membership</button></div>
 		<form class="user-dialog-content" hx-post="/ui/administration/users" hx-target="#administration-content" hx-swap="outerHTML" data-create-user-form>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="info"><div class="field-grid two"><label class="field-control"><span>Display Name</span><input name="display_name" maxlength="128" autocomplete="name"/></label><label class="field-control"><span>Username</span><input name="username" minlength="3" maxlength="64" pattern="[a-z0-9._-]+" autocomplete="off" aria-describedby="create-user-username-help create-user-username-error" required data-user-username/><small id="create-user-username-help">3–64 lowercase letters, numbers, dots, underscores, or hyphens.</small><small class="field-error" id="create-user-username-error" data-username-error hidden></small></label></div><label class="field-control"><span>Email</span><input type="email" name="email" maxlength="254" placeholder="name@example.com" autocomplete="email"/></label><div class="field-grid two" data-web-access-passwords hidden><label class="field-control"><span>Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" aria-describedby="create-user-password-help create-user-password-error" disabled data-user-password/></label><label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" disabled data-user-password-confirm/></label><p class="field-help" id="create-user-password-help">A password of at least 12 characters is required because the selected groups grant Web UI access.</p><p class="field-error field-grid-message" id="create-user-password-error" data-password-error hidden></p></div></section>
@@ -274,11 +274,11 @@ templ CreateUserDialog(roles []auth.Role, readOnly bool) {
 }
 
 templ CreateGroupDialog(view AdministrationPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id="create-group-dialog"><div class="dialog-header"><h2>Add Group</h2><p>Create a group with separate Web UI and API permissions</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button></footer></form></dialog>
+	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id="create-group-dialog" aria-labelledby="create-group-title"><div class="dialog-header"><h2 id="create-group-title">Add Group</h2><p>Create a group with separate Web UI and API permissions</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button></footer></form></dialog>
 }
 
 templ EditGroupDialog(view AdministrationPageView, role auth.Role) {
-	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id={ adminGroupDialogID(role.ID) }><div class="dialog-header"><h2>Edit Group</h2><p>{ role.Name } permissions and zone access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button></footer></form></dialog>
+	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id={ adminGroupDialogID(role.ID) } aria-labelledby={ adminGroupDialogID(role.ID) + "-title" }><div class="dialog-header"><h2 id={ adminGroupDialogID(role.ID) + "-title" }>Edit Group</h2><p>{ role.Name } permissions and zone access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button></footer></form></dialog>
 }
 
 templ GroupGrantFields(view AdministrationPageView, role *auth.Role) {
@@ -301,8 +301,8 @@ templ SurfaceGrantFields(view AdministrationPageView, role *auth.Role, surface a
 }
 
 templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
-	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id={ adminUserDialogID(user.ID) } data-dialog-tabs>
-		<div class="dialog-header"><h2>Edit User</h2><p>Update user account details</p></div>
+	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id={ adminUserDialogID(user.ID) } aria-labelledby={ adminUserDialogID(user.ID) + "-title" } data-dialog-tabs>
+		<div class="dialog-header"><h2 id={ adminUserDialogID(user.ID) + "-title" }>Edit User</h2><p>Update user account details</p></div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<div class="dialog-tab-list four" role="tablist" aria-label="User settings">
 			<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button>

@@ -70,6 +70,17 @@ a { color: inherit; text-decoration: none; }
 button, input, select { color: inherit; font: inherit; }
 button { cursor: pointer; }
 
+/* Keyboard users reach the two persistent application landmarks before the
+   sidebar's controls. The links stay out of sight until they receive focus. */
+.skip-links { position: fixed; top: .5rem; left: .5rem; z-index: 200; display: flex; gap: .5rem; pointer-events: none; }
+.skip-links a { position: absolute; width: max-content; max-width: calc(100vw - 1rem); border: 2px solid var(--ring); border-radius: .4rem; background: var(--background); padding: .6rem .8rem; color: var(--foreground); font-weight: 700; box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .22); opacity: 0; pointer-events: auto; transform: translateY(-150%); }
+.skip-links a:focus { position: relative; opacity: 1; transform: translateY(0); }
+
+/* Interactive elements share one unmistakable keyboard focus treatment. More
+   specific component rules may adjust the offset without removing the ring. */
+:where(a, button, summary, [tabindex]):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+:where(.main, .nav, section[tabindex="-1"]):focus-visible { outline: 3px solid var(--ring); outline-offset: -3px; }
+
 .app-shell { display: flex; min-height: 100vh; width: 100%; }
 .sidebar {
   position: sticky;
@@ -2305,7 +2316,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .logs-toolbar-actions .nav-icon { width: .9rem; height: .9rem; }
 .logs-toolbar-actions .live.active { border-color: rgb(16 185 129 / .55); color: #10b981; }
 .runtime-level-field { display: block; width: 9rem; }
-.runtime-log-viewer { height: min(38rem, calc(100vh - 22rem)); min-height: 20rem; overflow: auto; background: color-mix(in oklch, var(--background) 90%, #000); padding: .75rem 0; font: .72rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.runtime-log-viewer { height: min(38rem, calc(100vh - 22rem)); min-height: 20rem; overflow: auto; background: color-mix(in oklch, var(--background) 90%, #000); padding: .75rem 0; scroll-padding: .75rem; font: .72rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .runtime-log-line { display: grid; grid-template-columns: 11.75rem 3.5rem minmax(12rem, auto) minmax(0, 1fr); gap: .75rem; padding: .18rem 1.25rem; }
 .runtime-log-line:hover { background: color-mix(in oklch, var(--muted) 55%, transparent); }
 .runtime-log-line time, .runtime-log-attributes { color: var(--muted-foreground); }
@@ -2384,7 +2395,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .log-result-actions .nav-icon { width: .9rem; height: .9rem; }
 /* The query table stops growing where the runtime viewer stops, so the two
    tabs stand the same height instead of one of them scrolling the page. */
-.query-log-table-scroll { max-height: min(38rem, calc(100vh - 22rem)); min-height: 18rem; overflow: auto; }
+.query-log-table-scroll { max-height: min(38rem, calc(100vh - 22rem)); min-height: 18rem; overflow: auto; scroll-padding: 2.5rem 0; }
 .isotope-query-log-table thead { position: sticky; top: 0; z-index: 2; background: color-mix(in oklch, var(--muted) 82%, transparent); backdrop-filter: blur(8px); }
 .isotope-query-log-table th { text-transform: none; letter-spacing: 0; }
 .isotope-query-log-table td { height: auto; min-height: 3.5rem; padding-block: .65rem; }
@@ -2404,12 +2415,12 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-fold, .query-fold-tight { display: none; }
 .query-name-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotope-query-log-table tr[data-query-detail-row] { cursor: pointer; }
-.query-col-actions, .query-row-actions { width: 4.25rem; text-align: right; }
+.query-col-actions, .query-row-actions { width: 6rem; text-align: right; }
 .query-row-actions { white-space: nowrap; }
 .query-row-actions form { display: inline-flex; }
 .query-row-actions > * { vertical-align: middle; }
 .query-detail-button, .query-policy-action { width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
-.query-detail-button { display: none; }
+.query-detail-button { display: inline-grid; }
 .query-detail-button:hover, .query-detail-button:focus-visible { background: var(--accent); color: var(--foreground); }
 .query-policy-action { display: inline-grid; opacity: 0; transition: opacity 140ms, color 140ms, background 140ms; }
 .isotope-query-log-table tr:hover .query-policy-action, .query-row-actions:focus-within .query-policy-action { opacity: 1; }
@@ -2802,6 +2813,19 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 @media (max-width: 640px) {
   .tsig-key-row { grid-template-columns: 1.5rem minmax(0, 1fr) 2rem; padding-inline: .75rem; }
   .tsig-key-row .button.compact { grid-column: 2 / -1; justify-self: start; }
+}
+
+/* Motion preferences cover every interaction, including swapped fragments and
+   third-party loading indicators, rather than relying on each component. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+@media (forced-colors: active) {
+  :where(a, button, summary, input, select, textarea, [tabindex]):focus-visible { outline-color: Highlight; }
+  .nav-item.active, .isotope-tab.active, [role="tab"][aria-selected="true"] { border: 1px solid Highlight; }
+  .source-pill, .rcode, .status-badge, .domain-policy-badge { border: 1px solid currentColor !important; }
 }
 
 /* htmx injects these two rules as an inline <style> element on load, which the

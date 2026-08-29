@@ -40,7 +40,7 @@ templ ProfileContent(view ProfilePageView) {
 		<header class="page-heading"><h1>Profile</h1><p>Manage your account, password, and API tokens</p></header>
 		<nav class="isotope-tab-list profile-tabs" aria-label="Profile sections">
 			for _, tab := range profileTabs {
-				<a class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } href={ profileTabHref(tab.Value) }>
+				<a class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } href={ profileTabHref(tab.Value) } aria-current={ ifThen(view.ActiveTab == tab.Value, "page", "false") }>
 					@Icon(tab.Icon)
 					<span>{ tab.Label }</span>
 					if tab.Value == "tokens" {
@@ -113,7 +113,7 @@ templ ProfileTokens(view ProfilePageView) {
 					@ProfileTokenMobileRow(view, token)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table profile-token-table"><thead><tr><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			<div class="admin-desktop-table"><table class="isotope-table profile-token-table"><caption class="sr-only">Your API tokens</caption><thead><tr><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
 				for _, token := range view.Tokens {
 					<tr><td><strong>{ token.Name }</strong></td><td><div class="table-badges">
 						for _, group := range token.Groups {

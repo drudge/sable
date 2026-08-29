@@ -11,6 +11,12 @@
 
 	document.addEventListener("DOMContentLoaded", () => {
 	let dashboardStatSnapshot = new Map();
+	const announce = (message) => {
+	  const region = document.querySelector("[data-a11y-announcer]");
+	  if (!region || !message) return;
+	  region.textContent = "";
+	  window.requestAnimationFrame(() => { region.textContent = message; });
+	};
 	const dashboardStatKey = (element) => {
 	  const card = element.closest("[data-stat-label]");
 	  if (!card) return "";
@@ -215,6 +221,7 @@
 		draftName.value = customName.value;
 		draftIP.value = customIP.value;
 		updateCustomDraft();
+		dialog.sableReturnFocus = customEdit;
 		dialog.showModal();
 		draftName.focus();
 	  };
@@ -372,7 +379,7 @@
 		});
 	  };
 
-	  const renderCalendar = () => {
+	  const renderCalendar = (focusValue = "") => {
 		monthSelect.value = String(cursor.getMonth());
 		yearSelect.value = String(cursor.getFullYear());
 		updateMonthOptions();
@@ -390,7 +397,6 @@
 		  const cell = document.createElement("div");
 		  const button = document.createElement("button");
 		  cell.className = "calendar-day";
-		  cell.setAttribute("role", "gridcell");
 		  if (date.getMonth() !== cursor.getMonth()) cell.classList.add("outside-month");
 		  if (value === todayKey) cell.classList.add("today");
 		  if (value >= selectedStart && value <= selectedEnd) cell.classList.add("in-range");
@@ -399,13 +405,15 @@
 		  button.type = "button";
 		  button.dataset.rangeDate = value;
 		  button.textContent = String(date.getDate());
-		  button.disabled = date.getFullYear() < minimumYear;
+		  button.disabled = date.getFullYear() < minimumYear || value > todayKey;
+		  button.tabIndex = value === dateKey(cursor) ? 0 : -1;
 		  button.setAttribute("aria-label", date.toLocaleDateString(undefined, {year: "numeric", month: "long", day: "numeric"}));
-		  button.setAttribute("aria-selected", String(value >= selectedStart && value <= selectedEnd));
+		  button.setAttribute("aria-pressed", String(value >= selectedStart && value <= selectedEnd));
 		  cell.append(button);
 		  fragment.append(cell);
 		}
 		grid.replaceChildren(fragment);
+		if (focusValue) grid.querySelector(`[data-range-date="${CSS.escape(focusValue)}"]`)?.focus();
 	  };
 
 	  const open = () => {
@@ -434,6 +442,27 @@
 	  previous.addEventListener("click", () => {
 		cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1, 12);
 		renderCalendar();
+	  });
+	  grid.addEventListener("keydown", (event) => {
+		const button = event.target.closest("[data-range-date]");
+		if (!button) return;
+		const active = parseDate(button.dataset.rangeDate);
+		let target = new Date(active);
+		if (event.key === "ArrowLeft") target.setDate(target.getDate() - 1);
+		else if (event.key === "ArrowRight") target.setDate(target.getDate() + 1);
+		else if (event.key === "ArrowUp") target.setDate(target.getDate() - 7);
+		else if (event.key === "ArrowDown") target.setDate(target.getDate() + 7);
+		else if (event.key === "Home") target.setDate(target.getDate() - target.getDay());
+		else if (event.key === "End") target.setDate(target.getDate() + (6 - target.getDay()));
+		else if (event.key === "PageUp") target.setMonth(target.getMonth() - 1);
+		else if (event.key === "PageDown") target.setMonth(target.getMonth() + 1);
+		else return;
+		event.preventDefault();
+		const earliest = new Date(minimumYear, 0, 1, 12);
+		if (target < earliest) target = earliest;
+		if (target > today) target = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12);
+		cursor = target;
+		renderCalendar(dateKey(target));
 	  });
 	  next.addEventListener("click", () => {
 		cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12);
@@ -466,7 +495,7 @@
 		}
 		cursor = parseDate(value);
 		syncValues();
-		renderCalendar();
+		renderCalendar(value);
 	  });
 	  startTime.addEventListener("input", syncValues);
 	  endTime.addEventListener("input", syncValues);
@@ -525,6 +554,7 @@
 
 	  const layer = plot.querySelector("[data-chart-hover-layer]");
 	  const tooltip = plot.querySelector("[data-chart-tooltip]");
+	  const keyboardStatus = plot.querySelector("[data-chart-keyboard-status]");
 	  const svg = plot.querySelector("svg");
 	  if (!layer || !tooltip || !svg) return;
 	  let data;
@@ -579,7 +609,8 @@
 		return closest;
 	  };
 
-	  const show = (index, clientY) => {
+	  let keyboardIndex = data.x.length - 1;
+	  const show = (index, clientY, announceSample = false) => {
 		const rect = svg.getBoundingClientRect();
 		const ratio = data.x[index] / box.width;
 		crosshair.style.left = `${ratio * 100}%`;
@@ -591,6 +622,9 @@
 		  amounts[position].textContent = value.toLocaleString();
 		});
 		time.textContent = data.times[index] || "";
+		if (announceSample && keyboardStatus) {
+		  keyboardStatus.textContent = [data.times[index] || "Sample", ...series.map((entry) => `${entry.label}: ${(entry.values[index] || 0).toLocaleString()}`)].join(". ");
+		}
 		layer.hidden = false;
 		tooltip.hidden = false;
 		const left = ratio * rect.width;
@@ -616,6 +650,23 @@
 	  plot.addEventListener("pointermove", track);
 	  plot.addEventListener("pointerleave", hide);
 	  plot.addEventListener("pointercancel", hide);
+	  plot.addEventListener("focus", () => {
+		keyboardIndex = Math.max(0, data.x.length - 1);
+		show(keyboardIndex, undefined, true);
+	  });
+	  plot.addEventListener("keydown", (event) => {
+		let next = keyboardIndex;
+		if (event.key === "ArrowLeft") next--;
+		else if (event.key === "ArrowRight") next++;
+		else if (event.key === "Home") next = 0;
+		else if (event.key === "End") next = data.x.length - 1;
+		else if (event.key === "Escape") { hide(); return; }
+		else return;
+		event.preventDefault();
+		keyboardIndex = Math.max(0, Math.min(next, data.x.length - 1));
+		show(keyboardIndex, undefined, true);
+	  });
+	  plot.addEventListener("blur", hide);
 
 	  // A refresh replaces this plot while the pointer rests on it, and a
 	  // replaced element never sees another pointer event until the pointer
@@ -695,6 +746,27 @@
 	  panel.addEventListener("pointermove", track);
 	  panel.addEventListener("pointerleave", hide);
 	  panel.addEventListener("pointercancel", hide);
+	  panel.addEventListener("focusin", (event) => {
+		const segment = segmentFor(event.target);
+		if (!segment) return;
+		const rect = event.target.getBoundingClientRect();
+		show(segment, rect.left + rect.width / 2, rect.top + rect.height / 2);
+	  });
+	  panel.addEventListener("focusout", () => window.setTimeout(() => {
+		if (!panel.contains(document.activeElement)) hide();
+	  }));
+	  panel.addEventListener("keydown", (event) => {
+		const current = event.target.closest?.("[data-donut-legend]");
+		if (!current) return;
+		let index = legends.indexOf(current);
+		if (event.key === "ArrowLeft" || event.key === "ArrowUp") index--;
+		else if (event.key === "ArrowRight" || event.key === "ArrowDown") index++;
+		else if (event.key === "Home") index = 0;
+		else if (event.key === "End") index = legends.length - 1;
+		else return;
+		event.preventDefault();
+		legends[(index + legends.length) % legends.length]?.focus();
+	  });
 
 	  // The dashboard refreshes under a resting pointer, and the replacement
 	  // panel never sees a pointer event until the pointer moves. Redraw for
@@ -763,12 +835,42 @@
 	  if (!base) return;
 	  document.title = [label, base, APP_NAME].filter(Boolean).join(TITLE_SEPARATOR);
 	};
+	let tabSetSequence = 0;
+	const connectTabSet = (root, tabs, panels, tabValue, panelValue) => {
+	  const prefix = root.id || root.dataset.a11yTabPrefix || `sable-tabset-${++tabSetSequence}`;
+	  root.dataset.a11yTabPrefix = prefix;
+	  tabs.forEach((tab) => {
+		const value = tab.dataset[tabValue];
+		const panel = panels.find((candidate) => candidate.dataset[panelValue] === value);
+		if (!value || !panel) return;
+		if (!tab.id) tab.id = `${prefix}-tab-${value}`;
+		if (!panel.id) panel.id = `${prefix}-panel-${value}`;
+		tab.setAttribute("aria-controls", panel.id);
+		panel.setAttribute("role", "tabpanel");
+		panel.setAttribute("aria-labelledby", tab.id);
+		panel.tabIndex = 0;
+	  });
+	};
+	const tabFromKey = (tabs, current, event) => {
+	  const enabled = tabs.filter((tab) => !tab.disabled && tab.getAttribute("aria-disabled") !== "true");
+	  const index = enabled.indexOf(current);
+	  if (index < 0) return null;
+	  const vertical = current.closest("[role=tablist]")?.getAttribute("aria-orientation") === "vertical";
+	  let offset = 0;
+	  if (event.key === "Home") return enabled[0];
+	  if (event.key === "End") return enabled.at(-1);
+	  if ((!vertical && event.key === "ArrowRight") || (vertical && event.key === "ArrowDown")) offset = 1;
+	  if ((!vertical && event.key === "ArrowLeft") || (vertical && event.key === "ArrowUp")) offset = -1;
+	  if (!offset) return null;
+	  return enabled[(index + offset + enabled.length) % enabled.length];
+	};
 
 	const setupIsotopeTabs = (root) => {
 	  if (!root || root.dataset.isotopeTabsReady === "true") return;
 	  root.dataset.isotopeTabsReady = "true";
 	  const tabs = [...root.querySelectorAll(":scope > [role=tablist] [data-isotope-tab]")];
 	  const panels = [...root.querySelectorAll(":scope > [data-isotope-panel], :scope > form > [data-isotope-panel]")];
+	  connectTabSet(root, tabs, panels, "isotopeTab", "isotopePanel");
 	  const select = (value, updateURL = true) => {
 		const selected = tabs.find((tab) => tab.dataset.isotopeTab === value && !tab.disabled);
 		if (!selected) return;
@@ -789,15 +891,12 @@
 		  window.history.replaceState(window.history.state, "", url);
 		}
 	  };
-	  tabs.forEach((tab, index) => {
+	  tabs.forEach((tab) => {
 		tab.addEventListener("click", () => select(tab.dataset.isotopeTab));
 		tab.addEventListener("keydown", (event) => {
-		  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+		  const next = tabFromKey(tabs, tab, event);
+		  if (!next) return;
 		  event.preventDefault();
-		  const enabled = tabs.filter((candidate) => !candidate.disabled);
-		  const current = enabled.indexOf(tab);
-		  const direction = event.key === "ArrowRight" ? 1 : -1;
-		  const next = enabled[(current + direction + enabled.length) % enabled.length];
 		  next.focus();
 		  select(next.dataset.isotopeTab);
 		});
@@ -976,9 +1075,12 @@
 	// request instead of an htmx one.
 	const confirmAction = (question, options = {}) =>
 	  new Promise((resolve) => {
+		const returnFocus = document.activeElement;
 		const dialog = document.createElement("dialog");
 		dialog.className = "custom-server-dialog confirmation-dialog";
-		dialog.innerHTML = `<div class="dialog-header"><h2></h2><p></p></div><footer class="dialog-footer"><button class="button outline" type="button" data-confirm-cancel>Cancel</button><button class="button" type="button" data-confirm-accept></button></footer>`;
+		dialog.setAttribute("aria-labelledby", "sable-confirm-title");
+		dialog.setAttribute("aria-describedby", "sable-confirm-description");
+		dialog.innerHTML = `<div class="dialog-header"><h2 id="sable-confirm-title"></h2><p id="sable-confirm-description"></p></div><footer class="dialog-footer"><button class="button outline" type="button" data-confirm-cancel>Cancel</button><button class="button" type="button" data-confirm-accept></button></footer>`;
 		dialog.querySelector("h2").textContent = options.title || "Confirm action";
 		dialog.querySelector("p").textContent = question;
 		const accept = dialog.querySelector("[data-confirm-accept]");
@@ -988,6 +1090,7 @@
 		let accepted = false;
 		dialog.addEventListener("close", () => {
 		  dialog.remove();
+		  if (returnFocus?.isConnected) returnFocus.focus();
 		  resolve(accepted);
 		}, {once: true});
 		dialog.querySelector("[data-confirm-cancel]").addEventListener("click", () => dialog.close());
@@ -1105,6 +1208,7 @@
 	  root.dataset.dialogTabsReady = "true";
 	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")];
 	  const panels = [...root.querySelectorAll("[data-dialog-panel]")];
+	  connectTabSet(root, tabs, panels, "dialogTab", "dialogPanel");
 	  const select = (value, focus = false) => {
 		const selected = tabs.find((tab) => tab.dataset.dialogTab === value);
 		if (!selected) return;
@@ -1122,11 +1226,10 @@
 	  tabs.forEach((tab) => {
 		tab.addEventListener("click", () => select(tab.dataset.dialogTab));
 		tab.addEventListener("keydown", (event) => {
-		  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+		  const next = tabFromKey(tabs, tab, event);
+		  if (!next) return;
 		  event.preventDefault();
-		  const current = tabs.indexOf(tab);
-		  const direction = event.key === "ArrowRight" ? 1 : -1;
-		  select(tabs[(current + direction + tabs.length) % tabs.length].dataset.dialogTab, true);
+		  select(next.dataset.dialogTab, true);
 		});
 	  });
 	  root.sableResetDialogTabs = () => select(tabs[0]?.dataset.dialogTab);
@@ -1312,15 +1415,15 @@
 	  };
 	  let holdUntil = 0;
 	  let pollRequest = null;
-	  // A refresh replaces the whole panel, so it waits while someone is working a
-	  // control inside it rather than swapping the field out mid-keystroke. Focus
+	  // A refresh replaces the whole panel, so it waits while someone is reading
+	  // or operating anything inside it rather than stealing keyboard focus. Focus
 	  // cannot answer that on its own: Safari leaves a clicked <select> unfocused,
 	  // so an open level menu would read as idle and the refresh would tear the
 	  // menu out before the pick could land. A pointer on a control holds the
 	  // refresh off until the pick lands or the hold lapses.
 	  const inUse = () => {
 		const active = document.activeElement;
-		if (active && panel.contains(active) && active.matches("input, select, textarea")) return true;
+		if (active && active !== panel && panel.contains(active)) return true;
 		if (panel.querySelector("dialog[open]")) return true;
 		return performance.now() < holdUntil;
 	  };
@@ -1368,6 +1471,7 @@
 		button.setAttribute("aria-pressed", String(live));
 		if (label) label.textContent = live ? "Pause" : "Live";
 		if (input) input.value = live ? "1" : "0";
+		announce(live ? "Live log updates started" : "Live log updates paused");
 		syncLiveURL(live);
 		if (live) { poll(); start(); } else stop();
 	  });
@@ -1377,6 +1481,7 @@
 		else filtersPanel?.setAttribute("hidden", "");
 		filtersButton.classList.toggle("active", open);
 		filtersButton.setAttribute("aria-expanded", String(open));
+		announce(open ? "Query log filters expanded" : "Query log filters collapsed");
 		const liveURL = new URL(panel.dataset.liveUrl, window.location.origin);
 		if (open) liveURL.searchParams.set("filters", "1");
 		else liveURL.searchParams.delete("filters");
@@ -1388,9 +1493,13 @@
 		syncSearchClear(resultSearch);
 	  }
 	  const applyResultSearch = (search) => {
+		let visible = 0;
 		panel.querySelectorAll("[data-query-result-row]").forEach((row) => {
-		  row.hidden = search !== "" && !row.textContent.toLowerCase().includes(search);
+		  const matches = search === "" || row.textContent.toLowerCase().includes(search);
+		  row.hidden = !matches;
+		  if (matches) visible++;
 		});
+		if (search && document.activeElement === resultSearch) announce(`${visible} query results shown`);
 	  };
 	  applyResultSearch(queryResultSearch);
 	  resultSearch?.addEventListener("input", (event) => {
@@ -1403,7 +1512,7 @@
 		target.searchParams.set("page", "1");
 		target.searchParams.set("page_size", event.target.value);
 		target.searchParams.set("live", panel.dataset.live === "true" ? "1" : "0");
-		htmx.ajax("GET", target.pathname + target.search, {source: panel, target: `#${panel.id}`, swap: "outerHTML"});
+		htmx.ajax("GET", target.pathname + target.search, {source: panel, target: `#${panel.id}`, swap: "outerHTML", event});
 	  });
 	  start();
 	};
@@ -1442,11 +1551,54 @@
 	  }
 	  const total = dialog.querySelector("[data-top-stats-total]");
 	  if (total) total.textContent = `${hits.toLocaleString()} hits`;
+	  if (dialog.open && dialog.contains(document.activeElement)) announce(`${visible.toLocaleString()} results shown`);
+	};
+	let dialogLabelSequence = 0;
+	const setupDialogAccessibility = (dialog) => {
+	  if (!dialog || dialog.dataset.dialogA11yReady === "true") return;
+	  dialog.dataset.dialogA11yReady = "true";
+	  if (!dialog.hasAttribute("aria-label") && !dialog.hasAttribute("aria-labelledby")) {
+		const heading = dialog.querySelector("h1, h2, h3");
+		if (heading) {
+		  if (!heading.id) heading.id = `sable-dialog-title-${++dialogLabelSequence}`;
+		  dialog.setAttribute("aria-labelledby", heading.id);
+		}
+	  }
+	  dialog.addEventListener("close", () => {
+		const returnFocus = dialog.sableReturnFocus;
+		dialog.sableReturnFocus = null;
+		if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
+	  });
+	};
+	const setupScrollableRegion = (region) => {
+	  if (!region || region.dataset.a11yScrollReady === "true") return;
+	  region.dataset.a11yScrollReady = "true";
+	  const sync = () => {
+		const scrollable = region.scrollWidth > region.clientWidth + 1 || region.scrollHeight > region.clientHeight + 1;
+		if (scrollable) {
+		  region.tabIndex = 0;
+		  region.setAttribute("role", "region");
+		  if (!region.hasAttribute("aria-label") && !region.hasAttribute("aria-labelledby")) {
+			region.setAttribute("aria-label", region.querySelector("caption")?.textContent?.trim() || "Scrollable content");
+		  }
+		} else if (region.dataset.a11yScrollManaged === "true") {
+		  region.removeAttribute("tabindex");
+		  region.removeAttribute("role");
+		  region.removeAttribute("aria-label");
+		}
+		region.dataset.a11yScrollManaged = String(scrollable);
+	  };
+	  window.requestAnimationFrame(sync);
+	  if (window.ResizeObserver) new ResizeObserver(sync).observe(region);
 	};
 
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
+	  if (root.matches?.("dialog")) setupDialogAccessibility(root);
+	  root.querySelectorAll?.("dialog").forEach(setupDialogAccessibility);
+	  if (root.matches?.(".table-scroll, .admin-desktop-table")) setupScrollableRegion(root);
+	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
 	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
 	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
 	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
@@ -1482,6 +1634,34 @@
 	  if (root.matches?.('[role="progressbar"]')) syncProgressFill(root);
 	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
+	const describeFocus = (element) => element && element !== document.body ? {
+	  id: element.id,
+	  tag: element.tagName,
+	  name: element.getAttribute("name"),
+	  label: element.getAttribute("aria-label"),
+	  type: element.getAttribute("type"),
+	  text: element.textContent?.trim(),
+	} : null;
+	const restoreFocus = (root, descriptor) => {
+	  if (!root || !descriptor) return false;
+	  let match = descriptor.id ? document.getElementById(descriptor.id) : null;
+	  if (!match) {
+		const candidates = [root, ...(root.querySelectorAll?.(descriptor.tag.toLowerCase()) || [])]
+		  .filter((candidate) => candidate.tagName === descriptor.tag);
+		match = candidates.find((candidate) => descriptor.label && candidate.getAttribute("aria-label") === descriptor.label) ||
+		  candidates.find((candidate) => descriptor.name && candidate.getAttribute("name") === descriptor.name && candidate.getAttribute("type") === descriptor.type) ||
+		  candidates.find((candidate) => descriptor.text && candidate.textContent?.trim() === descriptor.text);
+	  }
+	  if (!match || match.disabled || match.hidden) return false;
+	  match.focus({preventScroll: true});
+	  return document.activeElement === match;
+	};
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (!ctx || ctx.sourceEvent?.isTrusted !== true) return;
+	  ctx.sableA11yUserRequest = true;
+	  if (ctx.target?.contains(document.activeElement)) ctx.sableA11yFocus = describeFocus(document.activeElement);
+	});
 
 	// htmx 4 swaps error responses by default. Keep bare server errors out of UI
 	// targets while allowing handlers that rendered a complete console fragment,
@@ -1495,7 +1675,15 @@
 	  const statsTask = event.detail?.tasks?.find((task) => task.type === "oob" && task.target?.id === "runtime-stats");
 	  if (statsTask) dashboardStatSnapshot = captureDashboardStats(statsTask.target);
 	});
-	document.body.addEventListener("htmx:after:swap", () => {
+	document.body.addEventListener("htmx:after:swap", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (ctx?.sableA11yUserRequest) {
+		const target = ctx.target;
+		const activeWasReplaced = !document.activeElement || document.activeElement === document.body;
+		if (activeWasReplaced && !restoreFocus(target, ctx.sableA11yFocus) && target?.focus) target.focus({preventScroll: true});
+		const heading = target?.querySelector?.("h1, h2, h3")?.textContent?.trim();
+		announce(`${heading || "Content"} updated`);
+	  }
 	  if (dashboardStatSnapshot.size === 0) return;
 	  const current = document.querySelector("#runtime-stats");
 	  const snapshot = dashboardStatSnapshot;
@@ -1612,21 +1800,39 @@
 		  const active = button.dataset.themeValue === selected;
 		  button.classList.toggle("active", active);
 		  button.setAttribute("aria-checked", String(active));
+		  button.tabIndex = active ? 0 : -1;
 		});
 	  };
 	  document.querySelectorAll("[data-theme-value]").forEach((button) => {
-		button.addEventListener("click", () => applyTheme(button.dataset.themeValue));
+		button.addEventListener("click", () => {
+		  applyTheme(button.dataset.themeValue);
+		  announce(`${button.textContent.trim()} theme selected`);
+		});
+		button.addEventListener("keydown", (event) => {
+		  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+		  event.preventDefault();
+		  const options = [...button.closest("[role=radiogroup]").querySelectorAll("[data-theme-value]")];
+		  const current = options.indexOf(button);
+		  let index = current;
+		  if (event.key === "Home") index = 0;
+		  else if (event.key === "End") index = options.length - 1;
+		  else index = (current + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + options.length) % options.length;
+		  applyTheme(options[index].dataset.themeValue);
+		  options[index].focus();
+		});
 	  });
 	  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
 		if (currentTheme() === "system") applyTheme("system");
 	  });
 	  applyTheme(currentTheme());
 
-	  const closeAccountMenus = (except = null) => {
+	  const closeAccountMenus = (except = null, restoreFocus = false) => {
 		document.querySelectorAll("[data-account-menu]").forEach((menu) => {
 		  if (menu === except) return;
 		  menu.querySelector("[data-account-popover]")?.setAttribute("hidden", "");
-		  menu.querySelector("[data-account-trigger]")?.setAttribute("aria-expanded", "false");
+		  const trigger = menu.querySelector("[data-account-trigger]");
+		  trigger?.setAttribute("aria-expanded", "false");
+		  if (restoreFocus && menu.contains(document.activeElement)) trigger?.focus();
 		});
 	  };
 	  document.querySelectorAll("[data-account-menu]").forEach((menu) => {
@@ -1640,11 +1846,30 @@
 		  popover.toggleAttribute("hidden", !opening);
 		  trigger.setAttribute("aria-expanded", String(opening));
 		});
+		trigger.addEventListener("keydown", (event) => {
+		  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+		  event.preventDefault();
+		  if (popover.hidden) trigger.click();
+		  const controls = [...popover.querySelectorAll('a[href], button:not([disabled]):not([tabindex="-1"])')];
+		  (event.key === "ArrowDown" ? controls[0] : controls.at(-1))?.focus();
+		});
+		popover.addEventListener("keydown", (event) => {
+		  if (event.target.closest("[role=radiogroup]") || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		  const controls = [...popover.querySelectorAll('a[href], button:not([disabled]):not([tabindex="-1"])')];
+		  const current = controls.indexOf(event.target.closest("a, button"));
+		  if (current < 0) return;
+		  event.preventDefault();
+		  let index = event.key === "Home" ? 0 : event.key === "End" ? controls.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		  controls[(index + controls.length) % controls.length]?.focus();
+		});
+		menu.addEventListener("focusout", () => window.setTimeout(() => {
+		  if (!menu.contains(document.activeElement)) closeAccountMenus();
+		}));
 		popover.addEventListener("click", (event) => event.stopPropagation());
 	  });
 	  document.addEventListener("click", () => closeAccountMenus());
 	  document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape") closeAccountMenus();
+		if (event.key === "Escape") closeAccountMenus(null, true);
 	  });
 
 	// The collapsed sidebar hides nav labels, so hover and focus get a floating
@@ -1692,18 +1917,29 @@
 	})();
 
 	const syncSidebarToggleState = () => {
+	  const mobile = window.matchMedia("(max-width: 767px)").matches;
 	  const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
+	  const mobileOpen = document.documentElement.classList.contains("sidebar-mobile-open");
 	  document.querySelectorAll(".sidebar-collapse, .sidebar-rail").forEach((button) => {
-		const label = collapsed ? "Expand sidebar" : "Collapse sidebar";
+		const label = mobile ? (mobileOpen ? "Close navigation" : "Open navigation") : (collapsed ? "Expand sidebar" : "Collapse sidebar");
 		button.setAttribute("aria-label", label);
+		button.setAttribute("aria-expanded", String(mobile ? mobileOpen : !collapsed));
 		button.title = label;
+	  });
+	  document.querySelectorAll("[data-mobile-header] [data-sidebar-toggle]").forEach((button) => {
+		button.setAttribute("aria-expanded", String(mobile && mobileOpen));
+		button.setAttribute("aria-label", mobileOpen ? "Close navigation" : "Open navigation");
 	  });
 	};
 	syncSidebarToggleState();
 	  document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
         if (window.matchMedia("(max-width: 767px)").matches) {
-          document.documentElement.classList.toggle("sidebar-mobile-open");
+		  const opening = document.documentElement.classList.toggle("sidebar-mobile-open");
+		  const main = document.getElementById("main-content");
+		  if (main) main.inert = opening;
+		  syncSidebarToggleState();
+		  if (opening) document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
           return;
         }
         const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
@@ -1716,8 +1952,39 @@
     document.querySelectorAll(".sidebar a").forEach((link) => {
       link.addEventListener("click", () => {
         document.documentElement.classList.remove("sidebar-mobile-open");
+		const main = document.getElementById("main-content");
+		if (main) main.inert = false;
+		syncSidebarToggleState();
       });
     });
+
+	document.addEventListener("keydown", (event) => {
+	  if (!window.matchMedia("(max-width: 767px)").matches || !document.documentElement.classList.contains("sidebar-mobile-open")) return;
+	  const sidebar = document.getElementById("app-sidebar");
+	  const controls = [...sidebar?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') || []]
+		.filter((control) => !control.closest("[hidden]") && control.getClientRects().length > 0 && getComputedStyle(control).visibility !== "hidden");
+	  if (event.key === "Escape") {
+		event.preventDefault();
+		document.documentElement.classList.remove("sidebar-mobile-open");
+		const main = document.getElementById("main-content");
+		if (main) main.inert = false;
+		syncSidebarToggleState();
+		document.querySelector("[data-mobile-header] [data-sidebar-toggle]")?.focus();
+		return;
+	  }
+	  if (event.key !== "Tab" || controls.length === 0) return;
+	  const first = controls[0];
+	  const last = controls.at(-1);
+	  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+	  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+	});
+	window.addEventListener("resize", () => {
+	  if (window.matchMedia("(max-width: 767px)").matches) { syncSidebarToggleState(); return; }
+	  document.documentElement.classList.remove("sidebar-mobile-open");
+	  const main = document.getElementById("main-content");
+	  if (main) main.inert = false;
+	  syncSidebarToggleState();
+	});
 
     // On phones the header sticks to the top, so it would eat screen space on
     // every long page. It slides away while scrolling down and comes straight
@@ -1783,8 +2050,10 @@
 		}
 	  });
 	};
-	const showRoutedDialog = (dialog, pushURL = false) => {
+	const showRoutedDialog = (dialog, pushURL = false, returnFocus = document.activeElement) => {
 	  if (!dialog) return;
+	  setupDialogAccessibility(dialog);
+	  if (returnFocus && returnFocus !== document.body && !dialog.contains(returnFocus)) dialog.sableReturnFocus = returnFocus;
 	  resetTokenDialog(dialog);
 	  setupRoutedDialog(dialog);
 	  setupDialogTabs(dialog);
@@ -1798,7 +2067,9 @@
 		  window.history.pushState({sableDialog: dialog.id}, "", dialog.dataset.dialogUrl);
 		}
 	  }
-	  dialog.querySelector('input:not([type="hidden"]):not(.sr-only), textarea, select, button')?.focus();
+	  const initial = dialog.querySelector('[autofocus], input:not([type="hidden"]):not(.sr-only):not([disabled]), textarea:not([disabled]), select:not([disabled])') ||
+		dialog.querySelector('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
+	  initial?.focus();
 	  dialog.querySelector("[data-token-owner]")?.dispatchEvent(new Event("change", {bubbles: true}));
 	  if (dialog.id === "create-user-dialog") dialog.querySelector('input[name="roles"]')?.dispatchEvent(new Event("change", {bubbles: true}));
 	};
@@ -1864,7 +2135,7 @@
 	  if (policyActions) policyActions.hidden = !domain;
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
-	  showRoutedDialog(dialog);
+	  showRoutedDialog(dialog, false, document.activeElement);
 	};
 	const syncRoutedDialogs = () => {
 	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url]")];
@@ -1877,7 +2148,7 @@
 	};
 	const openAutomaticDialogs = () => {
 	  document.querySelectorAll('dialog[data-dialog-auto-open="true"]').forEach((dialog) => {
-		if (!dialog.open) dialog.showModal();
+		if (!dialog.open) showRoutedDialog(dialog, false, null);
 		dialog.removeAttribute("data-dialog-auto-open");
 	  });
 	};
@@ -1937,14 +2208,15 @@
 	  const dialogRow = event.target.closest("[data-dialog-open]");
 	  if (dialogRow && dialogRow.tagName === "TR") {
 		const dialog = document.getElementById(dialogRow.dataset.dialogOpen);
-		showRoutedDialog(dialog);
+		const opener = event.target.closest("button, a") || dialogRow.querySelector("button, a");
+		showRoutedDialog(dialog, false, opener);
 		return;
 	  }
 	  const dialogOpen = event.target.closest("[data-dialog-open]");
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
 		dialogOpen.closest(".zone-action-menu")?.removeAttribute("open");
-		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl));
+		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), dialogOpen);
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
 		return;
 	  }
@@ -1952,8 +2224,10 @@
 	  if (dialogSwitch) {
 		const current = dialogSwitch.closest("dialog");
 		const dialog = document.getElementById(dialogSwitch.dataset.dialogSwitch);
+		const returnFocus = current?.sableReturnFocus || dialogSwitch;
+		if (current) current.sableReturnFocus = null;
 		current?.close();
-		showRoutedDialog(dialog);
+		showRoutedDialog(dialog, false, returnFocus);
 		dialog?.sableSelectDialogTab?.(dialogSwitch.dataset.dialogTabTarget);
 		return;
 	  }
@@ -1972,6 +2246,7 @@
 		  const active = tab.dataset.blockingTab === selected;
 		  tab.classList.toggle("active", active);
 		  tab.setAttribute("aria-selected", String(active));
+		  tab.tabIndex = active ? 0 : -1;
 		});
 		root?.querySelectorAll("[data-blocking-panel]").forEach((panel) => {
 		  panel.hidden = panel.dataset.blockingPanel !== selected;
@@ -1996,7 +2271,12 @@
 	  if (catalogTab) {
 		const dialog = catalogTab.closest("dialog");
 		const selected = catalogTab.dataset.catalogTab;
-		dialog?.querySelectorAll("[data-catalog-tab]").forEach((tab) => tab.classList.toggle("active", tab.dataset.catalogTab === selected));
+		dialog?.querySelectorAll("[data-catalog-tab]").forEach((tab) => {
+		  const active = tab.dataset.catalogTab === selected;
+		  tab.classList.toggle("active", active);
+		  tab.setAttribute("aria-selected", String(active));
+		  tab.tabIndex = active ? 0 : -1;
+		});
 		dialog?.querySelectorAll("[data-catalog-panel]").forEach((panel) => { panel.hidden = panel.dataset.catalogPanel !== selected; });
 		return;
 	  }
@@ -2020,6 +2300,7 @@
 		copyButton.classList.add("is-copied");
 		copyButton.setAttribute("aria-label", "Copied to clipboard");
 		copyButton.setAttribute("title", "Copied");
+		announce("Copied to clipboard");
 		if (label) label.textContent = "Copied";
 		setTimeout(() => {
 		  copyButton.classList.remove("is-copied");
@@ -2031,9 +2312,21 @@
       } catch (_) {
 		copyButton.setAttribute("aria-label", "Copy failed");
 		copyButton.setAttribute("title", "Copy failed — select the value and press Command-C");
+		announce("Copy failed. Select the value and copy it manually.");
 		if (label) label.textContent = "Copy failed";
       }
     });
+
+	document.addEventListener("keydown", (event) => {
+	  const tab = event.target.closest?.("[data-blocking-tab], [data-catalog-tab]");
+	  if (!tab) return;
+	  const tabs = [...tab.closest("[role=tablist]")?.querySelectorAll("[role=tab]") || []];
+	  const next = tabFromKey(tabs, tab, event);
+	  if (!next) return;
+	  event.preventDefault();
+	  next.focus();
+	  next.click();
+	});
 
 	// Warn as soon as the two passphrase fields disagree. Finding out after the
 	// archive has been built and sealed is a slow way to learn about a typo.
@@ -2251,6 +2544,7 @@
 		});
 		const empty = root.querySelector("[data-zone-filter-empty]");
 		if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+		announce(`${visible} zones shown`);
 		return;
 	  }
 
@@ -2267,6 +2561,7 @@
 		});
 		const empty = root.querySelector("[data-record-filter-empty]");
 		if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+		announce(`${visible} records shown`);
 		return;
 	  }
 
@@ -2288,6 +2583,7 @@
 		  shown.hidden = !query || visible === rows.length;
 		  shown.textContent = `(${visible} shown)`;
 		}
+		announce(`${visible} ${kind === "allowed" ? "allowed" : "blocked"} domains shown`);
 		return;
 	  }
 
@@ -2303,6 +2599,7 @@
 		});
 		const empty = root.querySelector("[data-blocking-filter-empty]");
 		if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+		announce(`${visible} blocking entries shown`);
 		return;
 	  }
 
@@ -2318,6 +2615,7 @@
 	  });
 	  const empty = dialog.querySelector("[data-cache-empty]");
 	  if (empty) empty.hidden = visible !== 0 || rows.length === 0;
+	  announce(`${visible} cached domains shown`);
 	});
 
 	document.body.addEventListener("change", (event) => {

@@ -91,18 +91,18 @@ templ LogsContent(view LogsPageView) {
 		<header class="logs-heading"><div class="page-heading"><h1>Logs</h1><p>View server logs and DNS query history</p></div><a class="icon-button" href="/settings?tab=logging" aria-label="Logging settings" title="Logging settings">@Icon("settings")</a></header>
 		<div class="isotope-tab-list logs-tab-list" role="tablist" aria-label="Log sources">
 			for _, tab := range logsTabs {
-				<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) }>{ tab.Label }</button>
+				<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) } tabindex={ ifThen(view.ActiveTab == tab.Value, "0", "-1") }>{ tab.Label }</button>
 			}
 		</div>
-		<div class="logs-tab-panel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
-		<div class="logs-tab-panel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
 	</div>
 }
 
 templ RuntimeLogsPanel(view RuntimeLogsView) {
-	<section class="card logs-card emphasized" id="runtime-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
+	<section class="card logs-card emphasized" id="runtime-logs-panel" aria-labelledby="runtime-log-title" tabindex="-1" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
 		<header class="logs-toolbar">
-			<div><div class="log-title"><h2>@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
+			<div><div class="log-title"><h2 id="runtime-log-title">@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
 			<div class="logs-toolbar-actions">
 				@LogLiveButton(view.Live)
 				<label class="runtime-level-field"><span class="sr-only">Log level</span><select name="level" aria-label="Log level" data-runtime-level><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select></label>
@@ -116,13 +116,13 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/>
 			<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="runtime-log-copy" aria-label="Copy current entries" title="Copy current entries">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(runtimeExportURL(view)) } aria-label="Export server logs" title="Export server logs">@Icon("download")</a></div>
 		</form>
-		<textarea class="sr-only" id="runtime-log-copy" readonly>{ view.CopyText }</textarea>
+		<textarea class="sr-only" id="runtime-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
-			<div class="logs-empty error">{ view.Error }</div>
+			<div class="logs-empty error" role="alert">{ view.Error }</div>
 		} else if len(view.Entries) == 0 {
-			<div class="logs-empty">No runtime log entries match these filters.</div>
+			<div class="logs-empty" role="status">No runtime log entries match these filters.</div>
 		} else {
-			<div class="runtime-log-viewer" role="log" aria-live="polite">
+			<div class="runtime-log-viewer" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false" aria-label="Runtime log entries" tabindex="0">
 				for _, entry := range view.Entries {
 					<div class={ "runtime-log-line level-" + entry.Level }><time>{ entry.OccurredAt }</time><span class="runtime-log-level">{ strings.ToUpper(entry.Level) }</span><span class="runtime-log-message">{ entry.Message }</span>if entry.Attributes != "" {
 						<span class="runtime-log-attributes">{ entry.Attributes }</span>
@@ -138,10 +138,10 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 
 templ QueryLogsPanel(view QueryLogsView) {
 	{{ tokens := queryFilterTokens(view) }}
-	<section class="card logs-card emphasized" id="query-logs-panel" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
+	<section class="card logs-card emphasized" id="query-logs-panel" aria-labelledby="query-log-title" tabindex="-1" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
-				<div class="log-title"><h2>@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
+				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
 				if len(tokens) > 0 {
 					<div class="query-filter-tokens">
 						for _, token := range tokens {
@@ -153,7 +153,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 			</div>
 			<div class="logs-toolbar-actions">
 				@LogLiveButton(view.Live)
-				<button class={ ifThen(view.FiltersOpen, "button outline filters-toggle active", "button outline filters-toggle") } type="button" data-query-filters-toggle aria-expanded={ fmt.Sprint(view.FiltersOpen) }>@Icon("filter")<span>Filters</span>
+				<button class={ ifThen(view.FiltersOpen, "button outline filters-toggle active", "button outline filters-toggle") } type="button" data-query-filters-toggle aria-expanded={ fmt.Sprint(view.FiltersOpen) } aria-controls="query-log-filters">@Icon("filter")<span>Filters</span>
 					if len(tokens) > 0 {
 						<span class="filter-count">{ fmt.Sprint(len(tokens)) }</span>
 					}
@@ -161,7 +161,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 				</button>
 			</div>
 		</header>
-		<div class="query-log-filters isotope-query-filters" data-query-filters hidden?={ !view.FiltersOpen }>
+		<div class="query-log-filters isotope-query-filters" id="query-log-filters" data-query-filters hidden?={ !view.FiltersOpen }>
 			<form hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML">
 				<div class="query-filter-grid">
 					<label><span>Client IP</span><input name="client_ip" value={ view.ClientIP } placeholder="e.g. 10.0.7.168"/></label>
@@ -182,7 +182,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 									<label><span>From</span><input class="time-field" type="time" step="60" data-range-start-time/></label>
 									<label><span>To</span><input class="time-field" type="time" step="60" data-range-end-time/></label>
 								</div>
-								<p class="range-error" data-range-error hidden></p>
+								<p class="range-error" role="alert" data-range-error hidden></p>
 								<div class="range-picker-actions">
 									<button class="button outline" type="button" data-range-clear>Any time</button>
 									<button class="button range-apply" type="button" data-range-apply>Apply</button>
@@ -201,13 +201,13 @@ templ QueryLogsPanel(view QueryLogsView) {
 			</form>
 		</div>
 		<div class="log-search-bar query-result-search"><div class="search-field">@Icon("search")<input type="search" placeholder="Search in results..." autocomplete="off" data-query-result-search aria-label="Search in results" data-search-clearable/>@SearchClear(true)</div><div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
-		<textarea class="sr-only" id="query-log-copy" readonly>{ view.CopyText }</textarea>
+		<textarea class="sr-only" id="query-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
-			<div class="logs-empty error">{ view.Error }</div>
+			<div class="logs-empty error" role="alert">{ view.Error }</div>
 		} else if len(view.Entries) == 0 {
-			<div class="logs-empty">No DNS queries match these filters.</div>
+			<div class="logs-empty" role="status">No DNS queries match these filters.</div>
 		} else {
-			<div class="table-scroll query-log-table-scroll"><table class="query-log-table full isotope-query-log-table"><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+			<div class="table-scroll query-log-table-scroll" role="region" aria-label="DNS query results" tabindex="0"><table class="query-log-table full isotope-query-log-table"><caption class="sr-only">DNS query results. Use the details button in each row for the full decision path.</caption><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
