@@ -14,6 +14,7 @@ func TestCommandPaletteExposesKeyboardCombobox(t *testing.T) {
 		`id="command-palette-input"`, `role="combobox"`, `aria-autocomplete="list"`,
 		`id="command-palette-results"`, `role="listbox"`, `data-command-item`,
 		`data-command-search-scope`, `data-command-search-back`, `data-command-search-modes`,
+		`data-command-footer-search-mode`, `>←</kbd><kbd>→</kbd> Search by`,
 		`role="radiogroup"`, `aria-label="Search query logs by"`,
 		`aria-keyshortcuts="Meta+K Control+K"`, `data-command-shortcut`,
 		`id="command-action-query"`, `data-command-focus="#query-name"`,
@@ -24,6 +25,30 @@ func TestCommandPaletteExposesKeyboardCombobox(t *testing.T) {
 	}
 	if triggers := strings.Count(page, `data-command-open`); triggers != 2 {
 		t.Errorf("command palette triggers = %d, want desktop and mobile triggers", triggers)
+	}
+}
+
+func TestCommandPaletteRendersClusterQuickActionForCurrentState(t *testing.T) {
+	t.Parallel()
+
+	uninitialized := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{{
+		ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
+		Route: "/cluster", Dialog: "initialize-cluster-dialog",
+	}}}))
+	for _, expected := range []string{`id="command-action-initialize-cluster"`, `icon-server-crash`, `data-command-route="/cluster"`, `data-command-dialog="initialize-cluster-dialog"`} {
+		if !strings.Contains(uninitialized, expected) {
+			t.Errorf("uninitialized palette does not contain %q", expected)
+		}
+	}
+
+	primary := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{{
+		ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+		Route: "/cluster", Dialog: "enrollment-token-dialog",
+	}}}))
+	for _, expected := range []string{`id="command-action-add-replica"`, `icon-server-plus`, `data-command-route="/cluster"`, `data-command-dialog="enrollment-token-dialog"`} {
+		if !strings.Contains(primary, expected) {
+			t.Errorf("primary palette does not contain %q", expected)
+		}
 	}
 }
 

@@ -113,8 +113,10 @@ contract:
   as timed blocking pauses; and keeps server-log, query-log, DNS-cache,
   blocking-policy, and per-zone record search terms in the palette before
   opening the filtered destination. Query-log search can target either a
-  domain or client IP. Page, dialog, and confirmation commands hand focus to
-  the control that is ready for input.
+  domain or client IP, with Left/Right switching that mode while focus remains
+  in the palette input. Page, dialog, and confirmation commands hand focus to
+  the control that is ready for input. Cluster quick actions reflect whether
+  the current writable node is standalone or the primary.
 - Canvas and SVG summaries provide keyboard-readable values. The query chart
   supports sample-by-sample arrow navigation, and distribution legends expose
   exact values and percentages as a list.

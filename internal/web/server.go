@@ -679,6 +679,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		CanLogs:             !server.securityEnabled,
 		CanMetrics:          !server.securityEnabled,
 		CanCluster:          !server.securityEnabled,
+		CanWriteCluster:     !server.securityEnabled,
 		Database:            server.database,
 		DNSListeners:        strings.Join(snapshot.Config.Server.DNSListen, ", "),
 		EncryptedDNS:        encryptedDNSStatus(snapshot.Config.EncryptedDNS),
@@ -708,6 +709,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.CanLogs = auth.HasPermission(principal, auth.PermissionLogsRead)
 		view.CanMetrics = auth.HasPermission(principal, auth.PermissionMetricsRead)
 		view.CanCluster = auth.HasPermission(principal, auth.PermissionClusterRead)
+		view.CanWriteCluster = auth.HasPermission(principal, auth.PermissionClusterWrite)
 	}
 	if server.cluster != nil {
 		clusterState := server.cluster.Snapshot()
@@ -757,6 +759,22 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 				ID: searchCommandID, Label: "Search in " + current.Name, Description: "Filter records in this zone", Icon: "search", Kind: "Search",
 				Keywords: "dns zone records " + current.Type, Route: "/zones/" + url.PathEscape(current.Name), Focus: "[data-record-search]",
 				SearchPrompt: "Search records in " + current.Name + "…",
+			})
+		}
+	}
+
+	if view.CanCluster && view.CanWriteCluster && server.cluster != nil {
+		state := server.cluster.Snapshot()
+		switch {
+		case !state.Initialized:
+			add(pages.CommandEntityView{
+				ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
+				Keywords: "create setup primary replication", Route: "/cluster", Dialog: "initialize-cluster-dialog",
+			})
+		case state.LocalRole == cluster.RolePrimary && state.NetworkReady:
+			add(pages.CommandEntityView{
+				ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+				Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
 			})
 		}
 	}

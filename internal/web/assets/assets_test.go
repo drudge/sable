@@ -122,7 +122,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 		"const tabFromKey", "setupDialogAccessibility", "setupScrollableRegion",
 		"Live log updates paused", "data-chart-keyboard-status", "sidebar-mobile-open",
 		`!control.closest("[hidden]")`, `mobileOpen ? "Close navigation" : "Open navigation"`,
-		"setupCommandPalette", "sable-command", "sable-search", "commandRank", "labelAcronym", "beginSearch", "selectSearchMode", "commandSearchAltParam", "commandSearchAltFocus", "runSearch", "runPostCommand", "visibleDialogTrigger", `target.closest("dialog")`, "responseDocument", "toast-region", "commandValues", `event.key.toLowerCase() !== "k"`,
+		"setupCommandPalette", "sable-command", "sable-search", "commandRank", "labelAcronym", "beginSearch", "selectSearchMode", "commandSearchAltParam", "commandSearchAltFocus", "searchModeFooterItems", `["ArrowLeft", "ArrowRight"].includes(event.key)`, "runSearch", "runPostCommand", "visibleDialogTrigger", `target.closest("dialog")`, "responseDocument", "toast-region", "commandValues", `event.key.toLowerCase() !== "k"`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain accessibility behavior %q", expected)

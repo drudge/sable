@@ -2168,6 +2168,7 @@
 	  const searchModeButtons = [...palette.querySelectorAll("[data-command-search-mode]")];
 	  const defaultFooterItems = [...palette.querySelectorAll("[data-command-footer-default]")];
 	  const searchFooterItems = [...palette.querySelectorAll("[data-command-footer-search]")];
+	  const searchModeFooterItems = [...palette.querySelectorAll("[data-command-footer-search-mode]")];
 	  const items = [...palette.querySelectorAll("[data-command-item]")];
 	  const groups = [...palette.querySelectorAll("[data-command-group]")];
 	  const pendingParameter = "sable-command";
@@ -2323,6 +2324,7 @@
 		searchModes.hidden = true;
 		defaultFooterItems.forEach((item) => { item.hidden = false; });
 		searchFooterItems.forEach((item) => { item.hidden = true; });
+		searchModeFooterItems.forEach((item) => { item.hidden = true; });
 		inputLabel.textContent = "Search commands";
 		input.placeholder = defaultInputPlaceholder;
 		input.setAttribute("role", "combobox");
@@ -2359,9 +2361,11 @@
 			button.dataset.commandSearchModePrompt = mode.prompt;
 		  });
 		  searchModes.hidden = false;
+		  searchModeFooterItems.forEach((footerItem) => { footerItem.hidden = false; });
 		  selectSearchMode(searchModeButtons[0]);
 		} else {
 		  searchModes.hidden = true;
+		  searchModeFooterItems.forEach((footerItem) => { footerItem.hidden = true; });
 		  searchParameter = item.dataset.commandSearchParam || "";
 		  inputLabel.textContent = item.dataset.commandLabel;
 		  input.placeholder = item.dataset.commandSearchPrompt || `${item.dataset.commandLabel}…`;
@@ -2476,6 +2480,14 @@
 	  input.addEventListener("input", () => { if (!searchCommand) updateResults(); });
 	  input.addEventListener("keydown", (event) => {
 		if (event.isComposing) return;
+		if (searchCommand && !searchModes.hidden && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+		  event.preventDefault();
+		  const current = Math.max(0, searchModeButtons.findIndex((button) => button.getAttribute("aria-checked") === "true"));
+		  const direction = event.key === "ArrowRight" ? 1 : -1;
+		  const next = (current + direction + searchModeButtons.length) % searchModeButtons.length;
+		  selectSearchMode(searchModeButtons[next]);
+		  return;
+		}
 		if (!searchCommand && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
 		  event.preventDefault();
 		  if (event.key === "Home") setActive(0, true);
