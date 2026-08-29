@@ -422,7 +422,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\" hx-post=\"/ui/blocking/lists/update\" hx-target=\"#blocking-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"this\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "\" hx-post=\"/ui/blocking/lists/update\" hx-target=\"#blocking-content\" hx-swap=\"outerHTML\" hx-disable=\"this\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -439,7 +439,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.Updating, "Updating block lists", "Update block lists"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 133, Col: 383}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 133, Col: 378}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -460,7 +460,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Updating, "Updating…", "Update Block Lists"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 133, Col: 489}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 133, Col: 484}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {

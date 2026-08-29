@@ -6,10 +6,11 @@ import (
 	"strings"
 )
 
-// htmx injects its own <style> element for the indicator classes as soon as it
-// loads, which the console's strict style-src CSP blocks. Turning the injection
-// off keeps the console CSP-clean; the equivalent rules live in app.css.
-const htmxConfig = `{"includeIndicatorStyles":false}`
+// htmx injects its own indicator CSS as soon as it loads, which the console's
+// strict style-src CSP blocks. Turning the injection off keeps the console
+// CSP-clean; the equivalent rules live in app.css. Sable keeps long-running
+// operations unbounded, matching its htmx 2 behavior.
+const htmxConfig = `{"includeIndicatorCSS":false,"defaultTimeout":0}`
 
 type DashboardView struct {
 	Version        string
@@ -271,7 +272,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<script src={ assetURL("app.js") } defer></script>
 			<script src={ assetURL("htmx.min.js") } defer></script>
 		</head>
-		<body hx-headers={ fmt.Sprintf("{\"X-CSRF-Token\":%q}", view.CSRFToken) } data-control-plane-read-only={ fmt.Sprint(view.ControlPlaneReadOnly) } data-cluster-primary-url={ view.PrimaryURL }>
+		<body hx-headers:inherited={ fmt.Sprintf("{\"X-CSRF-Token\":%q}", view.CSRFToken) } data-control-plane-read-only={ fmt.Sprint(view.ControlPlaneReadOnly) } data-cluster-primary-url={ view.PrimaryURL }>
 			<div class="app-shell">
 				<aside class="sidebar" id="app-sidebar">
 					<div class="sidebar-header">
@@ -762,7 +763,7 @@ func clientsStatDetail(scope string) string {
 }
 
 templ QueryChart(view QueryChartView) {
-	<section class="card chart-card" id="query-statistics" data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML" hx-indicator="#dashboard-update-indicator">
+	<section class="card chart-card" id="query-statistics" data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML" hx-indicator:inherited="#dashboard-update-indicator">
 		<div class="card-header chart-header">
 			<h2>Query Statistics</h2>
 			if view.ActiveRange == "custom" {

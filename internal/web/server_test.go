@@ -435,6 +435,11 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, `<h1 class="sr-only">Dashboard</h1>`) {
 		t.Error("dashboard does not contain its accessible page heading")
 	}
+	for _, expected := range []string{`includeIndicatorCSS`, `defaultTimeout`, `hx-headers:inherited=`} {
+		if !strings.Contains(dashboard, expected) {
+			t.Errorf("dashboard htmx 4 configuration does not contain %q", expected)
+		}
+	}
 	for _, name := range []string{"bootstrap.js", "app.css", "app.js", "htmx.min.js", "sable-mark.svg", "sable-icon-180.png"} {
 		if path := webassets.URL(name); !strings.Contains(dashboard, path) {
 			t.Errorf("dashboard does not contain fingerprinted asset %q", path)
@@ -601,7 +606,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		"DNS Blocking", "Block Lists", "Custom Blocked Domains", "Allowed Domains", "Settings → Blocking", `href="/settings?tab=blocking"`, `aria-label="Blocking settings"`,
 		`class="operational-metric red"`, `class="operational-metric purple"`,
 		`data-blocking-tab="lists"`, `data-domain-search`, "Add Block List", "Add Blocked Domain", "Pause Blocking",
-		`blocking-update-button`, `hx-disabled-elt="this"`,
+		`blocking-update-button`, `hx-disable="this"`,
 		"Import", "Export", "Clear All", `data-domain-import`,
 		`pause-menu`,
 	} {
@@ -877,8 +882,8 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	if invalidResponse.Code != http.StatusUnprocessableEntity || configuration.Current().Revision != 5 {
 		t.Fatalf("invalid settings update = %d revision=%d", invalidResponse.Code, configuration.Current().Revision)
 	}
-	// Without this header the console drops the rejected response on the floor
-	// and the operator never sees why the save failed.
+	// The client admits marked error fragments into the target while keeping
+	// unrendered server errors out of the page.
 	if invalidResponse.Header().Get("X-Sable-Console-Fragment") != "true" {
 		t.Fatalf("rejected settings response was not marked as a console fragment: %v", invalidResponse.Header())
 	}
@@ -1177,8 +1182,11 @@ func TestClusterOnboardingStaysInWizardAcrossRestart(t *testing.T) {
 	joinResponse := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(joinResponse, joinRequest)
 	joinBody := joinResponse.Body.String()
-	if joinResponse.Code != http.StatusOK {
+	if joinResponse.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("failed join status = %d body=%s", joinResponse.Code, joinBody)
+	}
+	if joinResponse.Header().Get(consoleFragmentHeader) != "true" {
+		t.Fatalf("failed join %s = %q, want true", consoleFragmentHeader, joinResponse.Header().Get(consoleFragmentHeader))
 	}
 	if cacheControl := joinResponse.Header().Get("Cache-Control"); cacheControl != "no-store" {
 		t.Fatalf("failed join Cache-Control = %q", cacheControl)

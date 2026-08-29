@@ -101,7 +101,7 @@ templ ClusterContent(view ClusterPageView) {
 				} else {
 					@ClusterLiveStatus(view)
 					if view.LocalRole == "Replica" {
-						<section class="card cluster-danger-card"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post="/ui/cluster/leave" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" hx-confirm="Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently." data-confirm-title="Leave cluster?" data-confirm-action="Leave Cluster"><button class="button destructive" type="submit">@Icon("log-out")<span>Leave Cluster</span></button></form></section>
+						<section class="card cluster-danger-card"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post="/ui/cluster/leave" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently." data-confirm-title="Leave cluster?" data-confirm-action="Leave Cluster"><button class="button destructive" type="submit">@Icon("log-out")<span>Leave Cluster</span></button></form></section>
 					} else if view.LocalRole == "Primary" {
 						<section class="card cluster-danger-card">
 							<div>
@@ -117,7 +117,7 @@ templ ClusterContent(view ClusterPageView) {
 									<p>Return this server to standalone operation. Its DNS data and stable node identity are preserved.</p>
 								}
 							</div>
-							<form hx-post="/ui/cluster/delete" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" hx-confirm="Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization." data-confirm-title="Delete cluster?" data-confirm-action="Delete Cluster"><button class="button destructive" type="submit">@Icon("trash")<span>Delete Cluster</span></button></form>
+							<form hx-post="/ui/cluster/delete" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization." data-confirm-title="Delete cluster?" data-confirm-action="Delete Cluster"><button class="button destructive" type="submit">@Icon("trash")<span>Delete Cluster</span></button></form>
 						</section>
 					}
 				}
@@ -273,7 +273,7 @@ templ JoinClusterDialog(view ClusterPageView) {
 		} else if !view.NetworkReady || view.ConfigureNode {
 			@ClusterNodeOnboardingForm(view, "join")
 		} else {
-			<form hx-post="/ui/cluster/join" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" data-cluster-join-form><input type="hidden" name="workflow" value="join"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "join")<div class="cluster-wizard-heading"><span>@Icon("log-in")</span><div><strong>Connect to the primary</strong><small>Use the enrollment token created on the existing primary.</small></div></div>
+			<form hx-post="/ui/cluster/join" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable:inherited="find button[type='submit']" data-cluster-join-form><input type="hidden" name="workflow" value="join"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "join")<div class="cluster-wizard-heading"><span>@Icon("log-in")</span><div><strong>Connect to the primary</strong><small>Use the enrollment token created on the existing primary.</small></div></div>
 				if view.Error != "" {
 					<div class="cluster-join-error" role="alert">@Icon("alert-triangle")<div><strong>Could not join the cluster</strong><span>{ view.Error }</span></div></div>
 				}
@@ -309,7 +309,7 @@ templ ClusterWizardProgress(step int, workflow string) {
 }
 
 templ ClusterNodeOnboardingForm(view ClusterPageView, workflow string) {
-	<form hx-post="/ui/cluster/onboarding" hx-target="#cluster-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']" data-cluster-onboarding data-initial-step={ fmt.Sprint(view.OnboardingStep) }>
+	<form hx-post="/ui/cluster/onboarding" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-cluster-onboarding data-initial-step={ fmt.Sprint(view.OnboardingStep) }>
 		<input type="hidden" name="workflow" value={ workflow }/>
 		<input type="hidden" name="wizard_step" value="https"/>
 		<div class="isotope-dialog-body">

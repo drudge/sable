@@ -622,14 +622,9 @@ func (server *Server) renderClusterMutation(writer http.ResponseWriter, request 
 	}
 }
 
-// HTMX swaps successful responses by default but intentionally ignores 4xx
-// bodies. A rejected cluster action is still a successful UI round-trip:
-// render its validation result with 200 so the page can show it. Direct HTTP
-// clients continue receiving the original error status.
+// A rejected cluster action remains a rendered UI round-trip. htmx 4 can swap
+// the marked fragment while preserving the original error status.
 func (server *Server) renderClusterUIFailure(writer http.ResponseWriter, request *http.Request, status int, message string) {
-	if strings.EqualFold(strings.TrimSpace(request.Header.Get("HX-Request")), "true") {
-		status = http.StatusOK
-	}
 	server.renderClusterMutation(writer, request, status, "", message)
 }
 
