@@ -18,15 +18,16 @@ import (
 )
 
 type Request struct {
-	Server     string
-	TLSName    string
-	DialIP     string
-	Name       string
-	Type       string
-	Transport  string
-	EDNSSubnet string
-	DNSSEC     bool
-	Timeout    time.Duration
+	Server       string
+	TLSName      string
+	DialIP       string
+	DoHTLSConfig *tls.Config
+	Name         string
+	Type         string
+	Transport    string
+	EDNSSubnet   string
+	DNSSEC       bool
+	Timeout      time.Duration
 }
 
 type Result struct {
@@ -36,7 +37,7 @@ type Result struct {
 }
 
 type exchangeFunc func(context.Context, *dns.Client, *dns.Msg, string) (*dns.Msg, time.Duration, error)
-type dohExchangeFunc func(context.Context, *dns.Msg, string, string, time.Duration) (*dns.Msg, time.Duration, error)
+type dohExchangeFunc func(context.Context, *dns.Msg, string, string, time.Duration, *tls.Config) (*dns.Msg, time.Duration, error)
 type doqExchangeFunc func(context.Context, *dns.Msg, string, string, time.Duration) (*dns.Msg, time.Duration, error)
 
 const (
@@ -99,7 +100,7 @@ func query(
 		if err != nil {
 			return Result{}, err
 		}
-		response, elapsed, err := exchangeHTTPS(ctx, message, endpoint, request.DialIP, request.Timeout)
+		response, elapsed, err := exchangeHTTPS(ctx, message, endpoint, request.DialIP, request.Timeout, request.DoHTLSConfig)
 		if err != nil {
 			return Result{}, fmt.Errorf("query %s via doh: %w", endpoint, err)
 		}
@@ -209,17 +210,23 @@ func exchangeDoH(
 	endpoint string,
 	dialIP string,
 	timeout time.Duration,
+	tlsConfiguration *tls.Config,
 ) (*dns.Msg, time.Duration, error) {
 	client := &http.Client{Timeout: timeout}
-	if dialIP != "" {
+	if dialIP != "" || tlsConfiguration != nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
-		dialer := &net.Dialer{Timeout: timeout}
-		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-			_, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, fmt.Errorf("parse HTTPS target %q: %w", address, err)
+		if tlsConfiguration != nil {
+			transport.TLSClientConfig = tlsConfiguration.Clone()
+		}
+		if dialIP != "" {
+			dialer := &net.Dialer{Timeout: timeout}
+			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				_, port, err := net.SplitHostPort(address)
+				if err != nil {
+					return nil, fmt.Errorf("parse HTTPS target %q: %w", address, err)
+				}
+				return dialer.DialContext(ctx, network, net.JoinHostPort(dialIP, port))
 			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(dialIP, port))
 		}
 		client.Transport = transport
 	}

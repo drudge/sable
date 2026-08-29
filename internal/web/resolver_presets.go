@@ -59,13 +59,19 @@ func resolveDNSClientServer(preset, custom, customName, customIP, local, transpo
 		}
 		return resolveCustomDNSServer(customName, customIP, transport)
 	case "this-server", "recursive-resolver":
-		if transport != "udp" && transport != "tcp" {
-			return resolvedDNSServer{}, fmt.Errorf("%s does not have a known %s endpoint; choose Custom and enter its encrypted DNS address", localResolverName(preset), transportName(transport))
+		switch transport {
+		case "udp", "tcp":
+			if server := strings.TrimSpace(local); server != "" {
+				return resolvedDNSServer{address: server}, nil
+			}
+			return resolvedDNSServer{}, fmt.Errorf("this Sable server has no DNS listener")
+		case "doh":
+			endpoint, err := url.Parse(strings.TrimSpace(local))
+			if err == nil && endpoint.Scheme == "https" && endpoint.Host != "" {
+				return resolvedDNSServer{address: endpoint.String()}, nil
+			}
 		}
-		if server := strings.TrimSpace(local); server != "" {
-			return resolvedDNSServer{address: server}, nil
-		}
-		return resolvedDNSServer{}, fmt.Errorf("this Sable server has no DNS listener")
+		return resolvedDNSServer{}, fmt.Errorf("%s does not have a known %s endpoint; choose Custom and enter its encrypted DNS address", localResolverName(preset), transportName(transport))
 	case "system-dns":
 		if transport != "udp" && transport != "tcp" {
 			return resolvedDNSServer{}, fmt.Errorf("System DNS does not have a known %s endpoint; choose a specific resolver", transportName(transport))

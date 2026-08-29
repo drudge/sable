@@ -3,6 +3,7 @@ package dnsclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -55,7 +56,7 @@ func TestQueryReturnsResponseFromDoHServer(t *testing.T) {
 
 	result, err := query(context.Background(), Request{
 		Server: "dns.example:443", DialIP: "192.0.2.53", Name: "example.com", Type: "AAAA", Transport: "doh",
-	}, nil, func(_ context.Context, request *dns.Msg, endpoint, dialIP string, timeout time.Duration) (*dns.Msg, time.Duration, error) {
+	}, nil, func(_ context.Context, request *dns.Msg, endpoint, dialIP string, timeout time.Duration, tlsConfiguration *tls.Config) (*dns.Msg, time.Duration, error) {
 		if endpoint != "https://dns.example:443/dns-query" {
 			t.Errorf("endpoint = %q", endpoint)
 		}
@@ -64,6 +65,9 @@ func TestQueryReturnsResponseFromDoHServer(t *testing.T) {
 		}
 		if timeout != 3*time.Second {
 			t.Errorf("timeout = %s, want 3s", timeout)
+		}
+		if tlsConfiguration != nil {
+			t.Errorf("TLS configuration = %#v, want nil", tlsConfiguration)
 		}
 		response := new(dns.Msg)
 		response.SetReply(request)

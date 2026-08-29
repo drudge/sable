@@ -3,12 +3,14 @@ package web
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -908,12 +910,13 @@ func requestedInsightWindow(request *http.Request) (insightWindow, bool) {
 func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
-		writer.WriteHeader(http.StatusBadRequest)
+		writeFragmentStatus(writer, http.StatusBadRequest)
 		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
 		return
 	}
 	resolver := request.FormValue("resolver")
 	var queryServer resolvedDNSServer
+	localDoHQuery := false
 	var err error
 	if strings.HasPrefix(strings.TrimSpace(resolver), clusterResolverPrefix) {
 		if server.cluster == nil {
@@ -927,17 +930,28 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 			)
 		}
 	} else {
+		localServer := request.FormValue("local_server")
+		var localDoH resolvedDNSServer
+		if request.FormValue("transport") == "doh" &&
+			(strings.TrimSpace(resolver) == "this-server" || strings.TrimSpace(resolver) == "recursive-resolver") {
+			localDoH = server.localDoHServer(request)
+			localServer = localDoH.address
+		}
 		queryServer, err = resolveDNSClientServer(
 			resolver,
 			request.FormValue("server"),
 			request.FormValue("custom_name"),
 			request.FormValue("custom_ip"),
-			request.FormValue("local_server"),
+			localServer,
 			request.FormValue("transport"),
 		)
+		if err == nil && localDoH.address != "" {
+			queryServer.dialIP = localDoH.dialIP
+			localDoHQuery = true
+		}
 	}
 	if err != nil {
-		writer.WriteHeader(http.StatusUnprocessableEntity)
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
 		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
 		return
 	}
@@ -952,9 +966,12 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 		DNSSEC:     request.FormValue("dnssec") == "true",
 		Timeout:    5 * time.Second,
 	}
+	if localDoHQuery {
+		queryRequest.DoHTLSConfig = server.localDoHTLSConfig(queryServer.address)
+	}
 	result, err := dnsclient.Query(request.Context(), queryRequest)
 	if err != nil {
-		writer.WriteHeader(http.StatusUnprocessableEntity)
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
 		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
 		return
 	}
@@ -992,6 +1009,79 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	}
 	view.JSON = queryResultJSON(view)
 	_ = pages.QueryResult(view).Render(request.Context(), writer)
+}
+
+// localDoHServer turns the console hostname the operator is already using into
+// this server's DoH URL and pins the connection to the configured local
+// listener. Pinning avoids sending a self-query through external DNS or NAT.
+func (server *Server) localDoHServer(request *http.Request) resolvedDNSServer {
+	if server.config == nil || request == nil {
+		return resolvedDNSServer{}
+	}
+	configuration := server.config.Current().Config
+	if len(configuration.EncryptedDNS.DoHListen) == 0 {
+		return resolvedDNSServer{}
+	}
+
+	listener := configuration.EncryptedDNS.DoHListen[0]
+	shared := configuration.SharesHTTPSWithDoH()
+	if shared {
+		listener = configuration.Server.HTTPSListen
+	}
+	requestHost := (&url.URL{Host: request.Host}).Hostname()
+	listenerHost, port, err := net.SplitHostPort(listener)
+	if requestHost == "" || err != nil {
+		return resolvedDNSServer{}
+	}
+	endpointHost := net.JoinHostPort(requestHost, port)
+	if port == "443" {
+		endpointHost = urlHost(requestHost)
+	}
+	return resolvedDNSServer{address: (&url.URL{
+		Scheme: "https",
+		Host:   endpointHost,
+		Path:   "/dns-query",
+	}).String(), dialIP: localListenerDialIP(listenerHost)}
+}
+
+func localListenerDialIP(host string) string {
+	host = strings.Trim(host, "[]")
+	if host == "" || host == "0.0.0.0" {
+		return "127.0.0.1"
+	}
+	if host == "::" {
+		return "::1"
+	}
+	return host
+}
+
+// localDoHTLSConfig trusts the exact certificate Sable is currently serving.
+// This keeps the installed self-signed certificate usable for a local query
+// without disabling hostname or certificate verification.
+func (server *Server) localDoHTLSConfig(endpoint string) *tls.Config {
+	certificate := server.certificate.Load()
+	parsedEndpoint, err := url.Parse(endpoint)
+	if certificate == nil || err != nil || parsedEndpoint.Hostname() == "" {
+		return nil
+	}
+	roots := x509.NewCertPool()
+	trusted := false
+	for _, encoded := range certificate.Certificate {
+		parsed, err := x509.ParseCertificate(encoded)
+		if err != nil {
+			continue
+		}
+		roots.AddCert(parsed)
+		trusted = true
+	}
+	if !trusted {
+		return nil
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+		ServerName: parsedEndpoint.Hostname(),
+	}
 }
 
 func queryResultJSON(view pages.QueryView) string {
