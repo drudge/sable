@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/drudge/sable/internal/auth"
+	clusterstate "github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/web/pages"
 	"github.com/drudge/sable/internal/zone"
@@ -59,5 +60,51 @@ func TestCommandPaletteEntitiesRespectZoneGrantsAndIncludeIntegrations(t *testin
 	}
 	if entity, found := byLabel["Edit SSO Setup"]; !found || entity.Href != "/integrations?setup=sso" {
 		t.Fatalf("SSO setup entity = %+v, found=%v", entity, found)
+	}
+}
+
+func TestCommandPaletteClusterQuickActionFollowsLocalState(t *testing.T) {
+	t.Parallel()
+
+	clusterService, err := clusterstate.Open(clusterstate.Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example.test:5443",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := clusterService.Close(context.Background()); err != nil {
+			t.Errorf("close cluster service: %v", err)
+		}
+	})
+	server := &Server{cluster: clusterService}
+	request := httptest.NewRequest("GET", "/", nil)
+	snapshot := config.Snapshot{Config: config.Defaults()}
+	view := pages.DashboardView{CanCluster: true, CanWriteCluster: true}
+	hasCommand := func(entities []pages.CommandEntityView, id string) bool {
+		for _, entity := range entities {
+			if entity.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	standalone := server.commandPaletteEntities(request, snapshot, view)
+	if !hasCommand(standalone, "command-action-initialize-cluster") || hasCommand(standalone, "command-action-add-replica") {
+		t.Fatalf("standalone cluster commands = %+v", standalone)
+	}
+	if err := clusterService.Initialize(context.Background(), "cluster.example.test", []string{"192.0.2.10"}); err != nil {
+		t.Fatal(err)
+	}
+	primary := server.commandPaletteEntities(request, snapshot, view)
+	if !hasCommand(primary, "command-action-add-replica") || hasCommand(primary, "command-action-initialize-cluster") {
+		t.Fatalf("primary cluster commands = %+v", primary)
+	}
+
+	view.CanWriteCluster = false
+	readOnly := server.commandPaletteEntities(request, snapshot, view)
+	if hasCommand(readOnly, "command-action-add-replica") || hasCommand(readOnly, "command-action-initialize-cluster") {
+		t.Fatalf("read-only cluster commands = %+v", readOnly)
 	}
 }
