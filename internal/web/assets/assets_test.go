@@ -122,6 +122,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 		"const tabFromKey", "setupDialogAccessibility", "setupScrollableRegion",
 		"Live log updates paused", "data-chart-keyboard-status", "sidebar-mobile-open",
 		`!control.closest("[hidden]")`, `mobileOpen ? "Close navigation" : "Open navigation"`,
+		"setupCommandPalette", "sable-command", "sable-search", "commandRank", "labelAcronym", "beginSearch", "selectSearchMode", "commandSearchAltParam", "commandSearchAltFocus", "runSearch", "runPostCommand", "visibleDialogTrigger", `target.closest("dialog")`, "responseDocument", "toast-region", "commandValues", `event.key.toLowerCase() !== "k"`,
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain accessibility behavior %q", expected)
@@ -129,7 +130,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 	}
 
 	stylesheet := string(manifest["app.css"].content)
-	for _, expected := range []string{".skip-links", ":focus-visible", "prefers-reduced-motion", "forced-colors"} {
+	for _, expected := range []string{".skip-links", ".command-palette", ":focus-visible", "prefers-reduced-motion", "forced-colors"} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain accessibility rule %q", expected)
 		}

@@ -74,6 +74,11 @@ once because htmx can process a newly swapped subtree at any time.
 
 ### Accessibility and responsive verification
 
+The complete product goals, keyboard interaction model, and definition of done
+live in [Accessibility and keyboard control](accessibility.md). The requirements
+below summarize the console-specific behaviors that implementations must
+preserve.
+
 Interactive work is not complete until it has keyboard focus treatment, an
 accessible name, a useful disabled reason, a reduced-motion behavior where
 animation is nonessential, and a live-region or status treatment for background
@@ -101,6 +106,15 @@ contract:
 - htmx updates preserve a meaningful focus target and announce user-requested
   changes. Filters announce result counts, while errors and background status
   use the appropriate alert or live-region behavior.
+- The global command palette opens with Command-K on macOS or Control-K on
+  other platforms. It groups authorized pages, zones, search actions,
+  integrations, and quick actions separately; supports ranked fuzzy search
+  plus Arrow/Home/End navigation; provides one-step operational commands such
+  as timed blocking pauses; and keeps server-log, query-log, DNS-cache,
+  blocking-policy, and per-zone record search terms in the palette before
+  opening the filtered destination. Query-log search can target either a
+  domain or client IP. Page, dialog, and confirmation commands hand focus to
+  the control that is ready for input.
 - Canvas and SVG summaries provide keyboard-readable values. The query chart
   supports sample-by-sample arrow navigation, and distribution legends expose
   exact values and percentages as a list.
