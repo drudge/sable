@@ -211,7 +211,12 @@ templ ClusterLiveStatus(view ClusterPageView) {
 									}
 									<span class={ nodeStateBadge(node.State) }>{ nodeStateLabel(node.State) }</span><span class={ nodeSyncBadge(node.SyncState) }>{ syncStateLabel(node.SyncState) }</span>
 								</div>
-								<code>{ node.ID }</code><small>{ clusterNodeEndpoint(node) }</small>
+								<code>{ node.ID }</code>
+								if node.AdvertiseURL != "" {
+									<a class="cluster-node-portal" href={ templ.SafeURL(node.AdvertiseURL) } target="_blank" rel="noopener noreferrer" aria-label={ "Open " + node.Name + " portal" }><span>{ clusterNodeEndpoint(node) }</span>@Icon("external-link")</a>
+								} else {
+									<small>{ clusterNodeEndpoint(node) }</small>
+								}
 							</div>
 							<div class="cluster-node-meta">
 								<span>{ node.Role }</span><strong>{ node.Version }</strong><small>{ nodeUptimeLabel(node) }</small>

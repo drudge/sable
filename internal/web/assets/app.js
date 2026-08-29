@@ -10,6 +10,75 @@
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
 	document.addEventListener("DOMContentLoaded", () => {
+	let dashboardStatSnapshot = new Map();
+	const dashboardStatKey = (element) => {
+	  const card = element.closest("[data-stat-label]");
+	  if (!card) return "";
+	  return `${card.dataset.statLabel}:${element.dataset.statNumber}`;
+	};
+	const captureDashboardStats = (root) => {
+	  const snapshot = new Map();
+	  root.querySelectorAll("[data-stat-number]").forEach((element) => {
+		const key = dashboardStatKey(element);
+		if (key) snapshot.set(key, element.textContent.trim());
+	  });
+	  return snapshot;
+	};
+	const parseMorphNumber = (text) => {
+	  const match = /^(-?)([\d,]+)(?:\.(\d+))?(%)?$/.exec(text.trim());
+	  if (!match) return null;
+	  const fraction = match[3] || "";
+	  const value = Number(`${match[1]}${match[2].replaceAll(",", "")}${fraction ? `.${fraction}` : ""}`);
+	  if (!Number.isFinite(value)) return null;
+	  return { value, decimals: fraction.length, grouped: match[2].includes(","), suffix: match[4] || "" };
+	};
+	const formatMorphNumber = (value, shape) => {
+	  const precision = 10 ** shape.decimals;
+	  const normalized = Math.abs(value) < .5 / precision ? 0 : value;
+	  let [integer, fraction] = normalized.toFixed(shape.decimals).split(".");
+	  if (shape.grouped) {
+		const sign = integer.startsWith("-") ? "-" : "";
+		integer = sign + integer.replace("-", "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+	  }
+	  return integer + (fraction === undefined ? "" : `.${fraction}`) + shape.suffix;
+	};
+	const morphDashboardStat = (element, previous, target) => {
+	  if (previous === target) return;
+	  element.classList.add("is-morphing");
+	  const from = parseMorphNumber(previous);
+	  const to = parseMorphNumber(target);
+	  if (!from || !to || from.suffix !== to.suffix) {
+		element.addEventListener("animationend", () => element.classList.remove("is-morphing"), { once: true });
+		return;
+	  }
+	  const shape = { ...to, grouped: from.grouped || to.grouped };
+	  const startedAt = performance.now();
+	  const duration = 520;
+	  element.textContent = previous;
+	  element.setAttribute("aria-label", target);
+	  const update = (now) => {
+		if (!element.isConnected) return;
+		const progress = Math.min(1, (now - startedAt) / duration);
+		const eased = 1 - ((1 - progress) ** 3);
+		element.textContent = formatMorphNumber(from.value + ((to.value - from.value) * eased), shape);
+		if (progress < 1) {
+		  window.requestAnimationFrame(update);
+		  return;
+		}
+		element.textContent = target;
+		element.classList.remove("is-morphing");
+		element.removeAttribute("aria-label");
+	  };
+	  window.requestAnimationFrame(update);
+	};
+	const animateDashboardStats = (root, snapshot) => {
+	  if (!root.isConnected || window.matchMedia("(prefers-reduced-motion: reduce)").matches || snapshot.size === 0) return;
+	  root.querySelectorAll("[data-stat-number]").forEach((element) => {
+		const previous = snapshot.get(dashboardStatKey(element));
+		if (previous !== undefined) morphDashboardStat(element, previous, element.textContent.trim());
+	  });
+	};
+
 	const replicaLocalMutation = (path) => {
 	  if (path === "/login" || path === "/logout" || path === "/ui/query" || path === "/ui/administration/sessions/revoke") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
@@ -1422,6 +1491,17 @@
 	  event.detail.shouldSwap = true;
 	  event.detail.isError = false;
 	});
+	document.body.addEventListener("htmx:oobBeforeSwap", (event) => {
+	  if (event.detail?.target?.id !== "runtime-stats") return;
+	  dashboardStatSnapshot = captureDashboardStats(event.detail.target);
+	});
+	document.body.addEventListener("htmx:oobAfterSwap", (event) => {
+	  if (event.detail?.target?.id !== "runtime-stats") return;
+	  const current = document.querySelector("#runtime-stats");
+	  const snapshot = dashboardStatSnapshot;
+	  dashboardStatSnapshot = new Map();
+	  if (current) window.requestAnimationFrame(() => animateDashboardStats(current, snapshot));
+	});
 
 	initializeSwappedContent(document);
 	document.body.addEventListener("htmx:afterSwap", (event) => {
@@ -2090,8 +2170,9 @@
 	});
 	document.body.addEventListener("htmx:beforeRequest", (event) => {
 	  const source = event.detail?.elt;
-	  if (source?.id === "query-statistics" && source.querySelector("[data-chart-range-popover]:not([hidden])")) {
+	  if (source?.id === "query-statistics" && source.querySelector("[data-range-popover]:not([hidden])")) {
 		event.preventDefault();
+		return;
 	  }
 	  if (source?.id === "cluster-live-status" && document.querySelector("dialog.confirmation-dialog[open]")) {
 		event.preventDefault();
