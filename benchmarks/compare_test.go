@@ -92,6 +92,59 @@ printf '%s\n' \
 	}
 }
 
+func TestCompareRejectsOccupiedManagedPortBeforeBuilding(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("benchmark harness requires a POSIX shell")
+	}
+
+	temporaryDirectory := t.TempDir()
+	binDirectory := filepath.Join(temporaryDirectory, "bin")
+	if err := os.Mkdir(binDirectory, 0o755); err != nil {
+		t.Fatalf("create fake tool directory: %v", err)
+	}
+	for _, name := range []string{"dig", "dnsperf", "docker", "go"} {
+		writeBenchmarkTool(t, binDirectory, name, "#!/bin/sh\nexit 0\n")
+	}
+	writeBenchmarkTool(t, binDirectory, "curl", `#!/bin/sh
+case "$*" in
+	*telnet://127.0.0.1:19081*) exit 28 ;;
+	*) exit 7 ;;
+esac
+`)
+
+	queryPath := filepath.Join(temporaryDirectory, "queries.txt")
+	if err := os.WriteFile(queryPath, []byte("example.com A\n"), 0o600); err != nil {
+		t.Fatalf("write query corpus: %v", err)
+	}
+	command := exec.Command("./compare.sh")
+	command.Env = append(os.Environ(),
+		"PATH="+binDirectory+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"MODE=managed",
+		"RUNS=1",
+		"QUERY_FILE="+queryPath,
+		"RESULTS_DIRECTORY="+filepath.Join(temporaryDirectory, "results"),
+		"SABLE_PORT=19053",
+		"SABLE_HTTP_PORT=19080",
+		"TECHNITIUM_PORT=19054",
+		"TECHNITIUM_HTTP_PORT=19081",
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("managed comparison accepted an occupied port:\n%s", output)
+	}
+	want := "Technitium HTTP port 127.0.0.1:19081 is already in use or unavailable; set TECHNITIUM_HTTP_PORT to an unused port"
+	if !strings.Contains(string(output), want) {
+		t.Fatalf("port collision error does not contain %q:\n%s", want, output)
+	}
+}
+
+func writeBenchmarkTool(t *testing.T, directory, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(directory, name), []byte(content), 0o755); err != nil {
+		t.Fatalf("write fake %s: %v", name, err)
+	}
+}
+
 func readBenchmarkEvidence(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(path)
