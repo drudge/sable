@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 type clusterController interface {
 	Snapshot() cluster.State
 	LocalConfiguration() cluster.LocalConfiguration
+	TLSConfigForNode(string) (*tls.Config, error)
 	Initialize(context.Context, string, []string) error
 	CreateEnrollmentToken(context.Context, time.Duration) (cluster.EnrollmentToken, error)
 	Enroll(context.Context, cluster.JoinRequest) (cluster.JoinConfiguration, error)

@@ -648,11 +648,10 @@ func TestPlannedHandoffTrustsPromotedReplicasPrivateCA(t *testing.T) {
 	if !found {
 		t.Fatal("promoted replica missing from manifest")
 	}
-	client, err := primary.httpClientForMember(promoted)
+	tlsConfiguration, err := primary.TLSConfigForNode(promoted.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	transport := client.Transport.(*http.Transport)
 	certificatePEM, err := os.ReadFile(filepath.Join(replicaDirectory, generated.CertificateFile))
 	if err != nil {
 		t.Fatal(err)
@@ -665,7 +664,10 @@ func TestPlannedHandoffTrustsPromotedReplicasPrivateCA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := leaf.Verify(x509.VerifyOptions{DNSName: "dns-2.example", Roots: transport.TLSClientConfig.RootCAs}); err != nil {
+	if tlsConfiguration == nil {
+		t.Fatal("promoted replica TLS configuration is nil")
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{DNSName: "dns-2.example", Roots: tlsConfiguration.RootCAs}); err != nil {
 		t.Fatalf("former primary does not trust promoted replica: %v", err)
 	}
 }

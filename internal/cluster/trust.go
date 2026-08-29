@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -206,6 +207,40 @@ func (service *Service) httpClientForMember(node member) (*http.Client, error) {
 	}
 	service.memberClients[key] = client
 	return client, nil
+}
+
+// TLSConfigForNode returns the TLS trust used for an enrolled node's
+// advertised HTTPS endpoint. Callers can reuse the cluster's pinned member CA
+// for another protocol served by that same endpoint, such as DNS-over-HTTPS.
+func (service *Service) TLSConfigForNode(nodeID string) (*tls.Config, error) {
+	service.mu.RLock()
+	if service.manifest == nil {
+		service.mu.RUnlock()
+		return nil, ErrNotInitialized
+	}
+	index := slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == nodeID })
+	if index < 0 {
+		service.mu.RUnlock()
+		return nil, errors.New("cluster node is no longer a member")
+	}
+	node := service.manifest.Nodes[index]
+	service.mu.RUnlock()
+
+	client, err := service.httpClientForMember(node)
+	if err != nil {
+		return nil, err
+	}
+	switch transport := client.Transport.(type) {
+	case nil:
+		return nil, nil
+	case *http.Transport:
+		if transport.TLSClientConfig == nil {
+			return nil, nil
+		}
+		return transport.TLSClientConfig.Clone(), nil
+	default:
+		return nil, errors.New("cluster HTTP client does not expose a TLS configuration")
+	}
 }
 
 func writeClusterTrustAnchor(directory string, contents []byte) (string, error) {
