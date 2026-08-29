@@ -1,13 +1,21 @@
 package web
 
 import (
+	"context"
+	"crypto/tls"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
@@ -66,8 +74,8 @@ func TestResolveClusterDNSClientServer(t *testing.T) {
 		Initialized: true,
 		NodeID:      "node-local",
 		Nodes: []cluster.Node{
-			{ID: "node-local", Name: "ns1", Role: cluster.RolePrimary, Addresses: []string{"192.0.2.10"}},
-			{ID: "node-standard", Name: "ns2", Role: cluster.RoleReplica, Addresses: []string{"192.0.2.11"}},
+			{ID: "node-local", Name: "ns1", Role: cluster.RolePrimary, AdvertiseURL: "https://ns1.example:5443", Addresses: []string{"192.0.2.10"}},
+			{ID: "node-standard", Name: "ns2", Role: cluster.RoleReplica, AdvertiseURL: "https://ns2.example:5443", Addresses: []string{"192.0.2.11"}},
 			{ID: "node-dev", Name: "ns-dev", Role: cluster.RoleReplica, Addresses: []string{"127.0.0.1:8054"}},
 			{ID: "node-v6", Name: "ns-v6", Role: cluster.RoleReplica, Addresses: []string{"[2001:db8::53]:5353"}},
 		},
@@ -80,6 +88,7 @@ func TestResolveClusterDNSClientServer(t *testing.T) {
 	}{
 		{name: "local listener", resolver: "cluster-node:node-local", transport: "udp", want: "127.0.0.1:8053"},
 		{name: "standard DNS port", resolver: "cluster-node:node-standard", transport: "tcp", want: "192.0.2.11:53"},
+		{name: "advertised HTTPS endpoint", resolver: "cluster-node:node-standard", transport: "doh", want: "https://ns2.example:5443/dns-query"},
 		{name: "development port", resolver: "cluster-node:node-dev", transport: "udp", want: "127.0.0.1:8054"},
 		{name: "IPv6 development port", resolver: "cluster-node:node-v6", transport: "udp", want: "[2001:db8::53]:5353"},
 	}
@@ -104,7 +113,8 @@ func TestResolveClusterDNSClientServerRejectsInvalidSelection(t *testing.T) {
 		name, resolver, transport, want string
 	}{
 		{name: "removed node", resolver: "cluster-node:gone", transport: "udp", want: "no longer a member"},
-		{name: "encrypted endpoint", resolver: "cluster-node:remote", transport: "doh", want: "do not advertise"},
+		{name: "missing HTTPS endpoint", resolver: "cluster-node:remote", transport: "doh", want: "does not advertise a valid HTTPS endpoint"},
+		{name: "unsupported encrypted endpoint", resolver: "cluster-node:remote", transport: "tcp-tls", want: "use UDP, TCP, or HTTPS"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -226,5 +236,83 @@ func TestDNSClientQueriesThisServerOverHTTPS(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "192.0.2.53") {
 		t.Fatalf("local DoH query = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestDNSClientQueriesClusterNodeOverHTTPS(t *testing.T) {
+	t.Parallel()
+
+	certificateDirectory := t.TempDir()
+	generated, err := certificates.New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), certificateDirectory).GenerateClusterPKI(
+		context.Background(),
+		certificates.ClusterPKIOptions{
+			NodeName: "ns2", Names: []string{"127.0.0.1", "::1"},
+			StorageDirectory: "pki", ValidFor: 24 * time.Hour,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate, err := tls.LoadX509KeyPair(
+		filepath.Join(certificateDirectory, generated.CertificateFile),
+		filepath.Join(certificateDirectory, generated.PrivateKeyFile),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trustAnchor, err := os.ReadFile(filepath.Join(certificateDirectory, generated.CAFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dohServer := httptest.NewUnstartedServer(dnsserver.NewDoHHandler(dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
+		response := new(dns.Msg)
+		response.SetReply(request)
+		response.Answer = append(response.Answer, &dns.A{
+			Hdr: dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+			A:   net.ParseIP("192.0.2.54"),
+		})
+		_ = writer.WriteMsg(response)
+	})))
+	dohServer.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	dohServer.StartTLS()
+	t.Cleanup(dohServer.Close)
+
+	clusterService, err := cluster.Open(cluster.Options{
+		DataDirectory: t.TempDir(), NodeName: "ns1", AdvertiseURL: "https://127.0.0.1:5443",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = clusterService.Close(context.Background()) })
+	if err := clusterService.Initialize(context.Background(), "cluster.example", []string{"127.0.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := clusterService.CreateEnrollmentToken(context.Background(), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const nodeID = "00000000-0000-4000-8000-000000000002"
+	if _, err := clusterService.Enroll(context.Background(), cluster.JoinRequest{
+		Token: token.Token, NodeID: nodeID, Name: "ns2", AdvertiseURL: dohServer.URL,
+		TrustAnchor: string(trustAnchor), Addresses: []string{"127.0.0.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{cluster: clusterService}
+	form := url.Values{
+		"name":      {"example.com"},
+		"type":      {"A"},
+		"resolver":  {clusterResolverPrefix + nodeID},
+		"transport": {"doh"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/ui/query", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+
+	server.query(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "192.0.2.54") {
+		t.Fatalf("cluster DoH query = %d %s", response.Code, response.Body.String())
 	}
 }

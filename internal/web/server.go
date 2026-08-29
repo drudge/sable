@@ -916,7 +916,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	}
 	resolver := request.FormValue("resolver")
 	var queryServer resolvedDNSServer
-	localDoHQuery := false
+	var dohTLSConfig *tls.Config
 	var err error
 	if strings.HasPrefix(strings.TrimSpace(resolver), clusterResolverPrefix) {
 		if server.cluster == nil {
@@ -928,6 +928,10 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 				request.FormValue("local_server"),
 				request.FormValue("transport"),
 			)
+			if err == nil && request.FormValue("transport") == "doh" {
+				nodeID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(resolver), clusterResolverPrefix))
+				dohTLSConfig, err = server.cluster.TLSConfigForNode(nodeID)
+			}
 		}
 	} else {
 		localServer := request.FormValue("local_server")
@@ -947,7 +951,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 		)
 		if err == nil && localDoH.address != "" {
 			queryServer.dialIP = localDoH.dialIP
-			localDoHQuery = true
+			dohTLSConfig = server.localDoHTLSConfig(queryServer.address)
 		}
 	}
 	if err != nil {
@@ -966,9 +970,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 		DNSSEC:     request.FormValue("dnssec") == "true",
 		Timeout:    5 * time.Second,
 	}
-	if localDoHQuery {
-		queryRequest.DoHTLSConfig = server.localDoHTLSConfig(queryServer.address)
-	}
+	queryRequest.DoHTLSConfig = dohTLSConfig
 	result, err := dnsclient.Query(request.Context(), queryRequest)
 	if err != nil {
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
