@@ -116,25 +116,42 @@ func resolveClusterDNSClientServer(preset string, state cluster.State, local, tr
 	if nodeID == "" || !strings.HasPrefix(strings.TrimSpace(preset), clusterResolverPrefix) {
 		return resolvedDNSServer{}, fmt.Errorf("cluster DNS node is invalid")
 	}
-	if transport != "udp" && transport != "tcp" {
-		return resolvedDNSServer{}, fmt.Errorf("cluster nodes do not advertise a known %s endpoint; use UDP or TCP, or configure a Custom encrypted DNS endpoint", transportName(transport))
-	}
 	for _, node := range state.Nodes {
 		if node.ID != nodeID {
 			continue
 		}
-		if node.ID == state.NodeID {
-			if listener := strings.TrimSpace(local); listener != "" {
-				return resolvedDNSServer{address: listener}, nil
+		switch transport {
+		case "udp", "tcp":
+			if node.ID == state.NodeID {
+				if listener := strings.TrimSpace(local); listener != "" {
+					return resolvedDNSServer{address: listener}, nil
+				}
+				return resolvedDNSServer{}, fmt.Errorf("this cluster node has no DNS listener")
 			}
-			return resolvedDNSServer{}, fmt.Errorf("this cluster node has no DNS listener")
+			if len(node.Addresses) == 0 {
+				return resolvedDNSServer{}, fmt.Errorf("cluster node %q does not advertise a DNS service address", node.Name)
+			}
+			return resolvedDNSServer{address: dnsServiceEndpoint(node.Addresses[0])}, nil
+		case "doh":
+			endpoint, err := clusterDoHEndpoint(node)
+			if err != nil {
+				return resolvedDNSServer{}, err
+			}
+			return resolvedDNSServer{address: endpoint}, nil
+		default:
+			return resolvedDNSServer{}, fmt.Errorf("cluster nodes do not advertise a known %s endpoint; use UDP, TCP, or HTTPS, or configure a Custom encrypted DNS endpoint", transportName(transport))
 		}
-		if len(node.Addresses) == 0 {
-			return resolvedDNSServer{}, fmt.Errorf("cluster node %q does not advertise a DNS service address", node.Name)
-		}
-		return resolvedDNSServer{address: dnsServiceEndpoint(node.Addresses[0])}, nil
 	}
 	return resolvedDNSServer{}, fmt.Errorf("cluster DNS node is no longer a member of this cluster")
+}
+
+func clusterDoHEndpoint(node cluster.Node) (string, error) {
+	endpoint, err := url.Parse(strings.TrimSpace(node.AdvertiseURL))
+	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return "", fmt.Errorf("cluster node %q does not advertise a valid HTTPS endpoint", node.Name)
+	}
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/dns-query"
+	return endpoint.String(), nil
 }
 
 func dnsServiceEndpoint(address string) string {
