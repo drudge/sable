@@ -585,7 +585,7 @@ templ ZoneListView(view ZonesPageView) {
 						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
 						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
 					</a>
-					@ZoneActionMenu(zone, "", "", zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
+					@ZoneActionMenu(zone, "", zoneElementID("history", index), zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
 					<a class="zone-row-chevron" href={ zoneHref(zone.Name) } aria-label={ "Open " + zone.Name }>@Icon("chevron-right")</a>
 				</div>
 				if zone.CanSettings {
@@ -599,6 +599,9 @@ templ ZoneListView(view ZonesPageView) {
 				}
 				if zone.CanDelete {
 					@DeleteZoneDialog(zone, zoneElementID("delete", index))
+				}
+				if len(zone.History) > 0 || zone.HistoryError != "" {
+					@ZoneHistoryDialog(zone, zoneElementID("history", index))
 				}
 			}
 			<div class="isotope-zone-empty zone-filter-empty" hidden data-zone-filter-empty><p>No zones match your search</p></div>
@@ -678,14 +681,14 @@ templ ZoneDetailView(zone ZoneView) {
 			@DeleteZoneDialog(zone, "delete-selected-zone-dialog")
 		}
 		if len(zone.History) > 0 || zone.HistoryError != "" {
-			@ZoneHistoryDialog(zone)
+			@ZoneHistoryDialog(zone, "zone-history-dialog")
 		}
 	</div>
 }
 
-templ ZoneHistoryDialog(zone ZoneView) {
-	<dialog class="custom-server-dialog zone-history-dialog" id="zone-history-dialog" aria-labelledby="zone-history-title">
-		<header class="zone-history-header"><div><span>Change Center</span><h2 id="zone-history-title">{ zone.Name }</h2><p>Review durable zone snapshots and restore an earlier state as a new revision.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close change history">@Icon("x")</button></header>
+templ ZoneHistoryDialog(zone ZoneView, id string) {
+	<dialog class="custom-server-dialog zone-history-dialog" id={ id } aria-labelledby={ id + "-title" }>
+		<header class="zone-history-header"><div><span>Change Center</span><h2 id={ id + "-title" }>{ zone.Name }</h2><p>Review durable zone snapshots and restore an earlier state as a new revision.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close change history">@Icon("x")</button></header>
 		<div class="zone-history-list">
 			if zone.HistoryError != "" {
 				<div class="zone-history-empty">{ zone.HistoryError }</div>
@@ -693,17 +696,21 @@ templ ZoneHistoryDialog(zone ZoneView) {
 				<div class="zone-history-empty">No revisions have been recorded for this zone.</div>
 			}
 			for _, revision := range zone.History {
-				<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#zone-history-revision-" + fmt.Sprint(revision.Number) } hx-swap="innerHTML">
+				<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#" + zoneHistoryRevisionID(id, revision.Number) } hx-swap="innerHTML">
 					<summary><span class={ "zone-history-marker " + revision.Kind } aria-hidden="true"></span><div><span><strong>Revision { fmt.Sprint(revision.Number) }</strong><span class={ "zone-history-kind " + revision.Kind }>{ revision.KindLabel }</span>
 						if revision.Current {
 							<span class="current-badge">Current</span>
 						}
 					</span><small>{ revision.OccurredAt }</small></div>@Icon("chevron-down")</summary>
-					<div class="zone-history-diff" id={ "zone-history-revision-" + fmt.Sprint(revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
+					<div class="zone-history-diff" id={ zoneHistoryRevisionID(id, revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
 				</details>
 			}
 		</div>
 	</dialog>
+}
+
+func zoneHistoryRevisionID(dialogID string, revision uint64) string {
+	return dialogID + "-revision-" + strconv.FormatUint(revision, 10)
 }
 
 func zoneHistoryDiffURL(name string, revision uint64) string {

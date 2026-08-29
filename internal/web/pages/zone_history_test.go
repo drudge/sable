@@ -13,13 +13,29 @@ func TestZoneHistoryDialogLazyLoadsRevisionDiffs(t *testing.T) {
 			{Number: 3, Kind: "updated", KindLabel: "Updated", OccurredAt: "Aug 28, 2026 14:00 EDT", Current: true},
 			{Number: 2, Kind: "created", KindLabel: "Created", OccurredAt: "Aug 28, 2026 13:00 EDT"},
 		},
-	}))
+	}, "zone-history-dialog"))
 	for _, expected := range []string{
 		"Change Center", "Revision 3", "Current", `hx-trigger="toggle once"`,
-		`/ui/zones/history/diff?zone=example.test&amp;revision=2`, `id="zone-history-revision-3"`,
+		`/ui/zones/history/diff?zone=example.test&amp;revision=2`, `id="zone-history-dialog-revision-3"`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("history dialog does not contain %q: %s", expected, markup)
+		}
+	}
+}
+
+func TestZoneHistoryLivesInListActionMenu(t *testing.T) {
+	t.Parallel()
+	markup := renderComponent(t, ZoneListView(ZonesPageView{Zones: []ZoneView{
+		{Name: "one.test", History: []ZoneRevisionView{{Number: 1, Current: true}}},
+		{Name: "two.test", History: []ZoneRevisionView{{Number: 1, Current: true}}},
+	}}))
+	for _, expected := range []string{
+		`data-dialog-open="zone-history-0"`, `id="zone-history-0"`, `id="zone-history-0-revision-1"`,
+		`data-dialog-open="zone-history-1"`, `id="zone-history-1"`, `id="zone-history-1-revision-1"`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("zones list does not contain %q: %s", expected, markup)
 		}
 	}
 }

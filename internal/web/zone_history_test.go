@@ -1,13 +1,90 @@
 package web
 
 import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
+
+type zoneHistoryListStore struct {
+	snapshot  zonemodel.Snapshot
+	histories map[string][]zonemodel.Revision
+	listed    []string
+}
+
+func (store *zoneHistoryListStore) Current() zonemodel.Snapshot {
+	return store.snapshot
+}
+
+func (store *zoneHistoryListStore) ListZoneRevisions(_ context.Context, name string, _ int) ([]zonemodel.Revision, error) {
+	store.listed = append(store.listed, name)
+	return store.histories[name], nil
+}
+
+func (*zoneHistoryListStore) ZoneRevision(context.Context, string, uint64) (zonemodel.Revision, error) {
+	return zonemodel.Revision{}, zonemodel.ErrRevisionNotFound
+}
+
+func (*zoneHistoryListStore) PreviousZoneRevision(context.Context, string, uint64) (zonemodel.Revision, error) {
+	return zonemodel.Revision{}, zonemodel.ErrRevisionNotFound
+}
+
+func TestZonesListLoadsHistoryForEveryZoneMenu(t *testing.T) {
+	t.Parallel()
+	store := &zoneHistoryListStore{
+		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{
+			{ID: "zone-one", Name: "one.test", Type: "primary", Revision: 2},
+			{ID: "zone-two", Name: "two.test", Type: "primary", Revision: 1},
+		}},
+		histories: map[string][]zonemodel.Revision{
+			"one.test": {{ZoneName: "one.test", Number: 2, ChangeKind: "updated", CreatedAt: time.Now()}},
+			"two.test": {{ZoneName: "two.test", Number: 1, ChangeKind: "created", CreatedAt: time.Now()}},
+		},
+	}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
+		testConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}},
+		store,
+		"sqlite",
+		testQueryLog{},
+		testQueryLog{},
+		func(context.Context) error { return nil },
+		nil,
+		false,
+		false,
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := serveRequest(server, http.MethodGet, "/zones")
+	if response.Code != http.StatusOK {
+		t.Fatalf("zones page status = %d", response.Code)
+	}
+	markup := response.Body.String()
+	for _, expected := range []string{
+		`data-dialog-open="zone-history-0"`, `id="zone-history-0"`,
+		`data-dialog-open="zone-history-1"`, `id="zone-history-1"`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("zones page does not contain %q", expected)
+		}
+	}
+	if strings.Join(store.listed, ",") != "one.test,two.test" {
+		t.Fatalf("history loaded for %q, want both listed zones", store.listed)
+	}
+}
 
 func TestDiffZoneRevisionReportsSettingsAndRecordChanges(t *testing.T) {
 	t.Parallel()

@@ -120,18 +120,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CanCreate:            !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
 			CanManagePermissions: console.CanAdministration,
 		}
-		if zone.Name == selected {
-			zoneView.Revision = zone.Revision
-			if history, ok := server.zones.(zoneRevisionStore); ok {
-				revisions, err := history.ListZoneRevisions(request.Context(), zone.Name, 20)
-				if err != nil && !errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
-					zoneView.HistoryError = "Change history is temporarily unavailable."
-					server.logger.Warn("load zone revision history", "zone", zone.Name, "error", err)
-				} else {
-					zoneView.History = zoneRevisionViews(revisions, zone.Revision, console.TimeDisplay)
-				}
-			}
-		}
+		zoneView.Revision = zone.Revision
 		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeDisplay)
 		for _, record := range zone.Records {
 			expiryTTL := uint32(0)
@@ -155,6 +144,24 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	}
 	if !slices.ContainsFunc(views, func(zone pages.ZoneView) bool { return zone.Name == selected }) {
 		selected = ""
+	}
+	if history, ok := server.zones.(zoneRevisionStore); ok {
+		for index := range views {
+			zoneView := &views[index]
+			if selected != "" && zoneView.Name != selected {
+				continue
+			}
+			revisions, err := history.ListZoneRevisions(request.Context(), zoneView.Name, 20)
+			if errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
+				break
+			}
+			if err != nil {
+				zoneView.HistoryError = "Change history is temporarily unavailable."
+				server.logger.Warn("load zone revision history", "zone", zoneView.Name, "error", err)
+				continue
+			}
+			zoneView.History = zoneRevisionViews(revisions, zoneView.Revision, console.TimeDisplay)
+		}
 	}
 	return pages.ZonesPageView{
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
