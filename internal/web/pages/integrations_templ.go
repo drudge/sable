@@ -1651,7 +1651,7 @@ func UniFiWizardDialog(view UniFiAppView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 130, "</a><form hx-post=\"/ui/integrations/unifi/wizard\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\"><div class=\"isotope-dialog-body\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 130, "</a><form hx-post=\"/ui/integrations/unifi/wizard\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\"><div class=\"isotope-dialog-body\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3756,7 +3756,7 @@ func SSOWizardDialog(wizard SSOWizardView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 300, "</a><form hx-post=\"/ui/integrations/sso/wizard\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\"><div class=\"isotope-dialog-body\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 300, "</a><form hx-post=\"/ui/integrations/sso/wizard\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\"><div class=\"isotope-dialog-body\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

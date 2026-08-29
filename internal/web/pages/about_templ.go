@@ -284,7 +284,7 @@ func AboutContent(view AboutPageView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if view.Console.CanMetrics {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"about-metrics-preview\"><button class=\"button outline compact\" type=\"button\" hx-get=\"/metrics\" hx-target=\"#metrics-preview\" hx-swap=\"innerHTML\" hx-disabled-elt=\"this\">Preview metrics</button><pre id=\"metrics-preview\" hidden></pre></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"about-metrics-preview\"><button class=\"button outline compact\" type=\"button\" hx-get=\"/metrics\" hx-target=\"#metrics-preview\" hx-swap=\"innerHTML\" hx-disable=\"this\">Preview metrics</button><pre id=\"metrics-preview\" hidden></pre></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -491,14 +491,14 @@ func UpdatePanel(view UpdateView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		case "install":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/install\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button\" hx-confirm=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/install\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disable=\"find button\" hx-confirm=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateInstallConfirmation(view))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 179, Col: 189}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `about.templ`, Line: 179, Col: 184}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 			if templ_7745c5c3_Err != nil {
@@ -543,7 +543,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		case "check":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/check\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button\"><div class=\"about-update-split\"><button class=\"button outline compact\" type=\"submit\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<form class=\"about-update-actions\" hx-post=\"/ui/updates/check\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disable=\"find button\"><div class=\"about-update-split\"><button class=\"button outline compact\" type=\"submit\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

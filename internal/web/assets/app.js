@@ -470,7 +470,7 @@
 	  });
 	  startTime.addEventListener("input", syncValues);
 	  endTime.addEventListener("input", syncValues);
-	  form?.addEventListener("htmx:beforeRequest", (event) => {
+	  form?.addEventListener("htmx:before:request", (event) => {
 		if (!validate(true)) event.preventDefault();
 	  });
 	  // Without a form of its own, Apply just commits the window to the hidden
@@ -1333,13 +1333,14 @@
 	  // A refresh already on the wire still answers the filter the panel carried
 	  // when it left, so it is dropped rather than allowed to land on top of the
 	  // filter the operator just asked for.
-	  panel.addEventListener("htmx:beforeRequest", () => {
+	  panel.addEventListener("htmx:before:request", () => {
 		if (!pollRequest) return;
 		pollRequest.abort();
 		pollRequest = null;
 	  });
-	  panel.addEventListener("htmx:beforeSend", (event) => {
-		if (event.detail?.elt === panel) pollRequest = event.detail.xhr;
+	  panel.addEventListener("htmx:before:request", (event) => {
+		const ctx = event.detail?.ctx;
+		if (ctx?.sourceElement === panel) pollRequest = ctx.request;
 	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
@@ -1482,21 +1483,20 @@
 	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
 
-	// htmx treats every 4xx and 5xx as a failed request and drops the body, so a
-	// rejected form used to leave the page untouched with nothing but a console
-	// warning. Handlers that render the whole panel back, error banner included,
-	// mark the response and it gets swapped in like a normal reply.
-	document.body.addEventListener("htmx:beforeSwap", (event) => {
-	  if (event.detail?.xhr?.getResponseHeader("X-Sable-Console-Fragment") !== "true") return;
-	  event.detail.shouldSwap = true;
-	  event.detail.isError = false;
+	// htmx 4 swaps error responses by default. Keep bare server errors out of UI
+	// targets while allowing handlers that rendered a complete console fragment,
+	// error banner included, to replace their panel.
+	document.body.addEventListener("htmx:after:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (!ctx?.response || ctx.response.status < 400) return;
+	  if (ctx.response.headers.get("X-Sable-Console-Fragment") !== "true") ctx.swap = "none";
 	});
-	document.body.addEventListener("htmx:oobBeforeSwap", (event) => {
-	  if (event.detail?.target?.id !== "runtime-stats") return;
-	  dashboardStatSnapshot = captureDashboardStats(event.detail.target);
+	document.body.addEventListener("htmx:before:swap", (event) => {
+	  const statsTask = event.detail?.tasks?.find((task) => task.type === "oob" && task.target?.id === "runtime-stats");
+	  if (statsTask) dashboardStatSnapshot = captureDashboardStats(statsTask.target);
 	});
-	document.body.addEventListener("htmx:oobAfterSwap", (event) => {
-	  if (event.detail?.target?.id !== "runtime-stats") return;
+	document.body.addEventListener("htmx:after:swap", () => {
+	  if (dashboardStatSnapshot.size === 0) return;
 	  const current = document.querySelector("#runtime-stats");
 	  const snapshot = dashboardStatSnapshot;
 	  dashboardStatSnapshot = new Map();
@@ -1504,19 +1504,17 @@
 	});
 
 	initializeSwappedContent(document);
-	document.body.addEventListener("htmx:afterSwap", (event) => {
-	  initializeSwappedContent(event.detail?.target);
-	  if (event.detail?.target?.id === "api-token-result" && event.detail.target.querySelector(".token-created")) {
-		const dialog = event.detail.target.closest("#create-token-dialog");
+	document.body.addEventListener("htmx:after:process", (event) => {
+	  const root = event.target;
+	  initializeSwappedContent(root);
+	  if (root?.id === "api-token-result" && root.querySelector(".token-created")) {
+		const dialog = root.closest("#create-token-dialog");
 		dialog?.querySelector("[data-token-fields]")?.setAttribute("hidden", "");
 		dialog?.querySelector("[data-token-submit]")?.setAttribute("hidden", "");
 		const close = dialog?.querySelector("[data-token-close]");
 		if (close) close.textContent = "Close";
 		dialog?.setAttribute("data-token-created", "true");
 	  }
-	});
-	document.body.addEventListener("htmx:load", (event) => {
-	  initializeSwappedContent(event.detail?.elt);
 	});
 
 	document.addEventListener("click", (event) => {
@@ -1889,11 +1887,11 @@
 	// them, so the poll is dropped for that cycle and the next one catches up.
 	// The check lives here rather than in an hx-trigger filter because the
 	// console's CSP has no unsafe-eval for htmx to compile one with.
-	document.body.addEventListener("htmx:beforeRequest", (event) => {
-	  if (event.detail?.elt?.id !== "dashboard-insights") return;
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  if (event.detail?.ctx?.sourceElement?.id !== "dashboard-insights") return;
 	  if (document.querySelector("#dashboard-insights dialog[open]")) event.preventDefault();
 	});
-	document.body.addEventListener("htmx:afterSwap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
+	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
 	syncRoutedDialogs();
 	openAutomaticDialogs();
 
@@ -2062,9 +2060,10 @@
 	  const form = event.target.closest?.("[data-passphrase-pair]");
 	  if (form) syncPassphrasePair(form);
 	});
-	document.body.addEventListener("htmx:afterRequest", (event) => {
-	  const policy = event.detail?.elt?.closest?.("[data-query-detail-policy]");
-	  if (policy && event.detail.successful) policy.closest("dialog")?.close();
+	document.body.addEventListener("htmx:after:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const policy = ctx?.sourceElement?.closest?.("[data-query-detail-policy]");
+	  if (policy && ctx.response?.status < 400) policy.closest("dialog")?.close();
 	});
 
 	// Read the unencrypted envelope header so a file identifies itself before
@@ -2132,12 +2131,12 @@
 	  });
 	};
 	window.setInterval(tickBackupExpiry, 10000);
-	document.body.addEventListener("htmx:afterSwap", tickBackupExpiry);
+	document.body.addEventListener("htmx:after:swap", tickBackupExpiry);
 	tickBackupExpiry();
 
-	// Drive the restore upload meter from real transfer progress. A large
-	// archive crossing a slow link is the only part of a restore the server
-	// cannot report on, so the browser measures that leg itself.
+	// Fetch does not expose upload progress. Backup restores therefore provide a
+	// fetch-compatible XHR transport to htmx for this one request so large files
+	// retain their real transfer meter without changing the rest of htmx 4.
 	const backupUploadMeter = (form) => form?.querySelector("[data-backup-upload]");
 	const setBackupUpload = (form, percent, visible) => {
 	  const meter = backupUploadMeter(form);
@@ -2148,28 +2147,56 @@
 	  if (fill) fill.style.width = `${percent}%`;
 	  if (label) label.textContent = `${percent}%`;
 	};
-	document.body.addEventListener("htmx:xhr:loadstart", (event) => {
-	  const form = event.target.closest?.("[data-backup-restore-form]");
-	  if (form) setBackupUpload(form, 0, true);
+	const uploadProgressFetch = (form) => (input, init = {}) => new Promise((resolve, reject) => {
+	  const xhr = new XMLHttpRequest();
+	  const signal = init.signal;
+	  const cleanup = () => signal?.removeEventListener("abort", abort);
+	  const fail = (error) => { cleanup(); reject(error); };
+	  const abort = () => xhr.abort();
+
+	  xhr.open(init.method || "GET", input, true);
+	  new Headers(init.headers).forEach((value, name) => xhr.setRequestHeader(name, value));
+	  xhr.withCredentials = init.credentials === "include";
+	  xhr.upload.addEventListener("progress", (event) => {
+		if (!event.lengthComputable || !event.total) return;
+		setBackupUpload(form, Math.round((event.loaded / event.total) * 100), true);
+	  });
+	  xhr.addEventListener("load", () => {
+		const headers = new Headers();
+		xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+		  const separator = line.indexOf(":");
+		  if (separator > 0) headers.append(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
+		});
+		cleanup();
+		const body = [101, 204, 205, 304].includes(xhr.status) ? null : xhr.responseText;
+		resolve(new Response(body, {status: xhr.status, statusText: xhr.statusText, headers}));
+	  });
+	  xhr.addEventListener("error", () => fail(new TypeError("Backup upload failed")));
+	  xhr.addEventListener("abort", () => fail(new DOMException("Backup upload aborted", "AbortError")));
+	  if (signal?.aborted) { fail(new DOMException("Backup upload aborted", "AbortError")); return; }
+	  signal?.addEventListener("abort", abort, {once: true});
+	  setBackupUpload(form, 0, true);
+	  xhr.send(init.body);
 	});
-	document.body.addEventListener("htmx:xhr:progress", (event) => {
-	  const form = event.target.closest?.("[data-backup-restore-form]");
-	  if (!form || !event.detail?.lengthComputable || !event.detail.total) return;
-	  setBackupUpload(form, Math.round((event.detail.loaded / event.detail.total) * 100), true);
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const form = ctx?.sourceElement?.closest?.("[data-backup-restore-form]");
+	  if (form) ctx.fetch = uploadProgressFetch(form);
 	});
-	document.body.addEventListener("htmx:xhr:loadend", (event) => {
-	  const form = event.target.closest?.("[data-backup-restore-form]");
+	document.body.addEventListener("htmx:finally:request", (event) => {
+	  const form = event.detail?.ctx?.sourceElement?.closest?.("[data-backup-restore-form]");
 	  if (form) setBackupUpload(form, 100, false);
 	});
 
 	// Keep the live chart refresh from replacing an open custom-range picker.
-	document.body.addEventListener("htmx:configRequest", (event) => {
-	  const source = event.detail?.elt;
+	document.body.addEventListener("htmx:config:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const source = ctx?.sourceElement;
 	  if (!source?.closest?.("#query-statistics")) return;
-	  event.detail.parameters.stats_scope = document.querySelector("#runtime-stats")?.dataset.statsScope || OVERVIEW_SCOPE_ALL;
+	  ctx.request.body.set("stats_scope", document.querySelector("#runtime-stats")?.dataset.statsScope || OVERVIEW_SCOPE_ALL);
 	});
-	document.body.addEventListener("htmx:beforeRequest", (event) => {
-	  const source = event.detail?.elt;
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const source = event.detail?.ctx?.sourceElement;
 	  if (source?.id === "query-statistics" && source.querySelector("[data-range-popover]:not([hidden])")) {
 		event.preventDefault();
 		return;
@@ -2185,18 +2212,16 @@
 	}, true);
 
 	document.body.addEventListener("htmx:confirm", (event) => {
-	  const question = event.detail?.question;
+	  const question = event.detail?.ctx?.confirm;
 	  if (!question) return;
 	  event.preventDefault();
-	  const source = event.detail?.elt;
+	  const source = event.detail.ctx.sourceElement;
 	  const confirmation = source?.closest?.("[data-confirm-title]") || source;
 	  confirmAction(question, {
 		title: confirmation?.dataset.confirmTitle,
 		action: confirmation?.dataset.confirmAction,
 		tone: confirmation?.dataset.confirmTone,
-	  }).then((accepted) => {
-		if (accepted) event.detail.issueRequest(true);
-	  });
+	  }).then((accepted) => accepted ? event.detail.issueRequest() : event.detail.dropRequest());
 	});
 
 	document.body.addEventListener("input", (event) => {

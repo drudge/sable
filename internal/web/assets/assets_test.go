@@ -105,3 +105,11 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 		t.Fatal("identity response does not match app.css")
 	}
 }
+
+func TestVendoredHTMXVersion(t *testing.T) {
+	t.Parallel()
+
+	if content := string(manifest["htmx.min.js"].content); !strings.Contains(content, `version="4.0.0"`) {
+		t.Fatal("vendored htmx asset is not version 4.0.0")
+	}
+}

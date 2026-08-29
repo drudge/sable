@@ -210,7 +210,7 @@ func ClusterContent(view ClusterPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.LocalRole == "Replica" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<section class=\"card cluster-danger-card\"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post=\"/ui/cluster/leave\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\" hx-confirm=\"Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently.\" data-confirm-title=\"Leave cluster?\" data-confirm-action=\"Leave Cluster\"><button class=\"button destructive\" type=\"submit\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<section class=\"card cluster-danger-card\"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post=\"/ui/cluster/leave\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" hx-confirm=\"Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently.\" data-confirm-title=\"Leave cluster?\" data-confirm-action=\"Leave Cluster\"><button class=\"button destructive\" type=\"submit\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -262,7 +262,7 @@ func ClusterContent(view ClusterPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div><form hx-post=\"/ui/cluster/delete\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\" hx-confirm=\"Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization.\" data-confirm-title=\"Delete cluster?\" data-confirm-action=\"Delete Cluster\"><button class=\"button destructive\" type=\"submit\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div><form hx-post=\"/ui/cluster/delete\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" hx-confirm=\"Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization.\" data-confirm-title=\"Delete cluster?\" data-confirm-action=\"Delete Cluster\"><button class=\"button destructive\" type=\"submit\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1335,7 +1335,7 @@ func JoinClusterDialog(view ClusterPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<form hx-post=\"/ui/cluster/join\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\" data-cluster-join-form><input type=\"hidden\" name=\"workflow\" value=\"join\"><div class=\"isotope-dialog-body\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 119, "<form hx-post=\"/ui/cluster/join\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disable:inherited=\"find button[type='submit']\" data-cluster-join-form><input type=\"hidden\" name=\"workflow\" value=\"join\"><div class=\"isotope-dialog-body\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1714,14 +1714,14 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 			templ_7745c5c3_Var71 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 152, "<form hx-post=\"/ui/cluster/onboarding\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disabled-elt=\"find button[type='submit']\" data-cluster-onboarding data-initial-step=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 152, "<form hx-post=\"/ui/cluster/onboarding\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-cluster-onboarding data-initial-step=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var72 string
 		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.OnboardingStep))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 312, Col: 209}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 312, Col: 204}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 		if templ_7745c5c3_Err != nil {

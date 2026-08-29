@@ -105,7 +105,7 @@ templ AboutContent(view AboutPageView) {
 				</div>
 				if view.Console.CanMetrics {
 					<div class="about-metrics-preview">
-						<button class="button outline compact" type="button" hx-get="/metrics" hx-target="#metrics-preview" hx-swap="innerHTML" hx-disabled-elt="this">Preview metrics</button>
+						<button class="button outline compact" type="button" hx-get="/metrics" hx-target="#metrics-preview" hx-swap="innerHTML" hx-disable="this">Preview metrics</button>
 						<pre id="metrics-preview" hidden></pre>
 					</div>
 				}
@@ -176,12 +176,12 @@ templ UpdatePanel(view UpdateView) {
 					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
 				</div>
 			case "install":
-				<form class="about-update-actions" hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disabled-elt="find button" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
+				<form class="about-update-actions" hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disable="find button" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
 					<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
 					<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
 				</form>
 			case "check":
-				<form class="about-update-actions" hx-post="/ui/updates/check" hx-target="#about-update" hx-swap="outerHTML" hx-disabled-elt="find button">
+				<form class="about-update-actions" hx-post="/ui/updates/check" hx-target="#about-update" hx-swap="outerHTML" hx-disable="find button">
 					<div class="about-update-split">
 						<button class="button outline compact" type="submit">@Icon("refresh")<span>{ ifThen(view.Checked, "Check Again", "Check for Updates") }</span></button>
 						<details class="about-update-menu">

@@ -492,7 +492,7 @@ templ UniFiWizardDialog(view UniFiAppView) {
 	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="unifi-setup-dialog" aria-labelledby="unifi-setup-title" data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="unifi-setup-title">Set Up UniFi Host Sync</h2><p>Publish UniFi hosts into zones Sable is authoritative for</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
-		<form hx-post="/ui/integrations/unifi/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+		<form hx-post="/ui/integrations/unifi/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				@UniFiWizardProgress(view.Wizard.Step)
 				if view.Wizard.Error != "" {
@@ -977,7 +977,7 @@ templ SSOWizardDialog(wizard SSOWizardView) {
 	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog sso-wizard-dialog" id="sso-setup-dialog" aria-labelledby="sso-setup-title" data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="sso-setup-title">Set Up Single Sign-On</h2><p>{ ssoWizardSubtitle(wizard.Step) }</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
-		<form hx-post="/ui/integrations/sso/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disabled-elt="find button[type='submit']">
+		<form hx-post="/ui/integrations/sso/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				@SSOWizardProgress(wizard.Step)
 				if wizard.Error != "" {
