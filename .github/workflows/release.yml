@@ -109,6 +109,28 @@ jobs:
           echo "tag_exists=${tag_exists}" >> "${GITHUB_OUTPUT}"
           echo "version=${release}" >> "${GITHUB_OUTPUT}"
 
+      - name: Prepare curated release notes
+        id: release_notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          notes="${RUNNER_TEMP}/sable-release-notes.md"
+          if awk -v heading="## [${RELEASE_VERSION}]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > "${notes}" && grep --quiet '[^[:space:]]' "${notes}"; then
+            echo "path=${notes}" >> "${GITHUB_OUTPUT}"
+            echo "Using curated CHANGELOG.md notes for ${RELEASE_VERSION}."
+          else
+            rm -f "${notes}"
+            echo "No curated CHANGELOG.md section for ${RELEASE_VERSION}; keeping generated notes."
+          fi
+
       - name: Run pre-release gate
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -142,5 +164,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.path }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: gh release edit "${RELEASE_TAG}" --draft=false
+        run: |
+          set -euo pipefail
+          if [[ -n "${RELEASE_NOTES}" ]]; then
+            gh release edit "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES}" --draft=false
+          else
+            gh release edit "${RELEASE_TAG}" --draft=false
+          fi
