@@ -72,18 +72,24 @@ runs the complete pre-release gate used by CI.
 Publishing is owned by the **Release** GitHub Actions workflow. Do not create a
 release commit or tag locally.
 
-1. Merge the intended release commit to `main` and wait for the required CI
+1. Add or update the matching version section in [`CHANGELOG.md`](../CHANGELOG.md).
+   Keep `Unreleased` while the release is being prepared; the workflow matches
+   the bracketed version, not the date text.
+2. Merge the intended release commit to `main` and wait for the required CI
    checks to pass.
-2. In GitHub, open **Actions → Release → Run workflow**.
-3. Select `main`, enter the semantic version, and start the run.
-4. Approve the `release` environment deployment when prompted.
+3. In GitHub, open **Actions → Release → Run workflow**.
+4. Select `main`, enter the semantic version, and start the run.
+5. Approve the `release` environment deployment when prompted.
 
 The job refuses to run from any ref other than `main`. It validates the version,
 runs `mage releaseGate`, creates and pushes an annotated tag, authenticates to
 GitHub Container Registry, and asks GoReleaser to create a replaceable draft.
 Only after every archive, checksum, and container image is published does it
-make the GitHub release visible. The job has repository write permissions only
-for that gated run, and it never pushes a branch.
+apply the matching curated changelog section and make the GitHub release
+visible. If a development or release-candidate version has no exact changelog
+section, GoReleaser's generated commit list remains in place. The job has
+repository write permissions only for that gated run, and it never pushes a
+branch.
 
 Configure the repository's `release` environment with required reviewers before
 the first production run. Protect `main` separately with the **Quality** and

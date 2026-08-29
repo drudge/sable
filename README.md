@@ -4,55 +4,94 @@
 
 <h1 align="center">Sable</h1>
 
-Sable is a modern, high-performance DNS platform written in Go. It is being
-built as one executable containing the DNS server, DNS client, administrative
-API, migrations, and reactive web console.
+Sable is a modern, high-performance DNS platform written in Go and distributed
+as one static executable containing the DNS server, DNS client, administrative
+API, migrations, and reactive web console. It is pre-1.0, but it has moved well
+beyond its original foundation milestone: the current platform covers recursive
+and authoritative DNS, policy, observability, identity, clustering, certificate
+automation, backup and restore, and native release management.
 
-The project is at an early foundation milestone. The current executable serves
-UDP, TCP, DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC with direct iterative recursion or configured forwarders, supports exact and subdomain
-blocking, caches positive and negative responses, persists query events
-asynchronously, hot-reloads TOML configuration transactionally, exposes health
-and runtime information, and embeds its web interface.
-
-The console uses server-rendered `templ` components and vendored htmx. Its
+The console uses server-rendered `templ` components and vendored htmx 4. Its
 visual language is derived from Isotope's dark, product-focused interface
 without shipping a Node.js runtime or a separate frontend bundle.
 
-## Current foundation
+## Current platform
 
-- One statically built `sable` executable
-- UDP, TCP, DoT, RFC 8484 DoH, and RFC 9250 DoQ listeners with TCP fallback for truncated replies
-- Transactional listener and TLS certificate hot reload with TLS 1.3 defaults
-- Longest-suffix conditional forwarding with round-robin failover pools
-- Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover, DS/DNSKEY chain validation, NSEC/NSEC3 denial proofs, AD/CD/DO handling, and Extended DNS Errors
-- Hot-reloadable local A/AAAA overrides with IDNA normalization
-- Primary and Secondary authoritative zones with AXFR/IXFR, automatic SOA refresh/retry/expiry, TSIG-authenticated transfers/NOTIFY and RFC 2136 dynamic updates, wildcard records, NSEC/NSEC3 negative proofs, transfer ACLs, and split KSK/ZSK signing with safe automated rollover
-- Automatically refreshed Stub zones and Forwarder zones with prioritized UDP/TCP/TLS subtree routing
-- Alias zones that republish another zone's records under a second name and follow every change to their source
-- Bounded sharded cache with TTL aging and RFC 2308 negative caching
-- Exact/subdomain blocking, allowed overrides, client bypasses, configurable responses, and temporary pause/resume
-- Curated or custom HTTP(S) block-list subscriptions with transactional scheduled and manual refresh
-- Built-in UDP, TCP, DNS-over-TLS, DNS-over-HTTPS, and DNS-over-QUIC client
-- Strict TOML configuration with transactional hot reload
-- Transactional SQLite/PostgreSQL zone and record storage with retained per-zone revisions
-- Batched non-blocking query logging, retention, API, and live console table
-- Embedded reactive console and health API
-- Prometheus text metrics for DNS, cache, policy, query-log, and cluster health
-- First-run administrator setup, Argon2id passwords, server-side sessions, CSRF protection, and login throttling
-- Database-backed users, built-in/custom roles, least-privilege permissions, account disable/delete/password reset, session and token revocation, and persistent audit views
-- Group-authorized API bearer tokens with configurable or non-expiring lifetimes, Web/API permission separation, per-zone grants, and an AES-256-GCM secret vault
-- OpenID Connect single sign-on with a guided setup wizard, group-to-role mapping, just-in-time account creation, verified-email linking, and a per-account switch to single sign-on only
-- Revisioned Settings UI for cluster-scoped DNS runtime configuration with atomic persistence and hot application
-- Durable primary/replica membership, short-lived single-use enrollment, signed zone/policy/runtime/authorization snapshots, manual replica promotion, and real-time node sync telemetry
-- Live policy reload, cache purge, and policy status APIs
-- UniFi host synchronization with a guided setup wizard, per-network zone mapping, automatic forward and reverse zone creation, and integration-owned records that never disturb hand-authored ones
-- Managed ACME DNS-01 certificates with automatic renewal and nine built-in DNS providers
-- UI-generated/imported public certificate key pairs with protected node-local keys
-- Passphrase-sealed whole-deployment backup and restore covering configuration, zones, authorization, secrets and their vault key, trust anchors, TLS material, and cluster membership
-- Unit, integration, race, allocation, and microbenchmark coverage
+### DNS service and policy
 
-Automatic failover is planned and not represented as complete yet. Replica
-promotion is manual. See [the roadmap](docs/roadmap.md).
+- UDP, TCP, DoT, RFC 8484 DoH, and RFC 9250 DoQ listeners, with TCP fallback
+  for truncated replies and transactional certificate/listener reload
+- Direct iterative recursion or longest-suffix conditional forwarding with
+  failover pools and reusable upstream TLS and QUIC connections
+- Recursive DNSSEC validation with persistent RFC 5011 root-anchor rollover,
+  negative trust anchors, authenticated denial, AD/CD/DO handling, and Extended
+  DNS Errors
+- Bounded positive/negative cache with TTL aging, serve-stale behavior, and
+  hit-rate-driven prefetch
+- Exact and subdomain blocking, allowed overrides, client bypasses,
+  configurable responses, temporary pause/resume, and transactional block-list
+  subscriptions with per-source health and retry backoff
+- Primary, Secondary, Stub, Forwarder, Alias, and RFC 9432 Catalog zones with
+  import/export, automatic refresh, AXFR/IXFR, targeted NOTIFY, transfer ACLs,
+  and transactional in-memory activation
+- TSIG-authenticated RFC 2136 updates and zone transfers, plus automatic
+  Ed25519/ECDSA DNSSEC signing with NSEC/NSEC3 proofs and managed KSK/ZSK
+  rollover
+- Hot-reloadable local A/AAAA overrides and a built-in UDP, TCP, DoT, DoH, and
+  DoQ client
+
+### Operations and observability
+
+- Strict TOML configuration, revisioned Settings UI, and last-known-good
+  runtime behavior when a replacement configuration cannot activate
+- Transactional SQLite/PostgreSQL storage with retained zone revisions and a
+  Change Center for inspecting differences and restoring an earlier revision
+- Batched non-blocking query logging with retention, cursor-based deep-history
+  browsing, minute rollups, exact range-aware dashboard rankings, and a query
+  detail drawer that explains policy, cache, resolver, route, and DNSSEC
+  decisions
+- Prometheus metrics for DNS, cache, policy, query-log, block-list, and cluster
+  health, including bounded-cardinality DNS latency histograms split by source,
+  protocol, cache result, and response code
+- Embedded fingerprinted and compressed web assets, live dashboard and cluster
+  updates, health endpoints, live policy reload, and cache inspection/purge APIs
+
+### Security and deployment
+
+- First-run administrator setup, Argon2id passwords, server-side sessions,
+  login throttling, CSRF defense, persistent audit events, and capability-aware
+  console navigation
+- Database-backed users, built-in/custom RBAC, separate Web/API permissions,
+  per-zone grants, revocable API tokens, and an AES-256-GCM secret vault
+- OpenID Connect single sign-on with guided setup, PKCE, group-to-role mapping,
+  just-in-time provisioning, verified-email linking, and replicated federated
+  identities
+- Generated or imported public certificate key pairs and managed ACME DNS-01
+  issuance/renewal through nine built-in providers
+- Passphrase-sealed whole-deployment backup and atomic restore with a durable
+  rollback journal
+- Hardened systemd installation, verified self-update, non-root multi-architecture
+  containers, and gated cross-platform releases with checksums and embedded
+  build identity
+
+### Clustering and integrations
+
+- Durable primary/replica membership, short-lived single-use enrollment,
+  content-addressed signed state snapshots, apply-before-commit activation,
+  authorization and secret replication, manual promotion, and real-time node
+  synchronization telemetry
+- Cluster-aware console links and DNS client presets that can query a specific
+  node over its advertised DoH endpoint
+- UniFi synchronization with guided setup, per-network zone mapping, and
+  integration-owned A, AAAA, and IPv4/IPv6 PTR records that do not disturb
+  hand-authored data
+
+Sable remains pre-1.0. Replicas continue serving DNS when the primary is
+unavailable, but control-plane writes require manual promotion; Sable does not
+yet claim automatic partition-safe failover. OpenTelemetry export,
+cluster-aggregated telemetry, encrypted-transport capacity profiles, and the
+broader fault-injection and recovery matrix also remain roadmap work. See
+[the roadmap](docs/roadmap.md) for the current boundary.
 
 ## Requirements
 
@@ -290,10 +329,14 @@ it behind a trusted HTTPS reverse proxy before exposing the console beyond the
 host. A newly created named volume receives the image's container-specific
 `sable.toml`; subsequent starts retain changes made through the console.
 
-See [the architecture](docs/architecture.md) and
-[configuration guide](docs/configuration.md) for runtime behavior. The
-[backup guide](docs/backup.md) covers capturing and rebuilding a deployment,
-the [benchmark protocol](docs/benchmarking.md) defines comparison rules, and the
-[Proxmox guide](docs/proxmox.md) covers native unprivileged LXC deployment.
+## Documentation
+
+- [Architecture](docs/architecture.md), [configuration](docs/configuration.md),
+  and the [console interaction contract](docs/ui.md)
+- [Operations](docs/operations.md), [clustering](docs/clustering.md),
+  [backup and restore](docs/backup.md), and [Proxmox deployment](docs/proxmox.md)
+- [Benchmark protocol](docs/benchmarking.md), [release guide](docs/releasing.md),
+  and the [roadmap](docs/roadmap.md)
+- [Changelog](CHANGELOG.md) and [security policy](SECURITY.md)
 
 Sable is licensed under the MIT License.
