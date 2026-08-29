@@ -98,6 +98,23 @@ first_line() {
 	"$@" 2>&1 | sed -n '1p'
 }
 
+require_unused_tcp_port() {
+	label=$1
+	host=$2
+	port=$3
+	override=$4
+	case "$host" in
+		*:*) endpoint="[$host]:$port" ;;
+		*) endpoint="$host:$port" ;;
+	esac
+	status=0
+	curl --silent --output /dev/null --noproxy '*' --connect-timeout 1 --max-time 1 "telnet://$endpoint" || status=$?
+	if [ "$status" -eq 7 ]; then
+		return 0
+	fi
+	fail "$label port $endpoint is already in use or unavailable; set $override to an unused port"
+}
+
 docker_remove() {
 	container=$1
 	[ -n "$container" ] || return 0
@@ -491,11 +508,13 @@ wait_for_dns() {
 
 configure_technitium() {
 	base_url="http://$TECHNITIUM_HOST:$TECHNITIUM_HTTP_PORT"
-	login_response=$(curl --fail --silent --show-error --request POST \
+	if ! login_response=$(curl --fail --silent --show-error --request POST \
 		--data-urlencode 'user=admin' \
 		--data-urlencode 'pass=benchmark-only' \
 		--data-urlencode 'includeInfo=false' \
-		"$base_url/api/user/login")
+		"$base_url/api/user/login"); then
+		fail "Technitium API login failed at $base_url; verify TECHNITIUM_HTTP_PORT reaches the benchmark container"
+	fi
 	token=$(printf '%s' "$login_response" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 	[ -n "$token" ] || fail "Technitium API login failed"
 
@@ -855,6 +874,10 @@ run_managed() {
 	require_command dig ""
 	require_command curl ""
 	require_command dnsperf " (macOS: brew install dnsperf)"
+	require_unused_tcp_port "Sable DNS" "$SABLE_HOST" "$SABLE_PORT" SABLE_PORT
+	require_unused_tcp_port "Sable HTTP" "$SABLE_HOST" "$SABLE_HTTP_PORT" SABLE_HTTP_PORT
+	require_unused_tcp_port "Technitium DNS" "$TECHNITIUM_HOST" "$TECHNITIUM_PORT" TECHNITIUM_PORT
+	require_unused_tcp_port "Technitium HTTP" "$TECHNITIUM_HOST" "$TECHNITIUM_HTTP_PORT" TECHNITIUM_HTTP_PORT
 
 	record_dnsperf_metadata
 	GO_VERSION=$(first_line go version)

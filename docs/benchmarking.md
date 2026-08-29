@@ -70,6 +70,9 @@ environment variables.
 Sable configuration and manifest without requiring a running Docker daemon.
 Reprint a completed run's calculated terminal summary with
 `SUMMARY_ONLY=true RESULTS_DIRECTORY=/absolute/path/to/run mage benchmarkCompare`.
+Managed mode verifies that every configured host TCP port is unused before it
+builds images. If a development server occupies a default port, stop it or set
+the named `SABLE_*_PORT` or `TECHNITIUM_*_PORT` override from the error message.
 
 Technitium does not expose every cache or QPM setting through its documented
 first-start container environment. The harness therefore uses its documented
