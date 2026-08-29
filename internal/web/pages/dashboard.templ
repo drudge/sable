@@ -730,6 +730,7 @@ templ StatsScopeButton(label string, scope string, view StatsOverviewView) {
 		hx-get={ statsScopeURL(scope, view) }
 		hx-target="#query-statistics"
 		hx-swap="outerHTML"
+		hx-indicator="#dashboard-update-indicator"
 	>{ label }</button>
 }
 
@@ -761,7 +762,7 @@ func clientsStatDetail(scope string) string {
 }
 
 templ QueryChart(view QueryChartView) {
-	<section class="card chart-card" id="query-statistics" data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML">
+	<section class="card chart-card" id="query-statistics" data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML" hx-indicator="#dashboard-update-indicator">
 		<div class="card-header chart-header">
 			<h2>Query Statistics</h2>
 			if view.ActiveRange == "custom" {
@@ -875,9 +876,9 @@ templ RangeOption(label string, value string, active string) {
 }
 
 templ StatCard(label string, value string, subValue string, color string) {
-	<article class={ "stat-card " + color }>
-		<strong>{ value }</strong>
-		<span>{ subValue }</span>
+	<article class={ "stat-card " + color } data-stat-label={ label }>
+		<strong data-stat-number="value">{ value }</strong>
+		<span data-stat-number="detail">{ subValue }</span>
 		<div>{ label }</div>
 	</article>
 }

@@ -445,13 +445,16 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, appScript) || !strings.Contains(dashboard, htmxScript) || strings.Index(dashboard, appScript) > strings.Index(dashboard, htmxScript) {
 		t.Error("deferred application script must register before htmx initializes")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range"} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", `id="dashboard-update-indicator"`, `hx-indicator="#dashboard-update-indicator"`, "Updating dashboard…", `data-stat-label="Total Queries"`, `data-stat-number="value"`, `data-stat-number="detail"`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
 	}
 	if cards := strings.Count(dashboard, `class="stat-card `); cards != 12 {
 		t.Errorf("dashboard stat card count = %d, want all 12 metrics", cards)
+	}
+	if values := strings.Count(dashboard, `data-stat-number="value"`); values != 12 {
+		t.Errorf("dashboard morphing value count = %d, want 12", values)
 	}
 	chartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day")
 	if chartResponse.Code != http.StatusOK || !strings.Contains(chartResponse.Body.String(), `data-range="day"`) {
@@ -1567,6 +1570,38 @@ func TestClusterUnverifiedSynchronizationUsesIndeterminateProgress(t *testing.T)
 	}
 	if strings.Contains(markup, "Up unknown") {
 		t.Fatalf("cluster status contains malformed unknown uptime: %s", markup)
+	}
+}
+
+func TestClusterNodesLinkToAdvertisedPortals(t *testing.T) {
+	t.Parallel()
+	var response bytes.Buffer
+	view := pages.ClusterPageView{
+		Initialized: true,
+		LocalRole:   "Primary",
+		Nodes: []pages.ClusterNodeView{
+			{ID: "node-primary", Name: "ns1", AdvertiseURL: "https://ns1.example.test:5380", Role: "Primary"},
+			{ID: "node-replica", Name: "ns2", AdvertiseURL: "https://ns2.example.test:5380", Role: "Replica"},
+		},
+	}
+	if err := pages.ClusterLiveStatus(view).Render(context.Background(), &response); err != nil {
+		t.Fatal(err)
+	}
+	markup := response.String()
+	for _, expected := range []string{
+		`href="https://ns1.example.test:5380"`, `aria-label="Open ns1 portal"`,
+		`href="https://ns2.example.test:5380"`, `aria-label="Open ns2 portal"`,
+		`target="_blank"`, `rel="noopener noreferrer"`, `icon-external-link`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Fatalf("cluster status missing %q: %s", expected, markup)
+		}
+	}
+	if links := strings.Count(markup, `class="cluster-node-portal"`); links != len(view.Nodes) {
+		t.Fatalf("cluster portal link count = %d, want %d: %s", links, len(view.Nodes), markup)
+	}
+	if strings.Contains(markup, ">Open portal<") {
+		t.Fatalf("cluster status renders a separate portal action instead of linking the endpoint: %s", markup)
 	}
 }
 
