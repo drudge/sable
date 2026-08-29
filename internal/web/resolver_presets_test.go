@@ -1,10 +1,17 @@
 package web
 
 import (
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/miekg/dns"
 )
 
 func TestResolveDNSClientServer(t *testing.T) {
@@ -21,6 +28,7 @@ func TestResolveDNSClientServer(t *testing.T) {
 		want       resolvedDNSServer
 	}{
 		{name: "this server UDP", preset: "this-server", local: "127.0.0.1:5353", transport: "udp", want: resolvedDNSServer{address: "127.0.0.1:5353"}},
+		{name: "this server HTTPS", preset: "this-server", local: "https://sable.example/dns-query", transport: "doh", want: resolvedDNSServer{address: "https://sable.example/dns-query"}},
 		{name: "recursive resolver", preset: "recursive-resolver", local: "127.0.0.1:5353", transport: "tcp", want: resolvedDNSServer{address: "127.0.0.1:5353"}},
 		{name: "Cloudflare UDP", preset: "cloudflare", transport: "udp", want: resolvedDNSServer{address: "1.1.1.1:53"}},
 		{name: "Cloudflare TLS", preset: "cloudflare", transport: "tcp-tls", want: resolvedDNSServer{address: "one.one.one.one:853"}},
@@ -138,5 +146,85 @@ func TestResolveDNSClientServerRejectsUnsupportedSelections(t *testing.T) {
 				t.Fatalf("resolveDNSClientServer() error = %v, want containing %q", err, test.wantError)
 			}
 		})
+	}
+}
+
+func TestDNSClientQueryMarksValidationErrorAsConsoleFragment(t *testing.T) {
+	t.Parallel()
+
+	form := url.Values{
+		"name":         {"example.com"},
+		"type":         {"A"},
+		"resolver":     {"this-server"},
+		"local_server": {"127.0.0.1:5353"},
+		"transport":    {"doh"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/ui/query", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+
+	(&Server{}).query(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+	if response.Header().Get(consoleFragmentHeader) != "true" {
+		t.Fatalf("%s = %q, want true", consoleFragmentHeader, response.Header().Get(consoleFragmentHeader))
+	}
+	if body := response.Body.String(); !strings.Contains(body, "Query failed") ||
+		!strings.Contains(body, "does not have a known DNS-over-HTTPS endpoint") {
+		t.Fatalf("query failure response does not explain the error: %s", body)
+	}
+}
+
+func TestLocalDoHServerUsesCurrentConsoleHostname(t *testing.T) {
+	t.Parallel()
+
+	configuration := config.Defaults()
+	configuration.Server.HTTPSListen = "0.0.0.0:443"
+	configuration.EncryptedDNS.DoHListen = []string{"0.0.0.0:443"}
+	server := &Server{config: testConfiguration{snapshot: config.Snapshot{Config: configuration}}}
+	request := httptest.NewRequest(http.MethodGet, "https://sable.example/dns-client", nil)
+
+	got := server.localDoHServer(request)
+	if want := (resolvedDNSServer{address: "https://sable.example/dns-query", dialIP: "127.0.0.1"}); got != want {
+		t.Fatalf("localDoHServer() = %#v, want %#v", got, want)
+	}
+}
+
+func TestDNSClientQueriesThisServerOverHTTPS(t *testing.T) {
+	t.Parallel()
+
+	dohServer := httptest.NewTLSServer(dnsserver.NewDoHHandler(dns.HandlerFunc(func(writer dns.ResponseWriter, request *dns.Msg) {
+		response := new(dns.Msg)
+		response.SetReply(request)
+		response.Answer = append(response.Answer, &dns.A{
+			Hdr: dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+			A:   net.ParseIP("192.0.2.53"),
+		})
+		_ = writer.WriteMsg(response)
+	})))
+	t.Cleanup(dohServer.Close)
+
+	configuration := config.Defaults()
+	configuration.EncryptedDNS.DoHListen = []string{strings.TrimPrefix(dohServer.URL, "https://")}
+	server := &Server{config: testConfiguration{snapshot: config.Snapshot{Config: configuration}}}
+	certificate := dohServer.TLS.Certificates[0]
+	server.certificate.Store(&certificate)
+	form := url.Values{
+		"name":      {"example.com"},
+		"type":      {"A"},
+		"resolver":  {"this-server"},
+		"transport": {"doh"},
+	}
+	request := httptest.NewRequest(http.MethodPost, dohServer.URL+"/ui/query", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+
+	server.query(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "192.0.2.53") {
+		t.Fatalf("local DoH query = %d %s", response.Code, response.Body.String())
 	}
 }
