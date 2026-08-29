@@ -563,8 +563,8 @@ templ ZoneListView(view ZonesPageView) {
 			<div><h1>Zones</h1><p>{ fmt.Sprint(len(view.Zones)) } zones configured</p></div>
 			if view.CanCreate {
 				<div class="zone-heading-actions">
-					<button class="button outline zone-primary-action" type="button" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("upload")<span>Import Zone</span></button>
-					<button class="button zone-primary-action" type="button" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
+					<button class="button outline zone-primary-action" type="button" aria-label="Import zone" title="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("upload")<span>Import Zone</span></button>
+					<button class="button zone-primary-action" type="button" aria-label="Add zone" title="Add zone" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
 				</div>
 			}
 		</header>
@@ -627,10 +627,10 @@ templ ZoneDetailView(zone ZoneView) {
 				<a class="icon-button" href={ zoneHref(zone.Name) } aria-label="Refresh records" title="Refresh records">@Icon("refresh")</a>
 				@ZoneActionMenu(zone, "detail-menu", "zone-history-dialog", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
 				if zoneCanResync(zone) && zone.CanTransfer {
-					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit">@Icon("refresh")<span>Resync</span></button></form>
+					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit" aria-label="Resynchronize zone" title="Resynchronize zone">@Icon("refresh")<span>Resync</span></button></form>
 				}
 				if zoneCanEditRecords(zone) && zone.CanRecords {
-					<button class="button zone-primary-action" type="button" data-dialog-open="add-zone-record-dialog" data-replica-primary-action>@Icon("plus")<span>Add Record</span></button>
+					<button class="button zone-primary-action" type="button" aria-label="Add DNS record" title="Add DNS record" data-dialog-open="add-zone-record-dialog" data-replica-primary-action>@Icon("plus")<span>Add Record</span></button>
 				}
 			</div>
 		</header>

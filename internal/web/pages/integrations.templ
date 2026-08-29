@@ -297,6 +297,7 @@ templ SSOMappingTable(view SSOAppView) {
 	} else {
 		<div class="admin-desktop-table">
 			<table class="isotope-table">
+				<caption class="sr-only">Single sign-on group mappings</caption>
 				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
 				<tbody>
 					for _, mapping := range view.Mappings {
@@ -467,6 +468,7 @@ templ UniFiMappingTable(view UniFiAppView, outOfBand bool) {
 
 templ UniFiMappingRows(view UniFiAppView) {
 	<table class="isotope-table unifi-mapping-table">
+		<caption class="sr-only">UniFi network to DNS zone mappings</caption>
 		<thead><tr><th>UniFi Network</th><th>Zone</th><th>Hosts</th><th>Example Name</th><th>TTL</th><th>Reverse</th><th>State</th></tr></thead>
 		<tbody>
 			for _, mapping := range view.Mappings {
@@ -574,6 +576,7 @@ templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
 		<div class="wizard-heading compact"><span>@Icon("hash")</span><div><strong>Networks</strong><small>Choose the UniFi networks whose hosts should appear in DNS.</small></div></div>
 		<div class="admin-desktop-table">
 			<table class="isotope-table unifi-network-table">
+				<caption class="sr-only">UniFi networks available for synchronization</caption>
 				<thead><tr><th>Sync</th><th>Network</th><th>Subnet</th><th class="right-cell">Hosts</th></tr></thead>
 				<tbody>
 					for index, network := range wizard.Networks {
@@ -700,6 +703,7 @@ templ UniFiPlanRecords(title string, records []UniFiPlanRecordView) {
 			<summary>{ fmt.Sprintf("%s (%d)", title, len(records)) }</summary>
 			<div class="admin-desktop-table">
 				<table class="isotope-table">
+					<caption class="sr-only">{ title } DNS records</caption>
 					<thead><tr><th>Name</th><th>Type</th><th>Value</th></tr></thead>
 					<tbody>
 						for _, record := range records {
@@ -1148,6 +1152,7 @@ templ SSOWizardReviewStep(wizard SSOWizardView) {
 	} else {
 		<div class="admin-desktop-table">
 			<table class="isotope-table">
+				<caption class="sr-only">Single sign-on group mappings to review</caption>
 				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
 				<tbody>
 					for _, mapping := range wizard.Mappings {

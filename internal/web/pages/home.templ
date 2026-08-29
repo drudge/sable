@@ -160,8 +160,8 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 	<article class="card distribution-card">
 		<header><h2>{ title }</h2></header>
 		<div class="distribution-content" data-donut>
-			<div class="donut-wrap" aria-label={ title + " chart" }>
-				<svg viewBox="0 0 120 120" role="img">
+			<div class="donut-wrap">
+				<svg viewBox="0 0 120 120" aria-hidden="true">
 					<circle class="donut-track" cx="60" cy="60" r="44" pathLength="100"/>
 					for index, item := range items {
 						<circle
@@ -180,12 +180,12 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 					<span>No data</span>
 				}
 			</div>
-			<div class="distribution-legend">
+			<div class="distribution-legend" role="list" aria-label={ title + " values" }>
 				if len(items) == 0 {
 					<div class="dashboard-empty compact">Waiting for queries</div>
 				}
 				for index, item := range items {
-					<div data-donut-legend={ fmt.Sprint(index) }><i class={ fmt.Sprintf("donut-color-%d", item.Color) }></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>
+					<div role="listitem" tabindex="0" aria-label={ fmt.Sprintf("%s: %s, %.1f%% of total", item.Name, formatNumber(item.Value), item.Percent) } data-donut-legend={ fmt.Sprint(index) }><i class={ fmt.Sprintf("donut-color-%d", item.Color) } aria-hidden="true"></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>
 				}
 			</div>
 			if len(items) > 0 {

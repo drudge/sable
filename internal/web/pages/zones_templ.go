@@ -742,7 +742,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if view.CanCreate {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"zone-heading-actions\"><button class=\"button outline zone-primary-action\" type=\"button\" data-dialog-open=\"import-new-zone-dialog\" data-replica-primary-action>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"zone-heading-actions\"><button class=\"button outline zone-primary-action\" type=\"button\" aria-label=\"Import zone\" title=\"Import zone\" data-dialog-open=\"import-new-zone-dialog\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -750,7 +750,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>Import Zone</span></button> <button class=\"button zone-primary-action\" type=\"button\" data-dialog-open=\"create-zone-dialog\" data-replica-primary-action>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>Import Zone</span></button> <button class=\"button zone-primary-action\" type=\"button\" aria-label=\"Add zone\" title=\"Add zone\" data-dialog-open=\"create-zone-dialog\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1371,7 +1371,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "\"><button class=\"button outline zone-primary-action\" type=\"submit\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "\"><button class=\"button outline zone-primary-action\" type=\"submit\" aria-label=\"Resynchronize zone\" title=\"Resynchronize zone\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1385,7 +1385,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			}
 		}
 		if zoneCanEditRecords(zone) && zone.CanRecords {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<button class=\"button zone-primary-action\" type=\"button\" data-dialog-open=\"add-zone-record-dialog\" data-replica-primary-action>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<button class=\"button zone-primary-action\" type=\"button\" aria-label=\"Add DNS record\" title=\"Add DNS record\" data-dialog-open=\"add-zone-record-dialog\" data-replica-primary-action>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

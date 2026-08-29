@@ -126,18 +126,18 @@ templ SettingsContent(view SettingsPageView) {
 			}
 		</div>
 		<form class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
-			<div class="settings-tab-panel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="web-service" hidden?={ view.ActiveTab != "web-service" }>@SettingsWebPanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="protocols" hidden?={ view.ActiveTab != "protocols" }>@SettingsProtocolsPanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="recursion" hidden?={ view.ActiveTab != "recursion" }>@SettingsRecursionPanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="cache" hidden?={ view.ActiveTab != "cache" }>@SettingsCachePanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>@SettingsBlockingPanel(view)</div>
-			<div class="settings-tab-panel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="web-service" hidden?={ view.ActiveTab != "web-service" }>@SettingsWebPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="protocols" hidden?={ view.ActiveTab != "protocols" }>@SettingsProtocolsPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="recursion" hidden?={ view.ActiveTab != "recursion" }>@SettingsRecursionPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="cache" hidden?={ view.ActiveTab != "cache" }>@SettingsCachePanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>@SettingsBlockingPanel(view)</div>
+			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
 		</form>
 		// TSIG and Backup live outside the settings form. Each posts its own
 		// actions and must never be swept up by a Save Settings submission.
-		<div class="settings-tab-panel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
-		<div class="settings-tab-panel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
+		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
+		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
 		@ManualCertificateDialogs()
 		@CertificateDetailsDialog(view)
@@ -145,7 +145,7 @@ templ SettingsContent(view SettingsPageView) {
 }
 
 templ SettingsTab(tab tabOption, active string, disabled bool) {
-	<button class={ ifThen(active == tab.Value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(active == tab.Value) } disabled?={ disabled } title={ ifThen(disabled, tab.Label + " settings are not available yet", "") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
+	<button class={ ifThen(active == tab.Value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(active == tab.Value) } tabindex={ ifThen(active == tab.Value, "0", "-1") } disabled?={ disabled } title={ ifThen(disabled, tab.Label + " settings are not available yet", "") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
 }
 
 templ SettingsGeneralPanel(view SettingsPageView) {

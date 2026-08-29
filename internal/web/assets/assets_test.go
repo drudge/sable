@@ -113,3 +113,25 @@ func TestVendoredHTMXVersion(t *testing.T) {
 		t.Fatal("vendored htmx asset is not version 4.0.0")
 	}
 }
+
+func TestAccessibilityInteractionAssets(t *testing.T) {
+	t.Parallel()
+
+	script := string(manifest["app.js"].content)
+	for _, expected := range []string{
+		"const tabFromKey", "setupDialogAccessibility", "setupScrollableRegion",
+		"Live log updates paused", "data-chart-keyboard-status", "sidebar-mobile-open",
+		`!control.closest("[hidden]")`, `mobileOpen ? "Close navigation" : "Open navigation"`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("application script does not contain accessibility behavior %q", expected)
+		}
+	}
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{".skip-links", ":focus-visible", "prefers-reduced-motion", "forced-colors"} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("application stylesheet does not contain accessibility rule %q", expected)
+		}
+	}
+}
