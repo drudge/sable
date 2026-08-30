@@ -108,15 +108,18 @@ contract:
   use the appropriate alert or live-region behavior.
 - The global command palette opens with Command-K on macOS or Control-K on
   other platforms. It groups authorized pages, zones, search actions,
-  integrations, and quick actions separately; supports ranked fuzzy search
-  plus Arrow/Home/End navigation; provides one-step operational commands such
-  as timed blocking pauses; and keeps server-log, query-log, DNS-cache,
+  integrations, settings sections, and quick actions separately; supports
+  ranked fuzzy search plus Arrow/Home/End navigation; provides one-step
+  operational commands such as timed blocking pauses; and keeps server-log,
+  query-log, DNS-cache,
   blocking-policy, and per-zone record search terms in the palette before
   opening the filtered destination. Query-log search can target either a
   domain or client IP, with Left/Right switching that mode while focus remains
   in the palette input. Run DNS Query accepts a domain in the palette, defaults
   to an A query, and uses the same arrow-key model for common record types.
-  Compact title acronyms such as `rdq` and `sql` are searchable. Page, dialog,
+  Compact title acronyms such as `rdq` and `sql` are searchable. Settings
+  entries link directly to each settings tab, and update checks run in place
+  with toast feedback. Page, dialog,
   and confirmation commands hand focus to the control that is ready for input.
   Cluster quick actions reflect whether the current writable node is standalone
   or the primary.

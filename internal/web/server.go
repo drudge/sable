@@ -245,6 +245,7 @@ func New(
 	mux.HandleFunc("POST /ui/backup/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/updates", server.updatePanel)
 	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)
+	mux.HandleFunc("POST /ui/updates/command-check", server.checkForUpdatesCommand)
 	mux.HandleFunc("POST /ui/updates/install", server.installUpdate)
 	mux.HandleFunc("POST /ui/updates/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/cluster/status", server.clusterLiveStatus)
@@ -681,6 +682,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		HasRemoteBlockLists: len(remoteBlockSources(snapshot.Config.Blocking)) > 0,
 		CanLogs:             !server.securityEnabled,
 		CanMetrics:          !server.securityEnabled,
+		CanCheckUpdates:     server.updates != nil && !server.securityEnabled,
 		CanCluster:          !server.securityEnabled,
 		CanWriteCluster:     !server.securityEnabled,
 		Database:            server.database,
@@ -711,6 +713,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.CanWriteBlocking = auth.HasPermission(principal, auth.PermissionBlockingWrite)
 		view.CanLogs = auth.HasPermission(principal, auth.PermissionLogsRead)
 		view.CanMetrics = auth.HasPermission(principal, auth.PermissionMetricsRead)
+		view.CanCheckUpdates = server.updates != nil && auth.HasPermission(principal, auth.PermissionUpdatesRead)
 		view.CanCluster = auth.HasPermission(principal, auth.PermissionClusterRead)
 		view.CanWriteCluster = auth.HasPermission(principal, auth.PermissionClusterWrite)
 	}

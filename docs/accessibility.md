@@ -74,7 +74,10 @@ retaining the standard interaction.
   accepts its term and any search mode in the palette before opening filtered
   results. When a scoped search offers multiple modes, Left and Right switch
   modes without moving focus out of the search input. Command-title acronyms
-  remain searchable without inserting spaces between their letters.
+  remain searchable without inserting spaces between their letters. Settings
+  shortcuts expose every settings tab as a distinct result, and operational
+  commands announce completion through the same toast and live-region path as
+  their page controls.
 - Global shortcuts must not activate while the user is composing text, except
   for the documented palette shortcut. Shortcuts supplement normal controls;
   they never replace them.

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/drudge/sable/internal/auth"
@@ -39,12 +40,50 @@ func (server *Server) checkForUpdates(writer http.ResponseWriter, request *http.
 	}
 	includePreRelease := updatePreReleaseRequested(writer, request)
 	server.rememberReleaseChannel(request, includePreRelease)
+	status, _ := server.resolveUpdateCheck(request, includePreRelease)
+	server.renderUpdatePanel(writer, request, status, "")
+}
+
+// checkForUpdatesCommand runs the same release lookup as the About page, but
+// reports the result as a global toast so a palette action works from any page.
+// It uses the configured release channel without changing that preference.
+func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request *http.Request) {
+	if server.updates == nil {
+		writeFragmentStatus(writer, http.StatusNotImplemented)
+		_ = pages.Toast("Updates are unavailable on this server.", "error").Render(request.Context(), writer)
+		return
+	}
+	includePreRelease := server.config.Current().Config.Updates.PreRelease
+	status, err := server.resolveUpdateCheck(request, includePreRelease)
+	server.renderUpdateCheckToast(writer, request, status, err)
+}
+
+func (server *Server) resolveUpdateCheck(request *http.Request, includePreRelease bool) (update.Status, error) {
 	status, err := server.updates.Check(request.Context(), includePreRelease)
 	if err != nil && !errors.Is(err, update.ErrUpdateInProgress) {
 		server.logger.Warn("check for Sable updates", "error", err)
 	}
 	server.recordControlPlaneAudit(request, "update.check", "checked for a newer Sable release")
-	server.renderUpdatePanel(writer, request, status, "")
+	return status, err
+}
+
+func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request *http.Request, status update.Status, checkErr error) {
+	view := server.updateView(request, status)
+	message, variant, responseStatus := "Update check completed.", "success", http.StatusOK
+	switch {
+	case checkErr != nil && !errors.Is(checkErr, update.ErrUpdateInProgress):
+		message, variant, responseStatus = checkErr.Error(), "error", http.StatusBadGateway
+	case view.Error != "":
+		message, variant, responseStatus = view.Error, "error", http.StatusBadGateway
+	case view.Busy || errors.Is(checkErr, update.ErrUpdateInProgress):
+		message = "An update check is already in progress."
+	case view.Available:
+		message = fmt.Sprintf("Sable v%s is available. Open About to review and install it.", view.LatestVersion)
+	case view.UpToDate:
+		message = "Sable is up to date."
+	}
+	writeFragmentStatus(writer, responseStatus)
+	_ = pages.Toast(message, variant).Render(request.Context(), writer)
 }
 
 // installUpdate replaces the installed executable with the newest release.
