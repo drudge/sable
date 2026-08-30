@@ -114,9 +114,12 @@ contract:
   blocking-policy, and per-zone record search terms in the palette before
   opening the filtered destination. Query-log search can target either a
   domain or client IP, with Left/Right switching that mode while focus remains
-  in the palette input. Page, dialog, and confirmation commands hand focus to
-  the control that is ready for input. Cluster quick actions reflect whether
-  the current writable node is standalone or the primary.
+  in the palette input. Run DNS Query accepts a domain in the palette, defaults
+  to an A query, and uses the same arrow-key model for common record types.
+  Compact title acronyms such as `rdq` and `sql` are searchable. Page, dialog,
+  and confirmation commands hand focus to the control that is ready for input.
+  Cluster quick actions reflect whether the current writable node is standalone
+  or the primary.
 - Canvas and SVG summaries provide keyboard-readable values. The query chart
   supports sample-by-sample arrow navigation, and distribution legends expose
   exact values and percentages as a list.

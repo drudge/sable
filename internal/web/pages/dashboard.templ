@@ -224,6 +224,35 @@ func (option ResolverOption) SearchText() string {
 type DNSClientPageView struct {
 	Console      DashboardView
 	ClusterNodes []ResolverOption
+	QueryName    string
+	RecordType   string
+}
+
+var dnsClientRecordTypes = []string{"A", "AAAA", "ANY", "CAA", "CNAME", "DNSKEY", "DS", "HTTPS", "MX", "NAPTR", "NS", "PTR", "SOA", "SRV", "SVCB", "TLSA", "TXT"}
+
+type CommandSearchMode struct {
+	Label          string `json:"label"`
+	Parameter      string `json:"parameter"`
+	Focus          string `json:"focus"`
+	Prompt         string `json:"prompt"`
+	InputLabel     string `json:"inputLabel"`
+	ExtraParameter string `json:"extraParameter,omitempty"`
+	ExtraValue     string `json:"extraValue,omitempty"`
+	ValueTarget    string `json:"valueTarget,omitempty"`
+}
+
+var queryLogCommandSearchModes = []CommandSearchMode{
+	{Label: "Domain", Parameter: "name", Focus: "#query-log-filters input[name='name']", Prompt: "Search query logs by domain…", InputLabel: "Search Query Logs by Domain"},
+	{Label: "Client IP", Parameter: "client_ip", Focus: "#query-log-filters input[name='client_ip']", Prompt: "Search query logs by client IP…", InputLabel: "Search Query Logs by Client IP"},
+}
+
+var dnsQueryCommandSearchModes = []CommandSearchMode{
+	{Label: "A", Parameter: "name", Focus: "#query-name", Prompt: "Query A records for…", InputLabel: "Run DNS Query for A records", ExtraParameter: "type", ExtraValue: "A", ValueTarget: "#record-type"},
+	{Label: "AAAA", Parameter: "name", Focus: "#query-name", Prompt: "Query AAAA records for…", InputLabel: "Run DNS Query for AAAA records", ExtraParameter: "type", ExtraValue: "AAAA", ValueTarget: "#record-type"},
+	{Label: "CNAME", Parameter: "name", Focus: "#query-name", Prompt: "Query CNAME records for…", InputLabel: "Run DNS Query for CNAME records", ExtraParameter: "type", ExtraValue: "CNAME", ValueTarget: "#record-type"},
+	{Label: "MX", Parameter: "name", Focus: "#query-name", Prompt: "Query MX records for…", InputLabel: "Run DNS Query for MX records", ExtraParameter: "type", ExtraValue: "MX", ValueTarget: "#record-type"},
+	{Label: "TXT", Parameter: "name", Focus: "#query-name", Prompt: "Query TXT records for…", InputLabel: "Run DNS Query for TXT records", ExtraParameter: "type", ExtraValue: "TXT", ValueTarget: "#record-type"},
+	{Label: "NS", Parameter: "name", Focus: "#query-name", Prompt: "Query NS records for…", InputLabel: "Run DNS Query for NS records", ExtraParameter: "type", ExtraValue: "NS", ValueTarget: "#record-type"},
 }
 
 var localResolverOptions = []ResolverOption{
@@ -469,10 +498,7 @@ templ CommandPalette(view DashboardView) {
 				@Icon("arrow-left")
 			</button>
 			<span><strong data-command-search-label></strong><small>Type your search above, then press Enter.</small></span>
-			<div class="command-palette-search-modes" role="radiogroup" aria-label="Search query logs by" data-command-search-modes hidden>
-				<button type="button" role="radio" aria-checked="true" data-command-search-mode></button>
-				<button type="button" role="radio" aria-checked="false" tabindex="-1" data-command-search-mode></button>
-			</div>
+			<div class="command-palette-search-modes" role="radiogroup" data-command-search-modes hidden></div>
 		</div>
 		<div class="command-palette-results" id="command-palette-results" role="listbox" aria-label="Commands" data-command-list>
 			<section class="command-palette-group" role="group" aria-labelledby="command-pages-title" data-command-group>
@@ -519,25 +545,24 @@ templ CommandPalette(view DashboardView) {
 					}
 				</section>
 			}
-			if view.CanLogs || view.CanSettings || view.CanBlocking || len(searchCommands) > 0 {
-				<section class="command-palette-group" role="group" aria-labelledby="command-search-title" data-command-group>
-					<h3 id="command-search-title">Search actions</h3>
-					if view.CanLogs {
-						@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
-						@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "dns history client response filters ip address", "/logs?tab=queries&filters=1", "Domain", "name", "#query-log-filters input[name='name']", "Search query logs by domain…", "Client IP", "client_ip", "#query-log-filters input[name='client_ip']", "Search query logs by client IP…")
-					}
-					if view.CanSettings {
-						@CommandSearchOption("command-action-search-cache", "Search DNS Cache", "Enter a domain without leaving the command palette", "search", "cached resolver responses browser", "/cache", "#cache-browser-dialog [data-cache-search]", "Search cached domains…", "")
-					}
-					if view.CanBlocking {
-						@CommandSearchOption("command-action-search-blocked", "Search Blocked Domains", "Filter the custom blocked-domain list", "search", "deny blacklist policy", "/blocked?tab=domains", "[data-domain-search=domains]", "Search blocked domains…", "")
-						@CommandSearchOption("command-action-search-allowed", "Search Allowed Domains", "Filter the blocking exceptions list", "search", "permit whitelist exceptions", "/blocked?tab=allowed", "[data-domain-search=allowed]", "Search allowed domains…", "")
-					}
-					for _, command := range searchCommands {
-						@CommandSearchOption(command.ID, command.Label, command.Description, command.Icon, command.Keywords, command.Route, command.Focus, command.SearchPrompt, command.SearchParam)
-					}
-				</section>
-			}
+			<section class="command-palette-group" role="group" aria-labelledby="command-search-title" data-command-group>
+				<h3 id="command-search-title">Search actions</h3>
+				@CommandSearchModesOption("command-action-query", "Run DNS Query", "Enter a domain and choose a record type", "terminal", "rdq resolve lookup dig nslookup", "/dns-client", "DNS record type", dnsQueryCommandSearchModes, "#dns-query-form")
+				if view.CanLogs {
+					@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "ssl runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
+					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
+				}
+				if view.CanSettings {
+					@CommandSearchOption("command-action-search-cache", "Search DNS Cache", "Enter a domain without leaving the command palette", "search", "cached resolver responses browser", "/cache", "#cache-browser-dialog [data-cache-search]", "Search cached domains…", "")
+				}
+				if view.CanBlocking {
+					@CommandSearchOption("command-action-search-blocked", "Search Blocked Domains", "Filter the custom blocked-domain list", "search", "deny blacklist policy", "/blocked?tab=domains", "[data-domain-search=domains]", "Search blocked domains…", "")
+					@CommandSearchOption("command-action-search-allowed", "Search Allowed Domains", "Filter the blocking exceptions list", "search", "permit whitelist exceptions", "/blocked?tab=allowed", "[data-domain-search=allowed]", "Search allowed domains…", "")
+				}
+				for _, command := range searchCommands {
+					@CommandSearchOption(command.ID, command.Label, command.Description, command.Icon, command.Keywords, command.Route, command.Focus, command.SearchPrompt, command.SearchParam)
+				}
+			</section>
 			if len(integrationCommands) > 0 {
 				<section class="command-palette-group" role="group" aria-labelledby="command-integrations-title" data-command-group>
 					<h3 id="command-integrations-title">Integrations</h3>
@@ -548,7 +573,6 @@ templ CommandPalette(view DashboardView) {
 			}
 			<section class="command-palette-group" role="group" aria-labelledby="command-actions-title" data-command-group>
 				<h3 id="command-actions-title">Quick actions</h3>
-				@CommandOption("command-action-query", "Run DNS Query", "Open the DNS client and focus the domain field", "terminal", "Action", "resolve lookup dig nslookup", "", "/dns-client", "", "#query-name", "")
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
 					@CommandOption("command-action-import-zone", "Import Zone", "Open the zone file import workflow", "upload", "Action", "upload bind file records origin", "", "/zones", "import-new-zone-dialog", "", "")
@@ -614,8 +638,8 @@ templ CommandSearchOption(id, label, description, icon, keywords, route, focus, 
 	</button>
 }
 
-templ CommandSearchModesOption(id, label, description, icon, keywords, route, primaryLabel, primaryParameter, primaryFocus, primaryPrompt, alternateLabel, alternateParameter, alternateFocus, alternatePrompt string) {
-	<button type="button" id={ id } role="option" aria-selected="false" tabindex="-1" data-command-item data-command-label={ label } data-command-keywords={ keywords } data-command-route={ route } data-command-focus={ primaryFocus } data-command-search="true" data-command-search-prompt={ primaryPrompt } data-command-search-param={ primaryParameter } data-command-search-mode-label={ primaryLabel } data-command-search-alt-label={ alternateLabel } data-command-search-alt-param={ alternateParameter } data-command-search-alt-focus={ alternateFocus } data-command-search-alt-prompt={ alternatePrompt }>
+templ CommandSearchModesOption(id, label, description, icon, keywords, route, modesLabel string, modes []CommandSearchMode, submit string) {
+	<button type="button" id={ id } role="option" aria-selected="false" tabindex="-1" data-command-item data-command-label={ label } data-command-keywords={ keywords } data-command-route={ route } data-command-focus={ modes[0].Focus } data-command-search="true" data-command-search-prompt={ modes[0].Prompt } data-command-search-param={ modes[0].Parameter } data-command-search-modes-label={ modesLabel } data-command-search-modes-config={ templ.JSONString(modes) } data-command-search-submit={ submit }>
 		<span class="command-palette-option-icon">
 			@Icon(icon)
 		</span>
@@ -651,15 +675,17 @@ templ DNSClientContent(view DNSClientPageView) {
 						<div class="query-primary-row">
 							<div class="search-field">
 								<label class="sr-only" for="query-name">Domain name</label>@Icon("search")
-								<input id="query-name" name="name" placeholder="Domain name" autocomplete="off" data-query-name required/>
+				<input id="query-name" name="name" value={ view.QueryName } placeholder="Domain name" autocomplete="off" data-query-name required/>
 								<button class="query-clear" type="button" data-query-clear aria-label="Clear domain">
 									@Icon("x")
 								</button>
 							</div>
 							<label class="sr-only" for="record-type">Record type</label>
-							<select id="record-type" name="type" class="record-type-select">
-								<option>A</option><option>AAAA</option><option>ANY</option><option>CAA</option><option>CNAME</option><option>DNSKEY</option><option>DS</option><option>HTTPS</option><option>MX</option><option>NAPTR</option><option>NS</option><option>PTR</option><option>SOA</option><option>SRV</option><option>SVCB</option><option>TLSA</option><option>TXT</option>
-							</select>
+			<select id="record-type" name="type" class="record-type-select">
+				for _, recordType := range dnsClientRecordTypes {
+					<option selected?={ recordType == view.RecordType || (view.RecordType == "" && recordType == "A") }>{ recordType }</option>
+				}
+			</select>
 							<button class="button resolve-button" type="submit">
 								@Icon("search")
 								<span>Resolve</span>

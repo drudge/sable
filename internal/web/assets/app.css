@@ -203,7 +203,7 @@ button { cursor: pointer; }
 .command-palette-search-scope > span { display: grid; gap: .2rem; }
 .command-palette-search-scope strong { font-size: .85rem; }
 .command-palette-search-scope small { color: var(--muted-foreground); font-size: .72rem; }
-.command-palette-search-modes { display: flex; align-items: center; gap: .15rem; border-radius: .45rem; background: var(--muted); padding: .2rem; }
+.command-palette-search-modes { display: flex; max-width: 100%; align-items: center; gap: .15rem; overflow-x: auto; border-radius: .45rem; background: var(--muted); padding: .2rem; }
 .command-palette-search-modes button { height: 1.8rem; border: 0; border-radius: .32rem; background: transparent; padding: 0 .65rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; white-space: nowrap; }
 .command-palette-search-modes button:hover { color: var(--foreground); }
 .command-palette-search-modes button[aria-checked="true"] { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .14); }

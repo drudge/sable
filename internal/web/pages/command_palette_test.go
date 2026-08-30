@@ -15,9 +15,9 @@ func TestCommandPaletteExposesKeyboardCombobox(t *testing.T) {
 		`id="command-palette-results"`, `role="listbox"`, `data-command-item`,
 		`data-command-search-scope`, `data-command-search-back`, `data-command-search-modes`,
 		`data-command-footer-search-mode`, `>←</kbd><kbd>→</kbd> Search by`,
-		`role="radiogroup"`, `aria-label="Search query logs by"`,
+		`role="radiogroup"`, `data-command-search-modes-label="DNS record type"`,
 		`aria-keyshortcuts="Meta+K Control+K"`, `data-command-shortcut`,
-		`id="command-action-query"`, `data-command-focus="#query-name"`,
+		`id="command-action-query"`, `data-command-focus="#query-name"`, `data-command-search-submit="#dns-query-form"`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("command palette markup does not contain %q", expected)
@@ -67,13 +67,13 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	page := renderComponent(t, CommandPalette(fullAccess))
 	for _, expected := range []string{
 		`id="command-page-zones"`, `id="command-page-query-logs"`,
+		`id="command-action-query"`, `data-command-keywords="rdq resolve lookup dig nslookup"`,
 		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `data-command-dialog="import-new-zone-dialog"`, `id="command-action-block-domain"`,
 		`id="command-action-search-server-logs"`, `id="command-action-search-query-logs"`, `id="command-action-search-cache"`,
 		`id="command-action-search-blocked"`, `data-command-focus="[data-domain-search=domains]"`,
 		`id="command-action-search-allowed"`, `data-command-focus="[data-domain-search=allowed]"`,
-		`data-command-search-mode-label="Domain"`, `data-command-search-alt-label="Client IP"`,
-		`data-command-search-alt-param="client_ip"`, `data-command-search-alt-focus="#query-log-filters input[name=&#39;client_ip&#39;]"`,
-		`data-command-search-alt-prompt="Search query logs by client IP…"`,
+		`data-command-search-modes-label="Search query logs by"`, `data-command-keywords="sql dns history client response filters ip address"`,
+		`data-command-search-modes-config=`, `data-command-search-submit="#dns-query-form"`,
 		`data-command-focus="#cache-browser-dialog [data-cache-search]"`, `data-command-search-prompt="Search cached domains…"`,
 		`data-command-search="true"`, `data-command-search-param="search"`, `data-command-search-param="name"`,
 		`id="command-action-pause-blocking-5"`,
@@ -86,6 +86,12 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		if !strings.Contains(page, expected) {
 			t.Errorf("full-access command palette does not contain %q", expected)
 		}
+	}
+	searchGroup := strings.Index(page, `id="command-search-title"`)
+	dnsQuery := strings.Index(page, `id="command-action-query"`)
+	quickActions := strings.Index(page, `id="command-actions-title"`)
+	if searchGroup < 0 || dnsQuery < searchGroup || quickActions < dnsQuery {
+		t.Fatal("Run DNS Query is not rendered in Search actions")
 	}
 	fullAccess.ControlPlaneReadOnly = true
 	replica := renderComponent(t, CommandPalette(fullAccess))
@@ -108,6 +114,17 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	for _, forbidden := range []string{`id="command-page-zones"`, `id="command-page-settings"`, `id="command-page-administration"`} {
 		if strings.Contains(restricted, forbidden) {
 			t.Errorf("restricted command palette unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestDNSClientAcceptsCommandPaletteQueryDefaults(t *testing.T) {
+	t.Parallel()
+
+	page := renderComponent(t, DNSClientContent(DNSClientPageView{QueryName: "mail.example.test", RecordType: "MX"}))
+	for _, expected := range []string{`id="query-name" name="name" value="mail.example.test"`, `<option selected>MX</option>`} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("DNS client command defaults do not contain %q", expected)
 		}
 	}
 }
