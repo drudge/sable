@@ -34,6 +34,7 @@ type DashboardView struct {
 	HasRemoteBlockLists  bool
 	CanLogs              bool
 	CanMetrics           bool
+	CanCheckUpdates      bool
 	CanCluster           bool
 	CanWriteCluster      bool
 	ControlPlaneReadOnly bool
@@ -571,8 +572,19 @@ templ CommandPalette(view DashboardView) {
 					}
 				</section>
 			}
+			if view.CanSettings {
+				<section class="command-palette-group" role="group" aria-labelledby="command-settings-title" data-command-group>
+					<h3 id="command-settings-title">Settings</h3>
+					for _, tab := range settingsTabs {
+						@CommandOption("command-settings-" + tab.Value, tab.Label, settingsCommandDescription(tab.Value), tab.Icon, "Settings", settingsCommandKeywords(tab.Value), "/settings?tab=" + url.QueryEscape(tab.Value), "", "", "", "")
+					}
+				</section>
+			}
 			<section class="command-palette-group" role="group" aria-labelledby="command-actions-title" data-command-group>
 				<h3 id="command-actions-title">Quick actions</h3>
+				if view.CanCheckUpdates {
+					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`)
+				}
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
 					@CommandOption("command-action-import-zone", "Import Zone", "Open the zone file import workflow", "upload", "Action", "upload bind file records origin", "", "/zones", "import-new-zone-dialog", "", "")
@@ -616,6 +628,56 @@ templ CommandPalette(view DashboardView) {
 		<span class="sr-only" aria-live="polite" aria-atomic="true" data-command-status></span>
 		<footer class="command-palette-footer" aria-hidden="true"><span data-command-footer-default><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span data-command-footer-default><kbd>↵</kbd> Run</span><span data-command-footer-default><kbd>Esc</kbd> Close</span><span data-command-footer-search-mode hidden><kbd>←</kbd><kbd>→</kbd> Search by</span><span data-command-footer-search hidden><kbd>↵</kbd> Search</span><span data-command-footer-search hidden><kbd>Esc</kbd> Back</span></footer>
 	</dialog>
+}
+
+func settingsCommandDescription(tab string) string {
+	switch tab {
+	case "general":
+		return "Server identity and DNS listeners"
+	case "web-service":
+		return "Web service, sessions, and display"
+	case "protocols":
+		return "Encrypted DNS and certificates"
+	case "tsig":
+		return "Transfer and update signing keys"
+	case "recursion":
+		return "Resolver, forwarders, and DNSSEC"
+	case "cache":
+		return "TTL, stale serving, and prefetch"
+	case "blocking":
+		return "Filtering policy and block lists"
+	case "logging":
+		return "Query logging and retention"
+	case "backup":
+		return "Export and restore configuration"
+	default:
+		return "Open this settings section"
+	}
+}
+
+func settingsCommandKeywords(tab string) string {
+	switch tab {
+	case "general":
+		return "settings configuration server identity listeners dns"
+	case "web-service":
+		return "settings configuration web service https sessions appearance display"
+	case "protocols":
+		return "settings configuration protocol protocols dot doh doq tls certificate certificates encryption"
+	case "tsig":
+		return "settings configuration tsig keys signing transfers updates"
+	case "recursion":
+		return "settings configuration recursion resolver forwarders root hints dnssec"
+	case "cache":
+		return "settings configuration cache caching ttl stale prefetch"
+	case "blocking":
+		return "settings configuration blocking filtering policy lists response bypass clients"
+	case "logging":
+		return "settings configuration logging logs query retention"
+	case "backup":
+		return "settings configuration backup backups restore download disaster recovery"
+	default:
+		return "settings configuration"
+	}
 }
 
 templ CommandOption(id, label, description, icon, kind, keywords, href, route, dialog, focus, theme string) {

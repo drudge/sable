@@ -63,6 +63,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		CanBlocking: true, CanWriteBlocking: true,
 		BlockingEnabled: true, HasRemoteBlockLists: true,
 		CanLogs: true, CanCluster: true,
+		CanCheckUpdates: true,
 	}
 	page := renderComponent(t, CommandPalette(fullAccess))
 	for _, expected := range []string{
@@ -80,11 +81,21 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		`id="command-action-pause-blocking-15"`, `id="command-action-pause-blocking-30"`,
 		`id="command-action-pause-blocking-60"`, `id="command-action-resume-blocking"`,
 		`id="command-action-update-block-lists"`, `data-command-post="/ui/blocking/pause"`,
+		`id="command-settings-title"`, `>Settings</h3>`, `id="command-settings-protocols"`, `data-command-href="/settings?tab=protocols"`,
+		`id="command-settings-backup"`, `data-command-href="/settings?tab=backup"`, `>Settings</span>`,
+		`id="command-action-check-updates"`, `data-command-post="/ui/updates/command-check"`,
 		`id="command-action-flush-cache"`, `id="command-action-create-token"`,
 		`id="command-action-add-user"`, `id="command-action-add-group"`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("full-access command palette does not contain %q", expected)
+		}
+	}
+	for _, tab := range []string{"general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "logging", "backup"} {
+		for _, expected := range []string{`id="command-settings-` + tab + `"`, `data-command-href="/settings?tab=` + tab + `"`} {
+			if !strings.Contains(page, expected) {
+				t.Errorf("full-access command palette does not contain settings shortcut %q", expected)
+			}
 		}
 	}
 	searchGroup := strings.Index(page, `id="command-search-title"`)
@@ -111,7 +122,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	}
 
 	restricted := renderComponent(t, CommandPalette(DashboardView{}))
-	for _, forbidden := range []string{`id="command-page-zones"`, `id="command-page-settings"`, `id="command-page-administration"`} {
+	for _, forbidden := range []string{`id="command-page-zones"`, `id="command-page-settings"`, `id="command-settings-title"`, `id="command-action-check-updates"`, `id="command-page-administration"`} {
 		if strings.Contains(restricted, forbidden) {
 			t.Errorf("restricted command palette unexpectedly contains %q", forbidden)
 		}

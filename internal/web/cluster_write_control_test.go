@@ -31,6 +31,9 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/profile/password", true},
 		{http.MethodPost, "/ui/cache/flush", false},
 		{http.MethodPost, "/ui/query", false},
+		// A release lookup is read-only even though it uses POST to carry the
+		// selected release channel.
+		{http.MethodPost, "/ui/updates/command-check", false},
 		{http.MethodPost, "/ui/certificates/renew", false},
 		// Integration settings are cluster-scoped and replicate from the
 		// primary, so configuring them on a replica would be overwritten on the
