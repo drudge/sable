@@ -530,7 +530,10 @@ func (server *Server) dashboardInsightsView(request *http.Request, window insigh
 
 func (server *Server) dnsClientPage(writer http.ResponseWriter, request *http.Request) {
 	console := server.consoleView(request)
-	view := pages.DNSClientPageView{Console: console}
+	view := pages.DNSClientPageView{
+		Console: console, QueryName: strings.TrimSpace(request.URL.Query().Get("name")),
+		RecordType: strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("type"))),
+	}
 	if server.cluster != nil && console.CanCluster {
 		state := server.cluster.Snapshot()
 		if state.Initialized {

@@ -2165,7 +2165,7 @@
 	  const searchScope = palette.querySelector("[data-command-search-scope]");
 	  const searchScopeLabel = palette.querySelector("[data-command-search-label]");
 	  const searchModes = palette.querySelector("[data-command-search-modes]");
-	  const searchModeButtons = [...palette.querySelectorAll("[data-command-search-mode]")];
+	  let searchModeButtons = [];
 	  const defaultFooterItems = [...palette.querySelectorAll("[data-command-footer-default]")];
 	  const searchFooterItems = [...palette.querySelectorAll("[data-command-footer-search]")];
 	  const searchModeFooterItems = [...palette.querySelectorAll("[data-command-footer-search-mode]")];
@@ -2193,19 +2193,26 @@
 		}
 		return true;
 	  };
+	  const commandLabelWords = (item) => normalize(item.dataset.commandLabel).split(/[^a-z0-9]+/).filter(Boolean);
+	  const commandAcronym = (item) => commandLabelWords(item)
+		.filter((word) => !["edit", "set", "up", "view", "the", "for"].includes(word))
+		.map((word) => word[0]).join("");
 	  const matchesQuery = (item, query) => {
+		const normalizedQuery = normalize(query);
+		if (!normalizedQuery) return true;
 		const candidate = normalize(`${item.dataset.commandLabel} ${item.dataset.commandKeywords} ${item.textContent}`);
 		const words = candidate.split(/[^a-z0-9]+/).filter(Boolean);
-		return normalize(query).split(" ").filter(Boolean).every((token) => candidate.includes(token) || words.some((word) => fuzzyContains(word, token)));
+		if (!normalizedQuery.includes(" ") && commandAcronym(item).startsWith(normalizedQuery)) return true;
+		return normalizedQuery.split(" ").filter(Boolean).every((token) => candidate.includes(token) || words.some((word) => fuzzyContains(word, token)));
 	  };
 	  const commandRank = (item, query) => {
 		const normalizedQuery = normalize(query);
 		if (!normalizedQuery) return itemOrder.get(item);
 		const label = normalize(item.dataset.commandLabel);
 		const keywords = normalize(item.dataset.commandKeywords);
-		const labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
+		const labelWords = commandLabelWords(item);
 		const keywordWords = keywords.split(/[^a-z0-9]+/).filter(Boolean);
-		const labelAcronym = labelWords.filter((word) => !["edit", "set", "up", "view", "the", "for"].includes(word)).map((word) => word[0]).join("");
+		const labelAcronym = commandAcronym(item);
 		if (label === normalizedQuery) return 0;
 		if (labelAcronym === normalizedQuery) return 10;
 		if (label.startsWith(normalizedQuery)) return 20;
@@ -2266,6 +2273,14 @@
 		return triggers.find((candidate) => candidate.getClientRects().length > 0 && !candidate.closest("[hidden]")) ||
 		  triggers.find((candidate) => !candidate.closest("[hidden]"));
 	  };
+	  const searchModesFor = (item) => {
+		try {
+		  const modes = JSON.parse(item?.dataset.commandSearchModesConfig || "[]");
+		  return Array.isArray(modes) ? modes : [];
+		} catch (_) {
+		  return [];
+		}
+	  };
 	  const localCommandTarget = (payload, returnFocus = null) => {
 		if (payload.theme) {
 		  applyTheme(payload.theme);
@@ -2282,6 +2297,13 @@
 		if (payload.focus) {
 		  const target = document.querySelector(payload.focus);
 		  if (!target) return false;
+		  if (payload.valueTarget) {
+			const valueTarget = document.querySelector(payload.valueTarget);
+			if (!valueTarget) return false;
+			valueTarget.value = payload.targetValue || "";
+			valueTarget.dispatchEvent(new Event("input", {bubbles: true}));
+			valueTarget.dispatchEvent(new Event("change", {bubbles: true}));
+		  }
 		  const dialog = target.closest("dialog");
 		  if (dialog && !dialog.open) showRoutedDialog(dialog, false, returnFocus || visibleDialogTrigger(dialog) || null);
 		  const disclosure = target.closest("details");
@@ -2293,7 +2315,14 @@
 		  target.focus();
 		  target.select?.();
 		  target.scrollIntoView({block: "center"});
-		  announce(`${payload.label} ready`);
+		  if (payload.submit) {
+			const form = document.querySelector(payload.submit);
+			if (!form) return false;
+			form.requestSubmit();
+			announce(`${payload.label} started`);
+		  } else {
+			announce(`${payload.label} ready`);
+		  }
 		  return true;
 		}
 		return false;
@@ -2304,7 +2333,28 @@
 		dialog: item.dataset.commandDialog,
 		focus: item.dataset.commandFocus,
 		theme: item.dataset.commandTheme,
+		submit: item.dataset.commandSearchSubmit,
 	  });
+	  const configureSearchModes = (item, modes) => {
+		searchModes.setAttribute("aria-label", item.dataset.commandSearchModesLabel || `${item.dataset.commandLabel} options`);
+		searchModeButtons = modes.map((mode, index) => {
+		  const button = document.createElement("button");
+		  button.type = "button";
+		  button.setAttribute("role", "radio");
+		  button.setAttribute("aria-checked", String(index === 0));
+		  button.tabIndex = index === 0 ? 0 : -1;
+		  button.dataset.commandSearchMode = "";
+		  button.dataset.commandSearchModeParam = mode.parameter || "";
+		  button.dataset.commandSearchModePrompt = mode.prompt || "";
+		  button.dataset.commandSearchModeInputLabel = mode.inputLabel || "";
+		  button.dataset.commandSearchModeExtraParam = mode.extraParameter || "";
+		  button.dataset.commandSearchModeExtraValue = mode.extraValue || "";
+		  button.dataset.commandSearchModeValueTarget = mode.valueTarget || "";
+		  button.textContent = mode.label;
+		  return button;
+		});
+		searchModes.replaceChildren(...searchModeButtons);
+	  };
 	  const selectSearchMode = (button, focus = false) => {
 		searchModeButtons.forEach((candidate) => {
 		  const selected = candidate === button;
@@ -2313,8 +2363,8 @@
 		});
 		searchParameter = button.dataset.commandSearchModeParam || "";
 		input.placeholder = button.dataset.commandSearchModePrompt || searchCommand?.dataset.commandSearchPrompt || "Search…";
-		inputLabel.textContent = `${searchCommand?.dataset.commandLabel || "Search"} by ${button.textContent}`;
-		status.textContent = `${button.textContent} search selected.`;
+		inputLabel.textContent = button.dataset.commandSearchModeInputLabel || `${searchCommand?.dataset.commandLabel || "Search"} by ${button.textContent}`;
+		status.textContent = `${button.textContent} selected.`;
 		if (focus) button.focus();
 	  };
 	  const restoreCommandMode = (query = "") => {
@@ -2322,6 +2372,9 @@
 		searchParameter = "";
 		searchScope.hidden = true;
 		searchModes.hidden = true;
+		searchModes.removeAttribute("aria-label");
+		searchModes.replaceChildren();
+		searchModeButtons = [];
 		defaultFooterItems.forEach((item) => { item.hidden = false; });
 		searchFooterItems.forEach((item) => { item.hidden = true; });
 		searchModeFooterItems.forEach((item) => { item.hidden = true; });
@@ -2349,17 +2402,9 @@
 		input.value = "";
 		searchScopeLabel.textContent = item.dataset.commandLabel;
 		searchScope.hidden = false;
-		const modeConfigurations = [
-		  {label: item.dataset.commandSearchModeLabel, parameter: item.dataset.commandSearchParam, prompt: item.dataset.commandSearchPrompt},
-		  {label: item.dataset.commandSearchAltLabel, parameter: item.dataset.commandSearchAltParam, prompt: item.dataset.commandSearchAltPrompt},
-		].filter((mode) => mode.label);
+		const modeConfigurations = searchModesFor(item);
 		if (modeConfigurations.length > 1) {
-		  searchModeButtons.forEach((button, index) => {
-			const mode = modeConfigurations[index];
-			button.textContent = mode.label;
-			button.dataset.commandSearchModeParam = mode.parameter;
-			button.dataset.commandSearchModePrompt = mode.prompt;
-		  });
+		  configureSearchModes(item, modeConfigurations);
 		  searchModes.hidden = false;
 		  searchModeFooterItems.forEach((footerItem) => { footerItem.hidden = false; });
 		  selectSearchMode(searchModeButtons[0]);
@@ -2386,7 +2431,11 @@
 		const target = new URL(item.dataset.commandRoute, window.location.origin);
 		const parameter = searchParameter;
 		if (parameter) target.searchParams.set(parameter, query);
-		else target.searchParams.set(pendingSearchParameter, query);
+		const selectedMode = searchModeButtons.find((button) => button.getAttribute("aria-checked") === "true");
+		if (selectedMode?.dataset.commandSearchModeExtraParam) {
+		  target.searchParams.set(selectedMode.dataset.commandSearchModeExtraParam, selectedMode.dataset.commandSearchModeExtraValue);
+		}
+		target.searchParams.set(pendingSearchParameter, query);
 		target.searchParams.set(pendingParameter, item.id);
 		palette.close();
 		window.location.assign(target.href);
@@ -2564,8 +2613,13 @@
 		window.history.replaceState(window.history.state, "", currentURL.pathname + currentURL.search + currentURL.hash);
 		const pendingItem = items.find((item) => item.id === pendingID);
 		const pending = pendingItem ? commandPayload(pendingItem) : null;
-		if (pendingItem?.dataset.commandSearchAltParam && currentURL.searchParams.has(pendingItem.dataset.commandSearchAltParam)) {
-		  pending.focus = pendingItem.dataset.commandSearchAltFocus || pending.focus;
+		const pendingModes = searchModesFor(pendingItem);
+		const pendingMode = pendingModes.find((mode) => mode.extraParameter && currentURL.searchParams.get(mode.extraParameter) === mode.extraValue) ||
+		  pendingModes.find((mode) => mode.parameter && currentURL.searchParams.has(mode.parameter)) || pendingModes[0];
+		if (pending && pendingMode) {
+		  pending.focus = pendingMode.focus || pending.focus;
+		  pending.valueTarget = pendingMode.valueTarget || "";
+		  pending.targetValue = pendingMode.extraValue || "";
 		}
 		if (pending && pendingSearch !== null) pending.value = pendingSearch;
 		const pendingRouteMatches = () => {
