@@ -88,7 +88,9 @@ button { cursor: pointer; }
   z-index: 30;
   display: flex;
   width: 16rem;
+  /* Keep bottom controls above expanding mobile browser chrome. */
   height: 100vh;
+  height: 100dvh;
   flex: 0 0 16rem;
   flex-direction: column;
   border-right: 1px solid var(--sidebar-border);

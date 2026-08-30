@@ -136,3 +136,12 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if !strings.Contains(stylesheet, "height: 100vh;\n  height: 100dvh;") {
+		t.Fatal("sidebar does not provide a legacy viewport fallback followed by a dynamic viewport height")
+	}
+}
