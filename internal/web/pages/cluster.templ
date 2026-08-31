@@ -192,24 +192,25 @@ templ ClusterLiveStatus(view ClusterPageView) {
 			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
 		</section>
 		<section class="card cluster-nodes-card">
-			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><div class="cluster-observed"><span class="count-badge">{ fmt.Sprint(len(view.Nodes)) }</span><small>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</small></div></header>
+			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="cluster-updated-badge">@Icon("clock")<span>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
 			<div class="cluster-node-list">
 				for _, node := range view.Nodes {
 					<article class="cluster-node-row">
 						<div class="cluster-node-heading">
-							<span class="cluster-node-icon">
+							<span class={ clusterNodeAvatar(node) } aria-label={ "Connection status: " + nodeStateLabel(node.State) } title={ nodeStateLabel(node.State) }>
 								if node.Role == "Primary" {
 									@Icon("crown")
 								} else {
 									@Icon("server")
 								}
+								<i class="cluster-node-state-dot" aria-hidden="true"></i>
 							</span>
 							<div class="cluster-node-copy">
 								<div><strong>{ node.Name }</strong>
 									if node.Local {
 										<span class="current-badge">This node</span>
 									}
-									<span class={ nodeStateBadge(node.State) }>{ nodeStateLabel(node.State) }</span><span class={ nodeSyncBadge(node.SyncState) }>{ syncStateLabel(node.SyncState) }</span>
+									<span class={ nodeSyncBadge(node.SyncState) }>{ syncStateLabel(node.SyncState) }</span>
 								</div>
 								<code>{ node.ID }</code>
 								if node.AdvertiseURL != "" {
@@ -390,7 +391,7 @@ func clusterWizardHTTPSListen(value, workflow string) string { if value != "" { 
 func clusterWizardHTTPSListenHelp(workflow string) string { if workflow == "join" { return "When testing both nodes on one machine, use a different port from the primary (normally 5444 instead of 5443)." }; return "The local address where Sable serves this HTTPS endpoint." }
 func firstNonEmptyPage(value, fallback string) string { if value != "" { return value }; return fallback }
 func clusterNodeEndpoint(node ClusterNodeView) string { if node.AdvertiseURL != "" { return node.AdvertiseURL }; if len(node.Addresses) > 0 { return node.Addresses[0] }; return "No advertised endpoint" }
-func nodeStateBadge(state string) string { if state == "online" { return "status-badge active" }; if state == "unreachable" { return "status-badge disabled" }; return "status-badge" }
+func clusterNodeAvatar(node ClusterNodeView) string { return "cluster-node-icon " + ifThen(node.State == "online", "online", ifThen(node.State == "unreachable", "unreachable", "unknown")) + ifThen(node.Local, " local", "") }
 func nodeStateLabel(state string) string { if state == "online" { return "Online" }; if state == "unreachable" { return "Unreachable" }; return "Unknown" }
 func nodeSyncBadge(state string) string { return "cluster-sync-badge " + state }
 func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; default: return "Sync unknown" } }

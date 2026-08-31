@@ -201,7 +201,7 @@ func waitForClusterSync(ctx context.Context, operator *console, nodes int) error
 			return ctx.Err()
 		}
 		page, err := operator.get("/cluster")
-		if err == nil && strings.Count(page, ">In sync<") >= nodes && strings.Count(page, ">Online<") >= nodes {
+		if err == nil && strings.Count(page, ">In sync<") >= nodes && strings.Count(page, `aria-label="Connection status: Online"`) >= nodes {
 			return nil
 		}
 		time.Sleep(time.Second)

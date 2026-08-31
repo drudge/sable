@@ -41,11 +41,20 @@ func TestCommandPaletteRendersClusterQuickActionForCurrentState(t *testing.T) {
 		}
 	}
 
-	primary := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{{
-		ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
-		Route: "/cluster", Dialog: "enrollment-token-dialog",
-	}}}))
-	for _, expected := range []string{`id="command-action-add-replica"`, `icon-server-plus`, `data-command-route="/cluster"`, `data-command-dialog="enrollment-token-dialog"`} {
+	primary := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{
+		{
+			ID: "command-action-configure-node", Label: "Configure Node", Description: "Edit this node's cluster identity and HTTPS endpoint", Icon: "server-cog", Kind: "Action",
+			Route: "/cluster", Dialog: "cluster-settings-dialog",
+		},
+		{
+			ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+			Route: "/cluster", Dialog: "enrollment-token-dialog",
+		},
+	}}))
+	for _, expected := range []string{
+		`id="command-action-configure-node"`, `icon-server-cog`, `data-command-dialog="cluster-settings-dialog"`,
+		`id="command-action-add-replica"`, `icon-server-plus`, `data-command-route="/cluster"`, `data-command-dialog="enrollment-token-dialog"`,
+	} {
 		if !strings.Contains(primary, expected) {
 			t.Errorf("primary palette does not contain %q", expected)
 		}
