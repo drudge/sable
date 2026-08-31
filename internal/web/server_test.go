@@ -465,6 +465,19 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if chartResponse.Code != http.StatusOK || !strings.Contains(chartResponse.Body.String(), `data-range="day"`) {
 		t.Fatalf("day chart response = %d %s", chartResponse.Code, chartResponse.Body.String())
 	}
+	dayRangeCookie := namedCookie(chartResponse, dashboardChartRangeCookie)
+	if dayRangeCookie == nil || dayRangeCookie.Value != "day" {
+		t.Fatalf("day chart preference cookie = %+v", dayRangeCookie)
+	}
+	rememberedDayRequest := httptest.NewRequest(http.MethodGet, "/", nil)
+	rememberedDayRequest.AddCookie(dayRangeCookie)
+	rememberedDayResponse := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(rememberedDayResponse, rememberedDayRequest)
+	for _, expected := range []string{`data-range-root hx-get="/ui/stats/chart?range=day"`, `hx-get="/ui/stats/insights?range=day"`} {
+		if !strings.Contains(rememberedDayResponse.Body.String(), expected) {
+			t.Errorf("dashboard with remembered day range does not contain %q", expected)
+		}
+	}
 	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerHTML"`, `data-stats-scope="all"`, "All time"} {
 		if !strings.Contains(chartResponse.Body.String(), expected) {
 			t.Errorf("day chart response does not contain %q", expected)
@@ -485,6 +498,19 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	customChartResponse := serveRequest(server, http.MethodGet, customChartPath)
 	if customChartResponse.Code != http.StatusOK || !strings.Contains(customChartResponse.Body.String(), "Custom range") {
 		t.Fatalf("custom chart response = %d %s", customChartResponse.Code, customChartResponse.Body.String())
+	}
+	customRangeCookie := namedCookie(customChartResponse, dashboardChartRangeCookie)
+	if customRangeCookie == nil || !strings.HasPrefix(customRangeCookie.Value, "custom:") {
+		t.Fatalf("custom chart preference cookie = %+v", customRangeCookie)
+	}
+	rememberedCustomRequest := httptest.NewRequest(http.MethodGet, "/", nil)
+	rememberedCustomRequest.AddCookie(customRangeCookie)
+	rememberedCustomResponse := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(rememberedCustomResponse, rememberedCustomRequest)
+	for _, expected := range []string{"Custom range", `hx-get="/ui/stats/insights?end=`, `&amp;range=custom&amp;start=`} {
+		if !strings.Contains(rememberedCustomResponse.Body.String(), expected) {
+			t.Errorf("dashboard with remembered custom range does not contain %q", expected)
+		}
 	}
 	invalidCustomResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=custom&start=nope&end=still-nope")
 	if invalidCustomResponse.Code != http.StatusBadRequest {
@@ -1619,6 +1645,15 @@ func serveRequest(server *Server, method, target string) *httptest.ResponseRecor
 	response := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(response, request)
 	return response
+}
+
+func namedCookie(response *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
 }
 
 func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {

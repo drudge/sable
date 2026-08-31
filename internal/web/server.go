@@ -481,6 +481,13 @@ func (server *Server) dashboard(writer http.ResponseWriter, request *http.Reques
 func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	view := server.consoleView(request)
 	view.StatsScope = dashboardStatsScope(request)
+	now := time.Now()
+	selected := dashboardChartRangeFromRequest(request)
+	if selected.Name == "custom" {
+		view.Chart = server.history.customView(request.Context(), selected.Start, selected.End, server.stats.Stats(), view.TimeDisplay)
+	} else {
+		view.Chart = server.history.view(request.Context(), selected.Name, now, server.stats.Stats(), view.TimeDisplay)
+	}
 	if !view.CanLogs {
 		return view
 	}
@@ -493,7 +500,11 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	view.Stats.Dropped = server.queryLog.Stats().Dropped
 	// The rankings open on whatever range the chart opens on, so the panels and
 	// the plot above them always answer for the same window.
-	if window, valid := chartInsightWindow(view.Chart.ActiveRange, time.Now()); valid {
+	if selected.Name == "custom" {
+		view.Insights = loadingDashboardInsights(insightWindow{
+			Range: "custom", Start: selected.Start, End: selected.End, Label: chartRangeLabel("custom"),
+		})
+	} else if window, valid := chartInsightWindow(view.Chart.ActiveRange, now); valid {
 		view.Insights = loadingDashboardInsights(window)
 	}
 	return view
@@ -696,7 +707,6 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		DNSSECStatus:        dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
 		ConfigRevision:      snapshot.Revision,
 		Stats:               statsView(server.history.totals(time.Now(), dnsStats)),
-		Chart:               server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
@@ -958,6 +968,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			http.Error(writer, "custom range must contain valid start and end times", http.StatusBadRequest)
 			return
 		}
+		server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: "custom", Start: start, End: end})
 		view := server.history.customView(request.Context(), start, end, server.stats.Stats(), display)
 		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
 			server.logger.Error("render custom query statistics", "error", err)
@@ -974,6 +985,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		http.Error(writer, "range must be hour, day, week, month, or year", http.StatusBadRequest)
 		return
 	}
+	server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: rangeName})
 	now := time.Now()
 	view := server.history.view(request.Context(), rangeName, now, server.stats.Stats(), display)
 	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
