@@ -205,7 +205,8 @@ The release channel is remembered. Ticking **Include pre-releases** writes
 candidates keeps finding them after a restart instead of failing its next
 check with "no published release was found". Writing it needs `updates.apply`;
 an operator who may only check still gets the channel they picked for that
-check.
+check. On a replica the choice likewise applies to that node's check, while the
+cluster-wide preference remains a primary-only change.
 
 Two permissions govern the console controls:
 

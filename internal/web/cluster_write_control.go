@@ -33,10 +33,14 @@ func (server *Server) primaryWriteControl(next http.Handler) http.Handler {
 }
 
 func writeRequiresPrimary(state cluster.State, method, path string) bool {
-	if safeMethod(method) || !state.Initialized || state.LocalRole != cluster.RoleReplica {
+	if safeMethod(method) || !controlPlaneReadOnly(state) {
 		return false
 	}
 	return !replicaLocalWrite(path)
+}
+
+func controlPlaneReadOnly(state cluster.State) bool {
+	return state.Initialized && state.LocalRole == cluster.RoleReplica
 }
 
 func replicaLocalWrite(path string) bool {
@@ -48,7 +52,8 @@ func replicaLocalWrite(path string) bool {
 	// sign-in on the same page works. The callback is a GET and never reaches
 	// this gate.
 	case path == "/login", path == "/logout", path == ssoStartPath,
-		path == "/ui/administration/sessions/revoke", path == "/ui/query", path == "/ui/updates/command-check":
+		path == "/ui/administration/sessions/revoke", path == "/ui/query",
+		path == "/ui/updates/check", path == "/ui/updates/command-check":
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
 		return true
