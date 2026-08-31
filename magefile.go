@@ -33,6 +33,7 @@ const (
 	githubActionsEnvironment  = "GITHUB_ACTIONS"
 	releaseTagEnvironment     = "SABLE_RELEASE_TAG"
 	controlledRestartExitCode = 75
+	containerWebUpdateVersion = "999.0.0"
 	goReleaserConfig          = `version: 2
 
 project_name: sable
@@ -346,6 +347,9 @@ func DockerSmoke(ctx context.Context) error {
 	if err := run(ctx, nil, "docker", "run", "--rm", "--entrypoint", "/usr/local/bin/sable", image, "version"); err != nil {
 		return fmt.Errorf("run container version smoke: %w", err)
 	}
+	if err := smokeContainerWebUpdates(ctx, image); err != nil {
+		return err
+	}
 	name := fmt.Sprintf("sable-smoke-%d", time.Now().UnixNano())
 	defer removeContainer(context.Background(), name)
 	if err := run(ctx, nil, "docker", "run", "--detach", "--name", name,
@@ -365,6 +369,34 @@ func DockerSmoke(ctx context.Context) error {
 		return fmt.Errorf("%w\ncontainer logs:\n%s", err, logs)
 	}
 	fmt.Printf("Container smoke passed: %s (HTTP 127.0.0.1:%s)\n", image, port)
+	return nil
+}
+
+func smokeContainerWebUpdates(ctx context.Context, image string) error {
+	directory, err := os.MkdirTemp("", "sable-container-web-update-*")
+	if err != nil {
+		return fmt.Errorf("create container web-update fixture: %w", err)
+	}
+	defer os.RemoveAll(directory)
+	if err := os.Chmod(directory, 0o755); err != nil {
+		return fmt.Errorf("make container web-update fixture accessible: %w", err)
+	}
+	binaryPath := filepath.Join(directory, "sable")
+	environment := []string{"CGO_ENABLED=0", "GOOS=linux", "GOARCH=" + runtime.GOARCH}
+	linkerFlags := "-s -w -X " + releasePackage + ".Release=" + containerWebUpdateVersion
+	if err := run(ctx, environment, "go", "build", "-trimpath", "-ldflags", linkerFlags, "-o", binaryPath, "./cmd/sable"); err != nil {
+		return fmt.Errorf("build container web-update fixture: %w", err)
+	}
+	output, err := output(ctx, "docker", "run", "--rm",
+		"--env", "SABLE_WEB_UPDATES=true",
+		"--volume", directory+":/data/.sable/bin:ro",
+		image, "version", "--short")
+	if err != nil {
+		return fmt.Errorf("run container web-update smoke: %w", err)
+	}
+	if output != containerWebUpdateVersion {
+		return fmt.Errorf("container web-update smoke ran version %q, want %q", output, containerWebUpdateVersion)
+	}
 	return nil
 }
 

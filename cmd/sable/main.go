@@ -28,9 +28,9 @@ Usage:
   sable backup create [--config sable.toml] [--out file]
   sable backup restore [--config sable.toml] <file>
   sable backup inspect <file>
-  sable install [--no-start] [--certificate-name name-or-ip]
+  sable install [--no-start] [--enable-web-updates] [--certificate-name name-or-ip]
   sable update [--pre-release] [--check] [--version tag] [--no-restart]
-  sable version
+  sable version [--short]
 `
 
 func main() {
@@ -57,14 +57,14 @@ func run(arguments []string) error {
 		return configCommand(arguments[1:])
 	case "backup":
 		return backupCommand(arguments[1:])
+	case "container":
+		return containerCommand(arguments[1:])
 	case "install":
 		return installCommand(arguments[1:])
 	case "update":
 		return updateCommand(arguments[1:])
 	case "version":
-		info := version.Current()
-		fmt.Printf("Sable %s (%s, %s, %s)\n", info.Release, info.Commit, info.BuiltAt, info.Go)
-		return nil
+		return versionCommand(arguments[1:])
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return nil
@@ -73,9 +73,31 @@ func run(arguments []string) error {
 	}
 }
 
+func versionCommand(arguments []string) error {
+	flags := flag.NewFlagSet("version", flag.ContinueOnError)
+	short := flags.Bool("short", false, "print only the release version")
+	if err := flags.Parse(arguments); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("usage: sable version [--short]")
+	}
+	info := version.Current()
+	if *short {
+		fmt.Println(info.Release)
+		return nil
+	}
+	fmt.Printf("Sable %s (%s, %s, %s)\n", info.Release, info.Commit, info.BuiltAt, info.Go)
+	return nil
+}
+
 func installCommand(arguments []string) error {
 	flags := flag.NewFlagSet("install", flag.ContinueOnError)
 	noStart := flags.Bool("no-start", false, "install and enable the service without starting it")
+	webUpdates := flags.Bool("enable-web-updates", false, "allow administrators to install verified releases from the web console")
 	var certificateNames stringListFlag
 	flags.Var(&certificateNames, "certificate-name", "additional DNS name or IP for the initial HTTPS certificate (repeatable)")
 	if err := flags.Parse(arguments); err != nil {
@@ -85,16 +107,20 @@ func installCommand(arguments []string) error {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("usage: sable install [--no-start] [--certificate-name name-or-ip]")
+		return errors.New("usage: sable install [--no-start] [--enable-web-updates] [--certificate-name name-or-ip]")
 	}
 	result, err := serviceinstall.SystemService(context.Background(), serviceinstall.Options{
 		CertificateNames: certificateNames,
 		Start:            !*noStart,
+		WebUpdates:       *webUpdates,
 	})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Sable installed: %s\nConfiguration: %s\nData: %s\n", result.BinaryPath, result.ConfigurationPath, result.DataDirectory)
+	if result.WebUpdates {
+		fmt.Printf("Web updates: enabled (%s)\n", result.ServiceBinaryPath)
+	}
 	if result.Started {
 		fmt.Printf("Console: https://%s/\n", result.ConsoleHost)
 		fmt.Println("The initial HTTPS certificate is self-signed; replace or trust it after first-run setup.")
@@ -122,11 +148,12 @@ func updateCommand(arguments []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	result, err := update.Apply(ctx, update.Options{
-		Version:    *requested,
-		PreRelease: *preRelease,
-		CheckOnly:  *check,
-		Restart:    !*noRestart,
-		Output:     os.Stdout,
+		Version:          *requested,
+		PreRelease:       *preRelease,
+		CheckOnly:        *check,
+		Restart:          !*noRestart,
+		MirrorBinaryPath: serviceinstall.InstalledWebUpdateBinaryPath(),
+		Output:           os.Stdout,
 	})
 	if err != nil {
 		return err

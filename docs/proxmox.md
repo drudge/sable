@@ -31,6 +31,17 @@ the published checksum, and invokes `sable install`. Open
 `https://CONTAINER-IP/` and accept the initial self-signed certificate to
 complete first-run setup.
 
+To allow administrators to install verified releases from the console, re-run
+the installed command once with the opt-in layout:
+
+```sh
+sudo sable install --enable-web-updates
+```
+
+This keeps `/usr/local/bin/sable` root-owned and runs the service from
+`/var/lib/sable/bin/sable`, still as the unprivileged `sable` user inside the
+hardened systemd sandbox.
+
 The installation uses:
 
 - `/usr/local/bin/sable` for the executable
@@ -51,8 +62,9 @@ sudo sable update
 
 The updater downloads the archive for the container architecture, verifies it
 against the published checksums, proves the downloaded executable can run, and
-then replaces `/usr/local/bin/sable`. The systemd service restarts only after
-the replacement succeeds.
+then replaces `/usr/local/bin/sable`. In the web-update layout it also replaces
+the service copy under `/var/lib/sable/bin`. The systemd service restarts only
+after replacement succeeds.
 
 Running the bootstrap again is equivalent for the newest stable release and
 also refreshes the systemd unit. Existing configuration and state are retained:

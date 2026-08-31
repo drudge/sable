@@ -121,6 +121,21 @@ self-signed HTTPS certificate for first-run setup:
 sudo ./sable install
 ```
 
+Web-console updates are opt-in. This layout keeps the root-owned command at
+`/usr/local/bin/sable`, runs the service from
+`/var/lib/sable/bin/sable`, and allows the unprivileged service to replace only
+that second executable:
+
+```sh
+sudo ./sable install --enable-web-updates
+```
+
+The systemd sandbox, dedicated user, and capability set stay unchanged. This
+does allow a compromised Sable process to persist as the `sable` user across a
+restart, so enable it only for a console protected by authentication and trusted
+HTTPS. Re-run `sudo sable install` without the flag to return the service to the
+root-owned executable.
+
 The console starts at `https://HOSTNAME/` on port 443. The same TLS listener
 serves DNS-over-HTTPS at `/dns-query`. The initial certificate is self-signed,
 so the browser will require explicit trust until a managed or
@@ -171,14 +186,19 @@ restart once the executable has been replaced. Sable keeps serving the running
 build until that restart, and the console says whether a service manager will
 start the new build again.
 
-A service installed with `sable install` cannot install a release from the
-console. Its systemd unit sets `ProtectSystem=strict` and grants write access
-only to `/var/lib/sable` and `/etc/sable`, so the running server cannot
-replace its own executable in `/usr/local/bin`. The same is true of the
-container image, which runs as `nonroot`. In both cases the console still
-reports the available release and says to install it with `sudo sable update`
-or by pulling a newer image. Loosening the unit would let a compromised DNS
-server rewrite binaries on the system `PATH`, so it stays as it is.
+The default service installed with `sable install` cannot install a release
+from the console. Its systemd unit sets `ProtectSystem=strict` and the running
+server cannot replace `/usr/local/bin/sable`. Pass `--enable-web-updates` at
+installation time to use the opt-in executable under `/var/lib/sable`; the
+console can then update and restart it without root access or a writable system
+`PATH`. The root `sable update` command recognizes this layout and updates both
+the command and service copies.
+
+The container image also runs as `nonroot`. Set `SABLE_WEB_UPDATES=true` to let
+its immutable entrypoint stage verified releases in the `/data` volume and hand
+off to a newer staged build after a controlled container restart. It does not
+need the Docker socket or additional capabilities. Without that environment
+switch, the image remains immutable and the console only reports the release.
 
 The release channel is remembered. Ticking **Include pre-releases** writes
 `updates.pre_release` to the configuration, so a server tracking release
@@ -318,6 +338,20 @@ docker run --detach --name sable --restart unless-stopped \
 
 `next` tracks the newest pre-release. Use `latest` for the newest stable release
 or an exact semantic version for a pinned deployment.
+
+To opt into web-console updates, add this environment setting while keeping the
+same restart policy and data volume:
+
+```sh
+--env SABLE_WEB_UPDATES=true
+```
+
+The image's root filesystem stays immutable. A newer release is stored at
+`/data/.sable/bin/sable`, and the immutable image entrypoint selects it on the
+next restart only when its semantic version is newer than the image build. A
+newer pulled image therefore takes precedence over an older staged executable.
+Remove the setting to ignore the staged executable and run exactly the image
+version again.
 
 The console renders timestamps in the timezone reported by your browser, so
 `TZ` is only the fallback used before that preference is known. Containers

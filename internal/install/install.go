@@ -24,18 +24,25 @@ const (
 type Options struct {
 	CertificateNames []string
 	Start            bool
+	// WebUpdates installs the service executable inside Sable's writable data
+	// directory. The service still runs as the unprivileged sable user, but it
+	// can replace that executable after verifying a published release.
+	WebUpdates bool
 }
 
 type Result struct {
 	BinaryPath        string
+	ServiceBinaryPath string
 	ConfigurationPath string
 	DataDirectory     string
 	ConsoleHost       string
 	Started           bool
+	WebUpdates        bool
 }
 
 type layout struct {
 	binaryPath        string
+	serviceBinaryPath string
 	configurationDir  string
 	configurationPath string
 	dataDirectory     string
@@ -45,11 +52,40 @@ type layout struct {
 func defaultLayout() layout {
 	return layout{
 		binaryPath:        defaultBinaryPath,
+		serviceBinaryPath: defaultBinaryPath,
 		configurationDir:  defaultConfigurationDir,
 		configurationPath: filepath.Join(defaultConfigurationDir, "sable.toml"),
 		dataDirectory:     defaultDataDirectory,
 		servicePath:       ServiceUnitPath,
 	}
+}
+
+func layoutForOptions(options Options) layout {
+	paths := defaultLayout()
+	if options.WebUpdates {
+		paths.serviceBinaryPath = filepath.Join(paths.dataDirectory, "bin", "sable")
+	}
+	return paths
+}
+
+// InstalledWebUpdateBinaryPath returns the alternate service executable when
+// the installed unit opted into web updates. The unit is root-owned, so it is
+// also the authoritative marker used by the root CLI updater.
+func InstalledWebUpdateBinaryPath() string {
+	contents, err := os.ReadFile(ServiceUnitPath)
+	if err != nil {
+		return ""
+	}
+	paths := layoutForOptions(Options{WebUpdates: true})
+	if !webUpdateServiceInstalled(string(contents), paths) {
+		return ""
+	}
+	return paths.serviceBinaryPath
+}
+
+func webUpdateServiceInstalled(unit string, paths layout) bool {
+	execStart := "ExecStart=" + paths.serviceBinaryPath + " serve --config " + paths.configurationPath
+	return slices.Contains(strings.Split(unit, "\n"), execStart)
 }
 
 func initialCertificateNames(additional []string) ([]string, string) {
@@ -132,7 +168,7 @@ UMask=0077
 
 [Install]
 WantedBy=multi-user.target
-`, serviceUser, paths.dataDirectory, paths.binaryPath, paths.configurationPath, paths.configurationDir)
+`, serviceUser, paths.dataDirectory, paths.serviceBinaryPath, paths.configurationPath, paths.configurationDir)
 }
 
 func initialConfiguration(paths layout) string {

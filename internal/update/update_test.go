@@ -145,6 +145,33 @@ func TestApplyVerifiesAndReplacesTheInstalledExecutable(t *testing.T) {
 	}
 }
 
+func TestApplyMirrorsTheVerifiedExecutableForAWebUpdateService(t *testing.T) {
+	requireExecutableScripts(t)
+	binaryPath := installedExecutable(t, "#!/bin/sh\necho old command\n")
+	servicePath := installedExecutable(t, "#!/bin/sh\necho old service\n")
+	server := releaseServer(t, "v9.9.9", false, nil)
+	result, err := Apply(context.Background(), Options{
+		APIBaseURL:       server.URL,
+		BinaryPath:       binaryPath,
+		MirrorBinaryPath: servicePath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Applied {
+		t.Fatalf("result = %+v", result)
+	}
+	for _, path := range []string{binaryPath, servicePath} {
+		installed, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(installed), "echo 9.9.9") {
+			t.Fatalf("installed executable %s = %q", path, installed)
+		}
+	}
+}
+
 func TestApplyRejectsAnArchiveThatFailsChecksumVerification(t *testing.T) {
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
