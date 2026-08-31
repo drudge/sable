@@ -24,5 +24,8 @@ VOLUME ["/data"]
 EXPOSE 8053/tcp 8053/udp 5380/tcp 5443/tcp 853/tcp 443/tcp
 
 USER nonroot:nonroot
-ENTRYPOINT ["/usr/local/bin/sable"]
+# The immutable launcher normally behaves exactly like the Sable command. When
+# SABLE_WEB_UPDATES=true it can hand off to a newer, non-root executable stored
+# in /data without exposing the Docker socket or any host privileges.
+ENTRYPOINT ["/usr/local/bin/sable", "container"]
 CMD ["serve", "--config", "/data/sable.toml"]

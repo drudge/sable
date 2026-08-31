@@ -11,16 +11,19 @@ in the [configuration guide](configuration.md).
 
 | Path | Purpose |
 | --- | --- |
-| `/usr/local/bin/sable` | Installed executable |
+| `/usr/local/bin/sable` | Root-owned command and default service executable |
+| `/var/lib/sable/bin/sable` | Opt-in service executable when installed with `--enable-web-updates` |
 | `/etc/sable/sable.toml` | Node configuration |
 | `/etc/sable/tls` | Initial or imported node certificate material |
 | `/var/lib/sable` | Database, caches, block lists, ACME state, vault key, and cluster identity |
 | `/etc/systemd/system/sable.service` | Service unit |
 
 The service runs as the dedicated `sable` user with only
-`CAP_NET_BIND_SERVICE`. `ProtectSystem=strict` makes the executable directory
-read-only to the running server; this is why an administrator uses
-`sudo sable update` instead of letting the console replace the binary.
+`CAP_NET_BIND_SERVICE`. `ProtectSystem=strict` makes the system executable
+directory read-only. By default an administrator therefore uses
+`sudo sable update`. An installation created with `--enable-web-updates` runs
+the service copy under `/var/lib/sable`, which is already confined to the
+unprivileged service account and writable inside the sandbox.
 
 ## Routine health check
 
@@ -174,10 +177,18 @@ downgrade compatibility is not yet a published contract, so installing an older
 binary is not a substitute for restoring a known-good pre-upgrade backup when
 persistent formats changed.
 
-The console can check for updates. It can install one only when the running
-process can write its executable directory; the hardened systemd service and
-non-root container intentionally cannot. Use the root CLI for a native install
-or pull an updated image for a container.
+The console can check for updates in every layout. To let it install them on a
+native service, opt in while installing or re-run the installer:
+
+```sh
+sudo sable install --enable-web-updates
+```
+
+The service remains non-root and cannot write the system `PATH`; it replaces
+only `/var/lib/sable/bin/sable`, then exits through the controlled-restart path.
+This creates a persistence path for code already running as the `sable` user,
+so use it only with console authentication and trusted HTTPS. Run
+`sudo sable install` without the flag to restore the default immutable layout.
 
 Set `SABLE_GITHUB_TOKEN` when repeated update checks exhaust GitHub's anonymous
 API limit. It is used only for GitHub release-metadata requests.
@@ -215,11 +226,19 @@ restore behavior.
 
 ## Container operations
 
-Containers keep mutable state in `/data` and run as a non-root user. Update by
-pulling the desired image and recreating the container against the same volume;
-do not run `sable update` inside the container. Pin an exact semantic-version
-tag for controlled production rollouts. `next` tracks release candidates and
-`latest` tracks the newest stable release.
+Containers keep mutable state in `/data` and run as a non-root user. The default
+immutable workflow is to pull the desired image and recreate the container
+against the same volume. Pin an exact semantic-version tag for controlled
+production rollouts. `next` tracks release candidates and `latest` tracks the
+newest stable release.
+
+Set `SABLE_WEB_UPDATES=true` and use a Docker restart policy to opt into console
+updates. Sable stores the verified executable under `/data/.sable/bin`, exits
+cleanly when the administrator confirms the restart, and the immutable image
+entrypoint launches the staged build. No Docker socket, root user, or additional
+capability is required. A newer image version wins over an older staged build;
+remove the environment setting to ignore the staged build during recovery or a
+pinned rollback.
 
 Publish the administrative listener only on a trusted interface, and configure
 Sable HTTPS or a trusted HTTPS reverse proxy before exposing the console beyond
@@ -237,7 +256,7 @@ backups.
 | Responses are slow | Inspect the latency histogram by `source` and `cache`; compare upstream errors, cache hit rate, and protocol before increasing resource limits. |
 | Query logs have gaps | Check `sable_query_log_dropped_total`, write errors, database health, queue sizing, and retention. DNS intentionally wins over telemetry. |
 | Block list is stale | Inspect the Blocking page and per-source health metrics. Sable retains the last successful file and backs off failed downloads. |
-| Console says update is blocked | The running sandbox cannot write `/usr/local/bin`; use `sudo sable update` or replace the container image. |
+| Console says update is blocked | Use `sudo sable update` or replace the image, or deliberately opt in with `sable install --enable-web-updates` or `SABLE_WEB_UPDATES=true` for Docker. |
 | Replica refuses a change | Make the cluster-scoped change on the primary. Node-local actions remain available on the replica. |
 | Restore is unavailable on a replica | Restore the primary or rebuild/re-enroll the replica; otherwise the next synchronized generation would overwrite it. |
 

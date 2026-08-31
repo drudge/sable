@@ -61,6 +61,9 @@ candidates into a release-ready DNS platform.
 
 ### Release and security operations
 
+- Systemd and Docker deployments can explicitly opt into verified console
+  updates while Sable remains non-root and unable to write the system path or
+  access the Docker socket.
 - The gated GitHub Actions release workflow validates protected `main`, creates
   an annotated semantic-version tag, publishes checksummed cross-platform
   archives and multi-architecture containers as a replaceable draft, and makes

@@ -43,6 +43,34 @@ func TestSystemdUnitIsHardenedAndRestartable(t *testing.T) {
 	}
 }
 
+func TestWebUpdatesKeepTheServiceExecutableInsideTheSandbox(t *testing.T) {
+	paths := layoutForOptions(Options{WebUpdates: true})
+	if paths.binaryPath != "/usr/local/bin/sable" {
+		t.Fatalf("command binary = %q", paths.binaryPath)
+	}
+	if paths.serviceBinaryPath != "/var/lib/sable/bin/sable" {
+		t.Fatalf("service binary = %q", paths.serviceBinaryPath)
+	}
+	unit := systemdUnit(paths)
+	for _, required := range []string{
+		"User=sable",
+		"ExecStart=/var/lib/sable/bin/sable serve --config /etc/sable/sable.toml",
+		"NoNewPrivileges=true",
+		"ProtectSystem=strict",
+		"ReadWritePaths=/var/lib/sable /etc/sable",
+	} {
+		if !strings.Contains(unit, required) {
+			t.Fatalf("web-updateable systemd unit is missing %q", required)
+		}
+	}
+	if !webUpdateServiceInstalled(unit, paths) {
+		t.Fatal("the web-updateable unit was not recognized")
+	}
+	if webUpdateServiceInstalled(systemdUnit(defaultLayout()), paths) {
+		t.Fatal("the standard unit was recognized as web-updateable")
+	}
+}
+
 func TestConsoleHostPrefersReachableAddress(t *testing.T) {
 	if got := consoleHost([]string{"sable-1", "localhost", "127.0.0.1", "192.0.2.53"}, "sable-1"); got != "192.0.2.53" {
 		t.Fatalf("console host = %q", got)

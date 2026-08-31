@@ -22,7 +22,7 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 	if os.Geteuid() != 0 {
 		return Result{}, errors.New("install must be run as root")
 	}
-	paths := defaultLayout()
+	paths := layoutForOptions(options)
 	certificateNames, hostname := initialCertificateNames(options.CertificateNames)
 	if err := exec.CommandContext(ctx, "systemctl", "--version").Run(); err != nil {
 		return Result{}, errors.New("systemd is required to install the Sable service")
@@ -38,6 +38,11 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 	}
 	if err := installExecutable(paths.binaryPath); err != nil {
 		return Result{}, err
+	}
+	if paths.serviceBinaryPath != paths.binaryPath {
+		if err := installExecutable(paths.serviceBinaryPath); err != nil {
+			return Result{}, fmt.Errorf("install web-updateable service executable: %w", err)
+		}
 	}
 	if err := installInitialConfiguration(ctx, paths, certificateNames); err != nil {
 		return Result{}, err
@@ -60,8 +65,9 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 		}
 	}
 	return Result{
-		BinaryPath: paths.binaryPath, ConfigurationPath: paths.configurationPath,
-		DataDirectory: paths.dataDirectory, ConsoleHost: consoleHost(certificateNames, hostname), Started: options.Start,
+		BinaryPath: paths.binaryPath, ServiceBinaryPath: paths.serviceBinaryPath,
+		ConfigurationPath: paths.configurationPath, DataDirectory: paths.dataDirectory,
+		ConsoleHost: consoleHost(certificateNames, hostname), Started: options.Start, WebUpdates: options.WebUpdates,
 	}, nil
 }
 

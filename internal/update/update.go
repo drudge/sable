@@ -25,6 +25,10 @@ const (
 	maximumMetadataBytes = 8 << 20
 	maximumArchiveBytes  = 512 << 20
 	downloadTimeout      = 10 * time.Minute
+	// BinaryPathEnvironment overrides the executable replaced by the console
+	// updater. The container launcher sets it to a path in the data volume when
+	// web updates are explicitly enabled.
+	BinaryPathEnvironment = "SABLE_UPDATE_BINARY_PATH"
 )
 
 var errMissingExecutable = errors.New("release archive does not contain the Sable executable")
@@ -47,8 +51,12 @@ type Options struct {
 	Restart bool
 	// BinaryPath overrides the executable that is replaced.
 	BinaryPath string
-	Client     *http.Client
-	Output     io.Writer
+	// MirrorBinaryPath receives the same verified executable before BinaryPath.
+	// The root CLI uses it for an opt-in systemd service whose executable lives
+	// outside the system PATH.
+	MirrorBinaryPath string
+	Client           *http.Client
+	Output           io.Writer
 }
 
 type Result struct {
@@ -138,6 +146,11 @@ func Apply(ctx context.Context, options Options) (Result, error) {
 	executable, err := extractExecutable(asset.Name, archive)
 	if err != nil {
 		return result, err
+	}
+	if mirrorPath := strings.TrimSpace(options.MirrorBinaryPath); mirrorPath != "" && mirrorPath != binaryPath {
+		if err := replaceExecutable(ctx, mirrorPath, executable); err != nil {
+			return result, fmt.Errorf("update the Sable service executable: %w", err)
+		}
 	}
 	if err := replaceExecutable(ctx, binaryPath, executable); err != nil {
 		return result, err
