@@ -74,6 +74,11 @@ once because htmx can process a newly swapped subtree at any time.
 
 ### Accessibility and responsive verification
 
+The complete product goals, keyboard interaction model, and definition of done
+live in [Accessibility and keyboard control](accessibility.md). The requirements
+below summarize the console-specific behaviors that implementations must
+preserve.
+
 Interactive work is not complete until it has keyboard focus treatment, an
 accessible name, a useful disabled reason, a reduced-motion behavior where
 animation is nonessential, and a live-region or status treatment for background
@@ -101,6 +106,23 @@ contract:
 - htmx updates preserve a meaningful focus target and announce user-requested
   changes. Filters announce result counts, while errors and background status
   use the appropriate alert or live-region behavior.
+- The global command palette opens with Command-K on macOS or Control-K on
+  other platforms. It groups authorized pages, zones, search actions,
+  integrations, settings sections, and quick actions separately; supports
+  ranked fuzzy search plus Arrow/Home/End navigation; provides one-step
+  operational commands such as timed blocking pauses; and keeps server-log,
+  query-log, DNS-cache,
+  blocking-policy, and per-zone record search terms in the palette before
+  opening the filtered destination. Query-log search can target either a
+  domain or client IP, with Left/Right switching that mode while focus remains
+  in the palette input. Run DNS Query accepts a domain in the palette, defaults
+  to an A query, and uses the same arrow-key model for common record types.
+  Compact title acronyms such as `rdq` and `sql` are searchable. Settings
+  entries link directly to each settings tab, and update checks run in place
+  with toast feedback. Page, dialog,
+  and confirmation commands hand focus to the control that is ready for input.
+  Cluster quick actions reflect whether the current writable node is standalone
+  or the primary.
 - Canvas and SVG summaries provide keyboard-readable values. The query chart
   supports sample-by-sample arrow navigation, and distribution legends expose
   exact values and percentages as a list.

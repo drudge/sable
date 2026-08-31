@@ -123,6 +123,40 @@ func TestAboutPageReportsAnUpToDateInstallation(t *testing.T) {
 	}
 }
 
+func TestCommandPaletteUpdateCheckReturnsToast(t *testing.T) {
+	t.Parallel()
+	controller := &testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
+		Available: true, CheckedAt: time.Now(),
+	}}
+	server := updateTestServer(t, controller)
+	response := serveUpdateForm(server, "/ui/updates/command-check", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("palette update check status = %d", response.Code)
+	}
+	body := response.Body.String()
+	for _, expected := range []string{`class="toast-region"`, "Sable v9.9.9 is available. Open About to review and install it."} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("palette update check does not contain %q: %s", expected, body)
+		}
+	}
+	if strings.Contains(body, `id="about-update"`) {
+		t.Error("palette update check returned the About page panel instead of a toast")
+	}
+	if controller.checks != 1 || controller.preRelease {
+		t.Fatalf("palette update checks = %d pre-release = %t", controller.checks, controller.preRelease)
+	}
+}
+
+func TestCommandPaletteUpdateCheckReportsUnavailableController(t *testing.T) {
+	t.Parallel()
+	server := updateTestServer(t, nil)
+	response := serveUpdateForm(server, "/ui/updates/command-check", nil)
+	if response.Code != http.StatusNotImplemented || !strings.Contains(response.Body.String(), "Updates are unavailable on this server.") {
+		t.Fatalf("unavailable palette update check = %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestCheckForUpdatesForwardsThePreReleaseChoice(t *testing.T) {
 	t.Parallel()
 	controller := &testUpdateController{status: update.Status{

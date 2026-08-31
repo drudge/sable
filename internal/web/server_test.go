@@ -927,6 +927,7 @@ func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
 		{http.MethodGet, "/api/v1/query-log?limit=1", auth.PermissionLogsRead},
 		{http.MethodGet, "/ui/updates", auth.PermissionUpdatesRead},
 		{http.MethodPost, "/ui/updates/check", auth.PermissionUpdatesRead},
+		{http.MethodPost, "/ui/updates/command-check", auth.PermissionUpdatesRead},
 		{http.MethodPost, "/ui/updates/install", auth.PermissionUpdatesApply},
 		{http.MethodPost, "/ui/updates/restart", auth.PermissionUpdatesApply},
 	}

@@ -245,6 +245,7 @@ func New(
 	mux.HandleFunc("POST /ui/backup/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/updates", server.updatePanel)
 	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)
+	mux.HandleFunc("POST /ui/updates/command-check", server.checkForUpdatesCommand)
 	mux.HandleFunc("POST /ui/updates/install", server.installUpdate)
 	mux.HandleFunc("POST /ui/updates/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/cluster/status", server.clusterLiveStatus)
@@ -530,7 +531,10 @@ func (server *Server) dashboardInsightsView(request *http.Request, window insigh
 
 func (server *Server) dnsClientPage(writer http.ResponseWriter, request *http.Request) {
 	console := server.consoleView(request)
-	view := pages.DNSClientPageView{Console: console}
+	view := pages.DNSClientPageView{
+		Console: console, QueryName: strings.TrimSpace(request.URL.Query().Get("name")),
+		RecordType: strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("type"))),
+	}
 	if server.cluster != nil && console.CanCluster {
 		state := server.cluster.Snapshot()
 		if state.Initialized {
@@ -665,27 +669,34 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	dnsStats := server.stats.Stats()
 	display := requestTimeDisplay(request)
 	view := pages.DashboardView{
-		Version:         version.Current().Release,
-		TimeDisplay:     display,
-		SecurityEnabled: server.securityEnabled,
-		CanSettings:     !server.securityEnabled,
-		CanZones:        !server.securityEnabled,
-		CanBlocking:     !server.securityEnabled,
-		CanLogs:         !server.securityEnabled,
-		CanMetrics:      !server.securityEnabled,
-		CanCluster:      !server.securityEnabled,
-		Database:        server.database,
-		DNSListeners:    strings.Join(snapshot.Config.Server.DNSListen, ", "),
-		EncryptedDNS:    encryptedDNSStatus(snapshot.Config.EncryptedDNS),
-		QueryServer:     snapshot.Config.Server.DNSListen[0],
-		CacheSize:       snapshot.Config.Resolver.CacheSize,
-		ForwardRoutes:   len(snapshot.Config.Resolver.Routes),
-		LocalHosts:      len(snapshot.Config.Resolver.Hosts),
-		QueryLogStatus:  queryLogStatus(snapshot.Config.QueryLog.Enabled, server.queryLog.Stats()),
-		DNSSECStatus:    dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
-		ConfigRevision:  snapshot.Revision,
-		Stats:           statsView(server.history.totals(time.Now(), dnsStats)),
-		Chart:           server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
+		Version:             version.Current().Release,
+		TimeDisplay:         display,
+		SecurityEnabled:     server.securityEnabled,
+		CanSettings:         !server.securityEnabled,
+		CanWriteSettings:    !server.securityEnabled,
+		CanZones:            !server.securityEnabled,
+		CanCreateZones:      !server.securityEnabled,
+		CanBlocking:         !server.securityEnabled,
+		CanWriteBlocking:    !server.securityEnabled,
+		BlockingEnabled:     snapshot.Config.Blocking.Enabled,
+		HasRemoteBlockLists: len(remoteBlockSources(snapshot.Config.Blocking)) > 0,
+		CanLogs:             !server.securityEnabled,
+		CanMetrics:          !server.securityEnabled,
+		CanCheckUpdates:     server.updates != nil && !server.securityEnabled,
+		CanCluster:          !server.securityEnabled,
+		CanWriteCluster:     !server.securityEnabled,
+		Database:            server.database,
+		DNSListeners:        strings.Join(snapshot.Config.Server.DNSListen, ", "),
+		EncryptedDNS:        encryptedDNSStatus(snapshot.Config.EncryptedDNS),
+		QueryServer:         snapshot.Config.Server.DNSListen[0],
+		CacheSize:           snapshot.Config.Resolver.CacheSize,
+		ForwardRoutes:       len(snapshot.Config.Resolver.Routes),
+		LocalHosts:          len(snapshot.Config.Resolver.Hosts),
+		QueryLogStatus:      queryLogStatus(snapshot.Config.QueryLog.Enabled, server.queryLog.Stats()),
+		DNSSECStatus:        dnssecRuntimeStatus(snapshot.Config.Resolver, dnsStats),
+		ConfigRevision:      snapshot.Revision,
+		Stats:               statsView(server.history.totals(time.Now(), dnsStats)),
+		Chart:               server.history.view(request.Context(), "hour", time.Now(), dnsStats, display),
 	}
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		view.Username = principal.Username
@@ -693,19 +704,149 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.AvatarURL = avatarURL(principal.AvatarETag)
 		view.CSRFToken = principal.CSRFToken
 		view.CanSettings = auth.HasPermission(principal, auth.PermissionSettingsRead)
+		view.CanWriteSettings = auth.HasPermission(principal, auth.PermissionSettingsWrite)
 		view.CanAdministration = auth.HasPermission(principal, auth.PermissionUsersRead)
+		view.CanWriteUsers = auth.HasPermission(principal, auth.PermissionUsersWrite)
 		view.CanZones = auth.HasPermission(principal, auth.PermissionZonesRead)
+		view.CanCreateZones = auth.HasPermission(principal, auth.PermissionZonesCreate)
 		view.CanBlocking = auth.HasPermission(principal, auth.PermissionBlockingRead)
+		view.CanWriteBlocking = auth.HasPermission(principal, auth.PermissionBlockingWrite)
 		view.CanLogs = auth.HasPermission(principal, auth.PermissionLogsRead)
 		view.CanMetrics = auth.HasPermission(principal, auth.PermissionMetricsRead)
+		view.CanCheckUpdates = server.updates != nil && auth.HasPermission(principal, auth.PermissionUpdatesRead)
 		view.CanCluster = auth.HasPermission(principal, auth.PermissionClusterRead)
+		view.CanWriteCluster = auth.HasPermission(principal, auth.PermissionClusterWrite)
 	}
 	if server.cluster != nil {
 		clusterState := server.cluster.Snapshot()
 		view.ControlPlaneReadOnly = clusterState.Initialized && clusterState.LocalRole == cluster.RoleReplica
 		view.PrimaryURL = clusterState.PrimaryURL
 	}
+	view.CommandEntities = server.commandPaletteEntities(request, snapshot, view)
 	return view
+}
+
+// commandPaletteEntities makes configured objects globally navigable without
+// leaking the names of zones an operator is not authorized to read.
+func (server *Server) commandPaletteEntities(request *http.Request, snapshot config.Snapshot, view pages.DashboardView) []pages.CommandEntityView {
+	entities := make([]pages.CommandEntityView, 0)
+	add := func(entity pages.CommandEntityView) {
+		if entity.ID == "" {
+			entity.ID = "command-entity-" + strconv.Itoa(len(entities))
+		}
+		entities = append(entities, entity)
+	}
+
+	if view.CanZones && server.zones != nil {
+		principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+		zones := append([]zone.Zone(nil), server.zones.Current().Zones...)
+		sort.SliceStable(zones, func(left, right int) bool { return zones[left].Name < zones[right].Name })
+		for _, current := range zones {
+			if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, current.ID) {
+				continue
+			}
+			description := commandZoneDescription(current.Type)
+			if current.Disabled {
+				description += " · Disabled"
+			}
+			commandID := ""
+			if current.ID != "" {
+				commandID = "command-entity-zone-" + current.ID
+			}
+			add(pages.CommandEntityView{
+				ID: commandID, Label: current.Name, Description: description, Icon: "globe", Kind: "Zone",
+				Keywords: "dns zone " + current.Type, Href: "/zones/" + url.PathEscape(current.Name),
+			})
+			searchCommandID := ""
+			if current.ID != "" {
+				searchCommandID = "command-entity-zone-search-" + current.ID
+			}
+			add(pages.CommandEntityView{
+				ID: searchCommandID, Label: "Search in " + current.Name, Description: "Filter records in this zone", Icon: "search", Kind: "Search",
+				Keywords: "dns zone records " + current.Type, Route: "/zones/" + url.PathEscape(current.Name), Focus: "[data-record-search]",
+				SearchPrompt: "Search records in " + current.Name + "…",
+			})
+		}
+	}
+
+	if view.CanCluster && view.CanWriteCluster && server.cluster != nil {
+		state := server.cluster.Snapshot()
+		switch {
+		case !state.Initialized:
+			add(pages.CommandEntityView{
+				ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
+				Keywords: "create setup primary replication", Route: "/cluster", Dialog: "initialize-cluster-dialog",
+			})
+		case state.LocalRole == cluster.RolePrimary && state.NetworkReady:
+			add(pages.CommandEntityView{
+				ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+				Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
+			})
+		}
+	}
+
+	if !view.CanSettings {
+		return entities
+	}
+	unifiSettings := snapshot.Config.UniFi
+	unifiConfigured := unifiSettings.ControllerURL != "" || len(unifiSettings.Networks) > 0
+	if server.unifi != nil || unifiConfigured {
+		entity := pages.CommandEntityView{
+			ID: "command-entity-integration-unifi", Label: "View UniFi Setup", Description: "Open the host synchronization integration", Icon: "wifi-sync", Kind: "Integration",
+			Keywords: strings.Join([]string{"unifi", "integration", "host", "sync", unifiSettings.ControllerURL, unifiSettings.Site}, " "),
+			Route:    "/integrations", Focus: "#unifi-card",
+		}
+		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+			entity.Label = "Set Up UniFi Sync"
+			if unifiConfigured {
+				entity.Label = "Edit UniFi Setup"
+			}
+			entity.Description = "Edit controller and network mappings"
+			entity.Href, entity.Route, entity.Focus = "/integrations?setup=unifi", "", ""
+		}
+		add(entity)
+	}
+	oidcSettings := snapshot.Config.OIDC
+	oidcConfigured := oidcSettings.Issuer != "" || oidcSettings.Enabled
+	if server.ssoAdmin != nil || oidcConfigured {
+		keywords := []string{"sso", "oidc", "integration", oidcSettings.Issuer, oidcSettings.ClientID}
+		for _, mapping := range oidcSettings.RoleMappings {
+			keywords = append(keywords, mapping.Group, mapping.Role)
+		}
+		entity := pages.CommandEntityView{
+			ID: "command-entity-integration-sso", Label: "View SSO Setup", Description: "Open the single sign-on integration", Icon: "key-round", Kind: "Integration",
+			Keywords: strings.Join(append(keywords, oidcSettings.Label()), " "), Route: "/integrations", Focus: "#sso-card",
+		}
+		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+			entity.Label = "Set Up Single Sign-On"
+			if oidcConfigured {
+				entity.Label = "Edit SSO Setup"
+			}
+			entity.Description = "Edit provider, claims, and role mappings"
+			entity.Href, entity.Route, entity.Focus = "/integrations?setup=sso", "", ""
+		}
+		add(entity)
+	}
+	return entities
+}
+
+func commandZoneDescription(zoneType string) string {
+	switch zoneType {
+	case "primary":
+		return "Primary DNS zone"
+	case "secondary":
+		return "Secondary DNS zone"
+	case "forwarder":
+		return "Forwarding DNS zone"
+	case "stub":
+		return "Stub DNS zone"
+	case "alias":
+		return "Alias DNS zone"
+	case "catalog":
+		return "Catalog DNS zone"
+	default:
+		return "DNS zone"
+	}
 }
 
 func dnssecRuntimeStatus(resolver config.Resolver, stats dnsserver.Stats) string {

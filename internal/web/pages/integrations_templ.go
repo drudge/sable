@@ -335,7 +335,7 @@ func SSOCard(view SSOAppView) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card integration-card\" id=\"sso-card\"><header><div class=\"integration-card-identity\"><span class=\"integration-card-glyph\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card integration-card\" id=\"sso-card\" tabindex=\"-1\"><header><div class=\"integration-card-identity\"><span class=\"integration-card-glyph\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -780,7 +780,7 @@ func UniFiCard(view UniFiAppView) templ.Component {
 			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<section class=\"card integration-card\"><header><div class=\"integration-card-identity\"><span class=\"integration-card-glyph\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<section class=\"card integration-card\" id=\"unifi-card\" tabindex=\"-1\"><header><div class=\"integration-card-identity\"><span class=\"integration-card-glyph\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
