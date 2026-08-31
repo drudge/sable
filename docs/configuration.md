@@ -561,8 +561,10 @@ survive pruning. Downtime is drawn as a gap rather than being smoothed over.
 The range picker drives the top-client, top-domain, top-blocked, query-type,
 response-source, and response-code panels as well as the chart. Following a
 ranked value to the query log preserves the same start/end window and exact
-match. Operators may choose whether the headline metric cards show lifetime
-totals or the active chart range; that preference is stored in a browser cookie.
+match. The selected chart range, including custom bounds, is stored in a browser
+cookie and restored when the dashboard is loaded again. Operators may choose
+whether the headline metric cards show lifetime totals or the active chart
+range; that preference is also stored in a browser cookie.
 Short ranges refresh live, while wider database aggregations run only when the
 operator selects them.
 
