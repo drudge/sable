@@ -91,20 +91,20 @@ func TestCommandPaletteClusterQuickActionFollowsLocalState(t *testing.T) {
 	}
 
 	standalone := server.commandPaletteEntities(request, snapshot, view)
-	if !hasCommand(standalone, "command-action-initialize-cluster") || hasCommand(standalone, "command-action-add-replica") {
+	if !hasCommand(standalone, "command-action-initialize-cluster") || hasCommand(standalone, "command-action-configure-node") || hasCommand(standalone, "command-action-add-replica") {
 		t.Fatalf("standalone cluster commands = %+v", standalone)
 	}
 	if err := clusterService.Initialize(context.Background(), "cluster.example.test", []string{"192.0.2.10"}); err != nil {
 		t.Fatal(err)
 	}
 	primary := server.commandPaletteEntities(request, snapshot, view)
-	if !hasCommand(primary, "command-action-add-replica") || hasCommand(primary, "command-action-initialize-cluster") {
+	if !hasCommand(primary, "command-action-configure-node") || !hasCommand(primary, "command-action-add-replica") || hasCommand(primary, "command-action-initialize-cluster") {
 		t.Fatalf("primary cluster commands = %+v", primary)
 	}
 
 	view.CanWriteCluster = false
 	readOnly := server.commandPaletteEntities(request, snapshot, view)
-	if hasCommand(readOnly, "command-action-add-replica") || hasCommand(readOnly, "command-action-initialize-cluster") {
+	if hasCommand(readOnly, "command-action-configure-node") || hasCommand(readOnly, "command-action-add-replica") || hasCommand(readOnly, "command-action-initialize-cluster") {
 		t.Fatalf("read-only cluster commands = %+v", readOnly)
 	}
 }

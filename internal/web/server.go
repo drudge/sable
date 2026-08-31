@@ -781,17 +781,22 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 
 	if view.CanCluster && view.CanWriteCluster && server.cluster != nil {
 		state := server.cluster.Snapshot()
-		switch {
-		case !state.Initialized:
+		if !state.Initialized {
 			add(pages.CommandEntityView{
 				ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
 				Keywords: "create setup primary replication", Route: "/cluster", Dialog: "initialize-cluster-dialog",
 			})
-		case state.LocalRole == cluster.RolePrimary && state.NetworkReady:
+		} else {
 			add(pages.CommandEntityView{
-				ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
-				Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
+				ID: "command-action-configure-node", Label: "Configure Node", Description: "Edit this node's cluster identity and HTTPS endpoint", Icon: "server-cog", Kind: "Action",
+				Keywords: "cluster local node settings identity endpoint", Route: "/cluster", Dialog: "cluster-settings-dialog",
 			})
+			if state.LocalRole == cluster.RolePrimary && state.NetworkReady {
+				add(pages.CommandEntityView{
+					ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+					Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
+				})
+			}
 		}
 	}
 
