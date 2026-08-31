@@ -96,7 +96,7 @@ func CacheContent(view CachePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"cache-layout\"><section class=\"card cache-status-card\"><div class=\"cache-card-header\"><div class=\"cache-title\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div class=\"cache-layout\"><section class=\"card cache-status-card\"><div class=\"cache-card-header\"><div class=\"cache-title\"><h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -104,7 +104,7 @@ func CacheContent(view CachePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div><h2>Cache Status</h2><p>Real-time cache statistics and management</p></div></div><div class=\"cache-header-actions\"><a class=\"icon-button\" href=\"/settings?tab=cache\" aria-label=\"Cache settings\" title=\"Cache settings\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<span>Cache Status</span></h2><p>Real-time cache statistics and management</p></div><div class=\"cache-header-actions\"><a class=\"icon-button\" href=\"/settings?tab=cache\" aria-label=\"Cache settings\" title=\"Cache settings\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

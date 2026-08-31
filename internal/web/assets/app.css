@@ -783,10 +783,10 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cache-layout { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(18rem, 1fr); gap: 1.5rem; align-items: start; }
 .cache-status-card { border-width: 1px; }
 .cache-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.5rem 1.5rem 0.75rem; }
-.cache-title { display: flex; min-width: 0; gap: 0.5rem; align-items: flex-start; }
-.cache-title > .nav-icon { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; color: var(--foreground); }
-.cache-title h2 { margin: 0; font-size: 1.5rem; line-height: 1; letter-spacing: -0.02em; }
-.cache-title p { margin: 0.35rem 0 0; color: var(--muted-foreground); font-size: 0.875rem; }
+.cache-title { min-width: 0; }
+.cache-title h2 { display: flex; align-items: center; gap: .65rem; margin: 0; font-size: 1.4rem; }
+.cache-title h2 .nav-icon { width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; color: #f59e0b; }
+.cache-title p { margin: .3rem 0 0; color: var(--muted-foreground); font-size: .82rem; }
 .cache-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.5rem; }
 .icon-button { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 2.25rem; place-items: center; overflow: visible; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--background); }
 .icon-button:hover { background: var(--accent); }
