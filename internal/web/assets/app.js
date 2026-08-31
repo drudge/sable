@@ -2152,6 +2152,490 @@
 		dialog.removeAttribute("data-dialog-auto-open");
 	  });
 	};
+	const setupCommandPalette = () => {
+	  const palette = document.querySelector("[data-command-palette]");
+	  if (!palette || palette.dataset.commandReady === "true") return;
+	  palette.dataset.commandReady = "true";
+	  setupDialogAccessibility(palette);
+	  const input = palette.querySelector("[data-command-input]");
+	  const list = palette.querySelector("[data-command-list]");
+	  const empty = palette.querySelector("[data-command-empty]");
+	  const status = palette.querySelector("[data-command-status]");
+	  const inputLabel = palette.querySelector("[data-command-input-label]");
+	  const searchScope = palette.querySelector("[data-command-search-scope]");
+	  const searchScopeLabel = palette.querySelector("[data-command-search-label]");
+	  const searchModes = palette.querySelector("[data-command-search-modes]");
+	  let searchModeButtons = [];
+	  const defaultFooterItems = [...palette.querySelectorAll("[data-command-footer-default]")];
+	  const searchFooterItems = [...palette.querySelectorAll("[data-command-footer-search]")];
+	  const searchModeFooterItems = [...palette.querySelectorAll("[data-command-footer-search-mode]")];
+	  const items = [...palette.querySelectorAll("[data-command-item]")];
+	  const groups = [...palette.querySelectorAll("[data-command-group]")];
+	  const pendingParameter = "sable-command";
+	  const pendingSearchParameter = "sable-search";
+	  const defaultInputPlaceholder = input.placeholder;
+	  const itemOrder = new Map(items.map((item, index) => [item, index]));
+	  const groupOrder = new Map(groups.map((group, index) => [group, index]));
+	  let visibleItems = items;
+	  let activeIndex = 0;
+	  let searchCommand = null;
+	  let searchParameter = "";
+	  let commandQuery = "";
+
+	  const normalize = (value) => (value || "").toLowerCase().trim().replace(/\s+/g, " ");
+	  const fuzzyContains = (candidate, needle) => {
+		if (candidate.includes(needle)) return true;
+		let cursor = 0;
+		for (const character of needle) {
+		  cursor = candidate.indexOf(character, cursor);
+		  if (cursor < 0) return false;
+		  cursor++;
+		}
+		return true;
+	  };
+	  const commandLabelWords = (item) => normalize(item.dataset.commandLabel).split(/[^a-z0-9]+/).filter(Boolean);
+	  const commandAcronym = (item) => commandLabelWords(item)
+		.filter((word) => !["edit", "set", "up", "view", "the", "for"].includes(word))
+		.map((word) => word[0]).join("");
+	  const matchesQuery = (item, query) => {
+		const normalizedQuery = normalize(query);
+		if (!normalizedQuery) return true;
+		const candidate = normalize(`${item.dataset.commandLabel} ${item.dataset.commandKeywords} ${item.textContent}`);
+		const words = candidate.split(/[^a-z0-9]+/).filter(Boolean);
+		if (!normalizedQuery.includes(" ") && commandAcronym(item).startsWith(normalizedQuery)) return true;
+		return normalizedQuery.split(" ").filter(Boolean).every((token) => candidate.includes(token) || words.some((word) => fuzzyContains(word, token)));
+	  };
+	  const commandRank = (item, query) => {
+		const normalizedQuery = normalize(query);
+		if (!normalizedQuery) return itemOrder.get(item);
+		const label = normalize(item.dataset.commandLabel);
+		const keywords = normalize(item.dataset.commandKeywords);
+		const labelWords = commandLabelWords(item);
+		const keywordWords = keywords.split(/[^a-z0-9]+/).filter(Boolean);
+		const labelAcronym = commandAcronym(item);
+		if (label === normalizedQuery) return 0;
+		if (labelAcronym === normalizedQuery) return 10;
+		if (label.startsWith(normalizedQuery)) return 20;
+		if (labelWords.includes(normalizedQuery)) return 40;
+		if (label.includes(normalizedQuery)) return 60;
+		if (keywordWords.includes(normalizedQuery)) return 100;
+		if (keywords.includes(normalizedQuery)) return 200;
+		const queryWords = normalizedQuery.split(" ").filter(Boolean);
+		if (queryWords.every((token) => labelWords.some((word) => word.startsWith(token)))) return 300;
+		if (queryWords.every((token) => labelWords.some((word) => fuzzyContains(word, token)))) return 400;
+		return 500 + itemOrder.get(item);
+	  };
+	  const setActive = (index, scroll = false) => {
+		items.forEach((item) => {
+		  item.classList.remove("active");
+		  item.setAttribute("aria-selected", "false");
+		});
+		if (visibleItems.length === 0) {
+		  activeIndex = -1;
+		  input.removeAttribute("aria-activedescendant");
+		  return;
+		}
+		activeIndex = (index + visibleItems.length) % visibleItems.length;
+		const active = visibleItems[activeIndex];
+		active.classList.add("active");
+		active.setAttribute("aria-selected", "true");
+		input.setAttribute("aria-activedescendant", active.id);
+		if (scroll) active.scrollIntoView({block: "nearest"});
+	  };
+	  const updateResults = () => {
+		const query = input.value;
+		items.forEach((item) => { item.hidden = !matchesQuery(item, query); });
+		groups.forEach((group) => {
+		  const groupItems = [...group.querySelectorAll("[data-command-item]")];
+		  groupItems.sort((left, right) => Number(left.hidden) - Number(right.hidden) || commandRank(left, query) - commandRank(right, query));
+		  group.append(...groupItems);
+		});
+		groups.sort((left, right) => {
+		  const leftRank = Math.min(...[...left.querySelectorAll("[data-command-item]:not([hidden])")].map((item) => commandRank(item, query)), Number.POSITIVE_INFINITY);
+		  const rightRank = Math.min(...[...right.querySelectorAll("[data-command-item]:not([hidden])")].map((item) => commandRank(item, query)), Number.POSITIVE_INFINITY);
+		  return leftRank - rightRank || groupOrder.get(left) - groupOrder.get(right);
+		});
+		list.append(...groups);
+		groups.forEach((group) => { group.hidden = !group.querySelector("[data-command-item]:not([hidden])"); });
+		visibleItems = [...list.querySelectorAll("[data-command-item]:not([hidden])")];
+		list.hidden = visibleItems.length === 0;
+		empty.hidden = visibleItems.length !== 0;
+		setActive(0);
+		if (palette.open) status.textContent = `${visibleItems.length} ${visibleItems.length === 1 ? "command" : "commands"} available`;
+	  };
+	  const currentRoute = () => window.location.pathname + window.location.search;
+	  const routeValue = (value) => {
+		const target = new URL(value || window.location.href, window.location.origin);
+		return target.pathname + target.search;
+	  };
+	  const visibleDialogTrigger = (dialog) => {
+		const triggers = [...document.querySelectorAll(`[data-dialog-open="${CSS.escape(dialog.id)}"]`)];
+		return triggers.find((candidate) => candidate.getClientRects().length > 0 && !candidate.closest("[hidden]")) ||
+		  triggers.find((candidate) => !candidate.closest("[hidden]"));
+	  };
+	  const searchModesFor = (item) => {
+		try {
+		  const modes = JSON.parse(item?.dataset.commandSearchModesConfig || "[]");
+		  return Array.isArray(modes) ? modes : [];
+		} catch (_) {
+		  return [];
+		}
+	  };
+	  const localCommandTarget = (payload, returnFocus = null) => {
+		if (payload.theme) {
+		  applyTheme(payload.theme);
+		  announce(`${payload.label} selected`);
+		  return true;
+		}
+		if (payload.dialog) {
+		  const dialog = document.getElementById(payload.dialog);
+		  if (!dialog) return false;
+		  showRoutedDialog(dialog, false, returnFocus || visibleDialogTrigger(dialog) || null);
+		  announce(`${payload.label} opened`);
+		  return true;
+		}
+		if (payload.focus) {
+		  const target = document.querySelector(payload.focus);
+		  if (!target) return false;
+		  if (payload.valueTarget) {
+			const valueTarget = document.querySelector(payload.valueTarget);
+			if (!valueTarget) return false;
+			valueTarget.value = payload.targetValue || "";
+			valueTarget.dispatchEvent(new Event("input", {bubbles: true}));
+			valueTarget.dispatchEvent(new Event("change", {bubbles: true}));
+		  }
+		  const dialog = target.closest("dialog");
+		  if (dialog && !dialog.open) showRoutedDialog(dialog, false, returnFocus || visibleDialogTrigger(dialog) || null);
+		  const disclosure = target.closest("details");
+		  if (disclosure) disclosure.open = true;
+		  if (Object.hasOwn(payload, "value")) {
+			target.value = payload.value;
+			target.dispatchEvent(new Event("input", {bubbles: true}));
+		  }
+		  target.focus();
+		  target.select?.();
+		  target.scrollIntoView({block: "center"});
+		  if (payload.submit) {
+			const form = document.querySelector(payload.submit);
+			if (!form) return false;
+			form.requestSubmit();
+			announce(`${payload.label} started`);
+		  } else {
+			announce(`${payload.label} ready`);
+		  }
+		  return true;
+		}
+		return false;
+	  };
+	  const commandPayload = (item) => ({
+		label: item.dataset.commandLabel,
+		route: item.dataset.commandRoute,
+		dialog: item.dataset.commandDialog,
+		focus: item.dataset.commandFocus,
+		theme: item.dataset.commandTheme,
+		submit: item.dataset.commandSearchSubmit,
+	  });
+	  const configureSearchModes = (item, modes) => {
+		searchModes.setAttribute("aria-label", item.dataset.commandSearchModesLabel || `${item.dataset.commandLabel} options`);
+		searchModeButtons = modes.map((mode, index) => {
+		  const button = document.createElement("button");
+		  button.type = "button";
+		  button.setAttribute("role", "radio");
+		  button.setAttribute("aria-checked", String(index === 0));
+		  button.tabIndex = index === 0 ? 0 : -1;
+		  button.dataset.commandSearchMode = "";
+		  button.dataset.commandSearchModeParam = mode.parameter || "";
+		  button.dataset.commandSearchModePrompt = mode.prompt || "";
+		  button.dataset.commandSearchModeInputLabel = mode.inputLabel || "";
+		  button.dataset.commandSearchModeExtraParam = mode.extraParameter || "";
+		  button.dataset.commandSearchModeExtraValue = mode.extraValue || "";
+		  button.dataset.commandSearchModeValueTarget = mode.valueTarget || "";
+		  button.textContent = mode.label;
+		  return button;
+		});
+		searchModes.replaceChildren(...searchModeButtons);
+	  };
+	  const selectSearchMode = (button, focus = false) => {
+		searchModeButtons.forEach((candidate) => {
+		  const selected = candidate === button;
+		  candidate.setAttribute("aria-checked", String(selected));
+		  candidate.tabIndex = selected ? 0 : -1;
+		});
+		searchParameter = button.dataset.commandSearchModeParam || "";
+		input.placeholder = button.dataset.commandSearchModePrompt || searchCommand?.dataset.commandSearchPrompt || "Search…";
+		inputLabel.textContent = button.dataset.commandSearchModeInputLabel || `${searchCommand?.dataset.commandLabel || "Search"} by ${button.textContent}`;
+		status.textContent = `${button.textContent} selected.`;
+		if (focus) button.focus();
+	  };
+	  const restoreCommandMode = (query = "") => {
+		searchCommand = null;
+		searchParameter = "";
+		searchScope.hidden = true;
+		searchModes.hidden = true;
+		searchModes.removeAttribute("aria-label");
+		searchModes.replaceChildren();
+		searchModeButtons = [];
+		defaultFooterItems.forEach((item) => { item.hidden = false; });
+		searchFooterItems.forEach((item) => { item.hidden = true; });
+		searchModeFooterItems.forEach((item) => { item.hidden = true; });
+		inputLabel.textContent = "Search commands";
+		input.placeholder = defaultInputPlaceholder;
+		input.setAttribute("role", "combobox");
+		input.setAttribute("aria-autocomplete", "list");
+		input.setAttribute("aria-controls", list.id);
+		input.setAttribute("aria-expanded", String(palette.open));
+		input.value = query;
+		updateResults();
+	  };
+	  const beginSearch = (item) => {
+		commandQuery = input.value;
+		searchCommand = item;
+		items.forEach((candidate) => {
+		  candidate.classList.remove("active");
+		  candidate.setAttribute("aria-selected", "false");
+		});
+		input.removeAttribute("aria-activedescendant");
+		input.removeAttribute("aria-autocomplete");
+		input.removeAttribute("aria-controls");
+		input.removeAttribute("aria-expanded");
+		input.setAttribute("role", "searchbox");
+		input.value = "";
+		searchScopeLabel.textContent = item.dataset.commandLabel;
+		searchScope.hidden = false;
+		const modeConfigurations = searchModesFor(item);
+		if (modeConfigurations.length > 1) {
+		  configureSearchModes(item, modeConfigurations);
+		  searchModes.hidden = false;
+		  searchModeFooterItems.forEach((footerItem) => { footerItem.hidden = false; });
+		  selectSearchMode(searchModeButtons[0]);
+		} else {
+		  searchModes.hidden = true;
+		  searchModeFooterItems.forEach((footerItem) => { footerItem.hidden = true; });
+		  searchParameter = item.dataset.commandSearchParam || "";
+		  inputLabel.textContent = item.dataset.commandLabel;
+		  input.placeholder = item.dataset.commandSearchPrompt || `${item.dataset.commandLabel}…`;
+		}
+		list.hidden = true;
+		empty.hidden = true;
+		defaultFooterItems.forEach((footerItem) => { footerItem.hidden = true; });
+		searchFooterItems.forEach((footerItem) => { footerItem.hidden = false; });
+		status.textContent = `${item.dataset.commandLabel}. Type a search term and press Enter.`;
+		input.focus();
+	  };
+	  const runSearch = (item) => {
+		const query = input.value.trim();
+		if (!query) {
+		  status.textContent = "Enter a search term.";
+		  return;
+		}
+		const target = new URL(item.dataset.commandRoute, window.location.origin);
+		const parameter = searchParameter;
+		if (parameter) target.searchParams.set(parameter, query);
+		const selectedMode = searchModeButtons.find((button) => button.getAttribute("aria-checked") === "true");
+		if (selectedMode?.dataset.commandSearchModeExtraParam) {
+		  target.searchParams.set(selectedMode.dataset.commandSearchModeExtraParam, selectedMode.dataset.commandSearchModeExtraValue);
+		}
+		target.searchParams.set(pendingSearchParameter, query);
+		target.searchParams.set(pendingParameter, item.id);
+		palette.close();
+		window.location.assign(target.href);
+	  };
+	  const runPostCommand = async (item) => {
+		const label = item.dataset.commandLabel;
+		let values = {};
+		let headers = {};
+		try { values = JSON.parse(item.dataset.commandValues || "{}"); } catch (_) {}
+		try { headers = JSON.parse(document.body.getAttribute("hx-headers:inherited") || "{}"); } catch (_) {}
+		palette.close();
+		announce(`${label} started`);
+		try {
+		  const response = await fetch(new URL(item.dataset.commandPost, window.location.origin), {
+			method: "POST",
+			headers: {...headers, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+			body: new URLSearchParams(values),
+		  });
+		  const markup = await response.text();
+		  const responseDocument = new DOMParser().parseFromString(markup, "text/html");
+		  const updatedBlocking = responseDocument.querySelector("#blocking-content");
+		  const currentBlocking = document.querySelector("#blocking-content");
+		  if (currentBlocking && updatedBlocking) {
+			currentBlocking.replaceWith(updatedBlocking);
+			window.htmx?.process(updatedBlocking);
+			initializeSwappedContent(updatedBlocking);
+			document.body.dispatchEvent(new CustomEvent("htmx:after:swap", {bubbles: true, detail: {target: updatedBlocking}}));
+		  } else {
+			const toast = responseDocument.querySelector(".toast-region");
+			if (toast) {
+			  document.querySelectorAll(".toast-region").forEach((region) => region.remove());
+			  document.body.append(toast);
+			  window.htmx?.process(toast);
+			  initializeSwappedContent(toast);
+			}
+		  }
+		  if (!response.ok) throw new Error(`command returned ${response.status}`);
+		  announce(`${label} completed`);
+		} catch (_) {
+		  announce(`${label} failed`);
+		}
+	  };
+	  const execute = (item) => {
+		if (!item) return;
+		if (item.dataset.commandSearch === "true") {
+		  beginSearch(item);
+		  return;
+		}
+		if (item.dataset.commandPost) {
+		  void runPostCommand(item);
+		  return;
+		}
+		const href = item.dataset.commandHref;
+		if (href) {
+		  const target = new URL(href, window.location.origin);
+		  palette.close();
+		  if (target.pathname + target.search === currentRoute()) {
+			announce(`${item.dataset.commandLabel} is already open`);
+			return;
+		  }
+		  window.location.assign(target.href);
+		  return;
+		}
+		const payload = commandPayload(item);
+		if (payload.route && routeValue(payload.route) !== currentRoute()) {
+		  const target = new URL(payload.route, window.location.origin);
+		  target.searchParams.set(pendingParameter, item.id);
+		  palette.close();
+		  window.location.assign(target.href);
+		  return;
+		}
+		const returnFocus = palette.sableReturnFocus;
+		if (payload.dialog) palette.sableReturnFocus = null;
+		palette.close();
+		window.requestAnimationFrame(() => {
+		  if (!localCommandTarget(payload, payload.dialog ? returnFocus : null)) announce(`${payload.label} is unavailable on this page`);
+		});
+	  };
+	  const open = (trigger = null) => {
+		if (palette.open) {
+		  palette.close();
+		  return;
+		}
+		palette.sableReturnFocus = trigger || (document.activeElement !== document.body ? document.activeElement : null);
+		palette.showModal();
+		document.querySelectorAll("[data-command-open]").forEach((button) => button.setAttribute("aria-expanded", "true"));
+		restoreCommandMode();
+		window.requestAnimationFrame(() => input.focus());
+	  };
+
+	  input.addEventListener("input", () => { if (!searchCommand) updateResults(); });
+	  input.addEventListener("keydown", (event) => {
+		if (event.isComposing) return;
+		if (searchCommand && !searchModes.hidden && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
+		  event.preventDefault();
+		  const current = Math.max(0, searchModeButtons.findIndex((button) => button.getAttribute("aria-checked") === "true"));
+		  const direction = event.key === "ArrowRight" ? 1 : -1;
+		  const next = (current + direction + searchModeButtons.length) % searchModeButtons.length;
+		  selectSearchMode(searchModeButtons[next]);
+		  return;
+		}
+		if (!searchCommand && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+		  event.preventDefault();
+		  if (event.key === "Home") setActive(0, true);
+		  else if (event.key === "End") setActive(visibleItems.length - 1, true);
+		  else setActive(activeIndex + (event.key === "ArrowDown" ? 1 : -1), true);
+		  return;
+		}
+		if (event.key === "Enter") {
+		  event.preventDefault();
+		  if (searchCommand) runSearch(searchCommand);
+		  else execute(visibleItems[activeIndex]);
+		  return;
+		}
+		if (event.key === "Escape") {
+		  event.preventDefault();
+		  if (searchCommand) {
+			restoreCommandMode(commandQuery);
+			input.focus();
+		  } else palette.close();
+		}
+	  });
+	  items.forEach((item) => {
+		item.addEventListener("pointermove", () => {
+		  const index = visibleItems.indexOf(item);
+		  if (index >= 0 && index !== activeIndex) setActive(index);
+		});
+		item.addEventListener("click", () => execute(item));
+	  });
+	  document.querySelectorAll("[data-command-open]").forEach((button) => {
+		button.setAttribute("aria-expanded", "false");
+		button.addEventListener("click", () => open(button));
+	  });
+	  palette.querySelector("[data-command-close]")?.addEventListener("click", () => palette.close());
+	  palette.querySelector("[data-command-search-back]")?.addEventListener("click", () => {
+		restoreCommandMode(commandQuery);
+		input.focus();
+	  });
+	  searchModes.addEventListener("click", (event) => {
+		const button = event.target.closest("[data-command-search-mode]");
+		if (button) selectSearchMode(button);
+	  });
+	  searchModes.addEventListener("keydown", (event) => {
+		if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+		event.preventDefault();
+		const current = Math.max(0, searchModeButtons.indexOf(event.target.closest("[data-command-search-mode]")));
+		let next = current;
+		if (event.key === "Home") next = 0;
+		else if (event.key === "End") next = searchModeButtons.length - 1;
+		else next = (current + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + searchModeButtons.length) % searchModeButtons.length;
+		selectSearchMode(searchModeButtons[next], true);
+	  });
+	  palette.addEventListener("pointerdown", (event) => { if (event.target === palette) palette.close(); });
+	  palette.addEventListener("close", () => {
+		document.querySelectorAll("[data-command-open]").forEach((button) => button.setAttribute("aria-expanded", "false"));
+		if (searchCommand) restoreCommandMode();
+		input.setAttribute("aria-expanded", "false");
+		input.removeAttribute("aria-activedescendant");
+	  });
+	  document.addEventListener("keydown", (event) => {
+		if (event.repeat || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+		event.preventDefault();
+		open();
+	  });
+	  const macShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K";
+	  document.querySelectorAll("[data-command-shortcut]").forEach((shortcut) => { shortcut.textContent = macShortcut; });
+	  updateResults();
+
+	  const currentURL = new URL(window.location.href);
+	  const pendingID = currentURL.searchParams.get(pendingParameter);
+	  if (pendingID) {
+		const pendingSearch = currentURL.searchParams.get(pendingSearchParameter);
+		currentURL.searchParams.delete(pendingParameter);
+		currentURL.searchParams.delete(pendingSearchParameter);
+		window.history.replaceState(window.history.state, "", currentURL.pathname + currentURL.search + currentURL.hash);
+		const pendingItem = items.find((item) => item.id === pendingID);
+		const pending = pendingItem ? commandPayload(pendingItem) : null;
+		const pendingModes = searchModesFor(pendingItem);
+		const pendingMode = pendingModes.find((mode) => mode.extraParameter && currentURL.searchParams.get(mode.extraParameter) === mode.extraValue) ||
+		  pendingModes.find((mode) => mode.parameter && currentURL.searchParams.has(mode.parameter)) || pendingModes[0];
+		if (pending && pendingMode) {
+		  pending.focus = pendingMode.focus || pending.focus;
+		  pending.valueTarget = pendingMode.valueTarget || "";
+		  pending.targetValue = pendingMode.extraValue || "";
+		}
+		if (pending && pendingSearch !== null) pending.value = pendingSearch;
+		const pendingRouteMatches = () => {
+		  if (!pending?.route) return false;
+		  const route = new URL(pending.route, window.location.origin);
+		  const current = new URL(window.location.href);
+		  return route.pathname === current.pathname && [...route.searchParams].every(([name, value]) => current.searchParams.get(name) === value);
+		};
+		window.requestAnimationFrame(() => {
+		  if (!pendingRouteMatches() || !localCommandTarget(pending)) {
+			document.getElementById("main-content")?.focus();
+			announce(`${pending?.label || "Command"} is unavailable`);
+		  }
+		});
+	  }
+	};
 	window.addEventListener("popstate", syncRoutedDialogs);
 	// The dashboard rankings refresh themselves on a timer. Replacing that block
 	// while an operator has a "View all" list open would close it out from under
@@ -2165,6 +2649,7 @@
 	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
 	syncRoutedDialogs();
 	openAutomaticDialogs();
+	setupCommandPalette();
 
 	const legacyCopyText = (value) => {
 	  const fallback = document.createElement("textarea");

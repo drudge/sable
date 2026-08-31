@@ -48,7 +48,7 @@ func replicaLocalWrite(path string) bool {
 	// sign-in on the same page works. The callback is a GET and never reaches
 	// this gate.
 	case path == "/login", path == "/logout", path == ssoStartPath,
-		path == "/ui/administration/sessions/revoke", path == "/ui/query":
+		path == "/ui/administration/sessions/revoke", path == "/ui/query", path == "/ui/updates/command-check":
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
 		return true
