@@ -48,6 +48,8 @@ type stubLocalBackups struct {
 }
 
 func (stub *stubLocalBackups) BackupSchedule(context.Context) (BackupSchedule, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	return BackupSchedule{
 		Directory: "data/backups", Interval: 24 * time.Hour, RunAt: "02:00", RetentionCount: 7,
 		PassphraseStored: stub.storedPassphrase != "",
@@ -55,19 +57,23 @@ func (stub *stubLocalBackups) BackupSchedule(context.Context) (BackupSchedule, e
 }
 
 func (stub *stubLocalBackups) UpdateBackupSchedule(_ context.Context, update BackupScheduleUpdate) error {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	stub.scheduleUpdate = update
 	return nil
 }
 
 func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase string, progress func(BackupProgress)) (LocalBackup, error) {
+	stub.mu.Lock()
 	if passphrase == "" {
 		passphrase = stub.storedPassphrase
 	}
-	stub.mu.Lock()
 	stub.lastPassphrase = passphrase
 	stub.mu.Unlock()
 	stub.run(progress)
 	archive := LocalBackup{Name: "sable-backup-ns1-20260901.sablebackup", CreatedAt: time.Now(), Size: 6}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	stub.archives = append([]LocalBackup{archive}, stub.archives...)
 	if stub.files == nil {
 		stub.files = map[string][]byte{}
@@ -77,10 +83,14 @@ func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase st
 }
 
 func (stub *stubLocalBackups) LocalBackups(context.Context) ([]LocalBackup, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	return append([]LocalBackup(nil), stub.archives...), nil
 }
 
 func (stub *stubLocalBackups) LocalBackupContents(_ context.Context, name string) ([]byte, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	contents, ok := stub.files[name]
 	if !ok {
 		return nil, errors.New("not found")
@@ -89,6 +99,8 @@ func (stub *stubLocalBackups) LocalBackupContents(_ context.Context, name string
 }
 
 func (stub *stubLocalBackups) DeleteLocalBackup(_ context.Context, name string) error {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
 	if _, ok := stub.files[name]; !ok {
 		return errors.New("not found")
 	}
