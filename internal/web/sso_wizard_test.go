@@ -82,7 +82,7 @@ func newWizardServer(t *testing.T, admin *fakeSSOAdmin) *Server {
 		config:          staticConfig{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}},
 		stats:           staticStats{},
 		queryLog:        staticQueryLog{},
-		history:         newStatsHistory(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		history:         newStatsHistory(slog.New(slog.NewTextHandler(io.Discard, nil)), config.Defaults().Statistics.Retention.Duration),
 	}
 }
 

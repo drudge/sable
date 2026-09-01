@@ -50,7 +50,8 @@ type Recorder struct {
 	entries     chan Entry
 	batchSize   int
 	flushEvery  time.Duration
-	retention   time.Duration
+	retention   atomic.Int64
+	pruneNow    chan struct{}
 	shutdown    chan context.Context
 	done        chan struct{}
 	enabled     atomic.Bool
@@ -85,10 +86,11 @@ func NewRecorder(writer Writer, options Options, logger *slog.Logger) (*Recorder
 		entries:    make(chan Entry, options.BufferSize),
 		batchSize:  options.BatchSize,
 		flushEvery: options.FlushInterval,
-		retention:  options.Retention,
+		pruneNow:   make(chan struct{}, 1),
 		shutdown:   make(chan context.Context, 1),
 		done:       make(chan struct{}),
 	}
+	recorder.retention.Store(int64(options.Retention))
 	recorder.enabled.Store(options.Enabled)
 	go recorder.run()
 	return recorder, nil
@@ -100,6 +102,20 @@ func (recorder *Recorder) Enabled() bool {
 
 func (recorder *Recorder) SetEnabled(enabled bool) {
 	recorder.enabled.Store(enabled)
+}
+
+func (recorder *Recorder) SetRetention(retention time.Duration) error {
+	if retention <= 0 {
+		return errors.New("server log retention must be positive")
+	}
+	if previous := recorder.retention.Swap(int64(retention)); previous == int64(retention) {
+		return nil
+	}
+	select {
+	case recorder.pruneNow <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // Record satisfies Sink. It never blocks: a full queue drops the entry and
@@ -165,6 +181,8 @@ func (recorder *Recorder) run() {
 			batch = recorder.write(context.Background(), batch)
 		case <-retentionTicker.C:
 			recorder.prune(context.Background())
+		case <-recorder.pruneNow:
+			recorder.prune(context.Background())
 		case ctx := <-recorder.shutdown:
 			batch = recorder.drain(ctx, batch)
 			recorder.write(ctx, batch)
@@ -174,7 +192,8 @@ func (recorder *Recorder) run() {
 }
 
 func (recorder *Recorder) prune(ctx context.Context) {
-	if err := recorder.writer.PruneServerLogEntries(ctx, time.Now().Add(-recorder.retention)); err != nil {
+	retention := time.Duration(recorder.retention.Load())
+	if err := recorder.writer.PruneServerLogEntries(ctx, time.Now().Add(-retention)); err != nil {
 		recorder.writeErrors.Add(1)
 		recorder.logger.Error("prune server log", "error", err)
 	}

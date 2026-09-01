@@ -37,10 +37,12 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	defer stopRuntime()
 	startedAt := time.Now()
 	runtimeLogs := serverlog.New(serverlog.DefaultCapacity)
+	var minimumLogLevel slog.LevelVar
+	minimumLogLevel.Set(slog.LevelInfo)
 	// baseLogger stays unwrapped so the server log recorder can report its own
 	// failures without feeding them back into the buffer it drains.
-	baseLogger := logger
-	logger = slog.New(serverlog.NewHandler(logger.Handler(), runtimeLogs))
+	baseLogger := slog.New(serverlog.NewLevelHandler(logger.Handler(), &minimumLogLevel))
+	logger = slog.New(serverlog.NewHandler(baseLogger.Handler(), runtimeLogs))
 	absoluteConfigurationPath, err := config.AbsolutePath(configurationPath)
 	if err != nil {
 		return err
@@ -59,6 +61,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
+	minimumLogLevel.Set(serverLogLevel(initial.ServerLog.Level))
 	configurationDirectory := filepath.Dir(absolutePath)
 
 	database, err := store.Open(ctx, initial.Database.Driver, initial.Database.DSN)
@@ -110,6 +113,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	tsigSecrets := tsig.NewStore(secretVault)
 	dnssec := newDNSSECSigner(secretVault)
 	var configurationManager *config.Manager
+	var scheduledBackups *scheduledBackupService
 	var webServer *web.Server
 	var handler *dnsserver.Handler
 	zoneManager, err := zone.NewManager(
@@ -213,6 +217,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		if active.Security != candidate.Security {
 			return errors.New("security settings require a controlled restart")
 		}
+		if scheduledBackups != nil {
+			if err := scheduledBackups.Prepare(candidate.Backup); err != nil {
+				return err
+			}
+		}
 		clusterRestartRequired := active.Cluster != candidate.Cluster
 		zones := zoneManager.Current().Zones
 		if err := zone.ValidateAll(zones, tsigKeyNames(candidate)); err != nil {
@@ -240,16 +249,33 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		}
 		handler.Activate(candidateRuntime)
 		queryRecorder.SetEnabled(candidate.QueryLog.Enabled)
+		if err := queryRecorder.SetRetention(candidate.QueryLog.Retention.Duration); err != nil {
+			return err
+		}
 		serverLogRecorder.SetEnabled(candidate.ServerLog.Enabled)
+		if err := serverLogRecorder.SetRetention(candidate.ServerLog.Retention.Duration); err != nil {
+			return err
+		}
+		minimumLogLevel.Set(serverLogLevel(candidate.ServerLog.Level))
+		if webServer != nil {
+			webServer.SetStatsRetention(candidate.Statistics.Retention.Duration)
+		}
 		if clusterRestartRequired {
 			logger.Info("cluster bootstrap settings staged", "restart_required", true)
 		}
 		if webRestartRequired {
 			logger.Info("HTTPS web listener settings staged", "restart_required", true)
 		}
+		if scheduledBackups != nil {
+			scheduledBackups.Apply(candidate.Backup)
+		}
 		return nil
 	}
 	configurationManager = config.NewManager(absolutePath, initial, apply)
+	scheduledBackups, err = newScheduledBackupService(absolutePath, configurationManager, secretVault, logger, initial.Backup)
+	if err != nil {
+		return errors.Join(fmt.Errorf("initialize scheduled backups: %w", err), closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
+	}
 	if _, err := certificateManager.Ensure(ctx, initial.EncryptedDNS, false); err != nil {
 		return errors.Join(fmt.Errorf("prepare public TLS certificate: %w", err), closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
 	}
@@ -353,7 +379,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		BinaryPath: os.Getenv(update.BinaryPathEnvironment),
 		PreRelease: initial.Updates.PreRelease,
 	}))
-	webServer.SetBackupController(&consoleBackups{configurationPath: absolutePath})
+	webServer.SetBackupController(scheduledBackups)
 	restartRequests := make(chan struct{}, 1)
 	webServer.SetRestartController(func() {
 		select {
@@ -382,6 +408,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		}
 	}
 	clusterService.StartMonitoring(runtimeContext)
+	go scheduledBackups.Run(runtimeContext)
 	go runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
 
 	releaseInfo := version.Current()
@@ -634,21 +661,32 @@ func closeServerLogRecorder(recorder *serverlog.Recorder, configuration config.C
 func serverLogWorkerChange(active, candidate config.ServerLog) error {
 	if active.BufferSize == candidate.BufferSize &&
 		active.BatchSize == candidate.BatchSize &&
-		active.FlushInterval == candidate.FlushInterval &&
-		active.Retention == candidate.Retention {
+		active.FlushInterval == candidate.FlushInterval {
 		return nil
 	}
-	return errors.New("server_log buffer, batch, flush, and retention settings require a controlled restart")
+	return errors.New("server_log buffer, batch, and flush settings require a controlled restart")
 }
 
 func queryLogWorkerChange(active, candidate config.QueryLog) error {
 	if active.BufferSize == candidate.BufferSize &&
 		active.BatchSize == candidate.BatchSize &&
-		active.FlushInterval == candidate.FlushInterval &&
-		active.Retention == candidate.Retention {
+		active.FlushInterval == candidate.FlushInterval {
 		return nil
 	}
-	return errors.New("query_log buffer, batch, flush, and retention settings require a controlled restart")
+	return errors.New("query_log buffer, batch, and flush settings require a controlled restart")
+}
+
+func serverLogLevel(level string) slog.Level {
+	switch level {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 func tsigKeyNames(configuration config.Config) []string {

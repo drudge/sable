@@ -24,7 +24,6 @@ const (
 	statsBucketInterval = time.Minute
 	statsFlushInterval  = 30 * time.Second
 	statsPruneInterval  = time.Hour
-	statsRetention      = 400 * 24 * time.Hour
 	memoryBucketWindow  = 48 * time.Hour
 	maxChartPoints      = 160
 	// The live badge pulses while queries are still arriving. The window
@@ -230,6 +229,7 @@ type statsHistory struct {
 	buckets       map[int64]chartedCounters
 	pending       map[int64]chartedCounters
 	lastActivity  time.Time
+	retention     time.Duration
 	lifetime      lifetimeCounters
 	lifetimeDirty bool
 }
@@ -246,15 +246,26 @@ type chartPoint struct {
 	cacheHits     uint64
 }
 
-func newStatsHistory(logger *slog.Logger) *statsHistory {
+func newStatsHistory(logger *slog.Logger, retention time.Duration) *statsHistory {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &statsHistory{
-		logger:  logger,
-		buckets: make(map[int64]chartedCounters),
-		pending: make(map[int64]chartedCounters),
+		logger:    logger,
+		retention: retention,
+		buckets:   make(map[int64]chartedCounters),
+		pending:   make(map[int64]chartedCounters),
 	}
+}
+
+func (history *statsHistory) setRetention(retention time.Duration) bool {
+	history.mu.Lock()
+	defer history.mu.Unlock()
+	if history.retention == retention {
+		return false
+	}
+	history.retention = retention
+	return true
 }
 
 // attach wires persistence and adopts the stored lifetime totals as the
@@ -355,11 +366,12 @@ func (history *statsHistory) flush(ctx context.Context) error {
 func (history *statsHistory) prune(ctx context.Context, now time.Time) error {
 	history.mu.RLock()
 	backing := history.store
+	retention := history.retention
 	history.mu.RUnlock()
 	if backing == nil {
 		return nil
 	}
-	return backing.PruneQueryStats(ctx, now.Add(-statsRetention))
+	return backing.PruneQueryStats(ctx, now.Add(-retention))
 }
 
 // totals reports the cumulative counters the stat cards display: everything
@@ -598,15 +610,21 @@ func (server *Server) collectStatsHistory() {
 		case <-flusher.C:
 			server.flushStatsHistory()
 		case at := <-pruner.C:
-			ctx, cancel := context.WithTimeout(context.Background(), statsStoreTimeout)
-			if err := server.history.prune(ctx, at); err != nil {
-				server.logger.Warn("prune query statistics", "error", err)
-			}
-			cancel()
+			server.pruneStatsHistory(at)
+		case <-server.historyPrune:
+			server.pruneStatsHistory(time.Now())
 		case <-server.historyStop:
 			server.flushStatsHistory()
 			return
 		}
+	}
+}
+
+func (server *Server) pruneStatsHistory(at time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), statsStoreTimeout)
+	defer cancel()
+	if err := server.history.prune(ctx, at); err != nil {
+		server.logger.Warn("prune query statistics", "error", err)
 	}
 }
 

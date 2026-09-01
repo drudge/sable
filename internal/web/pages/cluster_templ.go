@@ -2278,9 +2278,9 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var96 string
-		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.ResolveAttributeValue(firstNonEmptyPage(view.ACMERenewBefore, "720h"))
+		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.ResolveAttributeValue(firstNonEmptyPage(view.ACMERenewBefore, "30d"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 2075}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 2074}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var96)
 		if templ_7745c5c3_Err != nil {

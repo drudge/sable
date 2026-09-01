@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -71,6 +72,10 @@ type SettingsPageView struct {
 	MinimumTLSVersion   string
 	QueryLogEnabled     bool
 	QueryLogRetention   string
+	ServerLogEnabled    bool
+	ServerLogLevel      string
+	ServerLogRetention  string
+	StatisticsRetention string
 	SessionTTL          string
 	APITokenTTL         string
 	ConfigWatch         bool
@@ -139,6 +144,9 @@ templ SettingsContent(view SettingsPageView) {
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
+		@RunLocalBackupDialog()
+		@LocalBackupRestoreDialog()
+		@UploadBackupRestoreDialog()
 		@ManualCertificateDialogs()
 		@CertificateDetailsDialog(view)
 	</div>
@@ -218,7 +226,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 						if view.ACMELastError != "" {
 							<div class="certificate-error" role="alert">@Icon("alert-triangle")<span>{ view.ACMELastError }</span></div>
 						}
-						<div class="field-grid two"><label class="field-control"><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/><small>Used by the certificate authority for expiry and account notices.</small></label><label class="field-control"><span>DNS Names</span><textarea name="acme_domains" rows="3" spellcheck="false" placeholder="dns.example.com&#10;*.example.com">{ view.ACMEDomains }</textarea><small>One name per line. Wildcards are supported through DNS-01.</small></label><label class="field-control"><span>Certificate Authority</span><select name="acme_directory_url"><option value="https://acme-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" }>Let's Encrypt Production</option><option value="https://acme-staging-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-staging-v02.api.letsencrypt.org/directory" }>Let's Encrypt Staging</option></select><small>Use staging while testing to avoid production rate limits.</small></label><label class="field-control"><span>Renew Before Expiry</span><input name="acme_renew_before" value={ view.ACMERenewBefore } placeholder="720h"/><small>Between 24h and 1440h.</small></label></div>
+						<div class="field-grid two"><label class="field-control"><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/><small>Used by the certificate authority for expiry and account notices.</small></label><label class="field-control"><span>DNS Names</span><textarea name="acme_domains" rows="3" spellcheck="false" placeholder="dns.example.com&#10;*.example.com">{ view.ACMEDomains }</textarea><small>One name per line. Wildcards are supported through DNS-01.</small></label><label class="field-control"><span>Certificate Authority</span><select name="acme_directory_url"><option value="https://acme-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" }>Let's Encrypt Production</option><option value="https://acme-staging-v02.api.letsencrypt.org/directory" selected?={ view.ACMEDirectoryURL == "https://acme-staging-v02.api.letsencrypt.org/directory" }>Let's Encrypt Staging</option></select><small>Use staging while testing to avoid production rate limits.</small></label><label class="field-control"><span>Renew Before Expiry</span><input name="acme_renew_before" value={ view.ACMERenewBefore } placeholder="30d"/><small>Between 1d and 60d.</small></label></div>
 						<div class="acme-provider-card" data-acme-provider-root data-acme-provider-selected={ view.ACMEDNSProvider }>
 							<header>
 								<span class="acme-provider-icon">@Icon("globe-lock")</span>
@@ -303,7 +311,7 @@ templ SettingsCachePanel(view SettingsPageView) {
 			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Enable Serve Stale</strong><small>Improve availability during upstream outages without serving stale data during normal operation.</small></span><input type="checkbox" name="serve_stale" value="true" checked?={ view.ServeStale }/></label><div class="field-grid four"><label class="field-control"><span>Maximum Stale Age (sec)</span><input type="number" name="cache_stale_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleTTL) } required/><small>Maximum age for retained stale records.</small></label><label class="field-control"><span>Answer TTL (sec)</span><input type="number" name="cache_stale_answer_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleAnswerTTL) } required/><small>TTL returned in stale responses.</small></label><label class="field-control"><span>Retry TTL (sec)</span><input type="number" name="cache_stale_reset_ttl" min="1" max="4294967295" value={ fmt.Sprint(view.CacheStaleResetTTL) } required/><small>Delay before retrying a failed upstream.</small></label><label class="field-control"><span>Max Wait (ms)</span><input type="number" name="cache_stale_max_wait_ms" min="1" max="60000" value={ fmt.Sprint(view.CacheStaleMaxWaitMS) } required/><small>Wait before returning stale data.</small></label></div></div>
 		}
 		@SettingsCard("refresh", "Cache Prefetching", "Refresh popular records in the background before they expire") {
-			<div class="isotope-card-content field-grid four"><label class="field-control"><span>Eligibility TTL (sec)</span><input type="number" name="cache_prefetch_minimum_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchMinimumTTL) } required/><small>Minimum original TTL for prefetch.</small></label><label class="field-control"><span>Trigger TTL (sec)</span><input type="number" name="cache_prefetch_trigger_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchTriggerTTL) } required/><small>Refresh at this remaining TTL; 0 disables.</small></label><label class="field-control"><span>Sample Interval</span><input name="cache_prefetch_sample_interval" value={ view.CachePrefetchSample } required/><small>Go duration, such as <code>5m</code>.</small></label><label class="field-control"><span>Sample Hits/Hour</span><input type="number" name="cache_prefetch_hits_per_hour" min="1" max="4294967295" value={ fmt.Sprint(view.CachePrefetchHitsPerHour) } required/><small>Minimum popularity for prefetch.</small></label></div>
+			<div class="isotope-card-content field-grid four"><label class="field-control"><span>Eligibility TTL (sec)</span><input type="number" name="cache_prefetch_minimum_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchMinimumTTL) } required/><small>Minimum original TTL for prefetch.</small></label><label class="field-control"><span>Trigger TTL (sec)</span><input type="number" name="cache_prefetch_trigger_ttl" min="0" max="4294967295" value={ fmt.Sprint(view.CachePrefetchTriggerTTL) } required/><small>Refresh at this remaining TTL; 0 disables.</small></label><label class="field-control"><span>Sample Interval</span><input name="cache_prefetch_sample_interval" value={ view.CachePrefetchSample } required/><small>Duration such as <code>5m</code>.</small></label><label class="field-control"><span>Sample Hits/Hour</span><input type="number" name="cache_prefetch_hits_per_hour" min="1" max="4294967295" value={ fmt.Sprint(view.CachePrefetchHitsPerHour) } required/><small>Minimum popularity for prefetch.</small></label></div>
 		}
 		@SettingsSaveButton("cache")
 	</div>
@@ -333,8 +341,14 @@ templ SettingsBlockingPanel(view SettingsPageView) {
 
 templ SettingsLoggingPanel(view SettingsPageView) {
 	<div class="settings-panel-stack">
-		@SettingsCard("file-text", "Logging Configuration", "Configure query logs and audit trail") {
-			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Log DNS Queries</strong><small>Persist DNS queries for logs, metrics, and dashboard insights.</small></span><input type="checkbox" name="query_log_enabled" value="true" checked?={ view.QueryLogEnabled }/></label><div class="read-only-field narrow-control"><span>Query Log Retention</span><strong>{ view.QueryLogRetention }</strong></div></div>
+		@SettingsCard("logs", "DNS Query Logs", "Control searchable DNS query history") {
+			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Log DNS Queries</strong><small>Persist DNS queries for search, rankings, and operational analysis.</small></span><input type="checkbox" name="query_log_enabled" value="true" checked?={ view.QueryLogEnabled }/></label><label class="field-control narrow-control"><span>Query Log Retention</span><input name="query_log_retention" value={ view.QueryLogRetention } required/><small>Positive duration such as <code>30d</code>. Fixed units: y, mo, w, and d.</small></label></div>
+		}
+		@SettingsCard("server", "Server Logs", "Control runtime and audit history") {
+			<div class="isotope-card-content"><label class="field-control switch-row"><span><strong>Persist Server Logs</strong><small>Keep searchable runtime and audit entries across restarts. Entries always continue to stderr.</small></span><input type="checkbox" name="server_log_enabled" value="true" checked?={ view.ServerLogEnabled }/></label><div class="field-grid two"><label class="field-control narrow-control"><span>Minimum Log Level</span><select name="server_log_level"><option value="debug" selected?={ view.ServerLogLevel == "debug" }>Debug</option><option value="info" selected?={ view.ServerLogLevel == "info" }>Info</option><option value="warn" selected?={ view.ServerLogLevel == "warn" }>Warning</option><option value="error" selected?={ view.ServerLogLevel == "error" }>Error</option></select><small>Applies to both persisted history and stderr.</small></label><label class="field-control narrow-control"><span>Server Log Retention</span><input name="server_log_retention" value={ view.ServerLogRetention } required/><small>Positive duration such as <code>60d</code>. Fixed units: y, mo, w, and d.</small></label></div></div>
+		}
+		@SettingsCard("line-chart", "Dashboard History", "Control retained chart data") {
+			<div class="isotope-card-content"><label class="field-control narrow-control"><span>Statistics Retention</span><input name="statistics_retention" value={ view.StatisticsRetention } required/><small>Defaults to one fixed year: <code>1y</code> equals 365 days. Lifetime counters are not pruned.</small></label></div>
 		}
 		@SettingsSaveButton("logging")
 	</div>
@@ -356,12 +370,36 @@ type SettingsBackupView struct {
 	// the browser can keep the countdown honest instead of showing whatever
 	// was true when the page happened to render.
 	DownloadExpiresAt int64
+	LocalAvailable             bool
+	ScheduleEnabled            bool
+	ScheduleDirectory          string
+	ScheduleResolvedDirectory  string
+	ScheduleInterval           string
+	ScheduleRunAt              string
+	ScheduleRetentionCount     int
+	SchedulePassphraseStored   bool
+	ScheduleNextRun            string
+	ScheduleNextRunCompact     string
+	ScheduleLastSuccess        string
+	ScheduleLastSuccessCompact string
+	ScheduleLastError          string
+	LocalBackups               []SettingsLocalBackupView
 	// OfferRestart marks a result that only takes effect after a restart, so
 	// the notice carries the button rather than only naming the step.
 	OfferRestart bool
 	// Job describes the operation running right now. While it is set the panel
 	// shows progress in place of the forms and asks for the next poll.
 	Job *SettingsBackupJobView
+}
+
+// SettingsLocalBackupView is one on-disk archive offered for restore.
+type SettingsLocalBackupView struct {
+	Name         string
+	Created      string
+	Hostname     string
+	SableVersion string
+	Size         string
+	Scheduled    bool
 }
 
 // SettingsBackupJobView is the live state of a running backup or restore.
@@ -510,7 +548,112 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 				<div class="isotope-card-content"><div class="certificate-manual-note">@Icon("info")<span>Backups are unavailable on this node. Use <code>sable backup create</code> on the host instead.</span></div></div>
 			}
 		} else {
-			@SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included") {
+			if view.LocalAvailable {
+				@SettingsCard("calendar", "Scheduled Local Backups", "Create encrypted archives on this node and automatically rotate the oldest") {
+					<div class="isotope-card-content">
+						if !view.CanCreate {
+							<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot change the local backup policy.</span></div>
+						} else {
+							<form class="backup-form" hx-post="/ui/backup/schedule" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-passphrase-pair data-passphrase-optional>
+								<label class="field-control switch-row"><span><strong>Enable Scheduled Backups</strong><small>The first archive is created immediately, then at the interval below.</small></span><input type="checkbox" name="enabled" checked?={ view.ScheduleEnabled }/></label>
+								<div class="field-grid four">
+									<label class="field-control"><span>Local Directory</span><input name="directory" value={ view.ScheduleDirectory } required/><small>Relative paths resolve beside <code>sable.toml</code>.</small></label>
+									<label class="field-control"><span>Interval</span><input name="interval" value={ view.ScheduleInterval } required/><small>For example <code>6h</code>, <code>1d</code>, or <code>1w</code>.</small></label>
+									<label class="field-control"><span>Run At</span><input type="time" name="run_at" value={ view.ScheduleRunAt } step="60" required/><small>Anchors the interval in this node's local time. Your browser uses your preferred 12- or 24-hour display.</small></label>
+									<label class="field-control"><span>Backups to Keep</span><input type="number" name="retention_count" min="1" max="1000" value={ fmt.Sprint(view.ScheduleRetentionCount) } required/><small>Oldest scheduled archives are purged after success.</small></label>
+								</div>
+								<div class="field-grid two">
+									<label class="field-control"><span>Archive Passphrase</span><input type="password" name="passphrase" autocomplete="new-password" minlength="12" placeholder={ BackupSchedulePassphrasePlaceholder(view.SchedulePassphraseStored) } data-passphrase/><small>{ BackupSchedulePassphraseNote(view.SchedulePassphraseStored) }</small></label>
+									<label class="field-control"><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" placeholder="Repeat a new passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
+								</div>
+								<div class="backup-schedule-status">
+									<div class="backup-schedule-timestamps">
+										if view.ScheduleNextRun != "" {
+											<span><strong>Next backup</strong><span class="backup-schedule-time-full">{ view.ScheduleNextRun }</span><span class="backup-schedule-time-compact">{ view.ScheduleNextRunCompact }</span></span>
+										}
+										if view.ScheduleLastSuccess != "" {
+											<span><strong>Last success</strong><span class="backup-schedule-time-full">{ view.ScheduleLastSuccess }</span><span class="backup-schedule-time-compact">{ view.ScheduleLastSuccessCompact }</span></span>
+										}
+										if view.ScheduleLastError != "" {
+											<span class="error"><strong>Last error</strong>{ view.ScheduleLastError }</span>
+										}
+									</div>
+									<button class="button compact" type="submit" data-passphrase-submit><span>Save Schedule</span></button>
+								</div>
+							</form>
+						}
+					</div>
+				}
+				<section class="card settings-source-card settings-action-card backup-history-card">
+					<header>
+						<div><h2>@Icon("hard-drive")<span>Local Backups</span></h2><p>Encrypted backups stored on this node, ready to download or restore.</p></div>
+						<div class="backup-history-header-actions">
+							if view.CanRestore {
+								<button class="button outline compact" type="button" disabled?={ view.Busy() } data-dialog-open="upload-backup-restore-dialog" data-upload-backup-restore data-replica-primary-action>@Icon("upload")<span>Restore from File…</span></button>
+							}
+							if view.CanCreate {
+								if view.SchedulePassphraseStored {
+									<div class="backup-run-split">
+										<form hx-post="/ui/backup/run" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-local-backup-run-stored-form>
+											<input type="hidden" name="use_stored_passphrase" value="on"/>
+											<button class="button compact" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("play")<span>Backup Now</span></button>
+										</form>
+										if !view.Busy() {
+											<details class="backup-run-menu">
+												<summary class="button compact" aria-label="More backup options" title="More backup options">@Icon("chevron-down")</summary>
+												<div><button type="button" data-dialog-open="run-local-backup-dialog" data-run-local-backup>@Icon("key")<span>Use a different passphrase…</span></button></div>
+											</details>
+										}
+									</div>
+								} else {
+									<button class="button compact" type="button" disabled?={ view.Busy() } data-dialog-open="run-local-backup-dialog" data-run-local-backup>@Icon("play")<span>Backup Now</span></button>
+								}
+							}
+						</div>
+					</header>
+					<div class="isotope-card-content">
+						if view.Busy() {
+							@BackupProgress(*view.Job)
+						}
+						if !view.CanCreate && !view.CanRestore {
+							<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot download or restore local backups.</span></div>
+						} else if len(view.LocalBackups) == 0 {
+							<div class="backup-local-empty">@Icon("hard-drive")<strong>No local backups yet</strong><span>Enable the schedule above or place a valid <code>.sablebackup</code> archive in the configured directory.</span></div>
+						} else {
+							<div class="backup-local-list">
+								for _, archive := range view.LocalBackups {
+									<div class="backup-local-row">
+										<div class="backup-local-icon">@Icon("hard-drive")</div>
+										<div class="backup-local-detail"><strong>{ archive.Name }</strong><span>{ archive.Created } · { archive.Size } · { archive.Hostname }</span><span>Sable { archive.SableVersion }{ BackupKindLabel(archive.Scheduled) }</span></div>
+										<div class="backup-local-actions">
+											if view.CanCreate {
+												<a class="button outline compact" href={ LocalBackupDownloadURL(archive.Name) } download={ archive.Name }>@Icon("download")<span>Download</span></a>
+										}
+										if view.CanRestore {
+											<button class="button outline compact" type="button" disabled?={ view.Busy() } data-dialog-open="local-backup-restore-dialog" data-local-backup-restore data-local-backup-name={ archive.Name } data-local-backup-scheduled={ fmt.Sprint(archive.Scheduled) } data-replica-primary-action>@Icon("rotate-ccw")<span>Restore</span></button>
+										}
+										if view.CanCreate {
+											<form hx-post="/ui/backup/delete-local" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm={ "Delete " + archive.Name + "? This local backup cannot be recovered." } data-confirm-title="Delete local backup?" data-confirm-action="Delete Backup">
+												<input type="hidden" name="name" value={ archive.Name }/>
+												<button class="button outline compact backup-local-delete" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("trash")<span>Delete</span></button>
+											</form>
+										}
+										</div>
+									</div>
+								}
+							</div>
+							if view.CanRestore {
+								<small class="backup-local-restore-note">Scheduled archives use the passphrase in the encrypted vault when the restore field is blank. Enter the older passphrase after a rotation, or for another local archive.</small>
+							}
+						}
+					</div>
+					if view.ScheduleResolvedDirectory != "" {
+						<footer class="backup-history-footer"><span>Local path</span><code>{ view.ScheduleResolvedDirectory }</code></footer>
+					}
+				</section>
+			}
+			if !view.LocalAvailable {
+				@SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included") {
 				<div class="isotope-card-content">
 					if !view.CanCreate {
 						<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot take backups of this deployment.</span></div>
@@ -546,8 +689,10 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 						</details>
 					}
 				</div>
+				}
 			}
-			@SettingsDangerCard("upload", "Restore a Backup", "Replace this node's state with the contents of an archive") {
+			if !view.LocalAvailable {
+				@SettingsDangerCard("upload", "Restore a Backup", "Replace this node's state with the contents of an archive") {
 				<div class="isotope-card-content">
 					if !view.CanRestore {
 						<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot restore backups onto this deployment.</span></div>
@@ -579,9 +724,84 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 						</form>
 					}
 				</div>
+				}
 			}
 		}
 	</div>
+}
+
+// RunLocalBackupDialog collects a one-off passphrase only when the operator
+// chooses to create an archive; the finished file appears in local history.
+templ RunLocalBackupDialog() {
+	<dialog class="custom-server-dialog blocking-dialog" id="run-local-backup-dialog" aria-labelledby="run-local-backup-title">
+		<div class="dialog-header"><h2 id="run-local-backup-title">Backup Now</h2><p>Create a durable local backup outside the scheduled rotation set.</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form" hx-post="/ui/backup/run" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-passphrase-pair data-local-backup-run-form>
+			<label><span>Backup Passphrase</span><input type="password" name="passphrase" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters" data-passphrase/><small>Sable cannot recover this. Store it wherever you keep credentials, not beside the archive.</small></label>
+			<label><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" required placeholder="Repeat the passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-passphrase-submit disabled>@Icon("play")<span>Backup Now</span></button></footer>
+		</form>
+	</dialog>
+}
+
+// LocalBackupRestoreDialog keeps credentials and restore policy out of the
+// history list. A row's Restore button supplies only the selected archive name.
+templ LocalBackupRestoreDialog() {
+	<dialog class="custom-server-dialog blocking-dialog" id="local-backup-restore-dialog" aria-labelledby="local-backup-restore-title">
+		<div class="dialog-header"><h2 id="local-backup-restore-title">Restore Local Backup</h2><p>Stage <strong data-local-backup-restore-name></strong> before a controlled restart.</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form" hx-post="/ui/backup/restore-local" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-local-backup-restore-form>
+			<input type="hidden" name="name" data-local-backup-restore-input/>
+			<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Restoring replaces what is here now</strong><span>Zones, users, roles, API tokens, and secrets are validated and staged while this node keeps serving its current state.</span></p></div>
+			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" data-local-backup-passphrase/><small data-local-backup-passphrase-note></small></label>
+			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore Backup</span></button></footer>
+		</form>
+	</dialog>
+}
+
+// UploadBackupRestoreDialog mirrors local restore, changing only how the
+// archive is selected and requiring the passphrase that sealed the file.
+templ UploadBackupRestoreDialog() {
+	<dialog class="custom-server-dialog blocking-dialog" id="upload-backup-restore-dialog" aria-labelledby="upload-backup-restore-title">
+		<div class="dialog-header"><h2 id="upload-backup-restore-title">Restore Backup</h2><p>Choose a Sable archive and stage it before a controlled restart.</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form class="blocking-dialog-form backup-form" hx-post="/ui/backup/restore" hx-target="#backup-panel" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disable="find button[type='submit']" data-backup-restore-form data-upload-backup-restore-form>
+			<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Restoring replaces what is here now</strong><span>Zones, users, roles, API tokens, and secrets are validated and staged while this node keeps serving its current state.</span></p></div>
+			<div class="field-control">
+				<span>Backup File</span>
+				<div class="file-picker">
+					<input class="sr-only" id="restore-backup-archive-file" type="file" name="archive" accept=".sablebackup" data-file-picker-input data-backup-archive-input required/>
+					<label class="button outline" for="restore-backup-archive-file">@Icon("upload")<span>Choose File</span></label>
+					<span data-file-picker-name>No file selected</span>
+				</div>
+			</div>
+			@BackupArchivePreview()
+			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" required placeholder="The passphrase this backup was sealed with"/></label>
+			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
+			@BackupUploadMeter()
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit" data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button></footer>
+		</form>
+	</dialog>
+}
+
+func BackupSchedulePassphrasePlaceholder(stored bool) string {
+	if stored { return "Stored securely — leave blank to keep" }
+	return "At least 12 characters"
+}
+
+func BackupSchedulePassphraseNote(stored bool) string {
+	if stored { return "A passphrase is stored in the encrypted vault. Enter a new one only to rotate it." }
+	return "Required before the schedule can be enabled; it is stored in the encrypted vault."
+}
+
+func BackupKindLabel(scheduled bool) string {
+	if scheduled { return " · Scheduled" }
+	return " · Local archive"
+}
+
+func LocalBackupDownloadURL(name string) templ.SafeURL {
+	return templ.SafeURL("/ui/backup/local?name=" + url.QueryEscape(name))
 }
 
 // BackupProgress renders a real bar: the stage is the work actually under way

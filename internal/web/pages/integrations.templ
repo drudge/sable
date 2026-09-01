@@ -595,7 +595,7 @@ templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
 		<div class="field-grid two">
 			<label class="field-control checkbox"><input type="checkbox" name="source_reservations" value="true" checked?={ wizard.SyncReservations }/><span>Fixed-IP reservations</span></label>
 			<label class="field-control checkbox"><input type="checkbox" name="source_active" value="true" checked?={ wizard.SyncActive }/><span>Connected clients</span></label>
-			<label class="field-control"><span>Sync Interval</span><input name="interval" value={ wizard.Interval } placeholder="2m" required/><small>Go duration, at least 30s.</small></label>
+			<label class="field-control"><span>Sync Interval</span><input name="interval" value={ wizard.Interval } placeholder="2m" required/><small>Duration of at least 30s; fixed y, mo, w, and d units are supported.</small></label>
 		</div>
 	</section>
 }

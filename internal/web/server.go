@@ -87,6 +87,7 @@ type Server struct {
 	history          *statsHistory
 	insightCache     dashboardInsightCache
 	historyStop      chan struct{}
+	historyPrune     chan struct{}
 	historyStopOnce  sync.Once
 	blockLists       *blockcompiler.Updater
 	dnssec           dnssecController
@@ -133,6 +134,18 @@ func (server *Server) SetStatsStore(ctx context.Context, statistics statsStore) 
 	return server.history.attach(ctx, statistics)
 }
 
+// SetStatsRetention updates dashboard-history retention and schedules an
+// immediate sweep so a shorter window takes effect without waiting an hour.
+func (server *Server) SetStatsRetention(retention time.Duration) {
+	if !server.history.setRetention(retention) {
+		return
+	}
+	select {
+	case server.historyPrune <- struct{}{}:
+	default:
+	}
+}
+
 // Authenticator is the authentication capability used by the web console.
 // Callers should pass a nil interface when security is disabled.
 type Authenticator interface {
@@ -176,7 +189,8 @@ func New(
 		queryLog: queryLog, queries: queries, reload: reload,
 		auth: authentication, preAuthTokens: newPreAuthTokenStore(), ssoStateStore: newSSOStateStore(),
 		crossOrigin: http.NewCrossOriginProtection(),
-		history:     newStatsHistory(logger), historyStop: make(chan struct{}),
+		history:     newStatsHistory(logger, configuration.Current().Config.Statistics.Retention.Duration),
+		historyStop: make(chan struct{}), historyPrune: make(chan struct{}, 1),
 		securityEnabled: securityEnabled, secureCookies: secureCookies,
 		instanceID: strconv.FormatInt(time.Now().UnixNano(), 36),
 	}
@@ -241,7 +255,12 @@ func New(
 	mux.HandleFunc("GET /ui/backup/progress", server.backupProgress)
 	mux.HandleFunc("POST /ui/backup/download", server.downloadBackup)
 	mux.HandleFunc("GET /ui/backup/download/{token}", server.sendBackup)
+	mux.HandleFunc("POST /ui/backup/run", server.downloadBackup)
+	mux.HandleFunc("GET /ui/backup/local", server.downloadLocalBackup)
+	mux.HandleFunc("POST /ui/backup/delete-local", server.deleteLocalBackup)
+	mux.HandleFunc("POST /ui/backup/schedule", server.updateBackupSchedule)
 	mux.HandleFunc("POST /ui/backup/restore", server.restoreBackup)
+	mux.HandleFunc("POST /ui/backup/restore-local", server.restoreLocalBackup)
 	mux.HandleFunc("POST /ui/backup/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/updates", server.updatePanel)
 	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)

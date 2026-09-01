@@ -14,6 +14,7 @@ import (
 
 	"github.com/drudge/sable/internal/app"
 	"github.com/drudge/sable/internal/dnsclient"
+	"github.com/drudge/sable/internal/durationfmt"
 	serviceinstall "github.com/drudge/sable/internal/install"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
@@ -198,6 +199,21 @@ func (values *stringListFlag) Set(value string) error {
 	return nil
 }
 
+type durationFlag time.Duration
+
+func (value *durationFlag) String() string {
+	return durationfmt.Format(time.Duration(*value))
+}
+
+func (value *durationFlag) Set(input string) error {
+	parsed, err := durationfmt.Parse(input)
+	if err != nil {
+		return err
+	}
+	*value = durationFlag(parsed)
+	return nil
+}
+
 func serve(arguments []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	configurationPath := flags.String("config", "sable.toml", "path to the TOML configuration")
@@ -205,7 +221,9 @@ func serve(arguments []string) error {
 		return err
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// The application applies the configured runtime level. The terminal
+	// handler must accept debug records so lowering that level can take effect.
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return app.Run(ctx, *configurationPath, logger)
@@ -215,7 +233,8 @@ func query(arguments []string) error {
 	flags := flag.NewFlagSet("query", flag.ContinueOnError)
 	server := flags.String("server", "127.0.0.1:8053", "DNS server address")
 	transport := flags.String("transport", "udp", "udp, tcp, tcp-tls, quic, or doh")
-	timeout := flags.Duration("timeout", 3*time.Second, "query timeout")
+	timeout := durationFlag(3 * time.Second)
+	flags.Var(&timeout, "timeout", "query timeout")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -227,14 +246,15 @@ func query(arguments []string) error {
 	if len(positionals) > 1 {
 		queryType = strings.ToUpper(positionals[1])
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	timeoutDuration := time.Duration(timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration)
 	defer cancel()
 	result, err := dnsclient.Query(ctx, dnsclient.Request{
 		Server:    *server,
 		Name:      positionals[0],
 		Type:      queryType,
 		Transport: *transport,
-		Timeout:   *timeout,
+		Timeout:   timeoutDuration,
 	})
 	if err != nil {
 		return err

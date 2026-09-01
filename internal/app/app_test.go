@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,6 +22,39 @@ func TestQueryLogWorkerChangeAllowsEnabledToggle(t *testing.T) {
 	candidate.Enabled = false
 	if err := queryLogWorkerChange(active, candidate); err != nil {
 		t.Fatalf("queryLogWorkerChange() error = %v, want hot toggle", err)
+	}
+}
+
+func TestLogWorkerChangesAllowRetentionUpdates(t *testing.T) {
+	t.Parallel()
+
+	queryActive := config.Defaults().QueryLog
+	queryCandidate := queryActive
+	queryCandidate.Retention.Duration = 30 * 24 * time.Hour
+	if err := queryLogWorkerChange(queryActive, queryCandidate); err != nil {
+		t.Fatalf("queryLogWorkerChange() error = %v, want hot retention change", err)
+	}
+
+	serverActive := config.Defaults().ServerLog
+	serverCandidate := serverActive
+	serverCandidate.Retention.Duration = 90 * 24 * time.Hour
+	if err := serverLogWorkerChange(serverActive, serverCandidate); err != nil {
+		t.Fatalf("serverLogWorkerChange() error = %v, want hot retention change", err)
+	}
+}
+
+func TestServerLogLevelMapsValidatedConfiguration(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]slog.Level{
+		"debug": slog.LevelDebug,
+		"info":  slog.LevelInfo,
+		"warn":  slog.LevelWarn,
+		"error": slog.LevelError,
+	} {
+		if got := serverLogLevel(name); got != want {
+			t.Errorf("serverLogLevel(%q) = %s, want %s", name, got, want)
+		}
 	}
 }
 

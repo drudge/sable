@@ -19,6 +19,7 @@ import (
 	"github.com/drudge/sable/internal/dnsname"
 	dnssecstate "github.com/drudge/sable/internal/dnssec"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
@@ -237,7 +238,7 @@ func durationOr(value, fallback time.Duration) string {
 	if value <= 0 {
 		value = fallback
 	}
-	return value.String()
+	return durationfmt.Format(value)
 }
 
 func (server *Server) populateZoneDNSSECView(ctx context.Context, zone zonemodel.Zone, view *pages.ZoneView, display pages.TimeDisplay) {
@@ -934,9 +935,9 @@ func (server *Server) updateZoneDNSSEC(writer http.ResponseWriter, request *http
 				request.FormValue("key_prepublish"), request.FormValue("key_retire_after"),
 			}
 			for index, policy := range policies {
-				parsed, parseErr := time.ParseDuration(strings.TrimSpace(values[index]))
+				parsed, parseErr := durationfmt.Parse(values[index])
 				if parseErr != nil || parsed <= 0 {
-					return fmt.Errorf("%s must be a positive Go duration such as 720h", policy.name)
+					return fmt.Errorf("%s must be a positive duration such as 30d", policy.name)
 				}
 				policy.target.Duration = parsed
 			}

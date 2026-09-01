@@ -2697,6 +2697,52 @@
 		showRoutedDialog(dialog, false, opener);
 		return;
 	  }
+	  const localBackupRestore = event.target.closest("[data-local-backup-restore]");
+	  if (localBackupRestore) {
+		const dialog = document.getElementById("local-backup-restore-dialog");
+		const form = dialog?.querySelector("[data-local-backup-restore-form]");
+		form?.reset();
+		const name = localBackupRestore.dataset.localBackupName || "";
+		const input = dialog?.querySelector("[data-local-backup-restore-input]");
+		const label = dialog?.querySelector("[data-local-backup-restore-name]");
+		if (input) input.value = name;
+		if (label) label.textContent = name;
+		const scheduled = localBackupRestore.dataset.localBackupScheduled === "true";
+		const passphrase = dialog?.querySelector("[data-local-backup-passphrase]");
+		const passphraseNote = dialog?.querySelector("[data-local-backup-passphrase-note]");
+		if (passphrase) {
+		  passphrase.required = !scheduled;
+		  passphrase.placeholder = scheduled ? "Use the stored scheduled passphrase" : "Enter this backup's passphrase";
+		}
+		if (passphraseNote) passphraseNote.textContent = scheduled
+		  ? "Leave blank to use the current vaulted passphrase, or enter an older value after a rotation."
+		  : "This manual archive's passphrase is required.";
+		showRoutedDialog(dialog, false, localBackupRestore);
+		return;
+	  }
+	  const runLocalBackup = event.target.closest("[data-run-local-backup]");
+	  if (runLocalBackup) {
+		runLocalBackup.closest(".backup-run-menu")?.removeAttribute("open");
+		const dialog = document.getElementById("run-local-backup-dialog");
+		dialog?.querySelector("form")?.reset();
+		const submit = dialog?.querySelector("[data-passphrase-submit]");
+		if (submit) submit.disabled = true;
+		showRoutedDialog(dialog, false, runLocalBackup);
+		return;
+	  }
+	  const uploadBackupRestore = event.target.closest("[data-upload-backup-restore]");
+	  if (uploadBackupRestore) {
+		const dialog = document.getElementById("upload-backup-restore-dialog");
+		const form = dialog?.querySelector("[data-upload-backup-restore-form]");
+		form?.reset();
+		const preview = form?.querySelector("[data-backup-archive-preview]");
+		if (preview) preview.hidden = true;
+		const fileName = form?.querySelector("[data-file-picker-name]");
+		if (fileName) fileName.textContent = "No file selected";
+		setBackupUpload(form, 0, false);
+		showRoutedDialog(dialog, false, uploadBackupRestore);
+		return;
+	  }
 	  const dialogOpen = event.target.closest("[data-dialog-open]");
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
@@ -2832,7 +2878,9 @@
 		note.hidden = message === "";
 	  }
 	  second.setAttribute("aria-invalid", String(typed && !matches));
-	  if (submit) submit.disabled = message !== "" || first.value === "" || second.value === "";
+	  const optional = form.hasAttribute("data-passphrase-optional");
+	  const bothBlank = first.value === "" && second.value === "";
+	  if (submit) submit.disabled = message !== "" || (!optional && bothBlank) || (!bothBlank && (first.value === "" || second.value === ""));
 	};
 	document.body.addEventListener("input", (event) => {
 	  const form = event.target.closest?.("[data-passphrase-pair]");
@@ -2842,6 +2890,12 @@
 	  const ctx = event.detail?.ctx;
 	  const policy = ctx?.sourceElement?.closest?.("[data-query-detail-policy]");
 	  if (policy && ctx.response?.status < 400) policy.closest("dialog")?.close();
+	  const localRestore = ctx?.sourceElement?.closest?.("[data-local-backup-restore-form]");
+	  if (localRestore && ctx.response?.status < 400) localRestore.closest("dialog")?.close();
+	  const localRun = ctx?.sourceElement?.closest?.("[data-local-backup-run-form]");
+	  if (localRun && ctx.response?.status < 400) localRun.closest("dialog")?.close();
+	  const uploadedRestore = ctx?.sourceElement?.closest?.("[data-upload-backup-restore-form]");
+	  if (uploadedRestore && ctx.response?.status < 400) uploadedRestore.closest("dialog")?.close();
 	});
 
 	// Read the unencrypted envelope header so a file identifies itself before
@@ -3188,7 +3242,7 @@
 	  }
 	});
 
-	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open]";
+	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open]";
 	document.addEventListener("pointerdown", (event) => {
 	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");

@@ -85,9 +85,9 @@ journalctl -u sable -f
 ```
 
 The console's **Logs → Server** view starts with the current process ring buffer.
-Enable `[server_log]` to persist it across restarts and page through retained
-history. Entries still go to stderr and the journal even when database
-persistence is unavailable.
+Use **Settings → Logging** or `[server_log]` to control persistence, minimum
+level, and retention. Entries still go to stderr and the journal even when
+database persistence is unavailable.
 
 **Logs → Queries** uses the query-log database. It supports time, client,
 domain, type, response-code, source, and transport filters; cursor navigation;
@@ -95,8 +95,9 @@ and export. Expanding a query shows the persisted blocking-policy, cache,
 resolver, route, and DNSSEC decisions. When the recorder queue is full, events
 are dropped rather than slowing DNS, and the dropped count appears in metrics.
 
-Changing query-log or server-log buffer, batch, flush, or retention settings
-requires a restart because those values define worker lifetimes.
+Query-log retention, server-log enablement/level/retention, and dashboard-history
+retention hot-reload. Changing query-log or server-log buffer, batch, or flush
+settings requires a restart because those values define worker lifetimes.
 
 ## Metrics and alerts
 
@@ -199,7 +200,9 @@ At minimum:
 
 1. Export a passphrase-sealed backup before upgrades and material DNS, identity,
    certificate, or cluster changes.
-2. Automate periodic `sable backup create` runs.
+2. Enable scheduled local backups in **Settings → Backup**, choose a directory
+   on durable storage, and set the interval and retained archive count. Use an
+   external `sable backup create` timer when backups must be shipped off-node.
 3. Store archives off-host and separately from the passphrase.
 4. Run `sable backup inspect` in the backup pipeline to reject malformed
    envelopes and record the source version/time.

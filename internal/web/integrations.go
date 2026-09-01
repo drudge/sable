@@ -14,6 +14,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/web/pages"
 	"github.com/drudge/sable/internal/zone"
@@ -288,7 +289,7 @@ func unifiSettingsFromWizard(wizard pages.UniFiWizardView, networks []pages.UniF
 		Insecure:      wizard.Insecure,
 		Interval:      config.Duration{Duration: 2 * time.Minute},
 	}
-	if parsed, err := time.ParseDuration(wizard.Interval); err == nil && parsed > 0 {
+	if parsed, err := durationfmt.Parse(wizard.Interval); err == nil && parsed > 0 {
 		settings.Interval = config.Duration{Duration: parsed}
 	}
 	if wizard.SyncReservations {

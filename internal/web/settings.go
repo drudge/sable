@@ -13,6 +13,7 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -43,6 +44,21 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 	editor, ok := server.config.(settingsEditor)
 	if !ok {
 		server.renderSettingsMutation(writer, request, http.StatusNotImplemented, "", "Settings are read-only.")
+		return
+	}
+	queryLogRetention, err := parsePositiveDurationSetting(request.FormValue("query_log_retention"), "query log retention")
+	if err != nil {
+		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	serverLogRetention, err := parsePositiveDurationSetting(request.FormValue("server_log_retention"), "server log retention")
+	if err != nil {
+		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	statisticsRetention, err := parsePositiveDurationSetting(request.FormValue("statistics_retention"), "statistics retention")
+	if err != nil {
+		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
 	blockingUpdateHours, err := strconv.Atoi(request.FormValue("blocking_update_hours"))
@@ -110,9 +126,9 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	cachePrefetchSample, err := time.ParseDuration(strings.TrimSpace(request.FormValue("cache_prefetch_sample_interval")))
+	cachePrefetchSample, err := durationfmt.Parse(request.FormValue("cache_prefetch_sample_interval"))
 	if err != nil || cachePrefetchSample <= 0 || cachePrefetchSample > 24*time.Hour {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Prefetch sample interval must be a positive Go duration no greater than 24h.")
+		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Prefetch sample interval must be a positive duration no greater than 24h.")
 		return
 	}
 	cachePrefetchHits, err := parseUint32Setting(request.FormValue("cache_prefetch_hits_per_hour"), "prefetch hits per hour", false)
@@ -130,7 +146,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 	}
 	acmeRenewBefore := 30 * 24 * time.Hour
 	if certificateMode == "acme" {
-		acmeRenewBefore, err = time.ParseDuration(strings.TrimSpace(request.FormValue("acme_renew_before")))
+		acmeRenewBefore, err = durationfmt.Parse(request.FormValue("acme_renew_before"))
 		if err != nil {
 			server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "ACME renewal window is invalid.")
 			return
@@ -161,7 +177,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		if len(dnsListeners) == 0 || (resolverMode == "forward" && len(forwarders) == 0) {
 			return errors.New("DNS listeners are required, and forwarding mode requires at least one forwarder")
 		}
-		resolverTimeout, err := time.ParseDuration(strings.TrimSpace(request.FormValue("resolver_timeout")))
+		resolverTimeout, err := durationfmt.Parse(request.FormValue("resolver_timeout"))
 		if err != nil {
 			return errors.New("resolver timeout is invalid")
 		}
@@ -169,7 +185,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		if err != nil || resolverRetries < 1 || resolverRetries > 10 {
 			return errors.New("resolver retries must be a whole number between 1 and 10")
 		}
-		resolverRetryTimeout, err := time.ParseDuration(strings.TrimSpace(request.FormValue("resolver_retry_timeout")))
+		resolverRetryTimeout, err := durationfmt.Parse(request.FormValue("resolver_retry_timeout"))
 		if err != nil || resolverRetryTimeout <= 0 {
 			return errors.New("resolver retry timeout is invalid")
 		}
@@ -217,6 +233,11 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		candidate.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(request.FormValue("acme_storage_dir"))
 		candidate.EncryptedDNS.ACME.RenewBefore = config.Duration{Duration: acmeRenewBefore}
 		candidate.QueryLog.Enabled = request.FormValue("query_log_enabled") == "true"
+		candidate.QueryLog.Retention = config.Duration{Duration: queryLogRetention}
+		candidate.ServerLog.Enabled = request.FormValue("server_log_enabled") == "true"
+		candidate.ServerLog.Level = strings.ToLower(strings.TrimSpace(request.FormValue("server_log_level")))
+		candidate.ServerLog.Retention = config.Duration{Duration: serverLogRetention}
+		candidate.Statistics.Retention = config.Duration{Duration: statisticsRetention}
 		candidate.Blocking.UpdateInterval.Duration = time.Duration(blockingUpdateHours) * time.Hour
 		candidate.Blocking.ResponseType = blockingResponseType
 		candidate.Blocking.ResponseTTL = uint32(blockingResponseTTL)
@@ -443,8 +464,12 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		ACMEDNSZone: configuration.EncryptedDNS.ACME.DNSZone, ACMEStorageDirectory: configuration.EncryptedDNS.ACME.StorageDirectory,
 		ACMERenewBefore:   configuration.EncryptedDNS.ACME.RenewBefore.String(),
 		MinimumTLSVersion: configuration.EncryptedDNS.MinimumVersion, QueryLogEnabled: configuration.QueryLog.Enabled,
-		QueryLogRetention: configuration.QueryLog.Retention.String(), SessionTTL: configuration.Security.SessionTTL.String(),
-		APITokenTTL: configuration.Security.APITokenTTL.String(), ConfigWatch: configuration.Reload.Watch,
+		QueryLogRetention: retentionInputValue(configuration.QueryLog.Retention.Duration),
+		ServerLogEnabled:  configuration.ServerLog.Enabled, ServerLogLevel: configuration.ServerLog.Level,
+		ServerLogRetention:  retentionInputValue(configuration.ServerLog.Retention.Duration),
+		StatisticsRetention: retentionInputValue(configuration.Statistics.Retention.Duration),
+		SessionTTL:          configuration.Security.SessionTTL.String(),
+		APITokenTTL:         configuration.Security.APITokenTTL.String(), ConfigWatch: configuration.Reload.Watch,
 		BlockingUpdateHours:  max(1, int(configuration.Blocking.UpdateInterval.Duration/time.Hour)),
 		BlockingResponseType: configuration.Blocking.ResponseType, BlockingResponseTTL: configuration.Blocking.ResponseTTL,
 		BlockingCustomAddresses: strings.Join(configuration.Blocking.CustomAddresses, "\n"),
@@ -511,6 +536,18 @@ func parseUint32Setting(value, label string, allowZero bool) (uint32, error) {
 		return 0, fmt.Errorf("%s must be %s", label, ifThenString(allowZero, "a non-negative number", "a positive number"))
 	}
 	return uint32(parsed), nil
+}
+
+func parsePositiveDurationSetting(value, label string) (time.Duration, error) {
+	parsed, err := durationfmt.Parse(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive duration such as 30d", label)
+	}
+	return parsed, nil
+}
+
+func retentionInputValue(retention time.Duration) string {
+	return durationfmt.Format(retention)
 }
 
 func ifThenString(condition bool, yes, no string) string {

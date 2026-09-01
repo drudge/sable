@@ -42,6 +42,8 @@ const unifiSyncInterval = 15 * time.Minute
 // vault it lands in is deleted on the next run.
 const demoUniFiAPIKey = "vandelay-demo-controller-key"
 
+const demoBackupPassphrase = "TheHumanFund2026!"
+
 func main() {
 	root := flag.String("root", filepath.Join("_work", "demo"), "working directory for the demo deployment")
 	binary := flag.String("binary", filepath.Join("bin", "sable"), "Sable binary to run")
@@ -124,6 +126,13 @@ func run(root, binary, output string, basePort int, keep bool) error {
 		return err
 	}
 	if err := presentControllerURL(primary); err != nil {
+		return err
+	}
+	fmt.Println("Creating the first scheduled local backup")
+	if err := operator.EnableScheduledBackups(demoBackupPassphrase); err != nil {
+		return err
+	}
+	if err := operator.WaitForScheduledBackup(ctx); err != nil {
 		return err
 	}
 

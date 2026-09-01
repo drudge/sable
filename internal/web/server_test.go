@@ -623,7 +623,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		t.Fatalf("blocking page status = %d", blockingResponse.Code)
 	}
 	settingsResponse := serveRequest(server, http.MethodGet, "/settings")
-	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference`, "12-hour (9:30 PM)"} {
+	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "DNS Query Logs", "Server Logs", "Dashboard History", "Query Log Retention", "Minimum Log Level", "Server Log Retention", "Statistics Retention", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference`, "12-hour (9:30 PM)"} {
 		if !strings.Contains(settingsResponse.Body.String(), expected) {
 			t.Errorf("settings page does not contain %q", expected)
 		}
@@ -865,8 +865,10 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 		"cache_size": {"2048"}, "dnssec_validation": {"true"},
 		"trust_anchor_updates": {"true"}, "dot_listen": {"127.0.0.1:853"}, "doh_listen": {"127.0.0.1:8443"},
 		"certificate_file": {"tls/cert.pem"}, "private_key_file": {"tls/key.pem"},
-		"minimum_tls_version": {"1.3"}, "query_log_enabled": {"true"},
-		"cache_minimum_ttl": {"10"}, "cache_maximum_ttl": {"604800"}, "cache_negative_ttl": {"300"}, "cache_failure_ttl": {"10"},
+		"minimum_tls_version": {"1.3"}, "query_log_enabled": {"true"}, "query_log_retention": {"2w"},
+		"server_log_enabled": {"true"}, "server_log_level": {"debug"}, "server_log_retention": {"3mo"},
+		"statistics_retention": {"2y"},
+		"cache_minimum_ttl":    {"10"}, "cache_maximum_ttl": {"604800"}, "cache_negative_ttl": {"300"}, "cache_failure_ttl": {"10"},
 		"serve_stale": {"true"}, "cache_stale_ttl": {"259200"}, "cache_stale_answer_ttl": {"30"},
 		"save_cache":            {"true"},
 		"cache_stale_reset_ttl": {"30"}, "cache_prefetch_minimum_ttl": {"2"},
@@ -893,6 +895,8 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 		updated.Config.Resolver.CacheStaleMaxWait.Duration != 1800*time.Millisecond ||
 		updated.Config.Resolver.CachePrefetchSample.Duration != 5*time.Minute || updated.Config.Resolver.CachePrefetchHitsPerHour != 30 ||
 		updated.Config.EncryptedDNS.MinimumVersion != "1.3" || len(updated.Config.Server.DNSListen) != 2 ||
+		updated.Config.QueryLog.Retention.Duration != 14*24*time.Hour || !updated.Config.ServerLog.Enabled || updated.Config.ServerLog.Level != "debug" ||
+		updated.Config.ServerLog.Retention.Duration != 90*24*time.Hour || updated.Config.Statistics.Retention.Duration != 2*365*24*time.Hour ||
 		updated.Config.Blocking.UpdateInterval.Duration != 12*time.Hour || updated.Config.Blocking.ResponseType != "zero" ||
 		updated.Config.Blocking.ResponseTTL != 45 || len(updated.Config.Blocking.BypassClients) != 2 || !updated.Config.Blocking.AllowTXTReport {
 		t.Fatalf("updated settings = %+v revision=%d", updated.Config, updated.Revision)
@@ -900,7 +904,8 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 
 	invalid := httptest.NewRequest(http.MethodPost, "/ui/settings", strings.NewReader(url.Values{
 		"dns_listen": {"127.0.0.1:5353"}, "forwarders": {"1.1.1.1:53"},
-		"resolver_timeout": {"invalid"}, "cache_size": {"2048"},
+		"resolver_timeout": {"invalid"}, "cache_size": {"2048"}, "query_log_retention": {"2w"},
+		"server_log_retention": {"3mo"}, "statistics_retention": {"2y"},
 	}.Encode()))
 	invalid.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	invalidResponse := httptest.NewRecorder()
@@ -915,6 +920,16 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	}
 	if !strings.Contains(invalidResponse.Body.String(), "Block-list update interval must be between 1 and 8760 hours.") {
 		t.Fatalf("rejected settings response did not carry the reason: %s", invalidResponse.Body.String())
+	}
+
+	invalidRetention := httptest.NewRequest(http.MethodPost, "/ui/settings", strings.NewReader(url.Values{
+		"query_log_retention": {"0s"}, "server_log_retention": {"3mo"}, "statistics_retention": {"2y"},
+	}.Encode()))
+	invalidRetention.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	invalidRetentionResponse := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(invalidRetentionResponse, invalidRetention)
+	if invalidRetentionResponse.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidRetentionResponse.Body.String(), "query log retention must be a positive duration") || configuration.Current().Revision != 5 {
+		t.Fatalf("invalid retention update = %d revision=%d: %s", invalidRetentionResponse.Code, configuration.Current().Revision, invalidRetentionResponse.Body.String())
 	}
 }
 
@@ -1395,7 +1410,7 @@ func TestEnrollmentTokenDismissalClearsRenderedSecret(t *testing.T) {
 	}
 	server.SetClusterController(clusterService)
 
-	request := httptest.NewRequest(http.MethodPost, "/ui/cluster/enrollment-tokens", strings.NewReader(url.Values{"ttl": {"15m"}}.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "/ui/cluster/enrollment-tokens", strings.NewReader(url.Values{"ttl": {"1d"}}.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(response, request)
@@ -1492,7 +1507,7 @@ func TestAPITokenExpirationSelection(t *testing.T) {
 		{value: "", want: auth.APITokenExpiration{}},
 		{value: "default", want: auth.APITokenExpiration{}},
 		{value: "never", want: auth.APITokenExpiration{Never: true}},
-		{value: "720h", want: auth.APITokenExpiration{Lifetime: 30 * 24 * time.Hour}},
+		{value: "1mo", want: auth.APITokenExpiration{Lifetime: 30 * 24 * time.Hour}},
 		{value: "0h", wantErr: true},
 		{value: "later", wantErr: true},
 	}
@@ -1732,7 +1747,7 @@ func TestZoneEditorCreatesZoneAndRecords(t *testing.T) {
 	dnssecSettings := post("/ui/zones/dnssec", url.Values{
 		"zone": {"example.test"}, "enabled": {"true"}, "algorithm": {"ecdsa-p256-sha256"},
 		"denial": {"nsec3"}, "nsec3_iterations": {"0"}, "nsec3_salt": {"a1b2c3d4"},
-		"zsk_lifetime": {"720h"}, "ksk_lifetime": {"8760h"}, "key_prepublish": {"24h"}, "key_retire_after": {"168h"},
+		"zsk_lifetime": {"1mo"}, "ksk_lifetime": {"1y"}, "key_prepublish": {"1d"}, "key_retire_after": {"1w"},
 	})
 	if dnssecSettings.Code != http.StatusOK || !strings.Contains(dnssecSettings.Body.String(), "DNSSEC settings updated") ||
 		!configuration.zoneSnapshot.Zones[0].DNSSEC || configuration.zoneSnapshot.Zones[0].DNSSECAlgorithm != "ecdsa-p256-sha256" ||
