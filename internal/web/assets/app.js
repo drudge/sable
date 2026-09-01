@@ -86,7 +86,8 @@
 	};
 
 	const replicaLocalMutation = (path) => {
-	  if (path === "/login" || path === "/logout" || path === "/ui/query" || path === "/ui/administration/sessions/revoke") return true;
+	  if (path === "/login" || path === "/logout" || path === "/ui/query" ||
+		path === "/ui/administration/sessions/revoke" || path === "/ui/updates/check" || path === "/ui/updates/command-check") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
 	  if (path.startsWith("/ui/certificates/")) return true;
 	  if (path === "/ui/cluster/settings" || path === "/ui/cluster/leave" || path === "/ui/cluster/restart" || path === "/api/v1/cluster/membership") return true;

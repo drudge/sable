@@ -335,3 +335,34 @@ func TestCheckForUpdatesRemembersThePreReleaseChoice(t *testing.T) {
 		t.Fatal("clearing the checkbox did not return the server to stable releases")
 	}
 }
+
+func TestReplicaChecksForUpdatesWithoutChangingTheReleaseChannel(t *testing.T) {
+	t.Parallel()
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
+		configuration, configuration.zoneStore(), "sqlite", testQueryLog{}, testQueryLog{},
+		func(context.Context) error { return nil }, nil, false, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := &testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "0.7.0-rc.1", LatestVersion: "0.7.0-rc.2",
+		Available: true, PreRelease: true, IncludePreRelease: true, CheckedAt: time.Now(),
+	}}
+	server.SetUpdateController(controller)
+	server.SetClusterController(testReplicaClusterController{})
+
+	response := serveUpdateForm(server, "/ui/updates/check", url.Values{"pre_release": {"true"}})
+	if response.Code != http.StatusOK {
+		t.Fatalf("replica check status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if controller.checks != 1 || !controller.preRelease {
+		t.Fatalf("replica checks = %d, pre-release = %v", controller.checks, controller.preRelease)
+	}
+	if configuration.snapshot.Revision != 1 || configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatalf("replica changed release-channel configuration at revision %d", configuration.snapshot.Revision)
+	}
+}

@@ -748,7 +748,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	}
 	if server.cluster != nil {
 		clusterState := server.cluster.Snapshot()
-		view.ControlPlaneReadOnly = clusterState.Initialized && clusterState.LocalRole == cluster.RoleReplica
+		view.ControlPlaneReadOnly = controlPlaneReadOnly(clusterState)
 		view.PrimaryURL = clusterState.PrimaryURL
 	}
 	view.CommandEntities = server.commandPaletteEntities(request, snapshot, view)
