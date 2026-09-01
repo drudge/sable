@@ -16,6 +16,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/forwarding"
 )
 
@@ -39,7 +40,7 @@ type Duration struct {
 }
 
 func (duration Duration) MarshalJSON() ([]byte, error) {
-	return []byte(strconv.Quote(duration.Duration.String())), nil
+	return []byte(strconv.Quote(durationfmt.Format(duration.Duration))), nil
 }
 
 func (duration *Duration) UnmarshalJSON(value []byte) error {
@@ -47,7 +48,7 @@ func (duration *Duration) UnmarshalJSON(value []byte) error {
 	if err != nil {
 		return fmt.Errorf("decode duration: %w", err)
 	}
-	parsed, err := time.ParseDuration(text)
+	parsed, err := durationfmt.Parse(text)
 	if err != nil {
 		return fmt.Errorf("parse duration: %w", err)
 	}

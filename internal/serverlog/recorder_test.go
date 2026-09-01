@@ -149,6 +149,39 @@ func TestRecorderPrunesOnStartSoRetentionAppliesWithoutWaitingAnHour(t *testing.
 	}
 }
 
+func TestRecorderAppliesRetentionChangesWithoutRestart(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 2, FlushInterval: time.Hour, Retention: 48 * time.Hour,
+	})
+	deadline := time.Now().Add(time.Second)
+	for writer.pruneCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	initialPrunes := writer.pruneCount()
+	if err := recorder.SetRetention(12 * time.Hour); err != nil {
+		t.Fatalf("SetRetention() error = %v", err)
+	}
+	deadline = time.Now().Add(time.Second)
+	for writer.pruneCount() == initialPrunes && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if writer.pruneCount() == initialPrunes {
+		t.Fatal("retention change did not trigger pruning")
+	}
+	writer.mu.Lock()
+	cutoff := writer.pruned[len(writer.pruned)-1]
+	writer.mu.Unlock()
+	if elapsed := time.Since(cutoff); elapsed < 11*time.Hour || elapsed > 13*time.Hour {
+		t.Fatalf("prune cutoff was %v ago, want about 12h", elapsed)
+	}
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+}
+
 // A failed write is counted rather than retried forever, and the batch is
 // released so a broken database cannot pin the queue.
 func TestRecorderCountsWriteFailuresAndReleasesTheBatch(t *testing.T) {

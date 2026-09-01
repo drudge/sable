@@ -3,6 +3,12 @@
 Sable accepts TOML only. Unknown sections and keys are rejected so spelling
 mistakes cannot silently change resolver behavior.
 
+Durations accept Go's standard `ns`, `us`/`µs`, `ms`, `s`, `m`, and `h` units,
+plus Sable's fixed-length `d`, `w`, `mo`, and `y` units. A day is 24 hours, a
+week is 7 days, a month is 30 days, and a year is 365 days; `m` always means
+minutes. Units can be combined, as in `1y6mo2w3d4h30m`. The same syntax is
+accepted by every duration field in the console and API.
+
 ## Listeners and storage
 
 ```toml
@@ -70,7 +76,7 @@ directory_url = "https://acme-v02.api.letsencrypt.org/directory"
 dns_provider = "route53"
 dns_zone = "example.com"
 storage_dir = "data/tls/acme"
-renew_before = "720h"
+renew_before = "30d"
 ```
 
 Built-in DNS providers are Cloudflare, Porkbun, Namecheap, GoDaddy,
@@ -418,7 +424,7 @@ on every node.
 enabled = true
 domains = ["telemetry.example", "ads.example"]
 allowed_domains = ["safe.ads.example"]
-update_interval = "24h"
+update_interval = "1d"
 response_type = "nxdomain"
 response_ttl = 30
 custom_addresses = []
@@ -499,11 +505,13 @@ enabled = true
 buffer_size = 8192
 batch_size = 256
 flush_interval = "250ms"
-retention = "168h"
+retention = "30d"
 ```
 
-Enablement hot-reloads. Buffer, batch, flush, and retention changes require a
-controlled restart because they define the lifetime of the asynchronous worker.
+Retention defaults to 30 days. Enablement and retention hot-reload. A shorter
+retention triggers an immediate prune. Buffer, batch, and flush changes require
+a controlled restart because they define the shape and cadence of the
+asynchronous worker.
 When the queue is saturated, Sable drops telemetry and increments an exposed
 counter instead of blocking DNS requests.
 
@@ -525,10 +533,11 @@ event retention and rollup retention follow query-log retention together.
 ```toml
 [server_log]
 enabled = true
+level = "info"
 buffer_size = 4096
 batch_size = 128
 flush_interval = "1s"
-retention = "1440h"
+retention = "60d"
 ```
 
 The console's runtime log is held in a ring buffer that starts empty on every
@@ -538,12 +547,13 @@ configured database, and the Logs page pages through that history rather than
 the buffer.
 
 Retention defaults to 60 days. Runtime logs are a tiny fraction of query-log
-volume, which is why they are kept far longer.
+volume, which is why they are kept far longer. `level` accepts `debug`, `info`,
+`warn`, or `error` and applies to both persisted history and stderr.
 
-Enablement hot-reloads. Buffer, batch, flush, and retention changes require a
-controlled restart, matching the query log, because they define the lifetime of
-the asynchronous worker. A saturated queue drops entries and counts them rather
-than blocking whichever goroutine happened to log.
+Enablement, level, and retention hot-reload; a shorter retention triggers an
+immediate prune. Buffer, batch, and flush changes require a controlled restart.
+A saturated queue drops entries and counts them rather than blocking whichever
+goroutine happened to log.
 
 Entries also keep going to stderr, so `journalctl -u sable` and `docker logs`
 remain the place to look when the database itself is the thing that failed. The
@@ -552,11 +562,19 @@ the buffer it drains.
 
 ## Dashboard statistics
 
+```toml
+[statistics]
+retention = "1y"
+```
+
 Query counters are written to the configured database as one bucket per minute,
 so the dashboard chart keeps its hour, day, week, month, and year ranges across
 restarts, and the stat cards keep counting instead of returning to zero. Buckets
-older than 400 days are pruned hourly; lifetime totals are stored separately and
-survive pruning. Downtime is drawn as a gap rather than being smoothed over.
+older than the configured retention are pruned hourly; changing retention
+hot-reloads and schedules an immediate sweep. The default is one fixed year,
+or 365 days. Lifetime
+totals are stored separately and survive pruning. Downtime is drawn as a gap
+rather than being smoothed over.
 
 The range picker drives the top-client, top-domain, top-blocked, query-type,
 response-source, and response-code panels as well as the chart. Following a
@@ -568,8 +586,44 @@ range; that preference is also stored in a browser cookie.
 Short ranges refresh live, while wider database aggregations run only when the
 operator selects them.
 
-There is nothing to configure. The `sable_*` Prometheus counters continue to
-report this process only, which is what scrapers expect from a counter.
+The Logging settings panel controls this retention alongside query and server
+log settings. The `sable_*` Prometheus counters continue to report this process
+only, which is what scrapers expect from a counter.
+
+## Scheduled local backups
+
+```toml
+[backup]
+enabled = false
+directory = "data/backups"
+interval = "1d"
+run_at = "02:00"
+retention_count = 7
+```
+
+When enabled, Sable creates a complete encrypted backup immediately and then
+repeats at `interval`, anchored to `run_at` in the node's local timezone. For
+example, `interval = "6h"` and `run_at = "02:00"` runs at 02:00, 08:00, 14:00,
+and 20:00. The minimum interval is one hour. Relative directories resolve from
+the directory containing `sable.toml`; the default is `data/backups`.
+
+The archive passphrase is configured in **Settings → Backup** and stored in the
+node's encrypted secret vault, never in TOML. The schedule cannot be enabled
+until a passphrase has been stored. After each successful atomic archive write,
+Sable keeps the newest `retention_count` scheduled archives belonging to this
+node and purges older ones. Invalid files, manually named archives, and
+scheduled archives from another node are never removed by rotation.
+
+The same panel lists every valid `.sablebackup` file in the configured local
+directory and provides Download, Restore, and confirmed Delete actions for
+each. **Backup Now** uses the
+vaulted schedule passphrase when one exists; its adjacent menu can create a
+manual archive with a different one-off passphrase. Manual archives are not
+purged by scheduled rotation. A scheduled archive can be staged for restore
+with its vaulted passphrase; after rotating the passphrase, enter the older
+value in the restore dialog for an old archive. As with uploaded restores, the
+active deployment is not replaced until the controlled restart offered by the
+console.
 
 ## Reload controls
 
@@ -591,7 +645,7 @@ source compiler statistics, cache entries, and configuration revision.
 enabled = true
 secure_cookies = false
 session_ttl = "12h"
-api_token_ttl = "2160h"
+api_token_ttl = "3mo"
 secret_key_file = "data/sable.key"
 ```
 

@@ -1050,8 +1050,8 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 			</label>
 			<label><span>Signing Algorithm</span><select name="algorithm"><option value="ed25519" selected?={ zone.DNSSECAlgorithm == "" || zone.DNSSECAlgorithm == "ed25519" }>Ed25519 (recommended)</option><option value="ecdsa-p256-sha256" selected?={ zone.DNSSECAlgorithm == "ecdsa-p256-sha256" }>ECDSA P-256 / SHA-256</option><option value="ecdsa-p384-sha384" selected?={ zone.DNSSECAlgorithm == "ecdsa-p384-sha384" }>ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault.</small></label>
 			<div class="record-field-grid two zone-dnssec-policy">
-				<label><span>ZSK Lifetime</span><input class="mono-input" name="zsk_lifetime" value={ zone.ZSKLifetime } required/><small>Automatic zone-signing-key rotation interval.</small></label>
-				<label><span>KSK Lifetime</span><input class="mono-input" name="ksk_lifetime" value={ zone.KSKLifetime } required/><small>Starts a parent-coordinated KSK rollover.</small></label>
+				<label><span>ZSK Lifetime</span><input class="mono-input" name="zsk_lifetime" value={ zone.ZSKLifetime } required/><small>Automatic rotation interval; fixed units such as 30d are supported.</small></label>
+				<label><span>KSK Lifetime</span><input class="mono-input" name="ksk_lifetime" value={ zone.KSKLifetime } required/><small>Starts a parent-coordinated rollover; for example, 1y.</small></label>
 				<label><span>Prepublication Window</span><input class="mono-input" name="key_prepublish" value={ zone.KeyPrepublish } required/><small>Must cover the maximum DNSKEY/zone TTL.</small></label>
 				<label><span>Retirement Window</span><input class="mono-input" name="key_retire_after" value={ zone.KeyRetireAfter } required/><small>Old keys remain published for cached signatures and DS records.</small></label>
 			</div>

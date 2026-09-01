@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -224,10 +225,10 @@ func appendZoneSettingChanges(changes []pages.ZoneRevisionChangeView, previous, 
 		{"DNSSEC denial", valueOrNone(previous.DNSSECDenial), valueOrNone(current.DNSSECDenial)},
 		{"NSEC3 iterations", formatUint(uint64(previous.NSEC3Iterations)), formatUint(uint64(current.NSEC3Iterations))},
 		{"NSEC3 salt", valueOrNone(previous.NSEC3Salt), valueOrNone(current.NSEC3Salt)},
-		{"ZSK lifetime", previous.ZSKLifetime.Duration.String(), current.ZSKLifetime.Duration.String()},
-		{"KSK lifetime", previous.KSKLifetime.Duration.String(), current.KSKLifetime.Duration.String()},
-		{"Key prepublish", previous.KeyPrepublish.Duration.String(), current.KeyPrepublish.Duration.String()},
-		{"Key retirement", previous.KeyRetireAfter.Duration.String(), current.KeyRetireAfter.Duration.String()},
+		{"ZSK lifetime", durationfmt.Format(previous.ZSKLifetime.Duration), durationfmt.Format(current.ZSKLifetime.Duration)},
+		{"KSK lifetime", durationfmt.Format(previous.KSKLifetime.Duration), durationfmt.Format(current.KSKLifetime.Duration)},
+		{"Key prepublish", durationfmt.Format(previous.KeyPrepublish.Duration), durationfmt.Format(current.KeyPrepublish.Duration)},
+		{"Key retirement", durationfmt.Format(previous.KeyRetireAfter.Duration), durationfmt.Format(current.KeyRetireAfter.Duration)},
 		{"Parent DS key tag", formatUint(uint64(previous.ParentDSKeyTag)), formatUint(uint64(current.ParentDSKeyTag))},
 	}
 	for _, setting := range settings {

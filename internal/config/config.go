@@ -20,6 +20,7 @@ import (
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/unifi"
 )
 
@@ -49,11 +50,17 @@ const (
 	defaultQueryLogBuffer      = 8_192
 	defaultQueryLogBatch       = 256
 	defaultQueryLogFlush       = 250 * time.Millisecond
-	defaultQueryLogKeep        = 7 * 24 * time.Hour
+	defaultQueryLogKeep        = 30 * 24 * time.Hour
 	defaultServerLogBuffer     = 4_096
 	defaultServerLogBatch      = 128
 	defaultServerLogFlush      = time.Second
 	defaultServerLogKeep       = 60 * 24 * time.Hour
+	defaultServerLogLevel      = "info"
+	defaultStatisticsKeep      = durationfmt.Year
+	defaultBackupDirectory     = "data/backups"
+	defaultBackupInterval      = 24 * time.Hour
+	defaultBackupRunAt         = "02:00"
+	defaultBackupRetention     = 7
 	defaultTLSVersion          = "1.3"
 	defaultCertificateMode     = "manual"
 	defaultACMEDirectoryURL    = "https://acme-v02.api.letsencrypt.org/directory"
@@ -81,7 +88,7 @@ type Duration struct {
 }
 
 func (duration *Duration) UnmarshalText(value []byte) error {
-	parsed, err := time.ParseDuration(string(value))
+	parsed, err := durationfmt.Parse(string(value))
 	if err != nil {
 		return fmt.Errorf("parse duration %q: %w", value, err)
 	}
@@ -93,6 +100,10 @@ func (duration Duration) MarshalText() ([]byte, error) {
 	return []byte(duration.String()), nil
 }
 
+func (duration Duration) String() string {
+	return durationfmt.Format(duration.Duration)
+}
+
 type Config struct {
 	Server       Server       `toml:"server"`
 	Database     Database     `toml:"database"`
@@ -101,6 +112,8 @@ type Config struct {
 	Blocking     Blocking     `toml:"blocking"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	ServerLog    ServerLog    `toml:"server_log"`
+	Statistics   Statistics   `toml:"statistics"`
+	Backup       Backup       `toml:"backup"`
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
 	UniFi        UniFi        `toml:"unifi"`
 	OIDC         OIDC         `toml:"oidc"`
@@ -218,10 +231,29 @@ type QueryLog struct {
 // query log, which is why the retention default is much longer.
 type ServerLog struct {
 	Enabled       bool     `toml:"enabled"`
+	Level         string   `toml:"level"`
 	BufferSize    int      `toml:"buffer_size"`
 	BatchSize     int      `toml:"batch_size"`
 	FlushInterval Duration `toml:"flush_interval"`
 	Retention     Duration `toml:"retention"`
+}
+
+// Statistics controls how long the minute buckets behind dashboard history
+// remain available. Lifetime counters are stored separately and never fall
+// when old chart buckets are pruned.
+type Statistics struct {
+	Retention Duration `toml:"retention"`
+}
+
+// Backup controls encrypted archives created on the node itself. The
+// passphrase deliberately does not live here; it is held in the encrypted
+// secret vault so sable.toml is never enough to open an archive.
+type Backup struct {
+	Enabled        bool     `toml:"enabled"`
+	Directory      string   `toml:"directory"`
+	Interval       Duration `toml:"interval"`
+	RunAt          string   `toml:"run_at"`
+	RetentionCount int      `toml:"retention_count"`
 }
 
 type EncryptedDNS struct {
@@ -376,10 +408,18 @@ func Defaults() Config {
 		},
 		ServerLog: ServerLog{
 			Enabled:       true,
+			Level:         defaultServerLogLevel,
 			BufferSize:    defaultServerLogBuffer,
 			BatchSize:     defaultServerLogBatch,
 			FlushInterval: Duration{Duration: defaultServerLogFlush},
 			Retention:     Duration{Duration: defaultServerLogKeep},
+		},
+		Statistics: Statistics{Retention: Duration{Duration: defaultStatisticsKeep}},
+		Backup: Backup{
+			Directory:      defaultBackupDirectory,
+			Interval:       Duration{Duration: defaultBackupInterval},
+			RunAt:          defaultBackupRunAt,
+			RetentionCount: defaultBackupRetention,
 		},
 		EncryptedDNS: EncryptedDNS{
 			MinimumVersion:  defaultTLSVersion,
@@ -619,6 +659,24 @@ func (configuration Config) Validate() error {
 	if configuration.ServerLog.Retention.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("server_log.retention must be positive"))
 	}
+	if !validServerLogLevel(configuration.ServerLog.Level) {
+		validationErrors = append(validationErrors, fmt.Errorf("server_log.level must be debug, info, warn, or error, got %q", configuration.ServerLog.Level))
+	}
+	if configuration.Statistics.Retention.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("statistics.retention must be positive"))
+	}
+	if configuration.Backup.Directory == "" {
+		validationErrors = append(validationErrors, errors.New("backup.directory is required"))
+	}
+	if configuration.Backup.Interval.Duration < time.Hour {
+		validationErrors = append(validationErrors, errors.New("backup.interval must be at least 1h"))
+	}
+	if _, err := time.Parse("15:04", configuration.Backup.RunAt); err != nil {
+		validationErrors = append(validationErrors, errors.New("backup.run_at must use HH:MM local time"))
+	}
+	if configuration.Backup.RetentionCount < 1 || configuration.Backup.RetentionCount > 1000 {
+		validationErrors = append(validationErrors, errors.New("backup.retention_count must be between 1 and 1000"))
+	}
 	for index, address := range configuration.EncryptedDNS.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
 	}
@@ -667,7 +725,7 @@ func (configuration Config) Validate() error {
 			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.storage_dir is required"))
 		}
 		if acmeConfiguration.RenewBefore.Duration < 24*time.Hour || acmeConfiguration.RenewBefore.Duration > 60*24*time.Hour {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.renew_before must be between 24h and 1440h"))
+			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.renew_before must be between 1d and 60d"))
 		}
 	}
 	if configuration.EncryptedDNS.MinimumVersion != "1.2" && configuration.EncryptedDNS.MinimumVersion != "1.3" {
@@ -753,6 +811,15 @@ func (configuration Config) Validate() error {
 		}
 	}
 	return errors.Join(validationErrors...)
+}
+
+func validServerLogLevel(level string) bool {
+	switch level {
+	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
 }
 
 // Validate reports every problem with the UniFi settings. The setup wizard
@@ -920,6 +987,9 @@ func (configuration Config) DedicatedDoHListeners() []string {
 
 func (configuration *Config) normalize() {
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
+	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
+	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)
+	configuration.Backup.RunAt = strings.TrimSpace(configuration.Backup.RunAt)
 	configuration.Server.HTTPSListen = strings.TrimSpace(configuration.Server.HTTPSListen)
 	configuration.Server.DNSListen = uniqueTrimmed(configuration.Server.DNSListen)
 	configuration.Resolver.Forwarders = uniqueTrimmed(configuration.Resolver.Forwarders)
@@ -1096,6 +1166,12 @@ func (configuration Config) EncryptedDNSCertificatePaths(baseDirectory string) (
 
 func (configuration Config) SecuritySecretKeyPath(baseDirectory string) string {
 	return resolveOptionalPath(baseDirectory, configuration.Security.SecretKeyFile)
+}
+
+// BackupDirectoryPath resolves the local archive directory through the same
+// configuration-relative rules as Sable's other filesystem settings.
+func (configuration Config) BackupDirectoryPath(baseDirectory string) string {
+	return resolvePath(baseDirectory, configuration.Backup.Directory)
 }
 
 // AdvertisedBaseURL is the address other nodes and browsers are told to reach

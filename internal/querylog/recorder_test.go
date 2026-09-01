@@ -12,6 +12,7 @@ import (
 type memoryWriter struct {
 	mu     sync.Mutex
 	events []Event
+	pruned []time.Time
 	gate   <-chan struct{}
 }
 
@@ -29,12 +30,23 @@ func (writer *memoryWriter) WriteQueryEvents(ctx context.Context, events []Event
 	return nil
 }
 
-func (writer *memoryWriter) PruneQueryEvents(context.Context, time.Time) error { return nil }
+func (writer *memoryWriter) PruneQueryEvents(_ context.Context, before time.Time) error {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	writer.pruned = append(writer.pruned, before)
+	return nil
+}
 
 func (writer *memoryWriter) count() int {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	return len(writer.events)
+}
+
+func (writer *memoryWriter) pruneCount() int {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return len(writer.pruned)
 }
 
 func TestRecorderFlushesBatchAndShutdownRemainder(t *testing.T) {
@@ -102,6 +114,39 @@ func TestRecorderCanBeDisabledWithoutStoppingWorker(t *testing.T) {
 	}
 	if writer.count() != 1 {
 		t.Fatalf("persisted = %d, want 1", writer.count())
+	}
+}
+
+func TestRecorderAppliesRetentionChangesWithoutRestart(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 2, FlushInterval: time.Hour, Retention: 48 * time.Hour,
+	})
+	deadline := time.Now().Add(time.Second)
+	for writer.pruneCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	initialPrunes := writer.pruneCount()
+	if err := recorder.SetRetention(12 * time.Hour); err != nil {
+		t.Fatalf("SetRetention() error = %v", err)
+	}
+	deadline = time.Now().Add(time.Second)
+	for writer.pruneCount() == initialPrunes && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if writer.pruneCount() == initialPrunes {
+		t.Fatal("retention change did not trigger pruning")
+	}
+	writer.mu.Lock()
+	cutoff := writer.pruned[len(writer.pruned)-1]
+	writer.mu.Unlock()
+	if elapsed := time.Since(cutoff); elapsed < 11*time.Hour || elapsed > 13*time.Hour {
+		t.Fatalf("prune cutoff was %v ago, want about 12h", elapsed)
+	}
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
 	}
 }
 

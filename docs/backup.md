@@ -39,15 +39,28 @@ already keep credentials, not next to the archive.
 
 **Settings → Backup** has both halves.
 
-Downloading asks for a passphrase twice, builds the archive, and hands back a
-single-use link. The link expires after five minutes and works exactly once, so
-a backup never sits in browser history or a proxy cache waiting to be fetched
-again.
+The scheduled-backup card creates encrypted archives in a configurable local
+directory. Enabling it takes the first backup immediately and then follows the
+configured interval. The passphrase is stored in Sable's encrypted secret
+vault and never written to `sable.toml`. Each successful archive is written to
+a mode-0600 temporary file, synchronized, and atomically renamed before
+rotation starts.
 
-An archive being downloaded is held in memory and never written to the node's
-disk, so the staged link survives a page reload but not a restart of Sable.
-Rebuilding one takes a moment; the trade is that a downloadable file holding
-every private key is never left lying in the data directory.
+**Backup Now** uses the vaulted schedule passphrase and writes the complete
+archive into the configured local directory. Its adjacent menu offers a
+different one-off passphrase when needed. A manual archive remains until an
+operator removes it; scheduled rotation never silently purges it.
+
+The local history below the schedule lists valid archives by creation time,
+source host, Sable version, and size. Each row can be downloaded, restored, or
+permanently deleted after confirmation. Restore opens a focused dialog for the
+passphrase and keep-configuration choice, so credentials do not clutter the
+history list.
+Scheduled archives restore with the vaulted
+passphrase when the dialog field is blank. Enter a passphrase for an older
+archive after rotating the scheduled value, or for a manually copied archive.
+The restore still uses the normal validation, staging, rollback, and
+controlled-restart path.
 
 Both operations show their real progress: each stage named in the bar is the
 work actually under way, and the count is the stages already finished rather
@@ -83,7 +96,7 @@ passphrase are removed after either a successful apply or a recovered failure.
 `sable.toml` alone. Use it when the target node's listeners, storage, and paths
 are already correct and only its contents are stale.
 
-Both halves have their own permissions. `backup.create` allows a download and
+Both halves have their own permissions. `backup.create` allows creating and downloading an archive and
 `backup.restore` allows a restore; neither is implied by `settings.write`,
 because a backup carries credential material that a settings editor has no
 business walking off with. The built-in **Administrator** and **API
@@ -179,14 +192,31 @@ console, and how to rebuild membership without creating two writable primaries.
 
 ## Automating backups
 
-`sable backup create` is a normal command and expects nothing but read access
-to the configuration and the database, so a timer is enough:
+For the usual node-local policy, use **Settings → Backup**:
+
+```toml
+[backup]
+enabled = true
+directory = "/srv/backups/sable"
+interval = "1d"
+run_at = "02:00"
+retention_count = 14
+```
+
+Sable writes the first archive immediately, then anchors the configured
+interval to `run_at` in the node's local timezone. It writes a new archive
+before deleting anything, then keeps the newest configured number of its own
+scheduled archives. It does not purge invalid files, manually named backups,
+or another node's scheduled backups if a directory is shared.
+
+The CLI remains useful when an external scheduler, remote destination, or
+different retention policy owns the workflow:
 
 ```bash
 SABLE_BACKUP_PASSPHRASE=$(cat /etc/sable/backup.pass) \
   sable backup create --config /etc/sable/sable.toml --out /srv/backups/sable-$(date +%F).sablebackup
 ```
 
-Keep the passphrase file readable only by the user the timer runs as, and keep
-it somewhere the backups themselves are not. A backup and its passphrase in the
-same place is a backup with no passphrase at all.
+Keep an external scheduler's passphrase file readable only by the user the
+timer runs as, and keep it somewhere the backups themselves are not. A backup
+and its passphrase in the same place is a backup with no passphrase at all.

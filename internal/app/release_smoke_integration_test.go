@@ -200,8 +200,8 @@ func createReleaseSmokeZone(t *testing.T, client *http.Client, httpsAddress stri
 	})
 	postReleaseSmokeForm(t, client, httpsAddress, "/ui/zones/dnssec", url.Values{
 		"zone": {releaseSmokeZone}, "enabled": {"true"}, "algorithm": {"ed25519"}, "denial": {"nsec"},
-		"nsec3_iterations": {"0"}, "zsk_lifetime": {"720h"}, "ksk_lifetime": {"8760h"},
-		"key_prepublish": {"24h"}, "key_retire_after": {"168h"},
+		"nsec3_iterations": {"0"}, "zsk_lifetime": {"1mo"}, "ksk_lifetime": {"1y"},
+		"key_prepublish": {"1d"}, "key_retire_after": {"1w"},
 	})
 }
 

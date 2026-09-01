@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/web/pages"
@@ -24,6 +25,7 @@ type fakeStatsStore struct {
 	totals   store.QueryStatsTotals
 	writes   int
 	failNext bool
+	prunedAt time.Time
 }
 
 func newFakeStatsStore() *fakeStatsStore {
@@ -92,12 +94,31 @@ func (fake *fakeStatsStore) QueryStatsTotals(context.Context) (store.QueryStatsT
 func (fake *fakeStatsStore) PruneQueryStats(_ context.Context, before time.Time) error {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
+	fake.prunedAt = before
 	for key := range fake.buckets {
 		if key < before.Unix() {
 			delete(fake.buckets, key)
 		}
 	}
 	return nil
+}
+
+func TestStatsHistoryAppliesRetentionChanges(t *testing.T) {
+	t.Parallel()
+
+	backing := newFakeStatsStore()
+	history := newStatsHistory(nil, 48*time.Hour)
+	if err := history.attach(context.Background(), backing); err != nil {
+		t.Fatalf("attach() error = %v", err)
+	}
+	history.setRetention(12 * time.Hour)
+	now := time.Date(2026, time.September, 1, 12, 0, 0, 0, time.UTC)
+	if err := history.prune(context.Background(), now); err != nil {
+		t.Fatalf("prune() error = %v", err)
+	}
+	if want := now.Add(-12 * time.Hour); !backing.prunedAt.Equal(want) {
+		t.Fatalf("prune cutoff = %s, want %s", backing.prunedAt, want)
+	}
 }
 
 func lastCoordinate(polyline string) string {
@@ -112,7 +133,7 @@ func TestStatsHistoryBuildsRealCounterDeltaSeries(t *testing.T) {
 	t.Parallel()
 
 	started := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	history.record(started, dnsserver.Stats{Queries: 10, CacheHits: 2})
 	history.record(started.Add(5*time.Second), dnsserver.Stats{
 		Queries: 15, Blocked: 1, CacheHits: 5,
@@ -151,7 +172,7 @@ func TestChartHoverDataMatchesPlottedPoints(t *testing.T) {
 	t.Parallel()
 
 	started := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	history.record(started, dnsserver.Stats{Queries: 10, NoError: 8, CacheHits: 2})
 	history.record(started.Add(5*time.Second), dnsserver.Stats{Queries: 25, NoError: 20, Blocked: 3, CacheHits: 6})
 
@@ -229,7 +250,7 @@ func TestStatsHistoryBuildsCustomRange(t *testing.T) {
 	t.Parallel()
 
 	started := time.Now().Add(-30 * time.Minute).Truncate(time.Minute)
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	history.record(started, dnsserver.Stats{Queries: 10, NoError: 8})
 	history.record(started.Add(5*time.Minute), dnsserver.Stats{Queries: 14, NoError: 12})
 
@@ -252,7 +273,7 @@ func TestChartLiveBadgeFollowsRecentQueries(t *testing.T) {
 	t.Parallel()
 
 	at := time.Now().Add(-2 * time.Minute).Truncate(time.Minute)
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	history.record(at, dnsserver.Stats{Queries: 4})
 	history.record(at.Add(time.Second), dnsserver.Stats{Queries: 9})
 
@@ -277,7 +298,7 @@ func TestEmptyChartSeparatesAClosedRangeFromALiveOne(t *testing.T) {
 
 	ctx := context.Background()
 	display := pages.TimeDisplay{Format: pages.TimeFormat24}
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	now := time.Now()
 
 	live := history.view(ctx, "hour", now, dnsserver.Stats{}, display)
@@ -298,7 +319,7 @@ func TestStatsHistoryChartsActivityRecordedBeforeARestart(t *testing.T) {
 	backing := newFakeStatsStore()
 	yesterday := time.Now().Add(-20 * time.Hour).Truncate(time.Minute)
 
-	first := newStatsHistory(nil)
+	first := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	if err := first.attach(ctx, backing); err != nil {
 		t.Fatalf("attach() error = %v", err)
 	}
@@ -309,7 +330,7 @@ func TestStatsHistoryChartsActivityRecordedBeforeARestart(t *testing.T) {
 	}
 
 	// A restart zeroes the handler counters and empties the in-memory history.
-	restarted := newStatsHistory(nil)
+	restarted := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	if err := restarted.attach(ctx, backing); err != nil {
 		t.Fatalf("attach() error = %v", err)
 	}
@@ -336,7 +357,7 @@ func TestStatsHistoryRetriesAFailedFlush(t *testing.T) {
 
 	ctx := context.Background()
 	backing := newFakeStatsStore()
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	if err := history.attach(ctx, backing); err != nil {
 		t.Fatalf("attach() error = %v", err)
 	}
@@ -368,7 +389,7 @@ func TestStatsHistoryCountsWindowsFromPersistedBuckets(t *testing.T) {
 
 	ctx := context.Background()
 	backing := newFakeStatsStore()
-	history := newStatsHistory(nil)
+	history := newStatsHistory(nil, config.Defaults().Statistics.Retention.Duration)
 	if err := history.attach(ctx, backing); err != nil {
 		t.Fatalf("attach() error = %v", err)
 	}

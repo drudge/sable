@@ -72,6 +72,45 @@ domains = ["Example.COM.", "example.com", " ads.example "]
 	}
 }
 
+func TestDecodeAppliesAndValidatesBackupPolicy(t *testing.T) {
+	t.Parallel()
+
+	defaults, err := Decode(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if defaults.Backup.Enabled || defaults.Backup.Directory != "data/backups" ||
+		defaults.Backup.Interval.Duration != 24*time.Hour || defaults.Backup.RunAt != "02:00" || defaults.Backup.RetentionCount != 7 {
+		t.Fatalf("default backup policy = %+v", defaults.Backup)
+	}
+
+	custom, err := Decode(strings.NewReader(`
+[backup]
+enabled = true
+directory = " /srv/sable-backups "
+interval = "1mo"
+run_at = "23:15"
+retention_count = 12
+`))
+	if err != nil {
+		t.Fatalf("Decode() custom backup error = %v", err)
+	}
+	if custom.Backup.Directory != "/srv/sable-backups" || custom.Backup.Interval.Duration != 30*24*time.Hour || custom.Backup.RunAt != "23:15" || custom.Backup.RetentionCount != 12 {
+		t.Fatalf("custom backup policy = %+v", custom.Backup)
+	}
+
+	for _, source := range []string{
+		"[backup]\ndirectory = \"\"\n",
+		"[backup]\ninterval = \"59m\"\n",
+		"[backup]\nrun_at = \"25:00\"\n",
+		"[backup]\nretention_count = 0\n",
+	} {
+		if _, err := Decode(strings.NewReader(source)); err == nil || !strings.Contains(err.Error(), "backup.") {
+			t.Fatalf("Decode(%q) error = %v, want backup validation error", source, err)
+		}
+	}
+}
+
 func TestDecodeAppliesResolverRetryDefaultsAndValidates(t *testing.T) {
 	t.Parallel()
 
@@ -164,11 +203,19 @@ func TestDurationUnmarshalText(t *testing.T) {
 	t.Parallel()
 
 	var duration Duration
-	if err := duration.UnmarshalText([]byte("750ms")); err != nil {
+	if err := duration.UnmarshalText([]byte("1y2mo3w4d5h30m")); err != nil {
 		t.Fatalf("UnmarshalText() error = %v", err)
 	}
-	if duration.Duration != 750*time.Millisecond {
-		t.Fatalf("Duration = %s, want 750ms", duration.Duration)
+	want := 365*24*time.Hour + 2*30*24*time.Hour + 3*7*24*time.Hour + 4*24*time.Hour + 5*time.Hour + 30*time.Minute
+	if duration.Duration != want {
+		t.Fatalf("Duration = %s, want %s", duration.Duration, want)
+	}
+	marshaled, err := duration.MarshalText()
+	if err != nil {
+		t.Fatalf("MarshalText() error = %v", err)
+	}
+	if string(marshaled) != "1y2mo3w4d5h30m0s" {
+		t.Fatalf("MarshalText() = %q, want friendly fixed units", marshaled)
 	}
 }
 
@@ -198,10 +245,9 @@ batch_size = 64
 	}
 }
 
-// Runtime logs are a small fraction of query-log volume, so they are kept for
-// far longer by default, and the default is on: a history that has to be
-// switched on is missing exactly when the first restart makes it wanted.
-func TestDecodeDefaultsServerLogToSixtyDayRetention(t *testing.T) {
+// Log history defaults should give a new installation useful coverage without
+// requiring operators to discover and enable persistence first.
+func TestDecodeDefaultsLogRetention(t *testing.T) {
 	t.Parallel()
 
 	loaded, err := Decode(strings.NewReader(""))
@@ -211,8 +257,17 @@ func TestDecodeDefaultsServerLogToSixtyDayRetention(t *testing.T) {
 	if !loaded.ServerLog.Enabled {
 		t.Fatal("ServerLog.Enabled = false, want persistence on by default")
 	}
+	if loaded.QueryLog.Retention.Duration != 30*24*time.Hour {
+		t.Fatalf("QueryLog.Retention = %s, want 30d", loaded.QueryLog.Retention.Duration)
+	}
 	if loaded.ServerLog.Retention.Duration != 60*24*time.Hour {
-		t.Fatalf("ServerLog.Retention = %s, want 1440h", loaded.ServerLog.Retention.Duration)
+		t.Fatalf("ServerLog.Retention = %s, want 60d", loaded.ServerLog.Retention.Duration)
+	}
+	if loaded.ServerLog.Level != "info" {
+		t.Fatalf("ServerLog.Level = %q, want info", loaded.ServerLog.Level)
+	}
+	if loaded.Statistics.Retention.Duration != 365*24*time.Hour {
+		t.Fatalf("Statistics.Retention = %s, want 1y", loaded.Statistics.Retention.Duration)
 	}
 }
 
@@ -224,6 +279,38 @@ func TestDecodeRejectsNonPositiveServerLogRetention(t *testing.T) {
 retention = "0s"
 `)); err == nil {
 		t.Fatal("Decode() error = nil, want server log retention validation error")
+	}
+}
+
+func TestDecodeNormalizesAndValidatesServerLogLevel(t *testing.T) {
+	t.Parallel()
+
+	loaded, err := Decode(strings.NewReader(`
+[server_log]
+level = " WARN "
+`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if loaded.ServerLog.Level != "warn" {
+		t.Fatalf("ServerLog.Level = %q, want warn", loaded.ServerLog.Level)
+	}
+	if _, err := Decode(strings.NewReader(`
+[server_log]
+level = "trace"
+`)); err == nil {
+		t.Fatal("Decode() error = nil, want server log level validation error")
+	}
+}
+
+func TestDecodeRejectsNonPositiveStatisticsRetention(t *testing.T) {
+	t.Parallel()
+
+	if _, err := Decode(strings.NewReader(`
+[statistics]
+retention = "0s"
+`)); err == nil {
+		t.Fatal("Decode() error = nil, want statistics retention validation error")
 	}
 }
 
