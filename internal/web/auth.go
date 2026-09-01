@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -363,7 +364,7 @@ func apiTokenExpiration(value string) (auth.APITokenExpiration, error) {
 	case "never":
 		return auth.APITokenExpiration{Never: true}, nil
 	default:
-		lifetime, err := time.ParseDuration(value)
+		lifetime, err := durationfmt.Parse(value)
 		if err != nil || lifetime <= 0 {
 			return auth.APITokenExpiration{}, errors.New("token expiration is invalid")
 		}

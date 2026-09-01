@@ -165,7 +165,7 @@ func CreateBackup(ctx context.Context, options BackupOptions) ([]byte, error) {
 	archive := backup.Archive{Manifest: backup.Manifest{
 		CreatedAt:      time.Now().UTC(),
 		SableVersion:   version.Current().Release,
-		Hostname:       hostname(),
+		Hostname:       backupHostname(configuration),
 		DatabaseDriver: configuration.Database.Driver,
 		Sections:       sections,
 	}}
@@ -840,4 +840,11 @@ func hostname() string {
 		return ""
 	}
 	return name
+}
+
+func backupHostname(configuration config.Config) string {
+	if name := strings.TrimSpace(configuration.Cluster.NodeName); name != "" {
+		return name
+	}
+	return hostname()
 }

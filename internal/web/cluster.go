@@ -15,6 +15,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -223,7 +224,7 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 			return
 		}
 		var err error
-		acmeRenewBefore, err = time.ParseDuration(strings.TrimSpace(request.FormValue("acme_renew_before")))
+		acmeRenewBefore, err = durationfmt.Parse(request.FormValue("acme_renew_before"))
 		if err != nil {
 			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "ACME renewal window is invalid")
 			return
@@ -343,7 +344,7 @@ func (server *Server) createClusterEnrollmentToken(writer http.ResponseWriter, r
 		server.renderClusterMutation(writer, request, http.StatusBadRequest, "", "Invalid enrollment token form")
 		return
 	}
-	ttl, err := time.ParseDuration(firstNonEmpty(strings.TrimSpace(request.FormValue("ttl")), "15m"))
+	ttl, err := durationfmt.Parse(firstNonEmpty(strings.TrimSpace(request.FormValue("ttl")), "15m"))
 	if err != nil {
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "Enter a valid token lifetime")
 		return
@@ -522,9 +523,9 @@ func (server *Server) createClusterEnrollmentTokenAPI(writer http.ResponseWriter
 		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid enrollment token request"})
 		return
 	}
-	ttl, err := time.ParseDuration(firstNonEmpty(strings.TrimSpace(input.TTL), "15m"))
+	ttl, err := durationfmt.Parse(firstNonEmpty(strings.TrimSpace(input.TTL), "15m"))
 	if err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": "ttl must be a Go duration such as 15m"})
+		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": "ttl must be a duration such as 15m or 1d"})
 		return
 	}
 	token, err := server.cluster.CreateEnrollmentToken(request.Context(), ttl)

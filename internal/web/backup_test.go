@@ -39,6 +39,86 @@ type stubBackups struct {
 	restored       []byte
 }
 
+type stubLocalBackups struct {
+	*stubBackups
+	archives         []LocalBackup
+	files            map[string][]byte
+	storedPassphrase string
+	scheduleUpdate   BackupScheduleUpdate
+}
+
+func (stub *stubLocalBackups) BackupSchedule(context.Context) (BackupSchedule, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return BackupSchedule{
+		Directory: "data/backups", Interval: 24 * time.Hour, RunAt: "02:00", RetentionCount: 7,
+		PassphraseStored: stub.storedPassphrase != "",
+	}, nil
+}
+
+func (stub *stubLocalBackups) UpdateBackupSchedule(_ context.Context, update BackupScheduleUpdate) error {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	stub.scheduleUpdate = update
+	return nil
+}
+
+func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase string, progress func(BackupProgress)) (LocalBackup, error) {
+	stub.mu.Lock()
+	if passphrase == "" {
+		passphrase = stub.storedPassphrase
+	}
+	stub.lastPassphrase = passphrase
+	stub.mu.Unlock()
+	stub.run(progress)
+	archive := LocalBackup{Name: "sable-backup-ns1-20260901.sablebackup", CreatedAt: time.Now(), Size: 6}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	stub.archives = append([]LocalBackup{archive}, stub.archives...)
+	if stub.files == nil {
+		stub.files = map[string][]byte{}
+	}
+	stub.files[archive.Name] = []byte("sealed")
+	return archive, nil
+}
+
+func (stub *stubLocalBackups) LocalBackups(context.Context) ([]LocalBackup, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return append([]LocalBackup(nil), stub.archives...), nil
+}
+
+func (stub *stubLocalBackups) LocalBackupContents(_ context.Context, name string) ([]byte, error) {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	contents, ok := stub.files[name]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return append([]byte(nil), contents...), nil
+}
+
+func (stub *stubLocalBackups) DeleteLocalBackup(_ context.Context, name string) error {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if _, ok := stub.files[name]; !ok {
+		return errors.New("not found")
+	}
+	delete(stub.files, name)
+	for index, archive := range stub.archives {
+		if archive.Name == name {
+			stub.archives = append(stub.archives[:index], stub.archives[index+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (stub *stubLocalBackups) LocalBackupForRestore(ctx context.Context, name, passphrase string) ([]byte, string, error) {
+	contents, err := stub.LocalBackupContents(ctx, name)
+	return contents, passphrase, err
+}
+
 func (stub *stubBackups) run(progress func(BackupProgress)) {
 	for _, stage := range stub.stages {
 		progress(stage)
@@ -201,6 +281,132 @@ func TestBackupDownloadStagesASingleUseLink(t *testing.T) {
 	server.sendBackup(replay, replayRequest)
 	if replay.Code != http.StatusGone {
 		t.Fatalf("replay status = %d, want 410", replay.Code)
+	}
+}
+
+func TestRunBackupNowCreatesALocalArchive(t *testing.T) {
+	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
+		"passphrase":              {"a long enough passphrase"},
+		"passphrase_confirmation": {"a long enough passphrase"},
+	}))
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", recorder.Code, recorder.Body.String())
+	}
+	finished := pollBackupPanel(t, server)
+	if !strings.Contains(finished, "Created local backup sable-backup-ns1-20260901.sablebackup") {
+		t.Fatalf("finished panel does not report the local archive:\n%s", finished)
+	}
+	if downloadLinkPattern.MatchString(finished) {
+		t.Fatalf("run-now backup still created a staged in-memory link:\n%s", finished)
+	}
+	if stub.passphrase() != "a long enough passphrase" {
+		t.Fatalf("passphrase = %q", stub.passphrase())
+	}
+}
+
+func TestUpdateBackupScheduleStoresTheWallClockAnchor(t *testing.T) {
+	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.updateBackupSchedule(recorder, postForm("http://sable.test/ui/backup/schedule", url.Values{
+		"directory":       {"data/backups"},
+		"interval":        {"1d"},
+		"run_at":          {"14:30"},
+		"retention_count": {"7"},
+	}))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	if stub.scheduleUpdate.RunAt != "14:30" || stub.scheduleUpdate.Interval != 24*time.Hour {
+		t.Fatalf("schedule update = %+v", stub.scheduleUpdate)
+	}
+}
+
+func TestUpdateBackupScheduleRejectsAnInvalidWallClockAnchor(t *testing.T) {
+	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.updateBackupSchedule(recorder, postForm("http://sable.test/ui/backup/schedule", url.Values{
+		"directory":       {"data/backups"},
+		"interval":        {"1d"},
+		"run_at":          {"2:30 PM"},
+		"retention_count": {"7"},
+	}))
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRunBackupNowUsesTheStoredLocalPassphrase(t *testing.T) {
+	stub := &stubLocalBackups{
+		stubBackups: &stubBackups{}, files: map[string][]byte{}, storedPassphrase: "the vaulted backup passphrase",
+	}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
+		"use_stored_passphrase": {"on"},
+	}))
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", recorder.Code, recorder.Body.String())
+	}
+	pollBackupPanel(t, server)
+	if stub.passphrase() != "the vaulted backup passphrase" {
+		t.Fatalf("passphrase = %q, want the vaulted value", stub.passphrase())
+	}
+}
+
+func TestRunBackupNowRejectsAStoredPassphraseRequestWhenNoneExists(t *testing.T) {
+	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
+		"use_stored_passphrase": {"on"},
+	}))
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422: %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "No local-backup passphrase is stored") {
+		t.Fatalf("response does not explain the missing vault value:\n%s", recorder.Body.String())
+	}
+}
+
+func TestLocalBackupCanBeDownloadedFromHistory(t *testing.T) {
+	name := "sable-backup-ns1-20260901.sablebackup"
+	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{name: []byte("sealed archive")}}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.downloadLocalBackup(recorder, httptest.NewRequest(http.MethodGet, "http://sable.test/ui/backup/local?name="+name, nil))
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "sealed archive" {
+		t.Fatalf("download = status %d body %q", recorder.Code, recorder.Body.String())
+	}
+	if disposition := recorder.Header().Get("Content-Disposition"); !strings.Contains(disposition, name) {
+		t.Fatalf("content disposition = %q", disposition)
+	}
+	if recorder.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache control = %q", recorder.Header().Get("Cache-Control"))
+	}
+}
+
+func TestLocalBackupCanBeDeletedFromHistory(t *testing.T) {
+	name := "sable-backup-ns1-20260901.sablebackup"
+	stub := &stubLocalBackups{
+		stubBackups: &stubBackups{}, files: map[string][]byte{name: []byte("sealed archive")},
+		archives: []LocalBackup{{Name: name, CreatedAt: time.Now(), Size: 14}},
+	}
+	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	recorder := httptest.NewRecorder()
+	server.deleteLocalBackup(recorder, postForm("http://sable.test/ui/backup/delete-local", url.Values{"name": {name}}))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	if _, ok := stub.files[name]; ok {
+		t.Fatal("deleted local backup is still stored")
+	}
+	if !strings.Contains(recorder.Body.String(), "Deleted local backup "+name) {
+		t.Fatalf("response does not confirm deletion:\n%s", recorder.Body.String())
 	}
 }
 
@@ -400,7 +606,12 @@ func TestBackupPathsRequireTheirOwnPermissions(t *testing.T) {
 		"/ui/backup/progress":        auth.PermissionBackupCreate,
 		"/ui/backup/download":        auth.PermissionBackupCreate,
 		"/ui/backup/download/abc123": auth.PermissionBackupCreate,
+		"/ui/backup/run":             auth.PermissionBackupCreate,
+		"/ui/backup/local":           auth.PermissionBackupCreate,
+		"/ui/backup/delete-local":    auth.PermissionBackupCreate,
+		"/ui/backup/schedule":        auth.PermissionBackupCreate,
 		"/ui/backup/restore":         auth.PermissionBackupRestore,
+		"/ui/backup/restore-local":   auth.PermissionBackupRestore,
 	} {
 		request := httptest.NewRequest(http.MethodPost, "http://sable.test"+path, nil)
 		if permission := requiredPermission(request); permission != expected {
@@ -441,6 +652,62 @@ func TestSettingsPageShowsTheBackupPanel(t *testing.T) {
 	}
 	if strings.Contains(body, `data-isotope-tab="backup" aria-selected="true" disabled`) {
 		t.Fatal("the backup tab is still disabled")
+	}
+}
+
+func TestLocalBackupRestorePassphraseLivesInTheRestoreDialog(t *testing.T) {
+	view := pages.SettingsBackupView{
+		Available: true, LocalAvailable: true, CanCreate: true, CanRestore: true,
+		ScheduleResolvedDirectory: "/srv/sable/backups", ScheduleRunAt: "14:30", SchedulePassphraseStored: true,
+		ScheduleNextRun: "Sep 2, 2026 at 5:54 PM EDT", ScheduleNextRunCompact: "Sep 2 · 5:54 PM EDT",
+		ScheduleLastSuccess: "Sep 1, 2026 at 5:54 PM EDT", ScheduleLastSuccessCompact: "Sep 1 · 5:54 PM EDT",
+		LocalBackups: []pages.SettingsLocalBackupView{{
+			Name: "sable-scheduled-ns1-20260901.sablebackup", Created: "Sep 1, 2026", Size: "12.0 KiB", Scheduled: true,
+		}},
+	}
+	panel := &bytes.Buffer{}
+	if err := pages.SettingsBackupPanel(view).Render(context.Background(), panel); err != nil {
+		t.Fatalf("SettingsBackupPanel.Render() error = %v", err)
+	}
+	panelBody := panel.String()
+	if !strings.Contains(panelBody, `data-local-backup-name="sable-scheduled-ns1-20260901.sablebackup"`) {
+		t.Fatalf("local backup row has no restore button:\n%s", panelBody)
+	}
+	for _, expected := range []string{`type="time" name="run_at" value="14:30"`, `Your browser uses your preferred 12- or 24-hour display.`, `class="backup-schedule-status"`, `class="backup-schedule-timestamps"`, `>Next backup<`, `class="backup-schedule-time-full"`, `class="backup-schedule-time-compact"`, `Sep 2 · 5:54 PM EDT`, `>Save Schedule<`, `class="backup-history-header-actions"`, `data-local-backup-run-stored-form`, `name="use_stored_passphrase" value="on"`, `data-run-local-backup`, `>Use a different passphrase…<`, `data-upload-backup-restore`, `>Local Backups<`, `Encrypted backups stored on this node, ready to download or restore.`, `>Backup Now<`, `>Restore from File…<`, `hx-post="/ui/backup/delete-local"`, `data-confirm-action="Delete Backup"`, `icon-trash`, `>Delete<`, `icon-rotate-ccw`, `class="backup-local-restore-note"`, `class="backup-history-footer"`, `/srv/sable/backups`} {
+		if !strings.Contains(panelBody, expected) {
+			t.Fatalf("local backups card does not contain %q:\n%s", expected, panelBody)
+		}
+	}
+	restoreFromFile := strings.Index(panelBody, `>Restore from File…<`)
+	backupNow := strings.Index(panelBody, `>Backup Now<`)
+	if restoreFromFile < 0 || backupNow < 0 || restoreFromFile > backupNow {
+		t.Fatalf("Restore from File must appear before Backup Now:\n%s", panelBody)
+	}
+	if strings.Contains(panelBody, `Local Backup History`) || strings.Contains(panelBody, `class="backup-local-path"`) {
+		t.Fatalf("local backups card still contains its old title or path placement:\n%s", panelBody)
+	}
+	if strings.Contains(panelBody, `class="backup-local-restore"`) || strings.Contains(panelBody, `placeholder="Passphrase (if different)"`) {
+		t.Fatalf("local backup row still contains restore credentials:\n%s", panelBody)
+	}
+
+	dialog := &bytes.Buffer{}
+	if err := pages.LocalBackupRestoreDialog().Render(context.Background(), dialog); err != nil {
+		t.Fatalf("LocalBackupRestoreDialog.Render() error = %v", err)
+	}
+	for _, expected := range []string{`data-local-backup-restore-form`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
+		if !strings.Contains(dialog.String(), expected) {
+			t.Fatalf("restore dialog does not contain %q:\n%s", expected, dialog.String())
+		}
+	}
+
+	upload := &bytes.Buffer{}
+	if err := pages.UploadBackupRestoreDialog().Render(context.Background(), upload); err != nil {
+		t.Fatalf("UploadBackupRestoreDialog.Render() error = %v", err)
+	}
+	for _, expected := range []string{`data-upload-backup-restore-form`, `name="archive"`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
+		if !strings.Contains(upload.String(), expected) {
+			t.Fatalf("upload restore dialog does not contain %q:\n%s", expected, upload.String())
+		}
 	}
 }
 

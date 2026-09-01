@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -179,6 +180,37 @@ func (c *console) StoreUniFiCredentials(controllerURL, apiKey string) error {
 		"api_key":        {apiKey},
 	})
 	return err
+}
+
+// EnableScheduledBackups exercises the same policy form an operator uses and
+// gives the Backup tab a real local archive to show in the disposable demo.
+func (c *console) EnableScheduledBackups(passphrase string) error {
+	_, err := c.post("/ui/backup/schedule", url.Values{
+		"enabled":                 {"on"},
+		"directory":               {"data/backups"},
+		"interval":                {"1d"},
+		"run_at":                  {"02:00"},
+		"retention_count":         {"7"},
+		"passphrase":              {passphrase},
+		"passphrase_confirmation": {passphrase},
+	})
+	return err
+}
+
+func (c *console) WaitForScheduledBackup(ctx context.Context) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		page, err := c.get("/settings?tab=backup")
+		if err == nil && strings.Contains(page, "sable-scheduled-") {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return errors.New("timed out waiting for the first scheduled backup")
 }
 
 // InitializeCluster promotes this node to the cluster's primary.

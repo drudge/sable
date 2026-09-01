@@ -76,7 +76,7 @@ dnssec_trust_anchor_updates = true
 enabled = true
 domains = ["example.invalid"]
 allowed_domains = []
-update_interval = "24h"
+update_interval = "1d"
 response_type = "nxdomain"
 response_ttl = 30
 custom_addresses = []
@@ -100,14 +100,25 @@ enabled = true
 buffer_size = 8192
 batch_size = 256
 flush_interval = "250ms"
-retention = "168h"
+retention = "30d"
 
 [server_log]
 enabled = true
+level = "info"
 buffer_size = 4096
 batch_size = 128
 flush_interval = "1s"
-retention = "1440h"
+retention = "60d"
+
+[statistics]
+retention = "1y"
+
+[backup]
+enabled = false
+directory = "data/backups"
+interval = "1d"
+run_at = "02:00"
+retention_count = 7
 
 [encrypted_dns]
 dot_listen = []
@@ -128,7 +139,7 @@ directory_url = "https://acme-v02.api.letsencrypt.org/directory"
 dns_provider = ""
 dns_zone = ""
 storage_dir = "data/tls/acme"
-renew_before = "720h"
+renew_before = "30d"
 
 # UniFi host synchronization. Set this up from Apps in the console: the wizard
 # discovers the controller's networks, maps each one to a zone, and previews the
@@ -163,7 +174,7 @@ tls_insecure = false
 enabled = true
 secure_cookies = false
 session_ttl = "12h"
-api_token_ttl = "2160h"
+api_token_ttl = "3mo"
 secret_key_file = "data/sable.key"
 
 # Console sign-in through an OpenID Connect provider. Set this up from

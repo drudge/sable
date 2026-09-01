@@ -745,7 +745,7 @@ func ProfileCreateTokenDialog(view ProfilePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, ")</option><option value=\"24h\">1 day</option><option value=\"168h\">7 days</option><option value=\"720h\">30 days</option><option value=\"2160h\">90 days</option><option value=\"8760h\">1 year</option><option value=\"never\">Never</option></select><small>Non-expiring tokens remain valid until revoked.</small></label><fieldset><legend>Groups</legend><div class=\"role-checks\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, ")</option><option value=\"1d\">1 day</option><option value=\"1w\">7 days</option><option value=\"1mo\">30 days</option><option value=\"3mo\">90 days</option><option value=\"1y\">1 year</option><option value=\"never\">Never</option></select><small>Non-expiring tokens remain valid until revoked.</small></label><fieldset><legend>Groups</legend><div class=\"role-checks\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

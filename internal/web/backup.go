@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/backup"
+	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -87,12 +89,60 @@ type BackupProgress struct {
 	Total int
 }
 
+// BackupSchedule is the node-local archive policy and its current runtime
+// state. The passphrase itself never crosses this interface.
+type BackupSchedule struct {
+	Enabled           bool
+	Directory         string
+	ResolvedDirectory string
+	Interval          time.Duration
+	RunAt             string
+	RetentionCount    int
+	PassphraseStored  bool
+	NextRun           time.Time
+	LastSuccess       time.Time
+	LastError         string
+}
+
+// BackupScheduleUpdate is an operator's replacement local-backup policy. A
+// blank passphrase keeps the encrypted value already in the vault.
+type BackupScheduleUpdate struct {
+	Enabled        bool
+	Directory      string
+	Interval       time.Duration
+	RunAt          string
+	RetentionCount int
+	Passphrase     string
+}
+
+// LocalBackup describes one valid archive in the configured local directory.
+type LocalBackup struct {
+	Name         string
+	CreatedAt    time.Time
+	Hostname     string
+	SableVersion string
+	Size         int64
+	Scheduled    bool
+}
+
 // backupController captures deployment backups and stages restores for the next
 // controlled restart. Both calls report their stages so the console can show
 // real movement instead of a spinner.
 type backupController interface {
 	CreateBackup(ctx context.Context, passphrase string, progress func(BackupProgress)) ([]byte, error)
 	StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error)
+}
+
+// localBackupController is optional so the browser can still expose manual
+// create/restore when an embedding application has no scheduler or local disk.
+type localBackupController interface {
+	BackupSchedule(context.Context) (BackupSchedule, error)
+	UpdateBackupSchedule(context.Context, BackupScheduleUpdate) error
+	CreateLocalBackup(context.Context, string, func(BackupProgress)) (LocalBackup, error)
+	LocalBackups(context.Context) ([]LocalBackup, error)
+	LocalBackupContents(context.Context, string) ([]byte, error)
+	DeleteLocalBackup(context.Context, string) error
+	LocalBackupForRestore(context.Context, string, string) ([]byte, string, error)
 }
 
 // SetBackupController wires backup and restore into the console.
@@ -113,6 +163,51 @@ func (server *Server) backupProgress(writer http.ResponseWriter, request *http.R
 	server.renderBackupPanel(writer, request, http.StatusOK, "", "")
 }
 
+func (server *Server) updateBackupSchedule(writer http.ResponseWriter, request *http.Request) {
+	controller, ok := server.backups.(localBackupController)
+	if !ok {
+		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Scheduled backups are unavailable on this node.")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid scheduled backup form.")
+		return
+	}
+	interval, err := durationfmt.Parse(request.FormValue("interval"))
+	if err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Backup interval: "+err.Error())
+		return
+	}
+	runAt := request.FormValue("run_at")
+	if _, err := time.Parse("15:04", runAt); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Run at must be a valid local time.")
+		return
+	}
+	retention, err := strconv.Atoi(request.FormValue("retention_count"))
+	if err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Keep count must be a whole number.")
+		return
+	}
+	passphrase := request.FormValue("passphrase")
+	if passphrase != "" {
+		if message := validateBackupPassphrase(passphrase, request.FormValue("passphrase_confirmation")); message != "" {
+			server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", message)
+			return
+		}
+	}
+	update := BackupScheduleUpdate{
+		Enabled: request.FormValue("enabled") == "on", Directory: request.FormValue("directory"),
+		Interval: interval, RunAt: runAt, RetentionCount: retention, Passphrase: passphrase,
+	}
+	if err := controller.UpdateBackupSchedule(request.Context(), update); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Could not save scheduled backups: "+err.Error())
+		return
+	}
+	server.recordControlPlaneAudit(request, "backup.schedule", "updated the local backup schedule")
+	server.renderBackupPanel(writer, request, http.StatusOK, "Scheduled backup settings saved.", "")
+}
+
 func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.Request) {
 	if server.backups == nil {
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Backups are unavailable on this node.")
@@ -124,7 +219,19 @@ func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.R
 		return
 	}
 	passphrase := request.FormValue("passphrase")
-	if message := validateBackupPassphrase(passphrase, request.FormValue("passphrase_confirmation")); message != "" {
+	useStoredPassphrase := request.URL.Path == "/ui/backup/run" && request.FormValue("use_stored_passphrase") == "on"
+	if useStoredPassphrase {
+		controller, ok := server.backups.(localBackupController)
+		if !ok {
+			server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "A stored local-backup passphrase is unavailable on this node.")
+			return
+		}
+		schedule, err := controller.BackupSchedule(request.Context())
+		if err != nil || !schedule.PassphraseStored {
+			server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "No local-backup passphrase is stored. Enter one to run this backup.")
+			return
+		}
+	} else if message := validateBackupPassphrase(passphrase, request.FormValue("passphrase_confirmation")); message != "" {
 		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", message)
 		return
 	}
@@ -141,10 +248,27 @@ func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.R
 	// this response consume the one-shot completion notice before the browser's
 	// polling request can receive it.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
-	go server.runBackupJob(passphrase)
+	go server.runBackupJob(passphrase, useStoredPassphrase)
 }
 
-func (server *Server) runBackupJob(passphrase string) {
+func (server *Server) runBackupJob(passphrase string, useStoredPassphrase bool) {
+	if controller, ok := server.backups.(localBackupController); ok {
+		if useStoredPassphrase {
+			// Empty is an internal signal to resolve the encrypted vault value;
+			// the archive encoder never receives an empty passphrase.
+			passphrase = ""
+		}
+		archive, err := controller.CreateLocalBackup(context.Background(), passphrase, server.reportBackupProgress)
+		if err != nil {
+			server.logger.Error("create local backup", "error", err)
+			server.failBackupJob("Could not create the local backup: " + err.Error())
+			return
+		}
+		server.finishBackupJob(func(job *backupJob) {
+			job.message = "Created local backup " + archive.Name + "."
+		})
+		return
+	}
 	contents, err := server.backups.CreateBackup(context.Background(), passphrase, server.reportBackupProgress)
 	if err != nil {
 		server.logger.Error("create backup", "error", err)
@@ -162,6 +286,48 @@ func (server *Server) runBackupJob(passphrase string) {
 	server.finishBackupJob(func(job *backupJob) {
 		job.message = "Backup ready. Save the file and store the passphrase with it."
 	})
+}
+
+func (server *Server) downloadLocalBackup(writer http.ResponseWriter, request *http.Request) {
+	controller, ok := server.backups.(localBackupController)
+	if !ok {
+		http.Error(writer, "local backups are unavailable on this node", http.StatusServiceUnavailable)
+		return
+	}
+	name := request.URL.Query().Get("name")
+	contents, err := controller.LocalBackupContents(request.Context(), name)
+	if err != nil {
+		http.Error(writer, "could not read local backup: "+err.Error(), http.StatusNotFound)
+		return
+	}
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": name})
+	writer.Header().Set("Content-Type", "application/octet-stream")
+	writer.Header().Set("Content-Length", strconv.Itoa(len(contents)))
+	writer.Header().Set("Content-Disposition", disposition)
+	writer.Header().Set("Cache-Control", "no-store")
+	if _, err := writer.Write(contents); err != nil {
+		server.logger.Warn("send local backup", "error", err, "file", name)
+	}
+}
+
+func (server *Server) deleteLocalBackup(writer http.ResponseWriter, request *http.Request) {
+	controller, ok := server.backups.(localBackupController)
+	if !ok {
+		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Local backups are unavailable on this node.")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid local backup request.")
+		return
+	}
+	name := request.FormValue("name")
+	if err := controller.DeleteLocalBackup(request.Context(), name); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Could not delete the local backup: "+err.Error())
+		return
+	}
+	server.recordControlPlaneAudit(request, "backup.delete", "deleted local backup "+name)
+	server.renderBackupPanel(writer, request, http.StatusOK, "Deleted local backup "+name+".", "")
 }
 
 func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Request) {
@@ -208,6 +374,37 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 	// the browser has rendered the response.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
 	go server.runRestoreJob(contents, passphrase, keepConfiguration, header.Filename)
+}
+
+func (server *Server) restoreLocalBackup(writer http.ResponseWriter, request *http.Request) {
+	controller, ok := server.backups.(localBackupController)
+	if !ok {
+		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Local restore is unavailable on this node.")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid local restore form.")
+		return
+	}
+	name := request.FormValue("name")
+	contents, passphrase, err := controller.LocalBackupForRestore(request.Context(), name, request.FormValue("passphrase"))
+	if err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", "Could not open local backup: "+err.Error())
+		return
+	}
+	if _, err := backup.Inspect(contents); err != nil {
+		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	if !server.startBackupJob(backupJobKindRestore, "Preparing") {
+		server.renderBackupPanel(writer, request, http.StatusConflict, "", "Another backup operation is already running on this node.")
+		return
+	}
+	keepConfiguration := request.FormValue("keep_configuration") == "on"
+	server.recordControlPlaneAudit(request, "backup.restore", "started a restore from local backup "+name)
+	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
+	go server.runRestoreJob(contents, passphrase, keepConfiguration, name)
 }
 
 func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConfiguration bool, filename string) {
@@ -470,6 +667,44 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 		Message:    message,
 		Error:      errorMessage,
 	}
+	if controller, ok := server.backups.(localBackupController); ok {
+		view.LocalAvailable = true
+		schedule, err := controller.BackupSchedule(request.Context())
+		if err != nil {
+			if view.Error == "" {
+				view.Error = "Could not read scheduled backup settings: " + err.Error()
+			}
+		} else {
+			view.ScheduleEnabled = schedule.Enabled
+			view.ScheduleDirectory = schedule.Directory
+			view.ScheduleResolvedDirectory = schedule.ResolvedDirectory
+			view.ScheduleInterval = durationfmt.Format(schedule.Interval)
+			view.ScheduleRunAt = schedule.RunAt
+			view.ScheduleRetentionCount = schedule.RetentionCount
+			view.SchedulePassphraseStored = schedule.PassphraseStored
+			view.ScheduleNextRun = humanBackupScheduleTime(schedule.NextRun)
+			view.ScheduleNextRunCompact = compactBackupScheduleTime(schedule.NextRun)
+			view.ScheduleLastSuccess = humanBackupScheduleTime(schedule.LastSuccess)
+			view.ScheduleLastSuccessCompact = compactBackupScheduleTime(schedule.LastSuccess)
+			view.ScheduleLastError = schedule.LastError
+		}
+		if view.CanCreate || view.CanRestore {
+			local, err := controller.LocalBackups(request.Context())
+			if err != nil {
+				if view.Error == "" {
+					view.Error = "Could not list local backups: " + err.Error()
+				}
+			} else {
+				view.LocalBackups = make([]pages.SettingsLocalBackupView, 0, len(local))
+				for _, archive := range local {
+					view.LocalBackups = append(view.LocalBackups, pages.SettingsLocalBackupView{
+						Name: archive.Name, Created: humanBackupTime(archive.CreatedAt), Hostname: archive.Hostname,
+						SableVersion: archive.SableVersion, Size: humanBackupSize64(archive.Size), Scheduled: archive.Scheduled,
+					})
+				}
+			}
+		}
+	}
 	running, completed := server.takeBackupJob()
 	view.Job = running
 	if completed != nil {
@@ -495,6 +730,34 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 		view.DownloadExpiresAt = pending.expiresAt.UnixMilli()
 	}
 	return view
+}
+
+func humanBackupTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Local().Format("Jan 2, 2006 at 3:04 PM")
+}
+
+func humanBackupScheduleTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Local().Format("Jan 2, 2006 at 3:04 PM MST")
+}
+
+func compactBackupScheduleTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Local().Format("Jan 2 · 3:04 PM MST")
+}
+
+func humanBackupSize64(size int64) string {
+	if size > int64(^uint(0)>>1) {
+		return fmt.Sprintf("%.1f GiB", float64(size)/(1<<30))
+	}
+	return humanBackupSize(int(size))
 }
 
 // humanBackupExpiry says how much longer the staged link works. The archive is

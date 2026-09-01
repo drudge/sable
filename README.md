@@ -46,10 +46,10 @@ without shipping a Node.js runtime or a separate frontend bundle.
   runtime behavior when a replacement configuration cannot activate
 - Transactional SQLite/PostgreSQL storage with retained zone revisions and a
   Change Center for inspecting differences and restoring an earlier revision
-- Batched non-blocking query logging with retention, cursor-based deep-history
-  browsing, minute rollups, exact range-aware dashboard rankings, and a query
-  detail drawer that explains policy, cache, resolver, route, and DNSSEC
-  decisions
+- Batched non-blocking query and server logging with live retention and level
+  controls, cursor-based deep-history browsing, minute rollups, exact
+  range-aware dashboard rankings, and a query detail drawer that explains
+  policy, cache, resolver, route, and DNSSEC decisions
 - Prometheus metrics for DNS, cache, policy, query-log, block-list, and cluster
   health, including bounded-cardinality DNS latency histograms split by source,
   protocol, cache result, and response code
@@ -238,7 +238,9 @@ Every backup is encrypted with a passphrase, read from `--passphrase-file`, the
 contains the vault key, so an unsealed copy would expose every private key on
 the node; a lost passphrase is a lost backup.
 
-The same operations live in the console under **Settings → Backup**, behind
+The same operations live in the console under **Settings → Backup**, together
+with encrypted scheduled local backups, count-based automatic rotation, and a
+local archive history that can download or stage a restore. They remain behind
 their own `backup.create` and `backup.restore` permissions. Console restores
 are staged, applied before startup during a controlled restart, and protected
 by a durable rollback journal. Restoring onto a fresh instance is covered in

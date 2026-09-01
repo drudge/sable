@@ -2846,6 +2846,69 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .settings-danger-card > header > h2 .nav-icon { color: var(--destructive); }
 .backup-inventory { display: grid; gap: .3rem; margin: 0 0 .6rem; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
 .backup-panel .settings-advanced > small { display: block; color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.backup-schedule-status { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: .45rem .5rem .45rem .9rem; color: var(--muted-foreground); font-size: .72rem; }
+.backup-schedule-timestamps { display: flex; min-width: 0; flex: 1 1 auto; flex-wrap: wrap; gap: .5rem 1.25rem; }
+.backup-schedule-timestamps > span { display: flex; gap: .35rem; }
+.backup-schedule-time-compact { display: none; }
+.backup-schedule-status strong { color: var(--foreground); }
+.backup-schedule-status .error, .backup-schedule-status .error strong { color: var(--destructive); }
+.backup-schedule-status > .button { flex: 0 0 auto; }
+.backup-local-list { overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; }
+.backup-local-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: .75rem; border-top: 1px solid var(--border); padding: .75rem .9rem; }
+.backup-local-row:first-child { border-top: 0; }
+.backup-local-icon { color: var(--muted-foreground); }
+.backup-local-icon .nav-icon { width: 1rem; height: 1rem; }
+.backup-local-detail { display: grid; min-width: 0; gap: .12rem; }
+.backup-local-detail strong { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.backup-local-detail span { color: var(--muted-foreground); font-size: .68rem; }
+.backup-local-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.backup-local-actions form { display: flex; margin: 0; }
+.button.outline.backup-local-delete { border-color: color-mix(in oklch, var(--destructive) 45%, var(--border)); color: var(--destructive); }
+.button.outline.backup-local-delete:hover { background: color-mix(in oklch, var(--destructive) 12%, transparent); }
+.backup-local-restore-note { display: block; color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.backup-history-header-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.backup-history-header-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
+.backup-history-header-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.backup-run-split { display: flex; align-items: stretch; }
+.backup-run-split > form { display: flex; margin: 0; }
+.backup-run-split > form .button { border-radius: var(--radius) 0 0 var(--radius); }
+.backup-run-menu { position: relative; }
+.backup-run-menu > summary { width: 2.15rem; height: 100%; border-left-color: color-mix(in oklch, currentColor 25%, transparent); border-radius: 0 var(--radius) var(--radius) 0; padding: 0; list-style: none; cursor: pointer; }
+.backup-run-menu > summary::-webkit-details-marker { display: none; }
+.backup-run-menu > summary .nav-icon { width: .8rem; height: .8rem; }
+.backup-run-menu[open] > summary .nav-icon { rotate: 180deg; }
+.backup-run-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; min-width: 13rem; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); padding: .3rem; color: var(--popover-foreground, var(--foreground)); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .35); }
+.backup-run-menu > div button { display: flex; min-height: 2rem; align-items: center; gap: .55rem; border: 0; border-radius: .35rem; background: transparent; padding: 0 .65rem; color: inherit; font-size: .76rem; text-align: left; white-space: nowrap; }
+.backup-run-menu > div button:hover { background: var(--muted); }
+.backup-run-menu > div .nav-icon { width: .9rem; height: .9rem; }
+.backup-history-footer { display: flex; min-width: 0; align-items: baseline; gap: .5rem; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem 1.5rem; color: var(--muted-foreground); font-size: .7rem; }
+.backup-history-footer span { flex: none; font-weight: 600; }
+.backup-history-footer code { min-width: 0; overflow-wrap: anywhere; }
+.backup-local-empty { display: grid; justify-items: center; gap: .35rem; padding: 1.25rem; color: var(--muted-foreground); text-align: center; }
+.backup-local-empty .nav-icon { width: 1.35rem; height: 1.35rem; }
+.backup-local-empty strong { color: var(--foreground); font-size: .8rem; }
+.backup-local-empty span { max-width: 34rem; font-size: .72rem; }
+@media (max-width: 640px) {
+  .backup-schedule-status { gap: .65rem; padding: .65rem .75rem; }
+  .backup-schedule-timestamps { flex-direction: column; flex-wrap: nowrap; gap: .25rem; }
+  .backup-schedule-timestamps > span { white-space: nowrap; }
+  .backup-schedule-time-full { display: none; }
+  .backup-schedule-time-compact { display: inline; }
+  .backup-history-card > header { align-items: stretch; flex-direction: column; }
+  .backup-history-header-actions { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
+  .backup-history-header-actions > .button { width: 100%; }
+  .backup-run-split { width: 100%; }
+  .backup-run-split > form { flex: 1 1 auto; }
+  .backup-run-split > form .button { width: 100%; }
+  .backup-history-footer { align-items: stretch; flex-direction: column; gap: .25rem; padding-inline: 1rem; }
+  .backup-history-footer code { display: block; width: 100%; line-height: 1.4; }
+  .backup-local-row { grid-template-columns: 1.5rem minmax(0, 1fr); }
+  .backup-local-actions { display: grid; width: 100%; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; }
+  .backup-local-actions > a, .backup-local-actions > button, .backup-local-actions > form, .backup-local-actions > form > button { width: 100%; min-width: 0; }
+  .backup-local-actions .button { justify-content: flex-start; gap: .35rem; padding-inline: .55rem; line-height: 1; }
+  .backup-local-actions .button .nav-icon { width: .9rem; height: .9rem; flex-basis: .9rem; }
+  .backup-local-actions .button span { overflow: hidden; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+}
 .field-note { color: var(--destructive); font-size: .7rem; }
 .field-note[hidden] { display: none; }
 .field-control input[aria-invalid="true"] { border-color: var(--destructive); }
