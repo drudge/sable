@@ -80,6 +80,7 @@ Node-local state includes:
 - web, DNS, DoT, DoH, and DoQ listeners and certificate configuration;
 - database paths, security bootstrap, cluster identity, and the advertised URL;
 - the OpenID Connect callback override;
+- update checks, installed binaries, and the `updates.pre_release` preference;
 - browser sessions, audit history, token-use timestamps, query/server logs,
   dashboard history, and response caches.
 
@@ -163,6 +164,10 @@ Use `sudo sable update --version VERSION` for a pinned rollout. Cross-version
 compatibility is not yet a published long-term contract, so keep a mixed-version
 window short and do not combine an upgrade with a promotion unless recovery
 requires it.
+
+For installations with web updates enabled, each node's About page can check,
+install, and restart that node, including replicas. Its **Include pre-releases**
+setting is saved locally and is not overwritten by replication.
 
 ## Backup and recovery
 

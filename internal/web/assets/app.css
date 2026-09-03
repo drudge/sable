@@ -2323,6 +2323,12 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-update-notes { display: inline-flex; align-items: center; gap: .3rem; margin-left: .75rem; white-space: nowrap; }
 .about-update-notes .nav-icon { width: .75rem; height: .75rem; }
 .about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .9rem; margin: 0; }
+.about-update-actions > form { margin: 0; }
+.about-update-check-pending { display: none; }
+[data-update-check].htmx-request .about-update-check-idle { display: none; }
+[data-update-check].htmx-request .about-update-check-pending { display: inline; }
+[data-update-check].htmx-request .icon-refresh { animation: about-update-spin .65s linear infinite; }
+[data-update-check].htmx-request .about-update-menu { pointer-events: none; }
 /* Split control: the check runs on the left half, the release channel lives
    behind the caret so the row keeps one visible action. */
 .about-update-split { position: relative; display: inline-flex; }
@@ -2354,7 +2360,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
 @keyframes about-update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: none; }
+  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check].htmx-request .icon-refresh { animation: none; }
 }
 .about-footer { padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
 @media (max-width: 640px) {
@@ -2368,6 +2374,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .about-version-row .button { width: 100%; justify-content: center; }
   .about-update { align-items: stretch; }
   .about-update-actions { width: 100%; }
+  .about-update-actions > form { flex: 1 1 100%; }
+  .about-update-actions > form > .button, .about-update-actions > form > .about-update-split { width: 100%; }
   .about-update-actions > .button, .about-update-split { flex: 1 1 100%; }
   .about-update-actions > .button { justify-content: center; }
   .about-update-split > .button { flex: 1; justify-content: center; }

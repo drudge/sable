@@ -111,13 +111,8 @@ func (server *Server) rememberReleaseChannel(request *http.Request, includePreRe
 	if server.config.Current().Config.Updates.PreRelease == includePreRelease {
 		return
 	}
-	// A replica may use either release channel for its node-local lookup, but
-	// the preference is cluster configuration and must be changed on the
-	// primary. The selected channel remains in the update manager's status for
-	// subsequent checks during this process lifetime.
-	if server.cluster != nil && controlPlaneReadOnly(server.cluster.Snapshot()) {
-		return
-	}
+	// Updates are node-local and excluded from cluster snapshots, so replicas
+	// can persist their own channel without affecting the primary or peers.
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok &&
 		!auth.HasPermission(principal, auth.PermissionUpdatesApply) {
 		return

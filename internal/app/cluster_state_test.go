@@ -59,6 +59,7 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	targetConfiguration.Server.HTTPListen = "127.0.0.1:6380"
 	targetConfiguration.Cluster.NodeName = "replica-local"
 	targetConfiguration.Cluster.AdvertiseURL = "https://ns2.example.test"
+	targetConfiguration.Updates.PreRelease = true
 	targetManager := newTestConfigurationManager(t, targetConfiguration)
 	targetZones := newTestZoneManager(t, nil)
 
@@ -133,6 +134,9 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	}
 	if got.Server.HTTPListen != targetConfiguration.Server.HTTPListen || got.Cluster.NodeName != targetConfiguration.Cluster.NodeName {
 		t.Fatalf("node-local configuration was overwritten: %#v", got)
+	}
+	if got.Updates != targetConfiguration.Updates {
+		t.Fatalf("replication overwrote the node-local release channel: %#v", got.Updates)
 	}
 	if zones := targetZones.Current().Zones; !reflect.DeepEqual(zones, sourceZones.Current().Zones) {
 		t.Fatalf("replicated zones = %#v", zones)

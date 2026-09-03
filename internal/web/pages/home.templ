@@ -22,7 +22,7 @@ templ DashboardHome(view DashboardView) {
 			<span>{ view.Database }</span>
 			<span>{ view.DNSListeners }</span>
 			<span>Revision { fmt.Sprint(view.ConfigRevision) }</span>
-			<span>v{ view.Version }</span>
+			<span>{ formatReleaseVersion(view.Version) }</span>
 		</footer>
 	</div>
 }

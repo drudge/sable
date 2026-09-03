@@ -238,7 +238,8 @@ advertise_url = ""
 [updates]
 # Include release candidates when looking for a newer Sable release. The
 # About page writes your choice here, so a server tracking release candidates
-# keeps finding them after a restart.
+# keeps finding them after a restart. This setting is local to each node and
+# is not replicated from the cluster primary.
 pre_release = false
 
 [config]

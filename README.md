@@ -184,7 +184,9 @@ The **About** page in the console runs the same update path. It checks for a
 newer release, installs it after a confirmation, and then offers a controlled
 restart once the executable has been replaced. Sable keeps serving the running
 build until that restart, and the console says whether a service manager will
-start the new build again.
+start the new build again. After restarting, opening About automatically checks
+the running build so the panel reports whether it is up to date. Checks, installs,
+and restarts are node-local and work on replicas as well as the primary.
 
 The default service installed with `sable install` cannot install a release
 from the console. Its systemd unit sets `ProtectSystem=strict` and the running
@@ -200,13 +202,15 @@ off to a newer staged build after a controlled container restart. It does not
 need the Docker socket or additional capabilities. Without that environment
 switch, the image remains immutable and the console only reports the release.
 
-The release channel is remembered. Ticking **Include pre-releases** writes
-`updates.pre_release` to the configuration, so a server tracking release
+The release channel is remembered per node. Changing **Include pre-releases**
+immediately checks that channel and writes `updates.pre_release` to the local
+configuration, so a server tracking release
 candidates keeps finding them after a restart instead of failing its next
 check with "no published release was found". Writing it needs `updates.apply`;
 an operator who may only check still gets the channel they picked for that
-check. On a replica the choice likewise applies to that node's check, while the
-cluster-wide preference remains a primary-only change.
+check. Replicas save their own preference too; it is never replicated from the
+primary or shared with other nodes. The channel selector stays available when a
+newer release is offered.
 
 Two permissions govern the console controls:
 
