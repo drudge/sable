@@ -1157,6 +1157,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .detail-menu .zone-menu-content { top: calc(100% + .25rem); }
 .zone-record-filter-bar .zone-search { flex: 1; }
 .isotope-record-row { display: grid; min-height: 3.6rem; grid-template-columns: 3.5rem minmax(8rem, 3fr) minmax(8rem, 2fr) 4rem 1.25rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .65rem 1rem; transition: background 120ms; }
+.isotope-record-row:has(> .record-open-button) { cursor: pointer; }
 .isotope-record-row:first-of-type { border-top: 0; }
 .isotope-record-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
 .isotope-record-row.disabled { opacity: .55; }

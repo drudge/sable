@@ -82,6 +82,34 @@ func TestZoneSettingsDialogOmitsDNSSECValidation(t *testing.T) {
 	}
 }
 
+func TestZoneRecordRowsOpenWithoutOwningNestedControls(t *testing.T) {
+	t.Parallel()
+
+	zone := ZoneView{
+		Name:       "example.test",
+		Type:       "primary",
+		CanRecords: true,
+		Records: []ZoneRecordView{
+			{ID: "www-a", Name: "www", Type: "A", Value: "192.0.2.10", TTL: 300},
+			{ID: "dnssec", Name: "@", Type: "RRSIG", Value: "hidden", TTL: 300, Managed: true},
+		},
+	}
+	body := renderComponent(t, ZoneDetailView(zone))
+	for _, expected := range []string{
+		`data-record-dialog-row`,
+		`data-dialog-url="/zones/example.test/records/www-a/edit"`,
+		`data-copy-target="zone-owner-0"`,
+		`data-dialog-open="zone-record-0"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("zone record row does not contain %q", expected)
+		}
+	}
+	if count := strings.Count(body, `class="record-open-button"`); count != 1 {
+		t.Errorf("zone record editor buttons = %d, want 1 for the editable row only", count)
+	}
+}
+
 func renderComponent(t *testing.T, component interface {
 	Render(context.Context, io.Writer) error
 },
