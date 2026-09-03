@@ -2487,6 +2487,18 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 /* The query table stops growing where the runtime viewer stops, so the two
    tabs stand the same height instead of one of them scrolling the page. */
 .query-log-table-scroll { max-height: min(38rem, calc(100vh - 22rem)); min-height: 18rem; overflow: auto; scroll-padding: 2.5rem 0; }
+/* On desktop the active log card owns the main viewport's remaining height.
+   Its reading region scrolls while the paging controls stay in place. */
+@media (min-width: 768px) {
+	.main:has(.logs-page) { display: flex; height: 100vh; height: 100dvh; flex-direction: column; }
+	.main:has(.logs-page) > .content { display: flex; min-height: 0; flex: 1; }
+	.logs-page { min-height: 0; flex: 1; grid-template-rows: auto auto minmax(0, 1fr); }
+	.logs-tab-panel { min-height: 0; }
+	.logs-card { display: flex; height: 100%; min-height: 0; flex-direction: column; }
+	.runtime-log-viewer, .query-log-table-scroll, .logs-empty { flex: 1; }
+	.runtime-log-viewer { height: auto; }
+	.query-log-table-scroll { max-height: none; }
+}
 .isotope-query-log-table thead { position: sticky; top: 0; z-index: 2; background: color-mix(in oklch, var(--muted) 82%, transparent); backdrop-filter: blur(8px); }
 .isotope-query-log-table th { text-transform: none; letter-spacing: 0; }
 .isotope-query-log-table td { height: auto; min-height: 3.5rem; padding-block: .65rem; }
