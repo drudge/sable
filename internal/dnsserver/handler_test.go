@@ -574,9 +574,26 @@ func TestHandlerAcceptsSignedDynamicUpdateAndRefusesUnsignedRequest(t *testing.T
 	if firstAudit.Rcode != dns.RcodeRefused || secondAudit.Rcode != dns.RcodeSuccess || !secondAudit.Changed {
 		t.Fatalf("update audits = %+v, %+v", firstAudit, secondAudit)
 	}
-	firstQuery, secondQuery := <-collector.events, <-collector.events
-	if firstQuery.ResponseCode != dns.RcodeRefused || secondQuery.ResponseCode != dns.RcodeSuccess || secondQuery.Source != querylog.SourceAuthoritative {
-		t.Fatalf("update query events = %+v, %+v", firstQuery, secondQuery)
+	// Query events are recorded after the UDP reply, so the second request
+	// can finish logging before the first even though their replies are ordered.
+	expectedQueryCodes := []int{dns.RcodeSuccess, dns.RcodeRefused}
+	queryCodes := make([]int, 0, len(expectedQueryCodes))
+	queryTimeout := time.NewTimer(time.Second)
+	defer queryTimeout.Stop()
+	for range expectedQueryCodes {
+		select {
+		case event := <-collector.events:
+			if event.Source != querylog.SourceAuthoritative {
+				t.Fatalf("update query event = %+v", event)
+			}
+			queryCodes = append(queryCodes, event.ResponseCode)
+		case <-queryTimeout.C:
+			t.Fatalf("timed out waiting for update query events; received codes %v", queryCodes)
+		}
+	}
+	slices.Sort(queryCodes)
+	if !slices.Equal(queryCodes, expectedQueryCodes) {
+		t.Fatalf("update query codes = %v, want %v", queryCodes, expectedQueryCodes)
 	}
 }
 
