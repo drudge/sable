@@ -643,7 +643,7 @@ templ ZoneDetailView(zone ZoneView) {
 				<div class="isotope-zone-empty" data-record-empty><p>No records found</p></div>
 			}
 			for index, record := range zone.Records {
-				<div class={ ifThen(record.Disabled, "isotope-record-row disabled", ifThen(record.Type == "SOA", "isotope-record-row managed", "isotope-record-row")) } data-record-row data-record-name={ strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value) } data-record-type={ strings.ToLower(record.Type) }>
+				<div class={ ifThen(record.Disabled, "isotope-record-row disabled", ifThen(record.Type == "SOA", "isotope-record-row managed", "isotope-record-row")) } data-record-row data-record-dialog-row data-record-name={ strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value) } data-record-type={ strings.ToLower(record.Type) }>
 					<span class="record-type-badge">{ record.Type }</span>
 					<span class="record-owner-cell">
 						@ZoneCopyableText(zoneElementID("owner", index), zoneRecordOwner(zone, record), "record-owner-copy")

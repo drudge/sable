@@ -2691,6 +2691,14 @@
 		showQueryDetail(queryRow);
 		return;
 	  }
+	  const recordRow = event.target.closest?.("[data-record-dialog-row]");
+	  const recordInteractive = event.target.closest?.("button, a, input, select, textarea, label, form, summary, [contenteditable]");
+	  const recordOpener = recordRow?.querySelector(".record-open-button[data-dialog-open]");
+	  if (recordOpener && !recordInteractive && !window.getSelection()?.toString()) {
+		const dialog = document.getElementById(recordOpener.dataset.dialogOpen);
+		showRoutedDialog(dialog, Boolean(recordOpener.dataset.dialogUrl), recordOpener);
+		return;
+	  }
 	  const dialogRow = event.target.closest("[data-dialog-open]");
 	  if (dialogRow && dialogRow.tagName === "TR") {
 		const dialog = document.getElementById(dialogRow.dataset.dialogOpen);
