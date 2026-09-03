@@ -6,6 +6,7 @@
   const APP_NAME = "Sable";
   const TITLE_SEPARATOR = " \u00b7 ";
   const OVERVIEW_SCOPE_ALL = "all";
+  const MINIMUM_UPDATE_CHECK_MS = 650;
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
@@ -87,7 +88,9 @@
 
 	const replicaLocalMutation = (path) => {
 	  if (path === "/login" || path === "/logout" || path === "/ui/query" ||
-		path === "/ui/administration/sessions/revoke" || path === "/ui/updates/check" || path === "/ui/updates/command-check") return true;
+		path === "/ui/administration/sessions/revoke") return true;
+	  if (path === "/ui/updates/check" || path === "/ui/updates/command-check" ||
+		path === "/ui/updates/install" || path === "/ui/updates/restart") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
 	  if (path.startsWith("/ui/certificates/")) return true;
 	  if (path === "/ui/cluster/settings" || path === "/ui/cluster/leave" || path === "/ui/cluster/restart" || path === "/api/v1/cluster/membership") return true;
@@ -1103,6 +1106,28 @@
 		dialog.showModal();
 		dialog.querySelector("[data-confirm-cancel]").focus();
 	  });
+
+	// Keep even a cached release lookup visible long enough to acknowledge it,
+	// without slowing the server or adding delay to an already slow request.
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const form = ctx?.sourceElement?.closest?.("[data-update-check]");
+	  if (!form) return;
+	  form.setAttribute("aria-busy", "true");
+	  const requestFetch = ctx.fetch;
+	  ctx.fetch = async (...args) => {
+		const startedAt = performance.now();
+		try {
+		  return await requestFetch(...args);
+		} finally {
+		  const remaining = MINIMUM_UPDATE_CHECK_MS - (performance.now() - startedAt);
+		  if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+		}
+	  };
+	});
+	document.body.addEventListener("htmx:finally:request", (event) => {
+	  event.detail?.ctx?.sourceElement?.closest?.("[data-update-check]")?.removeAttribute("aria-busy");
+	});
 
 	const setupManagedRestart = (root) => {
 	  if (!root || root.dataset.sableRestartReady === "true") return;

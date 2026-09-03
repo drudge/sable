@@ -336,7 +336,7 @@ func TestCheckForUpdatesRemembersThePreReleaseChoice(t *testing.T) {
 	}
 }
 
-func TestReplicaChecksForUpdatesWithoutChangingTheReleaseChannel(t *testing.T) {
+func TestReplicaChecksForUpdatesAndRemembersItsLocalReleaseChannel(t *testing.T) {
 	t.Parallel()
 	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
 	server, err := New(
@@ -362,7 +362,56 @@ func TestReplicaChecksForUpdatesWithoutChangingTheReleaseChannel(t *testing.T) {
 	if controller.checks != 1 || !controller.preRelease {
 		t.Fatalf("replica checks = %d, pre-release = %v", controller.checks, controller.preRelease)
 	}
-	if configuration.snapshot.Revision != 1 || configuration.snapshot.Config.Updates.PreRelease {
-		t.Fatalf("replica changed release-channel configuration at revision %d", configuration.snapshot.Revision)
+	if !configuration.snapshot.Config.Updates.PreRelease {
+		t.Fatal("replica did not persist its local release channel")
+	}
+	restarted := update.NewManager(update.Options{PreRelease: configuration.snapshot.Config.Updates.PreRelease})
+	if !restarted.Status().IncludePreRelease {
+		t.Fatal("replica lost its release channel after restarting")
+	}
+	response = serveUpdateForm(server, "/ui/updates/command-check", nil)
+	if response.Code != http.StatusOK || !controller.preRelease {
+		t.Fatalf("replica command check ignored the local release channel: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestReplicaCanInstallAnUpdateLocally(t *testing.T) {
+	t.Parallel()
+	controller := &testUpdateController{status: update.Status{
+		Phase: update.PhaseIdle, CurrentVersion: "1.0.0-rc.10", LatestVersion: "1.0.0-rc.11",
+		Available: true, IncludePreRelease: true, CheckedAt: time.Now(),
+	}}
+	server := updateTestServer(t, controller)
+	server.SetClusterController(testReplicaClusterController{})
+	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"pre_release": {"true"}})
+	if response.Code != http.StatusOK || controller.installs != 1 || !controller.preRelease {
+		t.Fatalf("replica install = %d %s, installs = %d", response.Code, response.Body.String(), controller.installs)
+	}
+}
+
+func TestUpdateReaderCannotPersistTheReleaseChannel(t *testing.T) {
+	t.Parallel()
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
+	server := updateTestServer(t, &testUpdateController{})
+	server.config = configuration
+	server.SetClusterController(testReplicaClusterController{})
+	request := httptest.NewRequest(http.MethodPost, "/ui/updates/check", nil)
+	reader := auth.Principal{UserID: 2, Permissions: []string{auth.PermissionUpdatesRead}}
+	request = request.WithContext(context.WithValue(request.Context(), principalContextKey{}, reader))
+	server.rememberReleaseChannel(request, true)
+	if configuration.snapshot.Config.Updates.PreRelease || configuration.snapshot.Revision != 1 {
+		t.Fatal("an update reader persisted the release channel")
+	}
+}
+
+func TestReplicaCanRestartAfterAnUpdate(t *testing.T) {
+	t.Parallel()
+	server := updateTestServer(t, &testUpdateController{status: update.Status{Phase: update.PhaseInstalled, Installed: true}})
+	server.SetClusterController(testReplicaClusterController{})
+	restarts := 0
+	server.SetRestartController(func() { restarts++ })
+	response := serveUpdateForm(server, "/ui/updates/restart", nil)
+	if response.Code != http.StatusAccepted || restarts != 1 {
+		t.Fatalf("replica restart = %d %s, restarts = %d", response.Code, response.Body.String(), restarts)
 	}
 }

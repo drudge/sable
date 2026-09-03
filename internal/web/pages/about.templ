@@ -59,7 +59,7 @@ templ AboutContent(view AboutPageView) {
 			<h1>Sable</h1>
 			<p>A modern, high-performance DNS platform built in Go</p>
 			<div class="about-runtime-meta">
-				<span>Sable v{ view.Console.Version }</span>
+				<span>Sable { formatReleaseVersion(view.Console.Version) }</span>
 				<span class="about-meta-divider">|</span>
 				<span>{ view.Console.DNSListeners }</span>
 				<span class="about-meta-divider">|</span>
@@ -87,7 +87,7 @@ templ AboutContent(view AboutPageView) {
 				</div>
 				<div class="about-version-row">
 					<div class="about-version-copy">
-						<div><span>Installed version</span><strong>v{ view.Console.Version }</strong></div>
+						<div><span>Installed version</span><strong>{ formatReleaseVersion(view.Console.Version) }</strong></div>
 						<small>Go { view.GoVersion } · commit { view.Commit } · built { view.BuiltAt }</small>
 					</div>
 				</div>
@@ -170,35 +170,47 @@ templ UpdatePanel(view UpdateView) {
 				</small>
 			</div>
 		</div>
-		switch updateAction(view) {
-			case "restart":
-				<div class="about-update-actions">
+		<div class="about-update-actions">
+			switch updateAction(view) {
+				case "restart":
 					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
-				</div>
-			case "install":
-				<form class="about-update-actions" hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disable="find button" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
-					<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
-					<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
-				</form>
-			case "check":
-				<form class="about-update-actions" hx-post="/ui/updates/check" hx-target="#about-update" hx-swap="outerHTML" hx-disable="find button">
+				case "install":
+					<form hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disable="#about-update button, #about-update input" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
+						<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
+						<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
+					</form>
+			}
+			if view.Supported && view.CanCheck && !view.Busy && !view.Installed {
+				<form
+					data-update-check
+					hx-post="/ui/updates/check"
+					hx-target="#about-update"
+					hx-swap="outerHTML"
+					hx-disable="#about-update button, #about-update input"
+					if !view.Checked {
+						hx-trigger="submit, change, load"
+					} else {
+						hx-trigger="submit, change"
+					}
+				>
 					<div class="about-update-split">
-						<button class="button outline compact" type="submit">@Icon("refresh")<span>{ ifThen(view.Checked, "Check Again", "Check for Updates") }</span></button>
+						<button class="button outline compact" type="submit">@Icon("refresh")<span class="about-update-check-idle">{ ifThen(view.Checked, "Check Again", "Check for Updates") }</span><span class="about-update-check-pending" role="status">Checking…</span></button>
 						<details class="about-update-menu">
 							<summary class="button outline compact" aria-label="Release channel options" title="Release channel options">@Icon("chevron-down")</summary>
 							<div>
 								<label class="about-update-channel"><input type="checkbox" name="pre_release" value="true" checked?={ view.IncludePreRelease }/><span>Include pre-releases</span></label>
-								<small>Release candidates as well as stable builds.</small>
+								<small>This node only · checks again when changed.</small>
 							</div>
 						</details>
 					</div>
 				</form>
-		}
+			}
+		</div>
 	</div>
 }
 
-// updateAction names the one control the panel offers. Showing a single
-// action keeps the row from filling with competing buttons.
+// updateAction names the installation control, separate from release checks
+// so operators can change channels even when an update is available.
 func updateAction(view UpdateView) string {
 	switch {
 	case !view.Supported || view.Busy:
@@ -207,8 +219,6 @@ func updateAction(view UpdateView) string {
 		return ifThen(view.CanRestart, "restart", "")
 	case view.Available && view.CanApply && view.Blocked == "":
 		return "install"
-	case view.CanCheck:
-		return "check"
 	default:
 		return ""
 	}
@@ -282,9 +292,9 @@ func updateDetail(view UpdateView) string {
 	case view.Phase == "installing":
 		return "Downloading and verifying the release archive."
 	case view.Installed && view.ServiceManaged:
-		return "Still serving v" + view.CurrentVersion + ". The service manager starts the new build after a restart."
+		return "Still serving " + formatReleaseVersion(view.CurrentVersion) + ". The service manager starts the new build after a restart."
 	case view.Installed:
-		return "Still serving v" + view.CurrentVersion + ". Sable stays down after a restart unless a supervisor starts it."
+		return "Still serving " + formatReleaseVersion(view.CurrentVersion) + ". Sable stays down after a restart unless a supervisor starts it."
 	case view.Error != "":
 		return view.Error
 	case view.Available && view.Blocked != "":
@@ -299,8 +309,8 @@ func updateDetail(view UpdateView) string {
 }
 
 func updateInstallConfirmation(view UpdateView) string {
-	return "Download Sable v" + view.LatestVersion + " and replace the installed executable? Sable keeps serving v" +
-		view.CurrentVersion + " until you restart it."
+	return "Download Sable v" + view.LatestVersion + " and replace the installed executable? Sable keeps serving " +
+		formatReleaseVersion(view.CurrentVersion) + " until you restart it."
 }
 
 func updateRestartConfirmation(view UpdateView) string {

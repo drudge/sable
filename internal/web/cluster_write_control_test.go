@@ -41,6 +41,9 @@ func TestReplicaWriteControl(t *testing.T) {
 		// selected release channel.
 		{http.MethodPost, "/ui/updates/check", false},
 		{http.MethodPost, "/ui/updates/command-check", false},
+		{http.MethodPost, "/ui/updates/install", false},
+		{http.MethodPost, "/ui/updates/restart", false},
+		{http.MethodPost, "/ui/updates/unknown", true},
 		{http.MethodPost, "/ui/certificates/renew", false},
 		// Integration settings are cluster-scoped and replicate from the
 		// primary, so configuring them on a replica would be overwritten on the

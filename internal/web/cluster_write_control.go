@@ -52,8 +52,12 @@ func replicaLocalWrite(path string) bool {
 	// sign-in on the same page works. The callback is a GET and never reaches
 	// this gate.
 	case path == "/login", path == "/logout", path == ssoStartPath,
-		path == "/ui/administration/sessions/revoke", path == "/ui/query",
-		path == "/ui/updates/check", path == "/ui/updates/command-check":
+		path == "/ui/administration/sessions/revoke", path == "/ui/query":
+		return true
+	// Release channels, executable replacements, and restarts affect only
+	// this process, not the cluster's replicated control-plane state.
+	case path == "/ui/updates/check", path == "/ui/updates/command-check",
+		path == "/ui/updates/install", path == "/ui/updates/restart":
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
 		return true

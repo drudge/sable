@@ -123,7 +123,7 @@ type Config struct {
 	Reload       Reload       `toml:"config"`
 }
 
-// Updates holds how the console looks for new Sable releases.
+// Updates holds this node's release channel. It is not replicated to peers.
 type Updates struct {
 	// PreRelease includes release candidates when resolving the newest
 	// release. The console writes the operator's choice here so it survives a

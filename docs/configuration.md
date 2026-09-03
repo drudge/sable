@@ -896,7 +896,7 @@ text, and replicated TSIG secrets, UniFi credentials, and the single sign-on
 client secret are written into the receiving node's own encrypted vault rather
 than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
 certificate configuration, database paths, security bootstrap, the single
-sign-on callback override, and cluster settings remain node-local. Replicas continue serving DNS if the primary is
+sign-on callback override, update release channel, and cluster settings remain node-local. Replicas continue serving DNS if the primary is
 unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is
 performed on the replica being promoted and requires confirmation that the
 former primary is offline.
