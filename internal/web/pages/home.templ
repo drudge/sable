@@ -68,9 +68,18 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 		}
 		>
 		if view.Loading {
-			<div class="dashboard-insights-loading card" role="status" aria-live="polite">
-				@Icon("refresh")
-				<span>Loading query insights…</span>
+			<div class="dashboard-insights-skeleton" role="status" aria-live="polite" aria-busy="true">
+				<span class="sr-only">Loading query insights…</span>
+				<section class="dashboard-rankings" aria-hidden="true">
+					@RankedPanelSkeleton("Top Clients", view.RangeLabel)
+					@RankedPanelSkeleton("Top Domains", view.RangeLabel)
+					@RankedPanelSkeleton("Top Blocked Domains", view.RangeLabel)
+				</section>
+				<section class="dashboard-distributions" aria-hidden="true">
+					@DistributionPanelSkeleton("Query Types")
+					@DistributionPanelSkeleton("Response Sources")
+					@DistributionPanelSkeleton("Response Codes")
+				</section>
 			</div>
 		} else {
 			<section class="dashboard-rankings" aria-label="Query rankings">
@@ -85,6 +94,51 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 			</section>
 		}
 	</div>
+}
+
+templ RankedPanelSkeleton(title string, rangeLabel string) {
+	<article class="card ranking-card ranking-card-skeleton">
+		<header>
+			<div class="ranking-heading">
+				<h2>{ title }</h2>
+				if rangeLabel != "" {
+					<small>{ rangeLabel }</small>
+				}
+			</div>
+			<span class="ranking-skeleton-action insights-skeleton-block"></span>
+		</header>
+		<div class="ranking-list">
+			for range 5 {
+				<div class="ranking-row ranking-skeleton-row">
+					<div class="ranking-skeleton-copy">
+						<span class="ranking-skeleton-primary insights-skeleton-block"></span>
+						<span class="ranking-skeleton-secondary insights-skeleton-block"></span>
+					</div>
+					<span class="ranking-skeleton-count insights-skeleton-block"></span>
+				</div>
+			}
+		</div>
+	</article>
+}
+
+templ DistributionPanelSkeleton(title string) {
+	<article class="card distribution-card distribution-card-skeleton">
+		<header><h2>{ title }</h2></header>
+		<div class="distribution-content">
+			<div class="donut-wrap">
+				<span class="distribution-skeleton-donut insights-skeleton-block"></span>
+			</div>
+			<div class="distribution-legend distribution-skeleton-legend">
+				for range 5 {
+					<div class="distribution-skeleton-row">
+						<i class="distribution-skeleton-swatch insights-skeleton-block"></i>
+						<span class="distribution-skeleton-label insights-skeleton-block"></span>
+						<strong class="distribution-skeleton-value insights-skeleton-block"></strong>
+					</div>
+				}
+			</div>
+		</div>
+	</article>
 }
 
 templ RankedPanel(title string, kind string, items []RankedStatView, insights DashboardInsightsView) {
