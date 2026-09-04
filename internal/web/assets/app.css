@@ -2526,8 +2526,12 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-fold, .query-fold-tight { display: none; }
 .query-name-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotope-query-log-table tr[data-query-detail-row] { cursor: pointer; }
-.query-col-actions, .query-row-actions { width: 6rem; text-align: right; }
-.query-row-actions { white-space: nowrap; }
+/* Long clients and answers can overflow even the desktop layout. Keep the
+   controls visible while the result columns scroll underneath them. */
+.query-col-actions, .query-row-actions { position: sticky; right: 0; width: 6rem; text-align: right; }
+.query-row-actions { z-index: 1; background: var(--card); white-space: nowrap; }
+.query-col-actions { z-index: 3; background: color-mix(in oklch, var(--muted) 82%, var(--card)); }
+.isotope-query-log-table tr:hover .query-row-actions { background: color-mix(in oklch, var(--muted) 50%, var(--card)); }
 .query-row-actions form { display: inline-flex; }
 .query-row-actions > * { vertical-align: middle; }
 .query-detail-button, .query-policy-action { width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
@@ -2649,10 +2653,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.query-log-table.full th, .query-log-table.full td { padding-inline: .4rem; }
 	.query-col-time { width: 7.25rem; }
 	.query-col-status { width: 5rem; }
-	.query-row-actions, .query-col-actions { position: sticky; right: 0; width: 2.5rem; padding-inline: .25rem !important; }
-	.query-row-actions { z-index: 1; background: var(--card); }
-	.query-col-actions { z-index: 3; background: color-mix(in oklch, var(--muted) 82%, transparent); }
-	.isotope-query-log-table tr:hover .query-row-actions { background: color-mix(in oklch, var(--muted) 50%, var(--card)); }
+	.query-row-actions, .query-col-actions { width: 2.5rem; padding-inline: .25rem !important; }
 	.query-row-actions form { display: none; }
 	.query-detail-button { display: inline-grid; width: 2rem; height: 2rem; }
 	.isotope-query-log-table .query-name { max-width: none; }
