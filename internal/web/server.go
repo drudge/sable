@@ -351,6 +351,7 @@ func New(
 	mux.HandleFunc("DELETE /api/v1/cluster/membership", server.leaveClusterAPI)
 	mux.HandleFunc("DELETE /api/v1/cluster", server.deleteClusterAPI)
 	mux.HandleFunc("GET /metrics", server.metrics)
+	mux.HandleFunc("GET "+technitiumStatsPath, server.technitiumStats)
 	mux.HandleFunc("GET /api/v1/query-log", server.queryLogAPI)
 	mux.HandleFunc("GET /api/v1/logs/runtime", server.runtimeLogsAPI)
 	mux.HandleFunc("GET /api/v1/logs/runtime/export", server.exportRuntimeLogs)

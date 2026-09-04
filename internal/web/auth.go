@@ -116,7 +116,7 @@ func requiredPermission(request *http.Request) string {
 		strings.HasPrefix(path, "/ui/logs/") || strings.HasPrefix(path, "/api/v1/query-log") ||
 		strings.HasPrefix(path, "/api/v1/logs/"):
 		return auth.PermissionLogsRead
-	case path == "/metrics":
+	case path == "/metrics" || path == technitiumStatsPath:
 		return auth.PermissionMetricsRead
 	case path == "/ui/updates" || path == "/ui/updates/check" || path == "/ui/updates/command-check":
 		// Checking reaches out to GitHub but changes nothing locally.
@@ -133,6 +133,12 @@ func requiredPermission(request *http.Request) string {
 func (server *Server) authenticateRequest(request *http.Request) (auth.Principal, error) {
 	if bearer, found := strings.CutPrefix(request.Header.Get("Authorization"), "Bearer "); found && tokenRequest(request.URL.Path) {
 		return server.auth.AuthenticateToken(request.Context(), strings.TrimSpace(bearer))
+	}
+	// Glance's Technitium widget sends its API token in the query string.
+	if request.URL.Path == technitiumStatsPath && (request.Method == http.MethodGet || request.Method == http.MethodHead) {
+		if query := request.URL.Query(); query.Has("token") {
+			return server.auth.AuthenticateToken(request.Context(), strings.TrimSpace(query.Get("token")))
+		}
 	}
 	cookie, err := request.Cookie(server.sessionCookieName())
 	if err != nil {
@@ -423,6 +429,10 @@ func safeMethod(method string) bool {
 }
 
 func (server *Server) authenticationFailure(writer http.ResponseWriter, request *http.Request, status int, redirect string) {
+	if request.URL.Path == technitiumStatsPath {
+		writeTechnitiumError(writer, status, http.StatusText(status))
+		return
+	}
 	if tokenRequest(request.URL.Path) {
 		writeJSON(writer, status, map[string]string{"error": http.StatusText(status)})
 		return

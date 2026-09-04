@@ -938,3 +938,37 @@ Assign `metrics.read` on the API surface to a group, create a token using that
 group, and send it as `Authorization: Bearer sable_pat_...`. The
 [operations guide](operations.md) includes health, log, metric, update, and
 backup checks suitable for a production runbook.
+
+## Glance DNS stats widget
+
+Sable supports the [Glance DNS Stats widget](https://github.com/glanceapp/glance/blob/main/docs/configuration.md#dns-stats)
+through a Technitium-compatible endpoint on its administrative listener:
+`GET /api/dashboard/stats/get?token=...&type=LastDay`.
+
+Create a Sable API token using a group with `metrics.read` on the API surface.
+Add `logs.read` to include the five most frequently blocked domains. Configure
+Glance with Sable's console URL and that token:
+
+```yaml
+- type: dns-stats
+  title: Sable
+  service: technitium
+  url: https://dns.example.com
+  token: ${SABLE_API_TOKEN}
+```
+
+The widget shows query totals, the blocked percentage, the compiled blocked
+domain count, and 24 hourly graph values. Totals and graph values use the last
+24 hours of retained statistics at minute precision, including the current
+minute. Missing history is zero-filled. The blocked domain count combines
+manual entries and block lists without double-counting. Top blocked domains
+use retained query logs for the same window; this list is empty without
+`logs.read` or an available query-log reader. Query-log retention and dropped
+log events can make domain rankings incomplete even when counters are complete.
+
+This compatibility endpoint implements only `type=LastDay`, which Glance
+requests. Other or missing types return HTTP 400. It also accepts a bearer
+token or console session. Query-string tokens are accepted only on this route;
+use HTTPS and exclude its query string from reverse-proxy access logs. Invalid
+tokens return HTTP 401, missing `metrics.read` returns HTTP 403, and unavailable
+statistics return HTTP 503.
