@@ -2520,7 +2520,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .isotope-query-log-table .source-blocked, .isotope-query-log-table .source-error { background: rgb(239 68 68 / .12); color: #ef4444; }
 .query-answers { min-width: 12rem; max-width: 30rem; }
 .query-answers > div { display: flex; flex-wrap: wrap; gap: .25rem; }
-.query-answers > div > span { display: inline-block; max-width: 20rem; overflow: hidden; border-radius: .3rem; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .18rem .4rem; font: .68rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.query-answers > div > span { display: inline-block; min-width: 0; max-width: min(20rem, 100%); overflow: hidden; border-radius: .3rem; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .18rem .4rem; font: .68rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 /* Folded copies of the columns the narrow layout drops: hidden while the full
    table fits, so only one copy is ever in the page. */
 .query-fold, .query-fold-tight { display: none; }
@@ -2532,8 +2532,11 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .query-row-actions { z-index: 1; background: var(--card); white-space: nowrap; }
 .query-col-actions { z-index: 3; background: color-mix(in oklch, var(--muted) 82%, var(--card)); }
 .isotope-query-log-table tr:hover .query-row-actions { background: color-mix(in oklch, var(--muted) 50%, var(--card)); }
-.query-row-actions form { display: inline-flex; }
-.query-row-actions > * { vertical-align: middle; }
+/* Reserve each action's slot even when a blocked row omits the Block form. */
+.query-row-controls { display: grid; grid-template-columns: repeat(3, 1.75rem); align-items: center; justify-content: end; gap: .25rem; }
+.query-row-controls > .query-detail-button { grid-column: 1; grid-row: 1; }
+.query-row-controls > form { display: flex; grid-column: 2; grid-row: 1; }
+.query-row-controls > form:has(.allow) { grid-column: 3; }
 .query-detail-button, .query-policy-action { width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .35rem; background: transparent; color: var(--muted-foreground); }
 .query-detail-button { display: inline-grid; }
 .query-detail-button:hover, .query-detail-button:focus-visible { background: var(--accent); color: var(--foreground); }
@@ -2601,6 +2604,23 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .logs-pagination .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; }
 .logs-pagination .icon-button:disabled { cursor: not-allowed; opacity: .35; }
 
+/* Bound the full table to the card: long values truncate within their own
+   columns instead of disappearing beneath the pinned action column. */
+@media (min-width: 1561px) {
+	.isotope-query-log-table { table-layout: fixed; }
+	.query-log-table.full th, .query-log-table.full td { padding-inline: .75rem; }
+	.query-col-time { width: 9rem; }
+	.query-col-client { width: 21%; }
+	.query-col-domain { width: 18%; }
+	.query-col-type { width: 5rem; }
+	.query-col-source { width: 6.75rem; }
+	.query-col-status { width: 6.5rem; }
+	.query-col-protocol { width: 5rem; }
+	.query-col-actions { width: 7.25rem; }
+	.isotope-query-log-table .query-name, .query-col-answer { min-width: 0; max-width: none; }
+	.query-col-client code, .query-time time { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
 @media (max-width: 980px) {
 	.field-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.query-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2615,7 +2635,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 @media (max-width: 1560px) {
 	.query-col-client, .query-col-protocol, .query-col-answer { display: none; }
 	.query-fold-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin-top: .15rem; color: var(--muted-foreground); font: .66rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-	.query-fold-meta code { color: inherit; font: inherit; }
+	.query-fold-meta code { min-width: 0; max-width: 100%; overflow: hidden; color: inherit; font: inherit; text-overflow: ellipsis; white-space: nowrap; }
 	.query-fold-answers { display: block; min-width: 0; max-width: none; margin-top: .3rem; }
 	/* A row with no answer says so in the Answer column; folded under the
 	   domain the same dash would just repeat itself down the table. */
@@ -2655,6 +2675,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.query-col-status { width: 5rem; }
 	.query-row-actions, .query-col-actions { width: 2.5rem; padding-inline: .25rem !important; }
 	.query-row-actions form { display: none; }
+	.query-row-controls { grid-template-columns: 2rem; }
 	.query-detail-button { display: inline-grid; width: 2rem; height: 2rem; }
 	.isotope-query-log-table .query-name { max-width: none; }
 	.query-detail-dialog { inset: auto 0 0; width: 100vw; height: auto; max-height: 88dvh; border-top: 1px solid var(--border); border-left: 0; border-radius: 1rem 1rem 0 0; }
