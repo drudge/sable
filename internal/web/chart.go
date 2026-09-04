@@ -523,31 +523,15 @@ func (history *statsHistory) points(ctx context.Context, start, end time.Time) [
 	}
 	windowStart := time.Unix(first, 0).UTC()
 	windowEnd := time.Unix(last+seconds, 0).UTC()
-	history.mu.RLock()
-	backing := history.store
-	history.mu.RUnlock()
-	if backing != nil {
-		stored, err := backing.QueryStats(ctx, windowStart, windowEnd, width)
-		if err != nil {
-			history.logger.Warn("read persisted query statistics", "error", err)
-		}
-		for _, bucket := range stored {
-			if slot, ok := index(bucket.Start.Unix()); ok {
-				totals[slot].add(chartedFromStore(bucket))
-			}
+	buckets, err := history.readBuckets(ctx, windowStart, windowEnd, width)
+	if err != nil {
+		history.logger.Warn("read persisted query statistics", "error", err)
+	}
+	for _, bucket := range buckets {
+		if slot, ok := index(bucket.Start.Unix()); ok {
+			totals[slot].add(chartedFromStore(bucket))
 		}
 	}
-	history.mu.RLock()
-	source := history.pending
-	if backing == nil {
-		source = history.buckets
-	}
-	for key, counters := range source {
-		if slot, ok := index(key); ok {
-			totals[slot].add(counters)
-		}
-	}
-	history.mu.RUnlock()
 
 	points := make([]chartPoint, 0, slots)
 	for slot, counters := range totals {
@@ -564,6 +548,31 @@ func (history *statsHistory) points(ctx context.Context, start, end time.Time) [
 		})
 	}
 	return points
+}
+
+// readBuckets combines persisted activity with samples awaiting persistence.
+// Callers choose the aggregation width and fill any gaps in the result.
+func (history *statsHistory) readBuckets(ctx context.Context, start, end time.Time, width time.Duration) ([]store.QueryStatsBucket, error) {
+	history.mu.RLock()
+	backing := history.store
+	history.mu.RUnlock()
+	var buckets []store.QueryStatsBucket
+	var err error
+	if backing != nil {
+		buckets, err = backing.QueryStats(ctx, start, end, width)
+	}
+	history.mu.RLock()
+	source := history.pending
+	if backing == nil {
+		source = history.buckets
+	}
+	for key, counters := range source {
+		if key >= start.Unix() && key < end.Unix() {
+			buckets = append(buckets, counters.storeBucket(time.Unix(key, 0).UTC()))
+		}
+	}
+	history.mu.RUnlock()
+	return buckets, err
 }
 
 // serving reports whether queries arrived recently enough for the console to
