@@ -14,11 +14,11 @@ import (
 	"strings"
 )
 
-// htmx injects its own indicator CSS as soon as it loads, which the console's
-// strict style-src CSP blocks. Turning the injection off keeps the console
-// CSP-clean; the equivalent rules live in app.css. Sable keeps long-running
-// operations unbounded, matching its htmx 2 behavior.
-const htmxConfig = `{"includeIndicatorCSS":false,"defaultTimeout":0}`
+// Indicator CSS lives in app.css to respect the console's strict style-src CSP.
+// Long-running operations stay unbounded, matching Sable's htmx 2 behavior.
+// History traversal reloads the page because htmx's default body swap detaches
+// controls captured during app.js initialization, including the command palette.
+const htmxConfig = `{"includeIndicatorCSS":false,"defaultTimeout":0,"history":"reload"}`
 
 type DashboardView struct {
 	Version     string
