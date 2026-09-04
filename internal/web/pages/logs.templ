@@ -258,16 +258,18 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		// The client and the protocol ride under the timestamp, and the answers
 		// under the domain, so the narrow layout can drop those columns without
 		// dropping what they said.
-		<td class="query-time query-col-time"><time>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code>{ entry.ClientIP }</code></td><td class="query-name query-col-domain" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td class="query-col-status"><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
+		<td class="query-time query-col-time"><time title={ entry.OccurredAt }>{ entry.OccurredAt }</time><span class="query-fold query-fold-meta"><code title={ entry.ClientIP }>{ entry.ClientIP }</code><span>{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</span><span class="query-fold-tight">{ entry.RecordType }</span><span class="query-fold-tight">{ logSourceLabel(entry.Source) }</span></span></td><td class="query-col-client"><code title={ entry.ClientIP }>{ entry.ClientIP }</code></td><td class="query-name query-col-domain" title={ entry.Name }><span class="query-name-text">{ entry.Name }</span><div class="query-fold query-fold-answers query-answers">@QueryAnswers(entry.Answers)</div></td><td class="query-col-type"><span class="pill query-type-pill">{ entry.RecordType }</span></td><td class="query-col-source"><span class={ "source-pill source-" + entry.Source }>{ logSourceLabel(entry.Source) }</span></td><td class="query-col-status"><span class={ "rcode " + rcodeClass(entry.Status) }>{ rcodeDisplay(entry.Status) }</span></td><td class="query-protocol query-col-protocol">{ ifThen(entry.Protocol != "", entry.Protocol, "—") }</td>
 		<td class="query-answers query-col-answer">@QueryAnswers(entry.Answers)</td>
 		<td class="query-row-actions">
-			<button class="query-detail-button" type="button" data-query-detail-button aria-label={ "View details for " + entry.Name } title="View query details">@Icon("chevron-right")</button>
-			if canBlocking && entry.Name != "" {
-				if entry.Source != "blocked" {
-					@QueryPolicyAction(entry.Name, "block", "shield-x", "Block "+entry.Name)
+			<div class="query-row-controls">
+				<button class="query-detail-button" type="button" data-query-detail-button aria-label={ "View details for " + entry.Name } title="View query details">@Icon("chevron-right")</button>
+				if canBlocking && entry.Name != "" {
+					if entry.Source != "blocked" {
+						@QueryPolicyAction(entry.Name, "block", "shield-x", "Block "+entry.Name)
+					}
+					@QueryPolicyAction(entry.Name, "allow", "shield-check", "Allow "+entry.Name)
 				}
-				@QueryPolicyAction(entry.Name, "allow", "shield-check", "Allow "+entry.Name)
-			}
+			</div>
 		</td>
 	</tr>
 }
