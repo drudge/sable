@@ -89,7 +89,13 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
 	t.Parallel()
 	view := DynamicDNSAppView{
-		Available: true, Configured: true, Enabled: true, PublishIPv4: true, PublishIPv6: true,
+		Available: true, Configured: true, Enabled: true,
+		Publishers: []DynamicDNSPublisherView{{
+			Provider: "cloudflare",
+			Zones: []DynamicDNSZoneView{{
+				Zone: "example.com", Names: "home.example.com", PublishIPv4: true, PublishIPv6: true, TTL: 300,
+			}},
+		}},
 		Status: DynamicDNSStatusView{
 			LastPublished: "Sep 5, 2026 1:12 PM",
 			IPv4:          "203.0.113.42",
@@ -118,6 +124,74 @@ func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
 	view.Status.LastPublished = ""
 	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<span class="integration-fact-value">Never</span>`) {
 		t.Error("Dynamic DNS card does not use the Never fallback before its first publication")
+	}
+}
+
+func TestDynamicDNSPublisherEditorUsesCollapsibleStatusSummary(t *testing.T) {
+	t.Parallel()
+	configured := DynamicDNSPublisherView{
+		Provider: "cloudflare", CredentialsConfigured: true,
+		Zones: []DynamicDNSZoneView{{Zone: "example.com", Names: "home.example.com\nvpn.example.com", PublishIPv4: true, TTL: 300}},
+	}
+	html := render(t, DynamicDNSPublisherEditor(configured, "0", false))
+	details := openingTags(html, "<details ", "dynamic-dns-publisher")
+	if len(details) != 1 || strings.Contains(details[0], " open") {
+		t.Fatalf("configured publisher should render collapsed: %v", details)
+	}
+	for _, expected := range []string{"<summary>", `class="status-badge success">Configured</span>`, ">Cloudflare</strong>", "1 zone · 2 hosts"} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("configured publisher summary does not contain %q", expected)
+		}
+	}
+	zones := openingTags(html, "<details ", "dynamic-dns-zone")
+	if len(zones) < 1 || strings.Contains(zones[0], " open") {
+		t.Fatalf("configured zone should render collapsed: %v", zones)
+	}
+	if !strings.Contains(html, ">example.com</strong>") || !strings.Contains(html, "2 hosts · A") || strings.Contains(html, ">Zone 1</strong>") {
+		t.Error("configured zone summary is missing its identifying details")
+	}
+	if !strings.Contains(html, `type="hidden" name="publisher_0_provider" value="cloudflare"`) || strings.Contains(html, `<span>Provider</span><select`) {
+		t.Error("configured publisher should carry its fixed provider without rendering a provider picker")
+	}
+
+	unconfigured := DynamicDNSPublisherView{Provider: "route53", Zones: []DynamicDNSZoneView{{PublishIPv4: true}}}
+	html = render(t, DynamicDNSPublisherEditor(unconfigured, "0", false))
+	details = openingTags(html, "<details ", "dynamic-dns-publisher")
+	if len(details) != 1 || !strings.Contains(details[0], " open") {
+		t.Fatalf("unconfigured publisher should render expanded: %v", details)
+	}
+	if !strings.Contains(html, `class="status-badge">Needs credentials</span>`) {
+		t.Error("unconfigured publisher summary is missing its credential badge")
+	}
+	if !strings.Contains(html, ">Amazon Route 53</strong>") {
+		t.Error("unconfigured publisher summary does not retain the provider chosen before insertion")
+	}
+	zones = openingTags(html, "<details ", "dynamic-dns-zone")
+	if len(zones) < 1 || !strings.Contains(zones[0], " open") {
+		t.Fatalf("unconfigured zone should render expanded: %v", zones)
+	}
+	if !strings.Contains(html, ">New zone</strong>") {
+		t.Error("empty zone summary is missing its descriptive fallback")
+	}
+}
+
+func TestDynamicDNSSetupUsesProviderMenuAndGlobalPublishingSettings(t *testing.T) {
+	t.Parallel()
+	html := render(t, DynamicDNSSetupDialog(DynamicDNSAppView{Interval: "5m", TTL: 600}))
+	for _, expected := range []string{
+		`data-dynamic-dns-add-provider-menu`,
+		`data-dynamic-dns-add-publisher data-provider="cloudflare"`,
+		`data-dynamic-dns-add-publisher data-provider="route53"`,
+		`name="interval" value="5m"`,
+		`name="ttl" value="600"`,
+		`data-dynamic-dns-publishers-empty`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("dynamic DNS setup does not contain %q", expected)
+		}
+	}
+	if strings.Contains(html, `<span>Provider</span><select`) || strings.Contains(html, `_zone___ZONE___ttl`) {
+		t.Error("dynamic DNS setup still renders per-publisher provider or per-zone TTL controls")
 	}
 }
 

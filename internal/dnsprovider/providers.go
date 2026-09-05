@@ -72,8 +72,8 @@ func ValidateCredentials(provider string, credentials Credentials) error {
 			return err
 		}
 	case "route53":
-		if strings.TrimSpace(credentials.AccessKeyID) == "" || strings.TrimSpace(credentials.SecretAccessKey) == "" || strings.TrimSpace(credentials.ZoneID) == "" {
-			return errors.New("Route 53 access key ID, secret access key, and hosted zone ID are required")
+		if strings.TrimSpace(credentials.AccessKeyID) == "" || strings.TrimSpace(credentials.SecretAccessKey) == "" {
+			return errors.New("Route 53 access key ID and secret access key are required")
 		}
 	case "ovh":
 		if strings.TrimSpace(credentials.ApplicationKey) == "" || strings.TrimSpace(credentials.ApplicationSecret) == "" || strings.TrimSpace(credentials.ConsumerKey) == "" {

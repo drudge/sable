@@ -3,12 +3,37 @@ package assets
 import (
 	"bytes"
 	"compress/gzip"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestAppleTouchIconHasOpaqueBlackSafeArea(t *testing.T) {
+	t.Parallel()
+
+	icon, err := png.Decode(bytes.NewReader(manifest["sable-icon-180.png"].content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bounds := icon.Bounds(); bounds.Dx() != 180 || bounds.Dy() != 180 {
+		t.Fatalf("touch icon size = %dx%d, want 180x180", bounds.Dx(), bounds.Dy())
+	}
+	for y := 0; y < 180; y++ {
+		for x := 0; x < 180; x++ {
+			if x >= 20 && x < 160 && y >= 20 && y < 160 {
+				continue
+			}
+			pixel := color.RGBAModel.Convert(icon.At(x, y)).(color.RGBA)
+			if pixel != (color.RGBA{A: 255}) {
+				t.Fatalf("touch icon safe area pixel (%d,%d) = %#v, want opaque black", x, y, pixel)
+			}
+		}
+	}
+}
 
 func TestFingerprintURLServesImmutableCompressedAsset(t *testing.T) {
 	t.Parallel()

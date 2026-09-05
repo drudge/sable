@@ -939,16 +939,19 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 
 func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
 	view := server.lifetimeStatsView(request)
-	chart := server.history.view(request.Context(), "hour", time.Now(), server.stats.Stats(), requestTimeDisplay(request))
+	now := time.Now()
+	chart := server.history.view(request.Context(), "hour", now, server.stats.Stats(), requestTimeDisplay(request))
 	scope := dashboardStatsScope(request)
 	values := view
 	if scope == pages.StatsScopeRange {
 		values = chart.Stats
 	}
+	window, _ := chartInsightWindow(chart.ActiveRange, now)
 	overview := pages.StatsOverviewView{
 		Values: values, Lifetime: view, Scope: scope,
 		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
 		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
+		CanLogs: server.canReadLogs(request), LogWindowQuery: window.logWindowQuery(),
 	}
 	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render runtime statistics", "error", err)
@@ -1005,9 +1008,9 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 			server.logger.Error("render custom query statistics", "error", err)
 			return
 		}
-		server.renderChartStats(writer, request, view)
+		window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
+		server.renderChartStats(writer, request, view, window.logWindowQuery())
 		if withInsights {
-			window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
 			server.renderInsights(writer, request, window)
 		}
 		return
@@ -1023,8 +1026,9 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		server.logger.Error("render query statistics", "error", err)
 		return
 	}
-	server.renderChartStats(writer, request, view)
-	if window, valid := chartInsightWindow(rangeName, now); valid && withInsights {
+	window, valid := chartInsightWindow(rangeName, now)
+	server.renderChartStats(writer, request, view, window.logWindowQuery())
+	if valid && withInsights {
 		server.renderInsights(writer, request, window)
 	}
 }
@@ -1032,7 +1036,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 // renderChartStats updates the headline metrics alongside an htmx chart swap.
 // The chart remains the regular response target; this sibling is applied out
 // of band so every range control changes the whole dashboard consistently.
-func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView) {
+func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView, logWindowQuery string) {
 	lifetime := server.lifetimeStatsView(request)
 	scope := dashboardStatsScope(request)
 	values := lifetime
@@ -1043,6 +1047,7 @@ func (server *Server) renderChartStats(writer http.ResponseWriter, request *http
 		Values: values, Lifetime: lifetime, Scope: scope,
 		RangeName: view.ActiveRange, RangeLabel: view.RangeLabel,
 		CustomStart: view.CustomStart, CustomEnd: view.CustomEnd,
+		CanLogs: server.canReadLogs(request), LogWindowQuery: logWindowQuery,
 		OutOfBand: true,
 	}
 	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {

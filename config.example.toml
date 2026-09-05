@@ -147,19 +147,31 @@ renew_before = "30d"
 # can be reused by ACME DNS-01 when their permissions cover both record sets.
 [dynamic_dns]
 enabled = false
-provider = ""
 interval = "5m"
 ipv4_url = "https://api.ipify.org"
 ipv6_url = "https://api6.ipify.org"
 
-# Sable owns the complete A and/or AAAA RRset for each configured name. Pausing
-# or removing the integration leaves its last published external records intact.
-# GoDaddy and Porkbun require a TTL of at least 600 seconds.
-# [[dynamic_dns.records]]
+# Add one publisher per external provider. A publisher can contain records from
+# several zones, and credentials remain in the encrypted provider vault.
+# [[dynamic_dns.publishers]]
+# provider = "cloudflare"
+#
+# Sable owns the complete A and/or AAAA RRset for each configured name. Records
+# in the same zone share their address-family and TTL policy. Pausing or removing
+# the integration leaves its last published external records intact. GoDaddy and
+# Porkbun require a TTL of at least 600 seconds.
+# [[dynamic_dns.publishers.records]]
 # zone = "example.com"
 # name = "home.example.com"
 # ipv4 = true
 # ipv6 = false
+# ttl = 600
+#
+# [[dynamic_dns.publishers.records]]
+# zone = "example.net"
+# name = "vpn.example.net"
+# ipv4 = true
+# ipv6 = true
 # ttl = 600
 
 # UniFi host synchronization. Set this up from Apps in the console: the wizard

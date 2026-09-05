@@ -289,11 +289,23 @@ type ACME struct {
 // DynamicDNS publishes this deployment's public addresses into an external
 // authoritative DNS provider. Credentials live in the shared provider vault.
 type DynamicDNS struct {
-	Enabled  bool               `toml:"enabled"`
+	Enabled    bool                  `toml:"enabled"`
+	Interval   Duration              `toml:"interval"`
+	IPv4URL    string                `toml:"ipv4_url"`
+	IPv6URL    string                `toml:"ipv6_url"`
+	Publishers []DynamicDNSPublisher `toml:"publishers,omitempty"`
+
+	// Provider and Records preserve the original single-provider configuration
+	// shape on input. normalizeDynamicDNS migrates them into Publishers and
+	// clears them so the next settings write emits only the new shape.
+	Provider string             `toml:"provider,omitempty"`
+	Records  []DynamicDNSRecord `toml:"records,omitempty"`
+}
+
+// DynamicDNSPublisher is one external provider connection and every RRset it
+// owns there. Credentials remain in the provider vault rather than TOML.
+type DynamicDNSPublisher struct {
 	Provider string             `toml:"provider"`
-	Interval Duration           `toml:"interval"`
-	IPv4URL  string             `toml:"ipv4_url"`
-	IPv6URL  string             `toml:"ipv6_url"`
 	Records  []DynamicDNSRecord `toml:"records"`
 }
 
@@ -308,7 +320,55 @@ type DynamicDNSRecord struct {
 }
 
 func (settings DynamicDNS) Runnable() bool {
-	return settings.Enabled && settings.Provider != "" && len(settings.Records) > 0
+	publishers := settings.ConfiguredPublishers()
+	if !settings.Enabled || len(publishers) == 0 {
+		return false
+	}
+	for _, publisher := range publishers {
+		if publisher.Provider == "" || len(publisher.Records) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ConfiguredPublishers returns the normalized publisher list while still
+// understanding in-memory values and replicated snapshots produced by the
+// original single-provider schema.
+func (settings DynamicDNS) ConfiguredPublishers() []DynamicDNSPublisher {
+	if len(settings.Publishers) > 0 {
+		return settings.Publishers
+	}
+	if settings.Provider == "" && len(settings.Records) == 0 {
+		return nil
+	}
+	return []DynamicDNSPublisher{{Provider: settings.Provider, Records: settings.Records}}
+}
+
+// ProviderNames returns the configured providers in normalized display order.
+func (settings DynamicDNS) ProviderNames() []string {
+	publishers := settings.ConfiguredPublishers()
+	providers := make([]string, 0, len(publishers))
+	for _, publisher := range publishers {
+		if publisher.Provider != "" {
+			providers = append(providers, publisher.Provider)
+		}
+	}
+	return providers
+}
+
+// AllRecords flattens publisher-owned records for address discovery and status
+// totals without discarding which provider owns each record.
+func (settings DynamicDNS) AllRecords() []DynamicDNSRecord {
+	count := 0
+	for _, publisher := range settings.ConfiguredPublishers() {
+		count += len(publisher.Records)
+	}
+	records := make([]DynamicDNSRecord, 0, count)
+	for _, publisher := range settings.ConfiguredPublishers() {
+		records = append(records, publisher.Records...)
+	}
+	return records
 }
 
 // UniFi configures the host synchronizer that publishes UniFi networks,
@@ -869,12 +929,6 @@ func (settings DynamicDNS) validate() []error {
 	if settings.Interval.Duration < minimumDynamicDNSInterval {
 		validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.interval must be at least %s", minimumDynamicDNSInterval))
 	}
-	if settings.Provider != "" && !dnsprovider.Supported(settings.Provider) {
-		validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.provider %q is not supported", settings.Provider))
-	}
-	if settings.Enabled && settings.Provider == "" {
-		validationErrors = append(validationErrors, errors.New("dynamic_dns.provider is required when dynamic_dns.enabled is true"))
-	}
 	for _, endpoint := range []struct {
 		field string
 		value string
@@ -884,55 +938,65 @@ func (settings DynamicDNS) validate() []error {
 			validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.%s must be an absolute HTTPS URL without credentials", endpoint.field))
 		}
 	}
-	seen := make(map[string]struct{}, len(settings.Records)*2)
-	for index, record := range settings.Records {
-		field := fmt.Sprintf("dynamic_dns.records[%d]", index)
-		if record.Zone == "" {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.zone is required", field))
-		} else if _, err := dnsname.Normalize(record.Zone); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.zone: %w", field, err))
+	seenProviders := make(map[string]struct{}, len(settings.Publishers))
+	seenRecords := make(map[string]struct{})
+	for publisherIndex, publisher := range settings.Publishers {
+		publisherField := fmt.Sprintf("dynamic_dns.publishers[%d]", publisherIndex)
+		if publisher.Provider == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.provider is required", publisherField))
+		} else if !dnsprovider.Supported(publisher.Provider) {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.provider %q is not supported", publisherField, publisher.Provider))
+		} else if _, duplicate := seenProviders[publisher.Provider]; duplicate {
+			validationErrors = append(validationErrors, fmt.Errorf("dynamic DNS provider %q is configured more than once", publisher.Provider))
 		}
-		if record.Name == "" {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
-		} else if _, err := dnsname.Normalize(record.Name); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.name: %w", field, err))
-		} else if record.Zone != "" && record.Name != record.Zone && !strings.HasSuffix(record.Name, "."+record.Zone) {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.name must belong to its zone", field))
+		seenProviders[publisher.Provider] = struct{}{}
+		if len(publisher.Records) == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.records requires at least one record", publisherField))
 		}
-		if !record.IPv4 && !record.IPv6 {
-			validationErrors = append(validationErrors, fmt.Errorf("%s must publish IPv4, IPv6, or both", field))
-		}
-		if err := dnsprovider.ValidateRecordTTL(settings.Provider, record.TTL); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf("%s.ttl %w", field, err))
-		}
-		if index > 0 {
-			first := settings.Records[0]
-			if record.Zone != first.Zone {
-				validationErrors = append(validationErrors, fmt.Errorf("%s.zone must match dynamic_dns.records[0].zone", field))
+		zonePolicies := make(map[string]DynamicDNSRecord)
+		for recordIndex, record := range publisher.Records {
+			field := fmt.Sprintf("%s.records[%d]", publisherField, recordIndex)
+			if record.Zone == "" {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.zone is required", field))
+			} else if _, err := dnsname.Normalize(record.Zone); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.zone: %w", field, err))
 			}
-			if record.IPv4 != first.IPv4 || record.IPv6 != first.IPv6 {
-				validationErrors = append(validationErrors, fmt.Errorf("%s address families must match dynamic_dns.records[0]", field))
+			if record.Name == "" {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
+			} else if _, err := dnsname.Normalize(record.Name); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.name: %w", field, err))
+			} else if record.Zone != "" && record.Name != record.Zone && !strings.HasSuffix(record.Name, "."+record.Zone) {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.name must belong to its zone", field))
 			}
-			if record.TTL != first.TTL {
-				validationErrors = append(validationErrors, fmt.Errorf("%s.ttl must match dynamic_dns.records[0].ttl", field))
+			if !record.IPv4 && !record.IPv6 {
+				validationErrors = append(validationErrors, fmt.Errorf("%s must publish IPv4, IPv6, or both", field))
 			}
-		}
-		for _, candidate := range []struct {
-			recordType string
-			enabled    bool
-		}{{"A", record.IPv4}, {"AAAA", record.IPv6}} {
-			recordType, enabled := candidate.recordType, candidate.enabled
-			key := record.Name + "\x00" + recordType
-			if enabled {
-				if _, duplicate := seen[key]; duplicate {
-					validationErrors = append(validationErrors, fmt.Errorf("duplicate dynamic DNS %s record %q", recordType, record.Name))
+			if err := dnsprovider.ValidateRecordTTL(publisher.Provider, record.TTL); err != nil {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.ttl %w", field, err))
+			}
+			if first, found := zonePolicies[record.Zone]; found {
+				if record.IPv4 != first.IPv4 || record.IPv6 != first.IPv6 || record.TTL != first.TTL {
+					validationErrors = append(validationErrors, fmt.Errorf("%s policy must match the other records in zone %q", field, record.Zone))
 				}
-				seen[key] = struct{}{}
+			} else {
+				zonePolicies[record.Zone] = record
+			}
+			for _, candidate := range []struct {
+				recordType string
+				enabled    bool
+			}{{"A", record.IPv4}, {"AAAA", record.IPv6}} {
+				key := record.Name + "\x00" + candidate.recordType
+				if candidate.enabled {
+					if _, duplicate := seenRecords[key]; duplicate {
+						validationErrors = append(validationErrors, fmt.Errorf("duplicate dynamic DNS %s record %q", candidate.recordType, record.Name))
+					}
+					seenRecords[key] = struct{}{}
+				}
 			}
 		}
 	}
-	if settings.Enabled && len(settings.Records) == 0 {
-		validationErrors = append(validationErrors, errors.New("dynamic_dns.records requires at least one record when enabled"))
+	if settings.Enabled && len(settings.Publishers) == 0 {
+		validationErrors = append(validationErrors, errors.New("dynamic_dns.publishers requires at least one provider when enabled"))
 	}
 	return validationErrors
 }
@@ -1387,6 +1451,11 @@ func (configuration *Config) normalizeUniFi() {
 func (configuration *Config) normalizeDynamicDNS() {
 	settings := &configuration.DynamicDNS
 	settings.Provider = strings.ToLower(strings.TrimSpace(settings.Provider))
+	if len(settings.Publishers) == 0 && (settings.Provider != "" || len(settings.Records) > 0) {
+		settings.Publishers = []DynamicDNSPublisher{{Provider: settings.Provider, Records: settings.Records}}
+	}
+	settings.Provider = ""
+	settings.Records = nil
 	if settings.Interval.Duration <= 0 {
 		settings.Interval.Duration = defaultDynamicDNSInterval
 	}
@@ -1398,19 +1467,26 @@ func (configuration *Config) normalizeDynamicDNS() {
 	if settings.IPv6URL == "" {
 		settings.IPv6URL = defaultIPv6DiscoveryURL
 	}
-	for index := range settings.Records {
-		record := &settings.Records[index]
-		record.Zone = normalizeDomain(record.Zone)
-		record.Name = normalizeDynamicDNSName(record.Name)
-		if record.TTL == 0 {
-			record.TTL = defaultDynamicDNSRecordTTL
+	for publisherIndex := range settings.Publishers {
+		publisher := &settings.Publishers[publisherIndex]
+		publisher.Provider = strings.ToLower(strings.TrimSpace(publisher.Provider))
+		for recordIndex := range publisher.Records {
+			record := &publisher.Records[recordIndex]
+			record.Zone = normalizeDomain(record.Zone)
+			record.Name = normalizeDynamicDNSName(record.Name)
+			if record.TTL == 0 {
+				record.TTL = defaultDynamicDNSRecordTTL
+			}
 		}
+		slices.SortFunc(publisher.Records, func(left, right DynamicDNSRecord) int {
+			if compared := strings.Compare(left.Zone, right.Zone); compared != 0 {
+				return compared
+			}
+			return strings.Compare(left.Name, right.Name)
+		})
 	}
-	slices.SortFunc(settings.Records, func(left, right DynamicDNSRecord) int {
-		if compared := strings.Compare(left.Zone, right.Zone); compared != 0 {
-			return compared
-		}
-		return strings.Compare(left.Name, right.Name)
+	slices.SortFunc(settings.Publishers, func(left, right DynamicDNSPublisher) int {
+		return strings.Compare(left.Provider, right.Provider)
 	})
 }
 

@@ -427,7 +427,10 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if response := serveRequest(server, http.MethodGet, "/administration"); response.Code != http.StatusNotFound {
 		t.Fatalf("security-disabled administration status = %d, want 404", response.Code)
 	}
-	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
+	for _, expected := range []string{
+		"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0],
+		`class="dashboard-footer-status"`, `class="dashboard-footer-details"`,
+	} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
@@ -450,7 +453,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, appScript) || !strings.Contains(dashboard, htmxScript) || strings.Index(dashboard, appScript) > strings.Index(dashboard, htmxScript) {
 		t.Error("deferred application script must register before htmx initializes")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time data-styled-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `class="dashboard-insights-skeleton"`, `class="card ranking-card ranking-card-skeleton"`, `class="card distribution-card distribution-card-skeleton"`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", `id="dashboard-update-indicator"`, `hx-indicator="#dashboard-update-indicator"`, "Updating dashboard…", `data-stat-label="Total Queries"`, `data-stat-number="value"`, `data-stat-number="detail"`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time data-styled-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `class="dashboard-insights-skeleton"`, `class="card ranking-card ranking-card-skeleton"`, `class="card distribution-card distribution-card-skeleton"`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", `id="dashboard-update-indicator"`, `hx-indicator="#dashboard-update-indicator"`, "Updating dashboard…", `data-stat-label="Total Queries"`, `data-stat-number="value"`, `data-stat-number="detail"`, `href="/logs?response_code=SERVFAIL&amp;tab=queries"`, `href="/logs?source=blocked&amp;tab=queries"`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
@@ -463,6 +466,9 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	}
 	if cards := strings.Count(dashboard, `class="stat-card `); cards != 12 {
 		t.Errorf("dashboard stat card count = %d, want all 12 metrics", cards)
+	}
+	if links := strings.Count(dashboard, `class="stat-card stat-card-link `); links != 11 {
+		t.Errorf("dashboard linked stat card count = %d, want 11 queryable metrics", links)
 	}
 	if values := strings.Count(dashboard, `data-stat-number="value"`); values != 12 {
 		t.Errorf("dashboard morphing value count = %d, want 12", values)
@@ -491,7 +497,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	}
 	rangedChartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day&stats_scope=range")
 	rangedChart := rangedChartResponse.Body.String()
-	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Chart range", "· all time", "Recent sample · not ranged"} {
+	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Chart range", "· all time", "Recent sample", `href="/logs?end=`, `response_code=SERVFAIL`, `source=blocked`} {
 		if rangedChartResponse.Code != http.StatusOK || !strings.Contains(rangedChart, expected) {
 			t.Errorf("ranged day chart response does not contain %q", expected)
 		}

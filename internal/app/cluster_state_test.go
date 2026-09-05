@@ -51,11 +51,17 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		}},
 	}
 	sourceConfiguration.DynamicDNS = config.DynamicDNS{
-		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		Enabled: true, Interval: config.Duration{Duration: 5 * time.Minute},
 		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
-		Records: []config.DynamicDNSRecord{{
-			Zone: "example.test", Name: "home.example.test", IPv4: true, TTL: 300,
-		}},
+		Publishers: []config.DynamicDNSPublisher{
+			{Provider: "cloudflare", Records: []config.DynamicDNSRecord{
+				{Zone: "example.net", Name: "vpn.example.net", IPv4: true, IPv6: true, TTL: 600},
+				{Zone: "example.test", Name: "home.example.test", IPv4: true, TTL: 300},
+			}},
+			{Provider: "route53", Records: []config.DynamicDNSRecord{{
+				Zone: "example.org", Name: "edge.example.org", IPv6: true, TTL: 300,
+			}}},
+		},
 	}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, []zone.Zone{{
@@ -90,6 +96,10 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	sourceDNSCredentials := dnsprovider.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
 	dynamicDNSCredentials := dnsprovider.Credentials{APIToken: "cloudflare-token", ZoneID: "zone-id"}
 	if err := sourceDNSCredentials.Put(ctx, "cloudflare", dynamicDNSCredentials); err != nil {
+		t.Fatal(err)
+	}
+	route53Credentials := dnsprovider.Credentials{AccessKeyID: "access", SecretAccessKey: "secret"}
+	if err := sourceDNSCredentials.Put(ctx, "route53", route53Credentials); err != nil {
 		t.Fatal(err)
 	}
 	targetDNSCredentials := dnsprovider.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
@@ -129,12 +139,16 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		got.UniFi.Networks[0].ID != "net-1" || got.UniFi.Networks[0].Zone != "example.test" {
 		t.Fatalf("replicated UniFi settings = %#v", got.UniFi)
 	}
-	if !got.DynamicDNS.Runnable() || !reflect.DeepEqual(got.DynamicDNS.Records, sourceConfiguration.DynamicDNS.Records) {
+	if !got.DynamicDNS.Runnable() || !reflect.DeepEqual(got.DynamicDNS.AllRecords(), sourceConfiguration.DynamicDNS.AllRecords()) {
 		t.Fatalf("replicated dynamic DNS settings = %#v", got.DynamicDNS)
 	}
 	replicatedDNSCredentials, found := targetDNSCredentials.Get(ctx, "cloudflare")
 	if !found || replicatedDNSCredentials != dynamicDNSCredentials {
 		t.Fatalf("replica external DNS credentials = %+v, found = %v", replicatedDNSCredentials, found)
+	}
+	replicatedRoute53Credentials, found := targetDNSCredentials.Get(ctx, "route53")
+	if !found || replicatedRoute53Credentials != route53Credentials {
+		t.Fatalf("replica Route 53 credentials = %+v, found = %v", replicatedRoute53Credentials, found)
 	}
 	replicatedCredentials, found := targetCredentials.Get(ctx)
 	if !found || replicatedCredentials != controllerCredentials {

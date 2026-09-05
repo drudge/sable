@@ -543,7 +543,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if view.Supported && view.CanCheck && !view.Busy && !view.Installed {
+		if view.Supported && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<form data-update-check hx-post=\"/ui/updates/check\" hx-target=\"#about-update\" hx-swap=\"outerHTML\" hx-disable=\"#about-update button, #about-update input\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -611,8 +611,7 @@ func UpdatePanel(view UpdateView) templ.Component {
 	})
 }
 
-// updateAction names the installation control, separate from release checks
-// so operators can change channels even when an update is available.
+// updateAction names the primary action for the panel's current state.
 func updateAction(view UpdateView) string {
 	switch {
 	case !view.Supported || view.Busy:

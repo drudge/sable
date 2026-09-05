@@ -17,12 +17,18 @@ templ DashboardHome(view DashboardView) {
 		@QueryChart(view.Chart)
 		@DashboardInsights(view.Insights, false)
 		<footer class="dashboard-footer">
-			<span><i></i>Sable operational</span>
-			<span>{ view.DNSSECStatus }</span>
-			<span>{ view.Database }</span>
-			<span>{ view.DNSListeners }</span>
-			<span>Revision { fmt.Sprint(view.ConfigRevision) }</span>
-			<span>{ formatReleaseVersion(view.Version) }</span>
+			<span class="dashboard-footer-status"><i></i>Sable operational</span>
+			<div class="dashboard-footer-details">
+				<div class="dashboard-footer-detail-line">
+					<span>{ view.DNSSECStatus }</span>
+					<span>{ view.DNSListeners }</span>
+				</div>
+				<div class="dashboard-footer-detail-line">
+					<span>{ view.Database }</span>
+					<span>Revision { fmt.Sprint(view.ConfigRevision) }</span>
+				</div>
+			</div>
+			<span class="dashboard-footer-version">{ formatReleaseVersion(view.Version) }</span>
 		</footer>
 	</div>
 }
@@ -43,6 +49,8 @@ func dashboardStatsOverview(view DashboardView) StatsOverviewView {
 		RangeLabel:  view.Chart.RangeLabel,
 		CustomStart: view.Chart.CustomStart,
 		CustomEnd:   view.Chart.CustomEnd,
+		CanLogs:        view.CanLogs,
+		LogWindowQuery: view.Insights.LogWindowQuery,
 	}
 }
 

@@ -35,10 +35,11 @@ type testUniFiController struct {
 }
 
 type testDynamicDNSController struct {
-	status      dynamicdns.Status
-	credentials dnsprovider.Credentials
-	configured  bool
-	syncs       int
+	status                dynamicdns.Status
+	credentials           dnsprovider.Credentials
+	configured            bool
+	credentialsByProvider map[string]dnsprovider.Credentials
+	syncs                 int
 }
 
 func (controller *testDynamicDNSController) Status(context.Context) dynamicdns.Status {
@@ -50,12 +51,19 @@ func (controller *testDynamicDNSController) SyncNow() {
 	controller.status.Running = true
 }
 
-func (controller *testDynamicDNSController) PutCredentials(_ context.Context, _ string, credentials dnsprovider.Credentials) error {
+func (controller *testDynamicDNSController) PutCredentials(_ context.Context, provider string, credentials dnsprovider.Credentials) error {
 	controller.credentials, controller.configured = credentials, true
+	if controller.credentialsByProvider == nil {
+		controller.credentialsByProvider = make(map[string]dnsprovider.Credentials)
+	}
+	controller.credentialsByProvider[provider] = credentials
 	return nil
 }
 
-func (controller *testDynamicDNSController) StoredCredentials(context.Context, string) (dnsprovider.Credentials, bool) {
+func (controller *testDynamicDNSController) StoredCredentials(_ context.Context, provider string) (dnsprovider.Credentials, bool) {
+	if credentials, found := controller.credentialsByProvider[provider]; found {
+		return credentials, true
+	}
 	return controller.credentials, controller.configured
 }
 
@@ -173,8 +181,8 @@ func TestIntegrationsPageOffersDynamicDNSSetup(t *testing.T) {
 	}
 
 	setup := serveRequest(server, http.MethodGet, "/integrations?setup=dynamic-dns")
-	if setup.Code != http.StatusOK || !strings.Contains(setup.Body.String(), "data-styled-select") {
-		t.Fatalf("dynamic DNS setup does not opt into the styled provider select: %d %s", setup.Code, setup.Body.String())
+	if setup.Code != http.StatusOK || !strings.Contains(setup.Body.String(), "data-dynamic-dns-add-provider-menu") || strings.Contains(setup.Body.String(), "Choose a provider</option>") {
+		t.Fatalf("dynamic DNS setup does not use the add-provider menu: %d %s", setup.Code, setup.Body.String())
 	}
 }
 
@@ -195,10 +203,69 @@ func TestDynamicDNSSetupStoresProviderAndQueuesPublication(t *testing.T) {
 		t.Fatalf("save response = %d %s", response.Code, response.Body.String())
 	}
 	settings := configuration.Current().Config.DynamicDNS
-	if !settings.Runnable() || settings.Provider != "cloudflare" || len(settings.Records) != 2 || !settings.Records[0].IPv6 {
+	publishers := settings.ConfiguredPublishers()
+	if !settings.Runnable() || len(publishers) != 1 || publishers[0].Provider != "cloudflare" || len(publishers[0].Records) != 2 || !publishers[0].Records[0].IPv6 {
 		t.Fatalf("dynamic DNS settings = %+v", settings)
 	}
 	if controller.credentials.APIToken != "token" || controller.syncs != 1 {
+		t.Fatalf("controller = %+v", controller)
+	}
+}
+
+func TestDynamicDNSGlobalTTLUsesConfiguredValueOrDefault(t *testing.T) {
+	t.Parallel()
+	if ttl := dynamicDNSGlobalTTL(nil); ttl != 600 {
+		t.Fatalf("empty global TTL = %d, want 600", ttl)
+	}
+	publishers := []config.DynamicDNSPublisher{{Records: []config.DynamicDNSRecord{{TTL: 300}}}}
+	if ttl := dynamicDNSGlobalTTL(publishers); ttl != 300 {
+		t.Fatalf("configured global TTL = %d, want 300", ttl)
+	}
+}
+
+func TestDynamicDNSSetupStoresMultipleProvidersAndZones(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	controller := &testDynamicDNSController{}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/save", url.Values{
+		"publisher_0_provider":                  {"cloudflare"},
+		"publisher_0_cloudflare_api_token":      {"cloudflare-token"},
+		"publisher_0_zone_0_zone":               {"example.com"},
+		"publisher_0_zone_0_names":              {"home.example.com\nvpn.example.com"},
+		"publisher_0_zone_0_publish_ipv4":       {"true"},
+		"publisher_0_zone_1_zone":               {"example.net"},
+		"publisher_0_zone_1_names":              {"edge.example.net"},
+		"publisher_0_zone_1_publish_ipv6":       {"true"},
+		"publisher_1_provider":                  {"route53"},
+		"publisher_1_route53_access_key_id":     {"access"},
+		"publisher_1_route53_secret_access_key": {"secret"},
+		"publisher_1_zone_0_zone":               {"example.org"},
+		"publisher_1_zone_0_names":              {"home.example.org"},
+		"publisher_1_zone_0_publish_ipv4":       {"true"},
+		"publisher_1_zone_0_publish_ipv6":       {"true"},
+		"ttl":                                   {"900"},
+		"interval":                              {"5m"},
+		"ipv4_url":                              {"https://api.ipify.org"},
+		"ipv6_url":                              {"https://api6.ipify.org"},
+	})
+	if response.Code != http.StatusOK {
+		t.Fatalf("save response = %d %s", response.Code, response.Body.String())
+	}
+	publishers := configuration.Current().Config.DynamicDNS.ConfiguredPublishers()
+	if len(publishers) != 2 || len(publishers[0].Records) != 3 || len(publishers[1].Records) != 1 {
+		t.Fatalf("dynamic DNS publishers = %+v", publishers)
+	}
+	for _, publisher := range publishers {
+		for _, record := range publisher.Records {
+			if record.TTL != 900 {
+				t.Fatalf("global TTL was not applied to every record: %+v", publishers)
+			}
+		}
+	}
+	if controller.credentialsByProvider["cloudflare"].APIToken != "cloudflare-token" ||
+		controller.credentialsByProvider["route53"].AccessKeyID != "access" || controller.syncs != 1 {
 		t.Fatalf("controller = %+v", controller)
 	}
 }
@@ -279,6 +346,32 @@ func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
 	}
 	if strings.Contains(body, `hx-trigger="load`) {
 		t.Error("self-replacing Dynamic DNS status fragment immediately reloads and detaches its actions")
+	}
+}
+
+func TestDynamicDNSStatusRefreshUpdatesLastPublishedFact(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{
+		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
+		Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300}},
+	}
+	server.SetDynamicDNSController(&testDynamicDNSController{
+		configured:  true,
+		credentials: dnsprovider.Credentials{APIToken: "token"},
+		status:      dynamicdns.Status{LastPublished: time.Date(2026, time.September, 5, 17, 14, 0, 0, time.UTC)},
+	})
+
+	response := serveRequest(server, http.MethodGet, "/ui/integrations/dynamic-dns/status")
+	body := response.Body.String()
+	if response.Code != http.StatusOK {
+		t.Fatalf("status response = %d %s", response.Code, body)
+	}
+	for _, expected := range []string{`id="dynamic-dns-facts"`, `hx-swap-oob="true"`, "Last published", "Sep 5, 2026"} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("status refresh does not contain %q", expected)
+		}
 	}
 }
 
