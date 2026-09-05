@@ -290,6 +290,565 @@
 
 	document.querySelectorAll("[data-resolver-combobox]").forEach(setupResolverCombobox);
 
+	const positionAnchoredPopover = (root, trigger, popover) => {
+	  const triggerRect = trigger.getBoundingClientRect();
+	  let boundary = {top: 0, bottom: window.innerHeight};
+	  for (let parent = root.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+		const style = window.getComputedStyle(parent);
+		if (![style.overflow, style.overflowY].some((value) => ["auto", "clip", "hidden", "scroll"].includes(value))) continue;
+		const parentRect = parent.getBoundingClientRect();
+		boundary = {top: Math.max(0, parentRect.top), bottom: Math.min(window.innerHeight, parentRect.bottom)};
+		break;
+	  }
+	  const availableBelow = boundary.bottom - triggerRect.bottom;
+	  const availableAbove = triggerRect.top - boundary.top;
+	  const preferredHeight = Math.min(popover.scrollHeight, window.innerHeight * .45);
+	  root.dataset.side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
+	};
+
+	let styledSelectSequence = 0;
+	const setupStyledSelect = (select) => {
+	  if (!select || select.dataset.styledSelectReady === "true") return;
+	  select.dataset.styledSelectReady = "true";
+
+	  const root = document.createElement("div");
+	  root.className = "styled-select";
+	  select.classList.forEach((className) => root.classList.add(className));
+	  select.before(root);
+	  root.append(select);
+	  select.classList.add("styled-select-native");
+	  select.hidden = true;
+	  select.tabIndex = -1;
+	  select.setAttribute("aria-hidden", "true");
+
+	  const listID = `styled-select-list-${++styledSelectSequence}`;
+	  const trigger = document.createElement("button");
+	  trigger.type = "button";
+	  trigger.className = "styled-select-trigger";
+	  trigger.setAttribute("role", "combobox");
+	  trigger.setAttribute("aria-haspopup", "listbox");
+	  trigger.setAttribute("aria-expanded", "false");
+	  trigger.setAttribute("aria-controls", listID);
+	  trigger.disabled = select.disabled;
+
+	  const fieldLabel = select.closest("label")?.querySelector("span");
+	  trigger.setAttribute("aria-label", fieldLabel?.textContent?.trim() || select.getAttribute("aria-label") || select.name || "Choose an option");
+	  const selectedLabel = document.createElement("span");
+	  selectedLabel.className = "styled-select-value";
+	  const chevron = document.createElement("span");
+	  chevron.className = "styled-select-chevron";
+	  chevron.setAttribute("aria-hidden", "true");
+	  trigger.append(selectedLabel, chevron);
+
+	  const popover = document.createElement("div");
+	  popover.id = listID;
+	  popover.className = "styled-select-popover";
+	  popover.setAttribute("role", "listbox");
+	  popover.hidden = true;
+	  root.append(trigger, popover);
+
+	  const optionButtons = [...select.options].map((option) => {
+		const button = document.createElement("button");
+		button.type = "button";
+		button.className = "styled-select-option";
+		button.dataset.value = option.value;
+		button.textContent = option.textContent.trim();
+		button.classList.toggle("placeholder", option.hasAttribute("data-placeholder"));
+		button.disabled = option.disabled;
+		button.tabIndex = -1;
+		button.setAttribute("role", "option");
+		popover.append(button);
+		return button;
+	  });
+
+	  const closePopover = ({restoreFocus = false} = {}) => {
+		popover.hidden = true;
+		trigger.setAttribute("aria-expanded", "false");
+		root.removeAttribute("data-open");
+		if (restoreFocus) trigger.focus();
+	  };
+	  root.sableClosePopover = closePopover;
+	  const selectedButton = () => optionButtons.find((button) => button.dataset.value === select.value && !button.disabled);
+	  const focusOption = (button) => {
+		if (!button) return;
+		button.focus();
+		button.scrollIntoView({block: "nearest"});
+	  };
+	  const openPopover = (direction = 1) => {
+		if (trigger.disabled) return;
+		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
+		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
+		});
+		popover.hidden = false;
+		trigger.setAttribute("aria-expanded", "true");
+		root.dataset.open = "true";
+		positionAnchoredPopover(root, trigger, popover);
+		const available = optionButtons.filter((button) => !button.disabled);
+		focusOption(selectedButton() || available[direction < 0 ? available.length - 1 : 0]);
+	  };
+	  const syncSelection = () => {
+		const selected = select.selectedOptions[0];
+		selectedLabel.textContent = selected?.textContent?.trim() || "Choose an option";
+		trigger.classList.toggle("placeholder", selected?.hasAttribute("data-placeholder") === true);
+		trigger.removeAttribute("aria-invalid");
+		optionButtons.forEach((button) => button.setAttribute("aria-selected", String(button.dataset.value === select.value)));
+	  };
+	  const syncAvailability = () => {
+		trigger.disabled = select.disabled;
+		optionButtons.forEach((button, index) => { button.disabled = select.options[index]?.disabled ?? true; });
+		if (trigger.disabled) closePopover();
+		syncSelection();
+	  };
+	  select.sableSyncStyledSelect = syncAvailability;
+	  const chooseOption = (button) => {
+		if (!button || button.disabled) return;
+		select.value = button.dataset.value;
+		syncSelection();
+		select.dispatchEvent(new Event("change", {bubbles: true}));
+		closePopover({restoreFocus: true});
+	  };
+	  const moveFocus = (event, direction) => {
+		const available = optionButtons.filter((button) => !button.disabled);
+		const current = available.indexOf(document.activeElement);
+		if (current < 0) return;
+		event.preventDefault();
+		focusOption(available[(current + direction + available.length) % available.length]);
+	  };
+
+	  trigger.addEventListener("click", () => {
+		if (popover.hidden) openPopover(); else closePopover({restoreFocus: true});
+	  });
+	  trigger.addEventListener("keydown", (event) => {
+		if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+		event.preventDefault();
+		openPopover(event.key === "ArrowUp" ? -1 : 1);
+	  });
+	  popover.addEventListener("keydown", (event) => {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		  moveFocus(event, event.key === "ArrowDown" ? 1 : -1);
+		} else if (event.key === "Home" || event.key === "End") {
+		  event.preventDefault();
+		  const available = optionButtons.filter((button) => !button.disabled);
+		  focusOption(available[event.key === "Home" ? 0 : available.length - 1]);
+		} else if (event.key === "Escape") {
+		  event.preventDefault();
+		  closePopover({restoreFocus: true});
+		} else if (event.key === "Tab") {
+		  closePopover();
+		}
+	  });
+	  optionButtons.forEach((button) => button.addEventListener("click", () => chooseOption(button)));
+	  select.addEventListener("change", syncSelection);
+	  select.addEventListener("invalid", (event) => {
+		event.preventDefault();
+		trigger.setAttribute("aria-invalid", "true");
+		trigger.focus();
+	  });
+	  document.addEventListener("pointerdown", (event) => {
+		if (!popover.hidden && !root.contains(event.target)) closePopover();
+	  });
+	  new MutationObserver(syncAvailability).observe(select, {
+		attributes: true,
+		subtree: true,
+		attributeFilter: ["disabled", "selected"],
+	  });
+	  syncAvailability();
+	};
+
+	let styledTimeSequence = 0;
+	const uses24HourTime = () => document.cookie.split(";")
+	  .some((entry) => entry.trim() === "sable_time_format=24");
+	const setupStyledTime = (input) => {
+	  if (!input || input.dataset.styledTimeReady === "true") return;
+	  input.dataset.styledTimeReady = "true";
+
+	  const use24Hour = uses24HourTime();
+	  const root = document.createElement("div");
+	  root.className = "styled-time";
+	  input.classList.forEach((className) => root.classList.add(className));
+	  input.before(root);
+	  root.append(input);
+	  input.classList.add("styled-time-native");
+	  input.hidden = true;
+	  input.tabIndex = -1;
+	  input.setAttribute("aria-hidden", "true");
+
+	  const pickerID = `styled-time-picker-${++styledTimeSequence}`;
+	  const fieldLabel = input.closest("label")?.querySelector("span");
+	  const accessibleLabel = fieldLabel?.textContent?.trim() || input.getAttribute("aria-label") || input.name || "Time";
+	  const trigger = document.createElement("div");
+	  trigger.className = "styled-time-trigger";
+	  const entry = document.createElement("input");
+	  entry.type = "text";
+	  entry.className = "styled-time-entry";
+	  entry.autocomplete = "off";
+	  entry.spellcheck = false;
+	  entry.setAttribute("aria-label", accessibleLabel);
+	  entry.setAttribute("aria-haspopup", "dialog");
+	  entry.setAttribute("aria-expanded", "false");
+	  entry.setAttribute("aria-controls", pickerID);
+	  const toggle = document.createElement("button");
+	  toggle.type = "button";
+	  toggle.className = "styled-time-toggle";
+	  toggle.setAttribute("aria-label", `Open ${accessibleLabel.toLowerCase()} picker`);
+	  toggle.setAttribute("aria-haspopup", "dialog");
+	  toggle.setAttribute("aria-expanded", "false");
+	  toggle.setAttribute("aria-controls", pickerID);
+	  const clock = document.createElement("span");
+	  clock.className = "styled-time-clock";
+	  clock.setAttribute("aria-hidden", "true");
+	  toggle.append(clock);
+	  trigger.append(entry, toggle);
+
+	  const popover = document.createElement("div");
+	  popover.id = pickerID;
+	  popover.className = "styled-time-popover";
+	  popover.setAttribute("role", "dialog");
+	  popover.setAttribute("aria-label", `Choose ${accessibleLabel.toLowerCase()}`);
+	  popover.hidden = true;
+	  const columns = document.createElement("div");
+	  columns.className = "styled-time-columns";
+	  popover.append(columns);
+	  // Keep the editable control first so an enclosing implicit label focuses it,
+	  // while the original input remains in the form as the submitted value.
+	  root.append(trigger, popover, input);
+
+	  const pad = (value) => String(value).padStart(2, "0");
+	  const readTime = () => {
+		const match = /^(\d{2}):(\d{2})$/.exec(input.value);
+		if (!match) return {hour: 0, minute: 0, empty: true};
+		return {hour: Number(match[1]), minute: Number(match[2]), empty: false};
+	  };
+	  const formatTime = ({hour, minute, empty}) => {
+		if (empty) return "Choose a time";
+		if (use24Hour) return `${pad(hour)}:${pad(minute)}`;
+		return `${pad(hour % 12 || 12)}:${pad(minute)} ${hour < 12 ? "AM" : "PM"}`;
+	  };
+	  const parseTimeEntry = (value) => {
+		let normalized = value.trim().toUpperCase().replaceAll(".", "").replace(/\s+/g, " ");
+		if (!normalized) return null;
+		let period = "";
+		const periodMatch = normalized.match(/\s*(AM|PM)$/);
+		if (periodMatch) {
+		  period = periodMatch[1];
+		  normalized = normalized.slice(0, periodMatch.index).trim();
+		}
+
+		let hourText = "";
+		let minuteText = "";
+		const separated = normalized.match(/^(\d{1,2})(?::|\s)(\d{1,2})$/);
+		const compact = normalized.match(/^(\d{3,4})$/);
+		if (separated) {
+		  [, hourText, minuteText] = separated;
+		} else if (compact) {
+		  hourText = compact[1].slice(0, -2);
+		  minuteText = compact[1].slice(-2);
+		} else {
+		  return null;
+		}
+
+		let hour = Number(hourText);
+		const minute = Number(minuteText);
+		if (minute > 59 || minute % stepMinutes !== 0) return null;
+		if (period) {
+		  if (hour < 1 || hour > 12) return null;
+		  hour = hour % 12 + (period === "PM" ? 12 : 0);
+		} else if (use24Hour || hour === 0 || hour > 12) {
+		  if (hour > 23) return null;
+		} else {
+		  const current = readTime();
+		  hour = hour % 12 + (!current.empty && current.hour >= 12 ? 12 : 0);
+		}
+		return {hour, minute, empty: false};
+	  };
+	  const columnButtons = new Map();
+	  const makeColumn = (name, values, labelFor) => {
+		const column = document.createElement("div");
+		column.className = "styled-time-column";
+		const label = document.createElement("span");
+		label.className = "styled-time-column-label";
+		label.textContent = name;
+		const list = document.createElement("div");
+		list.className = "styled-time-list";
+		list.setAttribute("role", "listbox");
+		list.setAttribute("aria-label", name);
+		const buttons = values.map((value) => {
+		  const button = document.createElement("button");
+		  button.type = "button";
+		  button.dataset.timePart = name.toLowerCase();
+		  button.dataset.value = String(value);
+		  button.textContent = labelFor(value);
+		  button.tabIndex = -1;
+		  button.setAttribute("role", "option");
+		  list.append(button);
+		  return button;
+		});
+		columnButtons.set(name.toLowerCase(), buttons);
+		column.append(label, list);
+		columns.append(column);
+	  };
+	  const hours = Array.from({length: use24Hour ? 24 : 12}, (_, index) => use24Hour ? index : index + 1);
+	  const stepMinutes = Math.max(1, Math.floor((Number(input.step) || 60) / 60));
+	  const minutes = Array.from({length: 60}, (_, minute) => minute).filter((minute) => minute % stepMinutes === 0);
+	  makeColumn("Hour", hours, pad);
+	  makeColumn("Minute", minutes, pad);
+	  if (!use24Hour) makeColumn("Period", ["AM", "PM"], (period) => period);
+
+	  const done = document.createElement("button");
+	  done.type = "button";
+	  done.className = "button styled-time-done";
+	  done.textContent = "Done";
+	  popover.append(done);
+	  const allButtons = () => [...columnButtons.values()].flat();
+	  const selectedValueFor = (part, time) => {
+		if (part === "hour") return String(use24Hour ? time.hour : time.hour % 12 || 12);
+		if (part === "minute") return String(time.minute);
+		return time.hour < 12 ? "AM" : "PM";
+	  };
+	  const syncPicker = ({preserveEntry = false} = {}) => {
+		const time = readTime();
+		if (!preserveEntry) entry.value = time.empty ? "" : formatTime(time);
+		entry.placeholder = "Choose a time";
+		root.removeAttribute("data-invalid");
+		entry.removeAttribute("aria-invalid");
+		columnButtons.forEach((buttons, part) => buttons.forEach((button) => {
+		  button.setAttribute("aria-selected", String(!time.empty && button.dataset.value === selectedValueFor(part, time)));
+		}));
+	  };
+	  let editingEntry = false;
+	  const updateNativeTime = (value, {preserveEntry = false} = {}) => {
+		if (input.value === value) {
+		  syncPicker({preserveEntry});
+		  return;
+		}
+		editingEntry = preserveEntry;
+		input.value = value;
+		input.dispatchEvent(new Event("input", {bubbles: true}));
+		input.dispatchEvent(new Event("change", {bubbles: true}));
+		editingEntry = false;
+		syncPicker({preserveEntry});
+	  };
+	  const setPart = (part, value) => {
+		const time = readTime();
+		let hour = time.hour;
+		let minute = time.minute;
+		if (part === "hour") {
+		  const selectedHour = Number(value);
+		  hour = use24Hour ? selectedHour : (selectedHour % 12) + (hour >= 12 ? 12 : 0);
+		} else if (part === "minute") {
+		  minute = Number(value);
+		} else {
+		  hour = value === "PM" ? (hour % 12) + 12 : hour % 12;
+		}
+		updateNativeTime(`${pad(hour)}:${pad(minute)}`);
+	  };
+	  const segmentOrder = use24Hour ? ["hour", "minute"] : ["hour", "minute", "period"];
+	  const segmentRange = (part) => {
+		if (part === "hour") return [0, 2];
+		if (part === "minute") return [3, 5];
+		return [6, 8];
+	  };
+	  const segmentAtPosition = (position) => {
+		if (position <= 2) return "hour";
+		if (position <= 5 || use24Hour) return "minute";
+		return "period";
+	  };
+	  let activeSegment = "hour";
+	  let digitBuffer = "";
+	  let digitBufferTimer = 0;
+	  const resetDigitBuffer = () => {
+		digitBuffer = "";
+		window.clearTimeout(digitBufferTimer);
+	  };
+	  const selectTimeSegment = (part = activeSegment) => {
+		activeSegment = segmentOrder.includes(part) ? part : "hour";
+		const [start, end] = segmentRange(activeSegment);
+		entry.setSelectionRange(start, end);
+	  };
+	  const moveTimeSegment = (direction) => {
+		const current = segmentOrder.indexOf(activeSegment);
+		const target = current + direction;
+		if (target < 0 || target >= segmentOrder.length) return false;
+		resetDigitBuffer();
+		selectTimeSegment(segmentOrder[target]);
+		return true;
+	  };
+	  const stepTimeSegment = (part, direction) => {
+		const time = readTime();
+		if (part === "hour") {
+		  const displayedHour = use24Hour ? time.hour : time.hour % 12 || 12;
+		  const minimum = use24Hour ? 0 : 1;
+		  const maximum = use24Hour ? 23 : 12;
+		  const next = displayedHour + direction > maximum
+			? minimum
+			: displayedHour + direction < minimum ? maximum : displayedHour + direction;
+		  setPart("hour", String(next));
+		} else if (part === "minute") {
+		  const next = (time.minute + direction * stepMinutes + 60) % 60;
+		  setPart("minute", String(next));
+		} else {
+		  setPart("period", time.hour < 12 ? "PM" : "AM");
+		}
+		selectTimeSegment(part);
+	  };
+	  const typeTimeDigit = (digit) => {
+		if (activeSegment === "period") return;
+		window.clearTimeout(digitBufferTimer);
+		digitBuffer += digit;
+		const minimum = activeSegment === "hour" && !use24Hour ? 1 : 0;
+		const maximum = activeSegment === "hour" ? (use24Hour ? 23 : 12) : 59;
+		let value = Number(digitBuffer);
+		if (digitBuffer.length > 2 || value > maximum) {
+		  digitBuffer = digit;
+		  value = Number(digit);
+		}
+		if (value >= minimum && value <= maximum) setPart(activeSegment, String(value));
+		const firstDigitCompletes = digitBuffer.length === 1 && (
+		  (activeSegment === "hour" && Number(digitBuffer) > (use24Hour ? 2 : 1))
+		  || (activeSegment === "minute" && Number(digitBuffer) > 5)
+		);
+		if (digitBuffer.length === 2 || firstDigitCompletes) {
+		  resetDigitBuffer();
+		  if (!moveTimeSegment(1)) selectTimeSegment(activeSegment);
+		} else {
+		  digitBufferTimer = window.setTimeout(resetDigitBuffer, 900);
+		  selectTimeSegment(activeSegment);
+		}
+	  };
+	  const closePicker = ({restoreFocus = false} = {}) => {
+		popover.hidden = true;
+		entry.setAttribute("aria-expanded", "false");
+		toggle.setAttribute("aria-expanded", "false");
+		root.removeAttribute("data-open");
+		if (restoreFocus) entry.focus();
+	  };
+	  root.sableClosePopover = closePicker;
+	  const openPicker = () => {
+		if (entry.disabled) return;
+		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
+		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
+		});
+		popover.hidden = false;
+		entry.setAttribute("aria-expanded", "true");
+		toggle.setAttribute("aria-expanded", "true");
+		root.dataset.open = "true";
+		positionAnchoredPopover(root, trigger, popover);
+		const selected = [...popover.querySelectorAll('[aria-selected="true"]')];
+		selected.forEach((button) => button.scrollIntoView({block: "center"}));
+		(selected[0] || allButtons()[0])?.focus();
+	  };
+
+	  toggle.addEventListener("click", () => {
+		if (popover.hidden) openPicker(); else closePicker({restoreFocus: true});
+	  });
+	  entry.addEventListener("input", () => {
+		const parsed = parseTimeEntry(entry.value);
+		if (parsed) {
+		  updateNativeTime(`${pad(parsed.hour)}:${pad(parsed.minute)}`, {preserveEntry: true});
+		} else {
+		  updateNativeTime("", {preserveEntry: true});
+		  root.removeAttribute("data-invalid");
+		  entry.removeAttribute("aria-invalid");
+		}
+	  });
+	  entry.addEventListener("blur", () => {
+		const parsed = parseTimeEntry(entry.value);
+		if (parsed) {
+		  updateNativeTime(`${pad(parsed.hour)}:${pad(parsed.minute)}`);
+		} else if (entry.value.trim()) {
+		  root.dataset.invalid = "true";
+		  entry.setAttribute("aria-invalid", "true");
+		}
+	  });
+	  entry.addEventListener("click", () => {
+		resetDigitBuffer();
+		selectTimeSegment(segmentAtPosition(entry.selectionStart ?? 0));
+	  });
+	  entry.addEventListener("focus", () => {
+		if (entry.selectionStart === entry.selectionEnd) selectTimeSegment(segmentAtPosition(entry.selectionStart ?? 0));
+	  });
+	  entry.addEventListener("keydown", (event) => {
+		if (/^\d$/.test(event.key) && activeSegment !== "period") {
+		  event.preventDefault();
+		  typeTimeDigit(event.key);
+		  return;
+		}
+		if (!use24Hour && activeSegment === "period" && ["a", "p"].includes(event.key.toLowerCase())) {
+		  event.preventDefault();
+		  resetDigitBuffer();
+		  setPart("period", event.key.toLowerCase() === "p" ? "PM" : "AM");
+		  selectTimeSegment("period");
+		  return;
+		}
+		if (event.key === "Enter") {
+		  const parsed = parseTimeEntry(entry.value);
+		  if (!parsed) return;
+		  event.preventDefault();
+		  updateNativeTime(`${pad(parsed.hour)}:${pad(parsed.minute)}`);
+		  selectTimeSegment(activeSegment);
+		  return;
+		}
+		if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+		  if (moveTimeSegment(event.key === "ArrowRight" ? 1 : -1)) event.preventDefault();
+		  return;
+		}
+		if (event.key === "Tab") {
+		  if (moveTimeSegment(event.shiftKey ? -1 : 1)) event.preventDefault();
+		  return;
+		}
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		  event.preventDefault();
+		  resetDigitBuffer();
+		  stepTimeSegment(activeSegment, event.key === "ArrowUp" ? 1 : -1);
+		}
+	  });
+	  columns.addEventListener("click", (event) => {
+		const button = event.target.closest("[data-time-part]");
+		if (button) setPart(button.dataset.timePart, button.dataset.value);
+	  });
+	  columns.addEventListener("keydown", (event) => {
+		const button = event.target.closest("[data-time-part]");
+		if (!button || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		const buttons = columnButtons.get(button.dataset.timePart) || [];
+		const current = buttons.indexOf(button);
+		let target = current;
+		if (event.key === "ArrowDown") target = (current + 1) % buttons.length;
+		else if (event.key === "ArrowUp") target = (current - 1 + buttons.length) % buttons.length;
+		else target = event.key === "Home" ? 0 : buttons.length - 1;
+		event.preventDefault();
+		buttons[target]?.focus();
+		buttons[target]?.scrollIntoView({block: "nearest"});
+	  });
+	  popover.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") {
+		  event.preventDefault();
+		  closePicker({restoreFocus: true});
+		}
+	  });
+	  done.addEventListener("click", () => closePicker({restoreFocus: true}));
+	  input.addEventListener("input", () => syncPicker({preserveEntry: editingEntry}));
+	  input.addEventListener("change", () => syncPicker({preserveEntry: editingEntry}));
+	  input.addEventListener("invalid", (event) => {
+		event.preventDefault();
+		root.dataset.invalid = "true";
+		entry.setAttribute("aria-invalid", "true");
+		entry.focus();
+	  });
+	  document.addEventListener("pointerdown", (event) => {
+		if (!popover.hidden && !root.contains(event.target)) closePicker();
+	  });
+	  new MutationObserver(() => {
+		entry.disabled = input.disabled;
+		toggle.disabled = input.disabled;
+		root.dataset.disabled = String(input.disabled);
+		if (input.disabled) closePicker();
+	  }).observe(input, {attributes: true, attributeFilter: ["disabled"]});
+	  entry.disabled = input.disabled;
+	  toggle.disabled = input.disabled;
+	  root.dataset.disabled = String(input.disabled);
+	  syncPicker();
+	};
+
 	// One range picker drives both the dashboard's custom range and the query
 	// log's time window. The dashboard hangs a form off it and submits on Apply;
 	// the log filter has no form of its own and only writes the hidden bounds
@@ -355,8 +914,8 @@
 	  };
 
 	  const syncValues = () => {
-		startValue.value = `${selectedStart}T${startTime.value || "00:00"}`;
-		endValue.value = `${selectedEnd}T${endTime.value || "00:00"}`;
+		startValue.value = startTime.value ? `${selectedStart}T${startTime.value}` : "";
+		endValue.value = endTime.value ? `${selectedEnd}T${endTime.value}` : "";
 		if (error) error.hidden = true;
 	  };
 
@@ -387,6 +946,8 @@
 		monthSelect.value = String(cursor.getMonth());
 		yearSelect.value = String(cursor.getFullYear());
 		updateMonthOptions();
+		monthSelect.sableSyncStyledSelect?.();
+		yearSelect.sableSyncStyledSelect?.();
 		previous.disabled = cursor.getFullYear() === minimumYear && cursor.getMonth() === 0;
 		next.disabled = cursor.getFullYear() === today.getFullYear() && cursor.getMonth() === today.getMonth();
 
@@ -539,7 +1100,7 @@
 	  });
 	});
 	document.addEventListener("keydown", (event) => {
-	  if (event.key !== "Escape") return;
+	  if (event.key !== "Escape" || event.defaultPrevented) return;
 	  openRangePickers().forEach((popover) => popover.sableCloseRangePicker?.({restoreFocus: true}));
 	});
 
@@ -1435,6 +1996,40 @@
 	  const label = button?.querySelector("[data-log-live-label]");
 	  const filtersButton = panel.querySelector("[data-query-filters-toggle]");
 	  const filtersPanel = panel.querySelector("[data-query-filters]");
+	  let filtersAnimation = null;
+	  const animateFiltersPanel = (open) => {
+		if (!filtersPanel) return;
+		filtersAnimation?.cancel();
+		filtersAnimation = null;
+		filtersPanel.style.removeProperty("overflow");
+		filtersPanel.style.removeProperty("transform-origin");
+		if (open) filtersPanel.removeAttribute("hidden");
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		  filtersPanel.toggleAttribute("hidden", !open);
+		  return;
+		}
+		const fullHeight = filtersPanel.scrollHeight;
+		filtersPanel.style.overflow = "hidden";
+		filtersPanel.style.transformOrigin = "top right";
+		const animation = filtersPanel.animate(open ? [
+		  {height: "0px", opacity: 0, transform: "translateY(-0.5rem) scaleY(0.96)"},
+		  {height: `${fullHeight}px`, opacity: 1, transform: "translateY(0) scaleY(1)"},
+		] : [
+		  {height: `${filtersPanel.offsetHeight}px`, opacity: 1, transform: "translateY(0) scaleY(1)"},
+		  {height: "0px", opacity: 0, transform: "translateY(-0.4rem) scaleY(0.96)"},
+		], {
+		  duration: open ? 210 : 150,
+		  easing: open ? "cubic-bezier(0.22, 1, 0.36, 1)" : "ease-in",
+		});
+		filtersAnimation = animation;
+		animation.finished.then(() => {
+		  if (filtersAnimation !== animation) return;
+		  if (!open) filtersPanel.setAttribute("hidden", "");
+		  filtersPanel.style.removeProperty("overflow");
+		  filtersPanel.style.removeProperty("transform-origin");
+		  filtersAnimation = null;
+		}).catch(() => {});
+	  };
 	  const stop = () => {
 		if (timer !== null) window.clearInterval(timer);
 		timer = null;
@@ -1502,9 +2097,8 @@
 		if (live) { poll(); start(); } else stop();
 	  });
 	  filtersButton?.addEventListener("click", () => {
-		const open = filtersPanel?.hasAttribute("hidden");
-		if (open) filtersPanel?.removeAttribute("hidden");
-		else filtersPanel?.setAttribute("hidden", "");
+		const open = filtersButton.getAttribute("aria-expanded") !== "true";
+		animateFiltersPanel(open);
 		filtersButton.classList.toggle("active", open);
 		filtersButton.setAttribute("aria-expanded", String(open));
 		announce(open ? "Query log filters expanded" : "Query log filters collapsed");
@@ -1621,14 +2215,20 @@
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
+	  // Range pickers populate their year choices before their native selects are
+	  // promoted into styled comboboxes.
+	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
+	  root.querySelectorAll?.("[data-range-popover]").forEach(setupRangePicker);
+	  if (root.matches?.("select[data-styled-select]")) setupStyledSelect(root);
+	  root.querySelectorAll?.("select[data-styled-select]").forEach(setupStyledSelect);
 	  if (root.matches?.("dialog")) setupDialogAccessibility(root);
 	  root.querySelectorAll?.("dialog").forEach(setupDialogAccessibility);
 	  if (root.matches?.(".table-scroll, .admin-desktop-table")) setupScrollableRegion(root);
 	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
 	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
 	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
-	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
-	  root.querySelectorAll?.("[data-range-popover]").forEach(setupRangePicker);
+	  if (root.matches?.('input[type="time"][data-styled-time]')) setupStyledTime(root);
+	  root.querySelectorAll?.('input[type="time"][data-styled-time]').forEach(setupStyledTime);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
 	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
 	  if (root.matches?.("[data-donut]")) setupDonutChart(root);

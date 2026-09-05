@@ -230,7 +230,7 @@ func TestZoneFormsOfferTheConfiguredTSIGKeys(t *testing.T) {
 	response := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(response, request)
 	body := response.Body.String()
-	if !strings.Contains(body, `<select class="mono-input" name="tsig_key">`) {
+	if !strings.Contains(body, `<select class="mono-input" name="tsig_key" data-styled-select>`) {
 		t.Fatalf("the zone form still uses a free-text TSIG field: %s", body)
 	}
 	// The option carries the canonical name so it round-trips, but reads

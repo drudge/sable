@@ -105,7 +105,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 			<div><div class="log-title"><h2 id="runtime-log-title">@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
 			<div class="logs-toolbar-actions">
 				@LogLiveButton(view.Live)
-				<label class="runtime-level-field"><span class="sr-only">Log level</span><select name="level" aria-label="Log level" data-runtime-level><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select></label>
+				<label class="runtime-level-field"><span class="sr-only">Log level</span><select name="level" aria-label="Log level" data-runtime-level data-styled-select><option value="all" selected?={ view.Level == "all" }>All Levels</option><option value="debug" selected?={ view.Level == "debug" }>Debug</option><option value="info" selected?={ view.Level == "info" }>Info</option><option value="warn" selected?={ view.Level == "warn" }>Warning</option><option value="error" selected?={ view.Level == "error" }>Error</option></select></label>
 			</div>
 		</header>
 		// The level sits with the live toggle but posts with the search, so both
@@ -131,7 +131,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 			</div>
 		}
 		if view.Persisted {
-			<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size aria-label="Rows per page"><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ runtimePageSummary(view) }</span><nav aria-label="Server log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
+			<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size data-styled-select aria-label="Rows per page"><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ runtimePageSummary(view) }</span><nav aria-label="Server log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#runtime-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 		}
 	</section>
 }
@@ -167,20 +167,20 @@ templ QueryLogsPanel(view QueryLogsView) {
 					<label><span>Client IP</span><input name="client_ip" value={ view.ClientIP } placeholder="e.g. 10.0.7.168"/></label>
 					<label><span>Domain</span><input name="name" value={ view.Name } placeholder="e.g. example.com"/></label>
 					<label><span>Query Type</span><input name="record_type" value={ view.RecordType } placeholder="e.g. A, AAAA"/></label>
-					<label><span>Response Type</span><select name="source">@LogOption("", "All Types", view.Source)@LogOption("authoritative", "Authoritative", view.Source)@LogOption("upstream", "Recursive", view.Source)@LogOption("cache", "Cached", view.Source)@LogOption("blocked", "Blocked", view.Source)@LogOption("local", "Local", view.Source)@LogOption("error", "Error", view.Source)</select></label>
-					<label><span>Protocol</span><select name="protocol">@LogOption("", "All Protocols", view.Protocol)@LogOption("UDP", "UDP", view.Protocol)@LogOption("TCP", "TCP", view.Protocol)@LogOption("TLS", "TLS", view.Protocol)@LogOption("HTTPS", "HTTPS", view.Protocol)@LogOption("QUIC", "QUIC", view.Protocol)</select></label>
+					<label><span>Response Type</span><select name="source" data-styled-select>@LogOption("", "All Types", view.Source)@LogOption("authoritative", "Authoritative", view.Source)@LogOption("upstream", "Recursive", view.Source)@LogOption("cache", "Cached", view.Source)@LogOption("blocked", "Blocked", view.Source)@LogOption("local", "Local", view.Source)@LogOption("error", "Error", view.Source)</select></label>
+					<label><span>Protocol</span><select name="protocol" data-styled-select>@LogOption("", "All Protocols", view.Protocol)@LogOption("UDP", "UDP", view.Protocol)@LogOption("TCP", "TCP", view.Protocol)@LogOption("TLS", "TLS", view.Protocol)@LogOption("HTTPS", "HTTPS", view.Protocol)@LogOption("QUIC", "QUIC", view.Protocol)</select></label>
 					<label><span>RCODE</span><input name="response_code" value={ view.ResponseCode } placeholder="e.g. NoError"/></label>
 					<div class="query-filter-range query-filter-wide" data-range-root>
 						<span>Time Range</span>
-						<button class="range-trigger" type="button" data-range-open aria-haspopup="dialog" aria-expanded="false" aria-controls="query-log-range">@Icon("calendar")<span data-range-label>{ queryRangeLabel(view) }</span>@Icon("chevron-down")</button>
+						<button class="range-trigger" type="button" data-range-open aria-haspopup="dialog" aria-expanded="false" aria-controls="query-log-range">@Icon("calendar")<span data-range-label>{ queryRangeLabel(view) }</span><span class="styled-select-chevron" aria-hidden="true"></span></button>
 						<input type="hidden" name="start" value={ view.Start } data-range-start/>
 						<input type="hidden" name="end" value={ view.End } data-range-end/>
 						<div class="range-popover query-range-popover" id="query-log-range" role="dialog" aria-label="Query log time range" data-range-popover data-range-default-end-time="23:59" hidden>
 							<div class="range-picker-body">
 								@RangeCalendar()
 								<div class="range-times">
-									<label><span>From</span><input class="time-field" type="time" step="60" data-range-start-time/></label>
-									<label><span>To</span><input class="time-field" type="time" step="60" data-range-end-time/></label>
+									<label><span>From</span><input class="time-field" type="time" step="60" data-range-start-time data-styled-time/></label>
+									<label><span>To</span><input class="time-field" type="time" step="60" data-range-end-time data-styled-time/></label>
 								</div>
 								<p class="range-error" role="alert" data-range-error hidden></p>
 								<div class="range-picker-actions">
@@ -214,7 +214,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 			</tbody></table></div>
 			@QueryDetailDialog(view.CanBlocking)
 		}
-		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
+		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size data-styled-select aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 	</section>
 }
 

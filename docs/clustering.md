@@ -70,6 +70,7 @@ Replicated state includes:
 
 - authoritative zones, records, DNSSEC policy, and encrypted signing keys;
 - resolver, cache, TSIG, blocking, and query-log runtime settings;
+- Dynamic DNS settings and external provider credentials;
 - UniFi settings and controller credentials;
 - OpenID Connect settings, client secret, linked identities, and role mappings;
 - users, roles, permission grants, password hashes, API-token hashes, and token

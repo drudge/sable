@@ -344,6 +344,62 @@ DNSSEC private keys remain encrypted in the database-backed secret vault. Public
 
 GET /api/v1/zones returns the active database-backed catalog. TOML containing a zones table is rejected rather than silently maintaining two sources of truth.
 
+## Integrations: dynamic DNS
+
+Dynamic DNS discovers the deployment's public IPv4 or IPv6 address and keeps
+external A and AAAA records synchronized. Configure it from **Integrations →
+Dynamic DNS** so provider credentials are encrypted in the secret vault. Those
+credentials are shared with ACME DNS-01 for the same provider; give them only
+the record-edit and zone-read permissions both jobs require.
+
+```toml
+[dynamic_dns]
+enabled = true
+provider = "cloudflare"
+interval = "5m"
+ipv4_url = "https://api.ipify.org"
+ipv6_url = "https://api6.ipify.org"
+
+[[dynamic_dns.records]]
+zone = "example.com"
+name = "home.example.com"
+ipv4 = true
+ipv6 = true
+ttl = 600
+```
+
+`provider` accepts `cloudflare`, `porkbun`, `namecheap`, `godaddy`,
+`digitalocean`, `hetzner`, `route53`, `ovh`, or `rfc2136`. `interval` must be at
+least one minute. The default is five minutes, failed attempts retry with
+bounded exponential backoff, and provider writes occur only when the address,
+TTL, or RRset contents differ.
+
+Each record name must be fully qualified and belong to its `zone`. All entries
+in one integration use the same zone, address-family selection, and TTL; add one
+entry per public name. At least one of `ipv4` or `ipv6` must be true. Sable owns
+the complete RRset for each enabled name and type: if `home.example.com`
+publishes A, every A value at that name is replaced with the one discovered
+address. Other types at the same name are not touched. Do not configure a name
+whose A or AAAA RRset is shared with another system.
+
+The default discovery URLs use separate IPv4-only and IPv6-only services. A
+custom endpoint must be an absolute HTTPS URL without embedded credentials and
+return one public address as plain text. Sable rejects private, loopback,
+link-local, unspecified, and wrong-family replies. Calling any discovery
+service necessarily reveals the node's source address to that service.
+
+TTL values are normally 60–86400 seconds. GoDaddy and Porkbun require at least
+600; Namecheap permits at most 60000. Namecheap also requires the caller's
+current public IP in its API allow-list, so it may be unsuitable when that IP
+changes without another way to update the allow-list.
+
+Only the writable cluster node discovers and publishes addresses. Settings and
+provider credentials replicate so a promoted replica can take over. Pausing or
+removing the integration retains the last external records; removal also keeps
+the shared provider credentials because certificate automation may use them.
+See [the dynamic DNS guide](guides/dynamic-dns.md) for setup and reachability
+checks.
+
 ## Integrations: UniFi host synchronization
 
 Sable can publish the hosts a UniFi controller already knows about — fixed-IP

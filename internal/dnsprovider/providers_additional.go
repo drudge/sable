@@ -1,4 +1,4 @@
-package certificates
+package dnsprovider
 
 import (
 	"bytes"
@@ -188,63 +188,12 @@ func (provider *route53Provider) Present(ctx context.Context, _ string, name, va
 }
 
 func (provider *route53Provider) recordSet(ctx context.Context, name string) ([]string, error) {
-	query := url.Values{"name": {dns.Fqdn(name)}, "type": {"TXT"}, "maxitems": {"1"}}
-	request, err := provider.request(ctx, http.MethodGet, provider.rrsetPath(), query, nil)
-	if err != nil {
-		return nil, err
-	}
-	response, err := provider.client.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("list Route 53 records: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, responseError("Route 53", response)
-	}
-	var result struct {
-		Sets []route53RecordSet `xml:"ResourceRecordSets>ResourceRecordSet"`
-	}
-	if err := xml.NewDecoder(response.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode Route 53 records: %w", err)
-	}
-	if len(result.Sets) == 0 || !strings.EqualFold(strings.TrimSuffix(result.Sets[0].Name, "."), strings.TrimSuffix(name, ".")) || result.Sets[0].Type != "TXT" {
-		return nil, nil
-	}
-	values := make([]string, 0, len(result.Sets[0].Records))
-	for _, record := range result.Sets[0].Records {
-		values = append(values, record.Value)
-	}
-	return values, nil
+	values, _, err := provider.recordSetByType(ctx, name, "TXT")
+	return values, err
 }
 
 func (provider *route53Provider) change(ctx context.Context, action, name string, values []string) error {
-	requestBody := route53ChangeRequest{XMLNS: "https://route53.amazonaws.com/doc/2013-04-01/"}
-	change := struct {
-		Action string           `xml:"Action"`
-		Set    route53RecordSet `xml:"ResourceRecordSet"`
-	}{Action: action, Set: route53RecordSet{Name: dns.Fqdn(name), Type: "TXT", TTL: 60}}
-	for _, value := range values {
-		change.Set.Records = append(change.Set.Records, route53Record{Value: value})
-	}
-	requestBody.Changes = append(requestBody.Changes, change)
-	encoded, err := xml.Marshal(requestBody)
-	if err != nil {
-		return err
-	}
-	request, err := provider.request(ctx, http.MethodPost, provider.rrsetPath(), nil, encoded)
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/xml")
-	response, err := provider.client.Do(request)
-	if err != nil {
-		return fmt.Errorf("change Route 53 record: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return responseError("Route 53", response)
-	}
-	return nil
+	return provider.changeRecordSet(ctx, action, name, "TXT", 60, values)
 }
 
 func (provider *route53Provider) rrsetPath() string {

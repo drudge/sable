@@ -20,6 +20,7 @@ import (
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/durationfmt"
 	"github.com/drudge/sable/internal/unifi"
 )
@@ -71,6 +72,11 @@ const (
 	defaultUniFiInterval       = 2 * time.Minute
 	minimumUniFiInterval       = 30 * time.Second
 	defaultUniFiRecordTTL      = 300
+	defaultDynamicDNSInterval  = 5 * time.Minute
+	minimumDynamicDNSInterval  = time.Minute
+	defaultDynamicDNSRecordTTL = 600
+	defaultIPv4DiscoveryURL    = "https://api.ipify.org"
+	defaultIPv6DiscoveryURL    = "https://api6.ipify.org"
 	defaultBlockListUpdate     = 24 * time.Hour
 	defaultBlockingTTL         = 30
 	defaultSessionTTL          = 12 * time.Hour
@@ -115,6 +121,7 @@ type Config struct {
 	Statistics   Statistics   `toml:"statistics"`
 	Backup       Backup       `toml:"backup"`
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
+	DynamicDNS   DynamicDNS   `toml:"dynamic_dns"`
 	UniFi        UniFi        `toml:"unifi"`
 	OIDC         OIDC         `toml:"oidc"`
 	Security     Security     `toml:"security"`
@@ -279,6 +286,31 @@ type ACME struct {
 	RenewBefore      Duration `toml:"renew_before"`
 }
 
+// DynamicDNS publishes this deployment's public addresses into an external
+// authoritative DNS provider. Credentials live in the shared provider vault.
+type DynamicDNS struct {
+	Enabled  bool               `toml:"enabled"`
+	Provider string             `toml:"provider"`
+	Interval Duration           `toml:"interval"`
+	IPv4URL  string             `toml:"ipv4_url"`
+	IPv6URL  string             `toml:"ipv6_url"`
+	Records  []DynamicDNSRecord `toml:"records"`
+}
+
+// DynamicDNSRecord is an externally hosted owner whose A and/or AAAA RRset is
+// exclusively managed by Sable.
+type DynamicDNSRecord struct {
+	Zone string `toml:"zone"`
+	Name string `toml:"name"`
+	IPv4 bool   `toml:"ipv4"`
+	IPv6 bool   `toml:"ipv6"`
+	TTL  uint32 `toml:"ttl"`
+}
+
+func (settings DynamicDNS) Runnable() bool {
+	return settings.Enabled && settings.Provider != "" && len(settings.Records) > 0
+}
+
 // UniFi configures the host synchronizer that publishes UniFi networks,
 // reservations, and connected clients as authoritative records. Controller
 // credentials are encrypted in the secret vault and are deliberately never
@@ -428,6 +460,10 @@ func Defaults() Config {
 				DirectoryURL: defaultACMEDirectoryURL, StorageDirectory: defaultACMEStorageDir,
 				RenewBefore: Duration{Duration: defaultACMERenewBefore},
 			},
+		},
+		DynamicDNS: DynamicDNS{
+			Interval: Duration{Duration: defaultDynamicDNSInterval},
+			IPv4URL:  defaultIPv4DiscoveryURL, IPv6URL: defaultIPv6DiscoveryURL,
 		},
 		UniFi: UniFi{
 			Site:     defaultUniFiSite,
@@ -802,6 +838,7 @@ func (configuration Config) Validate() error {
 			}
 		}
 	}
+	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
 	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
@@ -820,6 +857,84 @@ func validServerLogLevel(level string) bool {
 	default:
 		return false
 	}
+}
+
+// Validate reports every problem with dynamic DNS settings.
+func (settings DynamicDNS) Validate() error {
+	return errors.Join(settings.validate()...)
+}
+
+func (settings DynamicDNS) validate() []error {
+	var validationErrors []error
+	if settings.Interval.Duration < minimumDynamicDNSInterval {
+		validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.interval must be at least %s", minimumDynamicDNSInterval))
+	}
+	if settings.Provider != "" && !dnsprovider.Supported(settings.Provider) {
+		validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.provider %q is not supported", settings.Provider))
+	}
+	if settings.Enabled && settings.Provider == "" {
+		validationErrors = append(validationErrors, errors.New("dynamic_dns.provider is required when dynamic_dns.enabled is true"))
+	}
+	for _, endpoint := range []struct {
+		field string
+		value string
+	}{{"ipv4_url", settings.IPv4URL}, {"ipv6_url", settings.IPv6URL}} {
+		parsed, err := url.Parse(endpoint.value)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("dynamic_dns.%s must be an absolute HTTPS URL without credentials", endpoint.field))
+		}
+	}
+	seen := make(map[string]struct{}, len(settings.Records)*2)
+	for index, record := range settings.Records {
+		field := fmt.Sprintf("dynamic_dns.records[%d]", index)
+		if record.Zone == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.zone is required", field))
+		} else if _, err := dnsname.Normalize(record.Zone); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.zone: %w", field, err))
+		}
+		if record.Name == "" {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
+		} else if _, err := dnsname.Normalize(record.Name); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name: %w", field, err))
+		} else if record.Zone != "" && record.Name != record.Zone && !strings.HasSuffix(record.Name, "."+record.Zone) {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.name must belong to its zone", field))
+		}
+		if !record.IPv4 && !record.IPv6 {
+			validationErrors = append(validationErrors, fmt.Errorf("%s must publish IPv4, IPv6, or both", field))
+		}
+		if err := dnsprovider.ValidateRecordTTL(settings.Provider, record.TTL); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.ttl %w", field, err))
+		}
+		if index > 0 {
+			first := settings.Records[0]
+			if record.Zone != first.Zone {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.zone must match dynamic_dns.records[0].zone", field))
+			}
+			if record.IPv4 != first.IPv4 || record.IPv6 != first.IPv6 {
+				validationErrors = append(validationErrors, fmt.Errorf("%s address families must match dynamic_dns.records[0]", field))
+			}
+			if record.TTL != first.TTL {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.ttl must match dynamic_dns.records[0].ttl", field))
+			}
+		}
+		for _, candidate := range []struct {
+			recordType string
+			enabled    bool
+		}{{"A", record.IPv4}, {"AAAA", record.IPv6}} {
+			recordType, enabled := candidate.recordType, candidate.enabled
+			key := record.Name + "\x00" + recordType
+			if enabled {
+				if _, duplicate := seen[key]; duplicate {
+					validationErrors = append(validationErrors, fmt.Errorf("duplicate dynamic DNS %s record %q", recordType, record.Name))
+				}
+				seen[key] = struct{}{}
+			}
+		}
+	}
+	if settings.Enabled && len(settings.Records) == 0 {
+		validationErrors = append(validationErrors, errors.New("dynamic_dns.records requires at least one record when enabled"))
+	}
+	return validationErrors
 }
 
 // Validate reports every problem with the UniFi settings. The setup wizard
@@ -1023,6 +1138,7 @@ func (configuration *Config) normalize() {
 	if configuration.EncryptedDNS.ACME.RenewBefore.Duration == 0 {
 		configuration.EncryptedDNS.ACME.RenewBefore.Duration = defaultACMERenewBefore
 	}
+	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
@@ -1266,6 +1382,47 @@ func (configuration *Config) normalizeUniFi() {
 		}
 		return strings.Compare(left.ID, right.ID)
 	})
+}
+
+func (configuration *Config) normalizeDynamicDNS() {
+	settings := &configuration.DynamicDNS
+	settings.Provider = strings.ToLower(strings.TrimSpace(settings.Provider))
+	if settings.Interval.Duration <= 0 {
+		settings.Interval.Duration = defaultDynamicDNSInterval
+	}
+	settings.IPv4URL = strings.TrimSpace(settings.IPv4URL)
+	if settings.IPv4URL == "" {
+		settings.IPv4URL = defaultIPv4DiscoveryURL
+	}
+	settings.IPv6URL = strings.TrimSpace(settings.IPv6URL)
+	if settings.IPv6URL == "" {
+		settings.IPv6URL = defaultIPv6DiscoveryURL
+	}
+	for index := range settings.Records {
+		record := &settings.Records[index]
+		record.Zone = normalizeDomain(record.Zone)
+		record.Name = normalizeDynamicDNSName(record.Name)
+		if record.TTL == 0 {
+			record.TTL = defaultDynamicDNSRecordTTL
+		}
+	}
+	slices.SortFunc(settings.Records, func(left, right DynamicDNSRecord) int {
+		if compared := strings.Compare(left.Zone, right.Zone); compared != 0 {
+			return compared
+		}
+		return strings.Compare(left.Name, right.Name)
+	})
+}
+
+func normalizeDynamicDNSName(name string) string {
+	name = strings.Trim(strings.ToLower(strings.TrimSpace(name)), ".")
+	normalized, err := dnsname.Normalize(name)
+	if err != nil {
+		// Preserve invalid input for validation instead of silently changing the
+		// RRset Sable would own (for example, stripping a wildcard label).
+		return name
+	}
+	return normalized
 }
 
 func normalizeDomain(domain string) string {

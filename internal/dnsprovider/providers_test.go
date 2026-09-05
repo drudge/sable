@@ -1,4 +1,4 @@
-package certificates
+package dnsprovider
 
 import (
 	"context"
@@ -92,12 +92,12 @@ func TestProviderCredentialValidation(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if err := validateCredentials(test.name, test.credentials); err != nil {
+			if err := ValidateCredentials(test.name, test.credentials); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
-	if err := validateCredentials("cloudflare", Credentials{}); err == nil {
+	if err := ValidateCredentials("cloudflare", Credentials{}); err == nil {
 		t.Fatal("empty Cloudflare credentials were accepted")
 	}
 }
@@ -234,5 +234,200 @@ func httpResponse(status int, body string) *http.Response {
 func TestRelativeDNSName(t *testing.T) {
 	if got := relativeName("_acme-challenge.dns.example.com.", "example.com."); got != "_acme-challenge.dns" {
 		t.Fatalf("relative name = %q", got)
+	}
+}
+
+func TestCloudflareEnsureRecordReplacesRRSetAndRemovesDuplicates(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.RequestURI())
+		if request.Method == http.MethodGet {
+			return httpResponse(http.StatusOK, `{"result":[{"id":"first","content":"198.51.100.2","ttl":300},{"id":"duplicate","content":"198.51.100.3","ttl":300}]}`), nil
+		}
+		return httpResponse(http.StatusOK, `{}`), nil
+	})}
+	provider := &cloudflareProvider{
+		credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://cloudflare.test/client/v4",
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 300,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(requests) != 3 || !strings.HasPrefix(requests[0], "GET /client/v4/zones/zone-1/dns_records?") || requests[1] != "PATCH /client/v4/zones/zone-1/dns_records/first" || requests[2] != "DELETE /client/v4/zones/zone-1/dns_records/duplicate" {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
+func TestCloudflareEnsureRecordPreservesProxiedAutomaticTTL(t *testing.T) {
+	var methods []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method)
+		return httpResponse(http.StatusOK, `{"result":[{"id":"record-1","content":"198.51.100.1","ttl":1,"proxied":true}]}`), nil
+	})}
+	provider := &cloudflareProvider{
+		credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://cloudflare.test/client/v4",
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 300,
+	})
+	if err != nil || changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(methods) != 1 || methods[0] != http.MethodGet {
+		t.Fatalf("methods = %#v", methods)
+	}
+}
+
+func TestGoDaddyEnsureRecordReadsItemsResponse(t *testing.T) {
+	var methods []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method)
+		return httpResponse(http.StatusOK, `{"items":[{"recordId":"record-1","data":"198.51.100.1","ttl":600}]}`), nil
+	})}
+	provider := &godaddyProvider{credentials: Credentials{APIToken: "token"}, client: client, baseURL: "https://godaddy.test/v3"}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(methods) != 1 || methods[0] != http.MethodGet {
+		t.Fatalf("methods = %#v", methods)
+	}
+}
+
+func TestPorkbunEnsureApexRecordOmitsAtLabel(t *testing.T) {
+	var paths []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		paths = append(paths, request.URL.Path)
+		if strings.Contains(request.URL.Path, "retrieveByNameType") {
+			return httpResponse(http.StatusOK, `{"status":"SUCCESS","records":[]}`), nil
+		}
+		return httpResponse(http.StatusOK, `{"status":"SUCCESS"}`), nil
+	})}
+	provider := &porkbunProvider{credentials: Credentials{APIKey: "key", Secret: "secret"}, client: client, baseURL: "https://porkbun.test/api/json/v3"}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(paths) != 2 || paths[0] != "/api/json/v3/dns/retrieveByNameType/example.com/A" || paths[1] != "/api/json/v3/dns/create/example.com" {
+		t.Fatalf("paths = %#v", paths)
+	}
+}
+
+func TestPorkbunEnsureRecordCollapsesDuplicateRecordsByID(t *testing.T) {
+	var paths []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		paths = append(paths, request.URL.Path)
+		if strings.Contains(request.URL.Path, "retrieveByNameType") {
+			return httpResponse(http.StatusOK, `{"status":"SUCCESS","records":[{"id":"10","content":"198.51.100.2","ttl":"600"},{"id":"11","content":"198.51.100.3","ttl":"600"}]}`), nil
+		}
+		return httpResponse(http.StatusOK, `{"status":"SUCCESS"}`), nil
+	})}
+	provider := &porkbunProvider{credentials: Credentials{APIKey: "key", Secret: "secret"}, client: client, baseURL: "https://porkbun.test/api/json/v3"}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	expected := []string{
+		"/api/json/v3/dns/retrieveByNameType/example.com/A/home",
+		"/api/json/v3/dns/edit/example.com/10",
+		"/api/json/v3/dns/delete/example.com/11",
+	}
+	if strings.Join(paths, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("paths = %#v", paths)
+	}
+}
+
+func TestHetznerEnsureRecordReadsWrappedRRSetResponse(t *testing.T) {
+	var methods []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method)
+		return httpResponse(http.StatusOK, `{"rrset":{"ttl":600,"records":[{"value":"198.51.100.1"}]}}`), nil
+	})}
+	provider := &hetznerProvider{
+		credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://hetzner.test/v1",
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(methods) != 1 || methods[0] != http.MethodGet {
+		t.Fatalf("methods = %#v", methods)
+	}
+}
+
+func TestHetznerEnsureRecordUsesRRSetActions(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.Path)
+		if request.Method == http.MethodGet {
+			return httpResponse(http.StatusOK, `{"rrset":{"ttl":300,"records":[{"value":"198.51.100.2"}]}}`), nil
+		}
+		return httpResponse(http.StatusCreated, `{}`), nil
+	})}
+	provider := &hetznerProvider{
+		credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://hetzner.test/v1",
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	expected := []string{
+		"GET /v1/zones/zone-1/rrsets/home/A",
+		"POST /v1/zones/zone-1/rrsets/home/A/actions/set_records",
+		"POST /v1/zones/zone-1/rrsets/home/A/actions/change_ttl",
+	}
+	if strings.Join(requests, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
+func TestHetznerEnsureRecordCreatesMissingRRSet(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.Path)
+		if request.Method == http.MethodGet {
+			return httpResponse(http.StatusNotFound, `{}`), nil
+		}
+		return httpResponse(http.StatusCreated, `{}`), nil
+	})}
+	provider := &hetznerProvider{
+		credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://hetzner.test/v1",
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	expected := []string{
+		"GET /v1/zones/zone-1/rrsets/home/A",
+		"POST /v1/zones/zone-1/rrsets",
+	}
+	if strings.Join(requests, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
+func TestRecordTTLRangeUsesProviderLimits(t *testing.T) {
+	if err := ValidateRecordTTL("godaddy", 300); err == nil {
+		t.Fatal("GoDaddy accepted a TTL below its minimum")
+	}
+	if err := ValidateRecordTTL("namecheap", 60001); err == nil {
+		t.Fatal("Namecheap accepted a TTL above its maximum")
+	}
+	if err := ValidateRecordTTL("cloudflare", 300); err != nil {
+		t.Fatal(err)
 	}
 }

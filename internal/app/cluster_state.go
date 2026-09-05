@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/unifi"
@@ -38,15 +39,21 @@ type oidcSecretVault interface {
 	Put(context.Context, string) error
 }
 
+type dnsProviderCredentialVault interface {
+	Get(context.Context, string) (dnsprovider.Credentials, bool)
+	Replace(context.Context, string, dnsprovider.Credentials) error
+}
+
 type clusterStateReplicator struct {
-	configuration        *config.Manager
-	zones                *zone.Manager
-	authorization        authorizationStateStore
-	tsigSecrets          *tsig.Store
-	unifiCredentials     unifiCredentialVault
-	oidcSecret           oidcSecretVault
-	baseDirectory        string
-	prepareConfiguration func(context.Context, config.Config, string) error
+	configuration          *config.Manager
+	zones                  *zone.Manager
+	authorization          authorizationStateStore
+	tsigSecrets            *tsig.Store
+	unifiCredentials       unifiCredentialVault
+	oidcSecret             oidcSecretVault
+	dnsProviderCredentials dnsProviderCredentialVault
+	baseDirectory          string
+	prepareConfiguration   func(context.Context, config.Config, string) error
 }
 
 type clusterStateSnapshot struct {
@@ -69,6 +76,10 @@ type clusterRuntimeConfiguration struct {
 	// node's vault, the same way TSIG secrets are. Neither side keeps them on
 	// disk in the clear.
 	UniFiCredentials unifi.Credentials `toml:"unifi_credentials"`
+	// Dynamic DNS follows the writable primary. Its provider credential travels
+	// with the settings so a promoted replica can immediately resume publishing.
+	DynamicDNS            config.DynamicDNS       `toml:"dynamic_dns"`
+	DynamicDNSCredentials dnsprovider.Credentials `toml:"dynamic_dns_credentials"`
 	// OIDC travels with redirect_url cleared. Every node serves the callback at
 	// the same path and fills in its own host, so the section is identical
 	// cluster-wide and a node that needs a different callback keeps its own
@@ -78,6 +89,10 @@ type clusterRuntimeConfiguration struct {
 	// credentials. Without it a replica shows the sign-in button and then fails
 	// the token exchange.
 	OIDCClientSecret string `toml:"oidc_client_secret"`
+}
+
+func (replicator *clusterStateReplicator) setDNSProviderCredentials(credentials dnsProviderCredentialVault) {
+	replicator.dnsProviderCredentials = credentials
 }
 
 func newClusterStateReplicator(
@@ -108,7 +123,13 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		Blocking:        active.Blocking,
 		QueryLogEnabled: active.QueryLog.Enabled,
 		UniFi:           active.UniFi,
+		DynamicDNS:      active.DynamicDNS,
 		OIDC:            replicatedOIDC(active.OIDC),
+	}
+	if replicator.dnsProviderCredentials != nil && active.DynamicDNS.Provider != "" {
+		if credentials, found := replicator.dnsProviderCredentials.Get(ctx, active.DynamicDNS.Provider); found {
+			runtimeConfiguration.DynamicDNSCredentials = credentials
+		}
 	}
 	if replicator.unifiCredentials != nil {
 		if credentials, found := replicator.unifiCredentials.Get(ctx); found {
@@ -158,6 +179,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 		return err
 	}
 	if err := replicator.storeReplicatedUniFiCredentials(ctx, &runtimeConfiguration); err != nil {
+		return err
+	}
+	if err := replicator.storeReplicatedDNSProviderCredentials(ctx, &runtimeConfiguration); err != nil {
 		return err
 	}
 	if err := replicator.storeReplicatedOIDCSecret(ctx, &runtimeConfiguration); err != nil {
@@ -283,6 +307,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		Blocking:        source.Blocking,
 		QueryLogEnabled: source.QueryLog.Enabled,
 		UniFi:           source.UniFi,
+		DynamicDNS:      source.DynamicDNS,
 		OIDC:            replicatedOIDC(source.OIDC),
 	}
 }
@@ -300,6 +325,7 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	candidate.Blocking = source.Blocking
 	candidate.QueryLog.Enabled = source.QueryLogEnabled
 	candidate.UniFi = source.UniFi
+	candidate.DynamicDNS = source.DynamicDNS
 	// The override stays put. It names this node, and the primary has no say in
 	// what hostname a browser reaches it at.
 	override := candidate.OIDC.RedirectURL
@@ -358,6 +384,25 @@ func (replicator *clusterStateReplicator) storeReplicatedUniFiCredentials(
 	}
 	if err := replicator.unifiCredentials.Replace(ctx, credentials); err != nil {
 		return fmt.Errorf("store replicated UniFi credentials: %w", err)
+	}
+	return nil
+}
+
+func (replicator *clusterStateReplicator) storeReplicatedDNSProviderCredentials(
+	ctx context.Context,
+	runtimeConfiguration *clusterRuntimeConfiguration,
+) error {
+	credentials := runtimeConfiguration.DynamicDNSCredentials
+	runtimeConfiguration.DynamicDNSCredentials = dnsprovider.Credentials{}
+	provider := runtimeConfiguration.DynamicDNS.Provider
+	if replicator.dnsProviderCredentials == nil || provider == "" || credentials == (dnsprovider.Credentials{}) {
+		return nil
+	}
+	if stored, found := replicator.dnsProviderCredentials.Get(ctx, provider); found && stored == credentials {
+		return nil
+	}
+	if err := replicator.dnsProviderCredentials.Replace(ctx, provider, credentials); err != nil {
+		return fmt.Errorf("store replicated %s DNS credentials: %w", provider, err)
 	}
 	return nil
 }

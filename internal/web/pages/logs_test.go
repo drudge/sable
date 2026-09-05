@@ -29,6 +29,15 @@ func TestQueryLogPanelShowsAppliedFiltersAsTokens(t *testing.T) {
 	if strings.Contains(panel, `type="datetime-local"`) {
 		t.Error("query log filter still uses a bare datetime-local input instead of the range picker")
 	}
+	for _, expected := range []string{
+		`<select aria-label="Month" data-calendar-month data-styled-select>`,
+		`<select aria-label="Year" data-calendar-year data-styled-select>`,
+		`class="styled-select-chevron" aria-hidden="true"`,
+	} {
+		if !strings.Contains(panel, expected) {
+			t.Errorf("query log range picker does not contain themed calendar select %q", expected)
+		}
+	}
 }
 
 func TestQueryLogPanelRendersOneReusableDetailDrawer(t *testing.T) {

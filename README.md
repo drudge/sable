@@ -82,6 +82,9 @@ without shipping a Node.js runtime or a separate frontend bundle.
   synchronization telemetry
 - Cluster-aware console links and DNS client presets that can query a specific
   node over its advertised DoH endpoint
+- Dynamic DNS publication through the same nine external providers as ACME
+  DNS-01, with A/AAAA reconciliation, public-address discovery, and primary-only
+  cluster execution
 - UniFi synchronization with guided setup, per-network zone mapping, and
   integration-owned A, AAAA, and IPv4/IPv6 PTR records that do not disturb
   hand-authored data

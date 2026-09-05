@@ -771,7 +771,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span><input type=\"search\" aria-label=\"Search zones\" placeholder=\"Search zones...\" autocomplete=\"off\" data-zone-search></label><div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span><input type=\"search\" aria-label=\"Search zones\" placeholder=\"Search zones...\" autocomplete=\"off\" data-zone-search></label><div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter data-styled-select><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter data-styled-select><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1406,7 +1406,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</span><input type=\"search\" aria-label=\"Filter zone records\" placeholder=\"Filter records...\" autocomplete=\"off\" data-record-search></label> <label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter><option value=\"all\">All Types</option>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</span><input type=\"search\" aria-label=\"Filter zone records\" placeholder=\"Filter records...\" autocomplete=\"off\" data-record-search></label> <label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter data-styled-select><option value=\"all\">All Types</option>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2840,7 +2840,7 @@ func TSIGKeySelect(keys []string, selected string) templ.Component {
 			templ_7745c5c3_Var111 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "<select class=\"mono-input\" name=\"tsig_key\"><option value=\"\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "<select class=\"mono-input\" name=\"tsig_key\" data-styled-select><option value=\"\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2965,7 +2965,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "</button><form class=\"blocking-dialog-form\" hx-post=\"/ui/zones/add\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\" data-zone-create-form><label><span>Zone Name</span><input name=\"name\" placeholder=\"example.com\" autocomplete=\"off\" required></label> <label><span>Zone Type</span><select name=\"type\" data-zone-create-type>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "</button><form class=\"blocking-dialog-form\" hx-post=\"/ui/zones/add\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\" data-zone-create-form><label><span>Zone Name</span><input name=\"name\" placeholder=\"example.com\" autocomplete=\"off\" required></label> <label><span>Zone Type</span><select name=\"type\" data-zone-create-type data-styled-select>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2994,7 +2994,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 220, "\" disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label> <label><span>Protocol</span><select name=\"primary_protocol\" data-zone-primary-protocol disabled><option value=\"tcp\">TCP</option><option value=\"tls\">DNS-over-TLS</option><option value=\"udp\" data-stub-protocol>UDP</option></select></label></section><section class=\"zone-create-options\" data-zone-create-options=\"alias\" hidden><label><span>Source Zone</span><select class=\"mono-input\" name=\"alias_zone\" disabled required>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 220, "\" disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label> <label><span>Protocol</span><select name=\"primary_protocol\" data-zone-primary-protocol data-styled-select disabled><option value=\"tcp\">TCP</option><option value=\"tls\">DNS-over-TLS</option><option value=\"udp\" data-stub-protocol>UDP</option></select></label></section><section class=\"zone-create-options\" data-zone-create-options=\"alias\" hidden><label><span>Source Zone</span><select class=\"mono-input\" name=\"alias_zone\" data-styled-select disabled required>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3030,7 +3030,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "</select><small>Every record of the source zone is republished here and kept in step whenever the source changes.</small></label></section><section class=\"zone-create-options\" data-zone-create-options=\"forwarder\" hidden><label><span>Forwarder Address</span><input class=\"mono-input\" name=\"forwarder_address\" placeholder=\"1.1.1.1 or dns.example:53\" disabled required></label><div class=\"record-field-grid two\"><label><span>Protocol</span><select name=\"forwarder_protocol\" disabled><option value=\"udp\">UDP</option><option value=\"tcp\">TCP</option><option value=\"tls\">DNS-over-TLS</option></select></label><label><span>Priority</span><input type=\"number\" name=\"forwarder_priority\" min=\"0\" max=\"65535\" value=\"0\" disabled required></label></div></section><section class=\"zone-create-options\" data-zone-create-options=\"resolution\" hidden><input type=\"hidden\" name=\"dnssec_validation_present\" value=\"1\" disabled> <label class=\"zone-dynamic-toggle\"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class=\"switch\"><input type=\"checkbox\" name=\"dnssec_validation\" value=\"true\" checked disabled><span></span></span></label></section><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button\" type=\"submit\">Create Zone</button></footer></form></dialog>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "</select><small>Every record of the source zone is republished here and kept in step whenever the source changes.</small></label></section><section class=\"zone-create-options\" data-zone-create-options=\"forwarder\" hidden><label><span>Forwarder Address</span><input class=\"mono-input\" name=\"forwarder_address\" placeholder=\"1.1.1.1 or dns.example:53\" disabled required></label><div class=\"record-field-grid two\"><label><span>Protocol</span><select name=\"forwarder_protocol\" data-styled-select disabled><option value=\"udp\">UDP</option><option value=\"tcp\">TCP</option><option value=\"tls\">DNS-over-TLS</option></select></label><label><span>Priority</span><input type=\"number\" name=\"forwarder_priority\" min=\"0\" max=\"65535\" value=\"0\" disabled required></label></div></section><section class=\"zone-create-options\" data-zone-create-options=\"resolution\" hidden><input type=\"hidden\" name=\"dnssec_validation_present\" value=\"1\" disabled> <label class=\"zone-dynamic-toggle\"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class=\"switch\"><input type=\"checkbox\" name=\"dnssec_validation\" value=\"true\" checked disabled><span></span></span></label></section><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button\" type=\"submit\">Create Zone</button></footer></form></dialog>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3282,7 +3282,7 @@ func RecordTypePicker() templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "</div><label class=\"record-more-types\"><span class=\"sr-only\">More record types</span><select data-record-more-types><option value=\"\">More types...</option> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "</div><label class=\"record-more-types\"><span class=\"sr-only\">More record types</span><select data-record-more-types data-styled-select><option value=\"\" data-placeholder>More types...</option> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4467,7 +4467,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4514,7 +4514,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var193 string
 			templ_7745c5c3_Var193, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "flags")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 920}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 939}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var193)
 			if templ_7745c5c3_Err != nil {
@@ -4527,7 +4527,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var194 string
 			templ_7745c5c3_Var194, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "flags") == "", "0", zoneRecordParsedField(recordType, value, "flags")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 1068}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 1087}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var194)
 			if templ_7745c5c3_Err != nil {
@@ -4654,7 +4654,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4721,13 +4721,13 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var200 string
 			templ_7745c5c3_Var200, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fingerprint_type")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 984, Col: 881}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 984, Col: 900}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var200)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4811,7 +4811,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4868,13 +4868,13 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var204 string
 			templ_7745c5c3_Var204, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "selector")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 987, Col: 826}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 987, Col: 845}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var204)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4911,13 +4911,13 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var205 string
 			templ_7745c5c3_Var205, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "matching_type")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 987, Col: 1256}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 987, Col: 1294}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var205)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5751,7 +5751,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 533, "\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 533, "\" data-styled-select")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5798,7 +5798,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var249 string
 			templ_7745c5c3_Var249, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fwd_priority")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1004, Col: 699}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1004, Col: 718}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var249)
 			if templ_7745c5c3_Err != nil {
@@ -5811,7 +5811,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var250 string
 			templ_7745c5c3_Var250, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1004, Col: 863}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1004, Col: 882}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var250)
 			if templ_7745c5c3_Err != nil {
@@ -5911,7 +5911,7 @@ func DNSSECAlgorithmSelect(name, selected string, disabled bool) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 552, "\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 552, "\" data-styled-select")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6033,7 +6033,7 @@ func DSDigestSelect(name, selected string, disabled bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 570, "\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 570, "\" data-styled-select")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6343,7 +6343,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 598, "><span></span></span></label> <label><span>Signing Algorithm</span><select name=\"algorithm\"><option value=\"ed25519\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 598, "><span></span></span></label> <label><span>Signing Algorithm</span><select name=\"algorithm\" data-styled-select><option value=\"ed25519\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6425,7 +6425,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 608, "\" required><small>Old keys remain published for cached signatures and DS records.</small></label></div><label><span>Authenticated Denial</span><select name=\"denial\" data-dnssec-denial><option value=\"nsec\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 608, "\" required><small>Old keys remain published for cached signatures and DS records.</small></label></div><label><span>Authenticated Denial</span><select name=\"denial\" data-dnssec-denial data-styled-select><option value=\"nsec\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6917,7 +6917,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 662, "\" readonly></label> <label><span>Zone Type</span><select disabled>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 662, "\" readonly></label> <label><span>Zone Type</span><select data-styled-select disabled>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7060,7 +7060,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 678, "</span><span><strong>Catalog Membership</strong><small>Publish this zone in a catalog so subscribed name servers provision it automatically.</small></span></div><label><span>Catalog Zone</span><select class=\"mono-input\" name=\"catalog_zone\"><option value=\"\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 678, "</span><span><strong>Catalog Membership</strong><small>Publish this zone in a catalog so subscribed name servers provision it automatically.</small></span></div><label><span>Catalog Zone</span><select class=\"mono-input\" name=\"catalog_zone\" data-styled-select><option value=\"\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7144,7 +7144,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 689, "</span><span><strong>Mirrored Zone</strong><small>This zone republishes the records of its source zone.</small></span></div><label><span>Source Zone</span><select class=\"mono-input\" name=\"alias_zone\" required>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 689, "</span><span><strong>Mirrored Zone</strong><small>This zone republishes the records of its source zone.</small></span></div><label><span>Source Zone</span><select class=\"mono-input\" name=\"alias_zone\" data-styled-select required>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7263,7 +7263,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 703, "</textarea><small>One address per line, tried in order.</small></label> <label><span>Protocol</span><select name=\"primary_protocol\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 703, "</textarea><small>One address per line, tried in order.</small></label> <label><span>Protocol</span><select name=\"primary_protocol\" data-styled-select>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7359,7 +7359,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 718, "</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div><label><span>Transfer Policy</span><select name=\"zone_transfer\"><option value=\"deny\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 718, "</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div><label><span>Transfer Policy</span><select name=\"zone_transfer\" data-styled-select><option value=\"deny\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

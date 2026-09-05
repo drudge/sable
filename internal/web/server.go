@@ -92,6 +92,7 @@ type Server struct {
 	blockLists       *blockcompiler.Updater
 	dnssec           dnssecController
 	cluster          clusterController
+	dynamicDNS       dynamicDNSController
 	unifi            unifiController
 	certificates     certificateController
 	tsigKeys         tsigController
@@ -223,6 +224,11 @@ func New(
 	mux.HandleFunc("GET /cache", server.cachePage)
 	mux.HandleFunc("GET /blocked", server.blockingPage)
 	mux.HandleFunc("GET /integrations", server.integrationsPage)
+	mux.HandleFunc("POST /ui/integrations/dynamic-dns/save", server.saveDynamicDNS)
+	mux.HandleFunc("POST /ui/integrations/dynamic-dns/sync", server.syncDynamicDNSNow)
+	mux.HandleFunc("POST /ui/integrations/dynamic-dns/enabled", server.setDynamicDNSEnabled)
+	mux.HandleFunc("POST /ui/integrations/dynamic-dns/remove", server.removeDynamicDNS)
+	mux.HandleFunc("GET /ui/integrations/dynamic-dns/status", server.dynamicDNSStatusPanel)
 	mux.HandleFunc("POST /ui/integrations/unifi/wizard", server.runUniFiWizard)
 	mux.HandleFunc("POST /ui/integrations/unifi/sync", server.syncUniFiNow)
 	mux.HandleFunc("POST /ui/integrations/unifi/enabled", server.setUniFiEnabled)

@@ -38,6 +38,7 @@ func (server *Server) SetUniFiController(controller unifiController) {
 
 func (server *Server) integrationsPage(writer http.ResponseWriter, request *http.Request) {
 	view := server.integrationsView(request, "", "")
+	view.DynamicDNS.Setup = request.URL.Query().Get("setup") == "dynamic-dns"
 	if request.URL.Query().Get("setup") == "unifi" {
 		view.UniFi.Wizard = server.newUniFiWizard(request)
 	}
@@ -51,8 +52,9 @@ func (server *Server) integrationsPage(writer http.ResponseWriter, request *http
 
 func (server *Server) integrationsView(request *http.Request, message, errorMessage string) pages.IntegrationsPageView {
 	settings := server.config.Current().Config.UniFi
+	console := server.consoleView(request)
 	view := pages.IntegrationsPageView{
-		Console: server.consoleView(request),
+		Console: console,
 		Message: message,
 		Error:   errorMessage,
 		UniFi: pages.UniFiAppView{
@@ -69,6 +71,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 			Mappings:         unifiMappingViews(settings, nil),
 		},
 	}
+	view.DynamicDNS = server.dynamicDNSView(request, console.TimeDisplay)
 	view.SSO = server.ssoView(request, nil)
 	if server.unifi == nil {
 		return view

@@ -93,7 +93,19 @@ templ UsersPanel(view AdministrationPageView) {
 		} else {
 			<div class="admin-mobile-list">
 				for _, user := range view.Users {
-					<button type="button" class="admin-mobile-row" data-dialog-open={ adminUserDialogID(user.ID) }><div><strong>{ user.Username }</strong><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span><small>{ administrationUserName(user) }</small><span class="mobile-role-list">{ adminRoles(user.Roles) }</span></div>@Icon("chevron-right")</button>
+					<button type="button" class="admin-mobile-row admin-mobile-user-row" data-dialog-open={ adminUserDialogID(user.ID) }><div class="admin-mobile-user-copy"><strong>{ user.Username }</strong><div class="admin-mobile-user-meta"><small>{ administrationUserName(user) }</small><div class="mobile-role-list">
+						if len(user.Roles) == 0 {
+							<span>No groups</span>
+						} else {
+							for _, role := range user.Roles {
+								<span>{ role }</span>
+							}
+						}
+					</div></div></div><div class="admin-mobile-user-trailing"><div class="admin-mobile-user-statuses">
+						if len(user.Identities) > 0 {
+							<span class="status-badge sso-badge" title={ userIdentitySummary(user) }>SSO</span>
+						}
+						<span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span></div>@Icon("chevron-right")</div></button>
 				}
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Users</caption><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>
@@ -121,7 +133,11 @@ templ GroupsPanel(view AdministrationPageView) {
 		} else {
 			<div class="admin-mobile-list">
 				for _, role := range view.Roles {
-					<button type="button" class="admin-mobile-row" disabled?={ role.BuiltIn } data-dialog-open={ adminGroupDialogID(role.ID) }><div><strong>{ role.Name }</strong><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span><small>{ role.Description }</small></div>@Icon("chevron-right")</button>
+					if role.BuiltIn {
+						<article class="admin-mobile-row admin-mobile-group-row static"><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing"><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span><span class="built-in-badge">Built in</span></div></article>
+					} else {
+						<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open={ adminGroupDialogID(role.ID) }><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing"><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span>@Icon("chevron-right")</div></button>
+					}
 				}
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Groups</caption><thead><tr><th>Name</th><th>Members</th><th>Description</th><th>Actions</th></tr></thead><tbody>
@@ -149,7 +165,7 @@ templ PermissionsPanel(view AdministrationPageView) {
 		} else {
 			<div class="admin-mobile-list">
 				for _, permission := range view.Permissions {
-					<article class="admin-mobile-row static"><div><strong>{ permission }</strong><small>{ fmt.Sprint(permissionRoleCount(view.Roles, permission)) } groups</small></div>@Icon("chevron-right")</article>
+					<article class="admin-mobile-row static"><div><strong>{ permission }</strong><small>{ fmt.Sprint(permissionRoleCount(view.Roles, permission)) } groups</small></div></article>
 				}
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Permissions by group and interface</caption><thead><tr><th>Permission</th><th>Web UI Groups</th><th>API Groups</th><th>Resource</th></tr></thead><tbody>
@@ -234,7 +250,7 @@ templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <articl
 
 templ CreateTokenDialog(view AdministrationPageView) {
 	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog" aria-labelledby="create-token-title"><div class="dialog-header"><h2 id="create-token-title">Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
-		<label><span>Expiration</span><select name="expiration" required>
+		<label><span>Expiration</span><select name="expiration" data-styled-select required>
 			<option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option>
 			<option value="1d">1 day</option>
 			<option value="1w">7 days</option>
@@ -244,7 +260,7 @@ templ CreateTokenDialog(view AdministrationPageView) {
 			<option value="never">Never</option>
 		</select><small>Non-expiring tokens remain valid until revoked.</small></label>
 		if view.CanManageUsers {
-			<label><span>Owner</span><select name="user_id" data-token-owner required>
+			<label><span>Owner</span><select name="user_id" data-token-owner data-styled-select required>
 				for _, user := range view.Users {
 					if !user.Disabled {
 						<option value={ fmt.Sprint(user.ID) } selected?={ user.ID == view.CurrentUserID }>{ administrationUserName(user) } ({ user.Username })</option>
@@ -431,7 +447,6 @@ func adminUserProfileFormID(id int64) string { return fmt.Sprintf("edit-user-%d-
 func adminUserGroupsFormID(id int64) string { return fmt.Sprintf("edit-user-%d-groups", id) }
 func adminUserTokenCountID(id int64) string { return fmt.Sprintf("edit-user-%d-token-count", id) }
 func adminGroupDialogID(id int64) string { return fmt.Sprintf("edit-group-%d-dialog", id) }
-func adminRoles(roles []string) string { if len(roles) == 0 { return "No groups" }; return strings.Join(roles, ", ") }
 func permissionRoleCount(roles []auth.Role, permission string) int { return len(permissionRoles(roles, permission)) }
 func permissionRoles(roles []auth.Role, permission string) []string { result := make([]string, 0); for _, role := range roles { if adminContains(role.Permissions, auth.PermissionAll) || adminContains(role.Permissions, permission) { result = append(result, role.Name) } }; return result }
 func permissionRolesForSurface(roles []auth.Role, permission string, surface auth.Surface) []string { result := make([]string, 0); for _, role := range roles { for _, grant := range role.Grants { if grant.Surface == surface && (grant.Permission == permission || grant.Permission == auth.PermissionAll) { result = append(result, role.Name); break } } }; return result }

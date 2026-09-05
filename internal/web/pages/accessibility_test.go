@@ -3,6 +3,8 @@ package pages
 import (
 	"strings"
 	"testing"
+
+	"github.com/drudge/sable/internal/auth"
 )
 
 func TestAppShellProvidesKeyboardLandmarks(t *testing.T) {
@@ -81,6 +83,71 @@ func TestRenderedDialogsHaveAccessibleNames(t *testing.T) {
 				t.Errorf("%s contains an unnamed dialog: %s", name, dialog)
 			}
 		}
+	}
+}
+
+func TestAdministrationMobileUserShowsSSOStatusAndGroupPills(t *testing.T) {
+	t.Parallel()
+
+	page := renderComponent(t, UsersPanel(AdministrationPageView{
+		Users: []auth.ManagedUser{{
+			ID:          1,
+			Username:    "art.vandelay",
+			DisplayName: "Art Vandelay",
+			Roles:       []string{"Administrator"},
+			Identities:  []auth.LinkedIdentity{{Provider: "oidc", Subject: "art"}},
+		}},
+	}))
+	for _, expected := range []string{
+		`class="admin-mobile-user-statuses"`,
+		`class="status-badge sso-badge"`,
+		`>SSO</span>`,
+		`class="mobile-role-list"><span>Administrator</span>`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("mobile administration user does not include %q", expected)
+		}
+	}
+	if strings.Index(page, `class="status-badge sso-badge"`) > strings.Index(page, `class="status-badge active"`) {
+		t.Error("mobile SSO badge should appear before the account status")
+	}
+}
+
+func TestAdministrationMobileRowsOnlyShowAvailableActions(t *testing.T) {
+	t.Parallel()
+
+	builtInGroup := renderComponent(t, GroupsPanel(AdministrationPageView{
+		Roles: []auth.Role{{ID: 1, Name: "Administrator", BuiltIn: true}},
+	}))
+	for _, expected := range []string{
+		`<article class="admin-mobile-row admin-mobile-group-row static">`,
+		`class="built-in-badge">Built in</span>`,
+	} {
+		if !strings.Contains(builtInGroup, expected) {
+			t.Errorf("built-in mobile group row does not include %q", expected)
+		}
+	}
+	if strings.Contains(builtInGroup, `data-dialog-open="edit-group-1-dialog"`) || strings.Contains(builtInGroup, `icon-chevron-right`) {
+		t.Error("built-in mobile group row advertises an unavailable edit action")
+	}
+
+	customGroup := renderComponent(t, GroupsPanel(AdministrationPageView{
+		Roles: []auth.Role{{ID: 2, Name: "DNS Operators"}},
+	}))
+	for _, expected := range []string{
+		`<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open="edit-group-2-dialog">`,
+		`icon-chevron-right`,
+	} {
+		if !strings.Contains(customGroup, expected) {
+			t.Errorf("editable mobile group row does not include %q", expected)
+		}
+	}
+
+	permissions := renderComponent(t, PermissionsPanel(AdministrationPageView{
+		Permissions: []string{"dns.read"},
+	}))
+	if strings.Contains(permissions, `icon-chevron-right`) {
+		t.Error("informational mobile permission row advertises a disclosure action")
 	}
 }
 

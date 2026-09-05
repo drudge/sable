@@ -127,8 +127,8 @@ and account disablement revoke existing sessions. Administration listing uses a
 fixed number of queries rather than one query per user or group. The web
 middleware leaves DNS, DoT, DoH, and DoQ listeners untouched while protecting the
 management UI, APIs, and metrics. `internal/secrets` encrypts DNSSEC private
-keys, TSIG shared secrets, UniFi and OpenID Connect credentials, and ACME
-provider credentials using AES-256-GCM with the secret name as associated data;
+keys, TSIG shared secrets, UniFi and OpenID Connect credentials, and external
+DNS provider credentials using AES-256-GCM with the secret name as associated data;
 its master key is stored outside the database with owner-only permissions.
 
 ## Persistence
@@ -172,8 +172,8 @@ unreadable sources preserve the active policy.
 Sable uses a primary/replica control plane designed for one- and two-server
 deployments. One primary accepts configuration changes. Replicas pull signed,
 monotonically numbered generations containing authoritative zones, resolver and
-cache policy, TSIG keys, blocking and query-log settings, UniFi and OpenID
-Connect configuration, users, roles, grants, federated identities, and API-token
+cache policy, TSIG keys, blocking and query-log settings, Dynamic DNS, UniFi,
+and OpenID Connect configuration, users, roles, grants, federated identities, and API-token
 hashes. Replicated credentials travel over the authenticated enrollment and
 synchronization channel and land in each node's own encrypted vault, so no node
 keeps them in plain-text configuration. Every node continues answering DNS from
@@ -217,9 +217,11 @@ behind an atomic certificate store. File-watcher reloads therefore update new
 DoT, DoH, and DoQ handshakes without restarting sockets; an invalid pair preserves the
 last-known-good identity.
 
-ACME DNS-01 uses a provider interface with credentials stored as encrypted
-secrets. Built-in adapters cover Cloudflare, Porkbun, Namecheap, GoDaddy,
+ACME DNS-01 and Dynamic DNS share a provider interface and encrypted credential
+store. Built-in adapters cover Cloudflare, Porkbun, Namecheap, GoDaddy,
 DigitalOcean, Hetzner, Amazon Route 53, OVHcloud, and RFC 2136 with TSIG.
 Issuance and automatic renewal run in the control plane and feed the existing
 atomic certificate activation path. Provider cleanup is record-specific so an
-ACME run does not replace unrelated TXT data.
+ACME run does not replace unrelated TXT data. The Dynamic DNS worker runs only
+on the writable node, discovers each needed address family once per attempt,
+and reconciles the complete configured A or AAAA RRset only when it differs.

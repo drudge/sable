@@ -2134,7 +2134,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 200, "</textarea></label><label><span>DNS Provider</span><select name=\"acme_dns_provider\" data-acme-provider><option value=\"\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 200, "</textarea></label><label><span>DNS Provider</span><select name=\"acme_dns_provider\" data-acme-provider data-styled-select><option value=\"\" data-placeholder")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2241,7 +2241,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		var templ_7745c5c3_Var93 string
 		templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.ACMEDNSZone)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 1663}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 1699}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var93)
 		if templ_7745c5c3_Err != nil {
@@ -2254,7 +2254,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		var templ_7745c5c3_Var94 string
 		templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.ResolveAttributeValue(firstNonEmptyPage(view.ACMEStorageDirectory, "data/tls/acme"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 1821}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 1857}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var94)
 		if templ_7745c5c3_Err != nil {
@@ -2267,7 +2267,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		var templ_7745c5c3_Var95 string
 		templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.ResolveAttributeValue(firstNonEmptyPage(view.ACMEDirectoryURL, "https://acme-v02.api.letsencrypt.org/directory"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 1970}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 2006}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var95)
 		if templ_7745c5c3_Err != nil {
@@ -2280,7 +2280,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		var templ_7745c5c3_Var96 string
 		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.ResolveAttributeValue(firstNonEmptyPage(view.ACMERenewBefore, "30d"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 2074}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 334, Col: 2110}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var96)
 		if templ_7745c5c3_Err != nil {
@@ -2468,7 +2468,7 @@ func ClusterACMECredentialFields(view ClusterPageView) templ.Component {
 			templ_7745c5c3_Var103 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 243, "<div class=\"cluster-acme-credentials\"><div class=\"field-grid two\" data-acme-credentials=\"cloudflare\" hidden><label><span>API Token</span><input type=\"password\" name=\"cloudflare_api_token\" autocomplete=\"new-password\"></label><label><span>Zone ID (optional)</span><input name=\"cloudflare_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"porkbun\" hidden><label><span>API Key</span><input type=\"password\" name=\"porkbun_api_key\"></label><label><span>Secret API Key</span><input type=\"password\" name=\"porkbun_secret\"></label></div><div class=\"field-grid three\" data-acme-credentials=\"namecheap\" hidden><label><span>API Username</span><input name=\"namecheap_username\"></label><label><span>API Key</span><input type=\"password\" name=\"namecheap_api_key\"></label><label><span>Allow-listed Client IP</span><input name=\"namecheap_client_ip\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"godaddy\" hidden><label><span>API Token</span><input type=\"password\" name=\"godaddy_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"digitalocean\" hidden><label><span>API Token</span><input type=\"password\" name=\"digitalocean_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"hetzner\" hidden><label><span>API Token</span><input type=\"password\" name=\"hetzner_api_token\"></label><label><span>Zone ID (optional)</span><input name=\"hetzner_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"route53\" hidden><label><span>Access Key ID</span><input name=\"route53_access_key_id\"></label><label><span>Secret Access Key</span><input type=\"password\" name=\"route53_secret_access_key\"></label><label><span>Hosted Zone ID</span><input name=\"route53_zone_id\"></label><label><span>Session Token (optional)</span><input type=\"password\" name=\"route53_session_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"ovh\" hidden><label><span>API Endpoint</span><select name=\"ovh_endpoint\"><option value=\"ovh-eu\">Europe</option><option value=\"ovh-ca\">Canada</option><option value=\"ovh-us\">United States</option></select></label><label><span>Application Key</span><input name=\"ovh_application_key\"></label><label><span>Application Secret</span><input type=\"password\" name=\"ovh_application_secret\"></label><label><span>Consumer Key</span><input type=\"password\" name=\"ovh_consumer_key\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"rfc2136\" hidden><label><span>Authoritative Server</span><input name=\"rfc2136_server\" placeholder=\"dns.example.com:53\"></label><label><span>TSIG Key Name</span><input name=\"rfc2136_tsig_name\"></label><label><span>TSIG Secret</span><input type=\"password\" name=\"rfc2136_tsig_secret\"></label><label><span>TSIG Algorithm</span><select name=\"rfc2136_tsig_algorithm\"><option value=\"hmac-sha256\">HMAC-SHA256</option><option value=\"hmac-sha384\">HMAC-SHA384</option><option value=\"hmac-sha512\">HMAC-SHA512</option></select></label></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 243, "<div class=\"cluster-acme-credentials\"><div class=\"field-grid two\" data-acme-credentials=\"cloudflare\" hidden><label><span>API Token</span><input type=\"password\" name=\"cloudflare_api_token\" autocomplete=\"new-password\"></label><label><span>Zone ID (optional)</span><input name=\"cloudflare_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"porkbun\" hidden><label><span>API Key</span><input type=\"password\" name=\"porkbun_api_key\"></label><label><span>Secret API Key</span><input type=\"password\" name=\"porkbun_secret\"></label></div><div class=\"field-grid three\" data-acme-credentials=\"namecheap\" hidden><label><span>API Username</span><input name=\"namecheap_username\"></label><label><span>API Key</span><input type=\"password\" name=\"namecheap_api_key\"></label><label><span>Allow-listed Client IP</span><input name=\"namecheap_client_ip\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"godaddy\" hidden><label><span>API Token</span><input type=\"password\" name=\"godaddy_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"digitalocean\" hidden><label><span>API Token</span><input type=\"password\" name=\"digitalocean_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"hetzner\" hidden><label><span>API Token</span><input type=\"password\" name=\"hetzner_api_token\"></label><label><span>Zone ID (optional)</span><input name=\"hetzner_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"route53\" hidden><label><span>Access Key ID</span><input name=\"route53_access_key_id\"></label><label><span>Secret Access Key</span><input type=\"password\" name=\"route53_secret_access_key\"></label><label><span>Hosted Zone ID</span><input name=\"route53_zone_id\"></label><label><span>Session Token (optional)</span><input type=\"password\" name=\"route53_session_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"ovh\" hidden><label><span>API Endpoint</span><select name=\"ovh_endpoint\" data-styled-select><option value=\"ovh-eu\">Europe</option><option value=\"ovh-ca\">Canada</option><option value=\"ovh-us\">United States</option></select></label><label><span>Application Key</span><input name=\"ovh_application_key\"></label><label><span>Application Secret</span><input type=\"password\" name=\"ovh_application_secret\"></label><label><span>Consumer Key</span><input type=\"password\" name=\"ovh_consumer_key\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"rfc2136\" hidden><label><span>Authoritative Server</span><input name=\"rfc2136_server\" placeholder=\"dns.example.com:53\"></label><label><span>TSIG Key Name</span><input name=\"rfc2136_tsig_name\"></label><label><span>TSIG Secret</span><input type=\"password\" name=\"rfc2136_tsig_secret\"></label><label><span>TSIG Algorithm</span><select name=\"rfc2136_tsig_algorithm\" data-styled-select><option value=\"hmac-sha256\">HMAC-SHA256</option><option value=\"hmac-sha384\">HMAC-SHA384</option><option value=\"hmac-sha512\">HMAC-SHA512</option></select></label></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2542,7 +2542,7 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			}
 		}
 		if view.EnrollmentToken == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "<form hx-post=\"/ui/cluster/enrollment-tokens\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\"><div class=\"isotope-dialog-body\"><label><span>Token Lifetime</span><select name=\"ttl\"><option value=\"5m\">5 minutes</option><option value=\"15m\" selected>15 minutes</option><option value=\"30m\">30 minutes</option><option value=\"1h\">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class=\"cluster-dialog-note\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "<form hx-post=\"/ui/cluster/enrollment-tokens\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\"><div class=\"isotope-dialog-body\"><label><span>Token Lifetime</span><select name=\"ttl\" data-styled-select><option value=\"5m\">5 minutes</option><option value=\"15m\" selected>15 minutes</option><option value=\"30m\">30 minutes</option><option value=\"1h\">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class=\"cluster-dialog-note\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

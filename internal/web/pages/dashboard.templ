@@ -743,7 +743,7 @@ templ DNSClientContent(view DNSClientPageView) {
 								</button>
 							</div>
 							<label class="sr-only" for="record-type">Record type</label>
-			<select id="record-type" name="type" class="record-type-select">
+			<select id="record-type" name="type" class="record-type-select" data-styled-select>
 				for _, recordType := range dnsClientRecordTypes {
 					<option selected?={ recordType == view.RecordType || (view.RecordType == "" && recordType == "A") }>{ recordType }</option>
 				}
@@ -760,7 +760,7 @@ templ DNSClientContent(view DNSClientPageView) {
 								<input type="hidden" name="custom_name" data-custom-name/>
 								<input type="hidden" name="custom_ip" data-custom-ip/>
 								<button class="resolver-trigger" type="button" role="combobox" aria-expanded="false" aria-controls="resolver-command-list" data-resolver-trigger>
-									<span data-resolver-label>This Server</span>@Icon("chevrons")
+									<span data-resolver-label>This Server</span><span class="styled-select-chevron" aria-hidden="true"></span>
 								</button>
 								<div class="resolver-popover" data-resolver-popover hidden>
 									<label class="resolver-search">
@@ -790,7 +790,7 @@ templ DNSClientContent(view DNSClientPageView) {
 									</div>
 								</div>
 							</div>
-							<label class="transport-picker"><span class="sr-only">Protocol</span><select name="transport" data-transport-picker><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tcp-tls">TLS</option><option value="doh">HTTPS</option><option value="quic">QUIC</option></select></label>
+							<label class="transport-picker"><span class="sr-only">Protocol</span><select name="transport" data-transport-picker data-styled-select><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tcp-tls">TLS</option><option value="doh">HTTPS</option><option value="quic">QUIC</option></select></label>
 							<label class="edns-subnet"><span class="sr-only">EDNS client subnet</span><input name="edns_subnet" placeholder="EDNS subnet" autocomplete="off"/></label>
 							<label class="checkbox-field"><input type="checkbox" name="dnssec" value="true"/><span>DNSSEC</span></label>
 						</div>
@@ -1166,7 +1166,7 @@ templ QueryChart(view QueryChartView) {
 			</div>
 			<label class="range-select">
 				<span class="sr-only">Query statistics time range</span>
-				<select id="chart-range-select" name="range" aria-label="Query statistics time range" hx-get="/ui/stats/chart?insights=1" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
+				<select id="chart-range-select" name="range" data-styled-select aria-label="Query statistics time range" hx-get="/ui/stats/chart?insights=1" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
 					@RangeOption("Hour", "hour", view.ActiveRange)
 					@RangeOption("Day", "day", view.ActiveRange)
 					@RangeOption("Week", "week", view.ActiveRange)
@@ -1183,8 +1183,8 @@ templ QueryChart(view QueryChartView) {
 				<input type="hidden" name="end" value={ view.CustomEnd } data-range-end required/>
 				@RangeCalendar()
 				<div class="range-times">
-					<label><span>From</span><input class="time-field" id="custom-range-start-time" type="time" step="60" data-range-start-time required/></label>
-					<label><span>To</span><input class="time-field" id="custom-range-end-time" type="time" step="60" data-range-end-time required/></label>
+					<label><span>From</span><input class="time-field" id="custom-range-start-time" type="time" step="60" data-range-start-time data-styled-time required/></label>
+					<label><span>To</span><input class="time-field" id="custom-range-end-time" type="time" step="60" data-range-end-time data-styled-time required/></label>
 				</div>
 				<p class="range-error" role="alert" data-range-error hidden></p>
 				<button class="button range-apply" type="submit" data-range-apply>Apply</button>
@@ -1235,11 +1235,11 @@ templ RangeCalendar() {
 		<div class="calendar-dropdowns">
 			<label>
 				<span class="sr-only">Month</span>
-				<select aria-label="Month" data-calendar-month>
+				<select aria-label="Month" data-calendar-month data-styled-select>
 					<option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option><option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option><option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option><option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
 				</select>
 			</label>
-			<label><span class="sr-only">Year</span><select aria-label="Year" data-calendar-year></select></label>
+			<label><span class="sr-only">Year</span><select aria-label="Year" data-calendar-year data-styled-select></select></label>
 		</div>
 		<button type="button" aria-label="Next month" data-calendar-next>
 			@Icon("chevron-right")
