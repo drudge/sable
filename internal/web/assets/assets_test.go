@@ -169,6 +169,9 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	if !strings.Contains(stylesheet, "height: 100vh;\n  height: 100dvh;") {
 		t.Fatal("sidebar does not provide a legacy viewport fallback followed by a dynamic viewport height")
 	}
+	if !strings.Contains(stylesheet, ".mobile-header [data-sidebar-toggle] .nav-icon { width: 1.125rem; height: 1.125rem; }") {
+		t.Fatal("mobile menu icon does not use its larger header size")
+	}
 }
 
 func TestNativeSelectOptionsRemainReadableOnLightPopups(t *testing.T) {
