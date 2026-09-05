@@ -1,4 +1,4 @@
-package certificates
+package dnsprovider
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +19,26 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-type dnsProvider interface {
+// Provider performs the provider-specific DNS operations needed by Sable.
+type Provider interface {
 	Present(context.Context, string, string, string) (func(context.Context) error, error)
+	EnsureRecord(context.Context, Record) (bool, error)
 }
 
-func validateCredentials(provider string, credentials Credentials) error {
+var supportedProviders = []string{
+	"cloudflare", "porkbun", "namecheap", "godaddy", "digitalocean",
+	"hetzner", "rfc2136", "route53", "ovh",
+}
+
+// Supported reports whether name identifies a built-in external DNS provider.
+func Supported(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	return slices.Contains(supportedProviders, name)
+}
+
+// ValidateCredentials validates the fields required by provider.
+func ValidateCredentials(provider string, credentials Credentials) error {
+	provider = strings.ToLower(strings.TrimSpace(provider))
 	switch provider {
 	case "cloudflare":
 		if strings.TrimSpace(credentials.APIToken) == "" {
@@ -72,8 +88,10 @@ func validateCredentials(provider string, credentials Credentials) error {
 	return nil
 }
 
-func newDNSProvider(name string, credentials Credentials) (dnsProvider, error) {
-	if err := validateCredentials(name, credentials); err != nil {
+// New returns an authenticated external DNS provider.
+func New(name string, credentials Credentials) (Provider, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if err := ValidateCredentials(name, credentials); err != nil {
 		return nil, err
 	}
 	client := &http.Client{Timeout: 30 * time.Second}

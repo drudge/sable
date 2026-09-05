@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -26,34 +25,12 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 )
 
-const credentialSecretPrefix = "public-tls/acme/"
+type Vault = dnsprovider.Vault
 
-type Vault interface {
-	Put(context.Context, string, []byte) error
-	Get(context.Context, string) ([]byte, error)
-}
-
-type Credentials struct {
-	APIToken          string `json:"api_token,omitempty"`
-	APIKey            string `json:"api_key,omitempty"`
-	Secret            string `json:"secret,omitempty"`
-	Username          string `json:"username,omitempty"`
-	ClientIP          string `json:"client_ip,omitempty"`
-	ZoneID            string `json:"zone_id,omitempty"`
-	Server            string `json:"server,omitempty"`
-	TSIGName          string `json:"tsig_name,omitempty"`
-	TSIGSecret        string `json:"tsig_secret,omitempty"`
-	TSIGAlgorithm     string `json:"tsig_algorithm,omitempty"`
-	AccessKeyID       string `json:"access_key_id,omitempty"`
-	SecretAccessKey   string `json:"secret_access_key,omitempty"`
-	SessionToken      string `json:"session_token,omitempty"`
-	Endpoint          string `json:"endpoint,omitempty"`
-	ApplicationKey    string `json:"application_key,omitempty"`
-	ApplicationSecret string `json:"application_secret,omitempty"`
-	ConsumerKey       string `json:"consumer_key,omitempty"`
-}
+type Credentials = dnsprovider.Credentials
 
 type Status struct {
 	Mode                  string
@@ -82,17 +59,20 @@ type Status struct {
 }
 
 type Manager struct {
-	vault         Vault
-	logger        *slog.Logger
-	now           func() time.Time
-	baseDirectory string
+	logger              *slog.Logger
+	now                 func() time.Time
+	baseDirectory       string
+	providerCredentials *dnsprovider.Store
 
 	mu     sync.RWMutex
 	status Status
 }
 
 func New(vault Vault, logger *slog.Logger, baseDirectory string) *Manager {
-	return &Manager{vault: vault, logger: logger, now: time.Now, baseDirectory: baseDirectory}
+	return &Manager{
+		logger: logger, now: time.Now, baseDirectory: baseDirectory,
+		providerCredentials: dnsprovider.NewStore(vault),
+	}
 }
 
 func (manager *Manager) Status(ctx context.Context, encrypted config.EncryptedDNS) Status {
@@ -114,76 +94,7 @@ func (manager *Manager) Status(ctx context.Context, encrypted config.EncryptedDN
 }
 
 func (manager *Manager) PutCredentials(ctx context.Context, provider string, credentials Credentials) error {
-	provider = strings.ToLower(strings.TrimSpace(provider))
-	if current, ok := manager.credentials(ctx, provider); ok {
-		credentials = mergeCredentials(current, credentials)
-	}
-	if err := validateCredentials(provider, credentials); err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(credentials)
-	if err != nil {
-		return fmt.Errorf("encode %s credentials: %w", provider, err)
-	}
-	if err := manager.vault.Put(ctx, credentialSecretPrefix+provider, encoded); err != nil {
-		return fmt.Errorf("store %s credentials: %w", provider, err)
-	}
-	return nil
-}
-
-func mergeCredentials(current, replacement Credentials) Credentials {
-	if replacement.APIToken != "" {
-		current.APIToken = replacement.APIToken
-	}
-	if replacement.APIKey != "" {
-		current.APIKey = replacement.APIKey
-	}
-	if replacement.Secret != "" {
-		current.Secret = replacement.Secret
-	}
-	if replacement.Username != "" {
-		current.Username = replacement.Username
-	}
-	if replacement.ClientIP != "" {
-		current.ClientIP = replacement.ClientIP
-	}
-	if replacement.ZoneID != "" {
-		current.ZoneID = replacement.ZoneID
-	}
-	if replacement.Server != "" {
-		current.Server = replacement.Server
-	}
-	if replacement.TSIGName != "" {
-		current.TSIGName = replacement.TSIGName
-	}
-	if replacement.TSIGSecret != "" {
-		current.TSIGSecret = replacement.TSIGSecret
-	}
-	if replacement.TSIGAlgorithm != "" {
-		current.TSIGAlgorithm = replacement.TSIGAlgorithm
-	}
-	if replacement.AccessKeyID != "" {
-		current.AccessKeyID = replacement.AccessKeyID
-	}
-	if replacement.SecretAccessKey != "" {
-		current.SecretAccessKey = replacement.SecretAccessKey
-	}
-	if replacement.SessionToken != "" {
-		current.SessionToken = replacement.SessionToken
-	}
-	if replacement.Endpoint != "" {
-		current.Endpoint = replacement.Endpoint
-	}
-	if replacement.ApplicationKey != "" {
-		current.ApplicationKey = replacement.ApplicationKey
-	}
-	if replacement.ApplicationSecret != "" {
-		current.ApplicationSecret = replacement.ApplicationSecret
-	}
-	if replacement.ConsumerKey != "" {
-		current.ConsumerKey = replacement.ConsumerKey
-	}
-	return current
+	return manager.providerCredentials.Put(ctx, provider, credentials)
 }
 
 // Ensure obtains or renews the configured certificate. It returns true when
@@ -333,18 +244,7 @@ func (manager *Manager) issue(ctx context.Context, configuration config.ACME, pr
 }
 
 func (manager *Manager) credentials(ctx context.Context, provider string) (Credentials, bool) {
-	if manager.vault == nil || strings.TrimSpace(provider) == "" {
-		return Credentials{}, false
-	}
-	encoded, err := manager.vault.Get(ctx, credentialSecretPrefix+provider)
-	if err != nil {
-		return Credentials{}, false
-	}
-	var credentials Credentials
-	if json.Unmarshal(encoded, &credentials) != nil || validateCredentials(provider, credentials) != nil {
-		return Credentials{}, false
-	}
-	return credentials, true
+	return manager.providerCredentials.Get(ctx, provider)
 }
 
 func (manager *Manager) recordCertificate(certificate *x509.Certificate, lastError string) {

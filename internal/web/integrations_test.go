@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/unifi"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -29,6 +31,28 @@ type testUniFiController struct {
 	syncs          int
 	forgotten      int
 	previewedWith  config.UniFi
+}
+
+type testDynamicDNSController struct {
+	status      dynamicdns.Status
+	credentials dnsprovider.Credentials
+	configured  bool
+	syncs       int
+}
+
+func (controller *testDynamicDNSController) Status(context.Context) dynamicdns.Status {
+	return controller.status
+}
+
+func (controller *testDynamicDNSController) SyncNow() { controller.syncs++ }
+
+func (controller *testDynamicDNSController) PutCredentials(_ context.Context, _ string, credentials dnsprovider.Credentials) error {
+	controller.credentials, controller.configured = credentials, true
+	return nil
+}
+
+func (controller *testDynamicDNSController) StoredCredentials(context.Context, string) (dnsprovider.Credentials, bool) {
+	return controller.credentials, controller.configured
 }
 
 func (controller *testUniFiController) Status() unifi.Status { return controller.status }
@@ -126,6 +150,93 @@ func TestIntegrationsPageOffersUniFiSetup(t *testing.T) {
 		if !strings.Contains(body, expected) {
 			t.Errorf("apps page does not contain %q", expected)
 		}
+	}
+}
+
+func TestIntegrationsPageOffersDynamicDNSSetup(t *testing.T) {
+	t.Parallel()
+	server, _ := newIntegrationsTestServer(t, nil)
+	server.SetDynamicDNSController(&testDynamicDNSController{})
+
+	page := serveRequest(server, http.MethodGet, "/integrations")
+	if page.Code != http.StatusOK {
+		t.Fatalf("integrations page = %d", page.Code)
+	}
+	for _, expected := range []string{"Dynamic DNS", "Set Up Dynamic DNS", "/integrations?setup=dynamic-dns"} {
+		if !strings.Contains(page.Body.String(), expected) {
+			t.Errorf("integrations page does not contain %q", expected)
+		}
+	}
+
+	setup := serveRequest(server, http.MethodGet, "/integrations?setup=dynamic-dns")
+	if setup.Code != http.StatusOK || !strings.Contains(setup.Body.String(), "data-styled-select") {
+		t.Fatalf("dynamic DNS setup does not opt into the styled provider select: %d %s", setup.Code, setup.Body.String())
+	}
+}
+
+func TestDynamicDNSSetupStoresProviderAndQueuesPublication(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	controller := &testDynamicDNSController{}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/save", url.Values{
+		"provider": {"cloudflare"}, "cloudflare_api_token": {"token"},
+		"zone": {"example.com"}, "names": {"home.example.com\nvpn.example.com"},
+		"publish_ipv4": {"true"}, "publish_ipv6": {"true"},
+		"ttl": {"300"}, "interval": {"5m"},
+		"ipv4_url": {"https://api.ipify.org"}, "ipv6_url": {"https://api6.ipify.org"},
+	})
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "first publication is running") {
+		t.Fatalf("save response = %d %s", response.Code, response.Body.String())
+	}
+	settings := configuration.Current().Config.DynamicDNS
+	if !settings.Runnable() || settings.Provider != "cloudflare" || len(settings.Records) != 2 || !settings.Records[0].IPv6 {
+		t.Fatalf("dynamic DNS settings = %+v", settings)
+	}
+	if controller.credentials.APIToken != "token" || controller.syncs != 1 {
+		t.Fatalf("controller = %+v", controller)
+	}
+}
+
+func TestInvalidDynamicDNSSettingsDoNotReplaceSharedCredentials(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	original := dnsprovider.Credentials{APIToken: "original-token"}
+	controller := &testDynamicDNSController{credentials: original, configured: true}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/save", url.Values{
+		"provider": {"godaddy"}, "godaddy_api_token": {"replacement-token"},
+		"zone": {"example.com"}, "names": {"home.example.com"}, "publish_ipv4": {"true"},
+		"ttl": {"300"}, "interval": {"5m"},
+		"ipv4_url": {"https://api.ipify.org"}, "ipv6_url": {"https://api6.ipify.org"},
+	})
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("save response = %d %s", response.Code, response.Body.String())
+	}
+	if controller.credentials != original || configuration.Current().Config.DynamicDNS.Provider != "" {
+		t.Fatalf("credentials = %+v, settings = %+v", controller.credentials, configuration.Current().Config.DynamicDNS)
+	}
+}
+
+func TestRemovingDynamicDNSLeavesProviderCredentialAndExternalRecords(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{
+		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
+		Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300}},
+	}
+	controller := &testDynamicDNSController{configured: true, credentials: dnsprovider.Credentials{APIToken: "token"}}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/remove", url.Values{})
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Existing external records") {
+		t.Fatalf("remove response = %d %s", response.Code, response.Body.String())
+	}
+	if configuration.Current().Config.DynamicDNS.Provider != "" || !controller.configured {
+		t.Fatalf("settings = %+v, credentials retained = %v", configuration.Current().Config.DynamicDNS, controller.configured)
 	}
 }
 

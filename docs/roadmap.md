@@ -76,6 +76,8 @@ behavior come before a broader administrative or plugin surface.
 - Generated/imported certificate key pairs and DNS-01 ACME issuance with
   automatic renewal through Cloudflare, Porkbun, Namecheap, GoDaddy,
   DigitalOcean, Hetzner, Route 53, OVHcloud, and RFC 2136
+- Dynamic DNS publication through the same provider set, with exact A/AAAA
+  RRset reconciliation and cluster-primary execution
 - UniFi synchronization with guided network-to-zone mapping and
   integration-owned A, AAAA, and IPv4/IPv6 PTR records
 - Passphrase-sealed whole-deployment backup and atomic restore covering

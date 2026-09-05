@@ -14,6 +14,7 @@ import (
 
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/unifi"
@@ -49,6 +50,13 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 			ID: "net-1", Name: "LAN", Zone: "example.test", TTL: 300, Enabled: true,
 		}},
 	}
+	sourceConfiguration.DynamicDNS = config.DynamicDNS{
+		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
+		Records: []config.DynamicDNSRecord{{
+			Zone: "example.test", Name: "home.example.test", IPv4: true, TTL: 300,
+		}},
+	}
 	sourceManager := newTestConfigurationManager(t, sourceConfiguration)
 	sourceZones := newTestZoneManager(t, []zone.Zone{{
 		ID: "zone-1", Name: "example.test", Type: "primary", DefaultTTL: 300,
@@ -79,11 +87,21 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetOIDC := newTestOIDCSecrets()
-	contents, err := newClusterStateReplicator(sourceManager, sourceZones, nil, sourceSecrets, sourceCredentials, sourceOIDC).Capture(ctx)
+	sourceDNSCredentials := dnsprovider.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
+	dynamicDNSCredentials := dnsprovider.Credentials{APIToken: "cloudflare-token", ZoneID: "zone-id"}
+	if err := sourceDNSCredentials.Put(ctx, "cloudflare", dynamicDNSCredentials); err != nil {
+		t.Fatal(err)
+	}
+	targetDNSCredentials := dnsprovider.NewStore(&memoryTSIGVault{values: make(map[string][]byte)})
+	sourceReplicator := newClusterStateReplicator(sourceManager, sourceZones, nil, sourceSecrets, sourceCredentials, sourceOIDC)
+	sourceReplicator.setDNSProviderCredentials(sourceDNSCredentials)
+	contents, err := sourceReplicator.Capture(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := newClusterStateReplicator(targetManager, targetZones, nil, targetSecrets, targetCredentials, targetOIDC).Apply(ctx, contents); err != nil {
+	targetReplicator := newClusterStateReplicator(targetManager, targetZones, nil, targetSecrets, targetCredentials, targetOIDC)
+	targetReplicator.setDNSProviderCredentials(targetDNSCredentials)
+	if err := targetReplicator.Apply(ctx, contents); err != nil {
 		t.Fatal(err)
 	}
 	got := targetManager.Current().Config
@@ -110,6 +128,13 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		got.UniFi.Site != sourceConfiguration.UniFi.Site || len(got.UniFi.ActiveNetworks()) != 1 ||
 		got.UniFi.Networks[0].ID != "net-1" || got.UniFi.Networks[0].Zone != "example.test" {
 		t.Fatalf("replicated UniFi settings = %#v", got.UniFi)
+	}
+	if !got.DynamicDNS.Runnable() || !reflect.DeepEqual(got.DynamicDNS.Records, sourceConfiguration.DynamicDNS.Records) {
+		t.Fatalf("replicated dynamic DNS settings = %#v", got.DynamicDNS)
+	}
+	replicatedDNSCredentials, found := targetDNSCredentials.Get(ctx, "cloudflare")
+	if !found || replicatedDNSCredentials != dynamicDNSCredentials {
+		t.Fatalf("replica external DNS credentials = %+v, found = %v", replicatedDNSCredentials, found)
 	}
 	replicatedCredentials, found := targetCredentials.Get(ctx)
 	if !found || replicatedCredentials != controllerCredentials {

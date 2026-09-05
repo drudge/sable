@@ -54,7 +54,7 @@ func TestCredentialsAreEncryptedVaultMaterialNotConfiguration(t *testing.T) {
 	if !status.CredentialsConfigured {
 		t.Fatal("stored credentials were not reported as configured")
 	}
-	if _, ok := vault.values[credentialSecretPrefix+"cloudflare"]; !ok {
+	if _, ok := vault.values["external-dns/providers/cloudflare"]; !ok {
 		t.Fatal("credentials were not stored under the provider secret")
 	}
 }

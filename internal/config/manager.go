@@ -91,6 +91,7 @@ func cloneConfig(source Config) Config {
 	cloned.EncryptedDNS.DoHListen = append([]string(nil), source.EncryptedDNS.DoHListen...)
 	cloned.EncryptedDNS.DoQListen = append([]string(nil), source.EncryptedDNS.DoQListen...)
 	cloned.EncryptedDNS.ACME.Domains = append([]string(nil), source.EncryptedDNS.ACME.Domains...)
+	cloned.DynamicDNS.Records = append([]DynamicDNSRecord(nil), source.DynamicDNS.Records...)
 	cloned.UniFi.Sources = append([]string(nil), source.UniFi.Sources...)
 	cloned.UniFi.Networks = append([]UniFiNetwork(nil), source.UniFi.Networks...)
 	cloned.OIDC.Scopes = append([]string(nil), source.OIDC.Scopes...)

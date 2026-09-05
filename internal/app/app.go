@@ -17,7 +17,9 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/secrets"
 	"github.com/drudge/sable/internal/serverlog"
@@ -294,6 +296,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 
 	unifiCredentials := newUniFiCredentialStore(secretVault)
 	oidcSecrets := newOIDCSecretStore(secretVault)
+	dnsProviderCredentials := dnsprovider.NewStore(secretVault)
+	stateReplicator := newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets)
+	stateReplicator.setDNSProviderCredentials(dnsProviderCredentials)
 	clusterService, err := cluster.Open(cluster.Options{
 		DataDirectory:   initial.ClusterDataPath(configurationDirectory),
 		NodeName:        clusterNodeName(initial.Cluster.NodeName),
@@ -302,7 +307,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		DNSListeners:    initial.Server.DNSListen,
 		TrustAnchorFile: initial.ClusterTrustAnchorPath(configurationDirectory),
 		Logger:          logger,
-		Replicator:      newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets),
+		Replicator:      stateReplicator,
 		Version:         version.Current().Release,
 		StartedAt:       startedAt,
 	})
@@ -332,6 +337,16 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		logger,
 	)
 	go unifiSync.Run(zoneRefreshContext)
+	dynamicDNS := dynamicdns.New(
+		configurationManager,
+		dnsProviderCredentials,
+		func() bool {
+			state := clusterService.Snapshot()
+			return !state.Initialized || state.LocalRole != cluster.RoleReplica
+		},
+		logger,
+	)
+	go dynamicDNS.Run(zoneRefreshContext)
 
 	var webAuthentication web.Authenticator
 	if authentication != nil {
@@ -362,6 +377,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	webServer.SetDNSSECController(dnssec)
 	webServer.SetClusterController(clusterService)
 	webServer.SetCertificateController(certificateManager)
+	webServer.SetDynamicDNSController(dynamicDNS)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
 	if authentication != nil {
