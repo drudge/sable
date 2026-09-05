@@ -2849,7 +2849,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .status-badge.success { background: rgb(34 197 94 / .13); color: #22c55e; }
 .status-badge.danger { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
 .integration-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
-.integration-card-identity { display: flex; align-items: flex-start; gap: .85rem; }
+.integration-card > header > .status-badge { flex: 0 0 auto; white-space: nowrap; }
+.integration-card-identity { display: flex; min-width: 0; align-items: flex-start; gap: .85rem; }
 .integration-card-identity p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
 .integration-card-glyph { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: rgb(59 130 246 / .12); color: #3b82f6; }
 .integration-card-glyph .nav-icon { width: 1.2rem; height: 1.2rem; }

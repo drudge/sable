@@ -69,7 +69,7 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 		{
 			name:     "not configured",
 			view:     DynamicDNSAppView{Available: true},
-			expected: `class="status-badge">Not configured</span>`,
+			expected: `class="status-badge">Not set up</span>`,
 		},
 		{
 			name:     "active",
@@ -110,6 +110,9 @@ func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
 	}
 	if strings.Contains(html, `<span class="integration-fact-label">Interval</span>`) {
 		t.Error("Dynamic DNS card still presents the polling interval as a status fact")
+	}
+	if published, ipv6 := strings.Index(html, "Last published"), strings.Index(html, ">IPv6<"); published < ipv6 {
+		t.Error("Last published is not the final Dynamic DNS status fact")
 	}
 
 	view.Status.LastPublished = ""
