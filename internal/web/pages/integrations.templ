@@ -18,19 +18,31 @@ type DynamicDNSAppView struct {
 	Configured            bool
 	Enabled               bool
 	Setup                 bool
-	Provider              string
-	Zone                  string
-	Names                 string
 	Interval              string
+	TTL                   uint32
 	IPv4URL               string
 	IPv6URL               string
-	PublishIPv4           bool
-	PublishIPv6           bool
-	TTL                   uint32
+	CredentialsConfigured bool
+	Publishers            []DynamicDNSPublisherView
+	Status                DynamicDNSStatusView
+}
+
+type DynamicDNSPublisherView struct {
+	Index                 int
+	Provider              string
 	CredentialsConfigured bool
 	ProviderEndpoint      string
 	TSIGAlgorithm         string
-	Status                DynamicDNSStatusView
+	Zones                  []DynamicDNSZoneView
+}
+
+type DynamicDNSZoneView struct {
+	Index       int
+	Zone        string
+	Names       string
+	PublishIPv4 bool
+	PublishIPv6 bool
+	TTL         uint32
 }
 
 type DynamicDNSStatusView struct {
@@ -298,19 +310,18 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 				if !view.CredentialsConfigured {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>No provider credentials are stored</strong><span>Edit the setup and save credentials before publication can run.</span></div></div>
 				}
-				<div class="integration-facts">
-					<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ dynamicDNSProviderLabel(view.Provider) }</span></div>
-					<div class="integration-fact-address" title={ dynamicDNSIPv4(view) } aria-label={ "IPv4: " + dynamicDNSIPv4(view) }><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ dynamicDNSIPv4(view) }</code></span></div>
-					<div class="integration-fact-address" title={ dynamicDNSIPv6(view) } aria-label={ "IPv6: " + dynamicDNSIPv6(view) }><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ dynamicDNSIPv6(view) }</code></span></div>
-					<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
-				</div>
+				@DynamicDNSFacts(view, false)
 				<div class="admin-desktop-table">
 					<table class="isotope-table">
 						<caption class="sr-only">Dynamic DNS records</caption>
-						<thead><tr><th>Name</th><th>Types</th><th>TTL</th></tr></thead>
+						<thead><tr><th>Provider</th><th>Name</th><th>Types</th><th>TTL</th></tr></thead>
 						<tbody>
-							for _, name := range dynamicDNSNames(view.Names) {
-								<tr><td><code>{ name }</code></td><td>{ dynamicDNSTypeLabel(view) }</td><td>{ fmt.Sprint(view.TTL) }</td></tr>
+							for _, publisher := range view.Publishers {
+								for _, zone := range publisher.Zones {
+									for _, name := range dynamicDNSNames(zone.Names) {
+										<tr><td>{ dynamicDNSProviderLabel(publisher.Provider) }</td><td><code>{ name }</code></td><td>{ dynamicDNSZoneTypeLabel(zone) }</td><td>{ fmt.Sprint(zone.TTL) }</td></tr>
+									}
+								}
 							}
 						</tbody>
 					</table>
@@ -319,6 +330,21 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 			</div>
 		}
 	</section>
+}
+
+templ DynamicDNSFacts(view DynamicDNSAppView, outOfBand bool) {
+	if outOfBand {
+		<div id="dynamic-dns-facts" class="integration-facts" hx-swap-oob="true">@DynamicDNSFactValues(view)</div>
+	} else {
+		<div id="dynamic-dns-facts" class="integration-facts">@DynamicDNSFactValues(view)</div>
+	}
+}
+
+templ DynamicDNSFactValues(view DynamicDNSAppView) {
+	<div><span class="integration-fact-label">Providers</span><span class="integration-fact-value">{ dynamicDNSProvidersLabel(view) }</span></div>
+	<div class="integration-fact-address" title={ dynamicDNSIPv4(view) } aria-label={ "IPv4: " + dynamicDNSIPv4(view) }><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ dynamicDNSIPv4(view) }</code></span></div>
+	<div class="integration-fact-address" title={ dynamicDNSIPv6(view) } aria-label={ "IPv6: " + dynamicDNSIPv6(view) }><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ dynamicDNSIPv6(view) }</code></span></div>
+	<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
 }
 
 templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
@@ -392,23 +418,27 @@ templ RemoveDynamicDNSDialog() {
 }
 
 templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="dynamic-dns-setup-dialog" aria-labelledby="dynamic-dns-setup-title" data-dialog-auto-open="true" data-certificate-settings>
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="dynamic-dns-setup-dialog" aria-labelledby="dynamic-dns-setup-title" data-dialog-auto-open="true" data-certificate-settings data-dynamic-dns-editor>
 		<div class="dialog-header"><h2 id="dynamic-dns-setup-title">Set Up Dynamic DNS</h2><p>Publish this deployment's public addresses to external DNS</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
 		<form hx-post="/ui/integrations/dynamic-dns/save" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				<section class="wizard-panel compact">
-					<div class="wizard-heading compact"><span>@Icon("globe-lock")</span><div><strong>External DNS Provider</strong><small>Credentials are encrypted in Sable's secret vault and can be shared with DNS-01 certificate automation.</small></div></div>
-					<div class="acme-provider-card" data-acme-provider-root data-acme-provider-selected={ view.Provider }>
-						<header><span class="acme-provider-icon">@Icon("key")</span><div><strong>Provider connection</strong><small>A blank secret keeps the credential already stored for this provider.</small></div><span class={ ifThen(view.CredentialsConfigured, "badge success", "badge") }>{ ifThen(view.CredentialsConfigured, "Configured", "Credentials required") }</span></header>
-						<label class="field-control"><span>Provider</span><select name="provider" data-acme-provider data-styled-select required><option value="" data-placeholder selected?={ view.Provider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.Provider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.Provider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.Provider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.Provider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.Provider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.Provider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.Provider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.Provider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.Provider == "rfc2136" }>RFC 2136 Dynamic Update</option></select></label>
-						@DynamicDNSCredentialFields(view)
+					<div class="wizard-heading compact"><span>@Icon("globe-lock")</span><div><strong>Publishers</strong><small>Add one connection for each external DNS provider, then assign its zones and public names.</small></div></div>
+					<div class="dynamic-dns-publishers" data-dynamic-dns-publishers>
+						for _, publisher := range view.Publishers {
+							@DynamicDNSPublisherEditor(publisher, strconv.Itoa(publisher.Index), true)
+						}
+						if len(view.Publishers) == 0 {
+							<p class="dynamic-dns-publishers-empty" data-dynamic-dns-publishers-empty>No providers added yet.</p>
+						}
 					</div>
-					<div class="wizard-heading compact"><span>@Icon("list")</span><div><strong>Records</strong><small>Sable owns and replaces the complete A/AAAA RRset for every name below.</small></div></div>
-					<div class="field-grid two"><label class="field-control"><span>DNS Zone</span><input name="zone" value={ view.Zone } placeholder="example.com" required/></label><label class="field-control"><span>TTL</span><input type="number" name="ttl" value={ fmt.Sprint(view.TTL) } min="60" max="86400" required/><small>GoDaddy and Porkbun require at least 600 seconds.</small></label></div>
-					<label class="field-control"><span>Public DNS Names</span><textarea name="names" rows="3" spellcheck="false" placeholder="home.example.com&#10;vpn.example.com" required>{ view.Names }</textarea><small>One fully-qualified name per line. Every name must belong to the zone above.</small></label>
-					<div class="field-grid two"><label class="field-control checkbox"><input type="checkbox" name="publish_ipv4" value="true" checked?={ view.PublishIPv4 }/><span>Publish IPv4 (A)</span></label><label class="field-control checkbox"><input type="checkbox" name="publish_ipv6" value="true" checked?={ view.PublishIPv6 }/><span>Publish IPv6 (AAAA)</span><small>The detected outbound IPv6 address must also accept inbound traffic.</small></label></div>
-					<label class="field-control"><span>Check Interval</span><input name="interval" value={ view.Interval } placeholder="5m" required/><small>At least one minute. Provider writes occur only when an RRset differs.</small></label>
+					@DynamicDNSAddProviderMenu()
+					<div class="field-grid two dynamic-dns-global-settings">
+						<label class="field-control"><span>Check Interval</span><input name="interval" value={ view.Interval } placeholder="5m" required/><small>How often Sable checks for address changes.</small></label>
+						<label class="field-control"><span>Record TTL</span><input type="number" name="ttl" value={ fmt.Sprint(view.TTL) } min="60" max="86400" required data-dynamic-dns-ttl/><small data-dynamic-dns-ttl-hint>Applied to every published record.</small></label>
+					</div>
+					<template data-dynamic-dns-publisher-template>@DynamicDNSPublisherEditor(DynamicDNSPublisherView{Provider: "__PROVIDER__", Zones: []DynamicDNSZoneView{{PublishIPv4: true}}}, "__PUBLISHER__", true)</template>
 					<details class="settings-advanced"><summary>@Icon("sliders")<span>Advanced address discovery</span>@Icon("chevron-down")</summary><div class="field-grid two"><label class="field-control"><span>IPv4 Discovery URL</span><input type="url" name="ipv4_url" value={ view.IPv4URL } required/></label><label class="field-control"><span>IPv6 Discovery URL</span><input type="url" name="ipv6_url" value={ view.IPv6URL } required/></label></div><small>Each HTTPS endpoint must return only the caller's IP address as plain text.</small></details>
 					<div class="cluster-dialog-note">@Icon("info")<p><strong>A DNS record does not open your firewall</strong><span>Carrier-grade NAT, port forwarding, and IPv6 firewall rules still determine whether the published service is reachable.</span></p></div>
 				</section>
@@ -418,16 +448,65 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 	</dialog>
 }
 
-templ DynamicDNSCredentialFields(view DynamicDNSAppView) {
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="cloudflare" hidden?={ view.Provider != "cloudflare" }><label class="field-control"><span>API Token</span><input type="password" name="cloudflare_api_token" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Cloudflare API token") }/></label><label class="field-control"><span>Zone ID (optional)</span><input name="cloudflare_zone_id" placeholder="Detected from the zone when blank"/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="porkbun" hidden?={ view.Provider != "porkbun" }><label class="field-control"><span>API Key</span><input type="password" name="porkbun_api_key" autocomplete="new-password"/></label><label class="field-control"><span>Secret API Key</span><input type="password" name="porkbun_secret" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Secret API key") }/></label></div>
-	<div class="field-grid three acme-credential-fields" data-acme-credentials="namecheap" hidden?={ view.Provider != "namecheap" }><label class="field-control"><span>API Username</span><input name="namecheap_username" autocomplete="off"/></label><label class="field-control"><span>API Key</span><input type="password" name="namecheap_api_key" autocomplete="new-password"/></label><label class="field-control"><span>Allow-listed Client IP</span><input name="namecheap_client_ip" placeholder="203.0.113.10"/><small>Namecheap may reject API calls after this address changes.</small></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="godaddy" hidden?={ view.Provider != "godaddy" }><label class="field-control"><span>Production API Token</span><input type="password" name="godaddy_api_token" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "GoDaddy API token") }/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="digitalocean" hidden?={ view.Provider != "digitalocean" }><label class="field-control"><span>API Token</span><input type="password" name="digitalocean_api_token" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "DigitalOcean API token") }/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="hetzner" hidden?={ view.Provider != "hetzner" }><label class="field-control"><span>API Token</span><input type="password" name="hetzner_api_token" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Hetzner API token") }/></label><label class="field-control"><span>Zone ID (optional)</span><input name="hetzner_zone_id" placeholder="Uses the DNS zone name when blank"/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="route53" hidden?={ view.Provider != "route53" }><label class="field-control"><span>Access Key ID</span><input name="route53_access_key_id" autocomplete="off"/></label><label class="field-control"><span>Secret Access Key</span><input type="password" name="route53_secret_access_key" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "AWS secret access key") }/></label><label class="field-control"><span>Hosted Zone ID</span><input name="route53_zone_id"/></label><label class="field-control"><span>Session Token (optional)</span><input type="password" name="route53_session_token" autocomplete="new-password"/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="ovh" hidden?={ view.Provider != "ovh" }><label class="field-control"><span>API Endpoint</span><select name="ovh_endpoint" data-styled-select><option value="ovh-eu" selected?={ view.ProviderEndpoint == "" || view.ProviderEndpoint == "ovh-eu" }>Europe</option><option value="ovh-ca" selected?={ view.ProviderEndpoint == "ovh-ca" }>Canada</option><option value="ovh-us" selected?={ view.ProviderEndpoint == "ovh-us" }>United States</option></select></label><label class="field-control"><span>Application Key</span><input name="ovh_application_key" autocomplete="off"/></label><label class="field-control"><span>Application Secret</span><input type="password" name="ovh_application_secret" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "OVHcloud application secret") }/></label><label class="field-control"><span>Consumer Key</span><input type="password" name="ovh_consumer_key" autocomplete="new-password"/></label></div>
-	<div class="field-grid two acme-credential-fields" data-acme-credentials="rfc2136" hidden?={ view.Provider != "rfc2136" }><label class="field-control"><span>Authoritative Server</span><input name="rfc2136_server" placeholder="dns.example.com:53"/></label><label class="field-control"><span>TSIG Key Name</span><input name="rfc2136_tsig_name" placeholder="dynamic-update."/></label><label class="field-control"><span>TSIG Secret</span><input type="password" name="rfc2136_tsig_secret" autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret") }/></label><label class="field-control"><span>TSIG Algorithm</span><select name="rfc2136_tsig_algorithm" data-styled-select><option value="hmac-sha256" selected?={ view.TSIGAlgorithm == "" || view.TSIGAlgorithm == "hmac-sha256" }>HMAC-SHA256</option><option value="hmac-sha384" selected?={ view.TSIGAlgorithm == "hmac-sha384" }>HMAC-SHA384</option><option value="hmac-sha512" selected?={ view.TSIGAlgorithm == "hmac-sha512" }>HMAC-SHA512</option></select></label></div>
+templ DynamicDNSAddProviderMenu() {
+	<details class="dynamic-dns-add-provider-menu" data-dynamic-dns-add-provider-menu>
+		<summary class="button outline compact">@Icon("plus")<span>Add Provider</span><span class="styled-select-chevron" aria-hidden="true"></span></summary>
+		<div role="menu" aria-label="Choose a Dynamic DNS provider">
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="cloudflare">Cloudflare</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="porkbun">Porkbun</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="namecheap">Namecheap</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="godaddy">GoDaddy</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="digitalocean">DigitalOcean</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="hetzner">Hetzner</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="route53">Amazon Route 53</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="ovh">OVHcloud</button>
+			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="rfc2136">RFC 2136 Dynamic Update</button>
+		</div>
+	</details>
+}
+
+templ DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removable bool) {
+	<details class="dynamic-dns-publisher" data-dynamic-dns-publisher data-publisher-index={ key } data-acme-provider-root data-acme-provider-selected={ view.Provider } open?={ !view.CredentialsConfigured }>
+		<summary>
+			<div class="dynamic-dns-publisher-summary"><strong data-dynamic-dns-publisher-label>{ dynamicDNSPublisherHeading(view) }</strong><small data-dynamic-dns-publisher-overview>{ dynamicDNSPublisherOverview(view) }</small></div>
+			<div class="dynamic-dns-publisher-tools"><span class={ ifThen(view.CredentialsConfigured, "status-badge success", "status-badge") }>{ ifThen(view.CredentialsConfigured, "Configured", "Needs credentials") }</span><span class="dynamic-dns-publisher-chevron">@Icon("chevron-down")</span></div>
+		</summary>
+		<div class="dynamic-dns-publisher-body">
+			<input type="hidden" name={ "publisher_" + key + "_provider" } value={ view.Provider } data-acme-provider/>
+			@DynamicDNSCredentialFields(view, "publisher_" + key + "_")
+			<div class="dynamic-dns-zones" data-dynamic-dns-zones>
+				for _, zone := range view.Zones {
+					@DynamicDNSZoneEditor(zone, key, strconv.Itoa(zone.Index), len(view.Zones) > 1)
+				}
+			</div>
+			<div class="dynamic-dns-publisher-footer"><button class="button outline compact dynamic-dns-add-zone" type="button" data-dynamic-dns-add-zone>@Icon("plus")<span>Add Zone</span></button><button class="button outline compact destructive" type="button" data-dynamic-dns-remove-publisher hidden?={ !removable }>@Icon("trash")<span>Remove Provider</span></button></div>
+			<template data-dynamic-dns-zone-template>@DynamicDNSZoneEditor(DynamicDNSZoneView{TTL: 600, PublishIPv4: true}, key, "__ZONE__", true)</template>
+		</div>
+	</details>
+}
+
+templ DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string, removable bool) {
+	<details class="dynamic-dns-zone" data-dynamic-dns-zone data-zone-index={ zoneKey } open?={ view.Zone == "" }>
+		<summary><div class="dynamic-dns-zone-summary"><strong data-dynamic-dns-zone-label>{ dynamicDNSZoneHeading(view) }</strong><small data-dynamic-dns-zone-overview>{ dynamicDNSZoneOverview(view) }</small></div><span class="dynamic-dns-zone-chevron">@Icon("chevron-down")</span></summary>
+		<div class="dynamic-dns-zone-body">
+			<label class="field-control"><span>DNS Zone</span><input name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_zone" } value={ view.Zone } placeholder="example.com" required/></label>
+			<label class="field-control"><span>Public DNS Names</span><textarea name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_names" } rows="3" spellcheck="false" placeholder="home.example.com&#10;vpn.example.com" required>{ view.Names }</textarea><small>One fully-qualified name per line. Every name must belong to this zone.</small></label>
+			<div class="field-grid two"><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv4" } value="true" checked?={ view.PublishIPv4 }/><span>Publish IPv4 (A)</span></label><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv6" } value="true" checked?={ view.PublishIPv6 }/><span>Publish IPv6 (AAAA)</span><small>The detected outbound IPv6 address must also accept inbound traffic.</small></label></div>
+			<div class="dynamic-dns-zone-footer"><button class="button outline compact destructive" type="button" data-dynamic-dns-remove-zone hidden?={ !removable }>@Icon("trash")<span>Remove Zone</span></button></div>
+		</div>
+	</details>
+}
+
+templ DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) {
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="cloudflare" hidden?={ view.Provider != "cloudflare" }><label class="field-control"><span>API Token</span><input type="password" name={ prefix + "cloudflare_api_token" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Cloudflare API token") }/></label><label class="field-control"><span>Default Zone ID (optional)</span><input name={ prefix + "cloudflare_zone_id" } placeholder="Detected per zone when blank"/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="porkbun" hidden?={ view.Provider != "porkbun" }><label class="field-control"><span>API Key</span><input type="password" name={ prefix + "porkbun_api_key" } autocomplete="new-password"/></label><label class="field-control"><span>Secret API Key</span><input type="password" name={ prefix + "porkbun_secret" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Secret API key") }/></label></div>
+	<div class="field-grid three acme-credential-fields" data-acme-credentials="namecheap" hidden?={ view.Provider != "namecheap" }><label class="field-control"><span>API Username</span><input name={ prefix + "namecheap_username" } autocomplete="off"/></label><label class="field-control"><span>API Key</span><input type="password" name={ prefix + "namecheap_api_key" } autocomplete="new-password"/></label><label class="field-control"><span>Allow-listed Client IP</span><input name={ prefix + "namecheap_client_ip" } placeholder="203.0.113.10"/><small>Namecheap may reject API calls after this address changes.</small></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="godaddy" hidden?={ view.Provider != "godaddy" }><label class="field-control"><span>Production API Token</span><input type="password" name={ prefix + "godaddy_api_token" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "GoDaddy API token") }/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="digitalocean" hidden?={ view.Provider != "digitalocean" }><label class="field-control"><span>API Token</span><input type="password" name={ prefix + "digitalocean_api_token" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "DigitalOcean API token") }/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="hetzner" hidden?={ view.Provider != "hetzner" }><label class="field-control"><span>API Token</span><input type="password" name={ prefix + "hetzner_api_token" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Hetzner API token") }/></label><label class="field-control"><span>Default Zone ID (optional)</span><input name={ prefix + "hetzner_zone_id" } placeholder="Uses each DNS zone name when blank"/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="route53" hidden?={ view.Provider != "route53" }><label class="field-control"><span>Access Key ID</span><input name={ prefix + "route53_access_key_id" } autocomplete="off"/></label><label class="field-control"><span>Secret Access Key</span><input type="password" name={ prefix + "route53_secret_access_key" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "AWS secret access key") }/></label><label class="field-control"><span>Default Hosted Zone ID (optional)</span><input name={ prefix + "route53_zone_id" } placeholder="Detected per zone when blank"/></label><label class="field-control"><span>Session Token (optional)</span><input type="password" name={ prefix + "route53_session_token" } autocomplete="new-password"/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="ovh" hidden?={ view.Provider != "ovh" }><label class="field-control"><span>API Endpoint</span><select name={ prefix + "ovh_endpoint" } data-styled-select><option value="ovh-eu" selected?={ view.ProviderEndpoint == "" || view.ProviderEndpoint == "ovh-eu" }>Europe</option><option value="ovh-ca" selected?={ view.ProviderEndpoint == "ovh-ca" }>Canada</option><option value="ovh-us" selected?={ view.ProviderEndpoint == "ovh-us" }>United States</option></select></label><label class="field-control"><span>Application Key</span><input name={ prefix + "ovh_application_key" } autocomplete="off"/></label><label class="field-control"><span>Application Secret</span><input type="password" name={ prefix + "ovh_application_secret" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "OVHcloud application secret") }/></label><label class="field-control"><span>Consumer Key</span><input type="password" name={ prefix + "ovh_consumer_key" } autocomplete="new-password"/></label></div>
+	<div class="field-grid two acme-credential-fields" data-acme-credentials="rfc2136" hidden?={ view.Provider != "rfc2136" }><label class="field-control"><span>Authoritative Server</span><input name={ prefix + "rfc2136_server" } placeholder="dns.example.com:53"/></label><label class="field-control"><span>TSIG Key Name</span><input name={ prefix + "rfc2136_tsig_name" } placeholder="dynamic-update."/></label><label class="field-control"><span>TSIG Secret</span><input type="password" name={ prefix + "rfc2136_tsig_secret" } autocomplete="new-password" placeholder={ ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret") }/></label><label class="field-control"><span>TSIG Algorithm</span><select name={ prefix + "rfc2136_tsig_algorithm" } data-styled-select><option value="hmac-sha256" selected?={ view.TSIGAlgorithm == "" || view.TSIGAlgorithm == "hmac-sha256" }>HMAC-SHA256</option><option value="hmac-sha384" selected?={ view.TSIGAlgorithm == "hmac-sha384" }>HMAC-SHA384</option><option value="hmac-sha512" selected?={ view.TSIGAlgorithm == "hmac-sha512" }>HMAC-SHA512</option></select></label></div>
 }
 
 templ SSOCard(view SSOAppView) {
@@ -1042,10 +1121,17 @@ func dynamicDNSIPv4(view DynamicDNSAppView) string {
 }
 
 func dynamicDNSIPv6(view DynamicDNSAppView) string {
-	return ifThen(view.PublishIPv6, ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered"), "Not published")
+	for _, publisher := range view.Publishers {
+		for _, zone := range publisher.Zones {
+			if zone.PublishIPv6 {
+				return ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered")
+			}
+		}
+	}
+	return "Not published"
 }
 
-func dynamicDNSTypeLabel(view DynamicDNSAppView) string {
+func dynamicDNSZoneTypeLabel(view DynamicDNSZoneView) string {
 	if view.PublishIPv4 && view.PublishIPv6 {
 		return "A, AAAA"
 	}
@@ -1053,6 +1139,47 @@ func dynamicDNSTypeLabel(view DynamicDNSAppView) string {
 		return "AAAA"
 	}
 	return "A"
+}
+
+func dynamicDNSProvidersLabel(view DynamicDNSAppView) string {
+	if len(view.Publishers) == 1 {
+		return dynamicDNSProviderLabel(view.Publishers[0].Provider)
+	}
+	return fmt.Sprintf("%d configured", len(view.Publishers))
+}
+
+func dynamicDNSPublisherOverview(view DynamicDNSPublisherView) string {
+	names := 0
+	for _, zone := range view.Zones {
+		names += len(dynamicDNSNames(zone.Names))
+	}
+	return fmt.Sprintf("%d %s · %d %s", len(view.Zones), dynamicDNSPlural(len(view.Zones), "zone", "zones"), names, dynamicDNSPlural(names, "host", "hosts"))
+}
+
+func dynamicDNSPublisherHeading(view DynamicDNSPublisherView) string {
+	if provider := dynamicDNSProviderLabel(view.Provider); provider != "" {
+		return provider
+	}
+	return "Choose a provider"
+}
+
+func dynamicDNSZoneOverview(view DynamicDNSZoneView) string {
+	names := len(dynamicDNSNames(view.Names))
+	return fmt.Sprintf("%d %s · %s", names, dynamicDNSPlural(names, "host", "hosts"), dynamicDNSZoneTypeLabel(view))
+}
+
+func dynamicDNSZoneHeading(view DynamicDNSZoneView) string {
+	if view.Zone == "" {
+		return "New zone"
+	}
+	return view.Zone
+}
+
+func dynamicDNSPlural(count int, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }
 
 func dynamicDNSProviderLabel(provider string) string {

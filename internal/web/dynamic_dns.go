@@ -32,38 +32,73 @@ func (server *Server) SetDynamicDNSController(controller dynamicDNSController) {
 
 func (server *Server) dynamicDNSView(request *http.Request, display pages.TimeDisplay) pages.DynamicDNSAppView {
 	settings := server.config.Current().Config.DynamicDNS
+	publishers := settings.ConfiguredPublishers()
 	view := pages.DynamicDNSAppView{
 		Available:  server.dynamicDNS != nil,
-		Configured: settings.Provider != "" || len(settings.Records) > 0,
-		Enabled:    settings.Enabled, Provider: settings.Provider,
-		Interval: settings.Interval.String(), IPv4URL: settings.IPv4URL, IPv6URL: settings.IPv6URL,
+		Configured: len(publishers) > 0,
+		Enabled:    settings.Enabled,
+		Interval:   settings.Interval.String(), TTL: dynamicDNSGlobalTTL(publishers), IPv4URL: settings.IPv4URL, IPv6URL: settings.IPv6URL,
 	}
-	if len(settings.Records) > 0 {
-		view.Zone = settings.Records[0].Zone
-		view.TTL = settings.Records[0].TTL
-		view.PublishIPv4 = settings.Records[0].IPv4
-		view.PublishIPv6 = settings.Records[0].IPv6
-		names := make([]string, 0, len(settings.Records))
-		for _, record := range settings.Records {
-			names = append(names, record.Name)
+	view.CredentialsConfigured = len(publishers) > 0
+	for publisherIndex, publisher := range publishers {
+		publisherView := pages.DynamicDNSPublisherView{
+			Index: publisherIndex, Provider: publisher.Provider,
+			Zones: dynamicDNSZoneViews(publisher.Records),
 		}
-		view.Names = strings.Join(names, "\n")
-	}
-	if view.TTL == 0 {
-		view.TTL = 600
-	}
-	if !view.Configured {
-		view.PublishIPv4 = true
+		if server.dynamicDNS != nil {
+			credentials, configured := server.dynamicDNS.StoredCredentials(request.Context(), publisher.Provider)
+			publisherView.CredentialsConfigured = configured
+			publisherView.ProviderEndpoint = credentials.Endpoint
+			publisherView.TSIGAlgorithm = credentials.TSIGAlgorithm
+			view.CredentialsConfigured = view.CredentialsConfigured && configured
+		}
+		view.Publishers = append(view.Publishers, publisherView)
 	}
 	if server.dynamicDNS == nil {
+		view.CredentialsConfigured = false
 		return view
 	}
-	credentials, configured := server.dynamicDNS.StoredCredentials(request.Context(), settings.Provider)
-	view.CredentialsConfigured = configured
-	view.ProviderEndpoint = credentials.Endpoint
-	view.TSIGAlgorithm = credentials.TSIGAlgorithm
-	view.Status = dynamicDNSStatusView(settings.Provider, server.dynamicDNS.Status(request.Context()), display)
+	provider := ""
+	if len(publishers) == 1 {
+		provider = publishers[0].Provider
+	}
+	view.Status = dynamicDNSStatusView(provider, server.dynamicDNS.Status(request.Context()), display)
 	return view
+}
+
+func dynamicDNSGlobalTTL(publishers []config.DynamicDNSPublisher) uint32 {
+	for _, publisher := range publishers {
+		for _, record := range publisher.Records {
+			if record.TTL > 0 {
+				return record.TTL
+			}
+		}
+	}
+	return 600
+}
+
+func dynamicDNSZoneViews(records []config.DynamicDNSRecord) []pages.DynamicDNSZoneView {
+	var zones []pages.DynamicDNSZoneView
+	indices := make(map[string]int)
+	for _, record := range records {
+		index, found := indices[record.Zone]
+		if !found {
+			index = len(zones)
+			indices[record.Zone] = index
+			zones = append(zones, pages.DynamicDNSZoneView{
+				Index: index, Zone: record.Zone, PublishIPv4: record.IPv4,
+				PublishIPv6: record.IPv6, TTL: record.TTL,
+			})
+		}
+		if zones[index].Names != "" {
+			zones[index].Names += "\n"
+		}
+		zones[index].Names += record.Name
+	}
+	if len(zones) == 0 {
+		zones = append(zones, pages.DynamicDNSZoneView{Index: 0, PublishIPv4: true, TTL: 600})
+	}
+	return zones
 }
 
 func dynamicDNSStatusView(provider string, status dynamicdns.Status, display pages.TimeDisplay) pages.DynamicDNSStatusView {
@@ -262,7 +297,7 @@ func (server *Server) saveDynamicDNS(writer http.ResponseWriter, request *http.R
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid dynamic DNS settings.")
 		return
 	}
-	settings, err := dynamicDNSSettingsFromForm(request)
+	settings, credentialInputs, err := dynamicDNSSettingsFromForm(request)
 	if err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
@@ -276,16 +311,20 @@ func (server *Server) saveDynamicDNS(writer http.ResponseWriter, request *http.R
 		server.renderIntegrationsMutation(writer, request, http.StatusNotImplemented, "", "Settings are read-only.")
 		return
 	}
-	credentials := certificateCredentialsFromForm(request, settings.Provider)
-	if credentials != (dnsprovider.Credentials{}) {
-		if err := server.dynamicDNS.PutCredentials(request.Context(), settings.Provider, credentials); err != nil {
+	for _, input := range credentialInputs {
+		if input.Credentials == (dnsprovider.Credentials{}) {
+			continue
+		}
+		if err := server.dynamicDNS.PutCredentials(request.Context(), input.Provider, input.Credentials); err != nil {
 			server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 			return
 		}
 	}
-	if _, configured := server.dynamicDNS.StoredCredentials(request.Context(), settings.Provider); !configured {
-		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", "Enter credentials for the selected DNS provider.")
-		return
+	for _, provider := range settings.ProviderNames() {
+		if _, configured := server.dynamicDNS.StoredCredentials(request.Context(), provider); !configured {
+			server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", "Enter credentials for "+dynamicDNSProviderName(provider)+".")
+			return
+		}
 	}
 	if err := editor.Update(request.Context(), func(candidate *config.Config) error {
 		candidate.DynamicDNS = settings
@@ -296,38 +335,104 @@ func (server *Server) saveDynamicDNS(writer http.ResponseWriter, request *http.R
 	}
 	server.dynamicDNS.SyncNow()
 	server.recordControlPlaneAudit(request, "integrations.dynamic_dns.configure",
-		fmt.Sprintf("enabled dynamic DNS publication for %d names", len(settings.Records)))
+		fmt.Sprintf("enabled dynamic DNS publication for %d names across %d providers", len(settings.AllRecords()), len(settings.ProviderNames())))
 	writer.Header().Set("HX-Replace-Url", "/integrations")
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, "Dynamic DNS is configured. The first publication is running now.", "")
 }
 
-func dynamicDNSSettingsFromForm(request *http.Request) (config.DynamicDNS, error) {
+type dynamicDNSCredentialInput struct {
+	Provider    string
+	Credentials dnsprovider.Credentials
+}
+
+var dynamicDNSPublisherFormPattern = regexp.MustCompile(`^publisher_(\d+)_provider$`)
+
+func dynamicDNSSettingsFromForm(request *http.Request) (config.DynamicDNS, []dynamicDNSCredentialInput, error) {
 	interval, err := durationfmt.Parse(strings.TrimSpace(request.FormValue("interval")))
 	if err != nil {
-		return config.DynamicDNS{}, errors.New("Dynamic DNS interval is invalid.")
+		return config.DynamicDNS{}, nil, errors.New("Dynamic DNS interval is invalid.")
 	}
-	ttl, err := strconv.ParseUint(strings.TrimSpace(request.FormValue("ttl")), 10, 32)
-	if err != nil {
-		return config.DynamicDNS{}, errors.New("Dynamic DNS TTL must be a whole number.")
+	globalTTLValue := strings.TrimSpace(request.FormValue("ttl"))
+	var globalTTL uint64
+	if globalTTLValue != "" {
+		globalTTL, err = strconv.ParseUint(globalTTLValue, 10, 32)
+		if err != nil {
+			return config.DynamicDNS{}, nil, errors.New("Dynamic DNS TTL must be a whole number.")
+		}
 	}
-	zone := strings.Trim(strings.ToLower(strings.TrimSpace(request.FormValue("zone"))), ".")
-	names := formLines(request.FormValue("names"))
-	records := make([]config.DynamicDNSRecord, 0, len(names))
-	for _, name := range names {
-		records = append(records, config.DynamicDNSRecord{
-			Zone: zone, Name: strings.Trim(strings.ToLower(name), "."),
-			IPv4: request.FormValue("publish_ipv4") == "true",
-			IPv6: request.FormValue("publish_ipv6") == "true",
-			TTL:  uint32(ttl),
+	publisherIndices := dynamicDNSFormIndices(request.Form, dynamicDNSPublisherFormPattern)
+	legacy := len(publisherIndices) == 0 && strings.TrimSpace(request.FormValue("provider")) != ""
+	if legacy {
+		publisherIndices = []int{0}
+	}
+	settings := config.DynamicDNS{
+		Enabled: true, Interval: config.Duration{Duration: interval},
+		IPv4URL: strings.TrimSpace(request.FormValue("ipv4_url")),
+		IPv6URL: strings.TrimSpace(request.FormValue("ipv6_url")),
+	}
+	var credentialInputs []dynamicDNSCredentialInput
+	for _, publisherIndex := range publisherIndices {
+		prefix := fmt.Sprintf("publisher_%d_", publisherIndex)
+		providerField := prefix + "provider"
+		if legacy {
+			prefix, providerField = "", "provider"
+		}
+		provider := strings.ToLower(strings.TrimSpace(request.FormValue(providerField)))
+		publisher := config.DynamicDNSPublisher{Provider: provider}
+		zonePattern := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `zone_(\d+)_zone$`)
+		zoneIndices := dynamicDNSFormIndices(request.Form, zonePattern)
+		if legacy {
+			zoneIndices = []int{0}
+		}
+		for _, zoneIndex := range zoneIndices {
+			zonePrefix := fmt.Sprintf("%szone_%d_", prefix, zoneIndex)
+			if legacy {
+				zonePrefix = ""
+			}
+			ttl := globalTTL
+			if globalTTLValue == "" {
+				var parseErr error
+				ttl, parseErr = strconv.ParseUint(strings.TrimSpace(request.FormValue(zonePrefix+"ttl")), 10, 32)
+				if parseErr != nil {
+					return config.DynamicDNS{}, nil, errors.New("Dynamic DNS TTL must be a whole number.")
+				}
+			}
+			zone := strings.Trim(strings.ToLower(strings.TrimSpace(request.FormValue(zonePrefix+"zone"))), ".")
+			for _, name := range formLines(request.FormValue(zonePrefix + "names")) {
+				publisher.Records = append(publisher.Records, config.DynamicDNSRecord{
+					Zone: zone, Name: strings.Trim(strings.ToLower(name), "."),
+					IPv4: request.FormValue(zonePrefix+"publish_ipv4") == "true",
+					IPv6: request.FormValue(zonePrefix+"publish_ipv6") == "true",
+					TTL:  uint32(ttl),
+				})
+			}
+		}
+		settings.Publishers = append(settings.Publishers, publisher)
+		credentialInputs = append(credentialInputs, dynamicDNSCredentialInput{
+			Provider: provider, Credentials: certificateCredentialsFromFormPrefix(request, provider, prefix),
 		})
 	}
-	return config.DynamicDNS{
-		Enabled: true, Provider: strings.ToLower(strings.TrimSpace(request.FormValue("provider"))),
-		Interval: config.Duration{Duration: interval},
-		IPv4URL:  strings.TrimSpace(request.FormValue("ipv4_url")),
-		IPv6URL:  strings.TrimSpace(request.FormValue("ipv6_url")),
-		Records:  records,
-	}, nil
+	return settings, credentialInputs, nil
+}
+
+func dynamicDNSFormIndices(form map[string][]string, pattern *regexp.Regexp) []int {
+	seen := make(map[int]struct{})
+	for field := range form {
+		matches := pattern.FindStringSubmatch(field)
+		if len(matches) != 2 {
+			continue
+		}
+		index, err := strconv.Atoi(matches[1])
+		if err == nil {
+			seen[index] = struct{}{}
+		}
+	}
+	indices := make([]int, 0, len(seen))
+	for index := range seen {
+		indices = append(indices, index)
+	}
+	sort.Ints(indices)
+	return indices
 }
 
 func (server *Server) syncDynamicDNSNow(writer http.ResponseWriter, request *http.Request) {
@@ -357,10 +462,11 @@ func (server *Server) setDynamicDNSEnabled(writer http.ResponseWriter, request *
 		return
 	}
 	if enabled {
-		provider := server.config.Current().Config.DynamicDNS.Provider
-		if _, configured := server.dynamicDNS.StoredCredentials(request.Context(), provider); !configured {
-			server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", "DNS provider credentials are not configured.")
-			return
+		for _, provider := range server.config.Current().Config.DynamicDNS.ProviderNames() {
+			if _, configured := server.dynamicDNS.StoredCredentials(request.Context(), provider); !configured {
+				server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", dynamicDNSProviderName(provider)+" credentials are not configured.")
+				return
+			}
 		}
 	}
 	if err := editor.Update(request.Context(), func(candidate *config.Config) error {
@@ -404,5 +510,8 @@ func (server *Server) dynamicDNSStatusPanel(writer http.ResponseWriter, request 
 	}
 	if err := pages.DynamicDNSCardActions(view, true).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render dynamic DNS actions", "error", err)
+	}
+	if err := pages.DynamicDNSFacts(view, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dynamic DNS facts", "error", err)
 	}
 }
