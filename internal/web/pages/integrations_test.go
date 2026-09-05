@@ -60,6 +60,32 @@ func TestIntegrationRemoveButtonsAreMarkedPrimaryOnly(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
+	tests := []struct {
+		name     string
+		view     DynamicDNSAppView
+		expected string
+	}{
+		{
+			name:     "not configured",
+			view:     DynamicDNSAppView{Available: true},
+			expected: `class="status-badge">Not configured</span>`,
+		},
+		{
+			name:     "active",
+			view:     DynamicDNSAppView{Available: true, Configured: true, Enabled: true, CredentialsConfigured: true},
+			expected: `class="status-badge success">Active</span>`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if html := render(t, DynamicDNSCard(test.view)); !strings.Contains(html, test.expected) {
+				t.Errorf("Dynamic DNS card does not use the shared status treatment %q", test.expected)
+			}
+		})
+	}
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var out strings.Builder

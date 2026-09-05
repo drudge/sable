@@ -2873,7 +2873,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .button.is-syncing .icon-refresh, .unifi-status-line .icon-refresh { animation: blocking-refresh-spin .8s linear infinite; }
 .button.is-syncing { cursor: progress; }
 .integration-card-actions .button:disabled { cursor: not-allowed; opacity: .55; }
-.unifi-progress { height: .3rem; }
+.integration-progress { height: .3rem; }
 .unifi-status-line .nav-icon { width: .85rem; height: .85rem; }
 .unifi-status { display: flex; gap: .7rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: .8rem; }
 .unifi-status.error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
@@ -2993,7 +2993,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.wizard-footer-advance { flex-direction: column-reverse; }
 	.wizard-footer .button { justify-content: center; }
 	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
-	.integration-card-actions-primary { flex-direction: column; }
+	.integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }
 	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
 	.wizard-progress { grid-template-columns: auto 1fr auto 1fr auto 1fr auto; }
 }

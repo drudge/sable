@@ -325,7 +325,7 @@ templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
 			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last publication failed</strong><span>{ view.Status.LastError }</span></div></div>
 		}
 		if view.Status.Running {
-			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Publishing dynamic DNS records"></div>
+			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Publishing dynamic DNS records"></div>
 		}
 		<p class="unifi-status-line">
 			if view.Status.Running {
@@ -615,7 +615,7 @@ templ UniFiStatusPanel(view UniFiAppView) {
 			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Removed) }</span></div>
 		</div>
 		if view.Status.Running {
-			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
+			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
 		}
 		<p class="unifi-status-line">
 			if view.Status.Running {
@@ -1057,12 +1057,12 @@ func dynamicDNSStatusPoll(running bool) string {
 
 func dynamicDNSBadgeClass(view DynamicDNSAppView) string {
 	if !view.Available || !view.Configured || !view.Enabled {
-		return "badge"
+		return "status-badge"
 	}
 	if view.Status.LastError != "" || !view.CredentialsConfigured {
-		return "badge danger"
+		return "status-badge danger"
 	}
-	return "badge success"
+	return "status-badge success"
 }
 
 func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {
