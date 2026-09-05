@@ -1105,7 +1105,7 @@ templ Stats(view StatsOverviewView) {
 			@StatCard("Cached", formatNumber(view.Values.CacheHits), percent(view.Values.CacheHits, view.Values.Queries), "amber", statsQueryLogURL(view, "cache", "", true))
 			@StatCard("Blocked", formatNumber(view.Values.Blocked), percent(view.Values.Blocked, view.Values.Queries), "orange", statsQueryLogURL(view, "blocked", "", true))
 			@StatCard("Dropped", formatNumber(view.Lifetime.Dropped), nonRangedStatDetail(percent(view.Lifetime.Dropped, view.Lifetime.Queries), view.Scope), "rose", "")
-			@StatCard("Clients", formatNumber(uint64(view.Lifetime.Clients)), clientsStatDetail(view.Scope), "purple", statsQueryLogURL(view, "", "", false))
+			@StatCard("Clients", formatNumber(uint64(view.Lifetime.Clients)), "Recent sample", "purple", statsQueryLogURL(view, "", "", false))
 			@StatCard("Cache Hit Rate", view.Values.CacheHitRatio, compactNumber(view.Values.CacheHits)+" hits", "cyan", statsQueryLogURL(view, "cache", "", true))
 		</div>
 	</section>
@@ -1142,13 +1142,6 @@ func nonRangedStatDetail(detail string, scope string) string {
 		return detail + " · all time"
 	}
 	return detail
-}
-
-func clientsStatDetail(scope string) string {
-	if scope == StatsScopeRange {
-		return "Recent sample · not ranged"
-	}
-	return "Recent sample"
 }
 
 templ QueryChart(view QueryChartView) {

@@ -497,7 +497,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	}
 	rangedChartResponse := serveRequest(server, http.MethodGet, "/ui/stats/chart?range=day&stats_scope=range")
 	rangedChart := rangedChartResponse.Body.String()
-	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Chart range", "· all time", "Recent sample · not ranged", `href="/logs?end=`, `response_code=SERVFAIL`, `source=blocked`} {
+	for _, expected := range []string{`data-stats-scope="range"`, "Last 24 hours", "Chart range", "· all time", "Recent sample", `href="/logs?end=`, `response_code=SERVFAIL`, `source=blocked`} {
 		if rangedChartResponse.Code != http.StatusOK || !strings.Contains(rangedChart, expected) {
 			t.Errorf("ranged day chart response does not contain %q", expected)
 		}
