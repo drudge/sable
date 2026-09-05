@@ -186,7 +186,7 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView, insights
 		</header>
 		<div class="top-stats-toolbar">
 			<label class="top-stats-search">@Icon("search")<span class="sr-only">Filter { strings.ToLower(title) }</span><input type="search" placeholder={ topStatsPlaceholder(kind) } data-top-stats-search/></label>
-			<label class="top-stats-limit"><span class="sr-only">Number of results</span><select data-top-stats-limit><option value="25">Top 25</option><option value="100" selected>Top 100</option><option value="250">Top 250</option><option value="1000">Top 1000</option></select></label>
+			<label class="top-stats-limit"><span class="sr-only">Number of results</span><select data-top-stats-limit data-styled-select><option value="25">Top 25</option><option value="100" selected>Top 100</option><option value="250">Top 250</option><option value="1000">Top 1000</option></select></label>
 		</div>
 		<div class="top-stats-list">
 			if len(items) == 0 {

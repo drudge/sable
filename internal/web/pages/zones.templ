@@ -571,8 +571,8 @@ templ ZoneListView(view ZonesPageView) {
 		<div class="zone-filter-bar">
 			<label class="zone-search"><span>@Icon("search")</span><input type="search" aria-label="Search zones" placeholder="Search zones..." autocomplete="off" data-zone-search/></label>
 			<div class="zone-filter-selects">
-				<label><span class="sr-only">Zone type</span><select data-zone-type-filter><option value="all">All Types</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="stub">Stub</option><option value="forwarder">Forwarder</option><option value="alias">Alias</option><option value="catalog">Catalog</option></select></label>
-				<label><span class="sr-only">Zone status</span><select data-zone-status-filter><option value="all">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
+				<label><span class="sr-only">Zone type</span><select data-zone-type-filter data-styled-select><option value="all">All Types</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="stub">Stub</option><option value="forwarder">Forwarder</option><option value="alias">Alias</option><option value="catalog">Catalog</option></select></label>
+				<label><span class="sr-only">Zone status</span><select data-zone-status-filter data-styled-select><option value="all">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
 			</div>
 		</div>
 		<section class="card isotope-zone-list" aria-label="Configured zones">
@@ -636,7 +636,7 @@ templ ZoneDetailView(zone ZoneView) {
 		</header>
 		<div class="zone-filter-bar zone-record-filter-bar">
 			<label class="zone-search"><span>@Icon("search")</span><input type="search" aria-label="Filter zone records" placeholder="Filter records..." autocomplete="off" data-record-search/></label>
-			<label class="zone-record-type-filter"><span class="sr-only">Record type</span><select data-record-type-filter><option value="all">All Types</option>@RecordTypeOptions(true)</select></label>
+			<label class="zone-record-type-filter"><span class="sr-only">Record type</span><select data-record-type-filter data-styled-select><option value="all">All Types</option>@RecordTypeOptions(true)</select></label>
 		</div>
 		<section class="card isotope-record-list" aria-label={ "Records for " + zone.Name }>
 			if len(zone.Records) == 0 {
@@ -814,7 +814,7 @@ templ ZoneTypeOptions(selected string, allowAlias bool) {
 // names a key removed from the configuration keeps it listed and selected, so
 // the form shows the broken reference instead of silently clearing it.
 templ TSIGKeySelect(keys []string, selected string) {
-	<select class="mono-input" name="tsig_key">
+	<select class="mono-input" name="tsig_key" data-styled-select>
 		<option value="" selected?={ selected == "" }>None</option>
 		for _, key := range keys {
 			<option value={ key } selected?={ key == selected }>{ TSIGDisplayName(key) }</option>
@@ -830,14 +830,14 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
 			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
-			<label><span>Zone Type</span><select name="type" data-zone-create-type>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
+			<label><span>Zone Type</span><select name="type" data-zone-create-type data-styled-select>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
 			<label><span>TSIG Key (optional)</span>@TSIGKeySelect(tsigKeys, "")<small>Authenticates transfers and updates. Add keys under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a>.</small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
-				<label><span>Protocol</span><select name="primary_protocol" data-zone-primary-protocol disabled><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option><option value="udp" data-stub-protocol>UDP</option></select></label>
+				<label><span>Protocol</span><select name="primary_protocol" data-zone-primary-protocol data-styled-select disabled><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option><option value="udp" data-stub-protocol>UDP</option></select></label>
 			</section>
 			<section class="zone-create-options" data-zone-create-options="alias" hidden>
-				<label><span>Source Zone</span><select class="mono-input" name="alias_zone" disabled required>
+				<label><span>Source Zone</span><select class="mono-input" name="alias_zone" data-styled-select disabled required>
 					for _, source := range aliasSources {
 						<option value={ source }>{ source }</option>
 					}
@@ -845,7 +845,7 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 			</section>
 			<section class="zone-create-options" data-zone-create-options="forwarder" hidden>
 				<label><span>Forwarder Address</span><input class="mono-input" name="forwarder_address" placeholder="1.1.1.1 or dns.example:53" disabled required/></label>
-				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" disabled><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option></select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
+				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" data-styled-select disabled><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option></select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
 			</section>
 			<section class="zone-create-options" data-zone-create-options="resolution" hidden>
 				<input type="hidden" name="dnssec_validation_present" value="1" disabled/>
@@ -894,7 +894,7 @@ templ RecordTypePicker() {
 				<button class={ ifThen(index == 0, "record-type-choice active", "record-type-choice") } type="button" data-record-type-choice={ recordType } data-record-description={ zoneRecordDescription(recordType) } aria-pressed={ ifThen(index == 0, "true", "false") }>{ recordType }</button>
 			}
 		</div>
-		<label class="record-more-types"><span class="sr-only">More record types</span><select data-record-more-types><option value="">More types...</option>
+		<label class="record-more-types"><span class="sr-only">More record types</span><select data-record-more-types data-styled-select><option value="" data-placeholder>More types...</option>
 			for _, recordType := range additionalZoneRecordTypes() {
 				<option value={ recordType } data-description={ zoneRecordDescription(recordType) }>{ recordType }</option>
 			}
@@ -976,15 +976,15 @@ templ ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) {
 			<label class="record-field"><span>Target Host</span><input class="mono-input" name={ prefix + "target" } value={ zoneRecordParsedField(recordType, value, "target") } placeholder="server.example.com" autocomplete="off" disabled?={ disabled } required/></label>
 			<div class="record-field-grid three"><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "priority") == "", "0", zoneRecordParsedField(recordType, value, "priority")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Weight</span><input type="number" name={ prefix + "weight" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "weight") == "", "0", zoneRecordParsedField(recordType, value, "weight")) } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Port</span><input type="number" name={ prefix + "port" } min="0" max="65535" value={ zoneRecordParsedField(recordType, value, "port") } placeholder="80" disabled?={ disabled } required/></label></div>
 		case "CAA":
-			<div class="record-field-grid caa"><label class="record-field"><span>CA Domain</span><input class="mono-input" name={ prefix + "ca_domain" } value={ zoneRecordParsedField(recordType, value, "ca_domain") } placeholder="letsencrypt.org" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Tag</span><select name={ prefix + "tag" } disabled?={ disabled }><option value="issue" selected?={ zoneRecordParsedField(recordType, value, "tag") == "" || zoneRecordParsedField(recordType, value, "tag") == "issue" }>issue</option><option value="issuewild" selected?={ zoneRecordParsedField(recordType, value, "tag") == "issuewild" }>issuewild</option><option value="iodef" selected?={ zoneRecordParsedField(recordType, value, "tag") == "iodef" }>iodef</option></select></label><label class="record-field secondary"><span>Flags</span><input type="number" name={ prefix + "flags" } min="0" max="255" value={ ifThen(zoneRecordParsedField(recordType, value, "flags") == "", "0", zoneRecordParsedField(recordType, value, "flags")) } disabled?={ disabled } required/></label></div>
+			<div class="record-field-grid caa"><label class="record-field"><span>CA Domain</span><input class="mono-input" name={ prefix + "ca_domain" } value={ zoneRecordParsedField(recordType, value, "ca_domain") } placeholder="letsencrypt.org" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Tag</span><select name={ prefix + "tag" } data-styled-select disabled?={ disabled }><option value="issue" selected?={ zoneRecordParsedField(recordType, value, "tag") == "" || zoneRecordParsedField(recordType, value, "tag") == "issue" }>issue</option><option value="issuewild" selected?={ zoneRecordParsedField(recordType, value, "tag") == "issuewild" }>issuewild</option><option value="iodef" selected?={ zoneRecordParsedField(recordType, value, "tag") == "iodef" }>iodef</option></select></label><label class="record-field secondary"><span>Flags</span><input type="number" name={ prefix + "flags" } min="0" max="255" value={ ifThen(zoneRecordParsedField(recordType, value, "flags") == "", "0", zoneRecordParsedField(recordType, value, "flags")) } disabled?={ disabled } required/></label></div>
 		case "DS":
 			<div class="record-field-grid three"><label class="record-field secondary"><span>Key Tag</span><input type="number" name={ prefix + "key_tag" } min="0" max="65535" value={ zoneRecordParsedField(recordType, value, "key_tag") } placeholder="12345" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Algorithm</span>@DNSSECAlgorithmSelect(prefix + "algorithm", zoneRecordParsedField(recordType, value, "algorithm"), disabled)</label><label class="record-field secondary"><span>Digest Type</span>@DSDigestSelect(prefix + "digest_type", zoneRecordParsedField(recordType, value, "digest_type"), disabled)</label></div>
 			<label class="record-field"><span>Digest</span><input class="mono-input" name={ prefix + "digest" } value={ zoneRecordParsedField(recordType, value, "digest") } placeholder="Hex digest of the child zone's KSK DNSKEY" autocomplete="off" disabled?={ disabled } required/></label>
 		case "SSHFP":
-			<div class="record-field-grid two"><label class="record-field secondary"><span>Algorithm</span><select name={ prefix + "algorithm" } disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "1" }>RSA</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "2" }>DSA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "3" }>ECDSA</option><option value="4" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "" || zoneRecordParsedField(recordType, value, "algorithm") == "4" }>Ed25519</option><option value="6" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "6" }>Ed448</option></select></label><label class="record-field secondary"><span>Fingerprint Type</span><select name={ prefix + "fingerprint_type" } disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "1" }>SHA-1</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "" || zoneRecordParsedField(recordType, value, "fingerprint_type") == "2" }>SHA-256</option></select></label></div>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Algorithm</span><select name={ prefix + "algorithm" } data-styled-select disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "1" }>RSA</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "2" }>DSA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "3" }>ECDSA</option><option value="4" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "" || zoneRecordParsedField(recordType, value, "algorithm") == "4" }>Ed25519</option><option value="6" selected?={ zoneRecordParsedField(recordType, value, "algorithm") == "6" }>Ed448</option></select></label><label class="record-field secondary"><span>Fingerprint Type</span><select name={ prefix + "fingerprint_type" } data-styled-select disabled?={ disabled }><option value="1" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "1" }>SHA-1</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "fingerprint_type") == "" || zoneRecordParsedField(recordType, value, "fingerprint_type") == "2" }>SHA-256</option></select></label></div>
 			<label class="record-field"><span>Fingerprint</span><input class="mono-input" name={ prefix + "fingerprint" } value={ zoneRecordParsedField(recordType, value, "fingerprint") } placeholder="Hex fingerprint of the host key" autocomplete="off" disabled?={ disabled } required/></label>
 		case "TLSA":
-			<div class="record-field-grid three"><label class="record-field secondary"><span>Certificate Usage</span><select name={ prefix + "certificate_usage" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "0" }>PKIX-TA</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "1" }>PKIX-EE</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "2" }>DANE-TA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "" || zoneRecordParsedField(recordType, value, "certificate_usage") == "3" }>DANE-EE</option></select></label><label class="record-field secondary"><span>Selector</span><select name={ prefix + "selector" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "selector") == "0" }>Full Certificate</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "selector") == "" || zoneRecordParsedField(recordType, value, "selector") == "1" }>SPKI</option></select></label><label class="record-field secondary"><span>Matching Type</span><select name={ prefix + "matching_type" } disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "0" }>Exact</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "" || zoneRecordParsedField(recordType, value, "matching_type") == "1" }>SHA2-256</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "2" }>SHA2-512</option></select></label></div>
+			<div class="record-field-grid three"><label class="record-field secondary"><span>Certificate Usage</span><select name={ prefix + "certificate_usage" } data-styled-select disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "0" }>PKIX-TA</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "1" }>PKIX-EE</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "2" }>DANE-TA</option><option value="3" selected?={ zoneRecordParsedField(recordType, value, "certificate_usage") == "" || zoneRecordParsedField(recordType, value, "certificate_usage") == "3" }>DANE-EE</option></select></label><label class="record-field secondary"><span>Selector</span><select name={ prefix + "selector" } data-styled-select disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "selector") == "0" }>Full Certificate</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "selector") == "" || zoneRecordParsedField(recordType, value, "selector") == "1" }>SPKI</option></select></label><label class="record-field secondary"><span>Matching Type</span><select name={ prefix + "matching_type" } data-styled-select disabled?={ disabled }><option value="0" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "0" }>Exact</option><option value="1" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "" || zoneRecordParsedField(recordType, value, "matching_type") == "1" }>SHA2-256</option><option value="2" selected?={ zoneRecordParsedField(recordType, value, "matching_type") == "2" }>SHA2-512</option></select></label></div>
 			<label class="record-field"><span>Certificate Association Data</span><textarea class="record-text-value short" name={ prefix + "certificate" } placeholder="Hex digest, or a PEM certificate to hash" disabled?={ disabled } required>{ zoneRecordParsedField(recordType, value, "certificate") }</textarea></label>
 		case "SVCB", "HTTPS":
 			<div class="record-field-grid mx"><label class="record-field"><span>Target Name</span><input class="mono-input" name={ prefix + "svc_target" } value={ zoneRecordParsedField(recordType, value, "svc_target") } placeholder="svc.example.com, or . for this name" autocomplete="off" disabled?={ disabled } required/></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "svc_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "svc_priority") == "", "1", zoneRecordParsedField(recordType, value, "svc_priority")) } disabled?={ disabled } required/></label></div>
@@ -1001,18 +1001,18 @@ templ ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) {
 			<div class="record-field-grid three"><label class="record-field secondary"><span>Expire</span><input type="number" name={ prefix + "expire" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "expire") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Minimum TTL</span><input type="number" name={ prefix + "minimum" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "minimum") } disabled?={ disabled } required/></label></div>
 		case "FWD":
 			<label class="record-field"><span>Forwarder Address</span><input class="mono-input" name={ prefix + "fwd_address" } value={ zoneRecordParsedField(recordType, value, "fwd_address") } placeholder="8.8.8.8, dns.example, or host:port" autocomplete="off" disabled?={ disabled } required/><small>This record applies to the owner name and every name below it.</small></label>
-			<div class="record-field-grid two"><label class="record-field secondary"><span>Protocol</span><select name={ prefix + "fwd_protocol" } disabled?={ disabled }><option value="udp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "" || zoneRecordParsedField(recordType, value, "fwd_protocol") == "udp" }>UDP</option><option value="tcp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tcp" }>TCP</option><option value="tls" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tls" }>DNS-over-TLS</option></select></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "fwd_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")) } disabled?={ disabled } required/></label></div>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Protocol</span><select name={ prefix + "fwd_protocol" } data-styled-select disabled?={ disabled }><option value="udp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "" || zoneRecordParsedField(recordType, value, "fwd_protocol") == "udp" }>UDP</option><option value="tcp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tcp" }>TCP</option><option value="tls" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tls" }>DNS-over-TLS</option></select></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "fwd_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")) } disabled?={ disabled } required/></label></div>
 		default:
 			<label class="record-field"><span>Value</span><input class="mono-input" name={ prefix + "value" } value={ value } placeholder="Record value" autocomplete="off" disabled?={ disabled } required/></label>
 	}
 }
 
 templ DNSSECAlgorithmSelect(name, selected string, disabled bool) {
-	<select name={ name } disabled?={ disabled }><option value="5" selected?={ selected == "5" }>RSA/SHA-1</option><option value="8" selected?={ selected == "8" }>RSA/SHA-256</option><option value="10" selected?={ selected == "10" }>RSA/SHA-512</option><option value="13" selected?={ selected == "" || selected == "13" }>ECDSA P-256/SHA-256</option><option value="14" selected?={ selected == "14" }>ECDSA P-384/SHA-384</option><option value="15" selected?={ selected == "15" }>Ed25519</option><option value="16" selected?={ selected == "16" }>Ed448</option></select>
+	<select name={ name } data-styled-select disabled?={ disabled }><option value="5" selected?={ selected == "5" }>RSA/SHA-1</option><option value="8" selected?={ selected == "8" }>RSA/SHA-256</option><option value="10" selected?={ selected == "10" }>RSA/SHA-512</option><option value="13" selected?={ selected == "" || selected == "13" }>ECDSA P-256/SHA-256</option><option value="14" selected?={ selected == "14" }>ECDSA P-384/SHA-384</option><option value="15" selected?={ selected == "15" }>Ed25519</option><option value="16" selected?={ selected == "16" }>Ed448</option></select>
 }
 
 templ DSDigestSelect(name, selected string, disabled bool) {
-	<select name={ name } disabled?={ disabled }><option value="1" selected?={ selected == "1" }>SHA-1</option><option value="2" selected?={ selected == "" || selected == "2" }>SHA-256</option><option value="3" selected?={ selected == "3" }>GOST R 34.11-94</option><option value="4" selected?={ selected == "4" }>SHA-384</option></select>
+	<select name={ name } data-styled-select disabled?={ disabled }><option value="1" selected?={ selected == "1" }>SHA-1</option><option value="2" selected?={ selected == "" || selected == "2" }>SHA-256</option><option value="3" selected?={ selected == "3" }>GOST R 34.11-94</option><option value="4" selected?={ selected == "4" }>SHA-384</option></select>
 }
 
 templ ZoneDNSSECDialog(zone ZoneView, id string) {
@@ -1048,14 +1048,14 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 				<span><strong>Sign this zone</strong><small>Sable maintains DNSKEY, authenticated-denial, and RRSIG records and refreshes signatures automatically.</small></span>
 				<span class="switch"><input type="checkbox" name="enabled" value="true" checked?={ zone.DNSSEC }/><span></span></span>
 			</label>
-			<label><span>Signing Algorithm</span><select name="algorithm"><option value="ed25519" selected?={ zone.DNSSECAlgorithm == "" || zone.DNSSECAlgorithm == "ed25519" }>Ed25519 (recommended)</option><option value="ecdsa-p256-sha256" selected?={ zone.DNSSECAlgorithm == "ecdsa-p256-sha256" }>ECDSA P-256 / SHA-256</option><option value="ecdsa-p384-sha384" selected?={ zone.DNSSECAlgorithm == "ecdsa-p384-sha384" }>ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault.</small></label>
+			<label><span>Signing Algorithm</span><select name="algorithm" data-styled-select><option value="ed25519" selected?={ zone.DNSSECAlgorithm == "" || zone.DNSSECAlgorithm == "ed25519" }>Ed25519 (recommended)</option><option value="ecdsa-p256-sha256" selected?={ zone.DNSSECAlgorithm == "ecdsa-p256-sha256" }>ECDSA P-256 / SHA-256</option><option value="ecdsa-p384-sha384" selected?={ zone.DNSSECAlgorithm == "ecdsa-p384-sha384" }>ECDSA P-384 / SHA-384</option></select><small>The private key is encrypted in Sable's secret vault.</small></label>
 			<div class="record-field-grid two zone-dnssec-policy">
 				<label><span>ZSK Lifetime</span><input class="mono-input" name="zsk_lifetime" value={ zone.ZSKLifetime } required/><small>Automatic rotation interval; fixed units such as 30d are supported.</small></label>
 				<label><span>KSK Lifetime</span><input class="mono-input" name="ksk_lifetime" value={ zone.KSKLifetime } required/><small>Starts a parent-coordinated rollover; for example, 1y.</small></label>
 				<label><span>Prepublication Window</span><input class="mono-input" name="key_prepublish" value={ zone.KeyPrepublish } required/><small>Must cover the maximum DNSKEY/zone TTL.</small></label>
 				<label><span>Retirement Window</span><input class="mono-input" name="key_retire_after" value={ zone.KeyRetireAfter } required/><small>Old keys remain published for cached signatures and DS records.</small></label>
 			</div>
-			<label><span>Authenticated Denial</span><select name="denial" data-dnssec-denial><option value="nsec" selected?={ zone.DNSSECDenial == "" || zone.DNSSECDenial == "nsec" }>NSEC</option><option value="nsec3" selected?={ zone.DNSSECDenial == "nsec3" }>NSEC3</option></select><small>NSEC3 hashes owner names in denial proofs. NSEC is faster and simpler.</small></label>
+			<label><span>Authenticated Denial</span><select name="denial" data-dnssec-denial data-styled-select><option value="nsec" selected?={ zone.DNSSECDenial == "" || zone.DNSSECDenial == "nsec" }>NSEC</option><option value="nsec3" selected?={ zone.DNSSECDenial == "nsec3" }>NSEC3</option></select><small>NSEC3 hashes owner names in denial proofs. NSEC is faster and simpler.</small></label>
 			<section class="zone-dnssec-nsec3" data-dnssec-nsec3 hidden?={ zone.DNSSECDenial != "nsec3" }>
 				<label><span>NSEC3 Iterations</span><input type="number" name="nsec3_iterations" min="0" max="0" value={ fmt.Sprint(zone.NSEC3Iterations) } disabled?={ zone.DNSSECDenial != "nsec3" }/><small>Modern DNSSEC guidance requires zero extra iterations to avoid validator and CPU costs.</small></label>
 				<label><span>NSEC3 Salt <small>(optional)</small></span><input class="mono-input" name="nsec3_salt" value={ zone.NSEC3Salt } maxlength="64" placeholder="Empty (recommended)" disabled?={ zone.DNSSECDenial != "nsec3" }/><small>Up to 32 bytes encoded as hexadecimal. An empty salt avoids unnecessary re-signing.</small></label>
@@ -1107,7 +1107,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="general">
 				<label><span>Zone Name</span><input class="mono-input" value={ zone.Name } readonly/></label>
-				<label><span>Zone Type</span><select disabled>@ZoneTypeOptions(zoneTypeSelectValue(zone), true)</select></label>
+				<label><span>Zone Type</span><select data-styled-select disabled>@ZoneTypeOptions(zoneTypeSelectValue(zone), true)</select></label>
 				<label><span>Default TTL (seconds)</span><input type="number" name="default_ttl" min="1" max="4294967295" value={ fmt.Sprint(zone.DefaultTTL) } required/></label>
 				if zone.CatalogManager != "" {
 					<section class="zone-settings-section">
@@ -1128,7 +1128,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 					if zone.CatalogManager == "" {
 						<section class="zone-settings-section">
 							<div><span class="zone-settings-section-icon">@Icon("layers")</span><span><strong>Catalog Membership</strong><small>Publish this zone in a catalog so subscribed name servers provision it automatically.</small></span></div>
-							<label><span>Catalog Zone</span><select class="mono-input" name="catalog_zone">
+							<label><span>Catalog Zone</span><select class="mono-input" name="catalog_zone" data-styled-select>
 								<option value="" selected?={ zone.CatalogZone == "" }>Not published in a catalog</option>
 								for _, target := range zone.CatalogTargets {
 									<option value={ target } selected?={ target == zone.CatalogZone }>{ target }</option>
@@ -1141,7 +1141,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 				if zone.Type == "alias" {
 					<section class="zone-settings-section">
 						<div><span class="zone-settings-section-icon">@Icon("copy")</span><span><strong>Mirrored Zone</strong><small>This zone republishes the records of its source zone.</small></span></div>
-						<label><span>Source Zone</span><select class="mono-input" name="alias_zone" required>
+						<label><span>Source Zone</span><select class="mono-input" name="alias_zone" data-styled-select required>
 							for _, source := range zone.AliasSources {
 								<option value={ source } selected?={ source == zone.AliasZone }>{ source }</option>
 							}
@@ -1158,7 +1158,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 					<section class="zone-settings-section first">
 						<div><span class="zone-settings-section-icon">@Icon("server")</span><span><strong>Primary Name Servers</strong><small>Servers used to refresh this { zoneTypeLabel(zone.Type) } zone.</small></span></div>
 						<label><span>Server Addresses</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } required>{ strings.Join(zone.PrimaryServers, "\n") }</textarea><small>One address per line, tried in order.</small></label>
-						<label><span>Protocol</span><select name="primary_protocol">
+						<label><span>Protocol</span><select name="primary_protocol" data-styled-select>
 							if zone.Type == "stub" {
 								<option value="udp" selected?={ zone.PrimaryProtocol == "udp" }>UDP</option>
 							}
@@ -1175,7 +1175,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 				if zone.Type != "stub" {
 					<section class={ ifThen(zone.Type == "primary" || zone.Type == "secondary" || zone.CatalogRole == "subscribed", "zone-settings-section", "zone-settings-section first") }>
 						<div><span class="zone-settings-section-icon">@Icon("download")</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div>
-						<label><span>Transfer Policy</span><select name="zone_transfer"><option value="deny" selected?={ zone.ZoneTransfer == "" || zone.ZoneTransfer == "deny" }>Deny transfers</option><option value="private" selected?={ zone.ZoneTransfer == "private" }>Private networks only</option><option value="acl" selected?={ zone.ZoneTransfer == "acl" }>Specified networks</option><option value="allow" selected?={ zone.ZoneTransfer == "allow" }>Allow any client</option></select></label>
+						<label><span>Transfer Policy</span><select name="zone_transfer" data-styled-select><option value="deny" selected?={ zone.ZoneTransfer == "" || zone.ZoneTransfer == "deny" }>Deny transfers</option><option value="private" selected?={ zone.ZoneTransfer == "private" }>Private networks only</option><option value="acl" selected?={ zone.ZoneTransfer == "acl" }>Specified networks</option><option value="allow" selected?={ zone.ZoneTransfer == "allow" }>Allow any client</option></select></label>
 						<label><span>Allowed Networks</span><textarea class="mono-input" name="transfer_acl" placeholder={ "192.0.2.10\n2001:db8::/64" }>{ strings.Join(zone.TransferACL, "\n") }</textarea><small>One IP address or CIDR network per line. Used by the specified-networks policy.</small></label>
 					</section>
 					<section class="zone-settings-section">

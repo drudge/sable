@@ -450,7 +450,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if !strings.Contains(dashboard, appScript) || !strings.Contains(dashboard, htmxScript) || strings.Index(dashboard, appScript) > strings.Index(dashboard, htmxScript) {
 		t.Error("deferred application script must register before htmx initializes")
 	}
-	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `class="dashboard-insights-skeleton"`, `class="card ranking-card ranking-card-skeleton"`, `class="card distribution-card distribution-card-skeleton"`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", `id="dashboard-update-indicator"`, `hx-indicator="#dashboard-update-indicator"`, "Updating dashboard…", `data-stat-label="Total Queries"`, `data-stat-number="value"`, `data-stat-number="detail"`} {
+	for _, expected := range []string{"sidebar-rail", `data-account-menu`, `data-theme-value="system"`, `data-theme-value="light"`, `data-theme-value="dark"`, `aria-label="Collapse sidebar"`, `aria-label="Expand sidebar"`, `hx-get="/ui/stats/chart?insights=1&amp;range=day"`, `data-range="year"`, `data-range-popover`, `data-calendar-grid`, `data-range-start-time data-styled-time`, `hx-get="/ui/stats/insights?range=hour"`, `hx-trigger="load"`, "Loading query insights…", `class="dashboard-insights-skeleton"`, `class="card ranking-card ranking-card-skeleton"`, `class="card distribution-card distribution-card-skeleton"`, `id="runtime-stats"`, `id="stats-overview-title"`, `data-stats-scope="all"`, "Chart range", `id="dashboard-update-indicator"`, `hx-indicator="#dashboard-update-indicator"`, "Updating dashboard…", `data-stat-label="Total Queries"`, `data-stat-number="value"`, `data-stat-number="detail"`} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard interaction markup does not contain %q", expected)
 		}
@@ -629,7 +629,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		t.Fatalf("blocking page status = %d", blockingResponse.Code)
 	}
 	settingsResponse := serveRequest(server, http.MethodGet, "/settings")
-	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "DNS Query Logs", "Server Logs", "Dashboard History", "Query Log Retention", "Minimum Log Level", "Server Log Retention", "Statistics Retention", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference`, "12-hour (9:30 PM)"} {
+	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "DNS Query Logs", "Server Logs", "Dashboard History", "Query Log Retention", "Minimum Log Level", "Server Log Retention", "Statistics Retention", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference data-styled-select`, "12-hour (9:30 PM)"} {
 		if !strings.Contains(settingsResponse.Body.String(), expected) {
 			t.Errorf("settings page does not contain %q", expected)
 		}

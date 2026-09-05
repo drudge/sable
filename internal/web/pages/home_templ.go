@@ -774,7 +774,7 @@ func TopStatsDialog(title string, kind string, items []RankedStatView, insights 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "\" data-top-stats-search></label> <label class=\"top-stats-limit\"><span class=\"sr-only\">Number of results</span><select data-top-stats-limit><option value=\"25\">Top 25</option><option value=\"100\" selected>Top 100</option><option value=\"250\">Top 250</option><option value=\"1000\">Top 1000</option></select></label></div><div class=\"top-stats-list\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "\" data-top-stats-search></label> <label class=\"top-stats-limit\"><span class=\"sr-only\">Number of results</span><select data-top-stats-limit data-styled-select><option value=\"25\">Top 25</option><option value=\"100\" selected>Top 100</option><option value=\"250\">Top 250</option><option value=\"1000\">Top 1000</option></select></label></div><div class=\"top-stats-list\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -82,6 +82,23 @@ func TestZoneSettingsDialogOmitsDNSSECValidation(t *testing.T) {
 	}
 }
 
+func TestZoneFormsUseStyledSelects(t *testing.T) {
+	t.Parallel()
+
+	dialog := renderComponent(t, CreateZoneDialog([]string{"source.test"}, []string{"transfer-key."}))
+	for _, expected := range []string{
+		`name="type" data-zone-create-type data-styled-select`,
+		`name="tsig_key" data-styled-select`,
+		`name="primary_protocol" data-zone-primary-protocol data-styled-select`,
+		`name="alias_zone" data-styled-select`,
+		`name="forwarder_protocol" data-styled-select`,
+	} {
+		if !strings.Contains(dialog, expected) {
+			t.Errorf("create-zone dialog does not contain styled select %q", expected)
+		}
+	}
+}
+
 func TestZoneRecordRowsOpenWithoutOwningNestedControls(t *testing.T) {
 	t.Parallel()
 

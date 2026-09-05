@@ -142,7 +142,7 @@ func TestDNSClientAcceptsCommandPaletteQueryDefaults(t *testing.T) {
 	t.Parallel()
 
 	page := renderComponent(t, DNSClientContent(DNSClientPageView{QueryName: "mail.example.test", RecordType: "MX"}))
-	for _, expected := range []string{`id="query-name" name="name" value="mail.example.test"`, `<option selected>MX</option>`} {
+	for _, expected := range []string{`id="query-name" name="name" value="mail.example.test"`, `<option selected>MX</option>`, `class="styled-select-chevron" aria-hidden="true"`} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("DNS client command defaults do not contain %q", expected)
 		}

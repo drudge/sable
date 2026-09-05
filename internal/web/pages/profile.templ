@@ -143,7 +143,7 @@ templ ProfileCreateTokenDialog(view ProfilePageView) {
 		<div class="dialog-header"><h2 id="profile-create-token-title">Create API Token</h2><p>Create a credential for an application or command-line client</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields>
 			<label><span>Name</span><input name="name" maxlength="100" placeholder="Home Assistant" autocomplete="off" required/><small>Use a name that identifies where this token will be used.</small></label>
-			<label><span>Expiration</span><select name="expiration" required><option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option><option value="1d">1 day</option><option value="1w">7 days</option><option value="1mo">30 days</option><option value="3mo">90 days</option><option value="1y">1 year</option><option value="never">Never</option></select><small>Non-expiring tokens remain valid until revoked.</small></label>
+			<label><span>Expiration</span><select name="expiration" data-styled-select required><option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option><option value="1d">1 day</option><option value="1w">7 days</option><option value="1mo">30 days</option><option value="3mo">90 days</option><option value="1y">1 year</option><option value="never">Never</option></select><small>Non-expiring tokens remain valid until revoked.</small></label>
 			<fieldset><legend>Groups</legend><div class="role-checks">
 				for _, role := range view.Roles {
 					if roleHasAPIAccess(role) {
