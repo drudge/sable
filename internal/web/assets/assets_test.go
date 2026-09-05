@@ -293,6 +293,19 @@ func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
 	}
 }
 
+func TestIntegrationActionsStackAcrossTheMobileCard(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	expected := ".integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }"
+	if !strings.Contains(stylesheet, expected) {
+		t.Errorf("mobile integration actions do not fill and stack within the card: missing %q", expected)
+	}
+	if !strings.Contains(stylesheet, ".integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }") {
+		t.Error("mobile integration action buttons do not fill their available row")
+	}
+}
+
 func TestOpenZoneActionMenuStacksAboveSiblingButtons(t *testing.T) {
 	t.Parallel()
 

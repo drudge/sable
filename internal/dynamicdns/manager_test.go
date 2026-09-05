@@ -157,6 +157,9 @@ func TestSyncNowCoalescesWhilePublicationIsQueued(t *testing.T) {
 	manager := newTestManager(testDynamicDNSSettings(), &testProvider{})
 	manager.SyncNow()
 	manager.SyncNow()
+	if !manager.Status(context.Background()).Running {
+		t.Error("queued publication did not immediately report running")
+	}
 	if queued := len(manager.wake); queued != 1 {
 		t.Fatalf("queued publications = %d, want 1", queued)
 	}

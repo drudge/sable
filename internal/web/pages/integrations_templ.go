@@ -661,7 +661,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 			}
 		}
 		if view.Status.Running {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"cluster-sync-indeterminate unifi-progress\" role=\"progressbar\" aria-label=\"Publishing dynamic DNS records\"></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"cluster-sync-indeterminate integration-progress\" role=\"progressbar\" aria-label=\"Publishing dynamic DNS records\"></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2611,7 +2611,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if view.Status.Running {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<div class=\"cluster-sync-indeterminate unifi-progress\" role=\"progressbar\" aria-label=\"Synchronizing with the UniFi controller\"></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<div class=\"cluster-sync-indeterminate integration-progress\" role=\"progressbar\" aria-label=\"Synchronizing with the UniFi controller\"></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4953,12 +4953,12 @@ func dynamicDNSStatusPoll(running bool) string {
 
 func dynamicDNSBadgeClass(view DynamicDNSAppView) string {
 	if !view.Available || !view.Configured || !view.Enabled {
-		return "badge"
+		return "status-badge"
 	}
 	if view.Status.LastError != "" || !view.CredentialsConfigured {
-		return "badge danger"
+		return "status-badge danger"
 	}
-	return "badge success"
+	return "status-badge success"
 }
 
 func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {

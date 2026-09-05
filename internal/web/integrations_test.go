@@ -44,7 +44,10 @@ func (controller *testDynamicDNSController) Status(context.Context) dynamicdns.S
 	return controller.status
 }
 
-func (controller *testDynamicDNSController) SyncNow() { controller.syncs++ }
+func (controller *testDynamicDNSController) SyncNow() {
+	controller.syncs++
+	controller.status.Running = true
+}
 
 func (controller *testDynamicDNSController) PutCredentials(_ context.Context, _ string, credentials dnsprovider.Credentials) error {
 	controller.credentials, controller.configured = credentials, true
@@ -237,6 +240,41 @@ func TestRemovingDynamicDNSLeavesProviderCredentialAndExternalRecords(t *testing
 	}
 	if configuration.Current().Config.DynamicDNS.Provider != "" || !controller.configured {
 		t.Fatalf("settings = %+v, credentials retained = %v", configuration.Current().Config.DynamicDNS, controller.configured)
+	}
+}
+
+// Manual publication should immediately swap the card into its running state,
+// just like UniFi synchronization, rather than waiting for the next poll.
+func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{
+		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
+		Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300}},
+	}
+	controller := &testDynamicDNSController{
+		configured:  true,
+		credentials: dnsprovider.Credentials{APIToken: "token"},
+	}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/sync", url.Values{})
+	body := response.Body.String()
+	if response.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s", response.Code, body)
+	}
+	for _, expected := range []string{
+		`role="progressbar"`, `aria-label="Publishing dynamic DNS records"`,
+		"cluster-sync-indeterminate", "integration-progress", "Publishing…",
+		"is-syncing", "disabled", `hx-trigger="load, every 1s"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("running publication response does not contain %q", expected)
+		}
+	}
+	if controller.syncs != 1 {
+		t.Errorf("publication queued %d times, want 1", controller.syncs)
 	}
 }
 
