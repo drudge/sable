@@ -258,16 +258,21 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 }
 
 func certificateCredentialsFromForm(request *http.Request, provider string) certificates.Credentials {
+	return certificateCredentialsFromFormPrefix(request, provider, "")
+}
+
+func certificateCredentialsFromFormPrefix(request *http.Request, provider, prefix string) certificates.Credentials {
+	field := func(name string) string { return prefix + provider + "_" + name }
 	return certificates.Credentials{
-		APIToken: strings.TrimSpace(request.FormValue(provider + "_api_token")), APIKey: strings.TrimSpace(request.FormValue(provider + "_api_key")),
-		Secret: strings.TrimSpace(request.FormValue(provider + "_secret")), Username: strings.TrimSpace(request.FormValue(provider + "_username")),
-		ClientIP: strings.TrimSpace(request.FormValue(provider + "_client_ip")), ZoneID: strings.TrimSpace(request.FormValue(provider + "_zone_id")),
-		Server: strings.TrimSpace(request.FormValue(provider + "_server")), TSIGName: strings.TrimSpace(request.FormValue(provider + "_tsig_name")),
-		TSIGSecret: strings.TrimSpace(request.FormValue(provider + "_tsig_secret")), TSIGAlgorithm: strings.TrimSpace(request.FormValue(provider + "_tsig_algorithm")),
-		AccessKeyID: strings.TrimSpace(request.FormValue(provider + "_access_key_id")), SecretAccessKey: strings.TrimSpace(request.FormValue(provider + "_secret_access_key")),
-		SessionToken: strings.TrimSpace(request.FormValue(provider + "_session_token")), Endpoint: strings.TrimSpace(request.FormValue(provider + "_endpoint")),
-		ApplicationKey: strings.TrimSpace(request.FormValue(provider + "_application_key")), ApplicationSecret: strings.TrimSpace(request.FormValue(provider + "_application_secret")),
-		ConsumerKey: strings.TrimSpace(request.FormValue(provider + "_consumer_key")),
+		APIToken: strings.TrimSpace(request.FormValue(field("api_token"))), APIKey: strings.TrimSpace(request.FormValue(field("api_key"))),
+		Secret: strings.TrimSpace(request.FormValue(field("secret"))), Username: strings.TrimSpace(request.FormValue(field("username"))),
+		ClientIP: strings.TrimSpace(request.FormValue(field("client_ip"))), ZoneID: strings.TrimSpace(request.FormValue(field("zone_id"))),
+		Server: strings.TrimSpace(request.FormValue(field("server"))), TSIGName: strings.TrimSpace(request.FormValue(field("tsig_name"))),
+		TSIGSecret: strings.TrimSpace(request.FormValue(field("tsig_secret"))), TSIGAlgorithm: strings.TrimSpace(request.FormValue(field("tsig_algorithm"))),
+		AccessKeyID: strings.TrimSpace(request.FormValue(field("access_key_id"))), SecretAccessKey: strings.TrimSpace(request.FormValue(field("secret_access_key"))),
+		SessionToken: strings.TrimSpace(request.FormValue(field("session_token"))), Endpoint: strings.TrimSpace(request.FormValue(field("endpoint"))),
+		ApplicationKey: strings.TrimSpace(request.FormValue(field("application_key"))), ApplicationSecret: strings.TrimSpace(request.FormValue(field("application_secret"))),
+		ConsumerKey: strings.TrimSpace(request.FormValue(field("consumer_key"))),
 	}
 }
 

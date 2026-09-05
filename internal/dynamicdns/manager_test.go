@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +23,14 @@ func (configuration testConfiguration) Current() config.Snapshot {
 
 type testCredentialStore struct {
 	credentials dnsprovider.Credentials
+	byProvider  map[string]dnsprovider.Credentials
 	found       bool
 }
 
-func (store *testCredentialStore) Get(context.Context, string) (dnsprovider.Credentials, bool) {
+func (store *testCredentialStore) Get(_ context.Context, provider string) (dnsprovider.Credentials, bool) {
+	if credentials, found := store.byProvider[provider]; found {
+		return credentials, true
+	}
 	return store.credentials, store.found
 }
 
@@ -74,6 +79,89 @@ func TestReconcileDiscoversEachFamilyOnceAndPublishesEveryRecord(t *testing.T) {
 	status := manager.Status(context.Background())
 	if status.Changed != 4 || status.IPv4 != "8.8.8.8" || status.IPv6 != "2001:4860:4860::8888" || status.LastSuccess.IsZero() || status.LastPublished.IsZero() {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestReconcilePublishesMultipleProvidersAndZonesInOneRun(t *testing.T) {
+	settings := config.DynamicDNS{
+		Enabled: true, Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://ipv4.test", IPv6URL: "https://ipv6.test",
+		Publishers: []config.DynamicDNSPublisher{
+			{Provider: "cloudflare", Records: []config.DynamicDNSRecord{
+				{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300},
+				{Zone: "example.net", Name: "vpn.example.net", IPv6: true, TTL: 600},
+			}},
+			{Provider: "route53", Records: []config.DynamicDNSRecord{
+				{Zone: "example.org", Name: "edge.example.org", IPv4: true, IPv6: true, TTL: 300},
+			}},
+		},
+	}
+	providers := map[string]*testProvider{
+		"cloudflare": {changed: true},
+		"route53":    {changed: true},
+	}
+	manager := newTestManager(settings, providers["cloudflare"])
+	manager.credentials = &testCredentialStore{byProvider: map[string]dnsprovider.Credentials{
+		"cloudflare": {APIToken: "cloudflare-token", ZoneID: "single-zone-shortcut"},
+		"route53":    {AccessKeyID: "access", SecretAccessKey: "secret"},
+	}}
+	var initialized []string
+	manager.newProvider = func(name string, credentials dnsprovider.Credentials) (provider, error) {
+		initialized = append(initialized, name)
+		if name == "cloudflare" && credentials.ZoneID != "" {
+			t.Errorf("multi-zone provider retained single-zone ID %q", credentials.ZoneID)
+		}
+		if name == "route53" && credentials.AccessKeyID != "access" {
+			t.Errorf("Route 53 received the wrong credentials: %+v", credentials)
+		}
+		return providers[name], nil
+	}
+	discoveries := 0
+	manager.discover = func(_ context.Context, _ string, recordType string) (netip.Addr, error) {
+		discoveries++
+		if recordType == dnsprovider.TypeA {
+			return netip.MustParseAddr("8.8.8.8"), nil
+		}
+		return netip.MustParseAddr("2001:4860:4860::8888"), nil
+	}
+
+	manager.runOnce(context.Background())
+
+	if discoveries != 2 || len(initialized) != 2 || len(providers["cloudflare"].records) != 2 || len(providers["route53"].records) != 2 {
+		t.Fatalf("discoveries = %d, providers = %v, Cloudflare = %v, Route 53 = %v", discoveries, initialized, providers["cloudflare"].records, providers["route53"].records)
+	}
+	if status := manager.Status(context.Background()); status.Changed != 4 || status.Records != 4 || status.LastPublished.IsZero() {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestReconcileContinuesAfterOneProviderFails(t *testing.T) {
+	settings := config.DynamicDNS{
+		Enabled: true, Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://ipv4.test", IPv6URL: "https://ipv6.test",
+		Publishers: []config.DynamicDNSPublisher{
+			{Provider: "cloudflare", Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300}}},
+			{Provider: "route53", Records: []config.DynamicDNSRecord{{Zone: "example.net", Name: "vpn.example.net", IPv4: true, TTL: 300}}},
+		},
+	}
+	providers := map[string]*testProvider{
+		"cloudflare": {err: io.ErrUnexpectedEOF},
+		"route53":    {changed: true},
+	}
+	manager := newTestManager(settings, providers["cloudflare"])
+	manager.newProvider = func(name string, _ dnsprovider.Credentials) (provider, error) { return providers[name], nil }
+	manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+		return netip.MustParseAddr("8.8.8.8"), nil
+	}
+
+	manager.runOnce(context.Background())
+
+	if len(providers["route53"].records) != 1 {
+		t.Fatalf("Route 53 publication attempts = %d, want 1", len(providers["route53"].records))
+	}
+	status := manager.Status(context.Background())
+	if status.Changed != 1 || status.LastPublished.IsZero() || !strings.Contains(status.LastError, "cloudflare") {
+		t.Fatalf("status after partial publication = %+v", status)
 	}
 }
 

@@ -748,11 +748,12 @@ ttl = 300
 		t.Fatal(err)
 	}
 	settings := configuration.DynamicDNS
-	if !settings.Runnable() || settings.Provider != "cloudflare" || settings.IPv4URL != "https://api.ipify.org" || settings.IPv6URL != "https://api6.ipify.org" {
+	publishers := settings.ConfiguredPublishers()
+	if !settings.Runnable() || len(publishers) != 1 || publishers[0].Provider != "cloudflare" || settings.IPv4URL != "https://api.ipify.org" || settings.IPv6URL != "https://api6.ipify.org" {
 		t.Fatalf("dynamic DNS settings = %+v", settings)
 	}
-	if len(settings.Records) != 1 || settings.Records[0].Zone != "example.com" || settings.Records[0].Name != "home.example.com" {
-		t.Fatalf("dynamic DNS records = %+v", settings.Records)
+	if records := settings.AllRecords(); len(records) != 1 || records[0].Zone != "example.com" || records[0].Name != "home.example.com" {
+		t.Fatalf("dynamic DNS records = %+v", records)
 	}
 }
 
@@ -768,11 +769,51 @@ func TestDynamicDNSRejectsUnsafeOrAmbiguousSettings(t *testing.T) {
 		"[dynamic_dns]\nenabled=true\nprovider=\"cloudflare\"\ninterval=\"5m\"\n[[dynamic_dns.records]]\nzone=\"example.com\"\nname=\"home.example.com\"\nttl=300\n",
 		"[dynamic_dns]\nenabled=true\nprovider=\"godaddy\"\ninterval=\"5m\"\n[[dynamic_dns.records]]\nzone=\"example.com\"\nname=\"home.example.com\"\nipv4=true\nttl=300\n",
 		"[dynamic_dns]\nenabled=true\nprovider=\"cloudflare\"\ninterval=\"5m\"\n[[dynamic_dns.records]]\nzone=\"example.com\"\nname=\"*.example.com\"\nipv4=true\nttl=300\n",
-		"[dynamic_dns]\nenabled=true\nprovider=\"cloudflare\"\ninterval=\"5m\"\n[[dynamic_dns.records]]\nzone=\"example.com\"\nname=\"home.example.com\"\nipv4=true\nttl=300\n[[dynamic_dns.records]]\nzone=\"example.net\"\nname=\"home.example.net\"\nipv4=true\nttl=300\n",
 	} {
 		if _, err := Decode(strings.NewReader(source)); err == nil {
 			t.Fatalf("Decode() accepted invalid dynamic DNS configuration:\n%s", source)
 		}
+	}
+}
+
+func TestDynamicDNSAcceptsMultipleProvidersAndZones(t *testing.T) {
+	t.Parallel()
+	configuration, err := Decode(strings.NewReader(`
+[dynamic_dns]
+enabled = true
+interval = "5m"
+
+[[dynamic_dns.publishers]]
+provider = "cloudflare"
+
+[[dynamic_dns.publishers.records]]
+zone = "example.com"
+name = "home.example.com"
+ipv4 = true
+ttl = 300
+
+[[dynamic_dns.publishers.records]]
+zone = "example.net"
+name = "vpn.example.net"
+ipv4 = true
+ipv6 = true
+ttl = 600
+
+[[dynamic_dns.publishers]]
+provider = "route53"
+
+[[dynamic_dns.publishers.records]]
+zone = "example.org"
+name = "edge.example.org"
+ipv6 = true
+ttl = 300
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishers := configuration.DynamicDNS.ConfiguredPublishers()
+	if len(publishers) != 2 || len(publishers[0].Records) != 2 || len(publishers[1].Records) != 1 {
+		t.Fatalf("dynamic DNS publishers = %+v", publishers)
 	}
 }
 
@@ -792,7 +833,7 @@ ipv4 = true
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ttl := configuration.DynamicDNS.Records[0].TTL; ttl != 600 {
+	if ttl := configuration.DynamicDNS.AllRecords()[0].TTL; ttl != 600 {
 		t.Fatalf("default TTL = %d, want 600", ttl)
 	}
 }

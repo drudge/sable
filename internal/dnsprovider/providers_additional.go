@@ -156,18 +156,22 @@ type route53ChangeRequest struct {
 	} `xml:"ChangeBatch>Changes>Change"`
 }
 
-func (provider *route53Provider) Present(ctx context.Context, _ string, name, value string) (func(context.Context) error, error) {
-	current, err := provider.recordSet(ctx, name)
+func (provider *route53Provider) Present(ctx context.Context, zone, name, value string) (func(context.Context) error, error) {
+	zoneID, err := provider.route53ZoneID(ctx, zone)
+	if err != nil {
+		return nil, err
+	}
+	current, err := provider.recordSet(ctx, zoneID, name)
 	if err != nil {
 		return nil, err
 	}
 	encodedValue := strconv.Quote(value)
 	current = appendUniqueRoute53Value(current, encodedValue)
-	if err := provider.change(ctx, "UPSERT", name, current); err != nil {
+	if err := provider.change(ctx, zoneID, "UPSERT", name, current); err != nil {
 		return nil, err
 	}
 	return func(cleanupContext context.Context) error {
-		latest, err := provider.recordSet(cleanupContext, name)
+		latest, err := provider.recordSet(cleanupContext, zoneID, name)
 		if err != nil {
 			return err
 		}
@@ -181,24 +185,56 @@ func (provider *route53Provider) Present(ctx context.Context, _ string, name, va
 			return nil
 		}
 		if len(remaining) == 0 {
-			return provider.change(cleanupContext, "DELETE", name, latest)
+			return provider.change(cleanupContext, zoneID, "DELETE", name, latest)
 		}
-		return provider.change(cleanupContext, "UPSERT", name, remaining)
+		return provider.change(cleanupContext, zoneID, "UPSERT", name, remaining)
 	}, nil
 }
 
-func (provider *route53Provider) recordSet(ctx context.Context, name string) ([]string, error) {
-	values, _, err := provider.recordSetByType(ctx, name, "TXT")
+func (provider *route53Provider) recordSet(ctx context.Context, zoneID, name string) ([]string, error) {
+	values, _, err := provider.recordSetByType(ctx, zoneID, name, "TXT")
 	return values, err
 }
 
-func (provider *route53Provider) change(ctx context.Context, action, name string, values []string) error {
-	return provider.changeRecordSet(ctx, action, name, "TXT", 60, values)
+func (provider *route53Provider) change(ctx context.Context, zoneID, action, name string, values []string) error {
+	return provider.changeRecordSet(ctx, zoneID, action, name, "TXT", 60, values)
 }
 
-func (provider *route53Provider) rrsetPath() string {
-	zoneID := strings.TrimPrefix(strings.TrimSpace(provider.credentials.ZoneID), "/hostedzone/")
+func (provider *route53Provider) rrsetPath(zoneID string) string {
+	zoneID = strings.TrimPrefix(strings.TrimSpace(zoneID), "/hostedzone/")
 	return "/2013-04-01/hostedzone/" + url.PathEscape(zoneID) + "/rrset"
+}
+
+func (provider *route53Provider) route53ZoneID(ctx context.Context, zone string) (string, error) {
+	if zoneID := strings.TrimSpace(provider.credentials.ZoneID); zoneID != "" {
+		return zoneID, nil
+	}
+	query := url.Values{"dnsname": {dns.Fqdn(zone)}, "maxitems": {"1"}}
+	request, err := provider.request(ctx, http.MethodGet, "/2013-04-01/hostedzonesbyname", query, nil)
+	if err != nil {
+		return "", err
+	}
+	response, err := provider.client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("look up Route 53 hosted zone: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", responseError("Route 53", response)
+	}
+	var listed struct {
+		Zones []struct {
+			ID   string `xml:"Id"`
+			Name string `xml:"Name"`
+		} `xml:"HostedZones>HostedZone"`
+	}
+	if err := xml.NewDecoder(response.Body).Decode(&listed); err != nil {
+		return "", fmt.Errorf("decode Route 53 hosted-zone lookup: %w", err)
+	}
+	if len(listed.Zones) != 1 || !strings.EqualFold(strings.TrimSuffix(listed.Zones[0].Name, "."), strings.TrimSuffix(zone, ".")) {
+		return "", fmt.Errorf("Route 53 hosted-zone lookup for %s returned no exact match", zone)
+	}
+	return listed.Zones[0].ID, nil
 }
 
 func (provider *route53Provider) request(ctx context.Context, method, requestPath string, query url.Values, body []byte) (*http.Request, error) {

@@ -193,6 +193,38 @@ func TestRoute53ProviderPreservesOtherTXTValues(t *testing.T) {
 	}
 }
 
+func TestRoute53ProviderFindsHostedZoneByName(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.RequestURI())
+		switch request.URL.Path {
+		case "/2013-04-01/hostedzonesbyname":
+			return httpResponse(http.StatusOK, `<ListHostedZonesByNameResponse xmlns="https://route53.amazonaws.com/doc/2013-04-01/"><HostedZones><HostedZone><Id>/hostedzone/Z456</Id><Name>example.net.</Name></HostedZone></HostedZones></ListHostedZonesByNameResponse>`), nil
+		case "/2013-04-01/hostedzone/Z456/rrset":
+			if request.Method == http.MethodGet {
+				return httpResponse(http.StatusOK, `<ListResourceRecordSetsResponse xmlns="https://route53.amazonaws.com/doc/2013-04-01/"><ResourceRecordSets></ResourceRecordSets></ListResourceRecordSetsResponse>`), nil
+			}
+			return httpResponse(http.StatusOK, `<ChangeResourceRecordSetsResponse/>`), nil
+		default:
+			return httpResponse(http.StatusNotFound, ``), nil
+		}
+	})}
+	provider := &route53Provider{
+		credentials: Credentials{AccessKeyID: "access", SecretAccessKey: "secret"},
+		client:      client, baseURL: "https://route53.test", now: func() time.Time { return time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC) },
+	}
+
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.net", Name: "home.example.net", Type: TypeA, Value: "8.8.8.8", TTL: 300,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	if len(requests) != 3 || !strings.Contains(requests[0], "dnsname=example.net.") || !strings.Contains(requests[1], "/hostedzone/Z456/rrset") {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
 func TestOVHProviderRefreshesAfterCreateAndCleanup(t *testing.T) {
 	var requests []string
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {

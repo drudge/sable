@@ -76,10 +76,13 @@ type clusterRuntimeConfiguration struct {
 	// node's vault, the same way TSIG secrets are. Neither side keeps them on
 	// disk in the clear.
 	UniFiCredentials unifi.Credentials `toml:"unifi_credentials"`
-	// Dynamic DNS follows the writable primary. Its provider credential travels
-	// with the settings so a promoted replica can immediately resume publishing.
-	DynamicDNS            config.DynamicDNS       `toml:"dynamic_dns"`
-	DynamicDNSCredentials dnsprovider.Credentials `toml:"dynamic_dns_credentials"`
+	// Dynamic DNS follows the writable primary. Every configured provider
+	// credential travels with the settings so a promoted replica can immediately
+	// resume all publishers. The singular field accepts snapshots from the
+	// original one-provider implementation.
+	DynamicDNS                    config.DynamicDNS               `toml:"dynamic_dns"`
+	DynamicDNSProviderCredentials []clusterDNSProviderCredentials `toml:"dynamic_dns_provider_credentials,omitempty"`
+	DynamicDNSCredentials         dnsprovider.Credentials         `toml:"dynamic_dns_credentials,omitempty"`
 	// OIDC travels with redirect_url cleared. Every node serves the callback at
 	// the same path and fills in its own host, so the section is identical
 	// cluster-wide and a node that needs a different callback keeps its own
@@ -89,6 +92,11 @@ type clusterRuntimeConfiguration struct {
 	// credentials. Without it a replica shows the sign-in button and then fails
 	// the token exchange.
 	OIDCClientSecret string `toml:"oidc_client_secret"`
+}
+
+type clusterDNSProviderCredentials struct {
+	Provider    string                  `toml:"provider"`
+	Credentials dnsprovider.Credentials `toml:"credentials"`
 }
 
 func (replicator *clusterStateReplicator) setDNSProviderCredentials(credentials dnsProviderCredentialVault) {
@@ -126,9 +134,14 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		DynamicDNS:      active.DynamicDNS,
 		OIDC:            replicatedOIDC(active.OIDC),
 	}
-	if replicator.dnsProviderCredentials != nil && active.DynamicDNS.Provider != "" {
-		if credentials, found := replicator.dnsProviderCredentials.Get(ctx, active.DynamicDNS.Provider); found {
-			runtimeConfiguration.DynamicDNSCredentials = credentials
+	if replicator.dnsProviderCredentials != nil {
+		for _, provider := range active.DynamicDNS.ProviderNames() {
+			if credentials, found := replicator.dnsProviderCredentials.Get(ctx, provider); found {
+				runtimeConfiguration.DynamicDNSProviderCredentials = append(
+					runtimeConfiguration.DynamicDNSProviderCredentials,
+					clusterDNSProviderCredentials{Provider: provider, Credentials: credentials},
+				)
+			}
 		}
 	}
 	if replicator.unifiCredentials != nil {
@@ -392,17 +405,29 @@ func (replicator *clusterStateReplicator) storeReplicatedDNSProviderCredentials(
 	ctx context.Context,
 	runtimeConfiguration *clusterRuntimeConfiguration,
 ) error {
-	credentials := runtimeConfiguration.DynamicDNSCredentials
+	credentialsByProvider := runtimeConfiguration.DynamicDNSProviderCredentials
+	runtimeConfiguration.DynamicDNSProviderCredentials = nil
+	if legacy := runtimeConfiguration.DynamicDNSCredentials; legacy != (dnsprovider.Credentials{}) {
+		providers := runtimeConfiguration.DynamicDNS.ProviderNames()
+		if len(providers) == 1 {
+			credentialsByProvider = append(credentialsByProvider, clusterDNSProviderCredentials{Provider: providers[0], Credentials: legacy})
+		}
+	}
 	runtimeConfiguration.DynamicDNSCredentials = dnsprovider.Credentials{}
-	provider := runtimeConfiguration.DynamicDNS.Provider
-	if replicator.dnsProviderCredentials == nil || provider == "" || credentials == (dnsprovider.Credentials{}) {
+	if replicator.dnsProviderCredentials == nil {
 		return nil
 	}
-	if stored, found := replicator.dnsProviderCredentials.Get(ctx, provider); found && stored == credentials {
-		return nil
+	var storeErrors []error
+	for _, entry := range credentialsByProvider {
+		if entry.Provider == "" || entry.Credentials == (dnsprovider.Credentials{}) {
+			continue
+		}
+		if stored, found := replicator.dnsProviderCredentials.Get(ctx, entry.Provider); found && stored == entry.Credentials {
+			continue
+		}
+		if err := replicator.dnsProviderCredentials.Replace(ctx, entry.Provider, entry.Credentials); err != nil {
+			storeErrors = append(storeErrors, fmt.Errorf("store replicated %s DNS credentials: %w", entry.Provider, err))
+		}
 	}
-	if err := replicator.dnsProviderCredentials.Replace(ctx, provider, credentials); err != nil {
-		return fmt.Errorf("store replicated %s DNS credentials: %w", provider, err)
-	}
-	return nil
+	return errors.Join(storeErrors...)
 }

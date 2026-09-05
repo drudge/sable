@@ -36,8 +36,9 @@ candidates into a release-ready DNS platform.
 - UniFi synchronization now owns A, AAAA, and matching IPv4 and IPv6 PTR records
   without disturbing hand-authored records.
 - Dynamic DNS can discover public IPv4 and IPv6 addresses and reconcile
-  external A/AAAA RRsets through the same nine providers used by ACME DNS-01.
-  Provider credentials are shared securely and replicated for cluster takeover.
+  external A/AAAA RRsets across multiple zones and providers through the same
+  nine adapters used by ACME DNS-01. Provider credentials are shared securely
+  and replicated for cluster takeover.
 - Record validation rejects changes that would leave a CNAME sharing its owner
   name with incompatible data.
 

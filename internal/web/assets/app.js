@@ -1469,6 +1469,27 @@
 	  select(root.dataset.activeTab || tabs.find((tab) => !tab.disabled)?.dataset.isotopeTab, false);
 	};
 
+	const setupDNSProviderFields = (root) => {
+	  if (!root || root.dataset.dnsProviderReady === "true") return;
+	  root.dataset.dnsProviderReady = "true";
+	  const provider = root.querySelector("[data-acme-provider]");
+	  const initialProvider = provider?.value || "";
+	  const syncProvider = () => {
+		root.querySelectorAll("[data-acme-credentials]").forEach((fields) => {
+		  fields.hidden = fields.dataset.acmeCredentials !== provider?.value;
+		});
+		const card = root.matches("[data-acme-provider-selected]") ? root : root.querySelector("[data-acme-provider-selected]");
+		if (card) card.dataset.acmeProviderSelected = provider?.value || "";
+		const badge = root.querySelector(".acme-provider-card > header .badge, :scope > header .badge, :scope > summary .status-badge");
+		if (badge && provider?.value !== initialProvider) {
+		  badge.classList.remove("success");
+		  badge.textContent = "Credentials required";
+		}
+	  };
+	  provider?.addEventListener("change", syncProvider);
+	  syncProvider();
+	};
+
 	const setupCertificateSettings = (root) => {
 	  if (!root || root.dataset.certificateReady === "true") return;
 	  root.dataset.certificateReady = "true";
@@ -1482,20 +1503,149 @@
 		modeInputs.forEach((input) => input.closest("label")?.classList.toggle("active", input.checked));
 	  };
 	  modeInputs.forEach((input) => input.addEventListener("change", syncMode));
-	  const provider = root.querySelector("[data-acme-provider]");
-	  const syncProvider = () => {
-		root.querySelectorAll("[data-acme-credentials]").forEach((fields) => {
-		  fields.hidden = fields.dataset.acmeCredentials !== provider?.value;
-		});
-		// The card takes the chosen provider's accent colour, which is the only
-		// signal in this long form that says which service is about to be given
-		// credentials.
-		const card = root.querySelector("[data-acme-provider-selected]");
-		if (card) card.dataset.acmeProviderSelected = provider?.value || "";
-	  };
-	  provider?.addEventListener("change", syncProvider);
 	  syncMode();
-	  syncProvider();
+	  const providerRoots = [...root.querySelectorAll("[data-acme-provider-root]")];
+	  (providerRoots.length ? providerRoots : [root]).forEach(setupDNSProviderFields);
+	};
+
+	const setupDynamicDNSPublishers = (root) => {
+	  if (!root || root.dataset.dynamicDNSReady === "true") return;
+	  root.dataset.dynamicDNSReady = "true";
+	  const publishers = root.querySelector("[data-dynamic-dns-publishers]");
+	  const publisherTemplate = root.querySelector("[data-dynamic-dns-publisher-template]");
+	  if (!publishers || !publisherTemplate) return;
+	  const addProviderMenu = root.querySelector("[data-dynamic-dns-add-provider-menu]");
+	  const providerLabels = {
+		cloudflare: "Cloudflare",
+		porkbun: "Porkbun",
+		namecheap: "Namecheap",
+		godaddy: "GoDaddy",
+		digitalocean: "DigitalOcean",
+		hetzner: "Hetzner",
+		route53: "Amazon Route 53",
+		ovh: "OVHcloud",
+		rfc2136: "RFC 2136",
+	  };
+	  const nextIndex = (selector, attribute) => Math.max(-1, ...[...root.querySelectorAll(selector)].map((entry) => Number(entry.getAttribute(attribute)) || 0)) + 1;
+	  const positionAddProviderMenu = () => {
+		if (!addProviderMenu?.open) return;
+		const trigger = addProviderMenu.querySelector(":scope > summary");
+		const options = addProviderMenu.querySelector(":scope > div");
+		const boundary = addProviderMenu.closest(".isotope-dialog-body")?.getBoundingClientRect();
+		if (!trigger || !options) return;
+		const triggerRect = trigger.getBoundingClientRect();
+		const top = Math.max(0, boundary?.top || 0);
+		const bottom = Math.min(window.innerHeight, boundary?.bottom || window.innerHeight);
+		const spaceAbove = triggerRect.top - top;
+		const spaceBelow = bottom - triggerRect.bottom;
+		const wanted = Math.min(options.scrollHeight, window.innerHeight * .5);
+		const side = spaceBelow < wanted && spaceAbove > spaceBelow ? "top" : "bottom";
+		addProviderMenu.dataset.side = side;
+		options.style.maxHeight = `${Math.max(120, Math.floor((side === "top" ? spaceAbove : spaceBelow) - 6))}px`;
+		options.scrollTop = 0;
+	  };
+	  addProviderMenu?.addEventListener("toggle", positionAddProviderMenu);
+	  const appendTemplate = (container, template, replacements) => {
+		const fragment = document.createElement("template");
+		let html = template.innerHTML;
+		Object.entries(replacements).forEach(([key, value]) => { html = html.replaceAll(key, String(value)); });
+		fragment.innerHTML = html;
+		const inserted = fragment.content.firstElementChild;
+		if (!inserted) return null;
+		container.append(inserted);
+		window.htmx?.process(inserted);
+		initializeSwappedContent(inserted);
+		inserted.querySelectorAll("[data-acme-provider-root]").forEach(setupDNSProviderFields);
+		return inserted;
+	  };
+	  const refreshLabels = () => {
+		const entries = [...publishers.querySelectorAll(":scope > [data-dynamic-dns-publisher]")];
+		entries.forEach((publisher) => {
+		  const zones = [...publisher.querySelectorAll(":scope > .dynamic-dns-publisher-body > [data-dynamic-dns-zones] > [data-dynamic-dns-zone]")];
+		  const provider = publisher.querySelector("[data-acme-provider]");
+		  const providerName = providerLabels[provider?.value] || provider?.value || "Choose a provider";
+		  const label = publisher.querySelector("[data-dynamic-dns-publisher-label]");
+		  if (label) label.textContent = providerName;
+		  const hostCount = zones.reduce((count, zone) => count + (zone.querySelector('textarea[name$="_names"]')?.value || "").split("\n").filter((name) => name.trim()).length, 0);
+		  const overview = publisher.querySelector("[data-dynamic-dns-publisher-overview]");
+		  if (overview) overview.textContent = `${zones.length} ${zones.length === 1 ? "zone" : "zones"} · ${hostCount} ${hostCount === 1 ? "host" : "hosts"}`;
+		  zones.forEach((zone) => {
+			const zoneName = zone.querySelector('input[name$="_zone"]')?.value.trim();
+			const zoneLabel = zone.querySelector("[data-dynamic-dns-zone-label]");
+			if (zoneLabel) zoneLabel.textContent = zoneName || "New zone";
+			const zoneHosts = (zone.querySelector('textarea[name$="_names"]')?.value || "").split("\n").filter((name) => name.trim()).length;
+			const ipv4 = zone.querySelector('input[name$="_publish_ipv4"]')?.checked;
+			const ipv6 = zone.querySelector('input[name$="_publish_ipv6"]')?.checked;
+			const types = ipv4 && ipv6 ? "A, AAAA" : (ipv6 ? "AAAA" : "A");
+			const zoneOverview = zone.querySelector("[data-dynamic-dns-zone-overview]");
+			if (zoneOverview) zoneOverview.textContent = `${zoneHosts} ${zoneHosts === 1 ? "host" : "hosts"} · ${types}`;
+			const zoneRemove = zone.querySelector("[data-dynamic-dns-remove-zone]");
+			if (zoneRemove) zoneRemove.hidden = zones.length === 1;
+		  });
+		});
+		const empty = root.querySelector("[data-dynamic-dns-publishers-empty]");
+		if (entries.length === 0 && !empty) {
+		  const message = document.createElement("p");
+		  message.className = "dynamic-dns-publishers-empty";
+		  message.dataset.dynamicDnsPublishersEmpty = "";
+		  message.textContent = "No providers added yet.";
+		  publishers.append(message);
+		} else if (entries.length > 0) {
+		  empty?.remove();
+		}
+		const configuredProviders = new Set(entries.map((publisher) => publisher.querySelector("[data-acme-provider]")?.value).filter(Boolean));
+		root.querySelectorAll("[data-dynamic-dns-add-publisher]").forEach((option) => {
+		  option.disabled = configuredProviders.has(option.dataset.provider);
+		});
+		const ttl = root.querySelector("[data-dynamic-dns-ttl]");
+		const ttlHint = root.querySelector("[data-dynamic-dns-ttl-hint]");
+		if (ttl) {
+		  const minimum = [...configuredProviders].some((provider) => provider === "godaddy" || provider === "porkbun") ? 600 : 60;
+		  const maximum = configuredProviders.has("namecheap") ? 60000 : 86400;
+		  ttl.min = String(minimum);
+		  ttl.max = String(maximum);
+		  if (ttlHint) ttlHint.textContent = `Applied to every published record. Selected providers allow ${minimum}–${maximum.toLocaleString()} seconds.`;
+		}
+	  };
+	  root.addEventListener("click", (event) => {
+		const addPublisher = event.target.closest("[data-dynamic-dns-add-publisher]");
+		if (addPublisher) {
+		  const provider = addPublisher.dataset.provider;
+		  if (!provider || addPublisher.disabled) return;
+		  const publisherIndex = nextIndex("[data-dynamic-dns-publisher]", "data-publisher-index");
+		  const publisher = appendTemplate(publishers, publisherTemplate, {"__PUBLISHER__": publisherIndex, "__PROVIDER__": provider});
+		  addPublisher.closest("[data-dynamic-dns-add-provider-menu]")?.removeAttribute("open");
+		  refreshLabels();
+		  publisher?.querySelector('.acme-credential-fields:not([hidden]) input, .acme-credential-fields:not([hidden]) select')?.focus();
+		  return;
+		}
+		const removePublisher = event.target.closest("[data-dynamic-dns-remove-publisher]");
+		if (removePublisher) {
+		  removePublisher.closest("[data-dynamic-dns-publisher]")?.remove();
+		  refreshLabels();
+		  return;
+		}
+		const addZone = event.target.closest("[data-dynamic-dns-add-zone]");
+		if (addZone) {
+		  const publisher = addZone.closest("[data-dynamic-dns-publisher]");
+		  const zones = publisher?.querySelector("[data-dynamic-dns-zones]");
+		  const template = publisher?.querySelector("[data-dynamic-dns-zone-template]");
+		  if (!publisher || !zones || !template) return;
+		  const zoneIndex = nextIndex(`[data-publisher-index="${publisher.dataset.publisherIndex}"] [data-dynamic-dns-zone]`, "data-zone-index");
+		  const zone = appendTemplate(zones, template, {"__ZONE__": zoneIndex});
+		  refreshLabels();
+		  zone?.querySelector("input")?.focus();
+		  return;
+		}
+		const removeZone = event.target.closest("[data-dynamic-dns-remove-zone]");
+		if (removeZone) {
+		  removeZone.closest("[data-dynamic-dns-zone]")?.remove();
+		  refreshLabels();
+		}
+	  });
+	  root.addEventListener("change", refreshLabels);
+	  root.addEventListener("input", refreshLabels);
+	  refreshLabels();
 	};
 
 	// The UniFi setup wizard runs server-side because each step needs live data
@@ -2241,6 +2391,10 @@
 	  root.querySelectorAll?.("[data-isotope-tabs]").forEach(setupIsotopeTabs);
 	  if (root.matches?.("[data-certificate-settings]")) setupCertificateSettings(root);
 	  root.querySelectorAll?.("[data-certificate-settings]").forEach(setupCertificateSettings);
+	  if (root.matches?.("[data-acme-provider-root]")) setupDNSProviderFields(root);
+	  root.querySelectorAll?.("[data-acme-provider-root]").forEach(setupDNSProviderFields);
+	  if (root.matches?.("[data-dynamic-dns-editor]")) setupDynamicDNSPublishers(root);
+	  root.querySelectorAll?.("[data-dynamic-dns-editor]").forEach(setupDynamicDNSPublishers);
 	  if (root.matches?.("[data-cluster-onboarding]")) setupClusterOnboarding(root);
 	  root.querySelectorAll?.("[data-cluster-onboarding]").forEach(setupClusterOnboarding);
 	  if (root.matches?.("[data-sable-restart]")) setupManagedRestart(root);
@@ -3876,7 +4030,7 @@
 	  }
 	});
 
-	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open]";
+	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open]";
 	document.addEventListener("pointerdown", (event) => {
 	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");

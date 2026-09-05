@@ -355,29 +355,51 @@ the record-edit and zone-read permissions both jobs require.
 ```toml
 [dynamic_dns]
 enabled = true
-provider = "cloudflare"
 interval = "5m"
 ipv4_url = "https://api.ipify.org"
 ipv6_url = "https://api6.ipify.org"
 
-[[dynamic_dns.records]]
+[[dynamic_dns.publishers]]
+provider = "cloudflare"
+
+[[dynamic_dns.publishers.records]]
 zone = "example.com"
 name = "home.example.com"
 ipv4 = true
 ipv6 = true
 ttl = 600
+
+[[dynamic_dns.publishers.records]]
+zone = "example.net"
+name = "vpn.example.net"
+ipv4 = true
+ipv6 = false
+ttl = 600
+
+[[dynamic_dns.publishers]]
+provider = "route53"
+
+[[dynamic_dns.publishers.records]]
+zone = "example.org"
+name = "edge.example.org"
+ipv4 = true
+ipv6 = true
+ttl = 300
 ```
 
-`provider` accepts `cloudflare`, `porkbun`, `namecheap`, `godaddy`,
+Each `publishers.provider` accepts `cloudflare`, `porkbun`, `namecheap`, `godaddy`,
 `digitalocean`, `hetzner`, `route53`, `ovh`, or `rfc2136`. `interval` must be at
 least one minute. The default is five minutes, failed attempts retry with
 bounded exponential backoff, and provider writes occur only when the address,
 TTL, or RRset contents differ.
 
-Each record name must be fully qualified and belong to its `zone`. All entries
-in one integration use the same zone, address-family selection, and TTL; add one
-entry per public name. At least one of `ipv4` or `ipv6` must be true. Sable owns
-the complete RRset for each enabled name and type: if `home.example.com`
+Add one publisher for each external provider. A provider can appear once because
+its stored credential set is shared with ACME DNS-01. A publisher can contain
+records in several zones, while every record within one zone uses the same
+address-family selection and TTL. Each record name must be fully qualified and
+belong to its `zone`; add one entry per public name. At least one of `ipv4` or
+`ipv6` must be true. Sable owns the complete RRset for each enabled name and type:
+if `home.example.com`
 publishes A, every A value at that name is replaced with the one discovered
 address. Other types at the same name are not touched. Do not configure a name
 whose A or AAAA RRset is shared with another system.
@@ -393,7 +415,9 @@ TTL values are normally 60–86400 seconds. GoDaddy and Porkbun require at least
 current public IP in its API allow-list, so it may be unsuitable when that IP
 changes without another way to update the allow-list.
 
-Only the writable cluster node discovers and publishes addresses. Settings and
+Only the writable cluster node discovers each needed address family once per
+run and publishes it through every configured provider. A failure at one
+provider does not prevent the others from being attempted. Settings and all
 provider credentials replicate so a promoted replica can take over. Pausing or
 removing the integration retains the last external records; removal also keeps
 the shared provider credentials because certificate automation may use them.
