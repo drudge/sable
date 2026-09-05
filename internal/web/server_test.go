@@ -427,7 +427,10 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if response := serveRequest(server, http.MethodGet, "/administration"); response.Code != http.StatusNotFound {
 		t.Fatalf("security-disabled administration status = %d, want 404", response.Code)
 	}
-	for _, expected := range []string{"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0]} {
+	for _, expected := range []string{
+		"Sable", "DNS Client", "Revision 7", configuration.Server.DNSListen[0],
+		`class="dashboard-footer-status"`, `class="dashboard-footer-details"`,
+	} {
 		if !strings.Contains(dashboard, expected) {
 			t.Errorf("dashboard does not contain %q", expected)
 		}
