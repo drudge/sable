@@ -2981,9 +2981,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .dark .record-source-badge.alias { background: #4c1d95; color: #ddd6fe; }
 
 @media (max-width: 960px) {
-	.integration-card-actions-primary { min-width: 0; flex: 1 1 24rem; }
-	.integration-card-actions-primary > .button, .integration-card-actions-primary > form { min-width: 0; flex: 1 1 0; }
-	.integration-card-actions-primary > form > .button { width: 100%; justify-content: center; }
+	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
+	.integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }
+	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 700px) {
@@ -2998,10 +2998,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.wizard-footer { align-items: stretch; flex-direction: column-reverse; }
 	.wizard-footer-advance { flex-direction: column-reverse; }
 	.wizard-footer .button { justify-content: center; }
-	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
-	.integration-card-actions-primary { width: 100%; align-items: stretch; flex: none; flex-direction: column; }
-	.integration-card-actions-primary > .button, .integration-card-actions-primary > form { flex: none; }
-	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
 	.wizard-progress { grid-template-columns: auto 1fr auto 1fr auto 1fr auto; }
 }
 

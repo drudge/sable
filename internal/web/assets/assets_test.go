@@ -293,28 +293,19 @@ func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
 	}
 }
 
-func TestIntegrationActionsStackAcrossTheMobileCard(t *testing.T) {
+func TestIntegrationActionsStackAcrossNarrowCards(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := string(manifest["app.css"].content)
 	for _, expected := range []string{
-		".integration-card-actions-primary { min-width: 0; flex: 1 1 24rem; }",
-		".integration-card-actions-primary > .button, .integration-card-actions-primary > form { min-width: 0; flex: 1 1 0; }",
-		".integration-card-actions-primary > form > .button { width: 100%; justify-content: center; }",
+		"@media (max-width: 960px)",
+		".integration-card-actions { align-items: stretch; flex-direction: column-reverse; }",
+		".integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }",
+		".integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }",
 	} {
 		if !strings.Contains(stylesheet, expected) {
-			t.Errorf("tablet integration actions do not share the available row: missing %q", expected)
+			t.Errorf("narrow integration actions do not fill and stack within the card: missing %q", expected)
 		}
-	}
-	expected := ".integration-card-actions-primary { width: 100%; align-items: stretch; flex: none; flex-direction: column; }"
-	if !strings.Contains(stylesheet, expected) {
-		t.Errorf("mobile integration actions do not fill and stack within the card: missing %q", expected)
-	}
-	if !strings.Contains(stylesheet, ".integration-card-actions-primary > .button, .integration-card-actions-primary > form { flex: none; }") {
-		t.Error("tablet flex sizing is not reset for vertically stacked mobile actions")
-	}
-	if !strings.Contains(stylesheet, ".integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }") {
-		t.Error("mobile integration action buttons do not fill their available row")
 	}
 }
 
