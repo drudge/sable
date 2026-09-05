@@ -267,7 +267,7 @@ func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
 	for _, expected := range []string{
 		`role="progressbar"`, `aria-label="Publishing dynamic DNS records"`,
 		"cluster-sync-indeterminate", "integration-progress", "Publishing…",
-		"is-syncing", "disabled", `hx-trigger="load, every 1s"`,
+		"is-syncing", "disabled", `hx-trigger="every 1s"`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("running publication response does not contain %q", expected)
@@ -275,6 +275,9 @@ func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
 	}
 	if controller.syncs != 1 {
 		t.Errorf("publication queued %d times, want 1", controller.syncs)
+	}
+	if strings.Contains(body, `hx-trigger="load`) {
+		t.Error("self-replacing Dynamic DNS status fragment immediately reloads and detaches its actions")
 	}
 }
 

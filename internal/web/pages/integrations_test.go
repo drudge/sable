@@ -86,6 +86,16 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSStatusPollingDoesNotReloadAfterEverySwap(t *testing.T) {
+	t.Parallel()
+	for _, running := range []bool{false, true} {
+		trigger := dynamicDNSStatusPoll(running)
+		if strings.Contains(trigger, "load") {
+			t.Errorf("dynamic DNS status trigger %q reloads immediately after replacing itself", trigger)
+		}
+	}
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var out strings.Builder

@@ -1050,9 +1050,9 @@ func dynamicDNSProviderLabel(provider string) string {
 
 func dynamicDNSStatusPoll(running bool) string {
 	if running {
-		return "load, every 1s"
+		return "every 1s"
 	}
-	return "load, every 30s"
+	return "every 30s"
 }
 
 func dynamicDNSBadgeClass(view DynamicDNSAppView) string {
