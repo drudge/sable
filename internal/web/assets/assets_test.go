@@ -293,6 +293,22 @@ func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
 	}
 }
 
+func TestIntegrationActionsStackAcrossNarrowCards(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"@media (max-width: 960px)",
+		".integration-card-actions { align-items: stretch; flex-direction: column-reverse; }",
+		".integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }",
+		".integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("narrow integration actions do not fill and stack within the card: missing %q", expected)
+		}
+	}
+}
+
 func TestOpenZoneActionMenuStacksAboveSiblingButtons(t *testing.T) {
 	t.Parallel()
 

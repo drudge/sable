@@ -34,16 +34,18 @@ type DynamicDNSAppView struct {
 }
 
 type DynamicDNSStatusView struct {
-	Running     bool
-	IPv4        string
-	IPv6        string
-	Records     int
-	Changed     int
-	Unchanged   int
-	LastSuccess string
-	NextAttempt string
-	Duration    string
-	LastError   string
+	Running         bool
+	IPv4            string
+	IPv6            string
+	Records         int
+	Changed         int
+	Unchanged       int
+	LastSuccess     string
+	LastPublished   string
+	NextAttempt     string
+	Duration        string
+	LastError       string
+	LastErrorDetail string
 }
 
 // SSOAppView describes the single sign-on card. Available is false on a
@@ -298,9 +300,9 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 				}
 				<div class="integration-facts">
 					<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ dynamicDNSProviderLabel(view.Provider) }</span></div>
-					<div><span class="integration-fact-label">Interval</span><span class="integration-fact-value">{ view.Interval }</span></div>
-					<div><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ ifThen(view.Status.IPv4 != "", view.Status.IPv4, "Not discovered") }</code></span></div>
-					<div><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ ifThen(view.PublishIPv6, ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered"), "Not published") }</code></span></div>
+					<div class="integration-fact-address" title={ dynamicDNSIPv4(view) } aria-label={ "IPv4: " + dynamicDNSIPv4(view) }><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ dynamicDNSIPv4(view) }</code></span></div>
+					<div class="integration-fact-address" title={ dynamicDNSIPv6(view) } aria-label={ "IPv6: " + dynamicDNSIPv6(view) }><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ dynamicDNSIPv6(view) }</code></span></div>
+					<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
 				</div>
 				<div class="admin-desktop-table">
 					<table class="isotope-table">
@@ -322,10 +324,22 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
 	<div id="dynamic-dns-status" hx-get="/ui/integrations/dynamic-dns/status" hx-trigger={ dynamicDNSStatusPoll(view.Status.Running) } hx-swap="outerHTML">
 		if view.Status.LastError != "" {
-			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last publication failed</strong><span>{ view.Status.LastError }</span></div></div>
+			<div class="unifi-status error">
+				@Icon("alert-triangle")
+				<div>
+					<strong>Last publication failed</strong>
+					<span>{ view.Status.LastError }</span>
+					if view.Status.LastErrorDetail != "" {
+						<details class="integration-error-details">
+							<summary>View provider details</summary>
+							<pre>{ view.Status.LastErrorDetail }</pre>
+						</details>
+					}
+				</div>
+			</div>
 		}
 		if view.Status.Running {
-			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Publishing dynamic DNS records"></div>
+			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Publishing dynamic DNS records"></div>
 		}
 		<p class="unifi-status-line">
 			if view.Status.Running {
@@ -615,7 +629,7 @@ templ UniFiStatusPanel(view UniFiAppView) {
 			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Removed) }</span></div>
 		</div>
 		if view.Status.Running {
-			<div class="cluster-sync-indeterminate unifi-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
+			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
 		}
 		<p class="unifi-status-line">
 			if view.Status.Running {
@@ -1023,6 +1037,14 @@ func dynamicDNSNames(value string) []string {
 	return names
 }
 
+func dynamicDNSIPv4(view DynamicDNSAppView) string {
+	return ifThen(view.Status.IPv4 != "", view.Status.IPv4, "Not discovered")
+}
+
+func dynamicDNSIPv6(view DynamicDNSAppView) string {
+	return ifThen(view.PublishIPv6, ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered"), "Not published")
+}
+
 func dynamicDNSTypeLabel(view DynamicDNSAppView) string {
 	if view.PublishIPv4 && view.PublishIPv6 {
 		return "A, AAAA"
@@ -1050,19 +1072,19 @@ func dynamicDNSProviderLabel(provider string) string {
 
 func dynamicDNSStatusPoll(running bool) string {
 	if running {
-		return "load, every 1s"
+		return "every 1s"
 	}
-	return "load, every 30s"
+	return "every 30s"
 }
 
 func dynamicDNSBadgeClass(view DynamicDNSAppView) string {
 	if !view.Available || !view.Configured || !view.Enabled {
-		return "badge"
+		return "status-badge"
 	}
 	if view.Status.LastError != "" || !view.CredentialsConfigured {
-		return "badge danger"
+		return "status-badge danger"
 	}
-	return "badge success"
+	return "status-badge success"
 }
 
 func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {
@@ -1070,7 +1092,7 @@ func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {
 		return "Unavailable"
 	}
 	if !view.Configured {
-		return "Not configured"
+		return "Not set up"
 	}
 	if !view.Enabled {
 		return "Paused"

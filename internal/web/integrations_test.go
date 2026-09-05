@@ -17,6 +17,7 @@ import (
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/unifi"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -44,7 +45,10 @@ func (controller *testDynamicDNSController) Status(context.Context) dynamicdns.S
 	return controller.status
 }
 
-func (controller *testDynamicDNSController) SyncNow() { controller.syncs++ }
+func (controller *testDynamicDNSController) SyncNow() {
+	controller.syncs++
+	controller.status.Running = true
+}
 
 func (controller *testDynamicDNSController) PutCredentials(_ context.Context, _ string, credentials dnsprovider.Credentials) error {
 	controller.credentials, controller.configured = credentials, true
@@ -237,6 +241,99 @@ func TestRemovingDynamicDNSLeavesProviderCredentialAndExternalRecords(t *testing
 	}
 	if configuration.Current().Config.DynamicDNS.Provider != "" || !controller.configured {
 		t.Fatalf("settings = %+v, credentials retained = %v", configuration.Current().Config.DynamicDNS, controller.configured)
+	}
+}
+
+// Manual publication should immediately swap the card into its running state,
+// just like UniFi synchronization, rather than waiting for the next poll.
+func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
+	t.Parallel()
+	server, configuration := newIntegrationsTestServer(t, nil)
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{
+		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
+		IPv4URL: "https://api.ipify.org", IPv6URL: "https://api6.ipify.org",
+		Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home.example.com", IPv4: true, TTL: 300}},
+	}
+	controller := &testDynamicDNSController{
+		configured:  true,
+		credentials: dnsprovider.Credentials{APIToken: "token"},
+	}
+	server.SetDynamicDNSController(controller)
+
+	response := postIntegrations(server, "/ui/integrations/dynamic-dns/sync", url.Values{})
+	body := response.Body.String()
+	if response.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s", response.Code, body)
+	}
+	for _, expected := range []string{
+		`role="progressbar"`, `aria-label="Publishing dynamic DNS records"`,
+		"cluster-sync-indeterminate", "integration-progress", "Publishing…",
+		"is-syncing", "disabled", `hx-trigger="every 1s"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("running publication response does not contain %q", expected)
+		}
+	}
+	if controller.syncs != 1 {
+		t.Errorf("publication queued %d times, want 1", controller.syncs)
+	}
+	if strings.Contains(body, `hx-trigger="load`) {
+		t.Error("self-replacing Dynamic DNS status fragment immediately reloads and detaches its actions")
+	}
+}
+
+func TestDynamicDNSErrorDisplaySummarizesAndSanitizesProviderResponse(t *testing.T) {
+	t.Parallel()
+	raw := `publish home.example.test A: DNS provider API returned 400 Bad Request: {"success":false,"errors":[{"code":6003,"message":"Invalid request headers","authorization":"Bearer secret-value","error_chain":[{"code":6111,"message":"Invalid format for Authorization header"}]}],"messages":[],"result":null}`
+
+	summary, detail := dynamicDNSErrorDisplay("cloudflare", raw)
+
+	for _, expected := range []string{
+		"Cloudflare rejected the request",
+		"Invalid request headers: Invalid format for Authorization header",
+		"codes 6003, 6111",
+	} {
+		if !strings.Contains(summary, expected) {
+			t.Errorf("summary %q does not contain %q", summary, expected)
+		}
+	}
+	if strings.Contains(summary, "{") {
+		t.Errorf("summary contains the raw JSON payload: %q", summary)
+	}
+	if !strings.Contains(detail, `"authorization": "[redacted]"`) {
+		t.Errorf("detail does not redact authorization: %s", detail)
+	}
+	if strings.Contains(summary, "secret-value") || strings.Contains(detail, "secret-value") {
+		t.Fatal("provider diagnostics exposed an authorization value")
+	}
+}
+
+func TestDynamicDNSErrorDisplayFallsBackToPlainText(t *testing.T) {
+	t.Parallel()
+	summary, detail := dynamicDNSErrorDisplay("cloudflare", "request failed with token=secret-value")
+	if summary != "request failed with token=[redacted]" || detail != "" {
+		t.Fatalf("plain-text diagnostics = %q, %q", summary, detail)
+	}
+}
+
+func TestDynamicDNSStatusViewFormatsLastPublishedLikeSSO(t *testing.T) {
+	t.Parallel()
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := dynamicdns.Status{
+		LastSuccess:   time.Date(2026, time.September, 5, 17, 15, 0, 0, time.UTC),
+		LastPublished: time.Date(2026, time.September, 5, 17, 14, 0, 0, time.UTC),
+	}
+
+	view := dynamicDNSStatusView("cloudflare", status, pages.TimeDisplay{Format: pages.TimeFormat12, Location: location})
+
+	if view.LastPublished != "Sep 5, 2026 1:14 PM" {
+		t.Errorf("LastPublished = %q", view.LastPublished)
+	}
+	if view.LastSuccess != "9/5 1:15:00 PM" {
+		t.Errorf("LastSuccess = %q", view.LastSuccess)
 	}
 }
 

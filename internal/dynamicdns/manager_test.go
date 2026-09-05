@@ -72,7 +72,21 @@ func TestReconcileDiscoversEachFamilyOnceAndPublishesEveryRecord(t *testing.T) {
 		t.Fatalf("published records = %d, want 4", len(publisher.records))
 	}
 	status := manager.Status(context.Background())
-	if status.Changed != 4 || status.IPv4 != "8.8.8.8" || status.IPv6 != "2001:4860:4860::8888" || status.LastSuccess.IsZero() {
+	if status.Changed != 4 || status.IPv4 != "8.8.8.8" || status.IPv6 != "2001:4860:4860::8888" || status.LastSuccess.IsZero() || status.LastPublished.IsZero() {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestReconcileDoesNotClaimPublicationWhenRecordsAreUnchanged(t *testing.T) {
+	manager := newTestManager(testDynamicDNSSettings(), &testProvider{})
+	manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+		return netip.MustParseAddr("8.8.8.8"), nil
+	}
+
+	manager.runOnce(context.Background())
+
+	status := manager.Status(context.Background())
+	if status.LastSuccess.IsZero() || !status.LastPublished.IsZero() {
 		t.Fatalf("status = %+v", status)
 	}
 }
@@ -157,6 +171,9 @@ func TestSyncNowCoalescesWhilePublicationIsQueued(t *testing.T) {
 	manager := newTestManager(testDynamicDNSSettings(), &testProvider{})
 	manager.SyncNow()
 	manager.SyncNow()
+	if !manager.Status(context.Background()).Running {
+		t.Error("queued publication did not immediately report running")
+	}
 	if queued := len(manager.wake); queued != 1 {
 		t.Fatalf("queued publications = %d, want 1", queued)
 	}

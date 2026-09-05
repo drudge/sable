@@ -1462,6 +1462,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
 .integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.integration-fact-address { min-width: 0; cursor: help; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
 .signin-methods { display: grid; gap: 0.5rem; }
@@ -2848,7 +2849,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .status-badge.success { background: rgb(34 197 94 / .13); color: #22c55e; }
 .status-badge.danger { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
 .integration-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
-.integration-card-identity { display: flex; align-items: flex-start; gap: .85rem; }
+.integration-card > header > .status-badge { flex: 0 0 auto; white-space: nowrap; }
+.integration-card-identity { display: flex; min-width: 0; align-items: flex-start; gap: .85rem; }
 .integration-card-identity p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
 .integration-card-glyph { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: rgb(59 130 246 / .12); color: #3b82f6; }
 .integration-card-glyph .nav-icon { width: 1.2rem; height: 1.2rem; }
@@ -2873,7 +2875,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .button.is-syncing .icon-refresh, .unifi-status-line .icon-refresh { animation: blocking-refresh-spin .8s linear infinite; }
 .button.is-syncing { cursor: progress; }
 .integration-card-actions .button:disabled { cursor: not-allowed; opacity: .55; }
-.unifi-progress { height: .3rem; }
+.integration-progress { height: .3rem; }
 .unifi-status-line .nav-icon { width: .85rem; height: .85rem; }
 .unifi-status { display: flex; gap: .7rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: .8rem; }
 .unifi-status.error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
@@ -2882,6 +2884,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .unifi-status > div { display: grid; gap: .2rem; }
 .unifi-status strong { font-size: .75rem; }
 .unifi-status span { color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.integration-error-details { min-width: 0; margin-top: .15rem; color: var(--muted-foreground); font-size: .68rem; }
+.integration-error-details summary { width: max-content; cursor: pointer; color: var(--foreground); }
+.integration-error-details pre { max-width: 100%; max-height: 12rem; overflow: auto; margin: .5rem 0 0; border: 1px solid var(--border); border-radius: .4rem; background: var(--background); padding: .65rem; color: var(--muted-foreground); font-size: .65rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .unifi-connection dl { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 1rem; }
 .unifi-connection dl > div { border-top: 0; padding-top: 0; }
 .unifi-auth-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
@@ -2980,6 +2985,12 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .record-source-badge.alias { background: #ede9fe; color: #5b21b6; }
 .dark .record-source-badge.alias { background: #4c1d95; color: #ddd6fe; }
 
+@media (max-width: 960px) {
+	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
+	.integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }
+	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
+}
+
 @media (max-width: 700px) {
 	.unifi-connection dl { grid-template-columns: 1fr; }
 	.unifi-connection dl > div { border-top: 1px solid var(--border); padding: .6rem 0; }
@@ -2992,9 +3003,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.wizard-footer { align-items: stretch; flex-direction: column-reverse; }
 	.wizard-footer-advance { flex-direction: column-reverse; }
 	.wizard-footer .button { justify-content: center; }
-	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
-	.integration-card-actions-primary { flex-direction: column; }
-	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
 	.wizard-progress { grid-template-columns: auto 1fr auto 1fr auto 1fr auto; }
 }
 

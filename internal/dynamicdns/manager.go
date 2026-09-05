@@ -60,6 +60,7 @@ type Status struct {
 	Unchanged             int
 	LastAttempt           time.Time
 	LastSuccess           time.Time
+	LastPublished         time.Time
 	NextAttempt           time.Time
 	Duration              time.Duration
 	LastError             string
@@ -354,8 +355,9 @@ func (manager *Manager) beginAttempt(started time.Time) {
 func (manager *Manager) finishAttempt(started time.Time, interval time.Duration, result reconcileResult, err error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
+	finished := manager.now()
 	manager.status.Running = false
-	manager.status.Duration = manager.now().Sub(started)
+	manager.status.Duration = finished.Sub(started)
 	if result.ipv4 != "" {
 		manager.status.IPv4 = result.ipv4
 	}
@@ -364,9 +366,12 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 	}
 	manager.status.Changed = result.changed
 	manager.status.Unchanged = result.unchanged
+	if result.changed > 0 {
+		manager.status.LastPublished = finished
+	}
 	if err == nil {
 		manager.consecutiveFails = 0
-		manager.status.LastSuccess = manager.now()
+		manager.status.LastSuccess = finished
 		manager.status.LastError = ""
 		manager.status.NextAttempt = started.Add(interval)
 		return

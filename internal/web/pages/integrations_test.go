@@ -60,6 +60,95 @@ func TestIntegrationRemoveButtonsAreMarkedPrimaryOnly(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
+	tests := []struct {
+		name     string
+		view     DynamicDNSAppView
+		expected string
+	}{
+		{
+			name:     "not configured",
+			view:     DynamicDNSAppView{Available: true},
+			expected: `class="status-badge">Not set up</span>`,
+		},
+		{
+			name:     "active",
+			view:     DynamicDNSAppView{Available: true, Configured: true, Enabled: true, CredentialsConfigured: true},
+			expected: `class="status-badge success">Active</span>`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if html := render(t, DynamicDNSCard(test.view)); !strings.Contains(html, test.expected) {
+				t.Errorf("Dynamic DNS card does not use the shared status treatment %q", test.expected)
+			}
+		})
+	}
+}
+
+func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
+	t.Parallel()
+	view := DynamicDNSAppView{
+		Available: true, Configured: true, Enabled: true, PublishIPv4: true, PublishIPv6: true,
+		Status: DynamicDNSStatusView{
+			LastPublished: "Sep 5, 2026 1:12 PM",
+			IPv4:          "203.0.113.42",
+			IPv6:          "2001:db8:1234:5678:90ab:cdef:1234:5678",
+		},
+	}
+	html := render(t, DynamicDNSCard(view))
+	for _, expected := range []string{
+		"Last published",
+		"Sep 5, 2026 1:12 PM",
+		`title="203.0.113.42"`,
+		`title="2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+		`aria-label="IPv6: 2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("Dynamic DNS card does not contain %q", expected)
+		}
+	}
+	if strings.Contains(html, `<span class="integration-fact-label">Interval</span>`) {
+		t.Error("Dynamic DNS card still presents the polling interval as a status fact")
+	}
+	if published, ipv6 := strings.Index(html, "Last published"), strings.Index(html, ">IPv6<"); published < ipv6 {
+		t.Error("Last published is not the final Dynamic DNS status fact")
+	}
+
+	view.Status.LastPublished = ""
+	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<span class="integration-fact-value">Never</span>`) {
+		t.Error("Dynamic DNS card does not use the Never fallback before its first publication")
+	}
+}
+
+func TestDynamicDNSStatusPollingDoesNotReloadAfterEverySwap(t *testing.T) {
+	t.Parallel()
+	for _, running := range []bool{false, true} {
+		trigger := dynamicDNSStatusPoll(running)
+		if strings.Contains(trigger, "load") {
+			t.Errorf("dynamic DNS status trigger %q reloads immediately after replacing itself", trigger)
+		}
+	}
+}
+
+func TestDynamicDNSStatusPanelDisclosesProviderDetails(t *testing.T) {
+	t.Parallel()
+	html := render(t, DynamicDNSStatusPanel(DynamicDNSAppView{Status: DynamicDNSStatusView{
+		LastError:       "Cloudflare rejected the request: Invalid request headers (code 6003).",
+		LastErrorDetail: "{\n  \"code\": 6003\n}",
+	}}))
+	for _, expected := range []string{
+		"Cloudflare rejected the request",
+		"View provider details",
+		`<pre>{`,
+		`&#34;code&#34;: 6003`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("Dynamic DNS status panel does not contain %q", expected)
+		}
+	}
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var out strings.Builder
