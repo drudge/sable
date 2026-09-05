@@ -86,6 +86,38 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
+	t.Parallel()
+	view := DynamicDNSAppView{
+		Available: true, Configured: true, Enabled: true, PublishIPv4: true, PublishIPv6: true,
+		Status: DynamicDNSStatusView{
+			LastPublished: "Sep 5, 2026 1:12 PM",
+			IPv4:          "203.0.113.42",
+			IPv6:          "2001:db8:1234:5678:90ab:cdef:1234:5678",
+		},
+	}
+	html := render(t, DynamicDNSCard(view))
+	for _, expected := range []string{
+		"Last published",
+		"Sep 5, 2026 1:12 PM",
+		`title="203.0.113.42"`,
+		`title="2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+		`aria-label="IPv6: 2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("Dynamic DNS card does not contain %q", expected)
+		}
+	}
+	if strings.Contains(html, `<span class="integration-fact-label">Interval</span>`) {
+		t.Error("Dynamic DNS card still presents the polling interval as a status fact")
+	}
+
+	view.Status.LastPublished = ""
+	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<span class="integration-fact-value">Never</span>`) {
+		t.Error("Dynamic DNS card does not use the Never fallback before its first publication")
+	}
+}
+
 func TestDynamicDNSStatusPollingDoesNotReloadAfterEverySwap(t *testing.T) {
 	t.Parallel()
 	for _, running := range []bool{false, true} {

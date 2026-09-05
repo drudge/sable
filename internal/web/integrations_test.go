@@ -17,6 +17,7 @@ import (
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/unifi"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -312,6 +313,27 @@ func TestDynamicDNSErrorDisplayFallsBackToPlainText(t *testing.T) {
 	summary, detail := dynamicDNSErrorDisplay("cloudflare", "request failed with token=secret-value")
 	if summary != "request failed with token=[redacted]" || detail != "" {
 		t.Fatalf("plain-text diagnostics = %q, %q", summary, detail)
+	}
+}
+
+func TestDynamicDNSStatusViewFormatsLastPublishedLikeSSO(t *testing.T) {
+	t.Parallel()
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := dynamicdns.Status{
+		LastSuccess:   time.Date(2026, time.September, 5, 17, 15, 0, 0, time.UTC),
+		LastPublished: time.Date(2026, time.September, 5, 17, 14, 0, 0, time.UTC),
+	}
+
+	view := dynamicDNSStatusView("cloudflare", status, pages.TimeDisplay{Format: pages.TimeFormat12, Location: location})
+
+	if view.LastPublished != "Sep 5, 2026 1:14 PM" {
+		t.Errorf("LastPublished = %q", view.LastPublished)
+	}
+	if view.LastSuccess != "9/5 1:15:00 PM" {
+		t.Errorf("LastSuccess = %q", view.LastSuccess)
 	}
 }
 

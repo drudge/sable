@@ -41,6 +41,7 @@ type DynamicDNSStatusView struct {
 	Changed         int
 	Unchanged       int
 	LastSuccess     string
+	LastPublished   string
 	NextAttempt     string
 	Duration        string
 	LastError       string
@@ -299,9 +300,9 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 				}
 				<div class="integration-facts">
 					<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ dynamicDNSProviderLabel(view.Provider) }</span></div>
-					<div><span class="integration-fact-label">Interval</span><span class="integration-fact-value">{ view.Interval }</span></div>
-					<div><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ ifThen(view.Status.IPv4 != "", view.Status.IPv4, "Not discovered") }</code></span></div>
-					<div><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ ifThen(view.PublishIPv6, ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered"), "Not published") }</code></span></div>
+					<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
+					<div class="integration-fact-address" title={ dynamicDNSIPv4(view) } aria-label={ "IPv4: " + dynamicDNSIPv4(view) }><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ dynamicDNSIPv4(view) }</code></span></div>
+					<div class="integration-fact-address" title={ dynamicDNSIPv6(view) } aria-label={ "IPv6: " + dynamicDNSIPv6(view) }><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ dynamicDNSIPv6(view) }</code></span></div>
 				</div>
 				<div class="admin-desktop-table">
 					<table class="isotope-table">
@@ -1034,6 +1035,14 @@ func dynamicDNSNames(value string) []string {
 		}
 	}
 	return names
+}
+
+func dynamicDNSIPv4(view DynamicDNSAppView) string {
+	return ifThen(view.Status.IPv4 != "", view.Status.IPv4, "Not discovered")
+}
+
+func dynamicDNSIPv6(view DynamicDNSAppView) string {
+	return ifThen(view.PublishIPv6, ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered"), "Not published")
 }
 
 func dynamicDNSTypeLabel(view DynamicDNSAppView) string {

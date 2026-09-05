@@ -76,6 +76,9 @@ func dynamicDNSStatusView(provider string, status dynamicdns.Status, display pag
 	if !status.LastSuccess.IsZero() {
 		result.LastSuccess = pages.FormatShortDateTime(status.LastSuccess, display, true)
 	}
+	if !status.LastPublished.IsZero() {
+		result.LastPublished = pages.FormatDateTime(status.LastPublished, display)
+	}
 	if !status.NextAttempt.IsZero() {
 		result.NextAttempt = pages.FormatShortDateTime(status.NextAttempt, display, true)
 	}

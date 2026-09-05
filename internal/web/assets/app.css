@@ -1462,6 +1462,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
 .integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.integration-fact-address { min-width: 0; cursor: help; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
 .signin-methods { display: grid; gap: 0.5rem; }
