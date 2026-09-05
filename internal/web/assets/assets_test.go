@@ -273,6 +273,26 @@ func TestStyledTimePickerMatchesTextFieldGeometryAndSurface(t *testing.T) {
 	}
 }
 
+func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	selector := ".certificate-mode-control input, .cluster-certificate-choices > label > input {"
+	_, afterSelector, found := strings.Cut(stylesheet, selector)
+	if !found {
+		t.Fatal("application stylesheet does not constrain hidden certificate choice inputs")
+	}
+	rule, _, found := strings.Cut(afterSelector, "}")
+	if !found {
+		t.Fatal("hidden certificate choice input rule is incomplete")
+	}
+	for _, expected := range []string{"position: absolute", "width: 1px", "height: 1px", "overflow: hidden", "clip-path: inset(50%)"} {
+		if !strings.Contains(rule, expected) {
+			t.Errorf("hidden certificate choice inputs can expand the page: missing %q", expected)
+		}
+	}
+}
+
 func TestOpenZoneActionMenuStacksAboveSiblingButtons(t *testing.T) {
 	t.Parallel()
 

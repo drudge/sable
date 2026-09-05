@@ -1962,7 +1962,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-certificate-section { display: grid; gap: .65rem; }
 .cluster-certificate-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .cluster-certificate-choices > label { position: relative; min-width: 0; cursor: pointer; }
-.cluster-certificate-choices > label > input { position: absolute; opacity: 0; pointer-events: none; }
 .cluster-certificate-choices > label > span { display: grid; min-height: 3.7rem; justify-items: center; align-content: center; gap: .12rem; border: 1px solid var(--border); border-radius: .5rem; padding: .4rem .55rem; color: var(--muted-foreground); text-align: center; }
 .cluster-certificate-choices > label.active > span { border-color: #3b82f6; background: rgb(59 130 246 / .08); color: var(--foreground); box-shadow: 0 0 0 1px #3b82f6; }
 .cluster-certificate-choices .nav-icon { width: .9rem; height: .9rem; margin-bottom: .08rem; }
@@ -2323,7 +2322,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .certificate-mode-control { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
 .certificate-mode-control label { display: flex; min-height: 2.5rem; cursor: pointer; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: calc(var(--radius) - 3px); color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .certificate-mode-control label.active { border-color: var(--border); background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
-.certificate-mode-control input { position: absolute; opacity: 0; pointer-events: none; }
+.certificate-mode-control input, .cluster-certificate-choices > label > input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; border: 0; padding: 0; clip-path: inset(50%); opacity: 0; pointer-events: none; white-space: nowrap; }
 /* Each provider carries its own accent so the card changes colour with the
    selection. In a long column of identical grey fields that tint is the only
    thing saying which service is about to receive credentials. */
