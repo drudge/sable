@@ -118,8 +118,9 @@ contract:
   in the palette input. Run DNS Query accepts a domain in the palette, defaults
   to an A query, and uses the same arrow-key model for common record types.
   Compact title acronyms such as `rdq` and `sql` are searchable. Settings
-  entries link directly to each settings tab, and update checks run in place
-  with toast feedback. Page, dialog,
+  entries link directly to each settings tab. Dynamic DNS appears as a setup or
+  edit command on a writable node and as a status link on a read-only replica.
+  Update checks run in place with toast feedback. Page, dialog,
   and confirmation commands hand focus to the control that is ready for input.
   Cluster quick actions reflect whether the current writable node is standalone
   or the primary.
