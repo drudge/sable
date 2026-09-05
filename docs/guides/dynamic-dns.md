@@ -21,10 +21,12 @@ name.
 
 ## Configure publication
 
-1. Open **Integrations → Dynamic DNS** and choose the provider.
-2. Enter its credentials, the external zone, and one fully-qualified public
-   name per line. One integration uses a single zone and publication policy.
-3. Select A for IPv4, AAAA for IPv6, or both. Use a TTL of 600 seconds unless
+1. Open **Integrations → Dynamic DNS** and add a provider.
+2. Enter its credentials, add each external zone it manages, and enter one
+   fully-qualified public name per line. Use **Add Provider** when another zone
+   lives at a different provider. Each provider can appear once because its
+   credential set is shared with ACME DNS-01.
+3. Select A for IPv4, AAAA for IPv6, or both for each zone. Use a TTL of 600 seconds unless
    you have a reason to tune it; this works across the built-in providers.
 4. Save the setup. Sable immediately checks the public address and external
    RRsets, then follows the configured interval.
@@ -54,15 +56,16 @@ can point to another HTTPS service; private, loopback, link-local, unspecified,
 and wrong-family replies are rejected. Like any public-address check, the
 service learns the source address and request time.
 
-IPv4 and IPv6 are discovered once per run even when several names publish the
-same family. A discovery failure prevents provider writes for that run and
-triggers bounded exponential retry. The last successful records remain in
-external DNS.
+IPv4 and IPv6 are discovered once per run even when several names, zones, or
+providers publish the same family. A discovery failure prevents provider writes
+for that run and triggers bounded exponential retry. Provider failures are
+isolated: Sable still attempts the remaining providers and reports the combined
+failure. The last successful records remain in external DNS.
 
 ## Clusters, pausing, and removal
 
 Only the writable cluster node contacts discovery services and the external
-provider. Dynamic DNS settings and credentials replicate to the other nodes so
+providers. Dynamic DNS settings and every provider credential replicate to the other nodes so
 a manually promoted replica can publish on its next run. This avoids two nodes
 alternating a shared name when their outbound addresses differ.
 

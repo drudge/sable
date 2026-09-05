@@ -224,4 +224,5 @@ Issuance and automatic renewal run in the control plane and feed the existing
 atomic certificate activation path. Provider cleanup is record-specific so an
 ACME run does not replace unrelated TXT data. The Dynamic DNS worker runs only
 on the writable node, discovers each needed address family once per attempt,
-and reconciles the complete configured A or AAAA RRset only when it differs.
+and reconciles complete configured A or AAAA RRsets across every publisher and
+zone only when they differ.

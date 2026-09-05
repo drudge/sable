@@ -574,22 +574,26 @@ func (provider *route53Provider) EnsureRecord(ctx context.Context, record Record
 	if err != nil {
 		return false, err
 	}
-	values, ttl, err := provider.recordSetByType(ctx, record.Name, record.Type)
+	zoneID, err := provider.route53ZoneID(ctx, record.Zone)
+	if err != nil {
+		return false, err
+	}
+	values, ttl, err := provider.recordSetByType(ctx, zoneID, record.Name, record.Type)
 	if err != nil {
 		return false, err
 	}
 	if sameSingleRecord(values, record.Value, ttl, record.TTL) {
 		return false, nil
 	}
-	if err := provider.changeRecordSet(ctx, "UPSERT", record.Name, record.Type, record.TTL, []string{record.Value}); err != nil {
+	if err := provider.changeRecordSet(ctx, zoneID, "UPSERT", record.Name, record.Type, record.TTL, []string{record.Value}); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (provider *route53Provider) recordSetByType(ctx context.Context, name, recordType string) ([]string, int, error) {
+func (provider *route53Provider) recordSetByType(ctx context.Context, zoneID, name, recordType string) ([]string, int, error) {
 	query := url.Values{"name": {dns.Fqdn(name)}, "type": {recordType}, "maxitems": {"1"}}
-	request, err := provider.request(ctx, http.MethodGet, provider.rrsetPath(), query, nil)
+	request, err := provider.request(ctx, http.MethodGet, provider.rrsetPath(zoneID), query, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -617,7 +621,7 @@ func (provider *route53Provider) recordSetByType(ctx context.Context, name, reco
 	return values, result.Sets[0].TTL, nil
 }
 
-func (provider *route53Provider) changeRecordSet(ctx context.Context, action, name, recordType string, ttl uint32, values []string) error {
+func (provider *route53Provider) changeRecordSet(ctx context.Context, zoneID, action, name, recordType string, ttl uint32, values []string) error {
 	requestBody := route53ChangeRequest{XMLNS: "https://route53.amazonaws.com/doc/2013-04-01/"}
 	change := struct {
 		Action string           `xml:"Action"`
@@ -631,7 +635,7 @@ func (provider *route53Provider) changeRecordSet(ctx context.Context, action, na
 	if err != nil {
 		return err
 	}
-	request, err := provider.request(ctx, http.MethodPost, provider.rrsetPath(), nil, encoded)
+	request, err := provider.request(ctx, http.MethodPost, provider.rrsetPath(zoneID), nil, encoded)
 	if err != nil {
 		return err
 	}

@@ -110,10 +110,22 @@ func (manager *Manager) Status(ctx context.Context) Status {
 	status := manager.status
 	manager.mu.Unlock()
 	status.Enabled = settings.Runnable()
-	status.Provider = settings.Provider
-	status.Records = dynamicRecordCount(settings.Records)
-	if manager.credentials != nil && settings.Provider != "" {
-		_, status.CredentialsConfigured = manager.credentials.Get(ctx, settings.Provider)
+	providers := settings.ProviderNames()
+	status.Provider = ""
+	if len(providers) == 1 {
+		status.Provider = providers[0]
+	}
+	status.Records = dynamicRecordCount(settings.AllRecords())
+	status.CredentialsConfigured = len(providers) > 0
+	for _, provider := range providers {
+		if manager.credentials == nil {
+			status.CredentialsConfigured = false
+			break
+		}
+		if _, found := manager.credentials.Get(ctx, provider); !found {
+			status.CredentialsConfigured = false
+			break
+		}
 	}
 	return status
 }
@@ -193,12 +205,12 @@ func (manager *Manager) runOnce(ctx context.Context) {
 	result, err := manager.reconcile(ctx, settings)
 	manager.finishAttempt(started, settings.Interval.Duration, result, err)
 	if err != nil {
-		manager.logger.Warn("dynamic DNS publication failed", "provider", settings.Provider, "error", err)
+		manager.logger.Warn("dynamic DNS publication failed", "providers", strings.Join(settings.ProviderNames(), ","), "error", err)
 		return
 	}
 	if result.changed > 0 {
 		manager.logger.Info("dynamic DNS records published",
-			"provider", settings.Provider, "changed", result.changed,
+			"providers", strings.Join(settings.ProviderNames(), ","), "changed", result.changed,
 			"unchanged", result.unchanged, "ipv4", result.ipv4, "ipv6", result.ipv6)
 	}
 }
@@ -214,40 +226,52 @@ func (manager *Manager) reconcile(ctx context.Context, settings config.DynamicDN
 	if manager.credentials == nil {
 		return reconcileResult{}, errors.New("external DNS credential store is unavailable")
 	}
-	credentials, found := manager.credentials.Get(ctx, settings.Provider)
-	if !found {
-		return reconcileResult{}, fmt.Errorf("%s DNS credentials are not configured", settings.Provider)
-	}
-	publisher, err := manager.newProvider(settings.Provider, credentials)
-	if err != nil {
-		return reconcileResult{}, err
-	}
 	result, addresses, err := manager.discoverAddresses(ctx, settings)
 	if err != nil {
 		return reconcileResult{}, err
 	}
-	for _, configured := range settings.Records {
-		for _, recordType := range recordTypes(configured) {
-			address := addresses[recordType]
-			changed, ensureErr := publisher.EnsureRecord(ctx, dnsprovider.Record{
-				Zone: configured.Zone, Name: configured.Name, Type: recordType,
-				Value: address.String(), TTL: configured.TTL,
-			})
-			if ensureErr != nil {
-				return result, fmt.Errorf("publish %s %s: %w", configured.Name, recordType, ensureErr)
-			}
-			if changed {
-				result.changed++
-			} else {
-				result.unchanged++
+	var publicationErrors []error
+	for _, configuredPublisher := range settings.ConfiguredPublishers() {
+		credentials, found := manager.credentials.Get(ctx, configuredPublisher.Provider)
+		if !found {
+			publicationErrors = append(publicationErrors, fmt.Errorf("%s DNS credentials are not configured", configuredPublisher.Provider))
+			continue
+		}
+		// A provider-level zone ID is a useful shortcut for one zone, but cannot
+		// route a publisher that owns several. Those providers resolve each zone
+		// by name when the shortcut is empty.
+		if publisherZoneCount(configuredPublisher) > 1 {
+			credentials.ZoneID = ""
+		}
+		publisher, providerErr := manager.newProvider(configuredPublisher.Provider, credentials)
+		if providerErr != nil {
+			publicationErrors = append(publicationErrors, fmt.Errorf("initialize %s provider: %w", configuredPublisher.Provider, providerErr))
+			continue
+		}
+		for _, configured := range configuredPublisher.Records {
+			for _, recordType := range recordTypes(configured) {
+				address := addresses[recordType]
+				changed, ensureErr := publisher.EnsureRecord(ctx, dnsprovider.Record{
+					Zone: configured.Zone, Name: configured.Name, Type: recordType,
+					Value: address.String(), TTL: configured.TTL,
+				})
+				if ensureErr != nil {
+					publicationErrors = append(publicationErrors, fmt.Errorf("%s: publish %s %s: %w", configuredPublisher.Provider, configured.Name, recordType, ensureErr))
+					continue
+				}
+				if changed {
+					result.changed++
+				} else {
+					result.unchanged++
+				}
 			}
 		}
 	}
-	return result, nil
+	return result, errors.Join(publicationErrors...)
 }
 
 func (manager *Manager) discoverAddresses(ctx context.Context, settings config.DynamicDNS) (reconcileResult, map[string]netip.Addr, error) {
-	needed := neededRecordTypes(settings.Records)
+	needed := neededRecordTypes(settings.AllRecords())
 	addresses := make(map[string]netip.Addr, len(needed))
 	result := reconcileResult{}
 	for _, recordType := range []string{dnsprovider.TypeA, dnsprovider.TypeAAAA} {
@@ -270,6 +294,14 @@ func (manager *Manager) discoverAddresses(ctx context.Context, settings config.D
 		}
 	}
 	return result, addresses, nil
+}
+
+func publisherZoneCount(publisher config.DynamicDNSPublisher) int {
+	zones := make(map[string]struct{})
+	for _, record := range publisher.Records {
+		zones[record.Zone] = struct{}{}
+	}
+	return len(zones)
 }
 
 func discoverAddress(ctx context.Context, endpoint, recordType string) (netip.Addr, error) {
