@@ -281,6 +281,40 @@ func TestDynamicDNSSyncNowRendersPublicationProgress(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSErrorDisplaySummarizesAndSanitizesProviderResponse(t *testing.T) {
+	t.Parallel()
+	raw := `publish home.example.test A: DNS provider API returned 400 Bad Request: {"success":false,"errors":[{"code":6003,"message":"Invalid request headers","authorization":"Bearer secret-value","error_chain":[{"code":6111,"message":"Invalid format for Authorization header"}]}],"messages":[],"result":null}`
+
+	summary, detail := dynamicDNSErrorDisplay("cloudflare", raw)
+
+	for _, expected := range []string{
+		"Cloudflare rejected the request",
+		"Invalid request headers: Invalid format for Authorization header",
+		"codes 6003, 6111",
+	} {
+		if !strings.Contains(summary, expected) {
+			t.Errorf("summary %q does not contain %q", summary, expected)
+		}
+	}
+	if strings.Contains(summary, "{") {
+		t.Errorf("summary contains the raw JSON payload: %q", summary)
+	}
+	if !strings.Contains(detail, `"authorization": "[redacted]"`) {
+		t.Errorf("detail does not redact authorization: %s", detail)
+	}
+	if strings.Contains(summary, "secret-value") || strings.Contains(detail, "secret-value") {
+		t.Fatal("provider diagnostics exposed an authorization value")
+	}
+}
+
+func TestDynamicDNSErrorDisplayFallsBackToPlainText(t *testing.T) {
+	t.Parallel()
+	summary, detail := dynamicDNSErrorDisplay("cloudflare", "request failed with token=secret-value")
+	if summary != "request failed with token=[redacted]" || detail != "" {
+		t.Fatalf("plain-text diagnostics = %q, %q", summary, detail)
+	}
+}
+
 func TestUniFiWizardWalksFromConnectionToEnabled(t *testing.T) {
 	t.Parallel()
 	controller := &testUniFiController{

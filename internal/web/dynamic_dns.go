@@ -2,9 +2,12 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,13 +62,14 @@ func (server *Server) dynamicDNSView(request *http.Request, display pages.TimeDi
 	view.CredentialsConfigured = configured
 	view.ProviderEndpoint = credentials.Endpoint
 	view.TSIGAlgorithm = credentials.TSIGAlgorithm
-	view.Status = dynamicDNSStatusView(server.dynamicDNS.Status(request.Context()), display)
+	view.Status = dynamicDNSStatusView(settings.Provider, server.dynamicDNS.Status(request.Context()), display)
 	return view
 }
 
-func dynamicDNSStatusView(status dynamicdns.Status, display pages.TimeDisplay) pages.DynamicDNSStatusView {
+func dynamicDNSStatusView(provider string, status dynamicdns.Status, display pages.TimeDisplay) pages.DynamicDNSStatusView {
+	errorSummary, errorDetail := dynamicDNSErrorDisplay(provider, status.LastError)
 	result := pages.DynamicDNSStatusView{
-		Running: status.Running, LastError: status.LastError,
+		Running: status.Running, LastError: errorSummary, LastErrorDetail: errorDetail,
 		IPv4: status.IPv4, IPv6: status.IPv6,
 		Records: status.Records, Changed: status.Changed, Unchanged: status.Unchanged,
 	}
@@ -79,6 +83,170 @@ func dynamicDNSStatusView(status dynamicdns.Status, display pages.TimeDisplay) p
 		result.Duration = status.Duration.Round(time.Millisecond).String()
 	}
 	return result
+}
+
+var providerSecretPattern = regexp.MustCompile(`(?i)((?:authorization|api[-_ ]?key|access[-_ ]?key|token|secret|password)\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+`)
+
+func dynamicDNSErrorDisplay(provider, raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+
+	start := strings.IndexAny(raw, "{[")
+	if start < 0 {
+		return redactProviderSecrets(raw), ""
+	}
+
+	var payload any
+	decoder := json.NewDecoder(strings.NewReader(raw[start:]))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
+		return redactProviderSecrets(raw), ""
+	}
+
+	messages, codes := providerDiagnostics(payload)
+	if len(messages) == 0 {
+		return redactProviderSecrets(raw), ""
+	}
+
+	summary := dynamicDNSProviderName(provider) + " rejected the request: " + strings.Join(messages, ": ")
+	if len(codes) == 1 {
+		summary += " (code " + codes[0] + ")"
+	} else if len(codes) > 1 {
+		summary += " (codes " + strings.Join(codes, ", ") + ")"
+	}
+	summary += "."
+
+	detail, err := json.MarshalIndent(sanitizeProviderPayload(payload), "", "  ")
+	if err != nil {
+		return summary, ""
+	}
+	return summary, string(detail)
+}
+
+func providerDiagnostics(payload any) ([]string, []string) {
+	var messages []string
+	var codes []string
+	seenMessages := make(map[string]bool)
+	seenCodes := make(map[string]bool)
+
+	var visit func(any)
+	visit = func(value any) {
+		switch typed := value.(type) {
+		case []any:
+			for _, item := range typed {
+				visit(item)
+			}
+		case map[string]any:
+			if message, ok := typed["message"].(string); ok {
+				message = redactProviderSecrets(strings.TrimSpace(message))
+				if message != "" && !seenMessages[message] {
+					seenMessages[message] = true
+					messages = append(messages, message)
+				}
+			}
+			if code, ok := providerErrorCode(typed["code"]); ok && !seenCodes[code] {
+				seenCodes[code] = true
+				codes = append(codes, code)
+			}
+
+			preferred := []string{"errors", "error_chain", "messages"}
+			for _, key := range preferred {
+				if child, ok := typed[key]; ok {
+					visit(child)
+				}
+			}
+			otherKeys := make([]string, 0, len(typed))
+			for key := range typed {
+				if key != "message" && key != "code" && key != "errors" && key != "error_chain" && key != "messages" {
+					otherKeys = append(otherKeys, key)
+				}
+			}
+			sort.Strings(otherKeys)
+			for _, key := range otherKeys {
+				visit(typed[key])
+			}
+		}
+	}
+	visit(payload)
+	return messages, codes
+}
+
+func providerErrorCode(value any) (string, bool) {
+	switch typed := value.(type) {
+	case json.Number:
+		return typed.String(), true
+	case string:
+		if code := strings.TrimSpace(typed); code != "" {
+			return code, true
+		}
+	}
+	return "", false
+}
+
+func sanitizeProviderPayload(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		clean := make([]any, len(typed))
+		for index, item := range typed {
+			clean[index] = sanitizeProviderPayload(item)
+		}
+		return clean
+	case map[string]any:
+		clean := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if providerFieldIsSecret(key) {
+				clean[key] = "[redacted]"
+			} else {
+				clean[key] = sanitizeProviderPayload(item)
+			}
+		}
+		return clean
+	case string:
+		return redactProviderSecrets(typed)
+	default:
+		return value
+	}
+}
+
+func providerFieldIsSecret(key string) bool {
+	normalized := strings.NewReplacer("_", "", "-", "", " ", "").Replace(strings.ToLower(key))
+	for _, sensitive := range []string{"authorization", "password", "secret", "token", "apikey", "accesskey", "privatekey", "consumerkey"} {
+		if strings.Contains(normalized, sensitive) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactProviderSecrets(value string) string {
+	return providerSecretPattern.ReplaceAllString(value, "${1}[redacted]")
+}
+
+func dynamicDNSProviderName(provider string) string {
+	switch provider {
+	case "cloudflare":
+		return "Cloudflare"
+	case "porkbun":
+		return "Porkbun"
+	case "namecheap":
+		return "Namecheap"
+	case "godaddy":
+		return "GoDaddy"
+	case "digitalocean":
+		return "DigitalOcean"
+	case "hetzner":
+		return "Hetzner"
+	case "route53":
+		return "Amazon Route 53"
+	case "ovh":
+		return "OVHcloud"
+	case "rfc2136":
+		return "RFC 2136 provider"
+	default:
+		return "DNS provider"
+	}
 }
 
 func (server *Server) saveDynamicDNS(writer http.ResponseWriter, request *http.Request) {

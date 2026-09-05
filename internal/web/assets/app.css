@@ -2882,6 +2882,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .unifi-status > div { display: grid; gap: .2rem; }
 .unifi-status strong { font-size: .75rem; }
 .unifi-status span { color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
+.integration-error-details { min-width: 0; margin-top: .15rem; color: var(--muted-foreground); font-size: .68rem; }
+.integration-error-details summary { width: max-content; cursor: pointer; color: var(--foreground); }
+.integration-error-details pre { max-width: 100%; max-height: 12rem; overflow: auto; margin: .5rem 0 0; border: 1px solid var(--border); border-radius: .4rem; background: var(--background); padding: .65rem; color: var(--muted-foreground); font-size: .65rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .unifi-connection dl { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 1rem; }
 .unifi-connection dl > div { border-top: 0; padding-top: 0; }
 .unifi-auth-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }

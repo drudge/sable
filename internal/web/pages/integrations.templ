@@ -34,16 +34,17 @@ type DynamicDNSAppView struct {
 }
 
 type DynamicDNSStatusView struct {
-	Running     bool
-	IPv4        string
-	IPv6        string
-	Records     int
-	Changed     int
-	Unchanged   int
-	LastSuccess string
-	NextAttempt string
-	Duration    string
-	LastError   string
+	Running         bool
+	IPv4            string
+	IPv6            string
+	Records         int
+	Changed         int
+	Unchanged       int
+	LastSuccess     string
+	NextAttempt     string
+	Duration        string
+	LastError       string
+	LastErrorDetail string
 }
 
 // SSOAppView describes the single sign-on card. Available is false on a
@@ -322,7 +323,19 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
 	<div id="dynamic-dns-status" hx-get="/ui/integrations/dynamic-dns/status" hx-trigger={ dynamicDNSStatusPoll(view.Status.Running) } hx-swap="outerHTML">
 		if view.Status.LastError != "" {
-			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last publication failed</strong><span>{ view.Status.LastError }</span></div></div>
+			<div class="unifi-status error">
+				@Icon("alert-triangle")
+				<div>
+					<strong>Last publication failed</strong>
+					<span>{ view.Status.LastError }</span>
+					if view.Status.LastErrorDetail != "" {
+						<details class="integration-error-details">
+							<summary>View provider details</summary>
+							<pre>{ view.Status.LastErrorDetail }</pre>
+						</details>
+					}
+				</div>
+			</div>
 		}
 		if view.Status.Running {
 			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Publishing dynamic DNS records"></div>

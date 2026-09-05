@@ -96,6 +96,24 @@ func TestDynamicDNSStatusPollingDoesNotReloadAfterEverySwap(t *testing.T) {
 	}
 }
 
+func TestDynamicDNSStatusPanelDisclosesProviderDetails(t *testing.T) {
+	t.Parallel()
+	html := render(t, DynamicDNSStatusPanel(DynamicDNSAppView{Status: DynamicDNSStatusView{
+		LastError:       "Cloudflare rejected the request: Invalid request headers (code 6003).",
+		LastErrorDetail: "{\n  \"code\": 6003\n}",
+	}}))
+	for _, expected := range []string{
+		"Cloudflare rejected the request",
+		"View provider details",
+		`<pre>{`,
+		`&#34;code&#34;: 6003`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("Dynamic DNS status panel does not contain %q", expected)
+		}
+	}
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var out strings.Builder
