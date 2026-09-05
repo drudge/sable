@@ -1029,7 +1029,7 @@ func CommandPalette(view DashboardView) templ.Component {
 			}
 		}
 		if view.CanSettings {
-			templ_7745c5c3_Err = CommandOption("command-page-integrations", "Integrations", "UniFi and single sign-on", "plug", "Page", "unifi sso oidc", "/integrations", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
