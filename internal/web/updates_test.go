@@ -107,6 +107,9 @@ func TestAboutPageOffersAnAvailableRelease(t *testing.T) {
 			t.Errorf("about page does not contain %q", expected)
 		}
 	}
+	if strings.Contains(body, `hx-post="/ui/updates/check"`) {
+		t.Error("about page offers a redundant release check while an update is available")
+	}
 }
 
 func TestAboutPageReportsAnUpToDateInstallation(t *testing.T) {

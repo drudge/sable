@@ -57,16 +57,19 @@ func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 	}
 }
 
-func TestAvailableUpdateKeepsReleaseChecksAndChannelOptions(t *testing.T) {
+func TestAvailableUpdateShowsOnlyTheInstallAction(t *testing.T) {
 	t.Parallel()
 	var body bytes.Buffer
 	view := UpdateView{Supported: true, CanCheck: true, CanApply: true, Available: true, Checked: true, LatestVersion: "1.0.0"}
 	if err := UpdatePanel(view).Render(context.Background(), &body); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{`hx-post="/ui/updates/install"`, `hx-post="/ui/updates/check"`, "Include pre-releases", "This node only", "Checking…", "data-update-check"} {
-		if !strings.Contains(body.String(), expected) {
-			t.Errorf("available update is missing %q", expected)
+	if !strings.Contains(body.String(), `hx-post="/ui/updates/install"`) {
+		t.Error("available update is missing its install action")
+	}
+	for _, redundant := range []string{`hx-post="/ui/updates/check"`, "Include pre-releases", "Check Again", "data-update-check"} {
+		if strings.Contains(body.String(), redundant) {
+			t.Errorf("available update still contains %q", redundant)
 		}
 	}
 }
