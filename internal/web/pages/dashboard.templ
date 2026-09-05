@@ -520,7 +520,7 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
 				}
 				if view.CanSettings {
-					@CommandOption("command-page-integrations", "Integrations", "UniFi and single sign-on", "plug", "Page", "unifi sso oidc", "/integrations", "", "", "", "")
+					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")
 				}
 				@CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "")
 				if view.CanLogs {

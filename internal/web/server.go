@@ -802,6 +802,17 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 				Keywords: "dns zone records " + current.Type, Route: "/zones/" + url.PathEscape(current.Name), Focus: "[data-record-search]",
 				SearchPrompt: "Search records in " + current.Name + "…",
 			})
+			if current.Revision > 0 {
+				historyCommandID := ""
+				if current.ID != "" {
+					historyCommandID = "command-entity-zone-history-" + current.ID
+				}
+				add(pages.CommandEntityView{
+					ID: historyCommandID, Label: "View history for " + current.Name, Description: "Review revisions and restore an earlier zone state", Icon: "clock", Kind: "Action",
+					Keywords: "dns zone history revisions changes change control rollback restore " + current.Type,
+					Route:    "/zones/" + url.PathEscape(current.Name), Dialog: "zone-history-dialog",
+				})
+			}
 		}
 	}
 
@@ -828,6 +839,30 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 
 	if !view.CanSettings {
 		return entities
+	}
+	dynamicDNSSettings := snapshot.Config.DynamicDNS
+	dynamicDNSPublishers := dynamicDNSSettings.ConfiguredPublishers()
+	if server.dynamicDNS != nil || len(dynamicDNSPublishers) > 0 {
+		keywords := []string{"dynamic dns", "ddns", "integration", "public address", "a aaaa"}
+		for _, publisher := range dynamicDNSPublishers {
+			keywords = append(keywords, publisher.Provider)
+			for _, record := range publisher.Records {
+				keywords = append(keywords, record.Zone, record.Name)
+			}
+		}
+		entity := pages.CommandEntityView{
+			ID: "command-entity-integration-dynamic-dns", Label: "View Dynamic DNS", Description: "Open public address publication status", Icon: "globe-lock", Kind: "Integration",
+			Keywords: strings.Join(keywords, " "), Route: "/integrations", Focus: "#dynamic-dns-card",
+		}
+		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+			entity.Label = "Set Up Dynamic DNS"
+			if len(dynamicDNSPublishers) > 0 {
+				entity.Label = "Edit Dynamic DNS Setup"
+			}
+			entity.Description = "Configure providers, public names, and address discovery"
+			entity.Href, entity.Route, entity.Focus = "/integrations?setup=dynamic-dns", "", ""
+		}
+		add(entity)
 	}
 	unifiSettings := snapshot.Config.UniFi
 	unifiConfigured := unifiSettings.ControllerURL != "" || len(unifiSettings.Networks) > 0

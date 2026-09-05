@@ -18,11 +18,15 @@ func TestCommandPaletteEntitiesRespectZoneGrantsAndIncludeIntegrations(t *testin
 	server := &Server{
 		securityEnabled: true,
 		zones: testZones{snapshot: zone.Snapshot{Zones: []zone.Zone{
-			{ID: "zone-allowed", Name: "penree.net", Type: "primary"},
-			{ID: "zone-hidden", Name: "secret.internal", Type: "secondary"},
+			{ID: "zone-allowed", Name: "penree.net", Type: "primary", Revision: 3},
+			{ID: "zone-hidden", Name: "secret.internal", Type: "secondary", Revision: 2},
 		}}},
 	}
 	configuration := config.Defaults()
+	configuration.DynamicDNS.Publishers = []config.DynamicDNSPublisher{{
+		Provider: "cloudflare",
+		Records:  []config.DynamicDNSRecord{{Zone: "penree.net", Name: "home", IPv4: true, TTL: 300}},
+	}}
 	configuration.UniFi.ControllerURL = "https://unifi.example.test"
 	configuration.UniFi.Site = "default"
 	configuration.UniFi.Networks = []config.UniFiNetwork{{ID: "network-1", Name: "Corporate LAN", Zone: "penree.net"}}
@@ -52,6 +56,12 @@ func TestCommandPaletteEntitiesRespectZoneGrantsAndIncludeIntegrations(t *testin
 	if entity, found := byLabel["Search in penree.net"]; !found || entity.Route != "/zones/penree.net" || entity.Focus != "[data-record-search]" || entity.SearchPrompt != "Search records in penree.net…" {
 		t.Fatalf("zone search entity = %+v, found=%v", entity, found)
 	}
+	if entity, found := byLabel["View history for penree.net"]; !found || entity.Route != "/zones/penree.net" || entity.Dialog != "zone-history-dialog" || entity.Kind != "Action" {
+		t.Fatalf("zone history entity = %+v, found=%v", entity, found)
+	}
+	if _, found := byLabel["View history for secret.internal"]; found {
+		t.Fatal("command palette exposed zone history outside the principal's resource grant")
+	}
 	if _, found := byLabel["Corporate LAN"]; found {
 		t.Fatal("command palette included an individual UniFi network")
 	}
@@ -60,6 +70,9 @@ func TestCommandPaletteEntitiesRespectZoneGrantsAndIncludeIntegrations(t *testin
 	}
 	if entity, found := byLabel["Edit SSO Setup"]; !found || entity.Href != "/integrations?setup=sso" {
 		t.Fatalf("SSO setup entity = %+v, found=%v", entity, found)
+	}
+	if entity, found := byLabel["Edit Dynamic DNS Setup"]; !found || entity.Href != "/integrations?setup=dynamic-dns" || entity.Kind != "Integration" {
+		t.Fatalf("Dynamic DNS setup entity = %+v, found=%v", entity, found)
 	}
 }
 
