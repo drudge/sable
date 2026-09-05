@@ -96,6 +96,11 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	}
 	waitForQueryLogEntry(t, first, client, ports.https, releaseSmokeCacheName)
 
+	// Close the release-smoke client's reusable TLS connections before stopping
+	// the server. This removes the transport/server connection-state race from
+	// the test's deliberately short shutdown window so the DNS cache snapshot
+	// below the web shutdown is still persisted.
+	client.CloseIdleConnections()
 	stopIntegrationNode(t, first)
 	upstream.stop(t)
 
