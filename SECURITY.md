@@ -6,7 +6,7 @@ disclosure.
 
 ## Supported versions
 
-Sable is currently pre-1.0. Security fixes are developed against `main` and
+Security fixes are developed against `main` and
 released in the newest available version.
 
 | Version | Security updates |
