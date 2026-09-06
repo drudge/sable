@@ -251,8 +251,8 @@ button { cursor: pointer; }
 .stats-scope-toggle button.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
 .stats-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; }
-/* Preserve text contrast on bright cards, including detail text and updates. */
-.stat-card { position: relative; display: flex; min-width: 0; min-height: 6rem; overflow: hidden; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: #0b1220; text-align: left; }
+/* Preserve the white-text hierarchy with backgrounds that also support translucent details. */
+.stat-card { position: relative; display: flex; min-width: 0; min-height: 6rem; overflow: hidden; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: white; text-align: left; }
 .stat-card-link { cursor: pointer; transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
 .stat-card-link::before { position: absolute; right: .85rem; bottom: .6rem; color: currentColor; content: "→"; font-size: 1rem; font-weight: 700; opacity: 0; pointer-events: none; transform: translateX(-.3rem); transition: opacity 160ms ease, transform 160ms ease; }
 .stat-card-link > div { padding-right: 1.25rem; }
@@ -269,22 +269,22 @@ button { cursor: pointer; }
   100% { transform: translateY(0); }
 }
 .stat-card strong { overflow: hidden; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.stat-card > span { height: 1rem; margin-top: 0.125rem; font-size: 0.6875rem; }
-.stat-card > div { margin-top: 0.375rem; font-size: 0.75rem; font-weight: 600; }
-.stat-card.blue { background: #3b82f6; }
-.stat-card.green { background: #22c55e; }
-.stat-card.red { background: #f87171; }
-.stat-card.slate { background: #4b5563; color: white; }
-.stat-card.orange { background: #f97316; }
-.stat-card.cyan { background: #06b6d4; }
-.stat-card.emerald { background: #4ade80; }
-.stat-card.yellow { background: #eab308; }
-.stat-card.rose { background: #ef4444; }
-.stat-card.pink { background: #df4778; }
-.stat-card.purple { background: #a855f7; }
-.stat-card.sky { background: #60a5fa; }
-.stat-card.teal { background: #14b8a6; }
-.stat-card.amber { background: #eab308; }
+.stat-card > span { height: 1rem; margin-top: 0.125rem; font-size: 0.6875rem; opacity: 0.75; }
+.stat-card > div { margin-top: 0.375rem; font-size: 0.75rem; font-weight: 600; opacity: 0.9; }
+.stat-card.blue { background: #2859a8; }
+.stat-card.green { background: #126832; }
+.stat-card.red { background: #914242; }
+.stat-card.slate { background: #565c67; }
+.stat-card.orange { background: #92430d; }
+.stat-card.cyan { background: #036373; }
+.stat-card.emerald { background: #22673b; }
+.stat-card.yellow { background: #725704; }
+.stat-card.rose { background: #a22e2e; }
+.stat-card.pink { background: #9c3254; }
+.stat-card.purple { background: #773caf; }
+.stat-card.sky { background: #365d8d; }
+.stat-card.teal { background: #0b665c; }
+.stat-card.amber { background: #725704; }
 
 .card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--card-foreground); }
 .card-header, .panel-header { display: flex; min-height: 4.25rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem; }
