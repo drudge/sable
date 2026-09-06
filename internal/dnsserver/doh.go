@@ -48,6 +48,7 @@ func (handler *dohHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		return
 	}
 	writer.Header().Set("Content-Type", dohContentType)
+	// DNS answers depend on the source client; shared HTTP caches must not reuse them.
 	writer.Header().Set("Cache-Control", response.httpCacheControl())
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.WriteHeader(http.StatusOK)
@@ -147,7 +148,7 @@ func (writer *dohResponseWriter) pack() ([]byte, error) {
 func (writer *dohResponseWriter) httpCacheControl() string {
 	if writer.message != nil {
 		if ttl, cacheable := responseTTL(writer.message); cacheable {
-			return "public, max-age=" + strconv.FormatUint(uint64(ttl), 10)
+			return "private, max-age=" + strconv.FormatUint(uint64(ttl), 10)
 		}
 	}
 	return "no-store"

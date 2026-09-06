@@ -185,6 +185,8 @@ driver = "sqlite"
 dsn = %q
 
 [resolver]
+# Recursion is restricted even when DNS listeners bind all interfaces.
+recursion = "private"
 mode = "forward"
 forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
 
