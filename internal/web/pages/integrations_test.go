@@ -60,6 +60,37 @@ func TestIntegrationRemoveButtonsAreMarkedPrimaryOnly(t *testing.T) {
 	}
 }
 
+func TestSSOCardActionsMatchIntegrationOrderAndEmphasis(t *testing.T) {
+	t.Parallel()
+	enabled := render(t, SSOCard(SSOAppView{Configured: true, Enabled: true}))
+	previous := -1
+	for _, label := range []string{"Edit Setup", "Pause", "Test Connection"} {
+		position := strings.Index(enabled, ">"+label+"</span>")
+		if position <= previous {
+			t.Fatalf("enabled SSO action %q is missing or out of order", label)
+		}
+		previous = position
+	}
+	if strings.Contains(enabled, ">Disable</span>") {
+		t.Error("enabled SSO card still labels its reversible toggle Disable")
+	}
+	check := enabled[strings.Index(enabled, `hx-post="/ui/integrations/sso/check"`):]
+	button := openingTags(check, "<button ", "")[0]
+	if !strings.Contains(button, `class="button"`) || strings.Contains(button, "outline") {
+		t.Errorf("enabled SSO Test Connection is not the primary button: %s", button)
+	}
+
+	paused := render(t, SSOCard(SSOAppView{Configured: true}))
+	check = paused[strings.Index(paused, `hx-post="/ui/integrations/sso/check"`):]
+	button = openingTags(check, "<button ", "")[0]
+	if !strings.Contains(paused, ">Resume</span>") {
+		t.Error("paused SSO card does not offer Resume")
+	}
+	if !strings.Contains(button, `class="button"`) || strings.Contains(button, "outline") {
+		t.Errorf("paused SSO Test Connection is not the primary button: %s", button)
+	}
+}
+
 func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 	tests := []struct {
 		name     string

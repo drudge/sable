@@ -556,19 +556,22 @@ templ SSOCard(view SSOAppView) {
 				<div class="integration-card-actions">
 					<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
 					<div class="integration-card-actions-primary">
-						<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
-							<button class="button outline" type="submit">@Icon("refresh")<span>Test Connection</span></button>
-						</form>
 						<a class="button outline" href="/integrations?setup=sso" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
 						if view.Enabled {
 							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 								<input type="hidden" name="enabled" value="false"/>
-								<button class="button outline" type="submit">@Icon("pause")<span>Disable</span></button>
+								<button class="button outline" type="submit">@Icon("pause")<span>Pause</span></button>
+							</form>
+							<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
+								<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
 							</form>
 						} else {
 							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 								<input type="hidden" name="enabled" value="true"/>
-								<button class="button" type="submit">@Icon("play")<span>Enable</span></button>
+								<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
+							</form>
+							<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
+								<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
 							</form>
 						}
 					</div>
