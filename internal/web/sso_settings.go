@@ -87,6 +87,7 @@ func (server *Server) ssoView(request *http.Request, check *SSOStatusView) pages
 	}
 	view := pages.SSOAppView{
 		Available:    true,
+		CanManage:    server.canManageSSO(request),
 		Configured:   status.Configured,
 		Enabled:      status.Enabled,
 		Label:        status.Label,
@@ -110,6 +111,11 @@ func (server *Server) ssoView(request *http.Request, check *SSOStatusView) pages
 	}
 	server.fillSSOAccountCounts(request, &view)
 	return view
+}
+
+func (server *Server) canManageSSO(request *http.Request) bool {
+	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	return !server.securityEnabled || auth.HasPermission(principal, auth.PermissionUsersWrite)
 }
 
 // fillSSOAccountCounts adds the linked-account totals the card shows. A

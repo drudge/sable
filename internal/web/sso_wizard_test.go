@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
@@ -91,6 +92,7 @@ func postWizard(t *testing.T, server *Server, form url.Values) *httptest.Respons
 	request := httptest.NewRequest(http.MethodPost, "http://dns.example.test/ui/integrations/sso/wizard",
 		strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request = request.WithContext(context.WithValue(request.Context(), principalContextKey{}, auth.Principal{Permissions: []string{auth.PermissionAll}}))
 	response := httptest.NewRecorder()
 	server.runSSOWizard(response, request)
 	return response

@@ -70,6 +70,9 @@ func requiredPermission(request *http.Request) string {
 	path := request.URL.Path
 	write := !safeMethod(request.Method)
 	switch {
+	case strings.HasPrefix(path, "/ui/integrations/sso/"):
+		// Changing the identity provider can delegate every permission on the node.
+		return auth.PermissionUsersWrite
 	case path == "/settings" || path == "/cache" || path == "/integrations" ||
 		strings.HasPrefix(path, "/ui/settings") || strings.HasPrefix(path, "/ui/integrations/") ||
 		strings.HasPrefix(path, "/ui/certificates/") ||
