@@ -45,9 +45,46 @@ type testProvider struct {
 	err     error
 }
 
+type testStateStore struct {
+	state PersistentState
+	saves int
+}
+
+func (store *testStateStore) LoadDynamicDNSState(context.Context) (PersistentState, error) {
+	return store.state, nil
+}
+
+func (store *testStateStore) SaveDynamicDNSState(_ context.Context, state PersistentState) error {
+	store.state = state
+	store.saves++
+	return nil
+}
+
 func (provider *testProvider) EnsureRecord(_ context.Context, record dnsprovider.Record) (bool, error) {
 	provider.records = append(provider.records, record)
 	return provider.changed, provider.err
+}
+
+func TestPublicationHistorySurvivesManagerRestart(t *testing.T) {
+	ctx := context.Background()
+	durable := &testStateStore{}
+	manager := newTestManager(testDynamicDNSSettings(), &testProvider{changed: true})
+	manager.state = durable
+	manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+		return netip.MustParseAddr("8.8.8.8"), nil
+	}
+	manager.runOnce(ctx)
+	if durable.saves != 1 || durable.state.LastPublished.IsZero() {
+		t.Fatalf("saved state = %+v after %d saves", durable.state, durable.saves)
+	}
+
+	restarted := newTestManager(testDynamicDNSSettings(), &testProvider{})
+	restarted.state = durable
+	restarted.restoreStatus(ctx)
+	status := restarted.Status(ctx)
+	if status.IPv4 != "8.8.8.8" || status.LastSuccess != durable.state.LastSuccess || status.LastPublished != durable.state.LastPublished {
+		t.Fatalf("restored status = %+v, want %+v", status, durable.state)
+	}
 }
 
 func TestReconcileDiscoversEachFamilyOnceAndPublishesEveryRecord(t *testing.T) {
