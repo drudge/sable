@@ -2745,6 +2745,18 @@
 	  const mobile = window.matchMedia("(max-width: 767px)").matches;
 	  const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
 	  const mobileOpen = document.documentElement.classList.contains("sidebar-mobile-open");
+	  const sidebar = document.getElementById("app-sidebar");
+	  const main = document.getElementById("main-content");
+	  const mobileToggle = document.querySelector("[data-mobile-header] [data-sidebar-toggle]");
+	  // Offscreen navigation must leave the tab order and accessibility tree.
+	  // Keep this in the shared sync path so initial load and resizing agree.
+	  const returnToPage = mobile && !mobileOpen && sidebar?.contains(document.activeElement);
+	  if (main) main.inert = mobile && mobileOpen;
+	  if (sidebar) sidebar.inert = mobile && !mobileOpen;
+	  if (returnToPage) mobileToggle?.focus();
+	  if (!mobile && document.activeElement === mobileToggle) {
+	    document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
+	  }
 	  document.querySelectorAll(".sidebar-collapse, .sidebar-rail").forEach((button) => {
 		const label = mobile ? (mobileOpen ? "Close navigation" : "Open navigation") : (collapsed ? "Expand sidebar" : "Collapse sidebar");
 		button.setAttribute("aria-label", label);
@@ -2761,8 +2773,6 @@
       button.addEventListener("click", () => {
         if (window.matchMedia("(max-width: 767px)").matches) {
 		  const opening = document.documentElement.classList.toggle("sidebar-mobile-open");
-		  const main = document.getElementById("main-content");
-		  if (main) main.inert = opening;
 		  syncSidebarToggleState();
 		  if (opening) document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
           return;
@@ -2777,8 +2787,6 @@
     document.querySelectorAll(".sidebar a").forEach((link) => {
       link.addEventListener("click", () => {
         document.documentElement.classList.remove("sidebar-mobile-open");
-		const main = document.getElementById("main-content");
-		if (main) main.inert = false;
 		syncSidebarToggleState();
       });
     });
@@ -2791,8 +2799,6 @@
 	  if (event.key === "Escape") {
 		event.preventDefault();
 		document.documentElement.classList.remove("sidebar-mobile-open");
-		const main = document.getElementById("main-content");
-		if (main) main.inert = false;
 		syncSidebarToggleState();
 		document.querySelector("[data-mobile-header] [data-sidebar-toggle]")?.focus();
 		return;
@@ -2806,8 +2812,6 @@
 	window.addEventListener("resize", () => {
 	  if (window.matchMedia("(max-width: 767px)").matches) { syncSidebarToggleState(); return; }
 	  document.documentElement.classList.remove("sidebar-mobile-open");
-	  const main = document.getElementById("main-content");
-	  if (main) main.inert = false;
 	  syncSidebarToggleState();
 	});
 
