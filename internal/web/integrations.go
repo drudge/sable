@@ -43,6 +43,10 @@ func (server *Server) integrationsPage(writer http.ResponseWriter, request *http
 		view.UniFi.Wizard = server.newUniFiWizard(request)
 	}
 	if request.URL.Query().Get("setup") == "sso" && server.ssoAdmin != nil {
+		if !server.canManageSSO(request) {
+			server.authenticationFailure(writer, request, http.StatusForbidden, "")
+			return
+		}
 		view.SSO.Wizard = server.newSSOWizard(request)
 	}
 	if err := pages.IntegrationsPage(view).Render(request.Context(), writer); err != nil {

@@ -64,6 +64,7 @@ type DynamicDNSStatusView struct {
 // deployment with authentication switched off, where the card would offer
 // something that cannot work.
 type SSOAppView struct {
+	CanManage    bool
 	Available    bool
 	Configured   bool
 	Enabled      bool
@@ -276,10 +277,10 @@ templ IntegrationsContent(view IntegrationsPageView) {
 		if view.UniFi.Wizard.Open {
 			@UniFiWizardDialog(view.UniFi)
 		}
-		if view.SSO.Available && view.SSO.Configured {
+		if view.SSO.Available && view.SSO.Configured && view.SSO.CanManage {
 			@RemoveSSODialog(view.SSO)
 		}
-		if view.SSO.Wizard.Open {
+		if view.SSO.Wizard.Open && view.SSO.CanManage {
 			@SSOWizardDialog(view.SSO.Wizard)
 		}
 	</div>
@@ -532,7 +533,9 @@ templ SSOCard(view SSOAppView) {
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p>
-				<a class="button" href="/integrations?setup=sso" data-replica-primary-action>@Icon("plus")<span>Set Up Single Sign-On</span></a>
+				if view.CanManage {
+					<a class="button" href="/integrations?setup=sso" data-replica-primary-action>@Icon("plus")<span>Set Up Single Sign-On</span></a>
+				}
 			</div>
 		} else {
 			<div class="integration-card-body">
@@ -553,29 +556,31 @@ templ SSOCard(view SSOAppView) {
 					<div><span class="integration-fact-label">Last sign-in</span><span class="integration-fact-value">{ ssoLastSignIn(view) }</span></div>
 				</div>
 				@SSOMappingTable(view)
-				<div class="integration-card-actions">
-					<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
-					<div class="integration-card-actions-primary">
-						<a class="button outline" href="/integrations?setup=sso" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
-						if view.Enabled {
-							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
-								<input type="hidden" name="enabled" value="false"/>
-								<button class="button outline" type="submit">@Icon("pause")<span>Pause</span></button>
-							</form>
-							<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
-								<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
-							</form>
-						} else {
-							<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
-								<input type="hidden" name="enabled" value="true"/>
-								<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
-							</form>
-							<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
-								<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
-							</form>
-						}
+				if view.CanManage {
+					<div class="integration-card-actions">
+						<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+						<div class="integration-card-actions-primary">
+							<a class="button outline" href="/integrations?setup=sso" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
+							if view.Enabled {
+								<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+									<input type="hidden" name="enabled" value="false"/>
+									<button class="button outline" type="submit">@Icon("pause")<span>Pause</span></button>
+								</form>
+								<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
+									<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
+								</form>
+							} else {
+								<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
+									<input type="hidden" name="enabled" value="true"/>
+									<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
+								</form>
+								<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
+									<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
+								</form>
+							}
+						</div>
 					</div>
-				</div>
+				}
 			</div>
 		}
 	</section>

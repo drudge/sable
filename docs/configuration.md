@@ -801,6 +801,11 @@ the API-token panel in the console.
 
 ## Single sign-on
 
+Configuring, testing, pausing, or removing the identity provider requires
+`users.write`, because the provider can grant administrative roles.
+`settings.read` allows viewing its status; `settings.write` alone does not
+allow changing the sign-in trust or role mappings.
+
 Sable can hand the console's sign-in over to an OpenID Connect provider, so
 people use the account they already have and losing access at the provider
 means losing access here. Group membership at the provider decides which Sable
