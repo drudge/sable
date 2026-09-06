@@ -187,14 +187,14 @@ func TestStyledSelectOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := string(manifest["app.css"].content)
-	for _, expected := range []string{".styled-select-trigger", ".styled-select-popover", `.styled-select[data-side="top"]`, ".styled-select-option.placeholder", "background: var(--popover)"} {
+	for _, expected := range []string{".styled-select-trigger", ".styled-select-popover", `.styled-select[data-side="top"]`, ".styled-select-option.placeholder", "background: var(--popover)", "position: fixed", "inset: auto", "margin: 0"} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain styled select rule %q", expected)
 		}
 	}
 
 	script := string(manifest["app.js"].content)
-	for _, expected := range []string{"setupStyledSelect", `option.hasAttribute("data-placeholder")`, "MutationObserver", `role", "combobox`, `role", "listbox`, `event.key === "ArrowDown"`, `event.key === "Escape"`} {
+	for _, expected := range []string{"setupStyledSelect", "positionFloatingPopover", `popover.setAttribute("popover", "manual")`, "popover.showPopover()", `document.addEventListener("scroll", repositionPopover, true)`, `option.hasAttribute("data-placeholder")`, "MutationObserver", `role", "combobox`, `role", "listbox`, `event.key === "ArrowDown"`, `event.key === "Escape"`} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain styled select behavior %q", expected)
 		}

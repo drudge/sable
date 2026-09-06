@@ -305,6 +305,33 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, window.innerHeight * .45);
 	  root.dataset.side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	};
+	const positionFloatingPopover = (root, trigger, popover) => {
+	  const triggerRect = trigger.getBoundingClientRect();
+	  const viewport = window.visualViewport;
+	  const viewportTop = viewport?.offsetTop || 0;
+	  const viewportLeft = viewport?.offsetLeft || 0;
+	  const viewportWidth = viewport?.width || document.documentElement.clientWidth;
+	  const viewportHeight = viewport?.height || window.innerHeight;
+	  const viewportRight = viewportLeft + viewportWidth;
+	  const viewportBottom = viewportTop + viewportHeight;
+	  const inset = 8;
+	  const gap = 6;
+	  const availableBelow = viewportBottom - inset - triggerRect.bottom - gap;
+	  const availableAbove = triggerRect.top - viewportTop - inset - gap;
+	  const preferredHeight = Math.min(popover.scrollHeight, viewportHeight * .45, 288);
+	  const side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
+	  const availableHeight = side === "top" ? availableAbove : availableBelow;
+	  const width = Math.min(triggerRect.width, viewportWidth - inset * 2);
+
+	  root.dataset.side = side;
+	  popover.style.width = `${Math.max(0, width)}px`;
+	  popover.style.maxHeight = `${Math.max(0, Math.min(preferredHeight, availableHeight))}px`;
+	  const height = popover.getBoundingClientRect().height;
+	  const left = Math.min(Math.max(triggerRect.left, viewportLeft + inset), viewportRight - inset - width);
+	  const top = side === "top" ? triggerRect.top - gap - height : triggerRect.bottom + gap;
+	  popover.style.left = `${left}px`;
+	  popover.style.top = `${top}px`;
+	};
 
 	let styledSelectSequence = 0;
 	const setupStyledSelect = (select) => {
@@ -343,6 +370,7 @@
 	  const popover = document.createElement("div");
 	  popover.id = listID;
 	  popover.className = "styled-select-popover";
+	  popover.setAttribute("popover", "manual");
 	  popover.setAttribute("role", "listbox");
 	  popover.hidden = true;
 	  root.append(trigger, popover);
@@ -361,10 +389,21 @@
 		return button;
 	  });
 
+	  const repositionPopover = () => {
+		if (!popover.hidden) positionFloatingPopover(root, trigger, popover);
+	  };
+	  const stopPositioning = () => {
+		document.removeEventListener("scroll", repositionPopover, true);
+		window.removeEventListener("resize", repositionPopover);
+		window.visualViewport?.removeEventListener("resize", repositionPopover);
+		window.visualViewport?.removeEventListener("scroll", repositionPopover);
+	  };
 	  const closePopover = ({restoreFocus = false} = {}) => {
+		if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
 		popover.hidden = true;
 		trigger.setAttribute("aria-expanded", "false");
 		root.removeAttribute("data-open");
+		stopPositioning();
 		if (restoreFocus) trigger.focus();
 	  };
 	  root.sableClosePopover = closePopover;
@@ -380,9 +419,14 @@
 		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
 		});
 		popover.hidden = false;
+		if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
 		trigger.setAttribute("aria-expanded", "true");
 		root.dataset.open = "true";
-		positionAnchoredPopover(root, trigger, popover);
+		positionFloatingPopover(root, trigger, popover);
+		document.addEventListener("scroll", repositionPopover, true);
+		window.addEventListener("resize", repositionPopover);
+		window.visualViewport?.addEventListener("resize", repositionPopover);
+		window.visualViewport?.addEventListener("scroll", repositionPopover);
 		const available = optionButtons.filter((button) => !button.disabled);
 		focusOption(selectedButton() || available[direction < 0 ? available.length - 1 : 0]);
 	  };
@@ -447,6 +491,7 @@
 	  document.addEventListener("pointerdown", (event) => {
 		if (!popover.hidden && !root.contains(event.target)) closePopover();
 	  });
+	  select.closest("dialog")?.addEventListener("close", () => closePopover());
 	  new MutationObserver(syncAvailability).observe(select, {
 		attributes: true,
 		subtree: true,

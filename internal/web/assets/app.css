@@ -816,12 +816,12 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .styled-select-chevron { width: .55rem; height: .55rem; flex: 0 0 .55rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: .65; transform: translateY(-.15rem) rotate(45deg); transition: transform 120ms ease; }
 .styled-select[data-open="true"] .styled-select-chevron { transform: translateY(.15rem) rotate(225deg); }
 .styled-select-popover {
-  position: absolute;
-  top: calc(100% + .35rem);
-  left: 0;
-  z-index: 80;
+  position: fixed;
+  inset: auto;
+  z-index: 100;
   display: grid;
-  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
   max-height: min(18rem, 45vh);
   overflow-x: hidden;
   overflow-y: auto;
@@ -834,7 +834,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   transform-origin: top left;
   animation: resolver-popover-in 120ms ease-out;
 }
-.styled-select[data-side="top"] .styled-select-popover { top: auto; bottom: calc(100% + .35rem); transform-origin: bottom left; }
+.styled-select[data-side="top"] .styled-select-popover { transform-origin: bottom left; }
 .styled-select-option { display: flex; width: 100%; min-height: 2.35rem; align-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: .45rem .65rem; color: inherit; font-size: .875rem; font-weight: 400; text-align: left; }
 .styled-select-option.placeholder { color: var(--muted-foreground); }
 .styled-select-option:hover, .styled-select-option:focus-visible { background: var(--accent); color: var(--accent-foreground); outline: 0; }
