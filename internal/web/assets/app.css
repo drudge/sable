@@ -4,26 +4,18 @@
   font-synthesis: none;
   --radius: 0.625rem;
   /* One palette keeps metric cards, chart lines, legends, and hover markers aligned. */
-  --metric-total: #0d68fd;
-  --metric-no-error: #018432;
-  --metric-server-failure: #e3024b;
-  --metric-nx-domain: #6b7280;
-  --metric-refused: #017d92;
-  --metric-authoritative: #026cee;
-  --metric-recursive: #9d38fd;
-  --metric-cached: #906d01;
-  --metric-blocked: #c05002;
-  --metric-dropped: #e60202;
-  --metric-clients: #594bf1;
-  --metric-cache-rate: #018173;
-  --chart-total: var(--metric-total);
-  --chart-no-error: var(--metric-no-error);
-  --chart-server-failure: var(--metric-server-failure);
-  --chart-nx-domain: var(--metric-nx-domain);
-  --chart-refused: var(--metric-refused);
-  --chart-recursive: var(--metric-recursive);
-  --chart-cached: var(--metric-cached);
-  --chart-blocked: var(--metric-blocked);
+  --metric-total: #3b82f6;
+  --metric-no-error: #22c55e;
+  --metric-server-failure: #fb3d9c;
+  --metric-nx-domain: #94a3b8;
+  --metric-refused: #06b6d4;
+  --metric-authoritative: #38bdf8;
+  --metric-recursive: #a855f7;
+  --metric-cached: #facc15;
+  --metric-blocked: #f97316;
+  --metric-dropped: #ef4444;
+  --metric-clients: #6366f1;
+  --metric-cache-rate: #14b8a6;
   --status-card-title-size: 1.25rem;
   --status-card-title-icon-size: 1rem;
   --background: oklch(1 0 0);
@@ -52,15 +44,6 @@
 }
 
 .dark {
-  /* Bright chart strokes keep the same category hues visible on dark canvas. */
-  --chart-total: #3b82f6;
-  --chart-no-error: #22c55e;
-  --chart-server-failure: #fb3d9c;
-  --chart-nx-domain: #a5a5a5;
-  --chart-refused: #06b6d4;
-  --chart-recursive: #a855f7;
-  --chart-cached: #facc15;
-  --chart-blocked: #f97316;
   color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -281,8 +264,10 @@ button { cursor: pointer; }
 .stats-scope-toggle button.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
 .stats-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; }
-/* Solid white labels allow brighter, saturated backgrounds without sacrificing contrast. */
-.stat-card { position: relative; display: flex; min-width: 0; min-height: 6rem; overflow: hidden; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: white; text-align: left; }
+/* A one-pixel dark halo keeps white glyphs readable on the bright shared palette
+   without changing card/series colors (WCAG technique G18). */
+.stat-card { position: relative; display: flex; min-width: 0; min-height: 6rem; overflow: hidden; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: white; text-align: left;
+  text-shadow: -1px -1px 0 #1f2937, 0 -1px 0 #1f2937, 1px -1px 0 #1f2937, -1px 0 0 #1f2937, 1px 0 0 #1f2937, -1px 1px 0 #1f2937, 0 1px 0 #1f2937, 1px 1px 0 #1f2937; }
 .stat-card-link { cursor: pointer; transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
 .stat-card-link::before { position: absolute; right: .85rem; bottom: .6rem; color: currentColor; content: "→"; font-size: 1rem; font-weight: 700; opacity: 0; pointer-events: none; transform: translateX(-.3rem); transition: opacity 160ms ease, transform 160ms ease; }
 .stat-card-link > div { padding-right: 1.25rem; }
@@ -336,15 +321,15 @@ button { cursor: pointer; }
 .chart-plot { position: relative; height: 100%; }
 .chart-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart-lines line { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; }
-.chart-series { fill: none; stroke-width: 2.25; vector-effect: non-scaling-stroke; }
-.chart-series.total { stroke: var(--chart-total); }
-.chart-series.success { stroke: var(--chart-no-error); }
-.chart-series.blocked { stroke: var(--chart-blocked); }
-.chart-series.cache { stroke: var(--chart-cached); }
-.chart-series.server-failure { stroke: var(--chart-server-failure); }
-.chart-series.nx-domain { stroke: var(--chart-nx-domain); }
-.chart-series.refused { stroke: var(--chart-refused); }
-.chart-series.recursive { stroke: var(--chart-recursive); stroke-width: 1.35; stroke-dasharray: 6 5; }
+.chart-series { fill: none; stroke-width: 2.25; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 .65px #1f2937); }
+.chart-series.total { stroke: var(--metric-total); }
+.chart-series.success { stroke: var(--metric-no-error); }
+.chart-series.blocked { stroke: var(--metric-blocked); }
+.chart-series.cache { stroke: var(--metric-cached); }
+.chart-series.server-failure { stroke: var(--metric-server-failure); }
+.chart-series.nx-domain { stroke: var(--metric-nx-domain); }
+.chart-series.refused { stroke: var(--metric-refused); }
+.chart-series.recursive { stroke: var(--metric-recursive); stroke-width: 1.35; stroke-dasharray: 6 5; }
 .chart-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted-foreground); font-size: 0.875rem; pointer-events: none; }
 .chart-axis { position: absolute; right: 1.5rem; bottom: 0; left: 1.5rem; display: flex; justify-content: space-between; color: var(--muted-foreground); font-size: 0.6875rem; pointer-events: none; }
 /* Y labels live in HTML, not the SVG: the plot stretches with
@@ -412,15 +397,15 @@ button { cursor: pointer; }
 .range-apply { width: 100%; height: 2rem; min-height: 2rem; }
 .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; padding: 0.75rem 1.5rem 1.25rem; color: var(--muted-foreground); font-size: 0.75rem; }
 .chart-legend span::before { display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.35rem; border-radius: 50%; content: ""; }
-.chart-legend .blue::before { background: var(--chart-total); }
-.chart-legend .green::before { background: var(--chart-no-error); }
-.chart-legend .orange::before { background: var(--chart-blocked); }
+.chart-legend .blue::before { background: var(--metric-total); }
+.chart-legend .green::before { background: var(--metric-no-error); }
+.chart-legend .orange::before { background: var(--metric-blocked); }
 .chart-legend .purple::before { background: var(--metric-clients); }
-.chart-legend .pink::before { background: var(--chart-server-failure); }
-.chart-legend .gray::before { background: var(--chart-nx-domain); }
-.chart-legend .teal::before { background: var(--chart-refused); }
-.chart-legend .lime::before { background: var(--chart-recursive); }
-.chart-legend .yellow::before { background: var(--chart-cached); }
+.chart-legend .pink::before { background: var(--metric-server-failure); }
+.chart-legend .gray::before { background: var(--metric-nx-domain); }
+.chart-legend .teal::before { background: var(--metric-refused); }
+.chart-legend .lime::before { background: var(--metric-recursive); }
+.chart-legend .yellow::before { background: var(--metric-cached); }
 
 .isotope-dashboard { gap: 1rem; }
 .dashboard-insights { display: grid; gap: 1rem; }
