@@ -70,6 +70,7 @@ CREATE INDEX IF NOT EXISTS sable_zone_records_lookup_idx
 ON sable_zone_records (zone_name, owner_name, record_type)`, `
 CREATE TABLE IF NOT EXISTS sable_zone_revisions (
     zone_name TEXT NOT NULL,
+    zone_id TEXT NOT NULL DEFAULT '',
     revision BIGINT NOT NULL,
     change_kind TEXT NOT NULL,
     snapshot_json TEXT NOT NULL,
@@ -667,8 +668,8 @@ func (store *Store) appendZoneRevision(ctx context.Context, transaction *sql.Tx,
 		return fmt.Errorf("encode revision for zone %q: %w", current.Name, err)
 	}
 	if _, err := transaction.ExecContext(ctx, `
-INSERT INTO sable_zone_revisions (zone_name, revision, change_kind, snapshot_json, created_at)
-VALUES (`+store.placeholders(5)+`)`, current.Name, revision, changeKind, string(snapshot), now); err != nil {
+INSERT INTO sable_zone_revisions (zone_name, zone_id, revision, change_kind, snapshot_json, created_at)
+VALUES (`+store.placeholders(6)+`)`, current.Name, current.ID, revision, changeKind, string(snapshot), now); err != nil {
 		return fmt.Errorf("append revision for zone %q: %w", current.Name, err)
 	}
 	return nil
@@ -679,7 +680,7 @@ func (store *Store) ListZoneRevisions(ctx context.Context, zoneName string, limi
 		return []zone.Revision{}, nil
 	}
 	rows, err := store.database.QueryContext(ctx, `
-SELECT zone_name, revision, change_kind, created_at
+SELECT zone_name, zone_id, revision, change_kind, created_at
 FROM sable_zone_revisions
 WHERE zone_name = `+store.placeholder(1)+`
 ORDER BY revision DESC
@@ -693,7 +694,7 @@ LIMIT `+store.placeholder(2), zoneName, limit)
 	for rows.Next() {
 		var revision zone.Revision
 		var number int64
-		if err := rows.Scan(&revision.ZoneName, &number, &revision.ChangeKind, &revision.CreatedAt); err != nil {
+		if err := rows.Scan(&revision.ZoneName, &revision.ZoneID, &number, &revision.ChangeKind, &revision.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan revision for zone %q: %w", zoneName, err)
 		}
 		revision.Number = uint64(number)
@@ -737,6 +738,7 @@ func (store *Store) loadZoneRevision(ctx context.Context, query, zoneName string
 	if err := json.Unmarshal([]byte(snapshot), &result.Zone); err != nil {
 		return zone.Revision{}, fmt.Errorf("decode revision %d for zone %q: %w", revision, zoneName, err)
 	}
+	result.ZoneID = result.Zone.ID
 	result.Number = uint64(number)
 	return result, nil
 }
