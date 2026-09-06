@@ -192,3 +192,25 @@ func TestResponsiveZoneActionsKeepAccessibleNames(t *testing.T) {
 		t.Error("secondary zone detail action loses its accessible name when its visible label is hidden")
 	}
 }
+
+func TestMetricLinksExposeVisibleValuesAsTheirAccessibleName(t *testing.T) {
+	t.Parallel()
+	for _, values := range [][2]string{{"12,345", "75.0%"}, {"42", "0.3%"}, {"0", ""}} {
+		card := renderComponent(t, StatCard("Cached", values[0], values[1], "yellow", "/logs?source=cache"))
+		links := openingTags(card, "<a ", "")
+		if len(links) != 1 {
+			t.Fatalf("metric link missing: %s", card)
+		}
+		if strings.Contains(links[0], "aria-label=") || strings.Contains(links[0], "aria-labelledby=") {
+			t.Fatalf("link name overrides current metric contents: %s", links[0])
+		}
+		for _, text := range []string{values[0], values[1], "Cached"} {
+			if text != "" && !strings.Contains(card, ">"+text+"<") {
+				t.Fatalf("metric name content %q missing: %s", text, card)
+			}
+		}
+		if !strings.Contains(links[0], `aria-description="View matching queries in query logs"`) {
+			t.Fatalf("metric destination description missing: %s", links[0])
+		}
+	}
+}

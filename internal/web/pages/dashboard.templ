@@ -1294,7 +1294,7 @@ func statsQueryLogURL(view StatsOverviewView, source string, responseCode string
 
 templ StatCard(label string, value string, subValue string, color string, href string) {
 	if href != "" {
-		<a class={ "stat-card stat-card-link " + color } href={ templ.SafeURL(href) } data-stat-label={ label } aria-label={ "View " + label + " in query logs" }>
+		<a class={ "stat-card stat-card-link " + color } href={ templ.SafeURL(href) } data-stat-label={ label } aria-description="View matching queries in query logs">
 			<strong data-stat-number="value">{ value }</strong>
 			<span data-stat-number="detail">{ subValue }</span>
 			<div>{ label }</div>
