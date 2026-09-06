@@ -27,38 +27,40 @@ import (
 const fallbackErrorCode = dns.RcodeServerFailure
 
 type Runtime struct {
-	recursion           clientaccess.Policy
-	mode                string
-	forwarders          []string
-	rootHints           []string
-	delegations         *delegationCache
-	nameServers         *addressCache
-	baseRoutes          []ForwardingRoute
-	routes              map[string][]string
-	upstreams           string
-	timeout             time.Duration
-	retries             int
-	retryTimeout        time.Duration
-	staleMaxWait        time.Duration
-	blocked             map[string]struct{}
-	allowedExact        map[string]struct{}
-	allowedWildcard     map[string]struct{}
-	blocking            bool
-	blockType           string
-	blockTTL            uint32
-	blockAddrs          []netip.Addr
-	bypass              []netip.Prefix
-	blockTXT            bool
-	cache               *ResponseCache
-	blockLists          []BlockListStats
-	hosts               map[string]localHostRecords
-	zones               map[string]*authoritativeZone
-	managedZones        map[string]managedZone
-	tsigKeys            map[string]tsigKey
-	zoneCount           int
-	dnssec              *dnssecValidator
-	zoneInsecure        []string
-	managedTrustAnchors bool
+	maxConcurrent          int
+	maxConcurrentPerClient int
+	recursion              clientaccess.Policy
+	mode                   string
+	forwarders             []string
+	rootHints              []string
+	delegations            *delegationCache
+	nameServers            *addressCache
+	baseRoutes             []ForwardingRoute
+	routes                 map[string][]string
+	upstreams              string
+	timeout                time.Duration
+	retries                int
+	retryTimeout           time.Duration
+	staleMaxWait           time.Duration
+	blocked                map[string]struct{}
+	allowedExact           map[string]struct{}
+	allowedWildcard        map[string]struct{}
+	blocking               bool
+	blockType              string
+	blockTTL               uint32
+	blockAddrs             []netip.Addr
+	bypass                 []netip.Prefix
+	blockTXT               bool
+	cache                  *ResponseCache
+	blockLists             []BlockListStats
+	hosts                  map[string]localHostRecords
+	zones                  map[string]*authoritativeZone
+	managedZones           map[string]managedZone
+	tsigKeys               map[string]tsigKey
+	zoneCount              int
+	dnssec                 *dnssecValidator
+	zoneInsecure           []string
+	managedTrustAnchors    bool
 }
 
 type managedZone struct {
@@ -73,6 +75,8 @@ type tsigKey struct {
 }
 
 type RuntimeConfig struct {
+	MaxConcurrent              int
+	MaxConcurrentPerClient     int
 	Recursion                  string
 	RecursionClients           []string
 	Mode                       string
@@ -208,6 +212,10 @@ type BlockListStats struct {
 }
 
 type Stats struct {
+	ResolutionInflight       int                   `json:"resolution_inflight"`
+	ResolutionClients        int                   `json:"resolution_clients"`
+	ResolutionRejectedGlobal uint64                `json:"resolution_rejected_global"`
+	ResolutionRejectedClient uint64                `json:"resolution_rejected_client"`
 	Queries                  uint64                `json:"queries"`
 	NoError                  uint64                `json:"no_error"`
 	ServerFailures           uint64                `json:"server_failures"`
@@ -237,6 +245,7 @@ type Stats struct {
 }
 
 type Handler struct {
+	admission            resolutionAdmission
 	runtime              atomic.Pointer[Runtime]
 	queries              atomic.Uint64
 	noError              atomic.Uint64
@@ -303,6 +312,11 @@ type resolution struct {
 }
 
 func Compile(configuration RuntimeConfig) (*Runtime, error) {
+	totalLimit := cmp.Or(configuration.MaxConcurrent, defaultMaxConcurrent)
+	clientLimit := cmp.Or(configuration.MaxConcurrentPerClient, defaultMaxConcurrentPerClient)
+	if totalLimit < 1 || totalLimit > maximumConcurrentResolutions || clientLimit < 1 || clientLimit > totalLimit {
+		return nil, fmt.Errorf("resolver concurrency must be between 1 and %d, with the client limit no greater than the total", maximumConcurrentResolutions)
+	}
 	mode := strings.ToLower(strings.TrimSpace(configuration.Mode))
 	if mode == "" {
 		mode = "forward"
@@ -629,6 +643,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		validator.setZoneInsecure(zoneInsecure)
 	}
 	return &Runtime{
+		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
 		recursion:       recursion,
 		mode:            mode,
 		forwarders:      append([]string(nil), configuration.Forwarders...),
@@ -1341,9 +1356,14 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	if route != "" {
 		handler.routedQueries.Add(1)
 	}
+	release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
+	if !admitted {
+		return recursionRefused(request)
+	}
 	if runtime.staleMaxWait > 0 && runtime.cache.HasStale(request) {
-		result = handler.resolveWithStaleWait(request, runtime, forwarders, clientIP)
+		result = handler.resolveWithStaleWait(request, runtime, forwarders, clientIP, release)
 	} else {
+		defer release()
 		result = handler.resolveShared(request, runtime, forwarders, true, clientIP)
 	}
 	result.decision.Policy = policy
@@ -1474,9 +1494,11 @@ func coalesceKey(request *dns.Msg) inflightKey {
 	}
 }
 
-func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string) resolution {
+func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string, release func()) resolution {
 	result := make(chan resolution, 1)
 	go func() {
+		// Keep the permit until work finishes, even after a stale answer returns.
+		defer release()
 		result <- handler.resolveShared(request.Copy(), runtime, forwarders, false, clientIP)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
@@ -1556,8 +1578,14 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
+	release, admitted := handler.admission.acquire("", runtime.maxConcurrent, runtime.maxConcurrentPerClient)
+	if !admitted {
+		runtime.cache.CancelPrefetch(request)
+		return
+	}
 	request = request.Copy()
 	go func() {
+		defer release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
 		response, validation, err := handler.resolveUpstream(request, runtime, forwarders)
 		if err != nil || response == nil || validation == validationBogus {
@@ -1607,6 +1635,11 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientI
 	targetRequest.RecursionDesired = true
 	targetResponse, local := runtime.authoritativeResponse(targetRequest)
 	if !local {
+		release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
+		if !admitted {
+			return errorResponse(request, dns.RcodeRefused), true
+		}
+		defer release()
 		forwarders, routed := runtime.forwardersFor(alias.target)
 		if routed {
 			handler.routedQueries.Add(1)
@@ -1685,12 +1718,14 @@ func (handler *Handler) BlockingPaused() bool {
 }
 
 func (handler *Handler) Stats() Stats {
+	active, clients, rejectedGlobal, rejectedClient := handler.admission.snapshot()
 	runtime := handler.runtime.Load()
 	anchorStatus := trustanchor.Status{}
 	if runtime.managedTrustAnchors && handler.trustAnchorManager != nil {
 		anchorStatus = handler.trustAnchorManager.Status()
 	}
 	return Stats{
+		ResolutionInflight: active, ResolutionClients: clients, ResolutionRejectedGlobal: rejectedGlobal, ResolutionRejectedClient: rejectedClient,
 		Queries:                  handler.queries.Load(),
 		NoError:                  handler.noError.Load(),
 		ServerFailures:           handler.serverFailures.Load(),
