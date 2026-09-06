@@ -8,6 +8,8 @@ driver = "sqlite"
 dsn = "data/sable.db"
 
 [resolver]
+# Recursion is restricted even when DNS listeners bind all interfaces.
+recursion = "private"
 # "forward" uses the upstreams below. "recursive" resolves directly from the
 # DNS root while still honoring conditional routes and forwarder zones.
 mode = "forward"

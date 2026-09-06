@@ -196,6 +196,10 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		candidate.Server.DNSListen = dnsListeners
 		candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue("https_listen"))
 		candidate.Resolver.Mode = resolverMode
+		if request.Form.Has("recursion") {
+			candidate.Resolver.Recursion = request.FormValue("recursion")
+			candidate.Resolver.RecursionClients = formLines(request.FormValue("recursion_clients"))
+		}
 		candidate.Resolver.Forwarders = forwarders
 		candidate.Resolver.RootHints = formLines(request.FormValue("root_hints"))
 		candidate.Resolver.Timeout = config.Duration{Duration: resolverTimeout}
@@ -444,6 +448,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		Backup:     server.backupView(request, "", ""),
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
+		Recursion: configuration.Resolver.Recursion, RecursionClients: strings.Join(configuration.Resolver.RecursionClients, "\n"),
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),

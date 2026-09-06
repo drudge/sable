@@ -1573,14 +1573,14 @@ func TestResolveCoalescesConcurrentCacheMisses(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		responses[0] = handler.resolveForClient(makeRequest(1), runtime, "")
+		responses[0] = handler.resolveForClient(makeRequest(1), runtime, "192.0.2.1")
 	}()
 	<-entered
 	for index := 1; index < callers; index++ {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			responses[index] = handler.resolveForClient(makeRequest(uint16(index+1)), runtime, "")
+			responses[index] = handler.resolveForClient(makeRequest(uint16(index+1)), runtime, "192.0.2.1")
 		}(index)
 	}
 	time.Sleep(30 * time.Millisecond)
@@ -1868,6 +1868,7 @@ func BenchmarkBlockedLookupWithLargePolicy(b *testing.B) {
 
 func testRuntimeConfig() RuntimeConfig {
 	return RuntimeConfig{
+		Recursion:  "allow",
 		Forwarders: []string{"127.0.0.1:53"},
 		Timeout:    time.Second,
 		CacheSize:  1_024,

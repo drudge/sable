@@ -19,7 +19,9 @@ type SettingsPageView struct {
 	DNSListen           string
 	DatabaseDriver      string
 	DatabaseDSN         string
-	ResolverMode        string
+	Recursion string
+ RecursionClients string
+ ResolverMode        string
 	Forwarders          string
 	RootHints           string
 	ResolverTimeout     string
@@ -285,7 +287,19 @@ templ ManualCertificateDialogs() {
 }
 
 templ SettingsRecursionPanel(view SettingsPageView) {
-	<div class="settings-panel-stack">
+ <div class="settings-panel-stack">
+ @SettingsCard("shield", "Recursive Clients", "Control who can use forwarding, recursion, and cached recursive answers") {
+ <div class="isotope-card-content">
+ <label class="field-control"><span>Recursion Access</span><select name="recursion" data-styled-select>
+ <option value="private" selected?={ view.Recursion == "private" }>Private networks and loopback (default)</option>
+ <option value="acl" selected?={ view.Recursion == "acl" }>Listed clients only</option>
+ <option value="deny" selected?={ view.Recursion == "deny" }>Disabled — authoritative and local answers only</option>
+ <option value="allow" selected?={ view.Recursion == "allow" }>Everyone — public recursive resolver</option>
+ </select><small>Applies to UDP, TCP, DoT, DoH, and DoQ. Private access includes link-local clients. Authoritative zones remain public.</small></label>
+ <label class="field-control"><span>Allowed Recursive Clients</span><textarea name="recursion_clients" rows="4" spellcheck="false" placeholder={ "192.168.1.0/24\nfd00::/8" }>{ view.RecursionClients }</textarea><small>Used with “Listed clients only”. Enter one IP address or CIDR network per line. An empty list denies all client recursion.</small></label>
+ </div>
+ }
+
 		@SettingsCard("refresh", "Recursive Resolver", "Configure recursive resolution behavior and DNSSEC validation") {
 			<div class="isotope-card-content">
 				<div class="blocking-radio-list settings-blocking-radio-list"><label><input type="radio" name="resolver_mode" value="recursive" checked?={ view.ResolverMode == "recursive" }/><span><strong>Iterative Recursion</strong><small>Resolve directly from the DNS root with QNAME minimization. Conditional routes still use their configured forwarders.</small></span></label><label><input type="radio" name="resolver_mode" value="forward" checked?={ view.ResolverMode == "forward" }/><span><strong>Forwarding</strong><small>Send unmatched queries to the forwarders configured below.</small></span></label></div>
