@@ -207,6 +207,23 @@ meet `cache_prefetch_minimum_ttl` and the observed hit rate to meet
 `cache_prefetch_hits_per_hour` during `cache_prefetch_sample_interval`. Set the
 trigger TTL to `0` to disable prefetching.
 
+### Resolution capacity
+
+`resolver.max_concurrent` defaults to 1024 outstanding requests per node and
+`resolver.max_concurrent_per_client` to 64 per source IP. Both can be changed in
+Settings → Recursion. The total must be 1–65536 and the client limit 1–total.
+Excess misses receive REFUSED immediately; normal cache hits, blocking responses,
+and local or authoritative records do not wait for capacity. Limits apply to
+all transports, coalesced waiters, and ANAME target lookups. Prefetch shares the
+global budget with a separate per-client allowance. Stale responses keep their
+permit until the outstanding refresh finishes. Limits survive runtime reloads;
+lowering a limit lets existing work finish and refuses new work until below it.
+
+Monitor `sable_resolution_inflight`, `sable_resolution_clients`, and the
+`sable_resolution_rejected_global_total` / `sable_resolution_rejected_client_total`
+counters. Client tracking is bounded by active work, with no IP metric labels.
+These are concurrency limits, not a packets-per-second or bandwidth limit.
+
 ### Recursive DNSSEC validation
 
 Recursive validation is enabled by default. Sable sends validation subqueries
