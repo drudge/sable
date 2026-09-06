@@ -158,6 +158,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SABLE_RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          # Stable and candidate tags can identify the same commit.
+          GORELEASER_CURRENT_TAG: ${{ steps.release.outputs.tag }}
         run: go tool mage publish
 
       - name: Finalize GitHub release
