@@ -19,6 +19,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/clientaccess"
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/durationfmt"
@@ -26,67 +27,69 @@ import (
 )
 
 const (
-	defaultHTTPListen          = "127.0.0.1:5380"
-	defaultDNSListen           = "127.0.0.1:8053"
-	defaultDatabaseDriver      = "sqlite"
-	defaultDatabaseDSN         = "data/sable.db"
-	defaultResolverTimeout     = 2 * time.Second
-	defaultResolverRetries     = 2
-	defaultResolverRetryWait   = 1500 * time.Millisecond
-	defaultShutdownTimeout     = 15 * time.Second
-	defaultReloadDebounce      = 250 * time.Millisecond
-	defaultCacheSize           = 65_536
-	defaultCacheMinimumTTL     = 10
-	defaultCacheMaximumTTL     = 7 * 24 * 60 * 60
-	defaultCacheNegativeTTL    = 300
-	defaultCacheFailureTTL     = 10
-	defaultCacheStaleTTL       = 3 * 24 * 60 * 60
-	defaultCacheStaleAnswerTTL = 30
-	defaultCacheStaleResetTTL  = 30
-	defaultCacheStaleMaxWait   = 1800 * time.Millisecond
-	defaultCachePrefetchMinTTL = 2
-	defaultCachePrefetchAtTTL  = 9
-	defaultCachePrefetchSample = 5 * time.Minute
-	defaultCachePrefetchHits   = 30
-	defaultQueryLogBuffer      = 8_192
-	defaultQueryLogBatch       = 256
-	defaultQueryLogFlush       = 250 * time.Millisecond
-	defaultQueryLogKeep        = 30 * 24 * time.Hour
-	defaultServerLogBuffer     = 4_096
-	defaultServerLogBatch      = 128
-	defaultServerLogFlush      = time.Second
-	defaultServerLogKeep       = 60 * 24 * time.Hour
-	defaultServerLogLevel      = "info"
-	defaultStatisticsKeep      = durationfmt.Year
-	defaultBackupDirectory     = "data/backups"
-	defaultBackupInterval      = 24 * time.Hour
-	defaultBackupRunAt         = "02:00"
-	defaultBackupRetention     = 7
-	defaultTLSVersion          = "1.3"
-	defaultCertificateMode     = "manual"
-	defaultACMEDirectoryURL    = "https://acme-v02.api.letsencrypt.org/directory"
-	defaultACMEStorageDir      = "data/tls/acme"
-	defaultACMERenewBefore     = 30 * 24 * time.Hour
-	defaultHostTTL             = 300
-	defaultUniFiSite           = "default"
-	defaultUniFiInterval       = 2 * time.Minute
-	minimumUniFiInterval       = 30 * time.Second
-	defaultUniFiRecordTTL      = 300
-	defaultDynamicDNSInterval  = 5 * time.Minute
-	minimumDynamicDNSInterval  = time.Minute
-	defaultDynamicDNSRecordTTL = 600
-	defaultIPv4DiscoveryURL    = "https://api.ipify.org"
-	defaultIPv6DiscoveryURL    = "https://api6.ipify.org"
-	defaultBlockListUpdate     = 24 * time.Hour
-	defaultBlockingTTL         = 30
-	defaultSessionTTL          = 12 * time.Hour
-	defaultAPITokenTTL         = 90 * 24 * time.Hour
-	defaultSecretKeyFile       = "data/sable.key"
-	defaultClusterDataDir      = "data/cluster"
-	defaultZSKLifetime         = 30 * 24 * time.Hour
-	defaultKSKLifetime         = 365 * 24 * time.Hour
-	defaultKeyPrepublish       = 24 * time.Hour
-	defaultKeyRetireAfter      = 7 * 24 * time.Hour
+	defaultHTTPListen             = "127.0.0.1:5380"
+	defaultDNSListen              = "127.0.0.1:8053"
+	defaultDatabaseDriver         = "sqlite"
+	defaultDatabaseDSN            = "data/sable.db"
+	defaultMaxConcurrent          = 1024
+	defaultMaxConcurrentPerClient = 64
+	defaultResolverTimeout        = 2 * time.Second
+	defaultResolverRetries        = 2
+	defaultResolverRetryWait      = 1500 * time.Millisecond
+	defaultShutdownTimeout        = 15 * time.Second
+	defaultReloadDebounce         = 250 * time.Millisecond
+	defaultCacheSize              = 65_536
+	defaultCacheMinimumTTL        = 10
+	defaultCacheMaximumTTL        = 7 * 24 * 60 * 60
+	defaultCacheNegativeTTL       = 300
+	defaultCacheFailureTTL        = 10
+	defaultCacheStaleTTL          = 3 * 24 * 60 * 60
+	defaultCacheStaleAnswerTTL    = 30
+	defaultCacheStaleResetTTL     = 30
+	defaultCacheStaleMaxWait      = 1800 * time.Millisecond
+	defaultCachePrefetchMinTTL    = 2
+	defaultCachePrefetchAtTTL     = 9
+	defaultCachePrefetchSample    = 5 * time.Minute
+	defaultCachePrefetchHits      = 30
+	defaultQueryLogBuffer         = 8_192
+	defaultQueryLogBatch          = 256
+	defaultQueryLogFlush          = 250 * time.Millisecond
+	defaultQueryLogKeep           = 30 * 24 * time.Hour
+	defaultServerLogBuffer        = 4_096
+	defaultServerLogBatch         = 128
+	defaultServerLogFlush         = time.Second
+	defaultServerLogKeep          = 60 * 24 * time.Hour
+	defaultServerLogLevel         = "info"
+	defaultStatisticsKeep         = durationfmt.Year
+	defaultBackupDirectory        = "data/backups"
+	defaultBackupInterval         = 24 * time.Hour
+	defaultBackupRunAt            = "02:00"
+	defaultBackupRetention        = 7
+	defaultTLSVersion             = "1.3"
+	defaultCertificateMode        = "manual"
+	defaultACMEDirectoryURL       = "https://acme-v02.api.letsencrypt.org/directory"
+	defaultACMEStorageDir         = "data/tls/acme"
+	defaultACMERenewBefore        = 30 * 24 * time.Hour
+	defaultHostTTL                = 300
+	defaultUniFiSite              = "default"
+	defaultUniFiInterval          = 2 * time.Minute
+	minimumUniFiInterval          = 30 * time.Second
+	defaultUniFiRecordTTL         = 300
+	defaultDynamicDNSInterval     = 5 * time.Minute
+	minimumDynamicDNSInterval     = time.Minute
+	defaultDynamicDNSRecordTTL    = 600
+	defaultIPv4DiscoveryURL       = "https://api.ipify.org"
+	defaultIPv6DiscoveryURL       = "https://api6.ipify.org"
+	defaultBlockListUpdate        = 24 * time.Hour
+	defaultBlockingTTL            = 30
+	defaultSessionTTL             = 12 * time.Hour
+	defaultAPITokenTTL            = 90 * 24 * time.Hour
+	defaultSecretKeyFile          = "data/sable.key"
+	defaultClusterDataDir         = "data/cluster"
+	defaultZSKLifetime            = 30 * 24 * time.Hour
+	defaultKSKLifetime            = 365 * 24 * time.Hour
+	defaultKeyPrepublish          = 24 * time.Hour
+	defaultKeyRetireAfter         = 7 * 24 * time.Hour
 )
 
 type Duration struct {
@@ -164,6 +167,10 @@ type Database struct {
 }
 
 type Resolver struct {
+	MaxConcurrent              int            `toml:"max_concurrent"`
+	MaxConcurrentPerClient     int            `toml:"max_concurrent_per_client"`
+	Recursion                  string         `toml:"recursion"`
+	RecursionClients           []string       `toml:"recursion_clients"`
 	Mode                       string         `toml:"mode"`
 	Forwarders                 []string       `toml:"forwarders"`
 	RootHints                  []string       `toml:"root_hints"`
@@ -466,6 +473,8 @@ func Defaults() Config {
 			DSN:    defaultDatabaseDSN,
 		},
 		Resolver: Resolver{
+			MaxConcurrent: defaultMaxConcurrent, MaxConcurrentPerClient: defaultMaxConcurrentPerClient,
+			Recursion:                "private",
 			Mode:                     "forward",
 			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
 			Timeout:                  Duration{Duration: defaultResolverTimeout},
@@ -680,8 +689,14 @@ func (configuration Config) Validate() error {
 	if configuration.Resolver.Mode != "forward" && configuration.Resolver.Mode != "recursive" {
 		validationErrors = append(validationErrors, errors.New("resolver.mode must be forward or recursive"))
 	}
+	if _, err := clientaccess.Compile(configuration.Resolver.Recursion, configuration.Resolver.RecursionClients); err != nil {
+		validationErrors = append(validationErrors, fmt.Errorf("resolver: %w", err))
+	}
 	if configuration.Resolver.Mode == "forward" && len(configuration.Resolver.Forwarders) == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.forwarders must contain at least one address in forward mode"))
+	}
+	if configuration.Resolver.MaxConcurrent < 1 || configuration.Resolver.MaxConcurrent > 65536 || configuration.Resolver.MaxConcurrentPerClient < 1 || configuration.Resolver.MaxConcurrentPerClient > configuration.Resolver.MaxConcurrent {
+		validationErrors = append(validationErrors, errors.New("resolver.max_concurrent must be between 1 and 65536; max_concurrent_per_client must be between 1 and max_concurrent"))
 	}
 	if configuration.Resolver.Timeout.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.timeout must be positive"))
@@ -1171,6 +1186,11 @@ func (configuration *Config) normalize() {
 	configuration.Backup.RunAt = strings.TrimSpace(configuration.Backup.RunAt)
 	configuration.Server.HTTPSListen = strings.TrimSpace(configuration.Server.HTTPSListen)
 	configuration.Server.DNSListen = uniqueTrimmed(configuration.Server.DNSListen)
+	configuration.Resolver.Recursion = strings.ToLower(strings.TrimSpace(configuration.Resolver.Recursion))
+	if configuration.Resolver.Recursion == "" {
+		configuration.Resolver.Recursion = "private"
+	}
+	configuration.Resolver.RecursionClients = uniqueTrimmed(configuration.Resolver.RecursionClients)
 	configuration.Resolver.Forwarders = uniqueTrimmed(configuration.Resolver.Forwarders)
 	configuration.Resolver.Mode = strings.ToLower(strings.TrimSpace(configuration.Resolver.Mode))
 	if configuration.Resolver.Mode == "" {

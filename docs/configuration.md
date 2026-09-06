@@ -86,6 +86,33 @@ renews within the configured window.
 
 ## Recursive resolution and forwarding
 
+Client recursion defaults to `recursion = "private"`: loopback, RFC 1918 IPv4,
+IPv6 unique-local, and link-local source addresses. This restriction also applies
+when upgrading a configuration that omits the setting. Public-network clients
+must be explicitly allowed. It covers UDP, TCP, DoT, DoH, and DoQ, including
+conditional forwarding and recursive cache hits. DoH uses the connection source;
+it does not trust forwarding headers. A reverse proxy must enforce equivalent
+client restrictions before forwarding to Sable.
+
+Use Settings → Recursion to choose the access policy, or configure:
+
+```toml
+[resolver]
+recursion = "acl"
+recursion_clients = ["192.168.1.0/24", "fd12:3456::/48", "203.0.113.10"]
+```
+
+An empty ACL denies client recursion. `recursion = "deny"` disables it entirely;
+`recursion = "allow"` explicitly operates a public recursive resolver. Primary,
+secondary, alias-zone, and local-host answers remain available independently of
+this policy. ANAME resolution is limited to administrator-configured targets and remains
+available as part of authoritative service, including requests from recursive
+resolvers with RD=0. Other RD=0 queries never initiate upstream resolution or
+prefetch: they receive available local/authoritative or permitted cached data,
+or REFUSED on a recursive miss. The RA flag reflects client access. DoH responses
+use private HTTP caching so shared caches cannot reuse client-specific answers.
+
+
 ```toml
 [resolver]
 mode = "recursive"
@@ -179,6 +206,23 @@ Popular responses are refreshed asynchronously when their remaining TTL reaches
 meet `cache_prefetch_minimum_ttl` and the observed hit rate to meet
 `cache_prefetch_hits_per_hour` during `cache_prefetch_sample_interval`. Set the
 trigger TTL to `0` to disable prefetching.
+
+### Resolution capacity
+
+`resolver.max_concurrent` defaults to 1024 outstanding requests per node and
+`resolver.max_concurrent_per_client` to 64 per source IP. Both can be changed in
+Settings → Recursion. The total must be 1–65536 and the client limit 1–total.
+Excess misses receive REFUSED immediately; normal cache hits, blocking responses,
+and local or authoritative records do not wait for capacity. Limits apply to
+all transports, coalesced waiters, and ANAME target lookups. Prefetch shares the
+global budget with a separate per-client allowance. Stale responses keep their
+permit until the outstanding refresh finishes. Limits survive runtime reloads;
+lowering a limit lets existing work finish and refuses new work until below it.
+
+Monitor `sable_resolution_inflight`, `sable_resolution_clients`, and the
+`sable_resolution_rejected_global_total` / `sable_resolution_rejected_client_total`
+counters. Client tracking is bounded by active work, with no IP metric labels.
+These are concurrency limits, not a packets-per-second or bandwidth limit.
 
 ### Recursive DNSSEC validation
 
