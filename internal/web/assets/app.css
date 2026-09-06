@@ -264,17 +264,16 @@ button { cursor: pointer; }
 .stats-scope-toggle button.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
 .stats-scope-toggle button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; }
-/* A one-pixel dark halo keeps white glyphs readable on the bright shared palette
-   without changing card/series colors (WCAG technique G18). */
+/* Layered soft shadows keep white text readable on the bright shared palette. */
 .stat-card { position: relative; display: flex; min-width: 0; min-height: 6rem; overflow: hidden; flex-direction: column; border-radius: var(--radius); padding: 0.75rem 1rem; color: white; text-align: left;
-  text-shadow: -1px -1px 0 #1f2937, 0 -1px 0 #1f2937, 1px -1px 0 #1f2937, -1px 0 0 #1f2937, 1px 0 0 #1f2937, -1px 1px 0 #1f2937, 0 1px 0 #1f2937, 1px 1px 0 #1f2937; }
-.stat-card-link { cursor: pointer; transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
+  text-shadow: 0 1px 3px #1f2937, 0 0 2px #1f2937, 0 0 2px #1f2937; }
+.stat-card-link { cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease; }
 .stat-card-link::before { position: absolute; right: .85rem; bottom: .6rem; color: currentColor; content: "→"; font-size: 1rem; font-weight: 700; opacity: 0; pointer-events: none; transform: translateX(-.3rem); transition: opacity 160ms ease, transform 160ms ease; }
 .stat-card-link > div { padding-right: 1.25rem; }
-.stat-card-link:hover, .stat-card-link:focus-visible { box-shadow: inset 0 0 0 2px currentColor, 0 0 0 1px rgb(0 0 0 / .18), 0 .6rem 1.25rem rgb(0 0 0 / .2); filter: brightness(1.02); transform: translateY(-2px); }
+.stat-card-link:hover, .stat-card-link:focus-visible { box-shadow: inset 0 0 0 2px currentColor, 0 0 0 1px rgb(0 0 0 / .18), 0 .6rem 1.25rem rgb(0 0 0 / .2); transform: translateY(-2px); }
 .stat-card-link:hover::before, .stat-card-link:focus-visible::before { opacity: 1; transform: translateX(0); }
-.stat-card-link:active { box-shadow: inset 0 0 0 1px currentColor; filter: brightness(1.02); transform: translateY(0); }
-.stat-card-link:focus-visible { outline-color: #0b1220; outline-offset: 2px; }
+.stat-card-link:active { box-shadow: inset 0 0 0 1px currentColor; transform: translateY(0); }
+.stat-card-link:focus-visible { outline-color: var(--foreground); outline-offset: 2px; }
 .dashboard-page:has(.dashboard-update-indicator.htmx-request) .stat-card::after { position: absolute; inset: auto 0 0; height: .2rem; background: linear-gradient(105deg, transparent 25%, rgb(255 255 255 / .22) 48%, transparent 70%); content: ""; pointer-events: none; transform: translateX(-120%); animation: dashboard-update-sweep 1.15s ease-in-out infinite; }
 @keyframes dashboard-update-sweep { to { transform: translateX(120%); } }
 .stat-card [data-stat-number] { font-variant-numeric: tabular-nums; }
