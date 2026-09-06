@@ -150,6 +150,7 @@ type Snapshot struct {
 // leave Zone empty so a history menu stays cheap even for very large zones;
 // callers load a snapshot only when they need to inspect or restore it.
 type Revision struct {
+	ZoneID     string
 	ZoneName   string
 	Number     uint64
 	ChangeKind string

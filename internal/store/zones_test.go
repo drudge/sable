@@ -188,7 +188,7 @@ func TestZoneStorePersistsAtomicPerZoneRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(history) != 2 || history[0].Number != 2 || history[0].Zone.Name != "" || history[1].ChangeKind != "created" {
+	if len(history) != 2 || history[0].Number != 2 || history[0].Zone.Name != "" || history[1].ChangeKind != "created" || history[0].ZoneID != created[0].ID {
 		t.Fatalf("revision metadata = %#v", history)
 	}
 	revision, err := storage.ZoneRevision(ctx, "example.test", 2)
