@@ -161,7 +161,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 				server.logger.Warn("load zone revision history", "zone", zoneView.Name, "error", err)
 				continue
 			}
-			zoneView.History = zoneRevisionViews(revisions, zoneView.Revision, console.TimeDisplay)
+			zoneView.History = zoneRevisionViews(server.readableZoneRevisions(request, revisions), zoneView.Revision, console.TimeDisplay)
 		}
 	}
 	return pages.ZonesPageView{

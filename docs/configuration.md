@@ -291,6 +291,10 @@ Primary zones require one apex SOA and at least one apex NS record. Console and 
 
 Open **Zones → Actions → Change Center** to inspect the retained revisions for a
 zone. Each revision shows setting and record differences from its predecessor.
+History access follows each snapshot's immutable zone identity, including the
+preceding snapshot used for a diff. Recreating a zone with the same name does not
+grant access to its earlier identity. Legacy snapshots without an identity are
+visible only to readers with access to all zones.
 Restoring an earlier state preserves the zone's stable identity, advances its
 SOA serial beyond the current value, and saves the restored state as a new
 revision; it never moves history backwards or bypasses validation, signing,
@@ -827,6 +831,11 @@ selected groups grant the required API permission. Tokens can be created from
 the API-token panel in the console.
 
 ## Single sign-on
+
+Configuring, testing, pausing, or removing the identity provider requires
+`users.write`, because the provider can grant administrative roles.
+`settings.read` allows viewing its status; `settings.write` alone does not
+allow changing the sign-in trust or role mappings.
 
 Sable can hand the console's sign-in over to an OpenID Connect provider, so
 people use the account they already have and losing access at the provider
