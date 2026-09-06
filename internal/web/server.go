@@ -851,7 +851,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 			}
 		}
 		entity := pages.CommandEntityView{
-			ID: "command-entity-integration-dynamic-dns", Label: "View Dynamic DNS", Description: "Open public address publication status", Icon: "globe-lock", Kind: "Integration",
+			ID: "command-entity-integration-dynamic-dns", Label: "View Dynamic DNS", Description: "Open public address publication status", Icon: "cloud-sync", Kind: "Integration",
 			Keywords: strings.Join(keywords, " "), Route: "/integrations", Focus: "#dynamic-dns-card",
 		}
 		if view.CanWriteSettings && !view.ControlPlaneReadOnly {

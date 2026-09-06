@@ -76,6 +76,14 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 			view:     DynamicDNSAppView{Available: true, Configured: true, Enabled: true, CredentialsConfigured: true},
 			expected: `class="status-badge success">Active</span>`,
 		},
+		{
+			name: "failed publication",
+			view: DynamicDNSAppView{
+				Available: true, Configured: true, Enabled: true, CredentialsConfigured: true,
+				Status: DynamicDNSStatusView{LastError: "provider rejected the request"},
+			},
+			expected: `class="status-badge danger">Needs attention</span>`,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -86,7 +94,7 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 	}
 }
 
-func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
+func TestDynamicDNSCardShowsCopyableAddressesWithFullAddressTitles(t *testing.T) {
 	t.Parallel()
 	view := DynamicDNSAppView{
 		Available: true, Configured: true, Enabled: true,
@@ -104,11 +112,19 @@ func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
 	}
 	html := render(t, DynamicDNSCard(view))
 	for _, expected := range []string{
+		`class="nav-icon icon-cloud-sync"`,
+		`<path d="m17 18-1.535 1.605`,
 		"Last published",
 		"Sep 5, 2026 1:12 PM",
 		`title="203.0.113.42"`,
 		`title="2001:db8:1234:5678:90ab:cdef:1234:5678"`,
 		`aria-label="IPv6: 2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+		`id="dynamic-dns-ipv4"`,
+		`data-copy-target="dynamic-dns-ipv4"`,
+		`aria-label="Copy IPv4 address"`,
+		`id="dynamic-dns-ipv6"`,
+		`data-copy-target="dynamic-dns-ipv6"`,
+		`aria-label="Copy IPv6 address"`,
 	} {
 		if !strings.Contains(html, expected) {
 			t.Errorf("Dynamic DNS card does not contain %q", expected)
@@ -124,6 +140,12 @@ func TestDynamicDNSCardShowsLastPublicationAndFullAddressTitles(t *testing.T) {
 	view.Status.LastPublished = ""
 	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<span class="integration-fact-value">Never</span>`) {
 		t.Error("Dynamic DNS card does not use the Never fallback before its first publication")
+	}
+
+	view.Status.IPv4 = ""
+	view.Status.IPv6 = ""
+	if html := render(t, DynamicDNSCard(view)); strings.Contains(html, `data-copy-target="dynamic-dns-ip`) {
+		t.Error("Dynamic DNS card offers to copy an address that has not been discovered")
 	}
 }
 
@@ -179,6 +201,7 @@ func TestDynamicDNSSetupUsesProviderMenuAndGlobalPublishingSettings(t *testing.T
 	t.Parallel()
 	html := render(t, DynamicDNSSetupDialog(DynamicDNSAppView{Interval: "5m", TTL: 600}))
 	for _, expected := range []string{
+		`class="nav-icon icon-globe"`,
 		`data-dynamic-dns-add-provider-menu`,
 		`data-dynamic-dns-add-publisher data-provider="cloudflare"`,
 		`data-dynamic-dns-add-publisher data-provider="route53"`,
@@ -212,6 +235,7 @@ func TestDynamicDNSStatusPanelDisclosesProviderDetails(t *testing.T) {
 		LastErrorDetail: "{\n  \"code\": 6003\n}",
 	}}))
 	for _, expected := range []string{
+		"Last publish failed",
 		"Cloudflare rejected the request",
 		"View provider details",
 		`<pre>{`,
@@ -220,6 +244,19 @@ func TestDynamicDNSStatusPanelDisclosesProviderDetails(t *testing.T) {
 		if !strings.Contains(html, expected) {
 			t.Errorf("Dynamic DNS status panel does not contain %q", expected)
 		}
+	}
+}
+
+func TestDynamicDNSAddressPlaceholdersAreDashes(t *testing.T) {
+	t.Parallel()
+	view := DynamicDNSAppView{Publishers: []DynamicDNSPublisherView{{
+		Zones: []DynamicDNSZoneView{{PublishIPv4: true, PublishIPv6: true}},
+	}}}
+	if got := dynamicDNSIPv4(view); got != "—" {
+		t.Errorf("empty IPv4 label = %q, want em dash", got)
+	}
+	if got := dynamicDNSIPv6(view); got != "—" {
+		t.Errorf("empty IPv6 label = %q, want em dash", got)
 	}
 }
 

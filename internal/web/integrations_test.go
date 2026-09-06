@@ -360,7 +360,10 @@ func TestDynamicDNSStatusRefreshUpdatesLastPublishedFact(t *testing.T) {
 	server.SetDynamicDNSController(&testDynamicDNSController{
 		configured:  true,
 		credentials: dnsprovider.Credentials{APIToken: "token"},
-		status:      dynamicdns.Status{LastPublished: time.Date(2026, time.September, 5, 17, 14, 0, 0, time.UTC)},
+		status: dynamicdns.Status{
+			LastPublished: time.Date(2026, time.September, 5, 17, 14, 0, 0, time.UTC),
+			LastError:     "provider rejected the request",
+		},
 	})
 
 	response := serveRequest(server, http.MethodGet, "/ui/integrations/dynamic-dns/status")
@@ -368,7 +371,10 @@ func TestDynamicDNSStatusRefreshUpdatesLastPublishedFact(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status response = %d %s", response.Code, body)
 	}
-	for _, expected := range []string{`id="dynamic-dns-facts"`, `hx-swap-oob="true"`, "Last published", "Sep 5, 2026"} {
+	for _, expected := range []string{
+		`id="dynamic-dns-facts"`, `hx-swap-oob="true"`, "Last published", "Sep 5, 2026",
+		`id="dynamic-dns-badge"`, `class="status-badge danger"`, "Needs attention",
+	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("status refresh does not contain %q", expected)
 		}

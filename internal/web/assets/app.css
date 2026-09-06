@@ -1471,7 +1471,20 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
 .integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.integration-fact-address { min-width: 0; cursor: help; }
+.integration-fact-address { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+.integration-fact-address .integration-fact-label { grid-column: 1; grid-row: 1; }
+.integration-fact-address .integration-fact-value { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+.integration-fact-address code { display: block; overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.integration-fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); }
+.integration-fact-copy:hover { background: color-mix(in oklch, var(--foreground) 9%, transparent); color: var(--foreground); }
+.integration-fact-copy:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.integration-fact-copy > span { width: 100%; height: 100%; align-items: center; justify-content: center; line-height: 0; }
+.integration-fact-copy .copy-icon-default { display: flex; }
+.integration-fact-copy .copy-icon-success { display: none; }
+.integration-fact-copy .nav-icon { display: block; width: .8rem; height: .8rem; }
+.integration-fact-copy .copy-icon-default .nav-icon { translate: -.1875rem 0; }
+.integration-fact-copy.is-copied .copy-icon-default { display: none; }
+.integration-fact-copy.is-copied .copy-icon-success { display: flex; color: #22c55e; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
 .signin-methods { display: grid; gap: 0.5rem; }
