@@ -43,6 +43,11 @@ type credentialStore interface {
 	Put(context.Context, string, dnsprovider.Credentials) error
 }
 
+type stateStore interface {
+	LoadDynamicDNSState(context.Context) (PersistentState, error)
+	SaveDynamicDNSState(context.Context, PersistentState) error
+}
+
 type provider interface {
 	EnsureRecord(context.Context, dnsprovider.Record) (bool, error)
 }
@@ -66,11 +71,22 @@ type Status struct {
 	LastError             string
 }
 
+// PersistentState is the useful publication history that survives process
+// restarts. Attempt progress and errors remain runtime-only so a restart does
+// not resurrect stale transient state.
+type PersistentState struct {
+	IPv4          string    `json:"ipv4,omitempty"`
+	IPv6          string    `json:"ipv6,omitempty"`
+	LastSuccess   time.Time `json:"last_success,omitempty"`
+	LastPublished time.Time `json:"last_published,omitempty"`
+}
+
 // Manager discovers this node's public addresses and reconciles configured
 // external A and AAAA RRsets on the writable cluster node.
 type Manager struct {
 	configuration configurationReader
 	credentials   credentialStore
+	state         stateStore
 	writable      func() bool
 	logger        *slog.Logger
 	now           func() time.Time
@@ -87,12 +103,14 @@ type Manager struct {
 func New(
 	configuration configurationReader,
 	credentials *dnsprovider.Store,
+	state stateStore,
 	writable func() bool,
 	logger *slog.Logger,
 ) *Manager {
 	return &Manager{
 		configuration: configuration,
 		credentials:   credentials,
+		state:         state,
 		writable:      writable,
 		logger:        logger,
 		now:           time.Now,
@@ -164,6 +182,7 @@ func (manager *Manager) SyncNow() {
 }
 
 func (manager *Manager) Run(ctx context.Context) {
+	manager.restoreStatus(ctx)
 	if manager.due() {
 		manager.runOnce(ctx)
 	}
@@ -204,6 +223,7 @@ func (manager *Manager) runOnce(ctx context.Context) {
 	manager.beginAttempt(started)
 	result, err := manager.reconcile(ctx, settings)
 	manager.finishAttempt(started, settings.Interval.Duration, result, err)
+	manager.persistStatus(ctx)
 	if err != nil {
 		manager.logger.Warn("dynamic DNS publication failed", "providers", strings.Join(settings.ProviderNames(), ","), "error", err)
 		return
@@ -212,6 +232,38 @@ func (manager *Manager) runOnce(ctx context.Context) {
 		manager.logger.Info("dynamic DNS records published",
 			"providers", strings.Join(settings.ProviderNames(), ","), "changed", result.changed,
 			"unchanged", result.unchanged, "ipv4", result.ipv4, "ipv6", result.ipv6)
+	}
+}
+
+func (manager *Manager) restoreStatus(ctx context.Context) {
+	if manager.state == nil {
+		return
+	}
+	persisted, err := manager.state.LoadDynamicDNSState(ctx)
+	if err != nil {
+		manager.logger.Warn("restore dynamic DNS status", "error", err)
+		return
+	}
+	manager.mu.Lock()
+	manager.status.IPv4 = persisted.IPv4
+	manager.status.IPv6 = persisted.IPv6
+	manager.status.LastSuccess = persisted.LastSuccess
+	manager.status.LastPublished = persisted.LastPublished
+	manager.mu.Unlock()
+}
+
+func (manager *Manager) persistStatus(ctx context.Context) {
+	if manager.state == nil {
+		return
+	}
+	manager.mu.Lock()
+	persisted := PersistentState{
+		IPv4: manager.status.IPv4, IPv6: manager.status.IPv6,
+		LastSuccess: manager.status.LastSuccess, LastPublished: manager.status.LastPublished,
+	}
+	manager.mu.Unlock()
+	if err := manager.state.SaveDynamicDNSState(ctx, persisted); err != nil {
+		manager.logger.Warn("persist dynamic DNS status", "error", err)
 	}
 }
 
