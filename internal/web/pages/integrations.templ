@@ -289,13 +289,13 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 	<section class="card integration-card" id="dynamic-dns-card" tabindex="-1">
 		<header>
 			<div class="integration-card-identity">
-				<span class="integration-card-glyph">@Icon("globe-lock")</span>
+				<span class="integration-card-glyph">@Icon("cloud-sync")</span>
 				<div>
 					<h2>Dynamic DNS</h2>
 					<p>Keeps external A and AAAA records pointed at this deployment's public addresses.</p>
 				</div>
 			</div>
-			<span class={ dynamicDNSBadgeClass(view) }>{ dynamicDNSBadgeLabel(view) }</span>
+			@DynamicDNSBadge(view, false)
 		</header>
 		if !view.Available {
 			<div class="integration-card-body"><p class="muted-cell">The publisher is not running on this node.</p></div>
@@ -332,6 +332,14 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 	</section>
 }
 
+templ DynamicDNSBadge(view DynamicDNSAppView, outOfBand bool) {
+	if outOfBand {
+		<span id="dynamic-dns-badge" class={ dynamicDNSBadgeClass(view) } hx-swap-oob="true">{ dynamicDNSBadgeLabel(view) }</span>
+	} else {
+		<span id="dynamic-dns-badge" class={ dynamicDNSBadgeClass(view) }>{ dynamicDNSBadgeLabel(view) }</span>
+	}
+}
+
 templ DynamicDNSFacts(view DynamicDNSAppView, outOfBand bool) {
 	if outOfBand {
 		<div id="dynamic-dns-facts" class="integration-facts" hx-swap-oob="true">@DynamicDNSFactValues(view)</div>
@@ -342,8 +350,8 @@ templ DynamicDNSFacts(view DynamicDNSAppView, outOfBand bool) {
 
 templ DynamicDNSFactValues(view DynamicDNSAppView) {
 	<div><span class="integration-fact-label">Providers</span><span class="integration-fact-value">{ dynamicDNSProvidersLabel(view) }</span></div>
-	<div class="integration-fact-address" title={ dynamicDNSIPv4(view) } aria-label={ "IPv4: " + dynamicDNSIPv4(view) }><span class="integration-fact-label">IPv4</span><span class="integration-fact-value"><code>{ dynamicDNSIPv4(view) }</code></span></div>
-	<div class="integration-fact-address" title={ dynamicDNSIPv6(view) } aria-label={ "IPv6: " + dynamicDNSIPv6(view) }><span class="integration-fact-label">IPv6</span><span class="integration-fact-value"><code>{ dynamicDNSIPv6(view) }</code></span></div>
+	@DynamicDNSAddressFact("IPv4", "dynamic-dns-ipv4", dynamicDNSIPv4(view), view.Status.IPv4 != "")
+	@DynamicDNSAddressFact("IPv6", "dynamic-dns-ipv6", dynamicDNSIPv6(view), dynamicDNSIPv6(view) == view.Status.IPv6 && view.Status.IPv6 != "")
 	<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
 }
 
@@ -353,7 +361,7 @@ templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
 			<div class="unifi-status error">
 				@Icon("alert-triangle")
 				<div>
-					<strong>Last publication failed</strong>
+					<strong>Last publish failed</strong>
 					<span>{ view.Status.LastError }</span>
 					if view.Status.LastErrorDetail != "" {
 						<details class="integration-error-details">
@@ -424,7 +432,7 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 		<form hx-post="/ui/integrations/dynamic-dns/save" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				<section class="wizard-panel compact">
-					<div class="wizard-heading compact"><span>@Icon("globe-lock")</span><div><strong>Publishers</strong><small>Add one connection for each external DNS provider, then assign its zones and public names.</small></div></div>
+					<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>Publishers</strong><small>Add one connection for each external DNS provider, then assign its zones and public names.</small></div></div>
 					<div class="dynamic-dns-publishers" data-dynamic-dns-publishers>
 						for _, publisher := range view.Publishers {
 							@DynamicDNSPublisherEditor(publisher, strconv.Itoa(publisher.Index), true)
@@ -1117,18 +1125,18 @@ func dynamicDNSNames(value string) []string {
 }
 
 func dynamicDNSIPv4(view DynamicDNSAppView) string {
-	return ifThen(view.Status.IPv4 != "", view.Status.IPv4, "Not discovered")
+	return ifThen(view.Status.IPv4 != "", view.Status.IPv4, "—")
 }
 
 func dynamicDNSIPv6(view DynamicDNSAppView) string {
 	for _, publisher := range view.Publishers {
 		for _, zone := range publisher.Zones {
 			if zone.PublishIPv6 {
-				return ifThen(view.Status.IPv6 != "", view.Status.IPv6, "Not discovered")
+				return ifThen(view.Status.IPv6 != "", view.Status.IPv6, "—")
 			}
 		}
 	}
-	return "Not published"
+	return "—"
 }
 
 func dynamicDNSZoneTypeLabel(view DynamicDNSZoneView) string {
@@ -1228,7 +1236,7 @@ func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {
 		return "Needs credentials"
 	}
 	if view.Status.LastError != "" {
-		return "Attention"
+		return "Needs attention"
 	}
 	return "Active"
 }
@@ -1761,4 +1769,20 @@ func ssoIssuerHost(issuer string) string {
 		return host
 	}
 	return trimmed
+}
+
+templ DynamicDNSAddressFact(label, id, value string, copyable bool) {
+	<div class="integration-fact-address" title={ value } aria-label={ label + ": " + value }>
+		<span class="integration-fact-label">{ label }</span>
+		if copyable {
+			<button class="integration-fact-copy" type="button" data-copy-target={ id } aria-label={ "Copy " + label + " address" } title={ "Copy " + label + " address" }>@CopyIcons()</button>
+		}
+		<span class="integration-fact-value">
+			if copyable {
+				<code id={ id }>{ value }</code>
+			} else {
+				<code>{ value }</code>
+			}
+		</span>
+	</div>
 }

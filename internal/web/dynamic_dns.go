@@ -513,5 +513,9 @@ func (server *Server) dynamicDNSStatusPanel(writer http.ResponseWriter, request 
 	}
 	if err := pages.DynamicDNSFacts(view, true).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render dynamic DNS facts", "error", err)
+		return
+	}
+	if err := pages.DynamicDNSBadge(view, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dynamic DNS badge", "error", err)
 	}
 }

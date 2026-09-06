@@ -152,19 +152,26 @@ func TestDNSClientAcceptsCommandPaletteQueryDefaults(t *testing.T) {
 func TestCommandPaletteRendersSearchableEntities(t *testing.T) {
 	t.Parallel()
 
-	page := renderComponent(t, CommandPalette(DashboardView{CommandEntities: []CommandEntityView{
+	page := renderComponent(t, CommandPalette(DashboardView{CanSettings: true, CommandEntities: []CommandEntityView{
 		{ID: "command-zone-penree", Label: "penree.net", Description: "Primary DNS zone", Icon: "globe", Kind: "Zone", Keywords: "dns zone primary", Href: "/zones/penree.net"},
 		{ID: "command-zone-search-penree", Label: "Search in penree.net", Description: "Filter records in this zone", Icon: "search", Kind: "Search", Keywords: "dns records", Route: "/zones/penree.net", Focus: "[data-record-search]", SearchPrompt: "Search records in penree.net…"},
 		{ID: "command-integration-unifi", Label: "Edit UniFi Setup", Description: "Edit controller and network mappings", Icon: "wifi-sync", Kind: "Integration", Keywords: "unifi", Href: "/integrations?setup=unifi"},
+		{ID: "command-integration-dynamic-dns", Label: "Edit Dynamic DNS Setup", Description: "Configure providers and public names", Icon: "cloud-sync", Kind: "Integration", Keywords: "dynamic dns ddns", Href: "/integrations?setup=dynamic-dns"},
+		{ID: "command-zone-history-penree", Label: "View history for penree.net", Description: "Review zone revisions", Icon: "clock", Kind: "Action", Keywords: "change control rollback", Route: "/zones/penree.net", Dialog: "zone-history-dialog"},
 	}}))
 	for _, expected := range []string{
 		`id="command-zones-title"`, `>Zones</h3>`, `id="command-search-title"`, `>Search actions</h3>`,
 		`id="command-integrations-title"`, `>Integrations</h3>`, `data-command-label="penree.net"`,
+		`data-command-label="Integrations"`, `>Dynamic DNS, UniFi, and single sign-on</small>`,
+		`data-command-keywords="dynamic dns ddns unifi sso oidc"`,
 		`data-command-href="/zones/penree.net"`, `>Zone</span>`,
 		`data-command-label="Search in penree.net"`, `data-command-route="/zones/penree.net"`,
 		`data-command-focus="[data-record-search]"`, `data-command-search="true"`,
 		`data-command-search-prompt="Search records in penree.net…"`, `>Search</span>`,
 		`data-command-label="Edit UniFi Setup"`, `data-command-href="/integrations?setup=unifi"`, `>Integration</span>`,
+		`data-command-label="Edit Dynamic DNS Setup"`, `data-command-href="/integrations?setup=dynamic-dns"`,
+		`data-command-label="View history for penree.net"`, `data-command-route="/zones/penree.net"`,
+		`data-command-dialog="zone-history-dialog"`, `data-command-keywords="change control rollback"`, `>Action</span>`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("entity command palette does not contain %q", expected)

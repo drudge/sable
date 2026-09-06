@@ -21,7 +21,10 @@ name.
 
 ## Configure publication
 
-1. Open **Integrations → Dynamic DNS** and add a provider.
+1. Open **Integrations → Dynamic DNS** and add a provider. You can also open
+   the command palette and choose **Set Up Dynamic DNS**. After setup, that
+   command becomes **Edit Dynamic DNS Setup**; on a read-only replica it opens
+   the integration status instead of offering configuration changes.
 2. Enter its credentials, add each external zone it manages, and enter one
    fully-qualified public name per line. Use **Add Provider** when another zone
    lives at a different provider. Each provider can appear once because its
