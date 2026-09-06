@@ -340,6 +340,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
 		dnsProviderCredentials,
+		database,
 		func() bool {
 			state := clusterService.Snapshot()
 			return !state.Initialized || state.LocalRole != cluster.RoleReplica
