@@ -747,6 +747,8 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 	runtime, err := dnsserver.Compile(dnsserver.RuntimeConfig{
 		Mode:                       configuration.Resolver.Mode,
 		Forwarders:                 configuration.Resolver.Forwarders,
+		Recursion:                  configuration.Resolver.Recursion,
+		RecursionClients:           configuration.Resolver.RecursionClients,
 		RootHints:                  configuration.Resolver.RootHints,
 		Routes:                     routes,
 		Timeout:                    configuration.Resolver.Timeout.Duration,

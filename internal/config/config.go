@@ -19,6 +19,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/clientaccess"
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/durationfmt"
@@ -164,6 +165,8 @@ type Database struct {
 }
 
 type Resolver struct {
+	Recursion                  string         `toml:"recursion"`
+	RecursionClients           []string       `toml:"recursion_clients"`
 	Mode                       string         `toml:"mode"`
 	Forwarders                 []string       `toml:"forwarders"`
 	RootHints                  []string       `toml:"root_hints"`
@@ -466,6 +469,7 @@ func Defaults() Config {
 			DSN:    defaultDatabaseDSN,
 		},
 		Resolver: Resolver{
+			Recursion:                "private",
 			Mode:                     "forward",
 			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
 			Timeout:                  Duration{Duration: defaultResolverTimeout},
@@ -679,6 +683,9 @@ func (configuration Config) Validate() error {
 	}
 	if configuration.Resolver.Mode != "forward" && configuration.Resolver.Mode != "recursive" {
 		validationErrors = append(validationErrors, errors.New("resolver.mode must be forward or recursive"))
+	}
+	if _, err := clientaccess.Compile(configuration.Resolver.Recursion, configuration.Resolver.RecursionClients); err != nil {
+		validationErrors = append(validationErrors, fmt.Errorf("resolver: %w", err))
 	}
 	if configuration.Resolver.Mode == "forward" && len(configuration.Resolver.Forwarders) == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.forwarders must contain at least one address in forward mode"))
@@ -1171,6 +1178,11 @@ func (configuration *Config) normalize() {
 	configuration.Backup.RunAt = strings.TrimSpace(configuration.Backup.RunAt)
 	configuration.Server.HTTPSListen = strings.TrimSpace(configuration.Server.HTTPSListen)
 	configuration.Server.DNSListen = uniqueTrimmed(configuration.Server.DNSListen)
+	configuration.Resolver.Recursion = strings.ToLower(strings.TrimSpace(configuration.Resolver.Recursion))
+	if configuration.Resolver.Recursion == "" {
+		configuration.Resolver.Recursion = "private"
+	}
+	configuration.Resolver.RecursionClients = uniqueTrimmed(configuration.Resolver.RecursionClients)
 	configuration.Resolver.Forwarders = uniqueTrimmed(configuration.Resolver.Forwarders)
 	configuration.Resolver.Mode = strings.ToLower(strings.TrimSpace(configuration.Resolver.Mode))
 	if configuration.Resolver.Mode == "" {
