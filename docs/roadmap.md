@@ -1,6 +1,6 @@
 # Sable roadmap
 
-Sable is pre-1.0, but the original foundation, recursive, authoritative,
+Sable's original foundation, recursive, authoritative,
 clustering, and certificate milestones are substantially delivered. This
 roadmap separates what is present on `main` from work that remains; a bullet in
 the delivered section is a current capability, while a bullet in a future

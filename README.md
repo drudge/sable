@@ -6,8 +6,7 @@
 
 Sable is a modern, high-performance DNS platform written in Go and distributed
 as one static executable containing the DNS server, DNS client, administrative
-API, migrations, and reactive web console. It is pre-1.0, but it has moved well
-beyond its original foundation milestone: the current platform covers recursive
+API, migrations, and reactive web console. The platform covers recursive
 and authoritative DNS, policy, observability, identity, clustering, certificate
 automation, backup and restore, and native release management.
 
@@ -89,7 +88,7 @@ without shipping a Node.js runtime or a separate frontend bundle.
   integration-owned A, AAAA, and IPv4/IPv6 PTR records that do not disturb
   hand-authored data
 
-Sable remains pre-1.0. Replicas continue serving DNS when the primary is
+Replicas continue serving DNS when the primary is
 unavailable, but control-plane writes require manual promotion; Sable does not
 yet claim automatic partition-safe failover. OpenTelemetry export,
 cluster-aggregated telemetry, encrypted-transport capacity profiles, and the
