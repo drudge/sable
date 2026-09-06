@@ -86,6 +86,33 @@ renews within the configured window.
 
 ## Recursive resolution and forwarding
 
+Client recursion defaults to `recursion = "private"`: loopback, RFC 1918 IPv4,
+IPv6 unique-local, and link-local source addresses. This restriction also applies
+when upgrading a configuration that omits the setting. Public-network clients
+must be explicitly allowed. It covers UDP, TCP, DoT, DoH, and DoQ, including
+conditional forwarding and recursive cache hits. DoH uses the connection source;
+it does not trust forwarding headers. A reverse proxy must enforce equivalent
+client restrictions before forwarding to Sable.
+
+Use Settings → Recursion to choose the access policy, or configure:
+
+```toml
+[resolver]
+recursion = "acl"
+recursion_clients = ["192.168.1.0/24", "fd12:3456::/48", "203.0.113.10"]
+```
+
+An empty ACL denies client recursion. `recursion = "deny"` disables it entirely;
+`recursion = "allow"` explicitly operates a public recursive resolver. Primary,
+secondary, alias-zone, and local-host answers remain available independently of
+this policy. ANAME resolution is limited to administrator-configured targets and remains
+available as part of authoritative service, including requests from recursive
+resolvers with RD=0. Other RD=0 queries never initiate upstream resolution or
+prefetch: they receive available local/authoritative or permitted cached data,
+or REFUSED on a recursive miss. The RA flag reflects client access. DoH responses
+use private HTTP caching so shared caches cannot reuse client-specific answers.
+
+
 ```toml
 [resolver]
 mode = "recursive"
@@ -264,6 +291,10 @@ Primary zones require one apex SOA and at least one apex NS record. Console and 
 
 Open **Zones → Actions → Change Center** to inspect the retained revisions for a
 zone. Each revision shows setting and record differences from its predecessor.
+History access follows each snapshot's immutable zone identity, including the
+preceding snapshot used for a diff. Recreating a zone with the same name does not
+grant access to its earlier identity. Legacy snapshots without an identity are
+visible only to readers with access to all zones.
 Restoring an earlier state preserves the zone's stable identity, advances its
 SOA serial beyond the current value, and saves the restored state as a new
 revision; it never moves history backwards or bypasses validation, signing,

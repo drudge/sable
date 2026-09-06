@@ -146,6 +146,9 @@ ON sable_server_log (occurred_at)`}
 			return fmt.Errorf("migrate %s database: %w", store.driver, err)
 		}
 	}
+	if err := store.migrateZoneRevisionIdentity(ctx); err != nil {
+		return fmt.Errorf("migrate zone revision identity: %w", err)
+	}
 	if err := store.migrateZoneIdentitySchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
