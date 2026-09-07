@@ -95,7 +95,7 @@ The Cluster page refreshes role, connectivity, applied/current generation,
 generation lag, last contact, and last successful synchronization. It also
 links to each advertised console.
 
-![Cluster status showing member roles, generation lag, and synchronization health](assets/guide-screenshots/cluster-status.webp "Check role, generation lag, and last successful synchronization before maintenance. Preview capture; the final release image will be refreshed for 1.0.0.")
+![Cluster status showing member roles, generation lag, and synchronization health](assets/guide-screenshots/cluster-status.webp "Check role, generation lag, and last successful synchronization before maintenance. Sable 1.0.0 with demo data.")
 
 The DNS client offers enrolled nodes as presets. A node preset queries
 `/dns-query` on that member's advertised HTTPS endpoint and reuses the

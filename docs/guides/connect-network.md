@@ -11,6 +11,8 @@ Move clients to Sable gradually. First prove that Sable answers from the intende
 
 For home networks, `home.arpa` is a designated private-use naming space. For an organization, use an internal subdomain of a domain you control. Avoid using `.local` for unicast DNS because it is used by multicast DNS. See [RFC 8375](https://www.rfc-editor.org/rfc/rfc8375.html).
 
+Sable 1.0 permits recursive lookups from private and loopback addresses by default. If trusted clients use other address ranges, add their exact addresses or subnets to `[resolver].recursion_clients`; keep public recursion closed. Authoritative answers for hosted zones are separate from recursion access. See [recursion access](../configuration.md#recursive-resolution-and-forwarding) for the complete policy.
+
 ## 1. Test a single device
 
 Manually set one device's DNS server to Sable's address. Open **Logs → Queries** and perform a lookup. Check both the device's IPv4 and IPv6 resolver settings; changing only one does not guarantee all requests use Sable.
