@@ -1,0 +1,154 @@
+{
+  "version": "1.0.0",
+  "versionLabel": "1.0.0",
+  "navigationLabels": {
+    "getting-started": "First server",
+    "concepts": "Core concepts",
+    "installation/linux": "Linux",
+    "installation/docker": "Docker",
+    "installation/proxmox": "Proxmox",
+    "guides/connect-network": "Connect your network",
+    "guides/private-names": "Service names",
+    "guides/reverse-dns": "Reverse DNS",
+    "guides/forwarding": "Forwarding",
+    "guides/blocking": "Blocking",
+    "guides/troubleshooting": "Troubleshooting",
+    "guides/import-export": "Import & export",
+    "guides/delegation": "Delegation",
+    "guides/zone-transfers": "Zone transfers",
+    "guides/dynamic-updates": "Dynamic updates",
+    "guides/dnssec": "DNSSEC",
+    "guides/encrypted-dns": "Encrypted DNS",
+    "guides/certificates": "Certificates",
+    "guides/access-control": "Users & permissions",
+    "guides/sso": "Single sign-on",
+    "guides/api-tokens": "API tokens",
+    "guides/dynamic-dns": "Dynamic DNS",
+    "guides/unifi": "UniFi",
+    "guides/glance": "Glance",
+    "guides/operations": "Operations",
+    "guides/logging": "Logs & metrics",
+    "guides/backup": "Backup & restore",
+    "guides/updates": "Updates",
+    "guides/clustering": "Clustering",
+    "reference/zones": "Overview",
+    "reference/records": "Overview",
+    "reference/records/dnssec": "Managed DNSSEC",
+    "reference/configuration": "Configuration",
+    "reference/cli": "CLI",
+    "reference/glossary": "Glossary",
+    "reference/benchmarking": "Benchmarking"
+  },
+  "groups": [
+    { "title": "Start here", "collections": [
+      { "title": "Installation", "pages": ["installation/linux", "installation/docker", "installation/proxmox"] }
+    ], "pages": [
+      { "slug": "", "file": "docs/index.md", "title": "Getting Started", "description": "Start with one server and one test device, then build the DNS setup your network needs." },
+      { "slug": "getting-started", "file": "docs/guides/getting-started.md", "title": "Your first Sable server", "description": "From a fresh install to a verified answer, one test device at a time.", "featured": true, "aliases": ["getting-started"] },
+      { "slug": "concepts", "file": "docs/guides/concepts.md", "title": "How Sable fits your network", "description": "Resolution, authority, forwarding, and replication—four different jobs with clear boundaries." },
+      { "slug": "installation/linux", "file": "docs/guides/install-linux.md", "title": "Install on Linux", "description": "A hardened systemd service, private administration, and a predictable on-disk layout." },
+      { "slug": "installation/docker", "file": "docs/guides/install-docker.md", "title": "Run with Docker", "description": "Publish DNS safely and keep configuration, certificates, and data across container replacements." },
+      { "slug": "installation/proxmox", "file": "docs/proxmox.md", "title": "Deploy on Proxmox", "description": "Provision a Debian LXC, install Sable, and maintain the node in place.", "aliases": ["proxmox"] },
+      { "slug": "guides/connect-network", "file": "docs/guides/connect-network.md", "title": "Connect your network", "description": "Move clients to Sable without losing your recovery path or leaking policy through a second resolver." }
+    ] },
+    { "title": "Everyday DNS", "collections": [
+      { "title": "Your network", "pages": ["guides/private-names", "guides/reverse-dns", "guides/forwarding", "guides/blocking", "guides/troubleshooting"] },
+      { "title": "Authoritative DNS", "pages": ["guides/import-export", "guides/delegation", "guides/zone-transfers", "guides/dynamic-updates", "guides/dnssec"] }
+    ], "pages": [
+      { "slug": "guides/private-names", "file": "docs/guides/private-names.md", "title": "Give your services names", "description": "Create a private zone, add host records, and make them resolve from your devices.", "featured": true },
+      { "slug": "guides/reverse-dns", "file": "docs/guides/reverse-dns.md", "title": "Set up reverse DNS", "description": "Turn IPv4 and IPv6 addresses back into meaningful names with reverse zones and PTR records." },
+      { "slug": "guides/forwarding", "file": "docs/guides/forwarding.md", "title": "Choose where queries go", "description": "Use direct recursion, shared upstreams, and conditional forwarding for private namespaces." },
+      { "slug": "guides/blocking", "file": "docs/guides/blocking.md", "title": "Block unwanted domains", "description": "Add lists and precise exceptions, verify the policy, and recover when a service breaks.", "featured": true },
+      { "slug": "guides/troubleshooting", "file": "docs/guides/troubleshooting.md", "title": "Explain a DNS answer", "description": "Follow a query through policy, cache, resolver routing, and DNSSEC to find the cause." },
+      { "slug": "guides/import-export", "file": "docs/guides/import-export.md", "title": "Import, export, and undo changes", "description": "Move zone data safely and use the Change Center to restore an earlier revision." },
+      { "slug": "guides/delegation", "file": "docs/guides/delegation.md", "title": "Host and delegate a zone", "description": "Publish authoritative data, configure parent delegation, and verify the whole lookup path." },
+      { "slug": "guides/zone-transfers", "file": "docs/guides/zone-transfers.md", "title": "Transfer zones securely", "description": "Pair a primary and secondary using explicit transfer policy, TSIG, and refresh checks." },
+      { "slug": "guides/dynamic-updates", "file": "docs/guides/dynamic-updates.md", "title": "Automate DNS updates", "description": "Authenticate RFC 2136 changes to a Primary zone and verify each update." },
+      { "slug": "guides/dnssec", "file": "docs/guides/dnssec.md", "title": "Validate and sign with DNSSEC", "description": "Separate recursive validation from authoritative signing and manage the parent DS carefully." }
+    ] },
+    { "title": "Secure and integrate", "collections": [
+      { "title": "Security", "pages": ["guides/encrypted-dns", "guides/certificates"] },
+      { "title": "Identity and access", "pages": ["guides/access-control", "guides/sso", "guides/api-tokens"] },
+      { "title": "Integrations", "pages": ["guides/dynamic-dns", "guides/unifi", "guides/glance"] }
+    ], "pages": [
+      { "slug": "guides/encrypted-dns", "file": "docs/guides/encrypted-dns.md", "title": "Enable encrypted DNS", "description": "Serve DoT, DoH, and DoQ with trusted certificates and test each transport." },
+      { "slug": "guides/certificates", "file": "docs/guides/certificates.md", "title": "Manage certificates", "description": "Choose imported, self-signed, or ACME-managed certificates and keep renewal healthy." },
+      { "slug": "guides/access-control", "file": "docs/guides/access-control.md", "title": "Manage people and permissions", "description": "Grant the right Web and API access without handing every operator administrator credentials." },
+      { "slug": "guides/sso", "file": "docs/guides/sso.md", "title": "Connect single sign-on", "description": "Configure an OpenID Connect provider, map groups, and preserve a recovery administrator." },
+      { "slug": "guides/api-tokens", "file": "docs/guides/api-tokens.md", "title": "Create an API token", "description": "Give an integration a revocable credential with only the API permissions it needs." },
+      { "slug": "guides/dynamic-dns", "file": "docs/guides/dynamic-dns.md", "title": "Publish a changing public address", "description": "Keep external A and AAAA records synchronized with this deployment's public connection." },
+      { "slug": "guides/unifi", "file": "docs/guides/unifi.md", "title": "Sync names from UniFi", "description": "Map controller networks to forward and reverse zones without overwriting hand-authored records." },
+      { "slug": "guides/glance", "file": "docs/guides/glance.md", "title": "Add a Glance DNS widget", "description": "Show Sable statistics in Glance using its Technitium-compatible DNS Stats integration." }
+    ] },
+    { "title": "Operate and recover", "pages": [
+      { "slug": "guides/operations", "file": "docs/operations.md", "title": "Day-to-day operations", "description": "Check health, control the service, monitor failures, and preserve incident evidence.", "aliases": ["operations"] },
+      { "slug": "guides/logging", "file": "docs/guides/logging.md", "title": "Use logs and metrics", "description": "Understand dashboard ranges, choose retention, and monitor the DNS service with Prometheus." },
+      { "slug": "guides/backup", "file": "docs/backup.md", "title": "Back up and restore", "description": "Schedule encrypted backups, keep an off-host copy, and rehearse recovery before you need it.", "featured": true, "aliases": ["backup"] },
+      { "slug": "guides/updates", "file": "docs/guides/updates.md", "title": "Update Sable safely", "description": "Choose a release channel, roll out the same version, and keep a known-good recovery point." },
+      { "slug": "guides/clustering", "file": "docs/clustering.md", "title": "Build a resilient cluster", "description": "Enroll replicas, inspect synchronization, and plan maintenance or recovery promotion.", "aliases": ["clustering"] }
+    ] },
+    { "title": "Zone types", "collections": [
+      { "title": "Authoritative zones", "pages": ["reference/zones/primary", "reference/zones/secondary", "reference/zones/alias"] },
+      { "title": "Resolver routing", "pages": ["reference/zones/stub", "reference/zones/forwarder"] },
+      { "title": "Catalogs", "pages": ["reference/zones/catalog", "reference/zones/secondary-catalog"] }
+    ], "pages": [
+      { "slug": "reference/zones", "file": "docs/reference/zones/index.md", "title": "Choose a zone type", "description": "Compare where data comes from, whether it is editable, and how each zone answers." },
+      { "slug": "reference/zones/primary", "file": "docs/reference/zones/primary.md", "title": "Primary", "description": "Authoritative records managed here, with revisions, transfers, updates, and optional signing." },
+      { "slug": "reference/zones/secondary", "file": "docs/reference/zones/secondary.md", "title": "Secondary", "description": "An authoritative copy maintained through AXFR and IXFR from another server." },
+      { "slug": "reference/zones/stub", "file": "docs/reference/zones/stub.md", "title": "Stub", "description": "Authority metadata and a primary pool for routing queries without hosting a full copy." },
+      { "slug": "reference/zones/forwarder", "file": "docs/reference/zones/forwarder.md", "title": "Forwarder", "description": "A namespace routed to explicit upstream resolvers using prioritized FWD records." },
+      { "slug": "reference/zones/alias", "file": "docs/reference/zones/alias.md", "title": "Alias", "description": "Republish a Primary or Secondary zone under another apex with one source of records." },
+      { "slug": "reference/zones/catalog", "file": "docs/reference/zones/catalog.md", "title": "Catalog", "description": "Publish an RFC 9432 zone inventory for other servers to provision." },
+      { "slug": "reference/zones/secondary-catalog", "file": "docs/reference/zones/secondary-catalog.md", "title": "Secondary Catalog", "description": "Subscribe to an RFC 9432 inventory and let Sable maintain its member zones." }
+    ] },
+    { "title": "Record types", "collections": [
+      { "title": "Addresses and aliases", "pages": ["reference/records/a", "reference/records/aaaa", "reference/records/cname", "reference/records/aname", "reference/records/dname", "reference/records/ptr"] },
+      { "title": "Zone authority", "pages": ["reference/records/ns", "reference/records/soa"] },
+      { "title": "Mail and text", "pages": ["reference/records/mx", "reference/records/txt"] },
+      { "title": "Service discovery", "pages": ["reference/records/srv", "reference/records/svcb", "reference/records/https", "reference/records/uri", "reference/records/naptr"] },
+      { "title": "Security and DNSSEC", "pages": ["reference/records/caa", "reference/records/ds", "reference/records/sshfp", "reference/records/tlsa", "reference/records/dnssec"] },
+      { "title": "Sable routing", "pages": ["reference/records/fwd"] }
+    ], "pages": [
+      { "slug": "reference/records", "file": "docs/reference/records/index.md", "title": "Record field guide", "description": "Find the right record, understand names and TTLs, and distinguish ordinary data from managed records." },
+      { "slug": "reference/records/a", "file": "docs/reference/records/a.md", "title": "A", "description": "Map a name to an IPv4 address." },
+      { "slug": "reference/records/aaaa", "file": "docs/reference/records/aaaa.md", "title": "AAAA", "description": "Map a name to an IPv6 address." },
+      { "slug": "reference/records/cname", "file": "docs/reference/records/cname.md", "title": "CNAME", "description": "Make one owner name an alias for another name." },
+      { "slug": "reference/records/aname", "file": "docs/reference/records/aname.md", "title": "ANAME", "description": "Flatten a target into authoritative address answers, including at an apex." },
+      { "slug": "reference/records/dname", "file": "docs/reference/records/dname.md", "title": "DNAME", "description": "Redirect descendants of an owner name to another subtree." },
+      { "slug": "reference/records/ns", "file": "docs/reference/records/ns.md", "title": "NS", "description": "Identify authoritative servers and delegate child zones." },
+      { "slug": "reference/records/soa", "file": "docs/reference/records/soa.md", "title": "SOA", "description": "Define the zone's serial, authority, and refresh timers." },
+      { "slug": "reference/records/mx", "file": "docs/reference/records/mx.md", "title": "MX", "description": "Direct email delivery to a prioritized mail exchanger." },
+      { "slug": "reference/records/txt", "file": "docs/reference/records/txt.md", "title": "TXT", "description": "Publish verification, mail policies, and application-defined text." },
+      { "slug": "reference/records/ptr", "file": "docs/reference/records/ptr.md", "title": "PTR", "description": "Point from a reverse-DNS owner to its host name." },
+      { "slug": "reference/records/srv", "file": "docs/reference/records/srv.md", "title": "SRV", "description": "Locate a service using priority, weight, port, and target." },
+      { "slug": "reference/records/caa", "file": "docs/reference/records/caa.md", "title": "CAA", "description": "Constrain which certificate authorities may issue for a name." },
+      { "slug": "reference/records/ds", "file": "docs/reference/records/ds.md", "title": "DS", "description": "Connect a signed child zone to its parent's chain of trust." },
+      { "slug": "reference/records/sshfp", "file": "docs/reference/records/sshfp.md", "title": "SSHFP", "description": "Publish fingerprints of SSH host keys." },
+      { "slug": "reference/records/tlsa", "file": "docs/reference/records/tlsa.md", "title": "TLSA", "description": "Bind a TLS service to certificate or public-key material." },
+      { "slug": "reference/records/svcb", "file": "docs/reference/records/svcb.md", "title": "SVCB", "description": "Advertise service bindings and connection parameters." },
+      { "slug": "reference/records/https", "file": "docs/reference/records/https.md", "title": "HTTPS", "description": "Advertise HTTPS bindings such as ALPN and alternate ports." },
+      { "slug": "reference/records/uri", "file": "docs/reference/records/uri.md", "title": "URI", "description": "Publish a URI for applications that understand URI discovery." },
+      { "slug": "reference/records/naptr", "file": "docs/reference/records/naptr.md", "title": "NAPTR", "description": "Publish ordered naming and rewrite rules for protocols such as SIP." },
+      { "slug": "reference/records/fwd", "file": "docs/reference/records/fwd.md", "title": "FWD", "description": "Sable-specific routing metadata for an owner and its subtree." },
+      { "slug": "reference/records/dnssec", "file": "docs/reference/records/dnssec.md", "title": "Managed DNSSEC records", "description": "Understand DNSKEY, RRSIG, NSEC, NSEC3, and NSEC3PARAM without hand-editing generated data." }
+    ] },
+    { "title": "Technical reference", "pages": [
+      { "slug": "reference/configuration", "file": "docs/configuration.md", "title": "TOML configuration", "description": "The complete configuration reference: listeners, resolver, policy, storage, identity, and integrations.", "aliases": ["configuration"] },
+      { "slug": "reference/cli", "file": "docs/reference/cli.md", "title": "Command-line interface", "description": "Serve, query, validate, install, update, and manage backup archives." },
+      { "slug": "reference/api", "file": "docs/reference/api.md", "title": "HTTP API", "description": "Authentication, supported management endpoints, and the boundary between API and console routes." },
+      { "slug": "reference/glossary", "file": "docs/reference/glossary.md", "title": "DNS glossary", "description": "Plain-language definitions of the terms used throughout this handbook." },
+      { "slug": "reference/benchmarking", "file": "docs/benchmarking.md", "title": "Benchmark protocol", "description": "Reproduce the managed UDP/TCP comparison and understand what its results do—and do not—measure.", "aliases": ["benchmarking"] }
+    ] },
+    { "title": "Project", "collections": [
+      { "title": "Inside Sable", "pages": ["project/architecture", "project/ui", "project/accessibility", "project/releasing"] }
+    ], "pages": [
+      { "slug": "project/security", "file": "SECURITY.md", "title": "Security policy", "description": "Supported releases and private vulnerability reporting." },
+      { "slug": "project/changelog", "file": "CHANGELOG.md", "title": "Changelog", "description": "Selected user-visible changes and known release boundaries." },
+      { "slug": "project/roadmap", "file": "docs/roadmap.md", "title": "Roadmap", "description": "Delivered capabilities, planned work, and deliberate boundaries.", "aliases": ["roadmap"] },
+      { "slug": "project/architecture", "file": "docs/architecture.md", "title": "Architecture", "description": "How the data plane, control plane, persistence, and cluster fit together.", "aliases": ["architecture"] },
+      { "slug": "project/ui", "file": "docs/ui.md", "title": "Console design", "description": "The implementation and interaction contracts behind Sable's console.", "aliases": ["ui"] },
+      { "slug": "project/accessibility", "file": "docs/accessibility.md", "title": "Accessibility", "description": "Keyboard, focus, motion, and responsive requirements for the product console." },
+      { "slug": "project/releasing", "file": "docs/releasing.md", "title": "Release process", "description": "Release tooling, verification gates, publication, and the artifact contract.", "aliases": ["releasing"] }
+    ] }
+  ]
+}

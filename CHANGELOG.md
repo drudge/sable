@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-09-06
 
 The first stable release brings together Sable's authoritative and recursive
 DNS service, cluster administration, query visibility, and operating tools.
