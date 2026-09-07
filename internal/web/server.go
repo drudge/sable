@@ -893,7 +893,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 			ID: "command-entity-integration-sso", Label: "View SSO Setup", Description: "Open the single sign-on integration", Icon: "key-round", Kind: "Integration",
 			Keywords: strings.Join(append(keywords, oidcSettings.Label()), " "), Route: "/integrations", Focus: "#sso-card",
 		}
-		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+		if server.canManageSSO(request) && !view.ControlPlaneReadOnly {
 			entity.Label = "Set Up Single Sign-On"
 			if oidcConfigured {
 				entity.Label = "Edit SSO Setup"

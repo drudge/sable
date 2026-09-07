@@ -52,7 +52,7 @@ func TestDoHHandlesWireFormatPOSTAndGET(t *testing.T) {
 			if response.Header().Get("Content-Type") != dohContentType {
 				t.Fatalf("Content-Type = %q", response.Header().Get("Content-Type"))
 			}
-			if response.Header().Get("Cache-Control") != "public, max-age=60" {
+			if response.Header().Get("Cache-Control") != "private, max-age=60" {
 				t.Fatalf("Cache-Control = %q", response.Header().Get("Cache-Control"))
 			}
 			message := new(dns.Msg)

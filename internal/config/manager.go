@@ -66,6 +66,7 @@ func (manager *Manager) Update(ctx context.Context, mutate func(*Config) error) 
 
 func cloneConfig(source Config) Config {
 	cloned := source
+	cloned.Resolver.RecursionClients = append([]string(nil), source.Resolver.RecursionClients...)
 	cloned.Server.DNSListen = append([]string(nil), source.Server.DNSListen...)
 	cloned.Resolver.Forwarders = append([]string(nil), source.Resolver.Forwarders...)
 	cloned.Resolver.RootHints = append([]string(nil), source.Resolver.RootHints...)

@@ -8,6 +8,17 @@ import (
 	"github.com/a-h/templ"
 )
 
+func TestSSOReadOnlyCardOmitsAdministrationActions(t *testing.T) {
+	for _, configured := range []bool{false, true} {
+		markup := render(t, SSOCard(SSOAppView{Configured: configured, Enabled: true}))
+		for _, control := range []string{"setup=sso", "hx-post=", "remove-sso-dialog"} {
+			if strings.Contains(markup, control) {
+				t.Errorf("read-only SSO card contains %q", control)
+			}
+		}
+	}
+}
+
 // The setup wizards are control-plane writes, so a replica has to show them as
 // unavailable. They are opened by links rather than submitted as forms, and the
 // console's read-only pass only finds a link through this marker, so without it
@@ -18,9 +29,9 @@ func TestIntegrationSetupLaunchersAreMarkedPrimaryOnly(t *testing.T) {
 		render func() string
 		target string
 	}{
-		{"single sign-on, not set up", func() string { return render(t, SSOCard(SSOAppView{})) }, "setup=sso"},
+		{"single sign-on, not set up", func() string { return render(t, SSOCard(SSOAppView{CanManage: true})) }, "setup=sso"},
 		{"single sign-on, configured", func() string {
-			return render(t, SSOCard(SSOAppView{Configured: true, Enabled: true, Issuer: "https://id.example.test"}))
+			return render(t, SSOCard(SSOAppView{CanManage: true, Configured: true, Enabled: true, Issuer: "https://id.example.test"}))
 		}, "setup=sso"},
 		{"unifi, not set up", func() string { return render(t, UniFiCard(UniFiAppView{Available: true})) }, "setup=unifi"},
 		{"unifi, configured", func() string {
@@ -45,7 +56,7 @@ func TestIntegrationSetupLaunchersAreMarkedPrimaryOnly(t *testing.T) {
 // A card that is set up also offers Remove, which is a write like any other.
 func TestIntegrationRemoveButtonsAreMarkedPrimaryOnly(t *testing.T) {
 	for name, html := range map[string]string{
-		"single sign-on": render(t, SSOCard(SSOAppView{Configured: true, Enabled: true})),
+		"single sign-on": render(t, SSOCard(SSOAppView{CanManage: true, Configured: true, Enabled: true})),
 		"unifi":          render(t, UniFiCard(UniFiAppView{Available: true, Configured: true, ControllerURL: "https://unifi.example.test"})),
 	} {
 		buttons := openingTags(html, "<button ", "-dialog\"")
@@ -62,7 +73,7 @@ func TestIntegrationRemoveButtonsAreMarkedPrimaryOnly(t *testing.T) {
 
 func TestSSOCardActionsMatchIntegrationOrderAndEmphasis(t *testing.T) {
 	t.Parallel()
-	enabled := render(t, SSOCard(SSOAppView{Configured: true, Enabled: true}))
+	enabled := render(t, SSOCard(SSOAppView{CanManage: true, Configured: true, Enabled: true}))
 	previous := -1
 	for _, label := range []string{"Edit Setup", "Pause", "Test Connection"} {
 		position := strings.Index(enabled, ">"+label+"</span>")
@@ -80,7 +91,7 @@ func TestSSOCardActionsMatchIntegrationOrderAndEmphasis(t *testing.T) {
 		t.Errorf("enabled SSO Test Connection is not the primary button: %s", button)
 	}
 
-	paused := render(t, SSOCard(SSOAppView{Configured: true}))
+	paused := render(t, SSOCard(SSOAppView{CanManage: true, Configured: true}))
 	check = paused[strings.Index(paused, `hx-post="/ui/integrations/sso/check"`):]
 	button = openingTags(check, "<button ", "")[0]
 	if !strings.Contains(paused, ">Resume</span>") {

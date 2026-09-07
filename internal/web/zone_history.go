@@ -40,6 +40,28 @@ func zoneRevisionKindLabel(kind string) string {
 	}
 }
 
+func (server *Server) canReadZoneRevision(request *http.Request, zoneID string) bool {
+	if !server.securityEnabled {
+		return true
+	}
+	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	// Legacy snapshots without an identity cannot be attributed to a scoped grant.
+	if zoneID == "" {
+		zoneID = auth.ResourceAll
+	}
+	return auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zoneID)
+}
+
+func (server *Server) readableZoneRevisions(request *http.Request, revisions []zonemodel.Revision) []zonemodel.Revision {
+	readable := make([]zonemodel.Revision, 0, len(revisions))
+	for _, revision := range revisions {
+		if server.canReadZoneRevision(request, revision.ZoneID) {
+			readable = append(readable, revision)
+		}
+	}
+	return readable
+}
+
 func (server *Server) zoneRevisionDiff(writer http.ResponseWriter, request *http.Request) {
 	name := normalizeZoneName(request.URL.Query().Get("zone"))
 	current := findZone(server.zones.Current().Zones, name)
@@ -71,11 +93,18 @@ func (server *Server) zoneRevisionDiff(writer http.ResponseWriter, request *http
 		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: message}).Render(request.Context(), writer)
 		return
 	}
+	if !server.canReadZoneRevision(request, target.Zone.ID) {
+		writeFragmentStatus(writer, http.StatusForbidden)
+		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "This zone revision is not available."}).Render(request.Context(), writer)
+		return
+	}
 	view := pages.ZoneRevisionDiffView{ZoneName: name, Revision: revisionNumber}
 	var previous zonemodel.Zone
 	if target.ChangeKind != "created" && target.ChangeKind != "deleted" {
 		prior, priorErr := history.PreviousZoneRevision(request.Context(), name, revisionNumber)
-		if priorErr == nil {
+		if priorErr == nil && !server.canReadZoneRevision(request, prior.Zone.ID) {
+			view.Notice = "The preceding revision is not available, so an exact diff is unavailable."
+		} else if priorErr == nil {
 			previous = prior.Zone
 		} else if errors.Is(priorErr, zonemodel.ErrRevisionNotFound) {
 			view.Notice = "The preceding revision is no longer retained, so an exact diff is unavailable."

@@ -136,8 +136,10 @@ func TestTwoNodeClusterReplicaEnrollmentAndSynchronization(t *testing.T) {
 	promotedGeneration := waitForClusterState(t, replica, replicaClient, replicaPorts.https, func(state cluster.State) bool {
 		return state.Generation > promotedReplicaState.Generation
 	}).Generation
+	// Membership heartbeats can advance the generation again before the replica polls it.
 	waitForClusterState(t, primary, primaryClient, primaryPorts.https, func(state cluster.State) bool {
-		return state.LocalRole == cluster.RoleReplica && state.PrimaryID == replicaState.NodeID && state.Generation == promotedGeneration
+		return state.LocalRole == cluster.RoleReplica && state.PrimaryID == replicaState.NodeID &&
+			state.Generation >= promotedGeneration && state.Connected == 2 && state.Synchronized == 2
 	})
 	waitForBlockedDNSResponse(t, primary, primaryPorts.dns, handoffBlockedDomain)
 }
