@@ -32,8 +32,9 @@ protects development builds from being replaced by published releases.
   groups support links together, and shows a readable build date and time using
   the browser's timezone and 12/24-hour preference. Development builds have a
   distinct striped status panel with improved mobile spacing.
-- Go dependencies are updated to their latest stable releases, including
-  PostgreSQL, QUIC, SQLite, cryptography, networking, and the vulnerability scanner.
+- The Go toolchain is updated to 1.27.1, with dependencies updated to their
+  latest stable releases, including PostgreSQL, QUIC, SQLite, cryptography,
+  networking, and the vulnerability scanner.
 
 ## [1.0.0] - 2026-09-06
 
