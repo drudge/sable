@@ -392,7 +392,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err := webServer.SetStatsStore(ctx, database); err != nil {
 		logger.Warn("restore query statistics", "error", err)
 	}
-	updateManager := update.NewManager(update.Options{
+	updateManager := newUpdateManager(update.Options{
 		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
 		RestartManaged: initial.Updates.RestartManaged,
 		PreRelease:     initial.Updates.PreRelease,

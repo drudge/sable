@@ -1180,8 +1180,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .toast-icon { display: grid; color: var(--toast-accent); padding-top: .1rem; }
 .toast-icon .nav-icon { width: 1.05rem; height: 1.05rem; }
 .toast-content { min-width: 0; }
-.toast-content strong { display: block; font-size: .8rem; font-weight: 600; line-height: 1.25; }
-.toast-content p { margin: .18rem 0 0; color: var(--muted-foreground); font-size: .76rem; line-height: 1.4; overflow-wrap: anywhere; }
+.toast-content > strong { display: block; font-size: .8rem; font-weight: 600; line-height: 1.25; }
+.toast-content > p { margin: .18rem 0 0; color: var(--muted-foreground); font-size: .76rem; line-height: 1.4; overflow-wrap: anywhere; }
 .toast-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
 .toast-actions .button { display: inline-flex; align-items: center; gap: .35rem; }
 .toast-actions .button .nav-icon { width: .85rem; height: .85rem; flex: 0 0 .85rem; }
