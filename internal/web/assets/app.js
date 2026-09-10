@@ -2229,26 +2229,7 @@
 		if (timer !== null) window.clearInterval(timer);
 		timer = null;
 	  };
-	  let holdUntil = 0;
 	  let pollRequest = null;
-	  // A refresh replaces the whole panel, so it waits while someone is reading
-	  // or operating anything inside it rather than stealing keyboard focus. Focus
-	  // cannot answer that on its own: Safari leaves a clicked <select> unfocused,
-	  // so an open level menu would read as idle and the refresh would tear the
-	  // menu out before the pick could land. A pointer on a control holds the
-	  // refresh off until the pick lands or the hold lapses.
-	  const inUse = () => {
-		const active = document.activeElement;
-		if (active && active !== panel && panel.contains(active)) return true;
-		if (panel.querySelector("dialog[open]")) return true;
-		return performance.now() < holdUntil;
-	  };
-	  panel.addEventListener("pointerdown", (event) => {
-		if (event.target.closest?.("input, select, textarea, label")) holdUntil = performance.now() + 10000;
-	  });
-	  // The pick landed: the change it fires reloads the panel with the new
-	  // filter, so nothing is left to protect.
-	  panel.addEventListener("change", () => { holdUntil = 0; });
 	  // A refresh already on the wire still answers the filter the panel carried
 	  // when it left, so it is dropped rather than allowed to land on top of the
 	  // filter the operator just asked for.
@@ -2259,11 +2240,18 @@
 	  });
 	  panel.addEventListener("htmx:before:request", (event) => {
 		const ctx = event.detail?.ctx;
-		if (ctx?.sourceElement === panel) pollRequest = ctx.request;
+		if (ctx?.sourceElement === panel) {
+		  pollRequest = ctx.request;
+		  ctx.sableLogLiveURL = panel.dataset.liveUrl;
+		}
+	  });
+	  panel.addEventListener("htmx:before:swap", (event) => {
+		const ctx = event.detail?.ctx;
+		if (ctx?.sableLiveRefresh && (panel.dataset.live !== "true" || ctx.sableLogLiveURL !== panel.dataset.liveUrl)) event.preventDefault();
 	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
-		if (document.hidden || requestInFlight || inUse() || panel.dataset.live !== "true") return;
+		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
 		requestInFlight = true;
 		htmx.ajax("GET", panel.dataset.liveUrl, {source: panel, target: `#${panel.id}`, swap: "outerHTML"})
 		  .finally?.(() => { requestInFlight = false; pollRequest = null; });
@@ -2459,6 +2447,102 @@
 	  if (root.matches?.('[role="progressbar"]')) syncProgressFill(root);
 	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
+	const CONTROL_HOLD_MS = 10000;
+	const INTERACTIVE_CONTENT = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"], dialog[open]';
+	const editedForms = new WeakSet();
+	let pointerControl = null;
+	let pointerHoldUntil = 0;
+
+	// A stable control id lets htmx restore focus. Other controls, open widgets,
+	// and drafts must keep their existing DOM until the operator is finished.
+	function isLiveRegionInUse(root, fragment) {
+	  if (!root) return false;
+	  // Initial skeleton loads can finish behind a dialog; they have no controls
+	  // or dialog return target to remove, and a load event will not retry.
+	  if (document.querySelector("dialog[open]") && (root.matches(INTERACTIVE_CONTENT) || root.querySelector(INTERACTIVE_CONTENT))) return true;
+	  if (root.querySelector('details[open], [data-open="true"], [data-range-popover]:not([hidden])')) return true;
+	  if (root.contains(pointerControl) && performance.now() < pointerHoldUntil) return true;
+	  const forms = root.matches?.("form") ? [root] : root.querySelectorAll("form");
+	  if ([...forms].some(form => editedForms.has(form))) return true;
+
+	  const active = document.activeElement;
+	  if (!active || active === document.body || !root.contains(active)) return false;
+	  const replacement = active.id && fragment?.querySelector(`#${CSS.escape(active.id)}`);
+	  return !replacement || replacement.tagName !== active.tagName || !replacement.matches(INTERACTIVE_CONTENT) ||
+	    replacement.disabled || replacement.closest("[hidden], [inert]");
+	}
+
+	function installLiveRefresh() {
+	  const markEdited = event => {
+	    const form = event.target.closest?.("form");
+	    if (form) editedForms.add(form);
+	  };
+	  document.body.addEventListener("input", markEdited);
+	  document.body.addEventListener("change", event => {
+	    markEdited(event);
+	    pointerControl = null;
+	  });
+	  document.body.addEventListener("reset", event => {
+	    queueMicrotask(() => {
+	      if (!event.defaultPrevented) editedForms.delete(event.target);
+	    });
+	  });
+	  document.body.addEventListener("pointerdown", event => {
+	    // Safari can open a native control without moving keyboard focus to it.
+	    pointerControl = event.target.closest?.("input, select, textarea, label") || null;
+	    pointerHoldUntil = performance.now() + CONTROL_HOLD_MS;
+	  });
+	  document.body.addEventListener("htmx:before:request", event => {
+	    const ctx = event.detail?.ctx;
+	    if (!ctx?.sourceElement?.matches("[data-live-refresh]")) return;
+	    const type = ctx.sourceEvent?.type;
+	    ctx.sableLiveRefresh = !type || type === "every" || type === "load";
+	  });
+	  document.body.addEventListener("htmx:before:swap", event => {
+	    const {ctx, tasks = []} = event.detail || {};
+	    if (!ctx?.sableLiveRefresh) return;
+	    // Check when the response lands: focus or edits may have changed while
+	    // the request was in flight. Discard it and let the next poll catch up.
+	    if (!ctx.sourceElement.isConnected || tasks.some(task => isLiveRegionInUse(task.target, task.fragment))) {
+	      event.preventDefault();
+	    }
+	  });
+	}
+
+	const blockListRequest = "[data-block-list-add], [data-blocking-update]";
+
+	function installBlockListFeedback() {
+	  document.body.addEventListener("htmx:before:request", (event) => {
+	    const source = event.detail?.ctx?.sourceElement;
+	    if (event.defaultPrevented || !source?.matches?.(blockListRequest)) return;
+	    source.setAttribute("aria-busy", "true");
+	    source.closest("[data-blocking-root]")?.querySelector("[data-block-list-error]")?.remove();
+	  });
+
+	  document.body.addEventListener("htmx:finally:request", (event) => {
+	    const ctx = event.detail?.ctx;
+	    const source = ctx?.sourceElement;
+	    if (!source?.matches?.(blockListRequest)) return;
+	    source.removeAttribute("aria-busy");
+	    // Rendered responses replace the source and already include their own toast.
+	    if (!source.isConnected) return;
+	    if (ctx.response && ctx.response.status < 400 && !ctx.status?.startsWith("error:")) return;
+
+	    const root = source.closest("[data-blocking-root]");
+	    const template = root?.querySelector("[data-block-list-error-toast]");
+	    const region = template?.content.firstElementChild?.cloneNode(true);
+	    if (!region) return;
+	    root.querySelector("[data-block-list-error]")?.remove();
+	    region.setAttribute("data-block-list-error", "");
+	    // Keep the toast above an open modal without moving the form or its fields.
+	    (root.querySelector("dialog[open]") || root).append(region);
+	    setupToast(region.querySelector("[data-toast]"));
+	  });
+	}
+
+	installLiveRefresh();
+	installBlockListFeedback();
+
 	const describeFocus = (element) => element && element !== document.body ? {
 	  id: element.id,
 	  tag: element.tagName,
@@ -2497,6 +2581,7 @@
 	  if (ctx.response.headers.get("X-Sable-Console-Fragment") !== "true") ctx.swap = "none";
 	});
 	document.body.addEventListener("htmx:before:swap", (event) => {
+	  if (event.defaultPrevented) return;
 	  const statsTask = event.detail?.tasks?.find((task) => task.type === "oob" && task.target?.id === "runtime-stats");
 	  if (statsTask) dashboardStatSnapshot = captureDashboardStats(statsTask.target);
 	});

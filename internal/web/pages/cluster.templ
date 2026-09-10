@@ -172,7 +172,7 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 }
 
 templ ClusterLiveStatus(view ClusterPageView) {
-	<div class="cluster-live-status" id="cluster-live-status" hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
+	<div class="cluster-live-status" id="cluster-live-status" data-live-refresh hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
 		<section class="card cluster-status-card emphasized">
 			<header>
 				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>

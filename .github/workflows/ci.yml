@@ -51,5 +51,18 @@ jobs:
       - name: Run race detector
         run: go tool mage race
 
+      - name: Set up Node for browser regression tests
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      - name: Install browser test dependencies
+        run: |
+          npm ci --prefix scripts/browser
+          scripts/browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Check live refresh and block-list feedback
+        run: go test -count=1 -tags=browser -run TestBrowser -v ./internal/web
+
       - name: Scan reachable dependencies
         run: go tool govulncheck ./...

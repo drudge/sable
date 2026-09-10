@@ -62,6 +62,7 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 	<div
 		class="dashboard-insights"
 		id="dashboard-insights"
+		data-live-refresh
 		if view.Loading && view.LoadURL != "" {
 			hx-get={ templ.SafeURL(view.LoadURL) }
 			hx-trigger="load"
