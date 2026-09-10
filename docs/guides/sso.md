@@ -6,6 +6,8 @@ Let operators use an existing OpenID Connect identity provider while keeping a l
 
 Prepare an OIDC client at your provider, a stable HTTPS console URL, and an administrator who can still sign in with a password. Decide whether unknown users may be provisioned and what, if anything, they receive by default.
 
+Managing the provider, account provisioning, and role mappings requires both `settings.write` and `users.write`. Use an administrator or a role with both permissions.
+
 ## 1. Connect the provider
 
 Open **Integrations → Single Sign-On**. Enter the issuer URL and client details. The wizard checks issuer discovery before continuing. Copy the exact redirect URL shown by Sable into the provider's client configuration; even a small mismatch can cause rejection.

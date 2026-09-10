@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/drudge/sable/internal/blocking"
 )
 
 type BlockingPageView struct {
@@ -46,7 +48,7 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"OISD Big", "Comprehensive list blocking ads, trackers, and malware", "https://big.oisd.nl/", "popular"},
 	{"OISD Small", "Lightweight version with fewer false positives", "https://small.oisd.nl/", "popular"},
 	{"Steven Black Unified", "Unified hosts file with adware and malware extensions", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", "popular"},
-	{"Hagezi Pro", "Multi-source blocklist with strong protection", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt", "popular"},
+	{"Hagezi Pro", "Multi-source blocklist with strong protection", blocking.HageziProURL, "popular"},
 	{"AdGuard DNS Filter", "Official AdGuard DNS filter list", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", "ads"},
 	{"AdAway Default", "Default blocklist from the AdAway project", "https://adaway.org/hosts.txt", "ads"},
 	{"EasyList", "Primary advertising filter list", "https://easylist.to/easylist/easylist.txt", "ads"},
@@ -210,15 +212,11 @@ templ AddBlockListDialog(existing []BlockListSourceView) {
 }
 
 templ CatalogRow(item BlockListCatalogItem, added bool) {
-	<article class="catalog-row"><div><strong>{ item.Name }</strong>
+	<article class="catalog-row"><div><strong>{ item.Name }</strong><p title={ item.Description }>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(item.URL) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
 		if added {
-			<span>@Icon("check") Added</span>
-		}
-		<p>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(item.URL) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
-		if added {
-			<button class="button outline" type="button" disabled>@Icon("check")</button>
+			<button class="button outline catalog-added" type="button" disabled aria-label={ item.Name + " already added" }>@Icon("check")<span>Added</span></button>
 		} else {
-			<button class="button" hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML">@Icon("plus")<span>Add</span></button>
+			<button class="button" type="button" aria-label={ "Add " + item.Name } hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML">@Icon("plus")<span>Add</span></button>
 		}
 	</article>
 }

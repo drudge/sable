@@ -1,6 +1,6 @@
 {
-  "version": "1.0 · preparation",
-  "versionLabel": "1.0 preview",
+  "version": "1.0.0",
+  "versionLabel": "1.0.0",
   "navigationLabels": {
     "getting-started": "First server",
     "concepts": "Core concepts",

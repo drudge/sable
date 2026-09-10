@@ -12,6 +12,7 @@ import (
 )
 
 func TestManagerCheckReportsAnAvailableReleaseWithoutInstallingIt(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	server := releaseServer(t, "v9.9.9", false, nil)
 	manager := NewManager(Options{APIBaseURL: server.URL, BinaryPath: binaryPath})
@@ -35,6 +36,7 @@ func TestManagerCheckReportsAnAvailableReleaseWithoutInstallingIt(t *testing.T) 
 }
 
 func TestManagerCheckRecordsAFailedRelease(t *testing.T) {
+	setTestRelease(t, "0.7.0-rc.1")
 	server := releaseServer(t, "v9.9.9-rc.1", true, nil)
 	manager := NewManager(Options{APIBaseURL: server.URL})
 	if _, err := manager.Check(context.Background(), false); err == nil {
@@ -53,6 +55,7 @@ func TestManagerCheckRecordsAFailedRelease(t *testing.T) {
 }
 
 func TestManagerInstallReplacesTheExecutableInTheBackground(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	server := releaseServer(t, "v9.9.9", false, nil)
@@ -77,6 +80,7 @@ func TestManagerInstallReplacesTheExecutableInTheBackground(t *testing.T) {
 }
 
 func TestManagerInstallRecordsAFailedDownload(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	server := releaseServer(t, "v9.9.9", false, func(checksums []byte) []byte {
@@ -103,6 +107,7 @@ func TestManagerInstallRecordsAFailedDownload(t *testing.T) {
 }
 
 func TestManagerRunsOneOperationAtATime(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	manager := NewManager(Options{})
 	if err := manager.begin(PhaseInstalling, false); err != nil {
 		t.Fatal(err)
@@ -134,6 +139,7 @@ func awaitInstall(t *testing.T, manager *Manager) Status {
 }
 
 func TestManagerRefusesToInstallWhereItCannotWrite(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	if err := os.Chmod(filepath.Dir(binaryPath), 0o555); err != nil {
 		t.Fatal(err)

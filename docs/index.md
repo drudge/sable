@@ -18,7 +18,7 @@ Start with one Sable server and one test device. Get your first DNS answer, then
 - **Configuration and operations references** describe exact behavior when you need to go deeper.
 
 > [!NOTE]
-> This documentation is being prepared for Sable 1.0 and tracks the source tree. It is not an announcement that 1.0 has shipped; check your installed version before relying on newly added features. Release downloads remain on GitHub.
+These guides cover Sable 1.0.0. [Download the release](https://github.com/drudge/sable/releases/tag/v1.0.0) or read the [release notes](../CHANGELOG.md).
 
 ## Make DNS work for your network
 

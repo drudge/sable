@@ -39,7 +39,7 @@ func TestCommandPaletteEntitiesRespectZoneGrantsAndIncludeIntegrations(t *testin
 		Grants: []auth.Grant{{
 			Permission: auth.PermissionZonesRead, Surface: auth.SurfaceWeb,
 			ResourceType: auth.ResourceZone, ResourceID: "zone-allowed",
-		}},
+		}, {Permission: auth.PermissionUsersWrite, Surface: auth.SurfaceWeb}},
 	}))
 
 	entities := server.commandPaletteEntities(request, config.Snapshot{Config: configuration}, pages.DashboardView{CanZones: true, CanSettings: true, CanWriteSettings: true})

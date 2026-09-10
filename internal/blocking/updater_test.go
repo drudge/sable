@@ -3,12 +3,68 @@ package blocking
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+type failingDownloadTransport struct{ err error }
+
+func (transport failingDownloadTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, transport.err
+}
+
+func TestUpdaterExplainsDNSFailuresWithoutReplacingCachedLists(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name string
+		err  error
+		hint string
+	}{
+		{"docker", &net.DNSError{Name: "big.oisd.nl", Server: "127.0.0.11:53", Err: "server misbehaving", IsTemporary: true}, "configure working DNS servers for the container using --dns or Compose dns"},
+		{"host", &net.DNSError{Name: "big.oisd.nl", Server: "192.0.2.53:53", Err: "server misbehaving"}, "check the host's DNS settings"},
+		{"missing hostname", &net.DNSError{Name: "missing.example", Err: "no such host", IsNotFound: true}, "that the list hostname is correct"},
+		{"connection", errors.New("connection refused"), ""},
+		{"canceled", context.Canceled, ""},
+		{"deadline", context.DeadlineExceeded, ""},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			source := RemoteSource{Name: "OISD Big", URL: "https://big.oisd.nl/", Path: "cached.txt"}
+			cached := []byte("ads.example\n")
+			if err := os.WriteFile(filepath.Join(root, source.Path), cached, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			updater := NewUpdater(root)
+			updater.client.Transport = failingDownloadTransport{testCase.err}
+			err := updater.Download(context.Background(), source)
+			if !errors.Is(err, testCase.err) {
+				t.Fatalf("Download() = %v, want underlying error %v preserved", err, testCase.err)
+			}
+			if testCase.hint != "" && !strings.Contains(err.Error(), testCase.hint) {
+				t.Fatalf("Download() = %v, want actionable hint %q", err, testCase.hint)
+			}
+			if testCase.hint == "" && strings.Contains(err.Error(), "DNS") {
+				t.Fatalf("Download() misdiagnosed a non-DNS failure: %v", err)
+			}
+			contents, readErr := os.ReadFile(filepath.Join(root, source.Path))
+			if readErr != nil || string(contents) != string(cached) {
+				t.Fatalf("cached list = %q, %v; want previous contents preserved", contents, readErr)
+			}
+			status := updater.Status()
+			if status.Degraded != 1 || len(status.Sources) != 1 || status.Sources[0].LastError != err.Error() {
+				t.Fatalf("download failure was not recorded for update diagnostics: %+v", status)
+			}
+		})
+	}
+}
 
 func TestUpdaterDownloadsRemoteList(t *testing.T) {
 	t.Parallel()

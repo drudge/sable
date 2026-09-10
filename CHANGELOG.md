@@ -4,14 +4,42 @@ This file records the user-visible changes selected for Sable releases. GitHub
 release notes use the matching version section when one is present; the raw
 commit list remains a fallback for development and release-candidate tags.
 
-Sable is still pre-1.0. Until a compatibility policy is published, create a
-passphrase-sealed application backup before upgrading and keep mixed-version
-cluster windows short.
+Create a passphrase-sealed application backup before upgrading and keep
+mixed-version cluster windows short. Cross-version restore and downgrade
+compatibility are not yet a published contract.
 
-## [0.9.9] - Unreleased
+## [1.0.1] - Unreleased
 
-This release consolidates the work completed through the `0.9.9` release
-candidates into a release-ready DNS platform.
+This patch release fixes block-list setup, improves the mobile console, and
+protects development builds from being replaced by published releases.
+
+### Block lists and Docker
+
+- Hagezi Pro now uses its working AdBlock feed. Existing subscriptions to the
+  retired URL migrate automatically while retaining their cached blocking data.
+- The block-list catalog uses consistently aligned Add and Added controls,
+  removes duplicate badges, and uses compact icon buttons on mobile.
+- A ready-to-use Docker Compose configuration and updated installation examples
+  give the container independent DNS for downloads and startup. DNS lookup
+  failures now include clearer guidance for Docker deployments.
+
+### Console and updates
+
+- Development and snapshot builds disable release checks and self-update
+  installation in both the console and CLI. Development containers also keep
+  running their image's build instead of selecting a staged release.
+- About combines installation details and update controls in one section,
+  groups support links together, and shows a readable build date and time using
+  the browser's timezone and 12/24-hour preference. Development builds have a
+  distinct striped status panel with improved mobile spacing.
+- The Go toolchain is updated to 1.27.1, with dependencies updated to their
+  latest stable releases, including PostgreSQL, QUIC, SQLite, cryptography,
+  networking, and the vulnerability scanner.
+
+## [1.0.0] - 2026-09-06
+
+The first stable release brings together Sable's authoritative and recursive
+DNS service, cluster administration, query visibility, and operating tools.
 
 ### Query visibility and dashboard scale
 
@@ -62,9 +90,26 @@ candidates into a release-ready DNS platform.
   benchmark-port detection improve performance confidence and diagnostics.
 - Backup completion notices remain visible through fast restore and redirect
   paths.
+- Closed mobile navigation no longer creates invisible keyboard stops, and
+  dashboard metric links expose their current values and details to screen
+  readers, including after live updates.
+- Metric cards and query-chart series share the same bright category colors
+  in both themes. White labels use soft shadows, and loading effects no longer
+  obscure or fade the text.
 
 ### Release and security operations
 
+- Recursive answers and cached recursive data default to private clients, with
+  explicit allow, deny, and IP/CIDR access-list modes across DNS transports.
+  Public authoritative service remains available, and queries with recursion
+  disabled do not trigger ordinary upstream lookups.
+- Configurable global and per-client limits bound unresolved DNS work,
+  including duplicate waiters and background refreshes. Excess work is refused
+  promptly and counted in metrics while cached and authoritative answers remain
+  available.
+- SSO trust, provisioning, and role-mapping changes require user-administration
+  permission. Retained zone history is authorized against each snapshot's zone
+  identity, protecting records from earlier owners of a recreated zone name.
 - Systemd and Docker deployments can explicitly opt into verified console
   updates while Sable remains non-root and unable to write the system path or
   access the Docker socket.
@@ -79,6 +124,9 @@ candidates into a release-ready DNS platform.
 
 ### Known boundaries
 
+- The bright metric cards retain white text with soft shadows. Rendered contrast
+  falls below WCAG AA thresholds in parts of these cards; this release does not
+  claim full WCAG conformance.
 - A cluster continues answering DNS when its primary is unavailable, but
   control-plane failover remains a manual operator action. Sable does not yet
   claim quorum-based or partition-safe automatic failover.

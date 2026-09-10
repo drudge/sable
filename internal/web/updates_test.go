@@ -112,6 +112,32 @@ func TestAboutPageOffersAnAvailableRelease(t *testing.T) {
 	}
 }
 
+func TestDevelopmentUpdatesAreDisabledInTheConsoleAndDirectRequests(t *testing.T) {
+	t.Parallel()
+	server := updateTestServer(t, update.NewManager(update.Options{}))
+	for _, endpoint := range []string{"/about", "/ui/updates/check", "/ui/updates/install", "/ui/updates/command-check"} {
+		var response *httptest.ResponseRecorder
+		if endpoint == "/about" {
+			response = serveRequest(server, http.MethodGet, endpoint)
+		} else {
+			response = serveUpdateForm(server, endpoint, url.Values{"pre_release": {"true"}})
+		}
+		body := response.Body.String()
+		if response.Code != http.StatusOK || !strings.Contains(body, "disabled for development builds") {
+			t.Errorf("%s = %d %s, want development build explanation", endpoint, response.Code, body)
+		}
+		for _, forbidden := range []string{`hx-post="/ui/updates/install"`, `hx-post="/ui/updates/check"`, "is available", "up to date", "Open About to review and install"} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s offers an update for a development build: %s", endpoint, forbidden)
+			}
+		}
+	}
+	status := server.updates.Status()
+	if status.Busy() || status.Installed || status.Checked() || !status.Development {
+		t.Fatalf("development request changed update state: %+v", status)
+	}
+}
+
 func TestAboutPageReportsAnUpToDateInstallation(t *testing.T) {
 	t.Parallel()
 	server := updateTestServer(t, &testUpdateController{status: update.Status{

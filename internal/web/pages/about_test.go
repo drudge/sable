@@ -40,6 +40,7 @@ func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 		{"busy", UpdateView{Supported: true, CanCheck: true, Busy: true}, false},
 		{"installed", UpdateView{Supported: true, CanCheck: true, Installed: true}, false},
 		{"unavailable", UpdateView{CanCheck: true}, false},
+		{"development", UpdateView{Supported: true, CanCheck: true, Development: true}, false},
 		{"not permitted", UpdateView{Supported: true}, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

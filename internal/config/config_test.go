@@ -837,3 +837,52 @@ ipv4 = true
 		t.Fatalf("default TTL = %d, want 600", ttl)
 	}
 }
+
+func TestRecursionConfigurationDefaultsAndValidation(t *testing.T) {
+	configuration, err := Decode(strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configuration.Resolver.Recursion != "private" {
+		t.Fatalf("default recursion=%q", configuration.Resolver.Recursion)
+	}
+	for _, input := range []string{`[resolver]
+recursion="invalid"`, `[resolver]
+recursion="acl"
+recursion_clients=["bad"]`} {
+		if _, err := Decode(strings.NewReader(input)); err == nil {
+			t.Fatalf("accepted %s", input)
+		}
+	}
+	configuration, err = Decode(strings.NewReader(`[resolver]
+recursion="acl"
+recursion_clients=["192.0.2.0/24"]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy := cloneConfig(configuration)
+	copy.Resolver.RecursionClients[0] = "0.0.0.0/0"
+	if configuration.Resolver.RecursionClients[0] != "192.0.2.0/24" {
+		t.Fatal("candidate mutated active access policy")
+	}
+}
+
+func TestResolutionCapacityConfiguration(t *testing.T) {
+	defaults, err := Decode(strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.Resolver.MaxConcurrent != 1024 || defaults.Resolver.MaxConcurrentPerClient != 64 {
+		t.Fatalf("capacity defaults=%+v", defaults.Resolver)
+	}
+	for _, input := range []string{`[resolver]
+max_concurrent=0`, `[resolver]
+max_concurrent=65537`, `[resolver]
+max_concurrent_per_client=0`, `[resolver]
+max_concurrent=10
+max_concurrent_per_client=11`} {
+		if _, err := Decode(strings.NewReader(input)); err == nil {
+			t.Fatalf("accepted %s", input)
+		}
+	}
+}
