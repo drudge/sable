@@ -2489,9 +2489,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-update-copy { display: grid; min-width: 0; gap: .2rem; }
 .about-update-copy strong { font-size: .8125rem; }
 .about-update-copy small { overflow-wrap: anywhere; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
-.about-update-notes { display: inline-flex; align-items: center; gap: .3rem; margin-left: .75rem; white-space: nowrap; }
-.about-update-notes .nav-icon { width: .75rem; height: .75rem; }
-button.about-update-notes { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
 .update-release-dialog { width: min(42rem, calc(100vw - 2rem)); }
 .update-release-dialog .release-notes-content { margin: 0; padding-right: .25rem; max-height: min(28rem, 60dvh); }
 .about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0; }

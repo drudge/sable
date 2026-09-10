@@ -179,15 +179,15 @@ templ UpdatePanel(view UpdateView) {
 						<br/>
 						Rebuild from source to update Sable.
 					}
-					if view.ReleaseNotes != "" {
-						<button class="inline-link about-update-notes" type="button" data-dialog-open="update-release-notes-dialog">Release notes</button>
-					} else if view.Available && !view.Installed && view.ReleaseURL != "" {
-						<a class="inline-link about-update-notes" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
-					}
 				</small>
 			</div>
 		</div>
 		<div class="about-update-actions">
+			if view.ReleaseNotes != "" {
+				<button class="button outline compact" type="button" data-dialog-open="update-release-notes-dialog">Release notes</button>
+			} else if view.Available && !view.Installed && view.ReleaseURL != "" {
+				<a class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+			}
 			switch updateAction(view) {
 				case "restart":
 					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
