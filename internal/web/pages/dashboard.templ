@@ -1079,7 +1079,7 @@ templ Stats(view StatsOverviewView) {
 		aria-labelledby="stats-overview-title"
 		data-stats-scope={ view.Scope }
 		if view.OutOfBand {
-			hx-swap-oob="outerHTML"
+			hx-swap-oob="outerMorph"
 		}
 	>
 		<header class="stats-overview-header">

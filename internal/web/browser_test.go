@@ -54,6 +54,7 @@ func TestBrowserConsoleFixes(t *testing.T) {
 			Values: pages.StatsView{Queries: 100 + dashboardRefreshes.Add(1)},
 			Scope:  r.URL.Query().Get("stats_scope"), RangeName: chart.ActiveRange,
 			RangeLabel: chart.RangeLabel, CanLogs: true, OutOfBand: true,
+			LogWindowQuery: "start=2026-09-10T10:00:00Z&end=2026-09-10T11:00:00Z",
 		}).Render(r.Context(), w)
 	})
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {

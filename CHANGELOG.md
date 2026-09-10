@@ -19,7 +19,8 @@ navigation and makes block-list downloads easier to follow.
   updates. Automatically refreshed panels also preserve open controls and
   unsaved form edits, including backup settings.
 - Routine dashboard refreshes keep the chart at full brightness. Loading
-  feedback appears when changing the chart range or overview scope.
+  feedback appears when changing the chart range or overview scope. Stat cards
+  update in place so their focus and hover highlights do not pulse.
 - Query logs discard in-flight refreshes after pausing live updates or changing
   filters, so an older response cannot replace the selected view.
 - About shows a seven-character commit SHA on mobile while retaining the full

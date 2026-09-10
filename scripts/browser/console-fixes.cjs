@@ -34,9 +34,22 @@ async function check(page, label, action) {
       await page.goto(`${process.argv[2]}/?dashboard`);
       const card = page.locator('#stat-card-total-queries');
       await card.focus();
+      await page.locator('#stat-card-no-error').hover();
+      await page.locator('#runtime-stats').evaluate(element => Promise.all(element.getAnimations({subtree: true}).map(animation => animation.finished)));
       await page.evaluate(() => {
         window.finishedRefreshes = 0;
         document.addEventListener('htmx:finally:request', () => { window.finishedRefreshes++; });
+        const cardAppearance = element => ({
+          transform: getComputedStyle(element).transform,
+          shadow: getComputedStyle(element).boxShadow,
+          arrowOpacity: getComputedStyle(element, '::before').opacity,
+        });
+        window.highlightedCards = [...document.querySelectorAll('.stat-card:focus-visible, .stat-card:hover')];
+        window.cardAppearanceBefore = window.highlightedCards.map(cardAppearance);
+        document.addEventListener('htmx:before:settle', event => {
+          if (event.detail.task.target.id !== 'runtime-stats') return;
+          window.cardAppearanceAfter = window.highlightedCards.map(element => cardAppearance(document.getElementById(element.id)));
+        });
       });
       let receiveRequest;
       const pending = new Promise(resolve => { receiveRequest = resolve; });
@@ -50,6 +63,9 @@ async function check(page, label, action) {
       assert.equal(await card.evaluate(element => getComputedStyle(element, '::after').animationName), 'none', 'background polling does not sweep across the cards');
       await request.continue();
       await page.waitForFunction(() => window.finishedRefreshes === 1);
+      assert.deepEqual(await page.evaluate(() => window.cardAppearanceAfter), await page.evaluate(() => window.cardAppearanceBefore), 'refresh does not restart the focus or hover highlight');
+      assert.equal(await page.evaluate(() => window.highlightedCards.length), 2, 'check both keyboard focus and pointer hover');
+      assert.equal(await page.evaluate(() => window.highlightedCards.every(element => element === document.getElementById(element.id))), true, 'refresh updates the existing cards in place');
       await page.clock.runFor(600);
       assert.equal(await card.locator('[data-stat-number="value"]').textContent(), '101');
       assert.equal(await card.evaluate(element => element === document.activeElement), true);
@@ -107,12 +123,21 @@ async function check(page, label, action) {
       await page.keyboard.press('Enter');
       await page.waitForFunction(() => document.querySelector('#runtime-stats').dataset.statsScope === 'range');
       assert.equal(await scope.evaluate(element => element === document.activeElement), true);
+      assert.equal(await scope.getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('.stats-range-label').textContent(), 'Last hour');
+      const totalCard = page.locator('#stat-card-total-queries');
+      assert.equal(new URL(await totalCard.getAttribute('href'), process.argv[2]).searchParams.get('start'), '2026-09-10T10:00:00Z', 'retained cards get the updated log links');
       const value = await page.locator('#runtime-stats [data-stat-number="value"]').first().textContent();
       await page.clock.runFor(10000);
       await page.waitForFunction(previous => document.querySelector('#runtime-stats [data-stat-number="value"]').textContent !== previous, value);
       assert.equal(await scope.evaluate(element => element === document.activeElement), true);
       await page.keyboard.press('Tab');
       assert.equal(await page.evaluate(() => document.activeElement?.dataset.statLabel), 'Total Queries');
+      await page.locator('#stats-scope-all').click();
+      await page.waitForFunction(() => document.querySelector('#runtime-stats').dataset.statsScope === 'all');
+      assert.equal(await scope.getAttribute('aria-pressed'), 'false');
+      assert.equal(await page.locator('.stats-range-label').count(), 0);
+      assert.equal(await totalCard.getAttribute('href'), '/logs?tab=queries');
     });
     assert.deepEqual(errors, [], 'console fixes produce no browser errors');
   } finally { await browser.close(); }
