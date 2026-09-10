@@ -29,8 +29,61 @@ async function check(page, label, action) {
     });
     await page.setViewportSize({width: 1400, height: 1000});
     assert.equal(await page.locator('.about-commit').innerText(), 'abcdef0123456789abcdef0123456789abcdef0123');
-    await check(page, 'stat card focus and tab order survive live refreshes', async () => {
+    await check(page, 'background dashboard refresh stays visually quiet', async () => {
       await page.clock.install();
+      await page.goto(`${process.argv[2]}/?dashboard`);
+      const card = page.locator('#stat-card-total-queries');
+      await card.focus();
+      await page.evaluate(() => {
+        window.finishedRefreshes = 0;
+        document.addEventListener('htmx:finally:request', () => { window.finishedRefreshes++; });
+      });
+      let receiveRequest;
+      const pending = new Promise(resolve => { receiveRequest = resolve; });
+      await page.route('**/ui/stats/chart**', receiveRequest, {times: 1});
+      const started = page.waitForRequest('**/ui/stats/chart**');
+      await page.clock.runFor(10000);
+      await started;
+      const request = await pending;
+      assert.equal(await page.locator('#dashboard-update-indicator').isVisible(), false, 'background polling does not show the dashboard loading notice');
+      assert.equal(await page.locator('.chart-plot').evaluate(element => getComputedStyle(element).opacity), '1', 'background polling does not dim the chart');
+      assert.equal(await card.evaluate(element => getComputedStyle(element, '::after').animationName), 'none', 'background polling does not sweep across the cards');
+      await request.continue();
+      await page.waitForFunction(() => window.finishedRefreshes === 1);
+      await page.clock.runFor(600);
+      assert.equal(await card.locator('[data-stat-number="value"]').textContent(), '101');
+      assert.equal(await card.evaluate(element => element === document.activeElement), true);
+      assert.equal(await page.locator('.chart-plot').evaluate(element => getComputedStyle(element).opacity), '1');
+    });
+    for (const control of ['desktop range', 'mobile range', 'custom range', 'overview scope']) {
+      await check(page, `${control} still shows loading feedback`, async () => {
+        await page.setViewportSize({width: control === 'mobile range' ? 600 : 1400, height: 1000});
+        await page.emulateMedia({reducedMotion: 'reduce'});
+        await page.goto(`${process.argv[2]}/?dashboard`);
+        let receiveRequest;
+        const pending = new Promise(resolve => { receiveRequest = resolve; });
+        await page.route('**/ui/stats/chart**', receiveRequest, {times: 1});
+        const started = page.waitForRequest('**/ui/stats/chart**');
+        if (control === 'desktop range') await page.locator('#chart-range-day').click();
+        if (control === 'mobile range') {
+          await page.locator('.range-select .styled-select-trigger').click();
+          await page.locator('.range-select [role="option"][data-value="day"]').click();
+        }
+        if (control === 'custom range') {
+          await page.locator('#chart-range-custom').click();
+          await page.locator('[data-range-apply]').click();
+        }
+        if (control === 'overview scope') await page.locator('#stats-scope-range').click();
+        await started;
+        const request = await pending;
+        assert.equal(await page.locator('#dashboard-update-indicator').isVisible(), true);
+        assert.equal(await page.locator('.chart-plot').evaluate(element => getComputedStyle(element).opacity), '0.65');
+        await request.continue();
+        await page.waitForFunction(() => !document.querySelector('#dashboard-update-indicator').classList.contains('htmx-request'));
+        assert.equal(await page.locator('#dashboard-update-indicator').isVisible(), false);
+      });
+    }
+    await check(page, 'stat card focus and tab order survive live refreshes', async () => {
       await page.goto(`${process.argv[2]}/?dashboard`);
       await page.emulateMedia({reducedMotion: 'reduce'});
       const cards = page.locator('#runtime-stats a.stat-card');

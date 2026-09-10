@@ -1146,8 +1146,8 @@ func nonRangedStatDetail(detail string, scope string) string {
 }
 
 templ QueryChart(view QueryChartView) {
-	<section class="card chart-card" id="query-statistics" data-live-refresh data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML" hx-indicator:inherited="#dashboard-update-indicator">
-		<div class="card-header chart-header">
+	<section class="card chart-card" id="query-statistics" data-live-refresh data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML">
+		<div class="card-header chart-header" hx-indicator:inherited="#dashboard-update-indicator">
 			<h2>Query Statistics</h2>
 			if view.ActiveRange == "custom" {
 				<div class="chart-live">Custom range</div>
@@ -1175,7 +1175,7 @@ templ QueryChart(view QueryChartView) {
 			<button class="range-custom-mobile" id="chart-range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-range-open>Custom</button>
 		</div>
 		<div class="range-popover chart-range-popover" id="chart-custom-range" role="dialog" aria-label="Custom query range" data-range-popover hidden>
-			<form class="range-picker-body" hx-get="/ui/stats/chart?insights=1" hx-target="#query-statistics" hx-swap="outerHTML" data-range-form>
+			<form class="range-picker-body" hx-get="/ui/stats/chart?insights=1" hx-target="#query-statistics" hx-swap="outerHTML" hx-indicator="#dashboard-update-indicator" data-range-form>
 				<input type="hidden" name="range" value="custom"/>
 				<input type="hidden" name="start" value={ view.CustomStart } data-range-start required/>
 				<input type="hidden" name="end" value={ view.CustomEnd } data-range-end required/>
