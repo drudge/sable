@@ -34,6 +34,7 @@ const (
 	releaseTagEnvironment     = "SABLE_RELEASE_TAG"
 	controlledRestartExitCode = 75
 	containerWebUpdateVersion = "999.0.0"
+	containerBaseRelease      = "1.0.0"
 	goReleaserConfig          = `version: 2
 
 project_name: sable
@@ -347,7 +348,7 @@ func DockerSmoke(ctx context.Context) error {
 	if err := run(ctx, nil, "docker", "run", "--rm", "--entrypoint", "/usr/local/bin/sable", image, "version"); err != nil {
 		return fmt.Errorf("run container version smoke: %w", err)
 	}
-	if err := smokeContainerWebUpdates(ctx, image); err != nil {
+	if err := smokeContainerWebUpdates(ctx, image, version); err != nil {
 		return err
 	}
 	name := fmt.Sprintf("sable-smoke-%d", time.Now().UnixNano())
@@ -372,7 +373,7 @@ func DockerSmoke(ctx context.Context) error {
 	return nil
 }
 
-func smokeContainerWebUpdates(ctx context.Context, image string) error {
+func smokeContainerWebUpdates(ctx context.Context, image, snapshotVersion string) error {
 	directory, err := os.MkdirTemp("", "sable-container-web-update-*")
 	if err != nil {
 		return fmt.Errorf("create container web-update fixture: %w", err)
@@ -381,21 +382,44 @@ func smokeContainerWebUpdates(ctx context.Context, image string) error {
 	if err := os.Chmod(directory, 0o755); err != nil {
 		return fmt.Errorf("make container web-update fixture accessible: %w", err)
 	}
-	binaryPath := filepath.Join(directory, "sable")
+	mutableBinary := filepath.Join(directory, "sable")
+	releaseBinary := filepath.Join(directory, "release-sable")
+	if err := buildContainerVersionFixture(ctx, mutableBinary, containerWebUpdateVersion); err != nil {
+		return err
+	}
+	if err := buildContainerVersionFixture(ctx, releaseBinary, containerBaseRelease); err != nil {
+		return err
+	}
+	for _, test := range []struct {
+		name    string
+		binary  string
+		version string
+	}{
+		{name: "snapshot keeps image build", version: snapshotVersion},
+		{name: "release uses staged update", binary: releaseBinary, version: containerWebUpdateVersion},
+	} {
+		arguments := []string{"run", "--rm", "--env", "SABLE_WEB_UPDATES=true",
+			"--volume", directory + ":/data/.sable/bin:ro"}
+		if test.binary != "" {
+			arguments = append(arguments, "--volume", test.binary+":/usr/local/bin/sable:ro")
+		}
+		arguments = append(arguments, image, "version", "--short")
+		actual, err := output(ctx, "docker", arguments...)
+		if err != nil {
+			return fmt.Errorf("container web-update smoke (%s): %w", test.name, err)
+		}
+		if actual != test.version {
+			return fmt.Errorf("container web-update smoke (%s) ran version %q, want %q", test.name, actual, test.version)
+		}
+	}
+	return nil
+}
+
+func buildContainerVersionFixture(ctx context.Context, binaryPath, release string) error {
 	environment := []string{"CGO_ENABLED=0", "GOOS=linux", "GOARCH=" + runtime.GOARCH}
-	linkerFlags := "-s -w -X " + releasePackage + ".Release=" + containerWebUpdateVersion
+	linkerFlags := "-s -w -X " + releasePackage + ".Release=" + release
 	if err := run(ctx, environment, "go", "build", "-trimpath", "-ldflags", linkerFlags, "-o", binaryPath, "./cmd/sable"); err != nil {
 		return fmt.Errorf("build container web-update fixture: %w", err)
-	}
-	output, err := output(ctx, "docker", "run", "--rm",
-		"--env", "SABLE_WEB_UPDATES=true",
-		"--volume", directory+":/data/.sable/bin:ro",
-		image, "version", "--short")
-	if err != nil {
-		return fmt.Errorf("run container web-update smoke: %w", err)
-	}
-	if output != containerWebUpdateVersion {
-		return fmt.Errorf("container web-update smoke ran version %q, want %q", output, containerWebUpdateVersion)
 	}
 	return nil
 }
