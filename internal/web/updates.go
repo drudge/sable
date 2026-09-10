@@ -63,11 +63,24 @@ func (server *Server) updatePreferences(writer http.ResponseWriter, request *htt
 		return nil
 	})
 	if err != nil {
-		server.renderUpdatePanel(writer, request, server.updateStatus(), err.Error())
+		view := server.settingsUpdatePreferencesView(request)
+		view.Error = err.Error()
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
 		return
 	}
 	server.recordControlPlaneAudit(request, "update.preferences", "changed automatic update checks")
-	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
+	view := server.settingsUpdatePreferencesView(request)
+	view.Message = "Update preferences saved."
+	_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
+}
+
+func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages.SettingsUpdatePreferencesView {
+	canEdit := !server.securityEnabled
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
+		canEdit = auth.HasPermission(principal, auth.PermissionSettingsWrite)
+	}
+	return pages.SettingsUpdatePreferencesView{CheckOnLogin: server.config.Current().Config.Updates.CheckOnLogin, CanEdit: canEdit}
 }
 
 // updatePanel renders the current update state. The panel polls this endpoint

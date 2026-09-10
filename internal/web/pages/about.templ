@@ -179,7 +179,9 @@ templ UpdatePanel(view UpdateView) {
 						<br/>
 						Rebuild from source to update Sable.
 					}
-					if view.Available && !view.Installed && view.ReleaseURL != "" && view.ReleaseNotes == "" {
+					if view.ReleaseNotes != "" {
+						<button class="inline-link about-update-notes" type="button" data-dialog-open="update-release-notes-dialog">Release notes</button>
+					} else if view.Available && !view.Installed && view.ReleaseURL != "" {
 						<a class="inline-link about-update-notes" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 					}
 				</small>
@@ -220,28 +222,21 @@ templ UpdatePanel(view UpdateView) {
 					</div>
 				</form>
 			}
-			if view.Supported && !view.Development && view.CanApply {
-				<details class="about-update-menu about-update-preferences">
-					<summary class="button outline compact" aria-label="Update options" title="Update options">@Icon("settings")</summary>
-					<div>
-						<form class="update-preferences" hx-post="/ui/updates/preferences" hx-target="#about-update" hx-swap="outerHTML" hx-trigger="change">
-							<label class="checkbox"><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin }/><span>Check for updates on sign-in</span></label>
-							<small>This node only. Updates are never installed automatically.</small>
-						</form>
-					</div>
-				</details>
-			}
 		</div>
 		if view.ReleaseNotes != "" {
-			<details class="update-release-notes">
-				<summary>What’s new in v{ view.LatestVersion }</summary>
+			<dialog class="custom-server-dialog update-release-dialog" id="update-release-notes-dialog" aria-labelledby="update-release-notes-title">
+				<div class="dialog-header"><h2 id="update-release-notes-title">Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
+				<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 				<div class="release-notes-content">
 					@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
-					if view.ReleaseURL != "" {
-						<p><a class="inline-link" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer">View release</a></p>
-					}
 				</div>
-			</details>
+				<div class="dialog-footer">
+					if view.ReleaseURL != "" {
+						<a class="button outline" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>View release</span>@Icon("external-link")</a>
+					}
+					<button class="button" type="button" data-dialog-close>Done</button>
+				</div>
+			</dialog>
 		}
 	</div>
 }

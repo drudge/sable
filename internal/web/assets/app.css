@@ -620,6 +620,7 @@ button { cursor: pointer; }
 .isotope-blocking-aside .blocking-guidance { padding: 1.5rem; }
 .popular-lists .green { background: transparent; box-shadow: inset 0 0 0 2px #22c55e; }
 .isotope-settings-form { display: grid; gap: 1.5rem; }
+.isotope-settings-form:not(:has(> .settings-tab-panel:not([hidden]))) { display: none; }
 .blocking-radio-list { display: grid; gap: .8rem; margin-top: 1.3rem; }
 .blocking-radio-list label, .blocking-check { display: flex; align-items: flex-start; gap: .65rem; cursor: pointer; }
 .blocking-radio-list input { width: 1rem; height: 1rem; margin-top: .15rem; accent-color: var(--foreground); }
@@ -2490,6 +2491,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-update-copy small { overflow-wrap: anywhere; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
 .about-update-notes { display: inline-flex; align-items: center; gap: .3rem; margin-left: .75rem; white-space: nowrap; }
 .about-update-notes .nav-icon { width: .75rem; height: .75rem; }
+button.about-update-notes { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
+.update-release-dialog { width: min(42rem, calc(100vw - 2rem)); }
+.update-release-dialog .release-notes-content { margin: 0; padding-right: .25rem; max-height: min(28rem, 60dvh); }
 .about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0; }
 .about-update-actions:empty { display: none; }
 .about-update-actions > form { margin: 0; }
@@ -2514,12 +2518,6 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-card:has(.about-update-menu[open]) { overflow: visible; }
 .about-update-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; max-width: 15rem; gap: .3rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground)); padding: .6rem .7rem; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .28), 0 .2rem .5rem rgb(0 0 0 / .18); }
 .about-update-menu > div small { color: var(--muted-foreground); font-size: .625rem; line-height: 1.4; }
-.about-update-preferences { position: relative; }
-.about-update-actions > .about-update-preferences { margin-left: auto; }
-.about-update-preferences > summary.button { margin-left: 0; border-radius: var(--radius); }
-.about-update-preferences[open] > summary.button .nav-icon { transform: none; }
-.about-update .update-release-notes { margin: 0; font-size: .75rem; line-height: 1.4; }
-.about-update .update-release-notes > summary { width: fit-content; color: var(--muted-foreground); font-weight: 500; }
 .about-update-channel { display: flex; align-items: center; gap: .45rem; font-size: .75rem; white-space: nowrap; cursor: pointer; }
 .about-update-channel input { width: .9rem; height: .9rem; accent-color: var(--primary); }
 .about-update-development { border-color: color-mix(in oklch, #f1ad47 45%, var(--border)); background: repeating-linear-gradient(-45deg, rgb(241 173 71 / .13) 0 12px, rgb(241 173 71 / .05) 12px 24px); }
@@ -3283,14 +3281,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .release-notes-content pre { white-space: pre-wrap; font-size: .75rem; }
 .release-notes-content img { max-width: 100%; height: auto; }
 .release-notes-content a { text-decoration: underline; }
-.update-preferences { margin: 0; }
-.update-preferences small { display: block; margin-top: .35rem; color: var(--muted-foreground); }
 .cluster-update-content { padding: 1rem; display: grid; gap: .75rem; }
 .cluster-update-nodes { display: grid; gap: .5rem; padding-left: 1.25rem; }
 
-.update-preferences .checkbox { display: flex; align-items: center; gap: .5rem; font-size: .75rem; }
-.update-preferences input[type="checkbox"] { width: 1rem; height: 1rem; min-height: 0; margin: 0; accent-color: var(--primary); }
-.update-preferences small { font-size: .6875rem; line-height: 1.5; }
 .cluster-update-card > header { padding: 1.25rem; border-bottom: 1px solid var(--border); }
 .cluster-update-card > header h2 { margin: 0; font-size: .875rem; }
 .cluster-update-card > header p { margin: .25rem 0 0; color: var(--muted-foreground); font-size: .75rem; }

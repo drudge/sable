@@ -495,9 +495,12 @@ func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
 		if enabled {
 			values.Set("check_on_login", "true")
 		}
-		response := serveUpdateForm(server, "/ui/updates/preferences", values)
+		response := serveUpdateForm(server, "/ui/settings/updates", values)
 		if response.Code != http.StatusOK || configuration.snapshot.Config.Updates.CheckOnLogin != enabled {
 			t.Fatalf("preference = %d %s", response.Code, response.Body.String())
+		}
+		if !strings.Contains(response.Body.String(), `id="settings-update-preferences"`) || strings.Contains(response.Body.String(), `id="about-update"`) {
+			t.Fatal("saving the preference did not return the Settings control")
 		}
 	}
 }
@@ -505,7 +508,7 @@ func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
 func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
 	for path, permission := range map[string]string{
 		"/ui/updates/automatic-check": auth.PermissionUpdatesRead,
-		"/ui/updates/preferences":     auth.PermissionUpdatesApply,
+		"/ui/settings/updates":        auth.PermissionSettingsWrite,
 		"/ui/updates/cluster":         auth.PermissionUpdatesApply,
 		"/ui/updates/cluster/stop":    auth.PermissionUpdatesApply,
 	} {

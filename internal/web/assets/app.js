@@ -91,6 +91,7 @@
 		path === "/ui/administration/sessions/revoke") return true;
 	  if (path === "/ui/updates/check" || path === "/ui/updates/command-check" ||
 		path === "/ui/updates/install" || path === "/ui/updates/restart") return true;
+	  if (path === "/ui/settings/updates") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
 	  if (path.startsWith("/ui/certificates/")) return true;
 	  if (path === "/ui/cluster/settings" || path === "/ui/cluster/leave" || path === "/ui/cluster/restart" || path === "/api/v1/cluster/membership") return true;

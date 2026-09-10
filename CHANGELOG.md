@@ -13,7 +13,7 @@ compatibility are not yet a published contract.
 ### Updates
 
 - The console checks for releases after sign-in by default and shows a dismissible
-  notification with release notes. Turn checks off for this node on About.
+  notification with release notes. Turn checks off for this node in Settings → General.
 - About displays notes from the GitHub release, and installed versions on About
   and Cluster link to their release pages.
 - Cluster can update all nodes to one reviewed release, restarting replicas one

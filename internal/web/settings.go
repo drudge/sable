@@ -453,10 +453,11 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 	}
 	view := pages.SettingsPageView{
 		Console: server.consoleView(request), Revision: snapshot.Revision,
-		TimeFormat: requestTimeFormat(request),
-		TimeZone:   requestTimeDisplay(request).Zone(),
-		ActiveTab:  activeTab,
-		Message:    message, Error: errorMessage,
+		TimeFormat:        requestTimeFormat(request),
+		TimeZone:          requestTimeDisplay(request).Zone(),
+		ActiveTab:         activeTab,
+		UpdatePreferences: server.settingsUpdatePreferencesView(request),
+		Message:           message, Error: errorMessage,
 		Backup:     server.backupView(request, "", ""),
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
