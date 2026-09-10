@@ -1155,7 +1155,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   bottom: 1rem;
   z-index: 100;
   display: grid;
-  width: min(24rem, calc(100vw - 2rem));
+  width: min(24rem, calc(100% - 2rem));
   gap: .65rem;
   pointer-events: none;
 }
@@ -1627,7 +1627,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 }
 
 @media (max-width: 639px) {
-	.toast-region { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
+	.toast-region { right: .75rem; bottom: .75rem; width: calc(100% - 1.5rem); }
 	.dashboard-footer { flex-wrap: wrap; justify-content: center; gap: .45rem 1rem; border-top: 1px solid var(--border); padding: .85rem .25rem max(.75rem, env(safe-area-inset-bottom)); text-align: center; }
 	.dashboard-footer-status { order: 1; }
 	.dashboard-footer-version { order: 2; }

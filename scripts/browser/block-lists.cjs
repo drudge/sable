@@ -17,8 +17,8 @@ async function checkConnectionToast(page) {
   await dismiss.click({trial: true});
   const bounds = await toast.boundingBox();
   const viewport = page.viewportSize();
-  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width, 'toast fits viewport width');
-  assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= viewport.height, 'toast fits viewport height');
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= viewport.width, `toast fits viewport width: ${JSON.stringify({bounds, viewport})}`);
+  assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= viewport.height, `toast fits viewport height: ${JSON.stringify({bounds, viewport})}`);
   return dismiss;
 }
 
