@@ -1,0 +1,22 @@
+services:
+  sable:
+    image: ghcr.io/drudge/sable:latest
+    container_name: sable
+    restart: unless-stopped
+    # Downloads must resolve even before Sable's DNS listener starts.
+    # Replace these with independent resolvers if your network requires them.
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    ports:
+      - "53:8053/tcp"
+      - "53:8053/udp"
+      - "127.0.0.1:5380:5380/tcp"
+    volumes:
+      - sable-data:/data
+    environment:
+      TZ: ${TZ:-UTC}
+
+volumes:
+  sable-data:
+    name: sable-data

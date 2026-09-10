@@ -101,6 +101,9 @@ func (buffer *cappedBuffer) Write(contents []byte) (int, error) {
 }
 
 func preferMutableRelease(imageRelease, mutableRelease string) bool {
+	if (version.Info{Release: imageRelease}).Development() {
+		return false
+	}
 	image := comparableRelease(imageRelease)
 	mutable := comparableRelease(mutableRelease)
 	return mutable != "" && (image == "" || semver.Compare(mutable, image) > 0)

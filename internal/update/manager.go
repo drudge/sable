@@ -30,6 +30,8 @@ type Status struct {
 	Phase Phase
 	// CurrentVersion is the release this process is running.
 	CurrentVersion string
+	// Development disables release operations for local builds.
+	Development bool
 	// LatestVersion is the newest release the last check resolved.
 	LatestVersion string
 	ReleaseURL    string
@@ -66,7 +68,7 @@ func (status Status) Checked() bool {
 
 // UpToDate reports whether a completed check found nothing newer to install.
 func (status Status) UpToDate() bool {
-	return status.Checked() && !status.Available && !status.Installed && status.Error == ""
+	return !status.Development && status.Checked() && !status.Available && !status.Installed && status.Error == ""
 }
 
 // Manager runs release checks and installations for the web console. One
@@ -83,11 +85,18 @@ type Manager struct {
 // options. Restart and CheckOnly are managed per operation and are ignored.
 // PreRelease seeds the release channel the first check runs on.
 func NewManager(options Options) *Manager {
+	build := version.Current()
+	blocked := ""
+	if build.Development() {
+		blocked = ErrDevelopmentBuild.Error()
+	}
 	return &Manager{
 		options: options.withDefaults(),
 		status: Status{
 			Phase:             PhaseIdle,
-			CurrentVersion:    version.Current().Release,
+			CurrentVersion:    build.Release,
+			Development:       build.Development(),
+			Blocked:           blocked,
 			IncludePreRelease: options.PreRelease,
 		},
 	}
@@ -149,6 +158,9 @@ func (manager *Manager) Install(includePreRelease bool) error {
 func (manager *Manager) begin(phase Phase, includePreRelease bool) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
+	if manager.status.Development {
+		return ErrDevelopmentBuild
+	}
 	if manager.status.Busy() {
 		return ErrUpdateInProgress
 	}

@@ -332,21 +332,35 @@ information, so publishing never rewrites or commits source files. See
 The image runs as a non-root user and keeps its writable TOML configuration,
 database, certificates, cache, block lists, and cluster identity in `/data`.
 It listens for DNS on unprivileged container port 8053; publish that as standard
-host port 53:
+host port 53. Use the included [compose.yaml](compose.yaml) for a standard
+deployment:
+
+```sh
+docker compose up -d
+```
+
+Or use the equivalent `docker run` command:
 
 ```sh
 docker volume create sable-data
 docker run --detach --name sable --restart unless-stopped \
+  --dns 1.1.1.1 --dns 9.9.9.9 \
   --publish 53:8053/tcp \
   --publish 53:8053/udp \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
   --env TZ=America/New_York \
-  ghcr.io/drudge/sable:next
+  ghcr.io/drudge/sable:latest
 ```
 
-`next` tracks the newest pre-release. Use `latest` for the newest stable release
+`latest` tracks the newest stable release. Use `next` for the newest pre-release
 or an exact semantic version for a pinned deployment.
+
+Both examples give the container independent DNS for block-list downloads and
+other outbound connections. These container DNS settings are separate from
+Sable's forwarding settings and avoid depending on Sable during startup. Replace
+the two public DNS addresses with reachable independent resolvers if your
+network requires them. See the [Docker guide](docs/guides/install-docker.md).
 
 To opt into web-console updates, add this environment setting while keeping the
 same restart policy and data volume:

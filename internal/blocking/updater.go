@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -246,7 +247,7 @@ func (updater *Updater) downloadTemporary(ctx context.Context, source RemoteSour
 	request.Header.Set("User-Agent", "Sable DNS block-list updater")
 	response, err := updater.client.Do(request)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("download block list %q: %w", source.Name, err)
+		return "", "", 0, blockListDownloadError(source, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -282,6 +283,18 @@ func (updater *Updater) downloadTemporary(ctx context.Context, source RemoteSour
 	}
 	removeTemporary = false
 	return temporaryPath, target, written, nil
+}
+
+func blockListDownloadError(source RemoteSource, err error) error {
+	var dnsError *net.DNSError
+	if errors.As(err, &dnsError) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		hint := "check the host's DNS settings and that the list hostname is correct"
+		if dnsError.Server == "127.0.0.11:53" || dnsError.Server == "127.0.0.11" {
+			hint = "Docker DNS lookup failed; configure working DNS servers for the container using --dns or Compose dns, independent of Sable"
+		}
+		return fmt.Errorf("download block list %q: %s: %w", source.Name, hint, err)
+	}
+	return fmt.Errorf("download block list %q: %w", source.Name, err)
 }
 
 func (updater *Updater) restore(staged []stagedBlockListFile) {
