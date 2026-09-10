@@ -188,16 +188,15 @@ func comparableVersion(tag string) string {
 }
 
 // isNewer reports whether the candidate release supersedes the running build.
-// An unrecognizable running version is always treated as outdated so that
-// development builds still pick up published releases.
+// Development builds cannot be ordered as released installations.
 func isNewer(candidate, current string) bool {
+	if (version.Info{Release: current}).Development() {
+		return false
+	}
 	comparableCandidate := comparableVersion(candidate)
 	if comparableCandidate == "" {
 		return false
 	}
 	comparableCurrent := comparableVersion(current)
-	if comparableCurrent == "" {
-		return true
-	}
 	return semver.Compare(comparableCandidate, comparableCurrent) > 0
 }

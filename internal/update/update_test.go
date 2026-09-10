@@ -21,15 +21,17 @@ import (
 	"github.com/drudge/sable/internal/version"
 )
 
-func TestIsNewerTreatsDevelopmentBuildsAsOutdated(t *testing.T) {
+func TestIsNewerComparesPublishedVersions(t *testing.T) {
 	if !isNewer("0.7.0", "0.6.0") {
 		t.Fatal("0.7.0 should supersede 0.6.0")
 	}
-	if !isNewer("0.6.0", "0.6.0-dev") {
+	if !isNewer("0.6.0", "0.6.0-rc.1") {
 		t.Fatal("a release should supersede its own pre-release build")
 	}
-	if !isNewer("0.6.0", "unknown") {
-		t.Fatal("an unrecognizable running version should always be updated")
+	for _, current := range []string{"dev", "unknown", "0.6.0-dev", "0.6.0-snapshot"} {
+		if isNewer("0.6.0", current) {
+			t.Fatalf("development build %q should not be offered a release update", current)
+		}
 	}
 	if isNewer("0.6.0", "0.6.0") || isNewer("0.5.9", "0.6.0") {
 		t.Fatal("older or equal releases should not be offered")
@@ -112,6 +114,7 @@ func TestExtractExecutableReadsBothArchiveFormats(t *testing.T) {
 }
 
 func TestApplyVerifiesAndReplacesTheInstalledExecutable(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	server := releaseServer(t, "v9.9.9", false, nil)
@@ -146,6 +149,7 @@ func TestApplyVerifiesAndReplacesTheInstalledExecutable(t *testing.T) {
 }
 
 func TestApplyMirrorsTheVerifiedExecutableForAWebUpdateService(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old command\n")
 	servicePath := installedExecutable(t, "#!/bin/sh\necho old service\n")
@@ -173,6 +177,7 @@ func TestApplyMirrorsTheVerifiedExecutableForAWebUpdateService(t *testing.T) {
 }
 
 func TestApplyRejectsAnArchiveThatFailsChecksumVerification(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	requireExecutableScripts(t)
 	binaryPath := installedExecutable(t, "#!/bin/sh\necho old\n")
 	server := releaseServer(t, "v9.9.9", false, func(checksums []byte) []byte {
@@ -193,6 +198,7 @@ func TestApplyRejectsAnArchiveThatFailsChecksumVerification(t *testing.T) {
 }
 
 func TestApplyReportsAnAvailableReleaseWithoutInstallingIt(t *testing.T) {
+	setTestRelease(t, "0.7.0")
 	server := releaseServer(t, "v9.9.9", false, nil)
 	result, err := Apply(context.Background(), Options{APIBaseURL: server.URL, CheckOnly: true})
 	if err != nil {
@@ -204,6 +210,7 @@ func TestApplyReportsAnAvailableReleaseWithoutInstallingIt(t *testing.T) {
 }
 
 func TestApplySkipsPreReleasesUnlessRequested(t *testing.T) {
+	setTestRelease(t, "0.7.0-rc.1")
 	server := releaseServer(t, "v9.9.9-rc.1", true, nil)
 	if _, err := Apply(context.Background(), Options{APIBaseURL: server.URL, CheckOnly: true}); err == nil {
 		t.Fatal("a pre-release-only repository should report no stable release")

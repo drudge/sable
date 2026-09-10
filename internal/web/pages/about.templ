@@ -1,5 +1,7 @@
 package pages
 
+import "strings"
+
 type AboutPageView struct {
 	Console      DashboardView
 	Commit       string
@@ -14,6 +16,7 @@ type AboutPageView struct {
 type UpdateView struct {
 	Phase          string
 	CurrentVersion string
+	Development    bool
 	LatestVersion  string
 	ReleaseURL     string
 	Progress       string
@@ -53,6 +56,7 @@ templ AboutPage(view AboutPageView) {
 }
 
 templ AboutContent(view AboutPageView) {
+	{{ buildDate, buildTime := formatBuildDateTime(view.BuiltAt, view.Console.TimeDisplay) }}
 	<div class="about-page page-stack">
 		<header class="about-hero">
 			<img class="about-mascot" src={ assetURL("sable-headshot.png") } alt="Sable, the Sable DNS mascot" width="512" height="499"/>
@@ -71,27 +75,39 @@ templ AboutContent(view AboutPageView) {
 			<header><h2>About</h2></header>
 			<div class="about-card-content">
 				<p>Sable is a modern authoritative and recursive DNS server built for speed, resilience, and straightforward operation. The DNS server, client, administrative API, and reactive web console ship together as one executable.</p>
-				<p>Its interface is built directly from Isotope's focused product language, while its Go-native core is designed for high-throughput DNS workloads.</p>
+				<div class="about-version-row">
+					<div class="about-version-copy">
+						<span>Installed version</span>
+						<strong>{ formatReleaseVersion(view.Console.Version) }</strong>
+					</div>
+					<dl class="about-build-meta">
+						<div><dt>Go</dt><dd>{ strings.TrimPrefix(view.GoVersion, "go") }</dd></div>
+						<div><dt>Commit</dt><dd><code>{ view.Commit }</code></dd></div>
+						<div>
+							<dt>Built</dt>
+							<dd class="about-build-timestamp" title={ view.BuiltAt }>
+								<span>{ buildDate }</span>
+								if buildTime != "" {
+									<span>{ buildTime }</span>
+								}
+							</dd>
+						</div>
+					</dl>
+				</div>
+				@UpdatePanel(view.Update)
 			</div>
 		</section>
 
 		<section class="card about-card">
-			<header><h2>Sable DNS Server</h2></header>
+			<header><h2>Support</h2></header>
 			<div class="about-card-content">
-				<p>An MIT-licensed DNS platform with authoritative zones, recursive resolution, DNSSEC, encrypted DNS, blocking, conditional forwarding, persistent query logs, and a built-in administrative console.</p>
+				<p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p>
 				<div class="about-links">
-					<a href="https://github.com/drudge/sable" target="_blank" rel="noopener noreferrer"><span>GitHub</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable" target="_blank" rel="noopener noreferrer"><span>Sable on GitHub</span>@Icon("external-link")</a>
 					<a href="https://github.com/drudge/sable#readme" target="_blank" rel="noopener noreferrer"><span>Documentation</span>@Icon("external-link")</a>
-					<a href="https://github.com/drudge/sable/issues" target="_blank" rel="noopener noreferrer"><span>Issues</span>@Icon("external-link")</a>
+					<a href="https://github.com/drudge/sable/issues/new" target="_blank" rel="noopener noreferrer"><span>Report an issue</span>@Icon("external-link")</a>
 					<a href="https://github.com/drudge/sable/discussions" target="_blank" rel="noopener noreferrer"><span>Community</span>@Icon("external-link")</a>
 				</div>
-				<div class="about-version-row">
-					<div class="about-version-copy">
-						<div><span>Installed version</span><strong>{ formatReleaseVersion(view.Console.Version) }</strong></div>
-						<small>Go { view.GoVersion } · commit { view.Commit } · built { view.BuiltAt }</small>
-					</div>
-				</div>
-				@UpdatePanel(view.Update)
 			</div>
 		</section>
 
@@ -109,17 +125,6 @@ templ AboutContent(view AboutPageView) {
 						<pre id="metrics-preview" hidden></pre>
 					</div>
 				}
-			</div>
-		</section>
-
-		<section class="card about-card">
-			<header><h2>Support</h2></header>
-			<div class="about-card-content">
-				<p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p>
-				<div class="about-links">
-					<a href="https://github.com/drudge/sable" target="_blank" rel="noopener noreferrer"><span>Sable on GitHub</span>@Icon("external-link")</a>
-					<a href="https://github.com/drudge/sable/issues/new" target="_blank" rel="noopener noreferrer"><span>Report an issue</span>@Icon("external-link")</a>
-				</div>
 			</div>
 		</section>
 
@@ -164,6 +169,10 @@ templ UpdatePanel(view UpdateView) {
 				<strong aria-live="polite">{ updateHeadline(view) }</strong>
 				<small data-restart-status>
 					{ updateDetail(view) }
+					if view.Development {
+						<br/>
+						Rebuild from source to update Sable.
+					}
 					if view.Available && !view.Installed && view.ReleaseURL != "" {
 						<a class="inline-link about-update-notes" href={ templ.SafeURL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 					}
@@ -180,7 +189,7 @@ templ UpdatePanel(view UpdateView) {
 						<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
 					</form>
 			}
-			if view.Supported && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
+			if view.Supported && !view.Development && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
 				<form
 					data-update-check
 					hx-post="/ui/updates/check"
@@ -212,7 +221,7 @@ templ UpdatePanel(view UpdateView) {
 // updateAction names the primary action for the panel's current state.
 func updateAction(view UpdateView) string {
 	switch {
-	case !view.Supported || view.Busy:
+	case !view.Supported || view.Development || view.Busy:
 		return ""
 	case view.Installed:
 		return ifThen(view.CanRestart, "restart", "")
@@ -227,6 +236,8 @@ func updateAction(view UpdateView) string {
 // can tint it without repeating the state rules.
 func updateVariant(view UpdateView) string {
 	switch {
+	case view.Development:
+		return "development"
 	case view.Busy:
 		return "busy"
 	case view.Installed:
@@ -243,6 +254,9 @@ func updateVariant(view UpdateView) string {
 }
 
 func updateIcon(view UpdateView) string {
+	if view.Development {
+		return "terminal"
+	}
 	switch updateVariant(view) {
 	case "busy":
 		return "refresh"
@@ -261,6 +275,8 @@ func updateIcon(view UpdateView) string {
 
 func updateHeadline(view UpdateView) string {
 	switch {
+	case view.Development:
+		return "Development build"
 	case !view.Supported:
 		return "Update checks are unavailable"
 	case view.Phase == "checking":
@@ -282,6 +298,8 @@ func updateHeadline(view UpdateView) string {
 
 func updateDetail(view UpdateView) string {
 	switch {
+	case view.Development:
+		return "Update checks and installation are disabled for development builds."
 	case !view.Supported:
 		return "Update this installation with sable update."
 	case view.Phase == "checking":

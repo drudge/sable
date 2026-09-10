@@ -8,6 +8,34 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.0.1] - Unreleased
+
+This patch release fixes block-list setup, improves the mobile console, and
+protects development builds from being replaced by published releases.
+
+### Block lists and Docker
+
+- Hagezi Pro now uses its working AdBlock feed. Existing subscriptions to the
+  retired URL migrate automatically while retaining their cached blocking data.
+- The block-list catalog uses consistently aligned Add and Added controls,
+  removes duplicate badges, and uses compact icon buttons on mobile.
+- A ready-to-use Docker Compose configuration and updated installation examples
+  give the container independent DNS for downloads and startup. DNS lookup
+  failures now include clearer guidance for Docker deployments.
+
+### Console and updates
+
+- Development and snapshot builds disable release checks and self-update
+  installation in both the console and CLI. Development containers also keep
+  running their image's build instead of selecting a staged release.
+- About combines installation details and update controls in one section,
+  groups support links together, and shows a readable build date and time using
+  the browser's timezone and 12/24-hour preference. Development builds have a
+  distinct striped status panel with improved mobile spacing.
+- The Go toolchain is updated to 1.27.1, with dependencies updated to their
+  latest stable releases, including PostgreSQL, QUIC, SQLite, cryptography,
+  networking, and the vulnerability scanner.
+
 ## [1.0.0] - 2026-09-06
 
 The first stable release brings together Sable's authoritative and recursive

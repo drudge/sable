@@ -603,7 +603,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if aboutResponse.Code != http.StatusOK {
 		t.Fatalf("about page status = %d", aboutResponse.Code)
 	}
-	for _, expected := range []string{"About", "Sable DNS Server", "Prometheus Metrics", "Installed version", "Check for Updates", "MIT License", `class="nav-item active" href="/about"`, `job_name: &#34;sable-dns&#34;`} {
+	for _, expected := range []string{"About", "Support", "Prometheus Metrics", "Installed version", "Check for Updates", "MIT License", `class="nav-item active" href="/about"`, `job_name: &#34;sable-dns&#34;`} {
 		if !strings.Contains(aboutResponse.Body.String(), expected) {
 			t.Errorf("about page does not contain %q", expected)
 		}

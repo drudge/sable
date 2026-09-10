@@ -36,6 +36,9 @@ var errMissingExecutable = errors.New("release archive does not contain the Sabl
 // ErrUpdateInProgress reports that another check or installation is running.
 var ErrUpdateInProgress = errors.New("an update is already running")
 
+// ErrDevelopmentBuild prevents local builds from replacing themselves with releases.
+var ErrDevelopmentBuild = errors.New("Update checks and installation are disabled for development builds. Rebuild from source to update Sable.")
+
 type Options struct {
 	// Repository is the GitHub owner/name pair that publishes Sable releases.
 	Repository string
@@ -94,6 +97,9 @@ func (options Options) withDefaults() Options {
 func Apply(ctx context.Context, options Options) (Result, error) {
 	options = options.withDefaults()
 	current := version.Current().Release
+	if version.Current().Development() {
+		return Result{CurrentVersion: current}, ErrDevelopmentBuild
+	}
 	selected, err := resolveRelease(ctx, options)
 	if err != nil {
 		return Result{}, err
@@ -213,6 +219,9 @@ func targetBinaryPath(override string) (string, error) {
 // executable renames a staged file over it, so the check is whether the
 // directory holding it accepts a new file.
 func Installable(binaryPath string) error {
+	if version.Current().Development() {
+		return ErrDevelopmentBuild
+	}
 	path, err := targetBinaryPath(binaryPath)
 	if err != nil {
 		return err

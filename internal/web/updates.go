@@ -60,7 +60,7 @@ func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request
 
 func (server *Server) resolveUpdateCheck(request *http.Request, includePreRelease bool) (update.Status, error) {
 	status, err := server.updates.Check(request.Context(), includePreRelease)
-	if err != nil && !errors.Is(err, update.ErrUpdateInProgress) {
+	if err != nil && !errors.Is(err, update.ErrUpdateInProgress) && !errors.Is(err, update.ErrDevelopmentBuild) {
 		server.logger.Warn("check for Sable updates", "error", err)
 	}
 	server.recordControlPlaneAudit(request, "update.check", "checked for a newer Sable release")
@@ -71,6 +71,8 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 	view := server.updateView(request, status)
 	message, variant, responseStatus := "Update check completed.", "success", http.StatusOK
 	switch {
+	case view.Development:
+		message = update.ErrDevelopmentBuild.Error()
 	case checkErr != nil && !errors.Is(checkErr, update.ErrUpdateInProgress):
 		message, variant, responseStatus = checkErr.Error(), "error", http.StatusBadGateway
 	case view.Error != "":
@@ -168,6 +170,7 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		Busy:              status.Busy(),
 		Checked:           status.Checked(),
 		CurrentVersion:    status.CurrentVersion,
+		Development:       status.Development,
 		Error:             status.Error,
 		IncludePreRelease: status.IncludePreRelease,
 		Installed:         status.Installed,

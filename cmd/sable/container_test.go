@@ -39,7 +39,9 @@ func TestContainerPrefersOnlyANewerPersistentRelease(t *testing.T) {
 		{image: "1.2.0", mutable: "1.3.0-rc.1", want: true},
 		{image: "1.2.0", mutable: "1.2.0", want: false},
 		{image: "1.2.0", mutable: "1.1.9", want: false},
-		{image: "dev", mutable: "1.2.0", want: true},
+		{image: "dev", mutable: "1.2.0", want: false},
+		{image: "1.2.0-snapshot", mutable: "1.3.0", want: false},
+		{image: "1.2.0-rc.1", mutable: "1.2.0", want: true},
 		{image: "1.2.0", mutable: "broken", want: false},
 	} {
 		if got := preferMutableRelease(test.image, test.mutable); got != test.want {

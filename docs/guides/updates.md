@@ -4,6 +4,8 @@ Treat a release update as a small, verifiable rollout. Preserve a recovery point
 
 ## Before an update
 
+Development builds (`dev`, unversioned builds, and versions marked `dev` or `snapshot`) disable release checks and self-update installation. About shows **Development build** instead of offering a published release. Rebuild from source to update a development checkout. Published alpha, beta, and release-candidate builds use the normal update workflow.
+
 Read the target release notes, export a [sealed backup](../backup.md), and make sure you can restore it. Record the running version and important listener settings. Keep console or SSH access independent of the DNS service you are changing.
 
 Database, backup-format, and cross-version cluster compatibility are not yet a published long-term contract. A successful binary downgrade is not proof that newer persistent data is safe for the older build. Use a known-good pre-upgrade backup when recovery requires the older state.
