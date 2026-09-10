@@ -100,7 +100,7 @@ templ LogsContent(view LogsPageView) {
 }
 
 templ RuntimeLogsPanel(view RuntimeLogsView) {
-	<section class="card logs-card emphasized" id="runtime-logs-panel" aria-labelledby="runtime-log-title" tabindex="-1" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
+	<section class="card logs-card emphasized" id="runtime-logs-panel" aria-labelledby="runtime-log-title" tabindex="-1" data-log-live-panel data-live-refresh data-live={ fmt.Sprint(view.Live) } data-live-url={ runtimePanelURL(view) }>
 		<header class="logs-toolbar">
 			<div><div class="log-title"><h2 id="runtime-log-title">@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
 			<div class="logs-toolbar-actions">
@@ -138,7 +138,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 
 templ QueryLogsPanel(view QueryLogsView) {
 	{{ tokens := queryFilterTokens(view) }}
-	<section class="card logs-card emphasized" id="query-logs-panel" aria-labelledby="query-log-title" tabindex="-1" data-log-live-panel data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
+	<section class="card logs-card emphasized" id="query-logs-panel" aria-labelledby="query-log-title" tabindex="-1" data-log-live-panel data-live-refresh data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
 				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>

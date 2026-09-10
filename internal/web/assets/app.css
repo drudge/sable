@@ -652,6 +652,14 @@ textarea:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in o
 .catalog-custom form label > div { display: grid; grid-template-columns: 1fr auto; gap: .6rem; }
 .catalog-custom > div { border-radius: .6rem; background: var(--muted); padding: .9rem 1rem; color: var(--muted-foreground); font-size: .72rem; }
 .catalog-custom ul { margin: .45rem 0 0; padding-left: 1.1rem; line-height: 1.55; }
+.block-list-add-button { position: relative; }
+.block-list-add-idle, .block-list-add-pending { align-items: center; gap: .3rem; white-space: nowrap; }
+.block-list-add-idle { display: inline-flex; }
+.block-list-add-pending { position: absolute; inset: 0; display: none; justify-content: center; }
+[data-block-list-add].htmx-request .block-list-add-idle { visibility: hidden; }
+[data-block-list-add].htmx-request .block-list-add-pending { display: inline-flex; }
+[data-block-list-add].htmx-request .icon-loader-circle { animation: blocking-refresh-spin .8s linear infinite; }
+.block-list-add-button:disabled { cursor: wait; }
 .dashboard-footer { display: flex; align-items: center; gap: 1rem; padding: .25rem .25rem 0; color: var(--muted-foreground); font-size: .7rem; }
 .dashboard-footer-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .35rem; color: var(--foreground); }
 .dashboard-footer-details { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .35rem 1rem; }
@@ -1147,7 +1155,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   bottom: 1rem;
   z-index: 100;
   display: grid;
-  width: min(24rem, calc(100vw - 2rem));
+  width: min(24rem, calc(100% - 2rem));
   gap: .65rem;
   pointer-events: none;
 }
@@ -1619,7 +1627,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 }
 
 @media (max-width: 639px) {
-	.toast-region { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
+	.toast-region { right: .75rem; bottom: .75rem; width: calc(100% - 1.5rem); }
 	.dashboard-footer { flex-wrap: wrap; justify-content: center; gap: .45rem 1rem; border-top: 1px solid var(--border); padding: .85rem .25rem max(.75rem, env(safe-area-inset-bottom)); text-align: center; }
 	.dashboard-footer-status { order: 1; }
 	.dashboard-footer-version { order: 2; }
@@ -1697,7 +1705,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 	.catalog-dialog { width: calc(100vw - 1rem); }
 	.catalog-row { grid-template-columns: minmax(0, 1fr) 2.25rem 2.25rem; padding-inline: .75rem; }
 	.catalog-row .button { padding: 0; }
-	.catalog-row .button > span { display: none; }
+	.catalog-row .catalog-added > span, .catalog-row .block-list-add-idle > span { display: none; }
 	.isotope-zone-heading h1 { font-size: 1.5rem; }
 	.isotope-zone-heading p { font-size: .78rem; }
 	.isotope-zone-heading .zone-primary-action span { display: none; }
@@ -2460,6 +2468,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .about-build-meta dd { margin: 0; font-size: .75rem; overflow-wrap: anywhere; }
 .about-build-timestamp { display: flex; flex-wrap: wrap; column-gap: .35rem; }
 .about-build-timestamp > span:last-child { white-space: nowrap; }
+.about-commit { white-space: nowrap; }
 .about-version-status { display: inline-flex; align-items: center; gap: .25rem; color: var(--muted-foreground); font-size: .6875rem; }
 .about-version-status .nav-icon { width: .875rem; height: .875rem; }
 .about-card-title { display: inline-flex; align-items: center; gap: .5rem; }
@@ -2534,6 +2543,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
   .about-card-content { padding-inline: 1rem; }
   .about-version-row { flex-direction: column; align-items: stretch; }
   .about-build-meta { display: grid; grid-template-columns: minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: .75rem; }
+  .about-commit-suffix { display: none; }
   .about-update { align-items: stretch; }
   .about-update-actions { width: 100%; }
   .about-update-actions > form { flex: 1 1 100%; }

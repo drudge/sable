@@ -8,6 +8,33 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.0.2] - Unreleased
+
+This patch release keeps live console updates from interrupting keyboard
+navigation and makes block-list downloads easier to follow.
+
+### Console interaction
+
+- Dashboard stat cards and scope controls retain keyboard focus through live
+  updates. Automatically refreshed panels also preserve open controls and
+  unsaved form edits, including backup settings.
+- Routine dashboard refreshes keep the chart at full brightness. Loading
+  feedback appears when changing the chart range or overview scope. Stat cards
+  update in place so their focus and hover highlights do not pulse.
+- Query logs discard in-flight refreshes after pausing live updates or changing
+  filters, so an older response cannot replace the selected view.
+- About shows a seven-character commit SHA on mobile while retaining the full
+  SHA on larger screens and in the tooltip.
+
+### Block-list feedback
+
+- Adding a catalog or custom block list shows a compact loading spinner and
+  prevents duplicate submissions while the download and compilation finish.
+  The dialog stays in place, and mobile Add buttons keep their visible icons.
+- Manual add and update failures show error toasts. Connection interruptions
+  and unrendered HTTP errors now show a dismissible notice, including inside
+  the open Add dialog, without clearing the custom URL.
+
 ## [1.0.1] - Unreleased
 
 This patch release fixes block-list setup, improves the mobile console, and

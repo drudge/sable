@@ -546,12 +546,17 @@ func TSIGAlgorithmLabel(algorithm string) string {
 }
 
 templ SettingsBackupPanel(view SettingsBackupView) {
-	<div class="settings-panel-stack backup-panel" id="backup-panel">
+	<div
+		class="settings-panel-stack backup-panel"
+		id="backup-panel"
+		data-live-refresh
 		if view.Busy() {
-			// Each rendered panel asks for the next poll, so the loop stops on
-			// its own as soon as a render comes back without a running job.
-			<div hx-get="/ui/backup/progress" hx-trigger="load delay:400ms" hx-target="#backup-panel" hx-swap="outerHTML"></div>
+			hx-get="/ui/backup/progress"
+			hx-trigger="every 400ms"
+			hx-target="this"
+			hx-swap="outerHTML"
 		}
+	>
 		if view.OfferRestart {
 			@ToastWithAction(view.Message, "success", ToastAction{
 				Label: "Restart Sable", Icon: "refresh", Post: "/ui/backup/restart",

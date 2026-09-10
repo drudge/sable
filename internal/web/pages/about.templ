@@ -2,6 +2,8 @@ package pages
 
 import "strings"
 
+const shortCommitLength = 7
+
 type AboutPageView struct {
 	Console      DashboardView
 	Commit       string
@@ -57,6 +59,7 @@ templ AboutPage(view AboutPageView) {
 
 templ AboutContent(view AboutPageView) {
 	{{ buildDate, buildTime := formatBuildDateTime(view.BuiltAt, view.Console.TimeDisplay) }}
+	{{ commitPrefixLength := min(len(view.Commit), shortCommitLength) }}
 	<div class="about-page page-stack">
 		<header class="about-hero">
 			<img class="about-mascot" src={ assetURL("sable-headshot.png") } alt="Sable, the Sable DNS mascot" width="512" height="499"/>
@@ -82,7 +85,7 @@ templ AboutContent(view AboutPageView) {
 					</div>
 					<dl class="about-build-meta">
 						<div><dt>Go</dt><dd>{ strings.TrimPrefix(view.GoVersion, "go") }</dd></div>
-						<div><dt>Commit</dt><dd><code>{ view.Commit }</code></dd></div>
+						<div><dt>Commit</dt><dd><code class="about-commit" title={ view.Commit }>{ view.Commit[:commitPrefixLength] }<span class="about-commit-suffix">{ view.Commit[commitPrefixLength:] }</span></code></dd></div>
 						<div>
 							<dt>Built</dt>
 							<dd class="about-build-timestamp" title={ view.BuiltAt }>
@@ -138,6 +141,7 @@ templ AboutContent(view AboutPageView) {
 templ UpdatePanel(view UpdateView) {
 	<div
 		id="about-update"
+		data-live-refresh
 		class={ "about-update", "about-update-" + updateVariant(view) }
 		if view.Busy {
 			hx-get="/ui/updates"

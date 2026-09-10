@@ -78,6 +78,9 @@ templ BlockingContent(view BlockingPageView) {
 		<header class="page-heading"><h1>DNS Blocking</h1><p>Block unwanted domains using block lists and custom rules</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
+		<template data-block-list-error-toast>
+			@ToastSticky("Could not confirm the block list changes. Check your connection and refresh the page before trying again.", "error")
+		</template>
 		<div class="blocking-layout isotope-blocking-layout">
 			<div class="blocking-main-column">
 				@BlockingStatus(view)
@@ -206,9 +209,20 @@ templ AddBlockListDialog(existing []BlockListSourceView) {
 					}
 				</div>
 			}
-			<div class="catalog-custom" id="catalog-panel-custom" role="tabpanel" aria-labelledby="catalog-tab-custom" data-catalog-panel="custom" hidden><form hx-post="/ui/blocking/lists/add" hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Block List URL</span><div><input type="url" name="url" placeholder="https://example.com/blocklist.txt" required/><button class="button" type="submit">Add</button></div></label><input type="hidden" name="format" value="auto"/></form><div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div></div>
+			<div class="catalog-custom" id="catalog-panel-custom" role="tabpanel" aria-labelledby="catalog-tab-custom" data-catalog-panel="custom" hidden>
+				<form data-block-list-add hx-post="/ui/blocking/lists/add" hx-target="#blocking-content" hx-swap="outerHTML" hx-sync="#add-block-list-dialog:drop" hx-disable="#add-block-list-dialog .block-list-add-button, #add-block-list-dialog input[type='url']">
+					<label><span>Block List URL</span><div><input type="url" name="url" placeholder="https://example.com/blocklist.txt" required/><button class="button block-list-add-button" type="submit">@BlockListAddLabel()</button></div></label>
+					<input type="hidden" name="format" value="auto"/>
+				</form>
+				<div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div>
+			</div>
 		</div>
 	</dialog>
+}
+
+templ BlockListAddLabel() {
+	<span class="block-list-add-idle">@Icon("plus")<span>Add</span></span>
+	<span class="block-list-add-pending">@Icon("loader-circle")<span class="sr-only">Adding…</span></span>
 }
 
 templ CatalogRow(item BlockListCatalogItem, added bool) {
@@ -216,7 +230,7 @@ templ CatalogRow(item BlockListCatalogItem, added bool) {
 		if added {
 			<button class="button outline catalog-added" type="button" disabled aria-label={ item.Name + " already added" }>@Icon("check")<span>Added</span></button>
 		} else {
-			<button class="button" type="button" aria-label={ "Add " + item.Name } hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML">@Icon("plus")<span>Add</span></button>
+			<button class="button block-list-add-button" type="button" aria-label={ "Add " + item.Name } data-block-list-add hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML" hx-sync="#add-block-list-dialog:drop" hx-disable="#add-block-list-dialog .block-list-add-button, #add-block-list-dialog input[type='url']">@BlockListAddLabel()</button>
 		}
 	</article>
 }
