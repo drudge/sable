@@ -1,0 +1,25 @@
+package pages
+
+templ ReleaseVersion(release string) {
+	if releaseURL(release) != "" {
+		<a class="inline-link" href={ templ.SafeURL(releaseURL(release)) } target="_blank" rel="noopener noreferrer" title="View this release on GitHub">{ formatReleaseVersion(release) }</a>
+	} else {
+		{ release }
+	}
+}
+
+templ UpdateNotification(view UpdateView) {
+	<div class="toast-region" aria-live="polite">
+		<div class="toast toast-success toast-persistent" data-toast data-toast-duration="0" role="status" data-update-version={ view.LatestVersion }>
+			<span class="toast-icon" aria-hidden="true">@Icon("download")</span>
+			<div class="toast-content">
+				<strong>Sable v{ view.LatestVersion } is available</strong>
+				if view.ReleaseNotes != "" {
+					<details class="update-release-notes"><summary>Release notes</summary><div class="release-notes-content">@templ.Raw(releaseNotesHTML(view.ReleaseNotes))</div></details>
+				}
+				<div class="toast-actions"><a class="button compact" href="/about#about-update">Review update</a>@ReleaseVersion(view.LatestVersion)</div>
+			</div>
+			<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
+		</div>
+	</div>
+}

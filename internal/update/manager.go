@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/version"
+	"golang.org/x/mod/semver"
 )
 
 // Phase names the stage a console-driven update has reached.
@@ -25,9 +26,15 @@ const (
 // download timeout so that a slow mirror fails on its own terms first.
 const installTimeout = 15 * time.Minute
 
+const (
+	automaticCheckInterval = 6 * time.Hour
+	automaticCheckTimeout  = 15 * time.Second
+)
+
 // Status is what the console knows about available updates right now.
 type Status struct {
-	Phase Phase
+	ClusterUpdate bool
+	Phase         Phase
 	// CurrentVersion is the release this process is running.
 	CurrentVersion string
 	// Development disables release operations for local builds.
@@ -35,6 +42,7 @@ type Status struct {
 	// LatestVersion is the newest release the last check resolved.
 	LatestVersion string
 	ReleaseURL    string
+	ReleaseNotes  string
 	AssetName     string
 	BinaryPath    string
 	// Progress is the most recent line the installer reported.
@@ -76,9 +84,10 @@ func (status Status) UpToDate() bool {
 // console can poll their progress instead of holding a request open for the
 // whole download.
 type Manager struct {
-	options Options
-	mutex   sync.Mutex
-	status  Status
+	options     Options
+	mutex       sync.Mutex
+	status      Status
+	reservation string
 }
 
 // NewManager returns a manager that installs releases with the supplied
@@ -106,12 +115,16 @@ func NewManager(options Options) *Manager {
 func (manager *Manager) Status() Status {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
-	return manager.status
+	status := manager.status
+	status.ClusterUpdate = manager.reservation != ""
+	return status
 }
 
 // ServiceManaged reports whether a service manager is expected to start Sable
 // again after it exits for an update.
-func (manager *Manager) ServiceManaged() bool { return ServiceManaged() }
+func (manager *Manager) ServiceManaged() bool {
+	return manager.options.RestartManaged || ServiceManaged()
+}
 
 // Check resolves the newest release without installing it. It runs inline
 // because it is only a pair of metadata requests.
@@ -126,6 +139,76 @@ func (manager *Manager) Check(ctx context.Context, includePreRelease bool) (Stat
 	return manager.finish(result, err), err
 }
 
+// CheckAutomatically shares a cached result across console sessions, including
+// failed lookups, so signing in cannot exhaust GitHub's unauthenticated quota.
+func (manager *Manager) CheckAutomatically(ctx context.Context, includePreRelease bool) (Status, error) {
+	manager.mutex.Lock()
+	if manager.status.Busy() || manager.status.Installed || manager.reservation != "" ||
+		(manager.status.IncludePreRelease == includePreRelease && time.Since(manager.status.CheckedAt) < automaticCheckInterval) {
+		status := manager.status
+		status.ClusterUpdate = manager.reservation != ""
+		manager.mutex.Unlock()
+		return status, nil
+	}
+	if err := manager.beginLocked(PhaseChecking, includePreRelease); err != nil {
+		status := manager.status
+		manager.mutex.Unlock()
+		return status, err
+	}
+	manager.mutex.Unlock()
+	options := manager.options
+	options.PreRelease, options.CheckOnly = includePreRelease, true
+	ctx, cancel := context.WithTimeout(ctx, automaticCheckTimeout)
+	defer cancel()
+	result, err := Apply(ctx, options)
+	return manager.finish(result, err), err
+}
+
+// Reserve prevents local checks and installations from racing a cluster rollout.
+func (manager *Manager) Reserve(id string) error {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	if manager.reservation == id && id != "" {
+		return nil
+	}
+	if id == "" || manager.reservation != "" || manager.status.Busy() || manager.status.Installed {
+		return ErrUpdateInProgress
+	}
+	if err := Installable(manager.options.BinaryPath); err != nil {
+		return err
+	}
+	manager.reservation = id
+	return nil
+}
+
+func (manager *Manager) Release(id string) {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	if manager.reservation == id {
+		manager.reservation = ""
+	}
+}
+
+func (manager *Manager) Installable() error { return Installable(manager.options.BinaryPath) }
+
+// InstallVersion installs the exact release selected by a reserved rollout.
+func (manager *Manager) InstallVersion(id, tag string) error {
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	if manager.reservation != id || id == "" {
+		return errors.New("cluster update is not reserved")
+	}
+	if !isNewer(tag, version.Current().Release) {
+		return errors.New("cluster updates require a newer release")
+	}
+	includePreRelease := semver.Prerelease(normalizeTag(tag)) != ""
+	if err := manager.beginLocked(PhaseInstalling, includePreRelease); err != nil {
+		return err
+	}
+	manager.startInstall(tag, includePreRelease)
+	return nil
+}
+
 // Install downloads the newest release, verifies it, and replaces the
 // installed executable in the background. Sable keeps running the previous
 // build until it restarts.
@@ -137,9 +220,13 @@ func (manager *Manager) Install(includePreRelease bool) error {
 		manager.finish(Result{}, err)
 		return err
 	}
+	manager.startInstall("", includePreRelease)
+	return nil
+}
+
+func (manager *Manager) startInstall(tag string, includePreRelease bool) {
 	options := manager.options
-	options.PreRelease = includePreRelease
-	options.CheckOnly = false
+	options.Version, options.PreRelease, options.CheckOnly = tag, includePreRelease, false
 	// The console restarts Sable as a separate, confirmed step so that an
 	// operator on a host without a service manager is not left with a stopped
 	// server.
@@ -151,13 +238,19 @@ func (manager *Manager) Install(includePreRelease bool) error {
 		result, err := Apply(ctx, options)
 		manager.finish(result, err)
 	}()
-	return nil
 }
 
 // begin claims the manager for one operation.
 func (manager *Manager) begin(phase Phase, includePreRelease bool) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
+	if manager.reservation != "" || manager.status.Installed {
+		return ErrUpdateInProgress
+	}
+	return manager.beginLocked(phase, includePreRelease)
+}
+
+func (manager *Manager) beginLocked(phase Phase, includePreRelease bool) error {
 	if manager.status.Development {
 		return ErrDevelopmentBuild
 	}
@@ -169,6 +262,7 @@ func (manager *Manager) begin(phase Phase, includePreRelease bool) error {
 		CurrentVersion:    version.Current().Release,
 		LatestVersion:     manager.status.LatestVersion,
 		ReleaseURL:        manager.status.ReleaseURL,
+		ReleaseNotes:      manager.status.ReleaseNotes,
 		IncludePreRelease: includePreRelease,
 		CheckedAt:         manager.status.CheckedAt,
 	}
@@ -193,6 +287,7 @@ func (manager *Manager) finish(result Result, err error) Status {
 	}
 	status.LatestVersion = result.LatestVersion
 	status.ReleaseURL = result.ReleaseURL
+	status.ReleaseNotes = result.ReleaseNotes
 	status.AssetName = result.AssetName
 	status.BinaryPath = result.BinaryPath
 	status.PreRelease = result.PreRelease

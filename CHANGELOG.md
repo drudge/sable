@@ -1,12 +1,30 @@
 # Changelog
 
 This file records the user-visible changes selected for Sable releases. GitHub
-release notes use the matching version section when one is present; the raw
-commit list remains a fallback for development and release-candidate tags.
+release notes require a matching version section, including release candidates.
+Generated commit lists are never published as release notes.
 
 Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
+
+## [Unreleased]
+
+### Updates
+
+- The console checks for releases after sign-in by default and shows a dismissible
+  notification with release notes. Turn checks off for this node on About.
+- About displays notes from the GitHub release, and installed versions on About
+  and Cluster link to their release pages.
+- Cluster can update all nodes to one reviewed release, restarting replicas one
+  at a time and waiting for their running version and synchronization before
+  updating the primary. Progress survives the primary's final restart. Failures,
+  timeouts, or an operator stop prevent further restarts.
+- Rolling updates require support and automatic restart on every node. Older
+  nodes need a manual upgrade first. DNS clients must use multiple nodes to
+  maintain service during a restart.
+- Publishing now requires curated notes for every release, including candidates;
+  merge commits and raw commit lists no longer become user-facing notes.
 
 ## [1.0.2] - Unreleased
 

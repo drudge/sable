@@ -29,6 +29,7 @@ type release struct {
 	Draft      bool           `json:"draft"`
 	PreRelease bool           `json:"prerelease"`
 	HTMLURL    string         `json:"html_url"`
+	Body       string         `json:"body"`
 	Assets     []releaseAsset `json:"assets"`
 }
 

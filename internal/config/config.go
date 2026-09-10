@@ -135,6 +135,9 @@ type Config struct {
 
 // Updates holds this node's release channel. It is not replicated to peers.
 type Updates struct {
+	CheckOnLogin bool `toml:"check_on_login"`
+	// RestartManaged opts externally supervised deployments into rolling restarts.
+	RestartManaged bool `toml:"restart_managed"`
 	// PreRelease includes release candidates when resolving the newest
 	// release. The console writes the operator's choice here so it survives a
 	// restart, which matters because a server tracking release candidates
@@ -463,6 +466,7 @@ type Reload struct {
 
 func Defaults() Config {
 	return Config{
+		Updates: Updates{CheckOnLogin: true},
 		Server: Server{
 			HTTPListen:      defaultHTTPListen,
 			DNSListen:       []string{defaultDNSListen},

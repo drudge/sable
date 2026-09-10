@@ -57,6 +57,7 @@ func replicaLocalWrite(path string) bool {
 	// Release channels, executable replacements, and restarts affect only
 	// this process, not the cluster's replicated control-plane state.
 	case path == "/ui/updates/check", path == "/ui/updates/command-check",
+		path == "/ui/updates/automatic-check", path == "/ui/updates/preferences",
 		path == "/ui/updates/install", path == "/ui/updates/restart":
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):

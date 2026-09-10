@@ -29,29 +29,32 @@ const (
 )
 
 type Heartbeat struct {
-	NodeID            string    `json:"node_id"`
-	Name              string    `json:"name,omitempty"`
-	AdvertiseURL      string    `json:"advertise_url,omitempty"`
-	TrustAnchor       string    `json:"trust_anchor,omitempty"`
-	Version           string    `json:"version,omitempty"`
-	Addresses         []string  `json:"addresses,omitempty"`
-	AppliedGeneration uint64    `json:"applied_generation"`
-	StateDigest       string    `json:"state_digest,omitempty"`
-	UpSince           time.Time `json:"up_since"`
-	SentAt            time.Time `json:"sent_at"`
+	Update            *NodeUpdateStatus `json:"update,omitempty"`
+	NodeID            string            `json:"node_id"`
+	Name              string            `json:"name,omitempty"`
+	AdvertiseURL      string            `json:"advertise_url,omitempty"`
+	TrustAnchor       string            `json:"trust_anchor,omitempty"`
+	Version           string            `json:"version,omitempty"`
+	Addresses         []string          `json:"addresses,omitempty"`
+	AppliedGeneration uint64            `json:"applied_generation"`
+	StateDigest       string            `json:"state_digest,omitempty"`
+	UpSince           time.Time         `json:"up_since"`
+	SentAt            time.Time         `json:"sent_at"`
 }
 
 type SyncConfiguration struct {
-	FormatVersion int       `json:"format_version"`
-	ClusterID     string    `json:"cluster_id"`
-	ClusterDomain string    `json:"cluster_domain"`
-	Generation    uint64    `json:"generation"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	PrimaryID     string    `json:"primary_id"`
-	StatusKey     string    `json:"status_key"`
-	StateDigest   string    `json:"state_digest,omitempty"`
-	StateSnapshot []byte    `json:"state_snapshot,omitempty"`
-	Members       []Member  `json:"members"`
+	FormatVersion  int            `json:"format_version"`
+	ClusterID      string         `json:"cluster_id"`
+	ClusterDomain  string         `json:"cluster_domain"`
+	Generation     uint64         `json:"generation"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	PrimaryID      string         `json:"primary_id"`
+	StatusKey      string         `json:"status_key"`
+	StateDigest    string         `json:"state_digest,omitempty"`
+	StateSnapshot  []byte         `json:"state_snapshot,omitempty"`
+	Members        []Member       `json:"members"`
+	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
+	UpdateProtocol int            `json:"update_protocol,omitempty"`
 }
 
 type nodeTelemetry struct {
@@ -78,12 +81,20 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 // A recently demoted primary continues serving this signed convergence
 // endpoint so replicas can learn a planned primary handoff without a push
 // connection from the former primary.
-func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, signature string) (SyncConfiguration, error) {
+func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, signature string) (result SyncConfiguration, resultErr error) {
 	if err := service.refreshPrimaryState(ctx); err != nil && !errors.Is(err, ErrNotInitialized) {
 		return SyncConfiguration{}, err
 	}
 	service.mu.Lock()
-	defer service.mu.Unlock()
+	defer func() {
+		service.mu.Unlock()
+		if resultErr == nil {
+			result.UpdateCommand = service.updateCommand(heartbeat.NodeID)
+			if service.updates != nil {
+				result.UpdateProtocol = updateProtocolVersion
+			}
+		}
+	}()
 	now := time.Now()
 	if heartbeat.SentAt.Before(now.Add(-heartbeatClockSkew)) || heartbeat.SentAt.After(now.Add(heartbeatClockSkew)) {
 		return SyncConfiguration{}, errors.New("synchronization timestamp is outside the accepted clock window")
@@ -169,6 +180,7 @@ func (service *Service) monitorPrimary(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		service.recordSynchronizationResult(service.syncFromPrimary(ctx))
+		service.advanceUpdates(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -198,7 +210,18 @@ func (service *Service) recordSynchronizationResult(err error) {
 	service.logger.Warn("cluster synchronization failed", "error", err)
 }
 
-func (service *Service) syncFromPrimary(ctx context.Context) error {
+func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
+	defer func() {
+		if syncErr != nil {
+			service.mu.Lock()
+			service.updatePrimaryID = ""
+			service.mu.Unlock()
+		}
+	}()
+	updateStatus := service.localUpdateStatus()
+	service.mu.Lock()
+	service.pendingUpdate = nil
+	service.mu.Unlock()
 	service.mu.RLock()
 	if service.manifest == nil {
 		service.mu.RUnlock()
@@ -210,7 +233,11 @@ func (service *Service) syncFromPrimary(ctx context.Context) error {
 	}
 	primaryURL := memberAdvertiseURL(service.manifest, service.manifest.PrimaryID)
 	primary, found := manifestMember(service.manifest, service.manifest.PrimaryID)
+	if service.updatePrimaryID != primary.ID {
+		updateStatus = nil
+	}
 	heartbeat := Heartbeat{
+		Update: updateStatus,
 		NodeID: service.nodeID, Name: service.nodeName, AdvertiseURL: service.advertiseURL,
 		TrustAnchor: string(service.localTrustAnchorPEM), Version: service.version,
 		Addresses:         effectiveDNSAddresses(service.manifest.Nodes[slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == service.nodeID })].Addresses, service.dnsListeners),
@@ -303,6 +330,11 @@ func (service *Service) syncFromPrimary(ctx context.Context) error {
 	}
 	firstSuccessfulSync := service.lastSuccessfulSync.IsZero()
 	service.lastSuccessfulSync = time.Now()
+	service.pendingUpdate = configuration.UpdateCommand
+	service.updatePrimaryID = ""
+	if configuration.UpdateProtocol == updateProtocolVersion && configuration.PrimaryID == primary.ID {
+		service.updatePrimaryID = primary.ID
+	}
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{
 			NodeID: candidate.PrimaryID, AppliedGeneration: candidate.Generation,

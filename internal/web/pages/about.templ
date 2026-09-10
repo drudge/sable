@@ -21,6 +21,8 @@ type UpdateView struct {
 	Development    bool
 	LatestVersion  string
 	ReleaseURL     string
+	ReleaseNotes string
+	CheckOnLogin bool
 	Progress       string
 	Error          string
 	// Blocked explains why this installation cannot replace its own
@@ -81,7 +83,7 @@ templ AboutContent(view AboutPageView) {
 				<div class="about-version-row">
 					<div class="about-version-copy">
 						<span>Installed version</span>
-						<strong>{ formatReleaseVersion(view.Console.Version) }</strong>
+						<strong>@ReleaseVersion(view.Console.Version)</strong>
 					</div>
 					<dl class="about-build-meta">
 						<div><dt>Go</dt><dd>{ strings.TrimPrefix(view.GoVersion, "go") }</dd></div>
@@ -178,7 +180,7 @@ templ UpdatePanel(view UpdateView) {
 						Rebuild from source to update Sable.
 					}
 					if view.Available && !view.Installed && view.ReleaseURL != "" {
-						<a class="inline-link about-update-notes" href={ templ.SafeURL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+						<a class="inline-link about-update-notes" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 					}
 				</small>
 			</div>
@@ -200,7 +202,7 @@ templ UpdatePanel(view UpdateView) {
 					hx-target="#about-update"
 					hx-swap="outerHTML"
 					hx-disable="#about-update button, #about-update input"
-					if !view.Checked {
+					if !view.Checked && view.CheckOnLogin {
 						hx-trigger="submit, change, load"
 					} else {
 						hx-trigger="submit, change"
@@ -219,6 +221,15 @@ templ UpdatePanel(view UpdateView) {
 				</form>
 			}
 		</div>
+		if view.ReleaseNotes != "" {
+			<details class="update-release-notes"><summary>What’s new in v{ view.LatestVersion }</summary><div class="release-notes-content">@templ.Raw(releaseNotesHTML(view.ReleaseNotes))</div></details>
+		}
+		if view.Supported && !view.Development && view.CanApply {
+			<form class="update-preferences" hx-post="/ui/updates/preferences" hx-target="#about-update" hx-swap="outerHTML" hx-trigger="change">
+				<label class="checkbox"><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin }/><span>Check for updates on sign-in</span></label>
+				<small>This node only. Checks never install updates automatically.</small>
+			</form>
+		}
 	</div>
 }
 

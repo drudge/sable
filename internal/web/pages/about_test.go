@@ -18,7 +18,7 @@ func TestAboutVersionLabels(t *testing.T) {
 			if err := AboutContent(AboutPageView{Console: DashboardView{Version: release.raw}}).Render(context.Background(), &body); err != nil {
 				t.Fatal(err)
 			}
-			for _, expected := range []string{"Sable " + release.label + "</span>", "<strong>" + release.label + "</strong>"} {
+			for _, expected := range []string{"Sable " + release.label + "</span>", release.label} {
 				if !strings.Contains(body.String(), expected) {
 					t.Errorf("about version is missing %q", expected)
 				}
@@ -34,7 +34,8 @@ func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 		view      UpdateView
 		automatic bool
 	}{
-		{"unchecked", UpdateView{Supported: true, CanCheck: true, IncludePreRelease: true}, true},
+		{"unchecked", UpdateView{Supported: true, CanCheck: true, IncludePreRelease: true, CheckOnLogin: true}, true},
+		{"disabled", UpdateView{Supported: true, CanCheck: true, CheckOnLogin: false}, false},
 		{"checked", UpdateView{Supported: true, CanCheck: true, Checked: true, UpToDate: true}, false},
 		{"failed", UpdateView{Supported: true, CanCheck: true, Checked: true, Error: "offline"}, false},
 		{"busy", UpdateView{Supported: true, CanCheck: true, Busy: true}, false},
@@ -72,5 +73,22 @@ func TestAvailableUpdateShowsOnlyTheInstallAction(t *testing.T) {
 		if strings.Contains(body.String(), redundant) {
 			t.Errorf("available update still contains %q", redundant)
 		}
+	}
+}
+
+func TestReleaseLinksAndNotesEscapeUntrustedContent(t *testing.T) {
+	body := renderComponent(t, ReleaseVersion("1.2.0-rc.1"))
+	if !strings.Contains(body, `href="https://github.com/drudge/sable/releases/tag/v1.2.0-rc.1"`) || !strings.Contains(body, `rel="noopener noreferrer"`) {
+		t.Fatalf("release link = %s", body)
+	}
+	for _, value := range []string{"dev", "1.2.0-dev", "<script>alert(1)</script>"} {
+		body := renderComponent(t, ReleaseVersion(value))
+		if strings.Contains(body, "href=") || strings.Contains(body, "<script>") {
+			t.Fatalf("unsafe development version = %s", body)
+		}
+	}
+	body = renderComponent(t, UpdateNotification(UpdateView{LatestVersion: "1.2.0", ReleaseNotes: "## Fixes\n\n<script>alert(1)</script>\n\n[Unsafe](javascript:alert(1))\n\n- Safer updates"}))
+	if strings.Contains(body, "<script>") || strings.Contains(body, `href="javascript:`) || !strings.Contains(body, "<h2>Fixes</h2>") || !strings.Contains(body, "<li>Safer updates</li>") {
+		t.Fatalf("unsafe release notes = %s", body)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
@@ -442,5 +443,102 @@ func TestReplicaCanRestartAfterAnUpdate(t *testing.T) {
 	response := serveUpdateForm(server, "/ui/updates/restart", nil)
 	if response.Code != http.StatusAccepted || restarts != 1 {
 		t.Fatalf("replica restart = %d %s, restarts = %d", response.Code, response.Body.String(), restarts)
+	}
+}
+
+func (controller *testUpdateController) CheckAutomatically(ctx context.Context, preRelease bool) (update.Status, error) {
+	return controller.Check(ctx, preRelease)
+}
+
+func TestAutomaticUpdateNoticeHonorsPreferenceAndDevelopmentBuilds(t *testing.T) {
+	for _, scenario := range []string{"available", "disabled", "development", "current", "failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0", ReleaseNotes: "Fix DNS <script>alert(1)</script>"}}
+			server := updateTestServer(t, controller)
+			configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+			server.config = configuration
+			switch scenario {
+			case "disabled":
+				configuration.snapshot.Config.Updates.CheckOnLogin = false
+			case "development":
+				controller.status.Development = true
+			case "current":
+				controller.status.Available = false
+			case "failure":
+				controller.status.Error = "GitHub unavailable"
+			}
+			response := serveUpdateForm(server, "/ui/updates/automatic-check", nil)
+			if scenario == "available" {
+				if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Review update") || strings.Contains(response.Body.String(), "<script>") {
+					t.Fatalf("notification = %d %s", response.Code, response.Body.String())
+				}
+			} else if response.Code != http.StatusNoContent || response.Body.Len() != 0 {
+				t.Fatalf("quiet check = %d %s", response.Code, response.Body.String())
+			}
+			if (scenario == "disabled" || scenario == "development") && controller.checks != 0 {
+				t.Fatal("disabled check reached the updater")
+			}
+		})
+	}
+}
+
+func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{})
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+	server.config = configuration
+	server.SetClusterController(testReplicaClusterController{})
+	if !configuration.snapshot.Config.Updates.CheckOnLogin {
+		t.Fatal("automatic checks are not enabled by default")
+	}
+	for _, enabled := range []bool{false, true} {
+		values := url.Values{}
+		if enabled {
+			values.Set("check_on_login", "true")
+		}
+		response := serveUpdateForm(server, "/ui/updates/preferences", values)
+		if response.Code != http.StatusOK || configuration.snapshot.Config.Updates.CheckOnLogin != enabled {
+			t.Fatalf("preference = %d %s", response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
+	for path, permission := range map[string]string{
+		"/ui/updates/automatic-check": auth.PermissionUpdatesRead,
+		"/ui/updates/preferences":     auth.PermissionUpdatesApply,
+		"/ui/updates/cluster":         auth.PermissionUpdatesApply,
+		"/ui/updates/cluster/stop":    auth.PermissionUpdatesApply,
+	} {
+		if got := requiredPermission(httptest.NewRequest(http.MethodPost, path, nil)); got != permission {
+			t.Errorf("%s permission = %s", path, got)
+		}
+	}
+	server := updateTestServer(t, nil)
+	server.securityEnabled = true
+	for _, permissions := range [][]string{{auth.PermissionUpdatesApply}, {auth.PermissionClusterWrite}, {auth.PermissionUpdatesApply, auth.PermissionClusterWrite}} {
+		request := httptest.NewRequest(http.MethodPost, "/ui/updates/cluster", nil)
+		request = request.WithContext(context.WithValue(request.Context(), principalContextKey{}, auth.Principal{Permissions: permissions}))
+		if got := server.canManageClusterUpdate(request); got != (len(permissions) == 2) {
+			t.Fatalf("permissions %v allowed = %v", permissions, got)
+		}
+	}
+	if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, "/ui/updates/cluster") {
+		t.Fatal("replica can start a cluster rollout")
+	}
+}
+
+func TestRollingUpdateReservationBlocksManualRestart(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{status: update.Status{ClusterUpdate: true, Installed: true}})
+	server.SetRestartController(func() { t.Fatal("manual restart bypassed rolling update") })
+	if response := serveUpdateForm(server, "/ui/updates/restart", nil); response.Code != http.StatusConflict {
+		t.Fatalf("restart = %d", response.Code)
+	}
+}
+
+func TestAutomaticUpdateNoticeWaitsForAnExistingCheck(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{status: update.Status{Phase: update.PhaseChecking}})
+	response := serveUpdateForm(server, "/ui/updates/automatic-check", nil)
+	if response.Code != http.StatusAccepted || response.Header().Get("Retry-After") == "" || response.Body.Len() != 0 {
+		t.Fatalf("pending lookup = %d %s", response.Code, response.Body.String())
 	}
 }

@@ -40,6 +40,8 @@ var ErrUpdateInProgress = errors.New("an update is already running")
 var ErrDevelopmentBuild = errors.New("Update checks and installation are disabled for development builds. Rebuild from source to update Sable.")
 
 type Options struct {
+	// RestartManaged asserts that an external supervisor restarts this process after exit.
+	RestartManaged bool
 	// Repository is the GitHub owner/name pair that publishes Sable releases.
 	Repository string
 	// APIBaseURL is the GitHub API root. Tests override it.
@@ -67,6 +69,7 @@ type Result struct {
 	LatestVersion  string
 	Tag            string
 	ReleaseURL     string
+	ReleaseNotes   string
 	AssetName      string
 	BinaryPath     string
 	PreRelease     bool
@@ -110,6 +113,7 @@ func Apply(ctx context.Context, options Options) (Result, error) {
 		LatestVersion:  releaseVersion,
 		Tag:            selected.TagName,
 		ReleaseURL:     selected.HTMLURL,
+		ReleaseNotes:   selected.Body,
 		PreRelease:     selected.PreRelease,
 	}
 	if strings.TrimSpace(options.Version) == "" && !isNewer(releaseVersion, current) {

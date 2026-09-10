@@ -3267,3 +3267,28 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
    htmx-config meta tag, so the rules are carried here instead. */
 .htmx-indicator { opacity: 0; visibility: hidden; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; visibility: visible; transition: opacity 200ms ease-in; }
+
+.update-release-notes { flex-basis: 100%; min-width: 0; margin-top: .75rem; }
+.update-release-notes summary { cursor: pointer; font-weight: 600; }
+.release-notes-content { overflow-wrap: anywhere; font-size: .8125rem; line-height: 1.6; max-height: 22rem; overflow: auto; margin-top: .75rem; }
+.release-notes-content :is(h1, h2, h3, h4) { font-size: .875rem; line-height: 1.4; margin: .8rem 0 .4rem; }
+.release-notes-content :is(p, ul, ol, pre) { margin: .5rem 0; }
+.release-notes-content :is(ul, ol) { padding-left: 1.2rem; }
+.release-notes-content pre { white-space: pre-wrap; font-size: .75rem; }
+.release-notes-content img { max-width: 100%; height: auto; }
+.release-notes-content a { text-decoration: underline; }
+.update-preferences { flex-basis: 100%; margin-top: .75rem; }
+.update-preferences small { display: block; margin-top: .35rem; color: var(--muted-foreground); }
+.cluster-update-content { padding: 1rem; display: grid; gap: .75rem; }
+.cluster-update-nodes { display: grid; gap: .5rem; padding-left: 1.25rem; }
+
+.update-preferences .checkbox { display: flex; align-items: center; gap: .5rem; font-size: .75rem; }
+.update-preferences input[type="checkbox"] { width: 1rem; height: 1rem; min-height: 0; margin: 0; accent-color: var(--primary); }
+.update-preferences small { font-size: .6875rem; line-height: 1.5; }
+.cluster-update-card > header { padding: 1.25rem; border-bottom: 1px solid var(--border); }
+.cluster-update-card > header h2 { margin: 0; font-size: .875rem; }
+.cluster-update-card > header p { margin: .25rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
+.cluster-update-content { padding: 1.25rem; font-size: .8125rem; }
+.cluster-update-content > :is(p, ol) { margin: 0; }
+.cluster-update-content > button { justify-self: start; }
+.cluster-update-content > small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }

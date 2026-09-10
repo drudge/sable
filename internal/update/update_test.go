@@ -262,6 +262,7 @@ func releaseServer(t *testing.T, tag string, preRelease bool, tamper func([]byte
 	t.Cleanup(server.Close)
 	published := release{
 		TagName: tag, PreRelease: preRelease, HTMLURL: server.URL + "/releases/" + tag,
+		Body: "### Improvements\n\n- More reliable updates.",
 		Assets: []releaseAsset{
 			{Name: archiveName, DownloadURL: server.URL + "/download/" + archiveName},
 			{Name: checksumsAssetName, DownloadURL: server.URL + "/download/" + checksumsAssetName},
@@ -272,6 +273,9 @@ func releaseServer(t *testing.T, tag string, preRelease bool, tamper func([]byte
 			http.Error(writer, "not found", http.StatusNotFound)
 			return
 		}
+		writeJSON(t, writer, published)
+	})
+	mux.HandleFunc("/repos/"+defaultRepository+"/releases/tags/"+tag, func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(t, writer, published)
 	})
 	mux.HandleFunc("/repos/"+defaultRepository+"/releases", func(writer http.ResponseWriter, request *http.Request) {

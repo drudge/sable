@@ -85,12 +85,7 @@ checksum:
   algorithm: sha256
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+  disable: true
 
 release:
   draft: true

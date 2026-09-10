@@ -1386,6 +1386,40 @@
 	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
 	};
 
+  const UPDATE_CHECK_RETRY_MS = 2000;
+  const MAX_UPDATE_CHECK_RETRIES = 8;
+  let updateCheckRetries = 0;
+  const checkForUpdateNotification = async () => {
+    const endpoint = document.body.dataset.updateCheckUrl;
+    if (!endpoint) return;
+    const session = document.body.dataset.updateSession || "local";
+    const key = `sable-update-check:${session}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "X-CSRF-Token": document.body.dataset.updateSession || "" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) return;
+      if (response.status === 202) {
+        if (updateCheckRetries++ < MAX_UPDATE_CHECK_RETRIES) window.setTimeout(checkForUpdateNotification, UPDATE_CHECK_RETRY_MS);
+        return;
+      }
+      sessionStorage.setItem(key, "checked");
+      if (response.status === 204) return;
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      const region = template.content.querySelector(".toast-region");
+      if (!region) return;
+      document.body.append(region);
+      region.querySelectorAll("[data-toast]").forEach(setupToast);
+    } catch {
+      // A release lookup must never interrupt console use.
+    }
+  };
+  queueMicrotask(checkForUpdateNotification);
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";

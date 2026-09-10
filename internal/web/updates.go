@@ -25,6 +25,51 @@ func (server *Server) SetUpdateController(controller updateController) {
 	server.updates = controller
 }
 
+func (server *Server) automaticUpdateCheck(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	checker, ok := server.updates.(interface {
+		CheckAutomatically(context.Context, bool) (update.Status, error)
+	})
+	if !ok || !server.config.Current().Config.Updates.CheckOnLogin || server.updates.Status().Development {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	status, err := checker.CheckAutomatically(request.Context(), server.config.Current().Config.Updates.PreRelease)
+	if status.Phase == update.PhaseChecking {
+		writer.Header().Set("Retry-After", "2")
+		writer.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if err != nil || status.Busy() || status.Error != "" || !status.Available || status.Installed || status.ClusterUpdate {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_ = pages.UpdateNotification(server.updateView(request, status)).Render(request.Context(), writer)
+}
+
+func (server *Server) updatePreferences(writer http.ResponseWriter, request *http.Request) {
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		http.Error(writer, "Invalid preferences", http.StatusBadRequest)
+		return
+	}
+	editor, ok := server.config.(settingsEditor)
+	if !ok {
+		http.Error(writer, "Preferences cannot be saved", http.StatusNotImplemented)
+		return
+	}
+	err := editor.Update(request.Context(), func(candidate *config.Config) error {
+		candidate.Updates.CheckOnLogin = request.FormValue("check_on_login") == "true"
+		return nil
+	})
+	if err != nil {
+		server.renderUpdatePanel(writer, request, server.updateStatus(), err.Error())
+		return
+	}
+	server.recordControlPlaneAudit(request, "update.preferences", "changed automatic update checks")
+	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
+}
+
 // updatePanel renders the current update state. The panel polls this endpoint
 // while a check or an installation is running.
 func (server *Server) updatePanel(writer http.ResponseWriter, request *http.Request) {
@@ -179,6 +224,8 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		PreRelease:        status.PreRelease,
 		Progress:          status.Progress,
 		ReleaseURL:        status.ReleaseURL,
+		ReleaseNotes:      status.ReleaseNotes,
+		CheckOnLogin:      server.config.Current().Config.Updates.CheckOnLogin,
 		Supported:         server.updates != nil,
 		UpToDate:          status.UpToDate(),
 	}
@@ -196,6 +243,10 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		view.CanCheck = auth.HasPermission(principal, auth.PermissionUpdatesRead)
 		view.CanApply = auth.HasPermission(principal, auth.PermissionUpdatesApply)
 		view.CSRFToken = principal.CSRFToken
+	}
+	if status.ClusterUpdate {
+		view.CanApply = false
+		view.Blocked = "A rolling update controls this node. Follow its progress on Cluster."
 	}
 	view.CanRestart = view.CanApply && server.restart != nil
 	return view

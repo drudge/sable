@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -169,5 +172,109 @@ func TestManagerRefusesToInstallWhereItCannotWrite(t *testing.T) {
 	}
 	if !strings.Contains(string(installed), "echo old") {
 		t.Fatalf("a refused installation replaced the executable: %q", installed)
+	}
+}
+
+type countingReleaseTransport struct{ calls atomic.Int32 }
+
+func (transport *countingReleaseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport.calls.Add(1)
+	return http.DefaultTransport.RoundTrip(request)
+}
+
+func TestAutomaticChecksCacheAcrossSessionsAndPreserveReleaseNotes(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	source := releaseServer(t, "v1.1.0", false, nil)
+	transport := &countingReleaseTransport{}
+	manager := NewManager(Options{APIBaseURL: source.URL, BinaryPath: installedExecutable(t, "old"), Client: &http.Client{Transport: transport}})
+	var checks sync.WaitGroup
+	for range 20 {
+		checks.Go(func() { _, _ = manager.CheckAutomatically(context.Background(), false) })
+	}
+	checks.Wait()
+	if transport.calls.Load() != 1 {
+		t.Fatalf("concurrent metadata requests = %d", transport.calls.Load())
+	}
+	for range 3 {
+		if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if transport.calls.Load() != 1 {
+		t.Fatal("cached check contacted GitHub")
+	}
+	if status := manager.Status(); !status.Available || status.ReleaseNotes != "### Improvements\n\n- More reliable updates." {
+		t.Fatalf("status = %+v", status)
+	}
+	manager.mutex.Lock()
+	manager.status.CheckedAt = time.Now().Add(-automaticCheckInterval)
+	manager.mutex.Unlock()
+	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if transport.calls.Load() != 2 {
+		t.Fatal("expired result was not refreshed")
+	}
+	if _, err := manager.Check(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if transport.calls.Load() != 3 {
+		t.Fatal("manual check did not bypass cache")
+	}
+}
+
+func TestAutomaticChecksCacheFailuresAndRespectChannelChanges(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	source := releaseServer(t, "v1.1.0-rc.1", true, nil)
+	transport := &countingReleaseTransport{}
+	manager := NewManager(Options{APIBaseURL: source.URL, BinaryPath: installedExecutable(t, "old"), Client: &http.Client{Transport: transport}})
+	if _, err := manager.CheckAutomatically(context.Background(), false); err == nil {
+		t.Fatal("missing stable release succeeded")
+	}
+	_, _ = manager.CheckAutomatically(context.Background(), false)
+	if transport.calls.Load() != 1 {
+		t.Fatal("failed lookup was not cached")
+	}
+	status, err := manager.CheckAutomatically(context.Background(), true)
+	if err != nil || !status.Available || !status.PreRelease || transport.calls.Load() != 2 {
+		t.Fatalf("changed channel = %+v, %v", status, err)
+	}
+}
+
+func TestReservedUpdatePinsVersionAndBlocksOtherOperations(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	requireExecutableScripts(t)
+	source := releaseServer(t, "v1.1.0", false, nil)
+	manager := NewManager(Options{APIBaseURL: source.URL, BinaryPath: installedExecutable(t, "#!/bin/sh\necho old\n")})
+	if err := manager.Reserve("rollout-1"); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.Status().ClusterUpdate {
+		t.Fatal("reservation is not visible")
+	}
+	if _, err := manager.Check(context.Background(), false); !errors.Is(err, ErrUpdateInProgress) {
+		t.Fatalf("reserved check = %v", err)
+	}
+	if err := manager.Install(false); !errors.Is(err, ErrUpdateInProgress) {
+		t.Fatalf("reserved install = %v", err)
+	}
+	if err := manager.InstallVersion("other-rollout", "v1.1.0"); err == nil {
+		t.Fatal("wrong reservation accepted")
+	}
+	if err := manager.InstallVersion("rollout-1", "v0.9.0"); err == nil {
+		t.Fatal("downgrade accepted")
+	}
+	if err := manager.InstallVersion("rollout-1", "v1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if status := awaitInstall(t, manager); !status.Installed || status.LatestVersion != "1.1.0" {
+		t.Fatalf("install = %+v", status)
+	}
+	manager.Release("rollout-1")
+	if _, err := manager.Check(context.Background(), false); !errors.Is(err, ErrUpdateInProgress) {
+		t.Fatalf("check erased pending restart: %v", err)
+	}
+	if !manager.Status().Installed {
+		t.Fatal("pending installation was lost")
 	}
 }

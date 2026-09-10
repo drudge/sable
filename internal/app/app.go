@@ -392,18 +392,24 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err := webServer.SetStatsStore(ctx, database); err != nil {
 		logger.Warn("restore query statistics", "error", err)
 	}
-	webServer.SetUpdateController(update.NewManager(update.Options{
-		BinaryPath: os.Getenv(update.BinaryPathEnvironment),
-		PreRelease: initial.Updates.PreRelease,
-	}))
+	updateManager := update.NewManager(update.Options{
+		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
+		RestartManaged: initial.Updates.RestartManaged,
+		PreRelease:     initial.Updates.PreRelease,
+	})
+	webServer.SetUpdateController(updateManager)
 	webServer.SetBackupController(scheduledBackups)
 	restartRequests := make(chan struct{}, 1)
-	webServer.SetRestartController(func() {
+	requestRestart := func() {
 		select {
 		case restartRequests <- struct{}{}:
 		default:
 		}
-	})
+	}
+	webServer.SetRestartController(requestRestart)
+	if err := clusterService.SetUpdateController(updateManager, requestRestart); err != nil {
+		logger.Error("restore cluster update progress", "error", err)
+	}
 	if err := webServer.Start(initial.Server.HTTPListen); err != nil {
 		return errors.Join(
 			err,

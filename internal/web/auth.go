@@ -121,7 +121,7 @@ func requiredPermission(request *http.Request) string {
 		return auth.PermissionLogsRead
 	case path == "/metrics" || path == technitiumStatsPath:
 		return auth.PermissionMetricsRead
-	case path == "/ui/updates" || path == "/ui/updates/check" || path == "/ui/updates/command-check":
+	case path == "/ui/updates" || path == "/ui/updates/check" || path == "/ui/updates/command-check" || path == "/ui/updates/automatic-check":
 		// Checking reaches out to GitHub but changes nothing locally.
 		return auth.PermissionUpdatesRead
 	case strings.HasPrefix(path, "/ui/updates/"):

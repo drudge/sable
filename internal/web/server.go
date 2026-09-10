@@ -269,6 +269,10 @@ func New(
 	mux.HandleFunc("POST /ui/backup/restore-local", server.restoreLocalBackup)
 	mux.HandleFunc("POST /ui/backup/restart", server.restartServer)
 	mux.HandleFunc("GET /ui/updates", server.updatePanel)
+	mux.HandleFunc("POST /ui/updates/automatic-check", server.automaticUpdateCheck)
+	mux.HandleFunc("POST /ui/updates/preferences", server.updatePreferences)
+	mux.HandleFunc("POST /ui/updates/cluster", server.startClusterUpdate)
+	mux.HandleFunc("POST /ui/updates/cluster/stop", server.stopClusterUpdate)
 	mux.HandleFunc("POST /ui/updates/check", server.checkForUpdates)
 	mux.HandleFunc("POST /ui/updates/command-check", server.checkForUpdatesCommand)
 	mux.HandleFunc("POST /ui/updates/install", server.installUpdate)
@@ -720,6 +724,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		CanLogs:             !server.securityEnabled,
 		CanMetrics:          !server.securityEnabled,
 		CanCheckUpdates:     server.updates != nil && !server.securityEnabled,
+		CheckUpdatesOnLogin: snapshot.Config.Updates.CheckOnLogin && !version.Current().Development(),
 		CanCluster:          !server.securityEnabled,
 		CanWriteCluster:     !server.securityEnabled,
 		Database:            server.database,

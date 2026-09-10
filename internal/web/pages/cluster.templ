@@ -7,6 +7,7 @@ import (
 )
 
 type ClusterPageView struct {
+	Update ClusterUpdateView
 	Console DashboardView
 	Initialized bool
 	NetworkReady bool
@@ -191,6 +192,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 			</div>
 			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
 		</section>
+		@ClusterUpdatePanel(view.Update)
 		<section class="card cluster-nodes-card">
 			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="cluster-updated-badge">@Icon("clock")<span>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
 			<div class="cluster-node-list">
@@ -220,7 +222,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 								}
 							</div>
 							<div class="cluster-node-meta">
-								<span>{ node.Role }</span><strong>{ node.Version }</strong><small>{ nodeUptimeLabel(node) }</small>
+								<span>{ node.Role }</span><strong>@ReleaseVersion(node.Version)</strong><small>{ nodeUptimeLabel(node) }</small>
 							</div>
 						</div>
 						<div class="cluster-sync-progress">
