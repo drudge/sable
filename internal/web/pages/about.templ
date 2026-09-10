@@ -179,7 +179,7 @@ templ UpdatePanel(view UpdateView) {
 						<br/>
 						Rebuild from source to update Sable.
 					}
-					if view.Available && !view.Installed && view.ReleaseURL != "" {
+					if view.Available && !view.Installed && view.ReleaseURL != "" && view.ReleaseNotes == "" {
 						<a class="inline-link about-update-notes" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 					}
 				</small>
@@ -220,15 +220,28 @@ templ UpdatePanel(view UpdateView) {
 					</div>
 				</form>
 			}
+			if view.Supported && !view.Development && view.CanApply {
+				<details class="about-update-menu about-update-preferences">
+					<summary class="button outline compact" aria-label="Update options" title="Update options">@Icon("settings")</summary>
+					<div>
+						<form class="update-preferences" hx-post="/ui/updates/preferences" hx-target="#about-update" hx-swap="outerHTML" hx-trigger="change">
+							<label class="checkbox"><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin }/><span>Check for updates on sign-in</span></label>
+							<small>This node only. Updates are never installed automatically.</small>
+						</form>
+					</div>
+				</details>
+			}
 		</div>
 		if view.ReleaseNotes != "" {
-			<details class="update-release-notes"><summary>What’s new in v{ view.LatestVersion }</summary><div class="release-notes-content">@templ.Raw(releaseNotesHTML(view.ReleaseNotes))</div></details>
-		}
-		if view.Supported && !view.Development && view.CanApply {
-			<form class="update-preferences" hx-post="/ui/updates/preferences" hx-target="#about-update" hx-swap="outerHTML" hx-trigger="change">
-				<label class="checkbox"><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin }/><span>Check for updates on sign-in</span></label>
-				<small>This node only. Checks never install updates automatically.</small>
-			</form>
+			<details class="update-release-notes">
+				<summary>What’s new in v{ view.LatestVersion }</summary>
+				<div class="release-notes-content">
+					@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
+					if view.ReleaseURL != "" {
+						<p><a class="inline-link" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer">View release</a></p>
+					}
+				</div>
+			</details>
 		}
 	</div>
 }
@@ -332,7 +345,7 @@ func updateDetail(view UpdateView) string {
 	case view.Available && view.Blocked != "":
 		return view.Blocked
 	case view.Available:
-		return "Verified against the published checksums before it replaces the executable."
+		return "Ready to install on this node."
 	case view.UpToDate:
 		return "Checked " + view.CheckedAt + ifThen(view.IncludePreRelease, ", including pre-releases.", ".")
 	default:

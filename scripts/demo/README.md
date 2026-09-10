@@ -85,7 +85,8 @@ Open <http://127.0.0.1:6491> and sign in as `art.vandelay` with password
 `LatexImporter2026!` (a disposable fixture account).
 
 1. After sign-in, expand the update notification to read its release notes.
-2. Choose **Review update** to see About, including the release link and the
+2. Choose **Review update** to see About. Expand **What's new** for the release
+   notes and link; **Update options** contains the
    **Check for updates on sign-in** preference.
 3. Open **Cluster**, choose **Update all nodes to v1.0.2**, and confirm.
 4. Watch each replica install, restart, and synchronize before the next node
