@@ -250,3 +250,24 @@ func TestZoneRefresherPacesFailedFirstTransfers(t *testing.T) {
 		t.Fatalf("a failed first transfer was not paced: %+v", state)
 	}
 }
+
+func TestLateTransferCannotOverwriteConvertedPrimary(t *testing.T) {
+	current := managedTestZone()
+	if err := zonemodel.ConvertToPrimary(&current, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	configuration := &refreshTestConfiguration{snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{current}}}
+	dnsService := &refreshTestDNS{expired: map[string]bool{current.Name: true}}
+	refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	refresher.states[current.Name] = zoneRefreshState{serial: 1}
+	if err := refresher.storeRecords(context.Background(), current.Name, nil); err == nil {
+		t.Fatal("late transfer replaced primary records")
+	}
+	refresher.step(context.Background(), time.Now())
+	if len(configuration.snapshot.Zones[0].Records) == 0 || configuration.updates != 0 {
+		t.Fatal("primary records changed")
+	}
+	if len(refresher.states) != 0 || dnsService.expired[current.Name] || dnsService.calls != 0 {
+		t.Fatal("primary still tracked for refresh or expiry")
+	}
+}

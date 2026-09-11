@@ -2397,3 +2397,36 @@ func TestResolveUpstreamWithValidationSurvivesEmptyUpstreamResult(t *testing.T) 
 		t.Fatalf("validation state = %v, want indeterminate", state)
 	}
 }
+
+func TestConvertedPrimaryIgnoresLateSecondaryExpiry(t *testing.T) {
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "secondary.test", Type: "secondary", PrimaryServers: []string{"192.0.2.53:53"}, PrimaryProtocol: "tcp",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.secondary.test. hostmaster.secondary.test. 1 10 3 20 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.secondary.test."},
+			{Name: "www", Type: "A", TTL: 60, Value: "192.0.2.10"},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	handler.SetZoneExpired("secondary.test", true)
+	configuration.Zones[0].Type = "primary"
+	configuration.Zones[0].PrimaryServers = nil
+	configuration.Zones[0].PrimaryProtocol = ""
+	if err := handler.ActivateZones(configuration.Zones, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Reproduce the refresher writing expiry after conversion committed.
+	handler.SetZoneExpired("secondary.test", true)
+	request := new(dns.Msg)
+	request.SetQuestion("www.secondary.test.", dns.TypeA)
+	response := new(responseCapture)
+	handler.ServeDNS(response, request)
+	if response.message == nil || response.message.Rcode != dns.RcodeSuccess || !response.message.Authoritative || len(response.message.Answer) != 1 {
+		t.Fatalf("converted primary unavailable: %+v", response.message)
+	}
+}

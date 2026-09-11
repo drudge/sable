@@ -1,6 +1,6 @@
 # HTTP API
 
-Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, and DNSSEC status; it does not provide general JSON zone or record CRUD.
+Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, DNSSEC status, and Secondary-to-Primary conversion; it does not provide general JSON zone or record CRUD.
 
 ## Authentication and permissions
 
@@ -45,6 +45,8 @@ curl --fail-with-body --get \
 ```
 
 Zone and DS export require the relevant zone-export grant. DNSSEC status requires zone-read access. A missing zone or a zone not managed by Sable's signer returns `404` where applicable. A DS download is data for your parent-zone operator or registrar; downloading it does not publish it. Follow the [DNSSEC guide](../guides/dnssec.md).
+
+`GET /api/v1/zones/convert-primary?zone=example.com` reviews an independent unsigned Secondary. POST form fields to `/api/v1/zones/convert-primary` to confirm conversion, optionally synchronizing first. See the [conversion API contract](zones/secondary.md#api) for the confirmation token, required permissions, and failure behavior. These endpoints are not available in released 1.1.0.
 
 To automate record changes, use the supported [RFC 2136 dynamic-update workflow](../guides/dynamic-updates.md) for an eligible Primary zone. Do not build an integration by treating session-based `/ui/` form handlers as undocumented JSON API endpoints.
 
@@ -91,3 +93,5 @@ Read the [cluster guide](../clustering.md) before using mutation endpoints. Requ
 Check HTTP status and content type before parsing a response. Not every error is JSON: zone downloads can return plain-text errors. Do not retry a mutation blindly after a timeout; first inspect whether it took effect. Treat `401` as an authentication problem and `403` as an authorization problem, rather than repeatedly retrying a denied action.
 
 The [route registration](../../internal/web/server.go) is the authoritative inventory for a specific source revision. Check your installed release before relying on endpoints added after it; this page is not a promise of a broader 1.0 compatibility policy.
+
+Catalog discovery and bulk import are currently console workflows under **Zones → Import from Catalog**; there is no public JSON catalog-import API.

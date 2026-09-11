@@ -25,3 +25,9 @@ A member can move between catalogs only through the current owner's change-of-ow
 Inspect the catalog's transfer state, then the individual member zones. Query a member's SOA and a known record. If the catalog is present but the member is empty, investigate the member transfer—not only catalog membership.
 
 For conflicts, correct ownership at the producer instead of deleting a local zone to force adoption without a recovery plan. For authentication errors, check the key, ACL, protocol, address, and clocks as in [Transfer zones securely](../../guides/zone-transfers.md).
+
+## Migration versus subscription
+
+For a one-time migration, use [Import from Catalog](../../guides/technitium-migration.md#3d-import-catalog-members-in-bulk) instead of subscribing. It creates independent Primary or Secondary zones and does not follow later catalog membership changes. Existing zones are skipped.
+
+Subscribed members show their managing catalog in zone lists and on the detail page. **Convert to Primary** cannot detach a managed member; importing the same name does not override that ownership either. Keep the catalog subscription for ongoing synchronization, or plan a separate transition to independently configured zones before conversion.

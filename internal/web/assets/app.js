@@ -12,23 +12,24 @@
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
 	document.addEventListener("DOMContentLoaded", () => {
-	let dashboardStatSnapshot = new Map();
+	const liveStatSnapshots = new Map();
 	const announce = (message) => {
 	  const region = document.querySelector("[data-a11y-announcer]");
 	  if (!region || !message) return;
 	  region.textContent = "";
 	  window.requestAnimationFrame(() => { region.textContent = message; });
 	};
-	const dashboardStatKey = (element) => {
+	const liveStatKey = (element) => {
+	  if (element.dataset.statKey) return element.dataset.statKey;
 	  const card = element.closest("[data-stat-label]");
 	  if (!card) return "";
 	  return `${card.dataset.statLabel}:${element.dataset.statNumber}`;
 	};
-	const captureDashboardStats = (root) => {
+	const captureLiveStats = (root) => {
 	  const snapshot = new Map();
-	  root.querySelectorAll("[data-stat-number]").forEach((element) => {
-		const key = dashboardStatKey(element);
-		if (key) snapshot.set(key, element.textContent.trim());
+	  root.querySelectorAll("[data-stat-number], [data-stat-key]").forEach((element) => {
+		const key = liveStatKey(element);
+		if (key) snapshot.set(key, element.getAttribute("aria-label") || element.textContent.trim());
 	  });
 	  return snapshot;
 	};
@@ -50,8 +51,56 @@
 	  }
 	  return integer + (fraction === undefined ? "" : `.${fraction}`) + shape.suffix;
 	};
-	const morphDashboardStat = (element, previous, target) => {
+	const morphTimeDigits = (element, previous, target) => {
+	  const previousParts = previous.split(/(\d+)/);
+	  const targetParts = target.split(/(\d+)/);
+	  const sameFormat = previousParts.length === targetParts.length &&
+		targetParts.every((part, index) => index % 2 || part === previousParts[index]);
+	  const fragment = document.createDocumentFragment();
+	  const animations = [];
+	  element.setAttribute("aria-label", target);
+	  targetParts.forEach((part, index) => {
+		if (index % 2 === 0) {
+		  fragment.append(document.createTextNode(part));
+		  return;
+		}
+		const oldDigits = sameFormat ? previousParts[index].padStart(part.length, " ") : "";
+		[...part].forEach((digit, digitIndex) => {
+		  const oldDigit = oldDigits[oldDigits.length - part.length + digitIndex];
+		  if (oldDigit === digit) {
+			fragment.append(document.createTextNode(digit));
+			return;
+		  }
+		  const cell = document.createElement("span");
+		  cell.className = "time-morph-digit";
+		  cell.setAttribute("aria-hidden", "true");
+		  const incoming = document.createElement("span");
+		  incoming.textContent = digit;
+		  cell.append(incoming);
+		  if (oldDigit?.trim()) {
+			const outgoing = document.createElement("span");
+			outgoing.textContent = oldDigit;
+			cell.append(outgoing);
+			animations.push([outgoing, [{ opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(3px)" }]]);
+		  }
+		  animations.push([incoming, [{ opacity: 0, filter: "blur(3px)" }, { opacity: 1, filter: "blur(0px)" }]]);
+		  fragment.append(cell);
+		});
+	  });
+	  element.replaceChildren(fragment);
+	  Promise.all(animations.map(([digit, frames]) =>
+		digit.animate(frames, { duration: 520, easing: "cubic-bezier(.2, .75, .25, 1)", fill: "forwards" }).finished
+	  )).then(() => {
+		element.textContent = target;
+		element.removeAttribute("aria-label");
+	  });
+	};
+	const morphLiveStat = (element, previous, target) => {
 	  if (previous === target) return;
+	  if (element.dataset.statKey) {
+		morphTimeDigits(element, previous, target);
+		return;
+	  }
 	  element.classList.add("is-morphing");
 	  const from = parseMorphNumber(previous);
 	  const to = parseMorphNumber(target);
@@ -79,11 +128,11 @@
 	  };
 	  window.requestAnimationFrame(update);
 	};
-	const animateDashboardStats = (root, snapshot) => {
+	const animateLiveStats = (root, snapshot) => {
 	  if (!root.isConnected || window.matchMedia("(prefers-reduced-motion: reduce)").matches || snapshot.size === 0) return;
-	  root.querySelectorAll("[data-stat-number]").forEach((element) => {
-		const previous = snapshot.get(dashboardStatKey(element));
-		if (previous !== undefined) morphDashboardStat(element, previous, element.textContent.trim());
+	  root.querySelectorAll("[data-stat-number], [data-stat-key]").forEach((element) => {
+		const previous = snapshot.get(liveStatKey(element));
+		if (previous !== undefined) morphLiveStat(element, previous, element.textContent.trim());
 	  });
 	};
 
@@ -2732,8 +2781,11 @@
 	});
 	document.body.addEventListener("htmx:before:swap", (event) => {
 	  if (event.defaultPrevented) return;
-	  const statsTask = event.detail?.tasks?.find((task) => task.type === "oob" && task.target?.id === "runtime-stats");
-	  if (statsTask) dashboardStatSnapshot = captureDashboardStats(statsTask.target);
+	  for (const task of event.detail?.tasks || []) {
+		if (["runtime-stats", "cluster-content", "cluster-live-status"].includes(task.target?.id)) {
+		  liveStatSnapshots.set(task.target.id, captureLiveStats(task.target));
+		}
+	  }
 	});
 	document.body.addEventListener("htmx:after:swap", (event) => {
 	  const ctx = event.detail?.ctx;
@@ -2744,11 +2796,11 @@
 		const heading = target?.querySelector?.("h1, h2, h3")?.textContent?.trim();
 		announce(`${heading || "Content"} updated`);
 	  }
-	  if (dashboardStatSnapshot.size === 0) return;
-	  const current = document.querySelector("#runtime-stats");
-	  const snapshot = dashboardStatSnapshot;
-	  dashboardStatSnapshot = new Map();
-	  if (current) window.requestAnimationFrame(() => animateDashboardStats(current, snapshot));
+	  for (const [id, snapshot] of liveStatSnapshots) {
+		const current = document.getElementById(id);
+		if (current) window.requestAnimationFrame(() => animateLiveStats(current, snapshot));
+	  }
+	  liveStatSnapshots.clear();
 	});
 
 	initializeSwappedContent(document);
@@ -4359,3 +4411,10 @@
 	});
   });
 })();
+
+document.addEventListener("click", (event) => {
+ const select = event.target.closest("[data-catalog-select]");
+ if (!select) return;
+ const members = select.form.querySelectorAll('input[name="member"]:not(:disabled)');
+ members.forEach((member, index) => { member.checked = index < 25; });
+});

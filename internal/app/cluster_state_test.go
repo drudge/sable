@@ -463,3 +463,27 @@ func newTestZoneManager(t *testing.T, zones []zone.Zone) *zone.Manager {
 	}
 	return manager
 }
+
+func TestClusterStateReplicatesPrimaryConversion(t *testing.T) {
+	ctx := context.Background()
+	current := managedTestZone()
+	current.ID = "migration-zone"
+	source := newTestZoneManager(t, []zone.Zone{current})
+	target := newTestZoneManager(t, []zone.Zone{current})
+	sourceReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), source, nil, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
+	targetReplicator := newClusterStateReplicator(newTestConfigurationManager(t, config.Defaults()), target, nil, newTestTSIGStore(), newTestUniFiCredentials(), newTestOIDCSecrets())
+	if err := source.UpdateZones(ctx, func(zones *[]zone.Zone) error { return zone.ConvertToPrimary(&(*zones)[0], time.Now()) }); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := sourceReplicator.Capture(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := targetReplicator.Apply(ctx, contents); err != nil {
+		t.Fatal(err)
+	}
+	primary, replica := source.Current().Zones[0], target.Current().Zones[0]
+	if replica.Type != "primary" || replica.ID != primary.ID || !reflect.DeepEqual(replica.Records, primary.Records) || len(replica.PrimaryServers) != 0 {
+		t.Fatalf("replicated conversion = %+v", replica)
+	}
+}

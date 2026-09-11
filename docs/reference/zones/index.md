@@ -26,7 +26,7 @@ Choose based on who owns the data and how this server should obtain an answer. A
 
 Zones are stored in SQLite or PostgreSQL, not in TOML. Saving a valid change publishes a compiled in-memory view so the DNS request path does not query SQL. A failed activation leaves the previous serving state available.
 
-Primary zones require exactly one apex [SOA](../records/soa.md) and at least one apex [NS](../records/ns.md). Console creation provisions the initial records. Zone type is selected at creation; the settings display is not a general in-place type converter.
+Primary zones require exactly one apex [SOA](../records/soa.md) and at least one apex [NS](../records/ns.md). Console creation provisions the initial records. Zone type is selected at creation; the settings display is not a general in-place type converter. Independent unsigned Secondaries have a dedicated [Convert to Primary](secondary.md#convert-to-primary) action. For multiple zones, [Import from Catalog](../../guides/technitium-migration.md#3d-import-catalog-members-in-bulk) creates independent Secondaries or Primaries without subscribing to the source catalog.
 
 The longest matching DNS suffix determines the relevant namespace. Creating a local authoritative zone can shadow public names below it. For private routing without local ownership of records, consider forwarding instead.
 

@@ -52,7 +52,16 @@ func main() {
 	updates := flag.Bool("updates", false, "run a disposable three-node update demonstration")
 	updateSmoke := flag.Bool("update-smoke", false, "run the update demonstration, verify a rollout, and exit")
 	basePort := flag.Int("base-port", 5391, "first console port; each node takes the next one")
+	migration := flag.Bool("migration", false, "run the isolated Technitium migration lab (use -keep for manual demo)")
+	image := flag.String("technitium-image", "technitium/dns-server:15.4.0", "pinned migration source image")
 	flag.Parse()
+	if *migration {
+		if err := runMigration(*binary, *image, *keep); err != nil {
+			fmt.Fprintln(os.Stderr, "migration:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	var err error
 	if *updates || *updateSmoke {

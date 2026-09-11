@@ -554,3 +554,53 @@ func TestZoneStoreAddsCatalogColumnsToExistingDatabase(t *testing.T) {
 		t.Fatalf("withdrawn membership = %#v, want it cleared", reread[1])
 	}
 }
+
+func TestPrimaryConversionSurvivesRestartWithIdentityAndHistory(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "conversion.db")
+	storage, err := Open(ctx, "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := testStoredZone(1)
+	initial.Type = "secondary"
+	initial.PrimaryServers = []string{"192.0.2.1:53"}
+	initial.PrimaryProtocol = "tcp"
+	persisted, err := storage.ReplaceZones(ctx, nil, []zone.Zone{initial})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := zone.NewManager(ctx, storage, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.UpdateZones(ctx, func(zones *[]zone.Zone) error { return zone.ConvertToPrimary(&(*zones)[0], time.Now()) }); err != nil {
+		t.Fatal(err)
+	}
+	converted := manager.Current().Zones[0]
+	if converted.ID != persisted[0].ID || converted.Revision <= persisted[0].Revision {
+		t.Fatal("identity or revision continuity lost")
+	}
+	if err := storage.Close(); err != nil {
+		t.Fatal(err)
+	}
+	storage, err = Open(ctx, "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	restarted, err := zone.NewManager(ctx, storage, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(restarted.Current().Zones[0], converted) {
+		t.Fatal("restart changed converted zone")
+	}
+	history, err := restarted.ListZoneRevisions(ctx, converted.Name, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].ZoneID != converted.ID || history[1].ZoneID != converted.ID {
+		t.Fatalf("history = %+v", history)
+	}
+}
