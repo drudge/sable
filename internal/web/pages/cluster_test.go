@@ -67,6 +67,7 @@ func TestClusterProgressDistinguishesCompletedActiveAndWaitingNodes(t *testing.T
 		phase, nodePhase, label string
 		spinners                int
 	}{
+		{"preparing", "queued", "Checking nodes", 0},
 		{"updating", "install", "Installing", 1},
 		{"updating", "restart", "Restarting", 1},
 		{"verifying", "restart", "Verifying sync", 2},
@@ -77,15 +78,20 @@ func TestClusterProgressDistinguishesCompletedActiveAndWaitingNodes(t *testing.T
 			view := ClusterUpdateView{Rollout: cluster.RolloutStatus{ID: "rollout", Phase: test.phase, Index: 1, Nodes: []cluster.RolloutNode{
 				{Name: "ns2", Phase: "complete"}, {Name: "ns3", Phase: test.nodePhase}, {Name: "ns1", Phase: "queued"},
 			}}}
+			checks := 1
+			if test.phase == "preparing" {
+				view.Rollout.Nodes[0].Phase = "queued"
+				checks = 0
+			}
 			var response bytes.Buffer
 			if err := ClusterUpdatePanel(view, false).Render(context.Background(), &response); err != nil {
 				t.Fatal(err)
 			}
 			markup := response.String()
-			if strings.Count(markup, "icon-loader-circle") != test.spinners || strings.Count(markup, `icon-check`) != 1 || !strings.Contains(markup, test.label) {
+			if strings.Count(markup, "icon-loader-circle") != test.spinners || strings.Count(markup, `icon-check`) != checks || !strings.Contains(markup, test.label) {
 				t.Fatalf("incorrect progress icons or labels: %s", markup)
 			}
-			if test.phase == "updating" && !strings.Contains(markup, `aria-hidden="true">3</span>`) {
+			if (test.phase == "preparing" || test.phase == "updating") && !strings.Contains(markup, `aria-hidden="true">3</span>`) {
 				t.Fatal("waiting node should show its position in a styled step")
 			}
 		})

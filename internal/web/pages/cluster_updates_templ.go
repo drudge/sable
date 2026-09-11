@@ -477,7 +477,7 @@ func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {
 		}
 		return "skipped"
 	}
-	if rollout.Phase == "preparing" || rollout.Phase == "verifying" {
+	if rollout.Phase == "verifying" {
 		return rollout.Phase
 	}
 	return phase
@@ -485,7 +485,7 @@ func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {
 
 func rolloutNodeBusy(phase string) bool {
 	switch phase {
-	case "preparing", "install", "installing", "restart", "restarting", "verifying":
+	case "install", "installing", "restart", "restarting", "verifying":
 		return true
 	default:
 		return false
@@ -494,8 +494,6 @@ func rolloutNodeBusy(phase string) bool {
 
 func rolloutNodePhaseLabel(phase string) string {
 	switch phase {
-	case "preparing":
-		return "Checking readiness"
 	case "verifying":
 		return "Verifying sync"
 	default:
