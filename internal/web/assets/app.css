@@ -1197,9 +1197,9 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 
 .toast-update { grid-template-columns: minmax(0, 1fr); gap: .75rem; padding: 1rem; }
 .toast-update > .toast-dismiss { position: absolute; top: .5rem; right: .5rem; width: 1.5rem; height: 1.5rem; }
-.toast-update-summary { display: grid; grid-template-columns: minmax(0, 1fr) 3rem; align-items: center; gap: 1rem; min-height: 5.5rem; }
+.toast-update-summary { display: grid; grid-template-columns: 3rem minmax(0, 1fr); align-items: center; gap: 1rem; min-height: 5.5rem; }
 .toast-update-copy { min-width: 0; }
-.toast-update-copy > strong { display: block; font-size: .875rem; font-weight: 600; line-height: 1.4; }
+.toast-update-copy > strong { display: block; padding-right: 1rem; font-size: .875rem; font-weight: 600; line-height: 1.4; }
 .toast-update-copy > p { margin: .4rem 0 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .toast-update-badge { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: .875rem; background: color-mix(in oklch, currentColor 13%, transparent); color: #d97706; }
 .toast-update-badge > .nav-icon { width: 1.75rem; height: 1.75rem; }
