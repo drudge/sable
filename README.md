@@ -182,12 +182,18 @@ The previous executable is kept until the downloaded build has been run once,
 so a corrupt or unrunnable download leaves the installation untouched. Set
 `SABLE_GITHUB_TOKEN` if the unauthenticated GitHub API rate limit is a problem.
 
+The console checks for new releases on sign-in by default and shows a
+notification with release notes. Change this node's preference under
+**Settings → General → Software Updates**; checks never install releases
+automatically.
+
 The **About** page in the console runs the same update path. It checks for a
 newer release, installs it after a confirmation, and then offers a controlled
 restart once the executable has been replaced. Sable keeps serving the running
 build until that restart, and the console says whether a service manager will
-start the new build again. After restarting, opening About automatically checks
-the running build so the panel reports whether it is up to date. Checks, installs,
+start the new build again. When automatic checks are enabled, opening About
+after a restart checks the running build so the panel reports whether it is up
+to date. Checks, installs,
 and restarts are node-local and work on replicas as well as the primary.
 
 The default service installed with `sable install` cannot install a release

@@ -74,6 +74,7 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	targetConfiguration.Cluster.NodeName = "replica-local"
 	targetConfiguration.Cluster.AdvertiseURL = "https://ns2.example.test"
 	targetConfiguration.Updates.PreRelease = true
+	targetConfiguration.Updates.CheckOnLogin = false
 	targetManager := newTestConfigurationManager(t, targetConfiguration)
 	targetZones := newTestZoneManager(t, nil)
 

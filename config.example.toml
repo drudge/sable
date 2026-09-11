@@ -273,6 +273,11 @@ node_name = ""
 advertise_url = ""
 
 [updates]
+# Check for new releases when the console opens after sign-in. Never installs automatically.
+check_on_login = true
+# Set only when an external supervisor (such as Docker with a restart policy)
+# restarts Sable after it exits. Installed systemd services are detected automatically.
+restart_managed = false
 # Include release candidates when looking for a newer Sable release. The
 # About page writes your choice here, so a server tracking release candidates
 # keeps finding them after a restart. This setting is local to each node and

@@ -1,0 +1,114 @@
+package pages
+
+const aboutUpdateNotesDialogID = "update-release-notes-dialog"
+const notificationUpdateNotesDialogID = "notification-release-notes-dialog"
+const clusterUpdateNotesDialogID = "cluster-release-notes-dialog"
+
+func updateRestartAttributes(view UpdateView, continueURL string) templ.Attributes {
+	if !view.Installed || !view.CanRestart {
+		return nil
+	}
+	return templ.Attributes{
+		"data-sable-restart": true,
+		"data-restart-url": "/ui/updates/restart",
+		"data-health-url": "/api/v1/health",
+		"data-continue-url": continueURL,
+		"data-updated-version": formatReleaseVersion(view.LatestVersion),
+		"data-csrf-token": view.CSRFToken,
+		"data-restart-confirm": updateRestartConfirmation(view),
+		"data-restart-confirm-title": "Restart Sable?",
+		"data-restart-confirm-action": "Restart Sable",
+	}
+}
+
+templ updatePrimaryAction(view UpdateView, fromNotification bool) {
+	if view.Busy {
+		<button class="button compact update-install-progress" type="button" disabled>@Icon("refresh")<span>{ ifThen(view.Phase == "checking", "Checking…", "Installing…") }</span></button>
+	} else {
+		switch updateAction(view) {
+			case "restart":
+				<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
+			case "install":
+				if fromNotification && view.CanUpdateCluster {
+					@updateScopeButton(view)
+				} else {
+					@updateInstallButton(view, fromNotification)
+				}
+		}
+	}
+}
+
+templ updateReleaseNotesButton(view UpdateView, dialogID string) {
+	if view.ReleaseNotes != "" {
+		<button id={ dialogID + "-open" } class="button outline compact" type="button" data-dialog-open={ dialogID }>Release notes</button>
+	} else if view.Available && !view.Installed && view.ReleaseURL != "" {
+		<a id={ dialogID + "-open" } class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+	}
+}
+
+templ updateInstallButton(view UpdateView, fromNotification bool) {
+	@updateInstallForm(view, fromNotification) {
+		<button class="button compact" type="submit">@Icon("download")<span>{ ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion) }</span></button>
+	}
+}
+
+templ updateInstallForm(view UpdateView, fromNotification bool) {
+	<form
+		hx-post="/ui/updates/install"
+		hx-target={ ifThen(fromNotification, "closest .toast-region", "#about-update") }
+		hx-swap="outerHTML"
+		hx-disable={ ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#about-update button, #about-update input") }
+		hx-confirm={ updateInstallConfirmation(view) }
+		data-confirm-title="Install this release?"
+		data-confirm-action="Download &amp; Install"
+		data-confirm-tone="neutral"
+	>
+		if fromNotification {
+			<input type="hidden" name="notification" value="true"/>
+		}
+		<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
+		{ children... }
+	</form>
+}
+
+templ updateScopeButton(view UpdateView) {
+	<div class="update-split-button" data-update-scope>
+		<div data-update-scope-action="node">
+			@updateInstallForm(view, true) {
+				<button id="notification-update-node" class="button compact" type="submit">Install update</button>
+			}
+		</div>
+		<div data-update-scope-action="cluster" hidden>
+			@clusterUpdateForm(view.LatestVersion, true) {
+				<button id="notification-update-cluster" class="button compact" type="submit">Update cluster</button>
+			}
+		</div>
+		<button id="notification-update-scope" class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls="notification-update-scope-menu" data-update-scope-trigger>@Icon("chevron-down")</button>
+		<div id="notification-update-scope-menu" class="update-scope-menu" role="menu" aria-label="Update scope" popover="manual">
+			@updateInstallForm(view, true) {
+				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="true" data-update-scope-option="node">@Icon("server")<span><strong>This node</strong><small>Install here, then restart when ready.</small></span>@Icon("check")</button>
+			}
+			@clusterUpdateForm(view.LatestVersion, true) {
+				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="false" data-update-scope-option="cluster">@Icon("cluster")<span><strong>Entire cluster</strong><small>Update all nodes, one at a time.</small></span>@Icon("check")</button>
+			}
+		</div>
+	</div>
+}
+
+templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
+	if view.ReleaseNotes != "" {
+		<dialog class="custom-server-dialog update-release-dialog" id={ dialogID } aria-labelledby={ dialogID + "-title" }>
+			<div class="dialog-header"><h2 id={ dialogID + "-title" }>Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+			<div class="release-notes-content">
+				@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
+			</div>
+			<div class="dialog-footer">
+				if view.ReleaseURL != "" {
+					<a class="button outline" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>View release</span>@Icon("external-link")</a>
+				}
+				<button class="button" type="button" data-dialog-close>Done</button>
+			</div>
+		</dialog>
+	}
+}

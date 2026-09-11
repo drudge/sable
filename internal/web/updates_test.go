@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
@@ -152,11 +154,11 @@ func TestAboutPageReportsAnUpToDateInstallation(t *testing.T) {
 	}
 }
 
-func TestCommandPaletteUpdateCheckReturnsToast(t *testing.T) {
+func TestCommandPaletteUpdateCheckReturnsUpdateNotification(t *testing.T) {
 	t.Parallel()
 	controller := &testUpdateController{status: update.Status{
 		Phase: update.PhaseIdle, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
-		Available: true, CheckedAt: time.Now(),
+		Available: true, CheckedAt: time.Now(), ReleaseNotes: "### Improvements\n\n- Faster updates.",
 	}}
 	server := updateTestServer(t, controller)
 	response := serveUpdateForm(server, "/ui/updates/command-check", nil)
@@ -164,16 +166,48 @@ func TestCommandPaletteUpdateCheckReturnsToast(t *testing.T) {
 		t.Fatalf("palette update check status = %d", response.Code)
 	}
 	body := response.Body.String()
-	for _, expected := range []string{`class="toast-region"`, "Sable v9.9.9 is available. Open About to review and install it."} {
+	for _, expected := range []string{
+		`id="update-notification"`, "Sable v9.9.9 is available", `data-toast-duration="0"`,
+		`data-dialog-open="notification-release-notes-dialog"`, "Faster updates.",
+		`hx-post="/ui/updates/install"`, `name="notification" value="true"`, "Install update",
+	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("palette update check does not contain %q: %s", expected, body)
 		}
 	}
-	if strings.Contains(body, `id="about-update"`) {
-		t.Error("palette update check returned the About page panel instead of a toast")
+	if strings.Contains(body, `id="about-update"`) || strings.Contains(body, "Open About to review and install") {
+		t.Error("palette update check did not offer the update directly in the notification")
 	}
 	if controller.checks != 1 || controller.preRelease {
 		t.Fatalf("palette update checks = %d pre-release = %t", controller.checks, controller.preRelease)
+	}
+}
+
+func TestCommandPaletteUpdateCheckKeepsStatusToasts(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		checkError error
+		wantStatus int
+		message    string
+	}{
+		{name: "up to date", wantStatus: http.StatusOK, message: "Sable is up to date."},
+		{name: "failed check", checkError: errors.New("release feed unavailable"), wantStatus: http.StatusBadGateway, message: "release feed unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{
+				status:     update.Status{Phase: update.PhaseIdle, CurrentVersion: "9.9.9", LatestVersion: "9.9.9", CheckedAt: time.Now()},
+				checkError: test.checkError,
+			})
+			response := serveUpdateForm(server, "/ui/updates/command-check", nil)
+			body := response.Body.String()
+			if response.Code != test.wantStatus || !strings.Contains(body, test.message) || !strings.Contains(body, `class="toast-region"`) {
+				t.Fatalf("status toast = %d %s", response.Code, body)
+			}
+			if strings.Contains(body, `id="update-notification"`) || strings.Contains(body, `hx-post="/ui/updates/install"`) {
+				t.Fatalf("status toast unexpectedly offered an update: %s", body)
+			}
+		})
 	}
 }
 
@@ -258,6 +292,7 @@ func TestInstalledUpdateOffersAConfirmedRestart(t *testing.T) {
 		"Sable v9.9.9 is installed",
 		"data-sable-restart",
 		`data-restart-url="/ui/updates/restart"`,
+		`data-updated-version="v9.9.9"`,
 		"data-restart-confirm",
 		"Restart Sable",
 		"The service manager starts the new build after a restart.",
@@ -442,5 +477,153 @@ func TestReplicaCanRestartAfterAnUpdate(t *testing.T) {
 	response := serveUpdateForm(server, "/ui/updates/restart", nil)
 	if response.Code != http.StatusAccepted || restarts != 1 {
 		t.Fatalf("replica restart = %d %s, restarts = %d", response.Code, response.Body.String(), restarts)
+	}
+}
+
+func (controller *testUpdateController) CheckAutomatically(ctx context.Context, preRelease bool) (update.Status, error) {
+	return controller.Check(ctx, preRelease)
+}
+
+func TestAutomaticUpdateNoticeHonorsPreferenceAndDevelopmentBuilds(t *testing.T) {
+	for _, scenario := range []string{"available", "disabled", "development", "current", "failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0", ReleaseNotes: "Fix DNS <script>alert(1)</script>"}}
+			server := updateTestServer(t, controller)
+			configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+			server.config = configuration
+			switch scenario {
+			case "disabled":
+				configuration.snapshot.Config.Updates.CheckOnLogin = false
+			case "development":
+				controller.status.Development = true
+			case "current":
+				controller.status.Available = false
+			case "failure":
+				controller.status.Error = "GitHub unavailable"
+			}
+			response := serveUpdateForm(server, "/ui/updates/automatic-check", nil)
+			if scenario == "available" {
+				if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `hx-post="/ui/updates/install"`) || !strings.Contains(response.Body.String(), `data-dialog-open="notification-release-notes-dialog"`) || strings.Contains(response.Body.String(), "<script>") {
+					t.Fatalf("notification = %d %s", response.Code, response.Body.String())
+				}
+			} else if response.Code != http.StatusNoContent || response.Body.Len() != 0 {
+				t.Fatalf("quiet check = %d %s", response.Code, response.Body.String())
+			}
+			if (scenario == "disabled" || scenario == "development") && controller.checks != 0 {
+				t.Fatal("disabled check reached the updater")
+			}
+		})
+	}
+}
+
+func TestNotificationInstallTracksDownloadAndOffersRestart(t *testing.T) {
+	controller := &testUpdateController{status: update.Status{Available: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}}
+	server := updateTestServer(t, controller)
+	server.SetRestartController(func() {})
+	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}, "pre_release": {"true"}})
+	if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "" {
+		t.Fatalf("notification install = %d, redirect %q", response.Code, response.Header().Get("HX-Redirect"))
+	}
+	for _, expected := range []string{`id="update-notification"`, "Installing Sable v1.2.0-rc.1", "Downloading sable_9.9.9_linux_amd64.tar.gz", `hx-get="/ui/updates?notification=true"`, "every 2s", "update-install-progress"} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("download notification is missing %q: %s", expected, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), "data-sable-restart-button") || response.Header().Get("HX-Trigger") != "sableUpdateChanged" {
+		t.Fatal("download offered an early restart or failed to synchronize other update controls")
+	}
+	if controller.installs != 1 || !controller.preRelease {
+		t.Fatalf("installs = %d, pre-release = %v", controller.installs, controller.preRelease)
+	}
+	controller.status = update.Status{Phase: update.PhaseInstalled, Installed: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}
+	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
+	for _, expected := range []string{`id="update-notification"`, "Sable v1.2.0-rc.1 is installed", "data-sable-restart-button", `data-restart-url="/ui/updates/restart"`, `data-updated-version="v1.2.0-rc.1"`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("installed notification is missing %q: %s", expected, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), "every 2s") || strings.Contains(response.Body.String(), "update-install-progress") || controller.checks != 0 {
+		t.Fatal("installed notification kept polling, showed download progress, or checked for another release")
+	}
+	controller.status.ClusterUpdate = true
+	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
+	if strings.Contains(response.Body.String(), "data-sable-restart-button") {
+		t.Fatal("notification offered a separate restart during a cluster rollout")
+	}
+}
+
+func TestNotificationInstallReportsFailureWithoutNavigating(t *testing.T) {
+	controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0"}, installError: update.ErrUpdateInProgress}
+	server := updateTestServer(t, controller)
+	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}})
+	if response.Header().Get("HX-Redirect") != "" || controller.installs != 0 {
+		t.Fatal("failed installation redirected or started an update")
+	}
+	if !strings.Contains(response.Body.String(), "toast-update-failed") || !strings.Contains(response.Body.String(), update.ErrUpdateInProgress.Error()) || !strings.Contains(response.Body.String(), `hx-post="/ui/updates/install"`) {
+		t.Fatalf("notification error = %s", response.Body.String())
+	}
+}
+
+func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{})
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+	server.config = configuration
+	server.SetClusterController(testReplicaClusterController{})
+	if !configuration.snapshot.Config.Updates.CheckOnLogin {
+		t.Fatal("automatic checks are not enabled by default")
+	}
+	for _, enabled := range []bool{false, true} {
+		values := url.Values{}
+		if enabled {
+			values.Set("check_on_login", "true")
+		}
+		response := serveUpdateForm(server, "/ui/settings/updates", values)
+		if response.Code != http.StatusOK || configuration.snapshot.Config.Updates.CheckOnLogin != enabled {
+			t.Fatalf("preference = %d %s", response.Code, response.Body.String())
+		}
+		if !strings.Contains(response.Body.String(), `id="settings-update-preferences"`) || strings.Contains(response.Body.String(), `id="about-update"`) {
+			t.Fatal("saving the preference did not return the Settings control")
+		}
+	}
+}
+
+func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
+	for path, permission := range map[string]string{
+		"/ui/updates/automatic-check": auth.PermissionUpdatesRead,
+		"/ui/settings/updates":        auth.PermissionSettingsWrite,
+		"/ui/updates/cluster":         auth.PermissionUpdatesApply,
+		"/ui/updates/cluster/stop":    auth.PermissionUpdatesApply,
+	} {
+		if got := requiredPermission(httptest.NewRequest(http.MethodPost, path, nil)); got != permission {
+			t.Errorf("%s permission = %s", path, got)
+		}
+	}
+	server := updateTestServer(t, nil)
+	server.securityEnabled = true
+	for _, permissions := range [][]string{{auth.PermissionUpdatesApply}, {auth.PermissionClusterWrite}, {auth.PermissionUpdatesApply, auth.PermissionClusterWrite}} {
+		request := httptest.NewRequest(http.MethodPost, "/ui/updates/cluster", nil)
+		request = request.WithContext(context.WithValue(request.Context(), principalContextKey{}, auth.Principal{Permissions: permissions}))
+		if got := server.canManageClusterUpdate(request); got != (len(permissions) == 2) {
+			t.Fatalf("permissions %v allowed = %v", permissions, got)
+		}
+	}
+	if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, "/ui/updates/cluster") {
+		t.Fatal("replica can start a cluster rollout")
+	}
+}
+
+func TestRollingUpdateReservationBlocksManualRestart(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{status: update.Status{ClusterUpdate: true, Installed: true}})
+	server.SetRestartController(func() { t.Fatal("manual restart bypassed rolling update") })
+	if response := serveUpdateForm(server, "/ui/updates/restart", nil); response.Code != http.StatusConflict {
+		t.Fatalf("restart = %d", response.Code)
+	}
+}
+
+func TestAutomaticUpdateNoticeWaitsForAnExistingCheck(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{status: update.Status{Phase: update.PhaseChecking}})
+	response := serveUpdateForm(server, "/ui/updates/automatic-check", nil)
+	if response.Code != http.StatusAccepted || response.Header().Get("Retry-After") == "" || response.Body.Len() != 0 {
+		t.Fatalf("pending lookup = %d %s", response.Code, response.Body.String())
 	}
 }

@@ -7,6 +7,7 @@ import (
 )
 
 type ClusterPageView struct {
+	Update ClusterUpdateView
 	Console DashboardView
 	Initialized bool
 	NetworkReady bool
@@ -132,6 +133,9 @@ templ ClusterContent(view ClusterPageView) {
 				if !view.NetworkReady {
 					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
 				}
+				if view.Initialized {
+					@ClusterUpdatePanel(view.Update, false)
+				}
 				<section class="card cluster-details">
 					<header>
 						<h2>Local Node</h2>
@@ -169,6 +173,11 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save &amp; Restart Later</button></div>
 		</form>
 	</dialog>
+}
+
+templ ClusterLiveStatusUpdate(view ClusterPageView) {
+	@ClusterLiveStatus(view)
+	@ClusterUpdatePanel(view.Update, true)
 }
 
 templ ClusterLiveStatus(view ClusterPageView) {
@@ -220,7 +229,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 								}
 							</div>
 							<div class="cluster-node-meta">
-								<span>{ node.Role }</span><strong>{ node.Version }</strong><small>{ nodeUptimeLabel(node) }</small>
+								<span>{ node.Role }</span><strong>@ReleaseVersion(node.Version)</strong><small>{ nodeUptimeLabel(node) }</small>
 							</div>
 						</div>
 						<div class="cluster-sync-progress">

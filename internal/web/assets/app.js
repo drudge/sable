@@ -7,6 +7,7 @@
   const TITLE_SEPARATOR = " \u00b7 ";
   const OVERVIEW_SCOPE_ALL = "all";
   const MINIMUM_UPDATE_CHECK_MS = 650;
+  const UPDATE_COMPLETED_KEY = "sable-update-completed";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
@@ -91,6 +92,7 @@
 		path === "/ui/administration/sessions/revoke") return true;
 	  if (path === "/ui/updates/check" || path === "/ui/updates/command-check" ||
 		path === "/ui/updates/install" || path === "/ui/updates/restart") return true;
+	  if (path === "/ui/settings/updates") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
 	  if (path.startsWith("/ui/certificates/")) return true;
 	  if (path === "/ui/cluster/settings" || path === "/ui/cluster/leave" || path === "/ui/cluster/restart" || path === "/api/v1/cluster/membership") return true;
@@ -305,7 +307,7 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, window.innerHeight * .45);
 	  root.dataset.side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	};
-	const positionFloatingPopover = (root, trigger, popover) => {
+	const positionFloatingPopover = (root, trigger, popover, preferredWidth) => {
 	  const triggerRect = trigger.getBoundingClientRect();
 	  const viewport = window.visualViewport;
 	  const viewportTop = viewport?.offsetTop || 0;
@@ -321,13 +323,13 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, viewportHeight * .45, 288);
 	  const side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	  const availableHeight = side === "top" ? availableAbove : availableBelow;
-	  const width = Math.min(triggerRect.width, viewportWidth - inset * 2);
+	  const width = Math.min(preferredWidth || triggerRect.width, viewportWidth - inset * 2);
 
 	  root.dataset.side = side;
 	  popover.style.width = `${Math.max(0, width)}px`;
 	  popover.style.maxHeight = `${Math.max(0, Math.min(preferredHeight, availableHeight))}px`;
 	  const height = popover.getBoundingClientRect().height;
-	  const left = Math.min(Math.max(triggerRect.left, viewportLeft + inset), viewportRight - inset - width);
+	  const left = Math.min(Math.max(triggerRect.right - width, viewportLeft + inset), viewportRight - inset - width);
 	  const top = side === "top" ? triggerRect.top - gap - height : triggerRect.bottom + gap;
 	  popover.style.left = `${left}px`;
 	  popover.style.top = `${top}px`;
@@ -1386,6 +1388,122 @@
 	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
 	};
 
+  const UPDATE_CHECK_RETRY_MS = 2000;
+  const MAX_UPDATE_CHECK_RETRIES = 8;
+  let updateCheckRetries = 0;
+  const checkForUpdateNotification = async () => {
+    const endpoint = document.body.dataset.updateCheckUrl;
+    if (!endpoint) return;
+    const session = document.body.dataset.updateSession || "local";
+    const key = `sable-update-check:${session}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "X-CSRF-Token": document.body.dataset.updateSession || "" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) return;
+      if (response.status === 202) {
+        if (updateCheckRetries++ < MAX_UPDATE_CHECK_RETRIES) window.setTimeout(checkForUpdateNotification, UPDATE_CHECK_RETRY_MS);
+        return;
+      }
+      sessionStorage.setItem(key, "checked");
+      if (response.status === 204) return;
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      const region = template.content.querySelector(".toast-region");
+      if (!region) return;
+      document.body.append(region);
+      window.htmx?.process(region);
+      initializeSwappedContent(region);
+    } catch {
+      // A release lookup must never interrupt console use.
+    }
+  };
+  queueMicrotask(checkForUpdateNotification);
+
+	const UPDATE_SCOPE_MENU_WIDTH = 288;
+	const updateScopePreferenceKey = `sable-update-scope:${document.body.dataset.preferenceUser || ""}`;
+	const setupUpdateScope = (root) => {
+	  if (root.dataset.updateScopeReady === "true") return;
+	  root.dataset.updateScopeReady = "true";
+	  const trigger = root.querySelector("[data-update-scope-trigger]");
+	  const menu = root.querySelector('[role="menu"]');
+	  const items = [...menu.querySelectorAll('[data-update-scope-option]')];
+	  const actions = [...root.querySelectorAll(':scope > [data-update-scope-action]')];
+	  const select = (scope) => {
+		const selected = scope === "cluster" ? "cluster" : "node";
+		actions.forEach((action) => { action.hidden = action.dataset.updateScopeAction !== selected; });
+		items.forEach((item) => { item.setAttribute("aria-checked", String(item.dataset.updateScopeOption === selected)); });
+	  };
+	  try {
+		select(localStorage.getItem(updateScopePreferenceKey));
+	  } catch {
+		// Storage may be disabled; the node action remains the initial default.
+	  }
+	  menu.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-update-scope-option]");
+		if (!option) return;
+		select(option.dataset.updateScopeOption);
+		try {
+		  localStorage.setItem(updateScopePreferenceKey, option.dataset.updateScopeOption);
+		} catch {
+		  // The selected action still works for this notification without storage.
+		}
+	  });
+	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
+	  const close = () => {
+		if (menu.matches(":popover-open")) menu.hidePopover();
+	  };
+	  const open = (last = false) => {
+		menu.showPopover();
+		position();
+		(last ? items.at(-1) : items[0])?.focus();
+	  };
+	  trigger.addEventListener("click", () => {
+		if (menu.matches(":popover-open")) close(); else open();
+	  });
+	  trigger.addEventListener("keydown", (event) => {
+		if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+		event.preventDefault();
+		open(event.key === "ArrowUp");
+	  });
+	  menu.addEventListener("toggle", (event) => {
+		const opened = event.newState === "open";
+		trigger.setAttribute("aria-expanded", String(opened));
+		if (opened) root.dataset.open = "true"; else root.removeAttribute("data-open");
+	  });
+	  menu.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" || event.key === "Tab") {
+		  if (event.key === "Escape") event.preventDefault();
+		  close();
+		  trigger.focus();
+		  return;
+		}
+		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		event.preventDefault();
+		const current = items.indexOf(document.activeElement);
+		const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		items[(index + items.length) % items.length]?.focus();
+	  });
+	  // Close before the shared confirmation captures its return-focus control.
+	  menu.addEventListener("htmx:confirm", () => {
+		close();
+		trigger.focus();
+	  });
+	};
+	window.addEventListener("resize", () => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
+	  });
+	});
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		if (!root.contains(event.target)) root.querySelector('[role="menu"]').hidePopover();
+	  });
+	});
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
@@ -1428,6 +1546,24 @@
 	  });
 	  schedule();
 	};
+
+	const showCompletedUpdateToast = () => {
+	  let updatedVersion;
+	  try {
+		updatedVersion = sessionStorage.getItem(UPDATE_COMPLETED_KEY);
+		sessionStorage.removeItem(UPDATE_COMPLETED_KEY);
+	  } catch {
+		return;
+	  }
+	  if (!updatedVersion) return;
+	  const template = document.querySelector("[data-update-completed-toast]");
+	  if (template?.dataset.updateCompletedToast !== updatedVersion) return;
+	  const region = template.content.firstElementChild?.cloneNode(true);
+	  if (!region) return;
+	  document.body.append(region);
+	  setupToast(region.querySelector("[data-toast]"));
+	};
+	showCompletedUpdateToast();
 
 	const syncDNSSECDenial = (select) => {
 	  const section = select.closest("form")?.querySelector("[data-dnssec-nsec3]");
@@ -1892,6 +2028,7 @@
 	  const buttonLabel = button?.querySelector("span");
 	  const status = root.querySelector("[data-restart-status]");
 	  const exit = root.querySelector("[data-restart-exit]");
+	  const continueURL = root.dataset.continueUrl || window.location.href;
 	  const sleep = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 	  let previousInstance = "";
 	  const fetchHealth = async () => {
@@ -1911,6 +2048,18 @@
 		if (buttonLabel) buttonLabel.textContent = "Check Again";
 	  };
 
+	  const continueAfterRestart = () => {
+		if (root.dataset.updatedVersion) {
+		  try {
+			sessionStorage.setItem(UPDATE_COMPLETED_KEY, root.dataset.updatedVersion);
+		  } catch {
+			// A confirmation must never prevent returning to the console.
+		  }
+		}
+		if (status) status.textContent = "Sable is back online. Reloading…";
+		window.location.assign(continueURL);
+	  };
+
 	  const waitForSable = async () => {
 		const deadline = Date.now() + 120000;
 		let stopped = false;
@@ -1920,12 +2069,11 @@
 			if (response.ok) {
 			  const health = await response.json();
 			  if (health.instance_id && health.instance_id !== previousInstance) {
-				if (status) status.textContent = "Sable is back online. Continuing setup…";
-				window.location.assign(root.dataset.continueUrl);
+				continueAfterRestart();
 				return;
 			  }
 			  if (stopped && !health.instance_id) {
-				window.location.assign(root.dataset.continueUrl);
+				continueAfterRestart();
 				return;
 			  }
 			}
@@ -2418,6 +2566,8 @@
 	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
+	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
+	  root.querySelectorAll?.("[data-update-scope]").forEach(setupUpdateScope);
 	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);
 	  root.querySelectorAll?.("[data-dnssec-denial]").forEach(syncDNSSECDenial);
 	  if (root.matches?.("[data-isotope-tabs]")) setupIsotopeTabs(root);

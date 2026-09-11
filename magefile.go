@@ -85,12 +85,7 @@ checksum:
   algorithm: sha256
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+  disable: true
 
 release:
   draft: true
@@ -212,6 +207,14 @@ func Demo(ctx context.Context) error {
 		return err
 	}
 	return run(ctx, nil, "go", "run", "./scripts/demo", "-keep")
+}
+
+// DemoUpdates starts three disposable, supervised nodes and a local release feed.
+func DemoUpdates(ctx context.Context) error {
+	if err := Generate(ctx); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", "run", "./scripts/demo", "-updates", "-root", filepath.Join("_work", "update-demos"), "-base-port", "6491")
 }
 
 // Screenshots rebuilds the Vandelay Industries demonstration deployment and

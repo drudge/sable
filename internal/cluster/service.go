@@ -122,6 +122,9 @@ type manifest struct {
 }
 
 type Service struct {
+	updates                   *clusterUpdates
+	pendingUpdate             *UpdateCommand
+	updatePrimaryID           string
 	mu                        sync.RWMutex
 	directory                 string
 	nodeID                    string
@@ -652,6 +655,10 @@ func loadManifest(path string) (*manifest, error) {
 }
 
 func writeManifest(directory string, value *manifest) error {
+	return writeClusterJSON(directory, manifestFileName, value)
+}
+
+func writeClusterJSON(directory, name string, value any) error {
 	contents, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cluster manifest: %w", err)
@@ -678,7 +685,7 @@ func writeManifest(directory string, value *manifest) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary cluster manifest: %w", err)
 	}
-	if err := os.Rename(temporaryPath, filepath.Join(directory, manifestFileName)); err != nil {
+	if err := os.Rename(temporaryPath, filepath.Join(directory, name)); err != nil {
 		return fmt.Errorf("replace cluster manifest: %w", err)
 	}
 	return syncDirectory(directory)

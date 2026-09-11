@@ -154,6 +154,12 @@ Preserve a backup before dissolving a cluster whose state may be needed later.
 
 ## Rolling updates
 
+Use **Cluster → Rolling Updates** on the primary to apply a reviewed release to
+all nodes. Sable updates replicas one at a time, verifies their running version
+and synchronization, then updates the primary last. See the
+[update guide](guides/updates.md#roll-through-a-cluster) for requirements, failure
+handling, and manual upgrades of nodes that do not yet support this feature.
+
 For a two-node deployment:
 
 1. Create and export a backup from the primary.

@@ -49,10 +49,18 @@ func main() {
 	binary := flag.String("binary", filepath.Join("bin", "sable"), "Sable binary to run")
 	output := flag.String("out", "", "directory to write screenshots into (empty skips capture)")
 	keep := flag.Bool("keep", false, "leave the deployment running after capture")
+	updates := flag.Bool("updates", false, "run a disposable three-node update demonstration")
+	updateSmoke := flag.Bool("update-smoke", false, "run the update demonstration, verify a rollout, and exit")
 	basePort := flag.Int("base-port", 5391, "first console port; each node takes the next one")
 	flag.Parse()
 
-	if err := run(*root, *binary, *output, *basePort, *keep); err != nil {
+	var err error
+	if *updates || *updateSmoke {
+		err = runUpdateDemo(*root, *basePort, *updateSmoke)
+	} else {
+		err = run(*root, *binary, *output, *basePort, *keep)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "demo:", err)
 		os.Exit(1)
 	}
