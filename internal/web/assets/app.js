@@ -7,6 +7,7 @@
   const TITLE_SEPARATOR = " \u00b7 ";
   const OVERVIEW_SCOPE_ALL = "all";
   const MINIMUM_UPDATE_CHECK_MS = 650;
+  const UPDATE_COMPLETED_KEY = "sable-update-completed";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
@@ -91,6 +92,7 @@
 		path === "/ui/administration/sessions/revoke") return true;
 	  if (path === "/ui/updates/check" || path === "/ui/updates/command-check" ||
 		path === "/ui/updates/install" || path === "/ui/updates/restart") return true;
+	  if (path === "/ui/settings/updates") return true;
 	  if (path.startsWith("/ui/cache/") || path.startsWith("/api/v1/cache/")) return true;
 	  if (path.startsWith("/ui/certificates/")) return true;
 	  if (path === "/ui/cluster/settings" || path === "/ui/cluster/leave" || path === "/ui/cluster/restart" || path === "/api/v1/cluster/membership") return true;
@@ -305,7 +307,7 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, window.innerHeight * .45);
 	  root.dataset.side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	};
-	const positionFloatingPopover = (root, trigger, popover) => {
+	const positionFloatingPopover = (root, trigger, popover, preferredWidth) => {
 	  const triggerRect = trigger.getBoundingClientRect();
 	  const viewport = window.visualViewport;
 	  const viewportTop = viewport?.offsetTop || 0;
@@ -321,13 +323,13 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, viewportHeight * .45, 288);
 	  const side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	  const availableHeight = side === "top" ? availableAbove : availableBelow;
-	  const width = Math.min(triggerRect.width, viewportWidth - inset * 2);
+	  const width = Math.min(preferredWidth || triggerRect.width, viewportWidth - inset * 2);
 
 	  root.dataset.side = side;
 	  popover.style.width = `${Math.max(0, width)}px`;
 	  popover.style.maxHeight = `${Math.max(0, Math.min(preferredHeight, availableHeight))}px`;
 	  const height = popover.getBoundingClientRect().height;
-	  const left = Math.min(Math.max(triggerRect.left, viewportLeft + inset), viewportRight - inset - width);
+	  const left = Math.min(Math.max(triggerRect.right - width, viewportLeft + inset), viewportRight - inset - width);
 	  const top = side === "top" ? triggerRect.top - gap - height : triggerRect.bottom + gap;
 	  popover.style.left = `${left}px`;
 	  popover.style.top = `${top}px`;
@@ -1386,6 +1388,122 @@
 	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
 	};
 
+  const UPDATE_CHECK_RETRY_MS = 2000;
+  const MAX_UPDATE_CHECK_RETRIES = 8;
+  let updateCheckRetries = 0;
+  const checkForUpdateNotification = async () => {
+    const endpoint = document.body.dataset.updateCheckUrl;
+    if (!endpoint) return;
+    const session = document.body.dataset.updateSession || "local";
+    const key = `sable-update-check:${session}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "X-CSRF-Token": document.body.dataset.updateSession || "" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) return;
+      if (response.status === 202) {
+        if (updateCheckRetries++ < MAX_UPDATE_CHECK_RETRIES) window.setTimeout(checkForUpdateNotification, UPDATE_CHECK_RETRY_MS);
+        return;
+      }
+      sessionStorage.setItem(key, "checked");
+      if (response.status === 204) return;
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      const region = template.content.querySelector(".toast-region");
+      if (!region) return;
+      document.body.append(region);
+      window.htmx?.process(region);
+      initializeSwappedContent(region);
+    } catch {
+      // A release lookup must never interrupt console use.
+    }
+  };
+  queueMicrotask(checkForUpdateNotification);
+
+	const UPDATE_SCOPE_MENU_WIDTH = 288;
+	const updateScopePreferenceKey = `sable-update-scope:${document.body.dataset.preferenceUser || ""}`;
+	const setupUpdateScope = (root) => {
+	  if (root.dataset.updateScopeReady === "true") return;
+	  root.dataset.updateScopeReady = "true";
+	  const trigger = root.querySelector("[data-update-scope-trigger]");
+	  const menu = root.querySelector('[role="menu"]');
+	  const items = [...menu.querySelectorAll('[data-update-scope-option]')];
+	  const actions = [...root.querySelectorAll(':scope > [data-update-scope-action]')];
+	  const select = (scope) => {
+		const selected = scope === "cluster" ? "cluster" : "node";
+		actions.forEach((action) => { action.hidden = action.dataset.updateScopeAction !== selected; });
+		items.forEach((item) => { item.setAttribute("aria-checked", String(item.dataset.updateScopeOption === selected)); });
+	  };
+	  try {
+		select(localStorage.getItem(updateScopePreferenceKey));
+	  } catch {
+		// Storage may be disabled; the node action remains the initial default.
+	  }
+	  menu.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-update-scope-option]");
+		if (!option) return;
+		select(option.dataset.updateScopeOption);
+		try {
+		  localStorage.setItem(updateScopePreferenceKey, option.dataset.updateScopeOption);
+		} catch {
+		  // The selected action still works for this notification without storage.
+		}
+	  });
+	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
+	  const close = () => {
+		if (menu.matches(":popover-open")) menu.hidePopover();
+	  };
+	  const open = (last = false) => {
+		menu.showPopover();
+		position();
+		(last ? items.at(-1) : items[0])?.focus();
+	  };
+	  trigger.addEventListener("click", () => {
+		if (menu.matches(":popover-open")) close(); else open();
+	  });
+	  trigger.addEventListener("keydown", (event) => {
+		if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+		event.preventDefault();
+		open(event.key === "ArrowUp");
+	  });
+	  menu.addEventListener("toggle", (event) => {
+		const opened = event.newState === "open";
+		trigger.setAttribute("aria-expanded", String(opened));
+		if (opened) root.dataset.open = "true"; else root.removeAttribute("data-open");
+	  });
+	  menu.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" || event.key === "Tab") {
+		  if (event.key === "Escape") event.preventDefault();
+		  close();
+		  trigger.focus();
+		  return;
+		}
+		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		event.preventDefault();
+		const current = items.indexOf(document.activeElement);
+		const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		items[(index + items.length) % items.length]?.focus();
+	  });
+	  // Close before the shared confirmation captures its return-focus control.
+	  menu.addEventListener("htmx:confirm", () => {
+		close();
+		trigger.focus();
+	  });
+	};
+	window.addEventListener("resize", () => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
+	  });
+	});
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		if (!root.contains(event.target)) root.querySelector('[role="menu"]').hidePopover();
+	  });
+	});
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
@@ -1428,6 +1546,24 @@
 	  });
 	  schedule();
 	};
+
+	const showCompletedUpdateToast = () => {
+	  let updatedVersion;
+	  try {
+		updatedVersion = sessionStorage.getItem(UPDATE_COMPLETED_KEY);
+		sessionStorage.removeItem(UPDATE_COMPLETED_KEY);
+	  } catch {
+		return;
+	  }
+	  if (!updatedVersion) return;
+	  const template = document.querySelector("[data-update-completed-toast]");
+	  if (template?.dataset.updateCompletedToast !== updatedVersion) return;
+	  const region = template.content.firstElementChild?.cloneNode(true);
+	  if (!region) return;
+	  document.body.append(region);
+	  setupToast(region.querySelector("[data-toast]"));
+	};
+	showCompletedUpdateToast();
 
 	const syncDNSSECDenial = (select) => {
 	  const section = select.closest("form")?.querySelector("[data-dnssec-nsec3]");
@@ -1892,6 +2028,7 @@
 	  const buttonLabel = button?.querySelector("span");
 	  const status = root.querySelector("[data-restart-status]");
 	  const exit = root.querySelector("[data-restart-exit]");
+	  const continueURL = root.dataset.continueUrl || window.location.href;
 	  const sleep = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 	  let previousInstance = "";
 	  const fetchHealth = async () => {
@@ -1911,6 +2048,18 @@
 		if (buttonLabel) buttonLabel.textContent = "Check Again";
 	  };
 
+	  const continueAfterRestart = () => {
+		if (root.dataset.updatedVersion) {
+		  try {
+			sessionStorage.setItem(UPDATE_COMPLETED_KEY, root.dataset.updatedVersion);
+		  } catch {
+			// A confirmation must never prevent returning to the console.
+		  }
+		}
+		if (status) status.textContent = "Sable is back online. Reloading…";
+		window.location.assign(continueURL);
+	  };
+
 	  const waitForSable = async () => {
 		const deadline = Date.now() + 120000;
 		let stopped = false;
@@ -1920,12 +2069,11 @@
 			if (response.ok) {
 			  const health = await response.json();
 			  if (health.instance_id && health.instance_id !== previousInstance) {
-				if (status) status.textContent = "Sable is back online. Continuing setup…";
-				window.location.assign(root.dataset.continueUrl);
+				continueAfterRestart();
 				return;
 			  }
 			  if (stopped && !health.instance_id) {
-				window.location.assign(root.dataset.continueUrl);
+				continueAfterRestart();
 				return;
 			  }
 			}
@@ -2229,26 +2377,7 @@
 		if (timer !== null) window.clearInterval(timer);
 		timer = null;
 	  };
-	  let holdUntil = 0;
 	  let pollRequest = null;
-	  // A refresh replaces the whole panel, so it waits while someone is reading
-	  // or operating anything inside it rather than stealing keyboard focus. Focus
-	  // cannot answer that on its own: Safari leaves a clicked <select> unfocused,
-	  // so an open level menu would read as idle and the refresh would tear the
-	  // menu out before the pick could land. A pointer on a control holds the
-	  // refresh off until the pick lands or the hold lapses.
-	  const inUse = () => {
-		const active = document.activeElement;
-		if (active && active !== panel && panel.contains(active)) return true;
-		if (panel.querySelector("dialog[open]")) return true;
-		return performance.now() < holdUntil;
-	  };
-	  panel.addEventListener("pointerdown", (event) => {
-		if (event.target.closest?.("input, select, textarea, label")) holdUntil = performance.now() + 10000;
-	  });
-	  // The pick landed: the change it fires reloads the panel with the new
-	  // filter, so nothing is left to protect.
-	  panel.addEventListener("change", () => { holdUntil = 0; });
 	  // A refresh already on the wire still answers the filter the panel carried
 	  // when it left, so it is dropped rather than allowed to land on top of the
 	  // filter the operator just asked for.
@@ -2259,11 +2388,18 @@
 	  });
 	  panel.addEventListener("htmx:before:request", (event) => {
 		const ctx = event.detail?.ctx;
-		if (ctx?.sourceElement === panel) pollRequest = ctx.request;
+		if (ctx?.sourceElement === panel) {
+		  pollRequest = ctx.request;
+		  ctx.sableLogLiveURL = panel.dataset.liveUrl;
+		}
+	  });
+	  panel.addEventListener("htmx:before:swap", (event) => {
+		const ctx = event.detail?.ctx;
+		if (ctx?.sableLiveRefresh && (panel.dataset.live !== "true" || ctx.sableLogLiveURL !== panel.dataset.liveUrl)) event.preventDefault();
 	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
-		if (document.hidden || requestInFlight || inUse() || panel.dataset.live !== "true") return;
+		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
 		requestInFlight = true;
 		htmx.ajax("GET", panel.dataset.liveUrl, {source: panel, target: `#${panel.id}`, swap: "outerHTML"})
 		  .finally?.(() => { requestInFlight = false; pollRequest = null; });
@@ -2430,6 +2566,8 @@
 	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
+	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
+	  root.querySelectorAll?.("[data-update-scope]").forEach(setupUpdateScope);
 	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);
 	  root.querySelectorAll?.("[data-dnssec-denial]").forEach(syncDNSSECDenial);
 	  if (root.matches?.("[data-isotope-tabs]")) setupIsotopeTabs(root);
@@ -2459,6 +2597,102 @@
 	  if (root.matches?.('[role="progressbar"]')) syncProgressFill(root);
 	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
 	};
+	const CONTROL_HOLD_MS = 10000;
+	const INTERACTIVE_CONTENT = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"], dialog[open]';
+	const editedForms = new WeakSet();
+	let pointerControl = null;
+	let pointerHoldUntil = 0;
+
+	// A stable control id lets htmx restore focus. Other controls, open widgets,
+	// and drafts must keep their existing DOM until the operator is finished.
+	function isLiveRegionInUse(root, fragment) {
+	  if (!root) return false;
+	  // Initial skeleton loads can finish behind a dialog; they have no controls
+	  // or dialog return target to remove, and a load event will not retry.
+	  if (document.querySelector("dialog[open]") && (root.matches(INTERACTIVE_CONTENT) || root.querySelector(INTERACTIVE_CONTENT))) return true;
+	  if (root.querySelector('details[open], [data-open="true"], [data-range-popover]:not([hidden])')) return true;
+	  if (root.contains(pointerControl) && performance.now() < pointerHoldUntil) return true;
+	  const forms = root.matches?.("form") ? [root] : root.querySelectorAll("form");
+	  if ([...forms].some(form => editedForms.has(form))) return true;
+
+	  const active = document.activeElement;
+	  if (!active || active === document.body || !root.contains(active)) return false;
+	  const replacement = active.id && fragment?.querySelector(`#${CSS.escape(active.id)}`);
+	  return !replacement || replacement.tagName !== active.tagName || !replacement.matches(INTERACTIVE_CONTENT) ||
+	    replacement.disabled || replacement.closest("[hidden], [inert]");
+	}
+
+	function installLiveRefresh() {
+	  const markEdited = event => {
+	    const form = event.target.closest?.("form");
+	    if (form) editedForms.add(form);
+	  };
+	  document.body.addEventListener("input", markEdited);
+	  document.body.addEventListener("change", event => {
+	    markEdited(event);
+	    pointerControl = null;
+	  });
+	  document.body.addEventListener("reset", event => {
+	    queueMicrotask(() => {
+	      if (!event.defaultPrevented) editedForms.delete(event.target);
+	    });
+	  });
+	  document.body.addEventListener("pointerdown", event => {
+	    // Safari can open a native control without moving keyboard focus to it.
+	    pointerControl = event.target.closest?.("input, select, textarea, label") || null;
+	    pointerHoldUntil = performance.now() + CONTROL_HOLD_MS;
+	  });
+	  document.body.addEventListener("htmx:before:request", event => {
+	    const ctx = event.detail?.ctx;
+	    if (!ctx?.sourceElement?.matches("[data-live-refresh]")) return;
+	    const type = ctx.sourceEvent?.type;
+	    ctx.sableLiveRefresh = !type || type === "every" || type === "load";
+	  });
+	  document.body.addEventListener("htmx:before:swap", event => {
+	    const {ctx, tasks = []} = event.detail || {};
+	    if (!ctx?.sableLiveRefresh) return;
+	    // Check when the response lands: focus or edits may have changed while
+	    // the request was in flight. Discard it and let the next poll catch up.
+	    if (!ctx.sourceElement.isConnected || tasks.some(task => isLiveRegionInUse(task.target, task.fragment))) {
+	      event.preventDefault();
+	    }
+	  });
+	}
+
+	const blockListRequest = "[data-block-list-add], [data-blocking-update]";
+
+	function installBlockListFeedback() {
+	  document.body.addEventListener("htmx:before:request", (event) => {
+	    const source = event.detail?.ctx?.sourceElement;
+	    if (event.defaultPrevented || !source?.matches?.(blockListRequest)) return;
+	    source.setAttribute("aria-busy", "true");
+	    source.closest("[data-blocking-root]")?.querySelector("[data-block-list-error]")?.remove();
+	  });
+
+	  document.body.addEventListener("htmx:finally:request", (event) => {
+	    const ctx = event.detail?.ctx;
+	    const source = ctx?.sourceElement;
+	    if (!source?.matches?.(blockListRequest)) return;
+	    source.removeAttribute("aria-busy");
+	    // Rendered responses replace the source and already include their own toast.
+	    if (!source.isConnected) return;
+	    if (ctx.response && ctx.response.status < 400 && !ctx.status?.startsWith("error:")) return;
+
+	    const root = source.closest("[data-blocking-root]");
+	    const template = root?.querySelector("[data-block-list-error-toast]");
+	    const region = template?.content.firstElementChild?.cloneNode(true);
+	    if (!region) return;
+	    root.querySelector("[data-block-list-error]")?.remove();
+	    region.setAttribute("data-block-list-error", "");
+	    // Keep the toast above an open modal without moving the form or its fields.
+	    (root.querySelector("dialog[open]") || root).append(region);
+	    setupToast(region.querySelector("[data-toast]"));
+	  });
+	}
+
+	installLiveRefresh();
+	installBlockListFeedback();
+
 	const describeFocus = (element) => element && element !== document.body ? {
 	  id: element.id,
 	  tag: element.tagName,
@@ -2497,6 +2731,7 @@
 	  if (ctx.response.headers.get("X-Sable-Console-Fragment") !== "true") ctx.swap = "none";
 	});
 	document.body.addEventListener("htmx:before:swap", (event) => {
+	  if (event.defaultPrevented) return;
 	  const statsTask = event.detail?.tasks?.find((task) => task.type === "oob" && task.target?.id === "runtime-stats");
 	  if (statsTask) dashboardStatSnapshot = captureDashboardStats(statsTask.target);
 	});

@@ -5,6 +5,10 @@ import "net/http"
 // restartServer performs the controlled restart the console offers after a
 // cluster change or an installed update.
 func (server *Server) restartServer(writer http.ResponseWriter, request *http.Request) {
+	if server.updateStatus().ClusterUpdate {
+		writeJSON(writer, http.StatusConflict, map[string]string{"error": "A rolling update controls this node. Stop the rollout before requesting a separate restart."})
+		return
+	}
 	if server.restart == nil {
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{
 			"error": "managed restart is unavailable; restart Sable with its service manager",

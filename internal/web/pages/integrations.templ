@@ -357,7 +357,7 @@ templ DynamicDNSFactValues(view DynamicDNSAppView) {
 }
 
 templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
-	<div id="dynamic-dns-status" hx-get="/ui/integrations/dynamic-dns/status" hx-trigger={ dynamicDNSStatusPoll(view.Status.Running) } hx-swap="outerHTML">
+	<div id="dynamic-dns-status" data-live-refresh hx-get="/ui/integrations/dynamic-dns/status" hx-trigger={ dynamicDNSStatusPoll(view.Status.Running) } hx-swap="outerHTML">
 		if view.Status.LastError != "" {
 			<div class="unifi-status error">
 				@Icon("alert-triangle")
@@ -713,7 +713,7 @@ templ RemoveUniFiDialog() {
 }
 
 templ UniFiStatusPanel(view UniFiAppView) {
-	<div id="unifi-status" hx-get="/ui/integrations/unifi/status" hx-trigger={ unifiStatusPoll(view.Status.Running) } hx-swap="outerHTML">
+	<div id="unifi-status" data-live-refresh hx-get="/ui/integrations/unifi/status" hx-trigger={ unifiStatusPoll(view.Status.Running) } hx-swap="outerHTML">
 		if view.Status.LastError != "" {
 			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last synchronization failed</strong><span>{ view.Status.LastError }</span></div></div>
 		}

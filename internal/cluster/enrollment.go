@@ -67,16 +67,18 @@ type Member struct {
 }
 
 type JoinConfiguration struct {
-	FormatVersion int       `json:"format_version"`
-	ClusterID     string    `json:"cluster_id"`
-	ClusterDomain string    `json:"cluster_domain"`
-	Generation    uint64    `json:"generation"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	PrimaryID     string    `json:"primary_id"`
-	StatusKey     string    `json:"status_key"`
-	StateDigest   string    `json:"state_digest,omitempty"`
-	StateSnapshot []byte    `json:"state_snapshot,omitempty"`
-	Members       []Member  `json:"members"`
+	FormatVersion  int            `json:"format_version"`
+	ClusterID      string         `json:"cluster_id"`
+	ClusterDomain  string         `json:"cluster_domain"`
+	Generation     uint64         `json:"generation"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	PrimaryID      string         `json:"primary_id"`
+	StatusKey      string         `json:"status_key"`
+	StateDigest    string         `json:"state_digest,omitempty"`
+	StateSnapshot  []byte         `json:"state_snapshot,omitempty"`
+	Members        []Member       `json:"members"`
+	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
+	UpdateProtocol int            `json:"update_protocol,omitempty"`
 }
 
 type storedEnrollmentToken struct {

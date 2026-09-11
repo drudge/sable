@@ -1,0 +1,62 @@
+package pages
+
+templ ReleaseVersion(release string) {
+	if releaseURL(release) != "" {
+		<a class="inline-link" href={ templ.SafeURL(releaseURL(release)) } target="_blank" rel="noopener noreferrer" title="View this release on GitHub">{ formatReleaseVersion(release) }</a>
+	} else {
+		{ release }
+	}
+}
+
+templ UpdateNotification(view UpdateView) {
+	<div
+		id="update-notification"
+		class="toast-region"
+		aria-live="polite"
+		data-live-refresh
+		hx-get="/ui/updates?notification=true"
+		hx-trigger={ ifThen(view.Busy, "sableUpdateChanged from:document, every 2s", "sableUpdateChanged from:document") }
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<div
+			class={ "toast toast-update toast-persistent", "toast-update-" + updateVariant(view) }
+			data-toast
+			data-toast-duration="0"
+			role="status"
+			data-update-version={ view.LatestVersion }
+			{ updateRestartAttributes(view, "")... }
+		>
+			<button id="update-notification-dismiss" class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
+			<div class="toast-update-summary">
+				<span class="toast-update-badge" aria-hidden="true">
+					@Icon(ifThen(updateVariant(view) == "available", "sparkles", updateIcon(view)))
+					if view.Installed && view.CanRestart {
+						@Icon("refresh")
+					}
+				</span>
+				<div class="toast-update-copy">
+					<strong>{ updateHeadline(view) }</strong>
+					<p data-restart-status>
+						if updateVariant(view) == "available" && view.Blocked == "" {
+							Review the release notes for what's changed and anything to know before updating. Install when you're ready.
+						} else {
+							{ updateDetail(view) }
+						}
+					</p>
+				</div>
+			</div>
+			<div class="toast-actions">
+				@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
+				@updatePrimaryAction(view, true)
+			</div>
+		</div>
+		@updateReleaseNotesDialog(view, notificationUpdateNotesDialogID)
+	</div>
+}
+
+templ UpdateCompletedToast(release string) {
+	<template data-update-completed-toast={ formatReleaseVersion(release) }>
+		@Toast("Sable was updated to " + formatReleaseVersion(release) + ".", "success")
+	</template>
+}

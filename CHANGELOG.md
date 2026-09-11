@@ -1,8 +1,8 @@
 # Changelog
 
 This file records the user-visible changes selected for Sable releases. GitHub
-release notes use the matching version section when one is present; the raw
-commit list remains a fallback for development and release-candidate tags.
+release notes require a matching version section, including release candidates.
+Generated commit lists are never published as release notes.
 
 Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
@@ -17,6 +17,54 @@ compatibility are not yet a published contract.
   synchronization. Identity, access policy, and history are retained. Signed zones
   and Sable catalog members are rejected; stale confirmations and late transfers
   cannot overwrite the converted Primary. This feature is not in released 1.1.0.
+## [1.1.0] - Unreleased
+
+### Updates
+
+- The console checks for releases after sign-in by default and shows a dismissible
+  notification with release notes. Turn checks off for this node in Settings → General.
+- About displays notes from the GitHub release, and installed versions on About
+  and Cluster link to their release pages.
+- Notifications let you install this node or update the entire cluster and
+  remember your last choice in this browser. Installation progress and the
+  restart action stay in the notification, with confirmation after an update.
+- Release notes remain available after restarting, including while offline.
+- Cluster can update all nodes to one reviewed release, restarting replicas one
+  at a time and waiting for their running version and synchronization before
+  updating the primary. Progress survives the primary's final restart. Failures,
+  timeouts, or an operator stop prevent further restarts.
+- Rolling updates require support and automatic restart on every node. Older
+  nodes need a manual upgrade first. DNS clients must use multiple nodes to
+  maintain service during a restart.
+- Publishing now requires curated notes for every release, including candidates;
+  merge commits and raw commit lists no longer become user-facing notes.
+
+## [1.0.2] - Unreleased
+
+This patch release keeps live console updates from interrupting keyboard
+navigation and makes block-list downloads easier to follow.
+
+### Console interaction
+
+- Dashboard stat cards and scope controls retain keyboard focus through live
+  updates. Automatically refreshed panels also preserve open controls and
+  unsaved form edits, including backup settings.
+- Routine dashboard refreshes keep the chart at full brightness. Loading
+  feedback appears when changing the chart range or overview scope. Stat cards
+  update in place so their focus and hover highlights do not pulse.
+- Query logs discard in-flight refreshes after pausing live updates or changing
+  filters, so an older response cannot replace the selected view.
+- About shows a seven-character commit SHA on mobile while retaining the full
+  SHA on larger screens and in the tooltip.
+
+### Block-list feedback
+
+- Adding a catalog or custom block list shows a compact loading spinner and
+  prevents duplicate submissions while the download and compilation finish.
+  The dialog stays in place, and mobile Add buttons keep their visible icons.
+- Manual add and update failures show error toasts. Connection interruptions
+  and unrendered HTTP errors now show a dismissible notice, including inside
+  the open Add dialog, without clearing the custom URL.
 
 ## [1.0.1] - Unreleased
 

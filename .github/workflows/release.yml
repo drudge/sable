@@ -118,18 +118,9 @@ jobs:
           set -euo pipefail
 
           notes="${RUNNER_TEMP}/sable-release-notes.md"
-          if awk -v heading="## [${RELEASE_VERSION}]" '
-            index($0, heading) == 1 { found = 1; next }
-            found && /^## \[/ { exit }
-            found { print }
-            END { if (!found) exit 1 }
-          ' CHANGELOG.md > "${notes}" && grep --quiet '[^[:space:]]' "${notes}"; then
-            echo "path=${notes}" >> "${GITHUB_OUTPUT}"
-            echo "Using curated CHANGELOG.md notes for ${RELEASE_VERSION}."
-          else
-            rm -f "${notes}"
-            echo "No curated CHANGELOG.md section for ${RELEASE_VERSION}; keeping generated notes."
-          fi
+          bash scripts/release-notes.sh "${RELEASE_VERSION}" > "${notes}"
+          echo "path=${notes}" >> "${GITHUB_OUTPUT}"
+          echo "Using curated CHANGELOG.md notes for ${RELEASE_VERSION}."
 
       - name: Run pre-release gate
         env:
@@ -170,8 +161,5 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          if [[ -n "${RELEASE_NOTES}" ]]; then
-            gh release edit "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES}" --draft=false
-          else
-            gh release edit "${RELEASE_TAG}" --draft=false
-          fi
+          test -s "${RELEASE_NOTES}"
+          gh release edit "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES}" --draft=false

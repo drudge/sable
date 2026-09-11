@@ -83,6 +83,7 @@ type SettingsPageView struct {
 	SessionTTL          string
 	APITokenTTL         string
 	ConfigWatch         bool
+	UpdatePreferences   SettingsUpdatePreferencesView
 	BlockingUpdateHours int
 	BlockingResponseType string
 	BlockingResponseTTL uint32
@@ -134,8 +135,8 @@ templ SettingsContent(view SettingsPageView) {
 				@SettingsTab(tab, view.ActiveTab, false)
 			}
 		</div>
-		<form class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
-			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
+		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
+		<form id="settings-form" class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="web-service" hidden?={ view.ActiveTab != "web-service" }>@SettingsWebPanel(view)</div>
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="protocols" hidden?={ view.ActiveTab != "protocols" }>@SettingsProtocolsPanel(view)</div>
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="recursion" hidden?={ view.ActiveTab != "recursion" }>@SettingsRecursionPanel(view)</div>
@@ -163,12 +164,32 @@ templ SettingsTab(tab tabOption, active string, disabled bool) {
 templ SettingsGeneralPanel(view SettingsPageView) {
 	<div class="settings-panel-stack">
 		@SettingsCard("server", "Server Identity", "Configure the DNS server's identity and listening endpoints") {
-			<div class="isotope-card-content"><label class="field-control"><span>Local End Points</span><textarea name="dns_listen" rows="3" spellcheck="false" required>{ view.DNSListen }</textarea><small>Network interface addresses and ports to listen on (one per line, format: IP:port).</small></label></div>
+			<div class="isotope-card-content"><label class="field-control"><span>Local End Points</span><textarea name="dns_listen" form="settings-form" rows="3" spellcheck="false" required>{ view.DNSListen }</textarea><small>Network interface addresses and ports to listen on (one per line, format: IP:port).</small></label></div>
 		}
 		@SettingsCard("database", "Storage", "Persistent configuration and DNS data backend") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Database Driver</span><strong>{ view.DatabaseDriver }</strong></div><div class="read-only-field"><span>Data Source</span><strong>{ view.DatabaseDSN }</strong></div></div>
 		}
-		@SettingsSaveButton("general")
+		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
+		@SettingsUpdatePreferences(view.UpdatePreferences)
+	</div>
+}
+
+type SettingsUpdatePreferencesView struct {
+	CheckOnLogin bool
+	CanEdit bool
+	Message string
+	Error string
+}
+
+templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
+	<div id="settings-update-preferences">
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		@SettingsCard("download", "Software Updates", "Preferences are saved automatically for this node") {
+			<form class="isotope-card-content" hx-post="/ui/settings/updates" hx-target="#settings-update-preferences" hx-swap="outerHTML" hx-trigger="change" hx-disabled-elt="find input">
+				<label class="field-control switch-row"><span><strong>Check for updates on sign-in</strong><small>Notify when a new release is available. Updates are installed only when you choose.</small></span><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
+			</form>
+		}
 	</div>
 }
 
@@ -546,12 +567,17 @@ func TSIGAlgorithmLabel(algorithm string) string {
 }
 
 templ SettingsBackupPanel(view SettingsBackupView) {
-	<div class="settings-panel-stack backup-panel" id="backup-panel">
+	<div
+		class="settings-panel-stack backup-panel"
+		id="backup-panel"
+		data-live-refresh
 		if view.Busy() {
-			// Each rendered panel asks for the next poll, so the loop stops on
-			// its own as soon as a render comes back without a running job.
-			<div hx-get="/ui/backup/progress" hx-trigger="load delay:400ms" hx-target="#backup-panel" hx-swap="outerHTML"></div>
+			hx-get="/ui/backup/progress"
+			hx-trigger="every 400ms"
+			hx-target="this"
+			hx-swap="outerHTML"
 		}
+	>
 		if view.OfferRestart {
 			@ToastWithAction(view.Message, "success", ToastAction{
 				Label: "Restart Sable", Icon: "refresh", Post: "/ui/backup/restart",

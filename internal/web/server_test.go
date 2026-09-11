@@ -490,7 +490,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard with remembered day range does not contain %q", expected)
 		}
 	}
-	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerHTML"`, `data-stats-scope="all"`, "All time"} {
+	for _, expected := range []string{`id="runtime-stats"`, `hx-swap-oob="outerMorph"`, `data-stats-scope="all"`, "All time"} {
 		if !strings.Contains(chartResponse.Body.String(), expected) {
 			t.Errorf("day chart response does not contain %q", expected)
 		}

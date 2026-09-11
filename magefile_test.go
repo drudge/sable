@@ -108,3 +108,25 @@ func runMageGit(t *testing.T, directory string, arguments ...string) {
 		t.Fatalf("git %s: %v: %s", strings.Join(arguments, " "), err, output)
 	}
 }
+
+func TestReleaseNotesRequireAnExactNonemptyCuratedSection(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	contents := "# Changelog\n\n## [1.2.0] - Unreleased\n\n- A useful improvement.\n\n## [1.2.0-rc.1]\n\n- Candidate notes.\n\n## [1.3.0]\n\n## [1.4.0]\n\n- Later notes.\n"
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, release := range []string{"1.2.0", "v1.2.0", "1.2.0-rc.1", "1.3.0", "1.2", "2.0.0"} {
+		output, err := exec.Command("bash", "scripts/release-notes.sh", release, path).Output()
+		valid := release == "1.2.0" || release == "v1.2.0" || release == "1.2.0-rc.1"
+		if (err == nil) != valid {
+			t.Errorf("%s notes = %q, %v", release, output, err)
+		}
+		if valid && (strings.Contains(string(output), "Later notes") || strings.Contains(string(output), "## [")) {
+			t.Errorf("notes included another release: %s", output)
+		}
+	}
+	if !strings.Contains(goReleaserConfig, "changelog:\n  disable: true") {
+		t.Fatal("release builds still generate commit lists")
+	}
+}

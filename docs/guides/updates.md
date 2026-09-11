@@ -23,25 +23,69 @@ After replacement, the previous executable is not a permanent rollback archive. 
 
 ## Use the console deliberately
 
-The **About** page can check on both primary and replica nodes. Installing requires `updates.apply` and a deployment that opted into writable service binaries:
+The console checks for releases after sign-in by default on both primary and
+replica nodes. A dismissible notice offers **Release notes** and **Install update**
+without leaving the current page. Results, including failed checks, are cached for six hours per node;
+manual checks remain available. Nothing is installed automatically.
+
+Under **Settings → General → Software Updates**, turn off **Check for updates on sign-in** to disable automatic
+checks on this node, or set `updates.check_on_login = false` in `sable.toml`.
+The choice persists across restarts and is not replicated. Update readers can
+see notifications; changing the preference requires `settings.write`.
+
+The **About** page displays release notes and links the installed version to its
+GitHub release. Release notes from a successful check or installation survive
+restarts and remain readable while offline. It can check on both primary and replica nodes. Installing requires `updates.apply` and a deployment that opted into writable service binaries:
 
 ```sh
 sudo sable install --enable-web-updates
 ```
 
-For Docker, opt in with `SABLE_WEB_UPDATES=true` and retain a restart policy. Otherwise update by pulling and recreating the immutable container image with the same volume.
+For Docker, opt in with `SABLE_WEB_UPDATES=true` and retain a restart policy.
+For rolling restarts, also set `updates.restart_managed = true` in each node’s
+configuration after verifying its supervisor restarts Sable when it exits.
+Installed systemd services are detected automatically. Changes to this supervisor
+setting take effect when Sable next starts. Otherwise update by pulling and recreating the immutable container image with the same volume.
 
 The console installs first and then offers a controlled restart. The old process keeps serving until that restart. The **Include pre-releases** preference is saved per node, including on replicas; changing one node's channel does not change the whole cluster.
 
 ## Roll through a cluster
 
-1. Back up the primary and choose one exact target version.
-2. Update a replica.
-3. Verify its DNS transports, console, and synchronization generation.
-4. Update the primary to the same target.
-5. Verify both versions and query each node independently.
+From the primary, open **Cluster → Rolling Updates**, review **Release notes**,
+and choose **Update all**. The update notification also offers **Entire cluster**
+in its scope dropdown when every node supports rolling updates. The dropdown
+remembers the last selection per user in this browser; its main button becomes
+**Update cluster** or **Install update** accordingly. This requires both `updates.apply` and
+`cluster.write`. The rollout pins that exact release across every node, even if
+a newer release is published during the operation.
 
-Keep mixed-version windows short. Avoid combining an update with promotion unless the recovery plan requires it. See [rolling updates](../clustering.md#rolling-updates).
+All nodes must be online, fully synchronized, running a published build with
+rolling update support, and configured for writable binaries and automatic
+restart. An older node without this protocol continues synchronizing normally,
+but must be upgraded manually before it can join an automated rollout. Downgrades
+are rejected; nodes already at the target version are skipped.
+
+The primary reserves the update mechanism on every node, updates each replica
+in order, and waits until it reports the target running version and current
+configuration generation. It restarts only when every other node is online and
+synchronized. The primary updates last, briefly interrupting its console, then
+verifies the cluster after its restart. The Cluster page keeps progress visible
+through restarts and marks the version badge with a green check when finished.
+
+Progress is saved to the node's cluster data directory. A failure or timeout
+stops further restarts; **Stop rollout** also prevents further nodes from
+restarting. An installation or restart already authorized may finish. If the
+coordinator restarts unexpectedly, the rollout stops for operator review. Review
+partially updated nodes before starting another rollout; an installed binary
+may need a manual restart first. When a primary disappears or changes, a replica
+never restarts from stale instructions; abandoned reservations expire after
+20 minutes without commands.
+
+Configure clients or your load balancer with multiple DNS servers. Rolling
+updates keep other nodes serving, but a client pinned to one restarting node
+can still experience an interruption. Keep mixed-version windows short and
+avoid changing cluster membership during a rollout. See
+[rolling updates](../clustering.md#rolling-updates).
 
 ## Verify or recover
 

@@ -53,7 +53,7 @@ func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *htt
 		}
 		return
 	}
-	if err := pages.ClusterLiveStatus(view).Render(request.Context(), writer); err != nil {
+	if err := pages.ClusterLiveStatusUpdate(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render live cluster status", "error", err)
 	}
 }
@@ -630,7 +630,7 @@ func (server *Server) renderClusterUIFailure(writer http.ResponseWriter, request
 }
 
 func (server *Server) clusterView(request *http.Request, message, errorMessage string) pages.ClusterPageView {
-	view := pages.ClusterPageView{Console: server.consoleView(request), Message: message, Error: errorMessage, OnboardingMode: clusterWorkflow(request), OnboardingStep: 1}
+	view := pages.ClusterPageView{Update: server.clusterUpdateView(request), Console: server.consoleView(request), Message: message, Error: errorMessage, OnboardingMode: clusterWorkflow(request), OnboardingStep: 1}
 	if request != nil {
 		switch request.URL.Query().Get("configure") {
 		case "node":

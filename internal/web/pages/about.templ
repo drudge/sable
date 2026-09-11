@@ -2,6 +2,8 @@ package pages
 
 import "strings"
 
+const shortCommitLength = 7
+
 type AboutPageView struct {
 	Console      DashboardView
 	Commit       string
@@ -19,6 +21,8 @@ type UpdateView struct {
 	Development    bool
 	LatestVersion  string
 	ReleaseURL     string
+	ReleaseNotes string
+	CheckOnLogin bool
 	Progress       string
 	Error          string
 	// Blocked explains why this installation cannot replace its own
@@ -48,6 +52,7 @@ type UpdateView struct {
 	ServiceManaged bool
 	CanCheck       bool
 	CanApply       bool
+	CanUpdateCluster bool
 	CanRestart     bool
 }
 
@@ -57,6 +62,7 @@ templ AboutPage(view AboutPageView) {
 
 templ AboutContent(view AboutPageView) {
 	{{ buildDate, buildTime := formatBuildDateTime(view.BuiltAt, view.Console.TimeDisplay) }}
+	{{ commitPrefixLength := min(len(view.Commit), shortCommitLength) }}
 	<div class="about-page page-stack">
 		<header class="about-hero">
 			<img class="about-mascot" src={ assetURL("sable-headshot.png") } alt="Sable, the Sable DNS mascot" width="512" height="499"/>
@@ -78,11 +84,11 @@ templ AboutContent(view AboutPageView) {
 				<div class="about-version-row">
 					<div class="about-version-copy">
 						<span>Installed version</span>
-						<strong>{ formatReleaseVersion(view.Console.Version) }</strong>
+						<strong>@ReleaseVersion(view.Console.Version)</strong>
 					</div>
 					<dl class="about-build-meta">
 						<div><dt>Go</dt><dd>{ strings.TrimPrefix(view.GoVersion, "go") }</dd></div>
-						<div><dt>Commit</dt><dd><code>{ view.Commit }</code></dd></div>
+						<div><dt>Commit</dt><dd><code class="about-commit" title={ view.Commit }>{ view.Commit[:commitPrefixLength] }<span class="about-commit-suffix">{ view.Commit[commitPrefixLength:] }</span></code></dd></div>
 						<div>
 							<dt>Built</dt>
 							<dd class="about-build-timestamp" title={ view.BuiltAt }>
@@ -138,23 +144,13 @@ templ AboutContent(view AboutPageView) {
 templ UpdatePanel(view UpdateView) {
 	<div
 		id="about-update"
+		data-live-refresh
 		class={ "about-update", "about-update-" + updateVariant(view) }
-		if view.Busy {
-			hx-get="/ui/updates"
-			hx-trigger="every 2s"
-			hx-target="this"
-			hx-swap="outerHTML"
-		}
-		if view.Installed && view.CanRestart {
-			data-sable-restart
-			data-restart-url="/ui/updates/restart"
-			data-health-url="/api/v1/health"
-			data-continue-url="/about"
-			data-csrf-token={ view.CSRFToken }
-			data-restart-confirm={ updateRestartConfirmation(view) }
-			data-restart-confirm-title="Restart Sable?"
-			data-restart-confirm-action="Restart Sable"
-		}
+		hx-get="/ui/updates"
+		hx-trigger={ ifThen(view.Busy, "sableUpdateChanged from:document, every 2s", "sableUpdateChanged from:document") }
+		hx-target="this"
+		hx-swap="outerHTML"
+		{ updateRestartAttributes(view, "/about")... }
 	>
 		<div class="about-update-summary">
 			<span class="about-update-icon" aria-hidden="true">
@@ -173,22 +169,12 @@ templ UpdatePanel(view UpdateView) {
 						<br/>
 						Rebuild from source to update Sable.
 					}
-					if view.Available && !view.Installed && view.ReleaseURL != "" {
-						<a class="inline-link about-update-notes" href={ templ.SafeURL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
-					}
 				</small>
 			</div>
 		</div>
 		<div class="about-update-actions">
-			switch updateAction(view) {
-				case "restart":
-					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
-				case "install":
-					<form hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disable="#about-update button, #about-update input" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
-						<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
-						<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
-					</form>
-			}
+			@updateReleaseNotesButton(view, aboutUpdateNotesDialogID)
+			@updatePrimaryAction(view, false)
 			if view.Supported && !view.Development && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
 				<form
 					data-update-check
@@ -196,7 +182,7 @@ templ UpdatePanel(view UpdateView) {
 					hx-target="#about-update"
 					hx-swap="outerHTML"
 					hx-disable="#about-update button, #about-update input"
-					if !view.Checked {
+					if !view.Checked && view.CheckOnLogin {
 						hx-trigger="submit, change, load"
 					} else {
 						hx-trigger="submit, change"
@@ -215,6 +201,7 @@ templ UpdatePanel(view UpdateView) {
 				</form>
 			}
 		</div>
+		@updateReleaseNotesDialog(view, aboutUpdateNotesDialogID)
 	</div>
 }
 
@@ -317,7 +304,7 @@ func updateDetail(view UpdateView) string {
 	case view.Available && view.Blocked != "":
 		return view.Blocked
 	case view.Available:
-		return "Verified against the published checksums before it replaces the executable."
+		return "Ready to install on this node."
 	case view.UpToDate:
 		return "Checked " + view.CheckedAt + ifThen(view.IncludePreRelease, ", including pre-releases.", ".")
 	default:

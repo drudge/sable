@@ -7,6 +7,7 @@ import (
 )
 
 type ClusterPageView struct {
+	Update ClusterUpdateView
 	Console DashboardView
 	Initialized bool
 	NetworkReady bool
@@ -132,6 +133,9 @@ templ ClusterContent(view ClusterPageView) {
 				if !view.NetworkReady {
 					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
 				}
+				if view.Initialized {
+					@ClusterUpdatePanel(view.Update, false)
+				}
 				<section class="card cluster-details">
 					<header>
 						<h2>Local Node</h2>
@@ -171,8 +175,13 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 	</dialog>
 }
 
+templ ClusterLiveStatusUpdate(view ClusterPageView) {
+	@ClusterLiveStatus(view)
+	@ClusterUpdatePanel(view.Update, true)
+}
+
 templ ClusterLiveStatus(view ClusterPageView) {
-	<div class="cluster-live-status" id="cluster-live-status" hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
+	<div class="cluster-live-status" id="cluster-live-status" data-live-refresh hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
 		<section class="card cluster-status-card emphasized">
 			<header>
 				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>
@@ -220,7 +229,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 								}
 							</div>
 							<div class="cluster-node-meta">
-								<span>{ node.Role }</span><strong>{ node.Version }</strong><small>{ nodeUptimeLabel(node) }</small>
+								<span>{ node.Role }</span><strong>@ReleaseVersion(node.Version)</strong><small>{ nodeUptimeLabel(node) }</small>
 							</div>
 						</div>
 						<div class="cluster-sync-progress">

@@ -3,10 +3,10 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
@@ -25,9 +25,68 @@ func (server *Server) SetUpdateController(controller updateController) {
 	server.updates = controller
 }
 
+func (server *Server) automaticUpdateCheck(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	checker, ok := server.updates.(interface {
+		CheckAutomatically(context.Context, bool) (update.Status, error)
+	})
+	if !ok || !server.config.Current().Config.Updates.CheckOnLogin || server.updates.Status().Development {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	status, err := checker.CheckAutomatically(request.Context(), server.config.Current().Config.Updates.PreRelease)
+	if status.Phase == update.PhaseChecking {
+		writer.Header().Set("Retry-After", "2")
+		writer.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if err != nil || status.Busy() || status.Error != "" || !status.Available || status.Installed || status.ClusterUpdate {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_ = pages.UpdateNotification(server.updateView(request, status)).Render(request.Context(), writer)
+}
+
+func (server *Server) updatePreferences(writer http.ResponseWriter, request *http.Request) {
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		http.Error(writer, "Invalid preferences", http.StatusBadRequest)
+		return
+	}
+	editor, ok := server.config.(settingsEditor)
+	if !ok {
+		http.Error(writer, "Preferences cannot be saved", http.StatusNotImplemented)
+		return
+	}
+	err := editor.Update(request.Context(), func(candidate *config.Config) error {
+		candidate.Updates.CheckOnLogin = request.FormValue("check_on_login") == "true"
+		return nil
+	})
+	if err != nil {
+		view := server.settingsUpdatePreferencesView(request)
+		view.Error = err.Error()
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
+		return
+	}
+	server.recordControlPlaneAudit(request, "update.preferences", "changed automatic update checks")
+	view := server.settingsUpdatePreferencesView(request)
+	view.Message = "Update preferences saved."
+	_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
+}
+
+func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages.SettingsUpdatePreferencesView {
+	canEdit := !server.securityEnabled
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
+		canEdit = auth.HasPermission(principal, auth.PermissionSettingsWrite)
+	}
+	return pages.SettingsUpdatePreferencesView{CheckOnLogin: server.config.Current().Config.Updates.CheckOnLogin, CanEdit: canEdit}
+}
+
 // updatePanel renders the current update state. The panel polls this endpoint
 // while a check or an installation is running.
 func (server *Server) updatePanel(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
 }
 
@@ -45,7 +104,7 @@ func (server *Server) checkForUpdates(writer http.ResponseWriter, request *http.
 }
 
 // checkForUpdatesCommand runs the same release lookup as the About page, but
-// reports the result as a global toast so a palette action works from any page.
+// reports the result globally so a palette action works from any page.
 // It uses the configured release channel without changing that preference.
 func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request *http.Request) {
 	if server.updates == nil {
@@ -55,7 +114,7 @@ func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request
 	}
 	includePreRelease := server.config.Current().Config.Updates.PreRelease
 	status, err := server.resolveUpdateCheck(request, includePreRelease)
-	server.renderUpdateCheckToast(writer, request, status, err)
+	server.renderUpdateCheckResult(writer, request, status, err)
 }
 
 func (server *Server) resolveUpdateCheck(request *http.Request, includePreRelease bool) (update.Status, error) {
@@ -67,7 +126,7 @@ func (server *Server) resolveUpdateCheck(request *http.Request, includePreReleas
 	return status, err
 }
 
-func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request *http.Request, status update.Status, checkErr error) {
+func (server *Server) renderUpdateCheckResult(writer http.ResponseWriter, request *http.Request, status update.Status, checkErr error) {
 	view := server.updateView(request, status)
 	message, variant, responseStatus := "Update check completed.", "success", http.StatusOK
 	switch {
@@ -80,7 +139,8 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 	case view.Busy || errors.Is(checkErr, update.ErrUpdateInProgress):
 		message = "An update check is already in progress."
 	case view.Available:
-		message = fmt.Sprintf("Sable v%s is available. Open About to review and install it.", view.LatestVersion)
+		_ = pages.UpdateNotification(view).Render(request.Context(), writer)
+		return
 	case view.UpToDate:
 		message = "Sable is up to date."
 	}
@@ -91,17 +151,18 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 // installUpdate replaces the installed executable with the newest release.
 // Sable keeps serving the running build until it is restarted.
 func (server *Server) installUpdate(writer http.ResponseWriter, request *http.Request) {
+	includePreRelease := updatePreReleaseRequested(writer, request)
 	if server.updates == nil {
 		server.renderUpdatePanel(writer, request, update.Status{}, "Updates are unavailable on this server.")
 		return
 	}
-	includePreRelease := updatePreReleaseRequested(writer, request)
 	if err := server.updates.Install(includePreRelease); err != nil {
 		server.renderUpdatePanel(writer, request, server.updateStatus(), err.Error())
 		return
 	}
 	server.logger.Warn("Sable update requested from the console", "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, "update.install", "started installing a newer Sable release")
+	writer.Header().Set("HX-Trigger", "sableUpdateChanged")
 	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
 }
 
@@ -158,7 +219,11 @@ func (server *Server) renderUpdatePanel(
 	if errorMessage != "" {
 		view.Error = errorMessage
 	}
-	if err := pages.UpdatePanel(view).Render(request.Context(), writer); err != nil {
+	component := pages.UpdatePanel(view)
+	if request.FormValue("notification") == "true" {
+		component = pages.UpdateNotification(view)
+	}
+	if err := component.Render(request.Context(), writer); err != nil {
 		server.logger.Error("render update panel", "error", err)
 	}
 }
@@ -179,6 +244,8 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		PreRelease:        status.PreRelease,
 		Progress:          status.Progress,
 		ReleaseURL:        status.ReleaseURL,
+		ReleaseNotes:      status.ReleaseNotes,
+		CheckOnLogin:      server.config.Current().Config.Updates.CheckOnLogin,
 		Supported:         server.updates != nil,
 		UpToDate:          status.UpToDate(),
 	}
@@ -196,6 +263,14 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		view.CanCheck = auth.HasPermission(principal, auth.PermissionUpdatesRead)
 		view.CanApply = auth.HasPermission(principal, auth.PermissionUpdatesApply)
 		view.CSRFToken = principal.CSRFToken
+	}
+	if status.ClusterUpdate {
+		view.CanApply = false
+		view.Blocked = "A rolling update controls this node. Follow its progress on Cluster."
+	}
+	if controller, ok := server.cluster.(clusterUpdateController); ok && view.CanApply && server.canManageClusterUpdate(request) {
+		view.CanUpdateCluster = status.Checked() && !status.Busy() && !status.Installed && !status.ClusterUpdate && status.Error == "" &&
+			server.cluster.Snapshot().LocalRole == cluster.RolePrimary && controller.RollingUpdatesSupported() && !controller.RolloutStatus().Active()
 	}
 	view.CanRestart = view.CanApply && server.restart != nil
 	return view

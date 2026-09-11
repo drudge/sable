@@ -86,8 +86,10 @@ runs `mage releaseGate`, creates and pushes an annotated tag, authenticates to
 GitHub Container Registry, and asks GoReleaser to create a replaceable draft.
 Only after every archive, checksum, and container image is published does it
 apply the matching curated changelog section and make the GitHub release
-visible. If a development or release-candidate version has no exact changelog
-section, GoReleaser's generated commit list remains in place. The job has
+visible. Every release, including a release candidate, requires a nonempty exact
+version section. Missing notes stop the workflow before it creates a tag or
+publishes artifacts. Write user-visible changes rather than merge messages,
+commit hashes, or internal housekeeping; automatic commit lists are disabled. The job has
 repository write permissions only for that gated run, and it never pushes a
 branch.
 
