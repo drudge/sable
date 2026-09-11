@@ -979,7 +979,7 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	if handler.serveZoneTransfer(writer, request, runtime, client.ip) {
 		return
 	}
-	if len(request.Question) == 1 && handler.zoneExpired(request.Question[0].Name) {
+	if len(request.Question) == 1 && handler.zoneExpired(runtime, request.Question[0].Name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
 		latencyResponseCode = result.response.Rcode
 		handler.logResolutionFailure(request, client.ip, "authoritative zone expired")
@@ -1016,7 +1016,7 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 	// serveNotify already do, so TSIG stays the authenticator it is meant to be.
 	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(clientIP) ||
 		writer.LocalAddr() == nil || !strings.HasPrefix(writer.LocalAddr().Network(), "tcp") ||
-		handler.zoneExpired(question.Name) {
+		handler.zoneExpired(runtime, question.Name) {
 		_ = writer.WriteMsg(errorResponse(request, dns.RcodeRefused))
 		handler.refused.Add(1)
 		return true

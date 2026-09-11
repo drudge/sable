@@ -286,15 +286,21 @@ func notifySourceAllowed(source string, primaries []string, timeout time.Duratio
 	return false
 }
 
-func (handler *Handler) zoneExpired(name string) bool {
+func (handler *Handler) zoneExpired(runtime *Runtime, name string) bool {
 	expired := handler.expiredZones.Load()
 	if len(*expired) == 0 {
 		return false
 	}
 	name = normalizeName(name)
 	for current := name; current != ""; {
-		if _, found := (*expired)[current]; found {
-			return true
+		// Consult the same runtime snapshot used to answer this query. A late
+		// refresh failure must never expire a newly activated Primary.
+		if _, managed := runtime.managedZones[current]; managed {
+			_, found := (*expired)[current]
+			return found
+		}
+		if _, authoritative := runtime.zones[current]; authoritative {
+			return false
 		}
 		separator := strings.IndexByte(current, '.')
 		if separator < 0 {

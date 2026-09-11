@@ -72,3 +72,92 @@ different one. `mage demo` needs no browser at all.
 hosts, the blocked and allowed domains, the domains in the sampled traffic, and
 the cluster's node names. `capture.go` holds the list of pages photographed and
 the window size each one uses.
+
+## Technitium migration lab
+
+The migration lab shares the node and console helpers but builds a separate,
+small fixture. It runs a real `technitium/dns-server:15.4.0` container and three
+Sable processes built from the current checkout. It requires a running Docker
+daemon and Go; it does not require a browser or dnsperf.
+
+```sh
+mage migrationDemo  # stage the zones and leave both products running
+mage migrationTest  # run automated cutovers and failure checks, then stop
+```
+
+If Mage is not installed globally, use `go tool mage migrationDemo` or
+`go tool mage migrationTest`. To use an already-built binary or explicitly test
+another Technitium version:
+
+```sh
+go build -o bin/sable-migration-lab ./scripts/demo
+bin/sable-migration-lab -migration -keep -binary bin/sable \
+  -technitium-image technitium/dns-server:15.4.0
+```
+
+Each run creates a fresh `_work/migration-*` directory, uniquely named container,
+and automatically assigned loopback ports. Console URLs, DNS endpoints, fixture
+credentials, and a manual walkthrough are printed and saved in that directory.
+The image ID is recorded in `source-image.txt`. The benchmark and ordinary demo
+are untouched. No production settings or client DNS addresses are changed.
+
+### Fixtures
+
+| Source fixture | Sable staging | Conversion expectation |
+| --- | --- | --- |
+| `standalone.migration.test` | Individual unsigned Secondary | Allowed |
+| `member.migration.test`, in `catalog.migration.test` | Individual unsigned Secondary | Allowed; source catalog stays intact |
+| `signed.migration.test`, in that same source catalog | Individual signed Secondary | Rejected; no private keys are transferred |
+| `managed.migration.test`, in `subscribed-catalog.migration.test` | Member provisioned by Sable's Secondary Catalog subscription | Rejected; detachment is separate work |
+
+Both products use a shared, disposable `migration-transfer` TSIG key. The
+catalog members inherit the source catalog's transfer authentication. Sable
+subscribes only to the second catalog: the default migration path deliberately
+leaves the first catalog behind. These are real Technitium Catalog zones; this
+fixture does not simulate a full Technitium cluster or migrate signing keys.
+
+### Automated checks and evidence
+
+The test changes source records and performs real authenticated transfers. It
+then verifies stale-confirmation rejection, failed final transfer with unchanged
+Secondary state, signed/member rejection, and primary-only cluster writes.
+During each successful conversion it repeatedly checks authoritative UDP and TCP
+answers on all three Sable nodes, recording samples in `dns-probes.tsv`.
+
+Final synchronization must include un-resynced additions, replacements, and
+deletions. Conversion must preserve zone identity and access policy, clear source
+settings, permit new Sable records, and reject a subsequent resync from
+Technitium. The test leaves the source catalog membership intact, stops Technitium,
+and restarts all Sable nodes. It checks persisted pre-conversion history, scoped
+zone grants, one successful conversion audit event per zone, and DNS answers.
+These sampled continuity checks complement the deterministic in-flight transfer
+and expiry regression tests; they cannot prove the absence of every brief gap.
+
+The final result is saved in `result.txt`; source and Sable logs remain alongside
+it. Ctrl-C in demo mode, or completion/failure in test mode, stops the owned Sable
+processes and removes the owned Technitium container and its anonymous volume.
+The run directory is retained for debugging. Remove that specific directory when
+finished. If the runner is forcibly killed, the container name is `sable-` plus
+the run directory's basename, and its `sable.fixture=migration` label identifies it.
+
+Technitium API setup follows the [pinned 15.4.0 API contract](https://github.com/TechnitiumSoftware/DnsServer/blob/v15.4.0/APIDOCS.md).
+
+### Bulk staging from a catalog
+
+The migration lab now stages `member.migration.test` and `signed.migration.test`
+through **Import from Catalog**, exercising real catalog discovery and bulk
+transfers. They remain independent Secondaries; `managed.migration.test` still
+exercises the subscribed-catalog restriction.
+
+To try the dialog wizard, open **Zones → Import from Catalog**, use
+`catalog.migration.test`, the source DNS address printed by the lab, TCP, and
+`migration-transfer`. Discover zones, select available members, and import.
+Already staged zones are disabled and left unchanged. To repeat staging in a
+fresh lab before conversion, delete only the demo's individual member and signed
+Secondaries in Sable first; leave the Technitium source zones intact.
+
+The wizard supports up to 25 selected zones per batch and reports each result.
+Secondary is the default. Choose Primary and confirm **Source writes are paused**
+to import eligible zones directly as writable Primaries. Signed zones can
+synchronize as Secondaries but are blocked from Primary import. Each failed
+Primary import leaves no new zone. Bulk conversion of existing zones is not included.

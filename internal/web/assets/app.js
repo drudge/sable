@@ -4124,3 +4124,10 @@
 	});
   });
 })();
+
+document.addEventListener("click", (event) => {
+ const select = event.target.closest("[data-catalog-select]");
+ if (!select) return;
+ const members = select.form.querySelectorAll('input[name="member"]:not(:disabled)');
+ members.forEach((member, index) => { member.checked = index < 25; });
+});

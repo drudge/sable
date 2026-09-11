@@ -8,6 +8,16 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## Unreleased — next release after 1.1.0
+
+- Added one-time catalog discovery and bulk import of independent Secondary or Primary zones, with source-write freeze confirmation for Primary imports, per-zone transfer results, and existing-zone protection.
+
+- Independent unsigned Secondary zones can be converted to Primary in place from
+  the console or API, with reviewed source/serial/record count and optional final
+  synchronization. Identity, access policy, and history are retained. Signed zones
+  and Sable catalog members are rejected; stale confirmations and late transfers
+  cannot overwrite the converted Primary. This feature is not in released 1.1.0.
+
 ## [1.0.1] - Unreleased
 
 This patch release fixes block-list setup, improves the mobile console, and

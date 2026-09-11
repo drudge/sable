@@ -122,6 +122,13 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CanManagePermissions: console.CanAdministration,
 		}
 		zoneView.Revision = zone.Revision
+		if zone.Type == "secondary" {
+			zoneView.ConversionFingerprint = zonemodel.ConversionFingerprint(zone)
+			zoneView.ConversionSerial = conversionSerial(zone)
+			if err := zonemodel.CheckPrimaryConversion(zone); err != nil {
+				zoneView.ConversionError = err.Error()
+			}
+		}
 		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeDisplay)
 		for _, record := range zone.Records {
 			expiryTTL := uint32(0)
@@ -400,6 +407,17 @@ func (server *Server) authorizeZoneMutation(request *http.Request) error {
 		"/ui/zones/records/delete":    auth.PermissionZonesRecords,
 		"/ui/zones/rollback":          auth.PermissionZonesRecords,
 	}[request.URL.Path]
+	if request.URL.Path == "/ui/zones/convert-primary" || request.URL.Path == "/api/v1/zones/convert-primary" {
+		if request.FormValue("final_sync") == "true" {
+			if err := server.authorizeExistingZone(principal, auth.PermissionZonesTransfer, request.FormValue("zone")); err != nil {
+				return err
+			}
+		}
+		if err := server.authorizeExistingZone(principal, auth.PermissionZonesRecords, request.FormValue("zone")); err != nil {
+			return err
+		}
+		return server.authorizeExistingZone(principal, auth.PermissionZonesSettings, request.FormValue("zone"))
+	}
 	if request.URL.Path == "/ui/zones/rollback" {
 		if err := server.authorizeExistingZone(principal, auth.PermissionZonesRecords, request.FormValue("zone")); err != nil {
 			return err
@@ -447,22 +465,27 @@ func (server *Server) logZoneOperation(request *http.Request, zoneName string, o
 }
 
 func zoneMutationAction(path string) string {
+	if path == "/ui/zones/import-catalog" {
+		return "zone.catalog_import"
+	}
 	actions := map[string]string{
-		"/ui/zones/add":               "zone.create",
-		"/ui/zones/delete":            "zone.delete",
-		"/ui/zones/settings":          "zone.settings",
-		"/ui/zones/toggle":            "zone.toggle",
-		"/ui/zones/clone":             "zone.clone",
-		"/ui/zones/resync":            "zone.resync",
-		"/ui/zones/import":            "zone.import",
-		"/ui/zones/import-new":        "zone.import_new",
-		"/ui/zones/records/add":       "zone.record.create",
-		"/ui/zones/records/update":    "zone.record.update",
-		"/ui/zones/records/delete":    "zone.record.delete",
-		"/ui/zones/dnssec":            "zone.dnssec.settings",
-		"/ui/zones/dnssec/rollover":   "zone.dnssec.rollover",
-		"/ui/zones/dnssec/confirm-ds": "zone.dnssec.confirm_ds",
-		"/ui/zones/rollback":          "zone.rollback",
+		"/ui/zones/convert-primary":     "zone.convert_primary",
+		"/api/v1/zones/convert-primary": "zone.convert_primary",
+		"/ui/zones/add":                 "zone.create",
+		"/ui/zones/delete":              "zone.delete",
+		"/ui/zones/settings":            "zone.settings",
+		"/ui/zones/toggle":              "zone.toggle",
+		"/ui/zones/clone":               "zone.clone",
+		"/ui/zones/resync":              "zone.resync",
+		"/ui/zones/import":              "zone.import",
+		"/ui/zones/import-new":          "zone.import_new",
+		"/ui/zones/records/add":         "zone.record.create",
+		"/ui/zones/records/update":      "zone.record.update",
+		"/ui/zones/records/delete":      "zone.record.delete",
+		"/ui/zones/dnssec":              "zone.dnssec.settings",
+		"/ui/zones/dnssec/rollover":     "zone.dnssec.rollover",
+		"/ui/zones/dnssec/confirm-ds":   "zone.dnssec.confirm_ds",
+		"/ui/zones/rollback":            "zone.rollback",
 	}
 	if action := actions[path]; action != "" {
 		return action
@@ -516,6 +539,14 @@ func (server *Server) renderZoneMutation(
 	status int,
 	selected, message, errorMessage string,
 ) {
+	if request.URL.Path == "/api/v1/zones/convert-primary" {
+		if errorMessage != "" {
+			writeJSON(writer, status, map[string]string{"error": errorMessage})
+		} else {
+			writeJSON(writer, status, map[string]any{"message": message, "zone": findZone(server.zones.Current().Zones, selected)})
+		}
+		return
+	}
 	if request.Header.Get("HX-Request") == "true" {
 		pushURL := "/zones"
 		if selected != "" {

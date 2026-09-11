@@ -138,3 +138,18 @@ func renderComponent(t *testing.T, component interface {
 	}
 	return builder.String()
 }
+
+func TestPrimaryConversionDialogReviewsSnapshotAndBlocksUnsupportedZones(t *testing.T) {
+	zone := ZoneView{Name: "secondary.test", Type: "secondary", CanSettings: true, CanRecords: true, CanTransfer: true, PrimaryServers: []string{"192.0.2.53:53"}, ConversionSerial: 42, ConversionFingerprint: "review-token", Records: []ZoneRecordView{{}, {}}}
+	dialog := renderComponent(t, ConvertPrimaryDialog(zone, "convert-dialog"))
+	for _, expected := range []string{"192.0.2.53:53", "42", `<span class="integration-fact-label">Records</span><span class="integration-fact-value">2</span>`, `name="confirmation" value="review-token"`, `name="freeze_confirmed"`, `value="true" selected`, "Use the stored snapshot", "stale or expired", `data-replica-primary-action`} {
+		if !strings.Contains(dialog, expected) {
+			t.Fatalf("dialog missing %q: %s", expected, dialog)
+		}
+	}
+	zone.ConversionError = "Signed zones need a DNSSEC transition"
+	dialog = renderComponent(t, ConvertPrimaryDialog(zone, "convert-dialog"))
+	if !strings.Contains(dialog, zone.ConversionError) || strings.Contains(dialog, `name="freeze_confirmed"`) || strings.Contains(dialog, `type="submit"`) || !strings.Contains(dialog, ">Close</button>") || strings.Contains(dialog, ">Cancel</button>") {
+		t.Fatal("unsupported conversion is actionable")
+	}
+}

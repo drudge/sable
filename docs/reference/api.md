@@ -1,6 +1,6 @@
 # HTTP API
 
-Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, and DNSSEC status; it does not provide general JSON zone or record CRUD.
+Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, DNSSEC status, and (in development builds after 1.1.0) Secondary-to-Primary conversion; it does not provide general JSON zone or record CRUD.
 
 ## Authentication and permissions
 
@@ -45,6 +45,8 @@ curl --fail-with-body --get \
 ```
 
 Zone and DS export require the relevant zone-export grant. DNSSEC status requires zone-read access. A missing zone or a zone not managed by Sable's signer returns `404` where applicable. A DS download is data for your parent-zone operator or registrar; downloading it does not publish it. Follow the [DNSSEC guide](../guides/dnssec.md).
+
+**Unreleased, next release after 1.1.0:** `GET /api/v1/zones/convert-primary?zone=example.com` reviews an independent unsigned Secondary. POST form fields to `/api/v1/zones/convert-primary` to confirm conversion, optionally synchronizing first. See the [conversion API contract](zones/secondary.md#api) for the confirmation token, required permissions, and failure behavior. These endpoints are not available in released 1.1.0.
 
 To automate record changes, use the supported [RFC 2136 dynamic-update workflow](../guides/dynamic-updates.md) for an eligible Primary zone. Do not build an integration by treating session-based `/ui/` form handlers as undocumented JSON API endpoints.
 

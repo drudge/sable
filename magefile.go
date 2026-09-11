@@ -761,3 +761,33 @@ func buildCommit() string {
 	}
 	return strings.TrimSpace(string(output))
 }
+
+// MigrationDemo starts a disposable Technitium source and Sable cluster for manual conversion.
+func MigrationDemo(ctx context.Context) error { return runMigrationTarget(ctx, true) }
+
+// MigrationTest exercises real Technitium transfers, conversion, failure cases and restart.
+func MigrationTest(ctx context.Context) error { return runMigrationTarget(ctx, false) }
+
+func runMigrationTarget(ctx context.Context, keep bool) error {
+	if err := Build(ctx); err != nil {
+		return err
+	}
+	runner := filepath.Join("bin", "sable-migration-lab")
+	if err := run(ctx, nil, "go", "build", "-o", runner, "./scripts/demo"); err != nil {
+		return err
+	}
+	arguments := []string{"-migration"}
+	if keep {
+		arguments = append(arguments, "-keep")
+	}
+	command := exec.CommandContext(ctx, runner, arguments...)
+	command.Stdin, command.Stdout, command.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// A killed go-run launcher cannot execute the fixture's deferred cleanup.
+	// Signal the compiled runner itself and give it time to remove its container.
+	command.Cancel = func() error { return command.Process.Signal(os.Interrupt) }
+	command.WaitDelay = 30 * time.Second
+	if err := command.Run(); err != nil && ctx.Err() == nil {
+		return err
+	}
+	return nil
+}

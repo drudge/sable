@@ -105,7 +105,7 @@ func (n *node) ClusterURL() string { return "https://" + n.Ports.https }
 // Start launches the node and waits for its console to answer.
 func (n *node) Start(ctx context.Context, binary string) error {
 	logPath := filepath.Join(n.Directory, "sable.log")
-	logFile, err := os.Create(logPath)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s log: %w", n.Name, err)
 	}

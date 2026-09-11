@@ -11,6 +11,7 @@ import (
 )
 
 type ZonesPageView struct {
+ CatalogImport *CatalogImportView
 	Console  DashboardView
 	Zones    []ZoneView
 	Selected string
@@ -26,6 +27,9 @@ type ZonesPageView struct {
 }
 
 type ZoneView struct {
+ ConversionFingerprint string
+ ConversionSerial uint32
+ ConversionError string
 	ID           string
 	Name         string
 	Type         string
@@ -553,6 +557,9 @@ templ ZonesContent(view ZonesPageView) {
 		if view.CanCreate {
 			@CreateZoneDialog(view.AliasSources, view.TSIGKeys)
 			@ImportNewZoneDialog()
+ if view.CatalogImport != nil {
+ @CatalogImportContent(*view.CatalogImport)
+ }
 		}
 	</div>
 }
@@ -563,6 +570,7 @@ templ ZoneListView(view ZonesPageView) {
 			<div><h1>Zones</h1><p>{ fmt.Sprint(len(view.Zones)) } zones configured</p></div>
 			if view.CanCreate {
 				<div class="zone-heading-actions">
+ <button type="button" class="button outline zone-primary-action" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("download")<span>Import from Catalog</span></button>
 					<button class="button outline zone-primary-action" type="button" aria-label="Import zone" title="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("upload")<span>Import Zone</span></button>
 					<button class="button zone-primary-action" type="button" aria-label="Add zone" title="Add zone" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
 				</div>
@@ -582,7 +590,11 @@ templ ZoneListView(view ZonesPageView) {
 			for index, zone := range view.Zones {
 				<div class={ ifThen(zone.Disabled, "isotope-zone-row disabled", "isotope-zone-row") } data-zone-row data-zone-name={ strings.ToLower(zone.Name) } data-zone-type={ strings.ToLower(zone.Type) } data-zone-status={ ifThen(zone.Disabled, "disabled", "active") }>
 					<a class="isotope-zone-row-link" href={ zoneHref(zone.Name) }>
-						<div class="isotope-zone-name"><strong>{ zone.Name }</strong><span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
+						<div class="isotope-zone-name"><strong>{ zone.Name }</strong>
+ if zone.CatalogZone != "" {
+ <small class="zone-catalog-membership" title={ ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog") }>@Icon("layers")<span class="sr-only">{ ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog") } </span><span>{ zone.CatalogZone }</span></small>
+ }
+ <span class="zone-mobile-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></span></div>
 						<div class="zone-desktop-badges"><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span></div>
 					</a>
 					@ZoneActionMenu(zone, "", zoneElementID("history", index), zoneElementID("settings", index), zoneElementID("dnssec", index), zoneElementID("clone", index), zoneElementID("delete", index))
@@ -590,6 +602,9 @@ templ ZoneListView(view ZonesPageView) {
 				</div>
 				if zone.CanSettings {
 					@ZoneSettingsDialog(zone, zoneElementID("settings", index))
+					if zone.Type == "secondary" && zone.CanRecords {
+ @ConvertPrimaryDialog(zone, zoneElementID("settings", index) + "-convert")
+ }
 				}
 				if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 					@ZoneDNSSECDialog(zone, zoneElementID("dnssec", index))
@@ -615,6 +630,9 @@ templ ZoneDetailView(zone ZoneView) {
 			<a class="icon-button zone-back-button" href="/zones" aria-label="Back to zones">@Icon("arrow-left")</a>
 			<div class="zone-records-title">
 				<h1>{ zone.Name }</h1>
+ if zone.CatalogZone != "" {
+ <p class="zone-catalog-membership" title={ ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog") }>@Icon("layers")<span class="sr-only">{ ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog") } </span><a href={ zoneHref(zone.CatalogZone) }>{ zone.CatalogZone }</a></p>
+ }
 				<div><span class={ "zone-type-badge " + zoneTypeClass(zone.Type) }>{ zoneTypeDisplay(zone) }</span><span class={ "zone-status-badge " + ifThen(zone.Disabled, "disabled", "active") }>{ ifThen(zone.Disabled, "Disabled", "Active") }</span><span class={ "zone-dnssec-badge " + ifThen(zone.DNSSEC, "signed", "unsigned") }>{ ifThen(zone.DNSSEC, "DNSSEC: Signed", "DNSSEC: Unsigned") }</span></div>
 				<p>
 					{ fmt.Sprint(len(zone.Records)) } { ifThen(len(zone.Records) == 1, "record", "records") }
@@ -670,6 +688,9 @@ templ ZoneDetailView(zone ZoneView) {
 		}
 		if zone.CanSettings {
 			@ZoneSettingsDialog(zone, "settings-selected-zone-dialog")
+			if zone.Type == "secondary" && zone.CanRecords {
+ @ConvertPrimaryDialog(zone, "settings-selected-zone-dialog-convert")
+ }
 		}
 		if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 			@ZoneDNSSECDialog(zone, "dnssec-selected-zone-dialog")
@@ -778,6 +799,9 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 			}
 			if zoneCanResync(zone) && zone.CanTransfer {
 				<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button type="submit">@Icon("refresh")<span>Resync Zone</span></button></form>
+			}
+			if zone.Type == "secondary" && zone.CanSettings && zone.CanRecords {
+				<button type="button" data-dialog-open={ settingsID + "-convert" } data-replica-primary-action>@Icon("crown")<span>Convert to Primary</span></button>
 			}
 			if zoneCanEditRecords(zone) && zone.CanCreate {
 				<button type="button" data-dialog-open={ cloneID } data-replica-primary-action>@Icon("copy")<span>Clone Zone</span></button>
@@ -1266,4 +1290,68 @@ templ ImportNewZoneDialog() {
 			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button></footer>
 		</form>
 	</dialog>
+}
+
+
+templ ConvertPrimaryDialog(zone ZoneView, id string) {
+ <dialog class="custom-server-dialog isotope-zone-dialog zone-conversion-dialog" id={ id } aria-labelledby={ id + "-title" }>
+  <div class="dialog-header"><h2 id={ id + "-title" }>Convert to Primary Zone</h2><p>Make Sable the writable source for <strong>{ zone.Name }</strong>.</p></div>
+  <button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+  <form class="blocking-dialog-form zone-conversion-form" hx-post="/ui/zones/convert-primary" hx-target="#zones-content" hx-swap="outerHTML">
+   <input type="hidden" name="zone" value={ zone.Name }/>
+   <input type="hidden" name="confirmation" value={ zone.ConversionFingerprint }/>
+   <div class="integration-facts zone-conversion-facts">
+ <div class="zone-conversion-source"><span class="integration-fact-label">Current source</span><span class="integration-fact-value">{ strings.Join(zone.PrimaryServers, ", ") }</span></div>
+ <div><span class="integration-fact-label">SOA serial</span><span class="integration-fact-value">{ fmt.Sprint(zone.ConversionSerial) }</span></div>
+ <div><span class="integration-fact-label">Records</span><span class="integration-fact-value">{ fmt.Sprint(len(zone.Records)) }</span></div>
+ </div>
+   if zone.ConversionError != "" {
+    if strings.Contains(zone.ConversionError, "DNSSEC") || strings.Contains(zone.ConversionError, "signed zones") {
+ <div class="warning-box zone-conversion-warning" role="alert">@Icon("alert-triangle")<div><strong>DNSSEC transition required</strong><p>{ zone.ConversionError }</p></div></div>
+ <details class="dnssec-migration-details"><summary>How to migrate this zone</summary>@DNSSECMigrationSteps()</details>
+ } else if strings.Contains(zone.ConversionError, "belongs to a Sable catalog") {
+ <div class="cluster-dialog-note zone-conversion-info">@Icon("info")<p><strong>Managed by a Sable catalog</strong><span>Catalog: <a href={ zoneHref(zone.CatalogZone) }>{ zone.CatalogZone }</a></span><span>This zone can’t be converted while the catalog manages it. Conversion does not detach zones from catalogs.</span><span>Import from Catalog can create independent Secondaries, but it skips zones that already exist in Sable. It won’t replace or detach this managed zone.</span></p></div>
+ } else {
+ <p class="zone-conversion-notice" role="alert">{ zone.ConversionError }</p>
+ }
+   } else {
+    <p class="zone-import-help">Records, permissions, and history stay in place. The serial advances and synchronization from the current source stops.</p>
+    <label><span>Final synchronization</span><select name="final_sync" data-styled-select>
+     if zone.CanTransfer {
+      <option value="true" selected>Synchronize, then convert</option>
+     }
+     <option value="false">Use the stored snapshot</option>
+    </select></label>
+    <p class="zone-import-help">If synchronization fails, the zone stays Secondary. A stored snapshot may contain stale or expired data.</p>
+    <div class="zone-import-options">
+     <label class="zone-import-option">
+      <input type="checkbox" name="freeze_confirmed" value="true" required/>
+      <span><strong>Source writes are paused</strong><small>I have stopped edits and automatic updates on the current source.</small></span>
+     </label>
+    </div>
+    <p class="zone-import-help">Before moving clients, verify Sable and its replicas. SOA and NS targets remain unchanged; review them before retiring the source.</p>
+   }
+   <footer class="dialog-footer">
+ if zone.ConversionError != "" {
+ <button class="button outline" type="button" data-dialog-close>Close</button>
+ } else {
+ <button class="button outline" type="button" data-dialog-close>Cancel</button>
+ <button class="button" type="submit" data-replica-primary-action>@Icon("crown")<span>Convert to Primary</span></button>
+ }
+ </footer>
+  </form>
+ </dialog>
+}
+
+// Shared by conversion and catalog import blockers.
+templ DNSSECMigrationSteps() {
+ <div class="dnssec-migration-steps">
+ <ol>
+ <li>If a parent DS record exists, remove it and wait for cached DS records to expire while Technitium continues signing. Update any private trust anchors too.</li>
+ <li>Disable DNSSEC for the source zone in Technitium, then resync the Sable Secondary to fetch the unsigned zone. If the import was blocked, retry importing after the source is unsigned.</li>
+ <li>Pause source edits and automatic writers, then convert to Primary or import as Primary.</li>
+ <li>Enable DNSSEC in Sable if required. Verify signing on all new authorities and allow old delegation and DNSKEY caches to expire before publishing Sable’s new DS record or trust anchor.</li>
+ </ol>
+ <p class="zone-import-help">This path temporarily suspends DNSSEC validation. Migration with uninterrupted DNSSEC requires coordinated key handling that this flow does not support.</p>
+ </div>
 }

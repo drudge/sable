@@ -50,7 +50,16 @@ func main() {
 	output := flag.String("out", "", "directory to write screenshots into (empty skips capture)")
 	keep := flag.Bool("keep", false, "leave the deployment running after capture")
 	basePort := flag.Int("base-port", 5391, "first console port; each node takes the next one")
+	migration := flag.Bool("migration", false, "run the isolated Technitium migration lab (use -keep for manual demo)")
+	image := flag.String("technitium-image", "technitium/dns-server:15.4.0", "pinned migration source image")
 	flag.Parse()
+	if *migration {
+		if err := runMigration(*binary, *image, *keep); err != nil {
+			fmt.Fprintln(os.Stderr, "migration:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if err := run(*root, *binary, *output, *basePort, *keep); err != nil {
 		fmt.Fprintln(os.Stderr, "demo:", err)

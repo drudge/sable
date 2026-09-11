@@ -1,0 +1,215 @@
+package pages
+
+import (
+	"fmt"
+	"slices"
+ "strings"
+)
+
+type CatalogImportMember struct {
+	Name   string
+	Exists bool
+}
+type CatalogImportResult struct {
+	Name    string
+	Message string
+	Success bool
+	Warning bool
+}
+type CatalogImportView struct {
+	Console                                             DashboardView
+	Selected                                            []string
+	ImportType                                          string
+	Catalog, Source, Protocol, Key, Confirmation, Error string
+	TSIGKeys                                            []string
+	Members                                             []CatalogImportMember
+	Results                                             []CatalogImportResult
+}
+
+func catalogImportStep(view CatalogImportView) int {
+	if len(view.Results) > 0 {
+		return 3
+	}
+	if view.Confirmation != "" {
+		return 2
+	}
+	return 1
+}
+
+templ CatalogImportContent(view CatalogImportView) {
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog catalog-import-dialog" id="catalog-import-dialog" aria-labelledby="catalog-import-title" data-dialog-auto-open="true">
+		<div class="dialog-header"><h2 id="catalog-import-title">Import from Catalog</h2><p>Bring catalog members into Sable as independent zones.</p></div>
+		<button type="button" class="dialog-close" data-dialog-close="catalog-import-dialog" aria-label="Close">
+			@Icon("x")
+		</button>
+		<form hx-post="/ui/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" hx-disabled-elt="#catalog-import-dialog button" hx-indicator="find .catalog-import-progress">
+			<div class="isotope-dialog-body">
+				<div class="wizard-progress catalog-import-steps" aria-label={ fmt.Sprintf("Step %d of 3", catalogImportStep(view)) }>
+					for index, label := range []string{"Connect", "Select zones", "Results"} {
+						if index > 0 {
+							<i></i>
+						}
+						<div class={ ifThen(catalogImportStep(view) == index+1, "current", ifThen(catalogImportStep(view) > index+1, "complete", "")) }><span>{ fmt.Sprint(index + 1) }</span><small>{ label }</small></div>
+					}
+				</div>
+				if view.Error != "" {
+					<div class="unifi-status error" role="alert">
+						@Icon("alert-triangle")
+						<div><strong>Import needs attention</strong><span>{ view.Error }</span></div>
+					</div>
+				}
+				<p class="catalog-import-progress htmx-indicator" role="status">Transferring zones… Please wait for the results.</p>
+				switch catalogImportStep(view) {
+					case 1:
+						@CatalogImportConnect(view)
+					case 2:
+						@CatalogImportConnectionFields(view)
+						@CatalogImportSelection(view)
+					case 3:
+						@CatalogImportConnectionFields(view)
+						<input type="hidden" name="import_type" value={ view.ImportType }/>
+						@CatalogImportResults(view)
+				}
+			</div>
+			<div class="dialog-footer wizard-footer">
+				<button type="button" class="button outline" data-dialog-close="catalog-import-dialog">{ ifThen(catalogImportStep(view) == 3, "Close", "Cancel") }</button>
+				<div class="wizard-footer-advance">
+					switch catalogImportStep(view) {
+						case 1:
+							<button type="submit" name="step" value="discover" class="button">
+								@Icon("arrow-right")
+								<span>Discover zones</span>
+							</button>
+						case 2:
+							<button type="submit" name="step" value="connect" class="button outline" formnovalidate>
+								@Icon("arrow-left")
+								<span>Back</span>
+							</button>
+							<button type="submit" name="step" value="stage" class="button" disabled?={ !catalogImportHasAvailable(view) } data-replica-primary-action>
+								@Icon("download")
+								<span>Import selected zones</span>
+							</button>
+						case 3:
+							<button type="submit" name="step" value="discover" class="button outline">Select more zones</button>
+							<button type="button" class="button" data-dialog-close="catalog-import-dialog">Done</button>
+					}
+				</div>
+			</div>
+		</form>
+	</dialog>
+}
+
+func catalogImportHasAvailable(view CatalogImportView) bool {
+	for _, member := range view.Members {
+		if !member.Exists {
+			return true
+		}
+	}
+	return false
+}
+
+templ CatalogImportConnect(view CatalogImportView) {
+	<input type="hidden" name="import_type" value={ view.ImportType }/>
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact">
+			<span>
+				@Icon("server")
+			</span>
+			<div><strong>Catalog source</strong><small>Allow transfers of the catalog and its members to Sable. This import does not subscribe Sable to the catalog.</small></div>
+		</div>
+		<div class="field-grid two">
+			<label class="field-control"><span>Catalog zone</span><input name="catalog" required value={ view.Catalog } placeholder="catalog.example.com"/></label>
+			<label class="field-control"><span>Primary servers</span><input name="primary_servers" required value={ view.Source } placeholder="192.0.2.53:53"/></label>
+			<label class="field-control"><span>Transfer protocol</span><select name="primary_protocol" data-styled-select><option value="tcp" selected?={ view.Protocol == "tcp" }>TCP</option><option value="tls" selected?={ view.Protocol == "tls" }>DNS-over-TLS</option></select></label>
+			<label class="field-control">
+				<span>TSIG key</span>
+				<select name="tsig_key" data-styled-select>
+					<option value="">None</option>
+					for _, key := range view.TSIGKeys {
+						<option value={ key } selected?={ view.Key == key }>{ key }</option>
+					}
+				</select>
+			</label>
+		</div>
+	</section>
+}
+
+templ CatalogImportConnectionFields(view CatalogImportView) {
+	<input type="hidden" name="catalog" value={ view.Catalog }/>
+	<input type="hidden" name="primary_servers" value={ view.Source }/>
+	<input type="hidden" name="primary_protocol" value={ view.Protocol }/>
+	<input type="hidden" name="tsig_key" value={ view.Key }/>
+}
+
+templ CatalogImportSelection(view CatalogImportView) {
+	<input type="hidden" name="confirmation" value={ view.Confirmation }/>
+	<section class="wizard-panel compact">
+		<fieldset class="catalog-import-type">
+			<legend>Import zones as</legend>
+			<div class="field-grid two">
+				<label class="choice-tile"><input type="radio" name="import_type" value="secondary" checked?={ view.ImportType != "primary" }/><span><strong>Secondary</strong><small>Keep synchronizing from the source.</small></span></label>
+				<label class="choice-tile"><input type="radio" name="import_type" value="primary" checked?={ view.ImportType == "primary" }/><span><strong>Primary</strong><small>Make Sable the writable source now.</small></span></label>
+			</div>
+			<div class="catalog-import-primary-confirmation">
+				<p class="zone-import-help">Sable fetches the latest zone and advances its SOA serial. Upstream refresh stops. Existing SOA and NS targets remain; review them before retiring the source. Signed zones are blocked, with no zone created.</p>
+				<div class="zone-import-options"><label class="zone-import-option"><input type="checkbox" name="freeze_confirmed" value="true"/><span><strong>Source writes are paused</strong><small>I have paused source edits and automatic update writers for all selected zones.</small></span></label></div>
+			</div>
+		</fieldset>
+		<div class="wizard-heading compact">
+			<span>
+				@Icon("globe")
+			</span>
+			<div><strong>{ view.Catalog }</strong><small>Select up to 25 zones. All transfers use { view.Source }.</small></div>
+		</div>
+		if catalogImportHasAvailable(view) {
+			<button type="button" class="button outline" data-catalog-select>Select first 25 available</button>
+		}
+		<div class="zone-import-options catalog-import-members">
+			for _, member := range view.Members {
+				<label class="zone-import-option">
+					<input type="checkbox" name="member" value={ member.Name } disabled?={ member.Exists } checked?={ !member.Exists && slices.Contains(view.Selected, member.Name) }/>
+					<span>
+						{ member.Name }
+						if member.Exists {
+							<small>Already in Sable — left unchanged</small>
+						}
+					</span>
+				</label>
+			}
+		</div>
+		if len(view.Members) == 0 {
+			<p>No member zones found.</p>
+		}
+		<p class="zone-import-help">Signed zones can synchronize but need a DNSSEC transition before conversion. Recreate Forwarders separately. Import can take up to two minutes; each zone gets its own result.</p>
+	</section>
+}
+
+templ CatalogImportResults(view CatalogImportView) {
+	<section class="wizard-panel compact" aria-label="Import results">
+		<div class="wizard-heading compact">
+			<span>
+				@Icon("list")
+			</span>
+			<div><strong>Import results</strong><small>Successful imports remain available if another transfer fails.</small></div>
+		</div>
+		for _, result := range view.Results {
+			<div class={ "catalog-import-result", templ.KV("warning-box catalog-import-alert", result.Warning), templ.KV("unifi-status error catalog-import-alert", !result.Success) } role={ ifThen(result.Warning || !result.Success, "alert", "group") }>
+				if result.Warning || !result.Success {
+					@Icon("alert-triangle")
+				}
+				<div>
+					if result.Success {
+						<a href={ zoneHref(result.Name) }><strong>{ result.Name }</strong></a>
+					} else {
+						<strong>{ result.Name }</strong>
+					}
+					<p>{ result.Message }</p>
+ if strings.Contains(result.Message, "DNSSEC") {
+ <details class="dnssec-migration-details"><summary>How to migrate this signed zone</summary>@DNSSECMigrationSteps()</details>
+ }
+				</div>
+			</div>
+		}
+		<p class="zone-import-help">Verify Sable and its replicas before moving clients. For Secondary imports, pause source writes before converting.</p>
+	</section>
+}
