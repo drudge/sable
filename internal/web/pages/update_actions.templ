@@ -2,6 +2,7 @@ package pages
 
 const aboutUpdateNotesDialogID = "update-release-notes-dialog"
 const notificationUpdateNotesDialogID = "notification-release-notes-dialog"
+const clusterUpdateNotesDialogID = "cluster-release-notes-dialog"
 
 func updateRestartAttributes(view UpdateView, continueURL string) templ.Attributes {
 	if !view.Installed || !view.CanRestart {

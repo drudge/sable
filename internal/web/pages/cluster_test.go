@@ -38,3 +38,42 @@ func TestClusterNodeStatusUsesAvatarIndicators(t *testing.T) {
 		t.Fatalf("cluster content still renders the redundant node count: %s", markup)
 	}
 }
+
+func TestClusterUpdatesRefreshInSidebarWithSharedReleaseNotes(t *testing.T) {
+	view := ClusterPageView{Initialized: true, Update: ClusterUpdateView{
+		Supported: true, CanApply: true, Version: "1.2.0",
+		Release: UpdateView{LatestVersion: "1.2.0", ReleaseNotes: "### Improvements\n\n- Faster DNS", ReleaseURL: "https://github.com/drudge/sable/releases/tag/v1.2.0"},
+	}}
+	var response bytes.Buffer
+	if err := ClusterContent(view).Render(context.Background(), &response); err != nil {
+		t.Fatal(err)
+	}
+	markup := response.String()
+	aside, updates, local := strings.Index(markup, `<aside`), strings.Index(markup, `id="cluster-updates"`), strings.Index(markup, `class="card cluster-details"`)
+	if aside < 0 || updates < aside || local < updates || strings.Count(markup, `id="cluster-updates"`) != 1 {
+		t.Fatal("rolling updates must appear once, in the sidebar before Local Node")
+	}
+	if strings.Contains(markup, "hx-swap-oob") {
+		t.Fatal("initial page should render its sidebar directly")
+	}
+	for _, supported := range []bool{true, false, true} {
+		view.Update.Supported = supported
+		response.Reset()
+		if err := ClusterLiveStatusUpdate(view).Render(context.Background(), &response); err != nil {
+			t.Fatal(err)
+		}
+		markup = response.String()
+		if !strings.Contains(markup, `id="cluster-live-status"`) || !strings.Contains(markup, `id="cluster-updates"`) || !strings.Contains(markup, `hx-swap-oob="outerHTML"`) {
+			t.Fatal("live response must refresh both the main column and stable sidebar target")
+		}
+		if strings.Contains(markup, `class="card cluster-update-card"`) != supported || strings.Contains(markup, `data-dialog-open="cluster-release-notes-dialog"`) != supported {
+			t.Fatal("card and release notes must follow cluster support")
+		}
+		if supported && (!strings.Contains(markup, `<h3>Improvements</h3>`) || !strings.Contains(markup, `class="custom-server-dialog update-release-dialog"`)) {
+			t.Fatal("cluster notes must use the shared Markdown release dialog")
+		}
+		if !supported && !strings.Contains(markup, `id="cluster-updates" hidden`) {
+			t.Fatal("unsupported cluster must keep a hidden target for future refreshes")
+		}
+	}
+}

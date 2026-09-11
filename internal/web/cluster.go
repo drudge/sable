@@ -53,7 +53,7 @@ func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *htt
 		}
 		return
 	}
-	if err := pages.ClusterLiveStatus(view).Render(request.Context(), writer); err != nil {
+	if err := pages.ClusterLiveStatusUpdate(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render live cluster status", "error", err)
 	}
 }

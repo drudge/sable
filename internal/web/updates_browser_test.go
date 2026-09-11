@@ -79,6 +79,12 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		restarts.Add(1)
 		writeJSON(w, http.StatusAccepted, map[string]string{"instance_id": "before-restart"})
 	})
+	clusterUpdate := pages.ClusterUpdateView{Supported: true, CanApply: true, Release: update,
+		Rollout: cluster.RolloutStatus{ID: "fixture", Version: "v1.1.0", Phase: "updating", Nodes: []cluster.RolloutNode{{Name: "ns2-queens", Phase: "complete"}, {Name: "ns3-latham", Phase: "install"}, {Name: "ns1-queens", Phase: "queued"}}},
+	}
+	mux.HandleFunc("GET /ui/cluster/status", func(w http.ResponseWriter, r *http.Request) {
+		_ = pages.ClusterLiveStatusUpdate(pages.ClusterPageView{Initialized: true, LocalRole: "Primary", Update: clusterUpdate}).Render(r.Context(), w)
+	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
 		if restarts.Load() > 0 {
@@ -86,9 +92,7 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if r.URL.Path == "/cluster" {
-			_ = pages.ClusterPage(pages.ClusterPageView{Console: view, Initialized: true, LocalRole: "Primary", Update: pages.ClusterUpdateView{Supported: true, CanApply: true,
-				Rollout: cluster.RolloutStatus{ID: "fixture", Version: "v1.1.0", Phase: "updating", Nodes: []cluster.RolloutNode{{Name: "ns2-queens", Phase: "complete"}, {Name: "ns3-latham", Phase: "install"}, {Name: "ns1-queens", Phase: "queued"}}},
-			}}).Render(r.Context(), w)
+			_ = pages.ClusterPage(pages.ClusterPageView{Console: view, Initialized: true, LocalRole: "Primary", Update: clusterUpdate}).Render(r.Context(), w)
 			return
 		}
 		_ = pages.AboutPage(pages.AboutPageView{Console: view, Update: update, Commit: "abcdef0", BuiltAt: "2026-09-10T12:00:00Z"}).Render(r.Context(), w)

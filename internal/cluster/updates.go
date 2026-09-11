@@ -186,6 +186,32 @@ func (service *Service) RolloutStatus() RolloutStatus {
 	return status
 }
 
+// RollingUpdatesSupported uses the last reported capability so a node's restart
+// does not hide rollout progress. StartRollout separately requires fresh, healthy
+// reports before any update can begin. Only the primary receives every report.
+func (service *Service) RollingUpdatesSupported() bool {
+	if service.updates == nil {
+		return false
+	}
+	service.updates.mu.Lock()
+	defer service.updates.mu.Unlock()
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	if service.manifest == nil || service.manifest.PrimaryID != service.nodeID || len(service.manifest.Nodes) < 2 {
+		return false
+	}
+	for _, node := range service.manifest.Nodes {
+		report := &service.updates.local
+		if node.ID != service.nodeID {
+			report = service.telemetry[node.ID].heartbeat.Update
+		}
+		if report == nil || !report.Supported || report.Blocked != "" {
+			return false
+		}
+	}
+	return true
+}
+
 func (service *Service) localUpdateStatus() *NodeUpdateStatus {
 	if service.updates == nil {
 		return nil

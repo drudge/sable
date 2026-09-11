@@ -3303,13 +3303,13 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .release-notes-content pre { white-space: pre-wrap; font-size: .75rem; }
 .release-notes-content img { max-width: 100%; height: auto; }
 .release-notes-content a { text-decoration: underline; }
-.cluster-update-content { padding: 1rem; display: grid; gap: .75rem; }
 .cluster-update-nodes { display: grid; gap: .5rem; padding-left: 1.25rem; }
 
-.cluster-update-card > header { padding: 1.25rem; border-bottom: 1px solid var(--border); }
-.cluster-update-card > header h2 { margin: 0; font-size: .875rem; }
-.cluster-update-card > header p { margin: .25rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
-.cluster-update-content { padding: 1.25rem; font-size: .8125rem; }
+.cluster-update-card { padding: 1.25rem; }
+.cluster-update-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.cluster-update-card > header h2 { margin: 0; font-size: 1rem; }
+.cluster-update-content { display: grid; gap: 1rem; margin-top: .5rem; font-size: .8125rem; }
 .cluster-update-content > :is(p, ol) { margin: 0; }
-.cluster-update-content > button { justify-self: start; }
-.cluster-update-content > small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
+.cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
+.cluster-update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.cluster-update-actions:empty { display: none; }

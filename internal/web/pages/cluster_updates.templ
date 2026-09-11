@@ -3,56 +3,87 @@ package pages
 import "github.com/drudge/sable/internal/cluster"
 
 type ClusterUpdateView struct {
- Supported bool
- CanApply bool
- Version string
- Rollout cluster.RolloutStatus
+	Supported bool
+	CanApply  bool
+	Version   string
+	Release   UpdateView
+	Rollout   cluster.RolloutStatus
 }
 
-templ ClusterUpdatePanel(view ClusterUpdateView) {
- if view.Supported {
-  <section class="card cluster-update-card">
-   <header><div><h2>Rolling Updates</h2><p>Update replicas one at a time, verify synchronization, then update the primary.</p></div></header>
-   <div class="cluster-update-content">
-    if view.Rollout.ID != "" {
-     <strong role="status">{ "Sable " + view.Rollout.Version + " · " + rolloutPhaseLabel(view.Rollout.Phase) }</strong>
-     if view.Rollout.Error != "" {
-      <p role="alert">{ view.Rollout.Error }</p>
-     }
-     <ol class="cluster-update-nodes">
-      for _, node := range view.Rollout.Nodes {
-       <li>{ node.Name + " · " + rolloutPhaseLabel(node.Phase) }</li>
-      }
-     </ol>
-    }
-    if view.Rollout.Active() {
-     if view.CanApply {
-      <button class="button outline compact" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
-     }
-    } else if view.CanApply && view.Version != "" {
-     <form hx-post="/ui/updates/cluster" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm={ "Install Sable v" + view.Version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." } data-confirm-title="Update the entire cluster?" data-confirm-action="Start rolling update" data-confirm-tone="neutral">
-      <input type="hidden" name="version" value={ view.Version }/>
-      <button class="button compact" type="submit">@Icon("download")<span>Update all nodes to v{ view.Version }</span></button>
-     </form>
-    }
-    <p><a class="inline-link" href="/about#about-update">Review release notes and check for updates</a></p>
-    <small>All nodes need rolling update support, writable binaries, and automatic restart support. Configure DNS clients with multiple servers to maintain service during each restart.</small>
-   </div>
-  </section>
- }
+templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
+	<div
+		id="cluster-updates"
+		hidden?={ !view.Supported }
+		if outOfBand {
+			hx-swap-oob="outerHTML"
+		}
+	>
+		if view.Supported {
+			<section class="card cluster-update-card">
+				<header>
+					<h2>Rolling Updates</h2>
+					if view.Version != "" {
+						<span class="status-badge">v{ view.Version }</span>
+					}
+				</header>
+				<div class="cluster-update-content">
+					<p>Update replicas one at a time, then the primary.</p>
+					if view.Rollout.ID != "" {
+						<strong role="status">{ "Sable " + view.Rollout.Version + " · " + rolloutPhaseLabel(view.Rollout.Phase) }</strong>
+						if view.Rollout.Error != "" {
+							<p role="alert">{ view.Rollout.Error }</p>
+						}
+						<ol class="cluster-update-nodes">
+							for _, node := range view.Rollout.Nodes {
+								<li>{ node.Name + " · " + rolloutPhaseLabel(node.Phase) }</li>
+							}
+						</ol>
+					}
+					<div class="cluster-update-actions">
+						@updateReleaseNotesButton(view.Release, clusterUpdateNotesDialogID)
+						if view.Rollout.Active() {
+							if view.CanApply {
+								<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
+							}
+						} else if view.CanApply && view.Version != "" {
+							<form hx-post="/ui/updates/cluster" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm={ "Install Sable v" + view.Version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." } data-confirm-title="Update the entire cluster?" data-confirm-action="Start rolling update" data-confirm-tone="neutral">
+								<input type="hidden" name="version" value={ view.Version }/>
+								<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")
+<span>Update all</span></button>
+							</form>
+						}
+					</div>
+					if view.Version == "" && !view.Rollout.Active() {
+						<a class="button outline compact" href="/about#about-update">Check for updates</a>
+					}
+				</div>
+			</section>
+			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)
+		}
+	</div>
 }
 
 func rolloutPhaseLabel(phase string) string {
- switch phase {
- case "preparing": return "Checking nodes"
- case "updating": return "Updating cluster"
- case "verifying": return "Verifying cluster"
- case "queued": return "Waiting"
- case "install": return "Installing"
- case "restart", "restarting": return "Restarting"
- case "complete": return "Up to date"
- case "failed": return "Failed"
- case "stopped": return "Stopped"
- default: return phase
- }
+	switch phase {
+	case "preparing":
+		return "Checking nodes"
+	case "updating":
+		return "Updating cluster"
+	case "verifying":
+		return "Verifying cluster"
+	case "queued":
+		return "Waiting"
+	case "install":
+		return "Installing"
+	case "restart", "restarting":
+		return "Restarting"
+	case "complete":
+		return "Up to date"
+	case "failed":
+		return "Failed"
+	case "stopped":
+		return "Stopped"
+	default:
+		return phase
+	}
 }

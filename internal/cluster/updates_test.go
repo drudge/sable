@@ -224,6 +224,43 @@ func TestRollingUpdateRejectsUnsupportedBlockedUnhealthyAndNewerNodes(t *testing
 	}
 }
 
+func TestRollingUpdatesSupportedRequiresEveryMemberCapability(t *testing.T) {
+	for _, scenario := range []string{"supported", "restart", "unknown", "legacy", "unsupported", "blocked", "local blocked", "local unsupported", "unconfigured", "single", "replica"} {
+		t.Run(scenario, func(t *testing.T) {
+			fixture := newRolloutFixture(t, 2)
+			primary, replica := fixture.nodes[0], fixture.nodes[2]
+			observed := primary.telemetry[replica.nodeID]
+			switch scenario {
+			case "restart":
+				observed.received = time.Now().Add(-time.Minute)
+			case "unknown":
+				observed = nodeTelemetry{}
+			case "legacy":
+				observed.heartbeat.Update = nil
+			case "unsupported":
+				observed.heartbeat.Update.Supported = false
+			case "blocked":
+				observed.heartbeat.Update.Blocked = "automatic restart unavailable"
+			case "local blocked":
+				primary.updates.local.Blocked = "read-only binary"
+			case "local unsupported":
+				primary.updates = nil
+			case "unconfigured":
+				primary.manifest = nil
+			case "single":
+				primary.manifest.Nodes = slices.DeleteFunc(primary.manifest.Nodes, func(node member) bool { return node.ID != primary.nodeID })
+			case "replica":
+				primary = replica
+			}
+			primary.telemetry[replica.nodeID] = observed
+			want := scenario == "supported" || scenario == "restart"
+			if got := primary.RollingUpdatesSupported(); got != want {
+				t.Fatalf("RollingUpdatesSupported() = %t, want %t", got, want)
+			}
+		})
+	}
+}
+
 func TestRollingUpdateStopAndTimeoutPreventFurtherRestarts(t *testing.T) {
 	for _, scenario := range []string{"stop", "timeout", "coordinator restart"} {
 		t.Run(scenario, func(t *testing.T) {

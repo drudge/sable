@@ -133,6 +133,9 @@ templ ClusterContent(view ClusterPageView) {
 				if !view.NetworkReady {
 					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
 				}
+				if view.Initialized {
+					@ClusterUpdatePanel(view.Update, false)
+				}
 				<section class="card cluster-details">
 					<header>
 						<h2>Local Node</h2>
@@ -172,6 +175,11 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 	</dialog>
 }
 
+templ ClusterLiveStatusUpdate(view ClusterPageView) {
+	@ClusterLiveStatus(view)
+	@ClusterUpdatePanel(view.Update, true)
+}
+
 templ ClusterLiveStatus(view ClusterPageView) {
 	<div class="cluster-live-status" id="cluster-live-status" data-live-refresh hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
 		<section class="card cluster-status-card emphasized">
@@ -192,7 +200,6 @@ templ ClusterLiveStatus(view ClusterPageView) {
 			</div>
 			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
 		</section>
-		@ClusterUpdatePanel(view.Update)
 		<section class="card cluster-nodes-card">
 			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="cluster-updated-badge">@Icon("clock")<span>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
 			<div class="cluster-node-list">

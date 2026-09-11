@@ -10,6 +10,7 @@ import (
 )
 
 type clusterUpdateController interface {
+	RollingUpdatesSupported() bool
 	RolloutStatus() cluster.RolloutStatus
 	StartRollout(context.Context, string) error
 	StopRollout() error
@@ -76,7 +77,12 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 		return pages.ClusterUpdateView{}
 	}
 	status := server.updateStatus()
-	view := pages.ClusterUpdateView{Supported: true, Rollout: controller.RolloutStatus(), CanApply: server.canManageClusterUpdate(request)}
+	view := pages.ClusterUpdateView{
+		Supported: controller.RollingUpdatesSupported(),
+		Rollout:   controller.RolloutStatus(),
+		CanApply:  server.canManageClusterUpdate(request),
+		Release:   server.updateView(request, status),
+	}
 	if server.cluster.Snapshot().LocalRole != cluster.RolePrimary {
 		view.CanApply = false
 	}
