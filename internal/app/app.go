@@ -393,6 +393,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		logger.Warn("restore query statistics", "error", err)
 	}
 	updateManager := newUpdateManager(update.Options{
+		ReleaseStore:   database,
+		Logger:         logger,
 		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
 		RestartManaged: initial.Updates.RestartManaged,
 		PreRelease:     initial.Updates.PreRelease,

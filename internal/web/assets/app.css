@@ -3338,6 +3338,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-update-version .nav-icon { width: .8rem; height: .8rem; }
 .cluster-update-version.available { background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
 .dark .cluster-update-version.available { color: #f1ad47; }
+.cluster-update-version.current { background: color-mix(in oklch, #16a34a 12%, transparent); color: #16a34a; }
+.dark .cluster-update-version.current { color: #22c55e; }
 .cluster-update-content { display: grid; gap: 1rem; margin-top: .5rem; font-size: .8125rem; }
 .cluster-update-content > :is(p, ol) { margin: 0; }
 .cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }

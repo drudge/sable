@@ -34,6 +34,10 @@ func (view ClusterUpdateView) UpdateAvailable() bool {
 	return view.Supported && view.Version != "" && !view.Rollout.Active()
 }
 
+func (view ClusterUpdateView) UpToDate() bool {
+	return view.Rollout.Phase == "complete" && view.Version == "" && view.DisplayVersion() == formatReleaseVersion(view.Rollout.Version)
+}
+
 templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 	<div
 		id="cluster-updates"
@@ -47,10 +51,13 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				<header>
 					<h2>Rolling Updates</h2>
 					if view.DisplayVersion() != "" {
-						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()) }>
+						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("current", view.UpToDate()) }>
 							if view.UpdateAvailable() {
 								@Icon("sparkles")
 								<span class="sr-only">Update available: </span>
+							} else if view.UpToDate() {
+								@Icon("check")
+								<span class="sr-only">Up to date: </span>
 							}
 							{ view.DisplayVersion() }
 						</span>
@@ -59,7 +66,9 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				<div class="cluster-update-content">
 					<p>Update replicas one at a time, then the primary.</p>
 					if view.Rollout.ID != "" {
-						<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
+						if view.Rollout.Phase != "complete" {
+							<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
+						}
 						if view.Rollout.Error != "" {
 							<p role="alert">{ view.Rollout.Error }</p>
 						}

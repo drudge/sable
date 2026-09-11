@@ -111,6 +111,9 @@ func TestClusterUpdateBadgeAndCompletedActions(t *testing.T) {
 	if strings.Contains(markup, `icon-sparkles`) || strings.Contains(markup, `id="cluster-update-start"`) || strings.Contains(markup, `/about#about-update`) {
 		t.Fatal("up-to-date cluster must not offer another installation or redirect to About")
 	}
+	if strings.Contains(markup, `class="cluster-update-status"`) || !strings.Contains(markup, `cluster-update-version current`) || !strings.Contains(markup, `icon-check`) {
+		t.Fatal("completed rollout should indicate success in its version badge without a redundant status heading")
+	}
 	for _, expected := range []string{`hx-post="/ui/updates/command-check"`, `icon-refresh`, `Check again`, `button outline compact`} {
 		if !strings.Contains(markup, expected) {
 			t.Fatalf("missing compact update check: %q", expected)

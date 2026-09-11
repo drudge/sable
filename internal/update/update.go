@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -40,6 +41,9 @@ var ErrUpdateInProgress = errors.New("an update is already running")
 var ErrDevelopmentBuild = errors.New("Update checks and installation are disabled for development builds. Rebuild from source to update Sable.")
 
 type Options struct {
+	// ReleaseStore retains release notes across process restarts.
+	ReleaseStore ReleaseStore
+	Logger       *slog.Logger
 	// RestartManaged asserts that an external supervisor restarts this process after exit.
 	RestartManaged bool
 	// Repository is the GitHub owner/name pair that publishes Sable releases.

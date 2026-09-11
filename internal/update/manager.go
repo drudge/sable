@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +100,10 @@ func NewManager(options Options) *Manager {
 	if build.Development() {
 		blocked = ErrDevelopmentBuild.Error()
 	}
-	return &Manager{
+	if options.Logger == nil {
+		options.Logger = slog.Default()
+	}
+	manager := &Manager{
 		options: options.withDefaults(),
 		status: Status{
 			Phase:             PhaseIdle,
@@ -109,6 +113,8 @@ func NewManager(options Options) *Manager {
 			IncludePreRelease: options.PreRelease,
 		},
 	}
+	manager.restoreRelease()
+	return manager
 }
 
 // Status returns a snapshot of the current update state.
@@ -306,6 +312,7 @@ func (manager *Manager) finish(result Result, err error) Status {
 		status.Phase = PhaseIdle
 	}
 	manager.status = status
+	manager.saveRelease()
 	return status
 }
 
