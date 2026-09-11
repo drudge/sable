@@ -292,6 +292,7 @@ func TestInstalledUpdateOffersAConfirmedRestart(t *testing.T) {
 		"Sable v9.9.9 is installed",
 		"data-sable-restart",
 		`data-restart-url="/ui/updates/restart"`,
+		`data-updated-version="v9.9.9"`,
 		"data-restart-confirm",
 		"Restart Sable",
 		"The service manager starts the new build after a restart.",
@@ -536,7 +537,7 @@ func TestNotificationInstallTracksDownloadAndOffersRestart(t *testing.T) {
 	}
 	controller.status = update.Status{Phase: update.PhaseInstalled, Installed: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}
 	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
-	for _, expected := range []string{`id="update-notification"`, "Sable v1.2.0-rc.1 is installed", "data-sable-restart-button", `data-restart-url="/ui/updates/restart"`} {
+	for _, expected := range []string{`id="update-notification"`, "Sable v1.2.0-rc.1 is installed", "data-sable-restart-button", `data-restart-url="/ui/updates/restart"`, `data-updated-version="v1.2.0-rc.1"`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Fatalf("installed notification is missing %q: %s", expected, response.Body.String())
 		}

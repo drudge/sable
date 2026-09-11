@@ -81,6 +81,9 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
+		if restarts.Load() > 0 {
+			view.Version = "1.1.0"
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if r.URL.Path == "/cluster" {
 			_ = pages.ClusterPage(pages.ClusterPageView{Console: view, Initialized: true, LocalRole: "Primary", Update: pages.ClusterUpdateView{Supported: true, CanApply: true,

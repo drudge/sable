@@ -7,6 +7,7 @@
   const TITLE_SEPARATOR = " \u00b7 ";
   const OVERVIEW_SCOPE_ALL = "all";
   const MINIMUM_UPDATE_CHECK_MS = 650;
+  const UPDATE_COMPLETED_KEY = "sable-update-completed";
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
@@ -1465,6 +1466,24 @@
 	  schedule();
 	};
 
+	const showCompletedUpdateToast = () => {
+	  let updatedVersion;
+	  try {
+		updatedVersion = sessionStorage.getItem(UPDATE_COMPLETED_KEY);
+		sessionStorage.removeItem(UPDATE_COMPLETED_KEY);
+	  } catch {
+		return;
+	  }
+	  if (!updatedVersion) return;
+	  const template = document.querySelector("[data-update-completed-toast]");
+	  if (template?.dataset.updateCompletedToast !== updatedVersion) return;
+	  const region = template.content.firstElementChild?.cloneNode(true);
+	  if (!region) return;
+	  document.body.append(region);
+	  setupToast(region.querySelector("[data-toast]"));
+	};
+	showCompletedUpdateToast();
+
 	const syncDNSSECDenial = (select) => {
 	  const section = select.closest("form")?.querySelector("[data-dnssec-nsec3]");
 	  if (!section) return;
@@ -1948,6 +1967,18 @@
 		if (buttonLabel) buttonLabel.textContent = "Check Again";
 	  };
 
+	  const continueAfterRestart = () => {
+		if (root.dataset.updatedVersion) {
+		  try {
+			sessionStorage.setItem(UPDATE_COMPLETED_KEY, root.dataset.updatedVersion);
+		  } catch {
+			// A confirmation must never prevent returning to the console.
+		  }
+		}
+		if (status) status.textContent = "Sable is back online. Reloading…";
+		window.location.assign(continueURL);
+	  };
+
 	  const waitForSable = async () => {
 		const deadline = Date.now() + 120000;
 		let stopped = false;
@@ -1957,12 +1988,11 @@
 			if (response.ok) {
 			  const health = await response.json();
 			  if (health.instance_id && health.instance_id !== previousInstance) {
-				if (status) status.textContent = "Sable is back online. Reloading…";
-				window.location.assign(continueURL);
+				continueAfterRestart();
 				return;
 			  }
 			  if (stopped && !health.instance_id) {
-				window.location.assign(continueURL);
+				continueAfterRestart();
 				return;
 			  }
 			}

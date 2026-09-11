@@ -20,6 +20,7 @@ func updateRestartAttributes(view UpdateView, continueURL string) templ.Attribut
 		"data-restart-url":            "/ui/updates/restart",
 		"data-health-url":             "/api/v1/health",
 		"data-continue-url":           continueURL,
+		"data-updated-version":        formatReleaseVersion(view.LatestVersion),
 		"data-csrf-token":             view.CSRFToken,
 		"data-restart-confirm":        updateRestartConfirmation(view),
 		"data-restart-confirm-title":  "Restart Sable?",
@@ -64,7 +65,7 @@ func updatePrimaryAction(view UpdateView, fromNotification bool) templ.Component
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Phase == "checking", "Checking…", "Installing…"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 24, Col: 168}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 25, Col: 168}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -129,7 +130,7 @@ func updateReleaseNotesButton(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID + "-open")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 37, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 38, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -142,7 +143,7 @@ func updateReleaseNotesButton(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 37, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 38, Col: 108}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
@@ -160,7 +161,7 @@ func updateReleaseNotesButton(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID + "-open")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 39, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 40, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -173,7 +174,7 @@ func updateReleaseNotesButton(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var7 templ.SafeURL
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(view.ReleaseURL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 39, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 40, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -224,7 +225,7 @@ func updateInstallButton(view UpdateView, fromNotification bool) templ.Component
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(fromNotification, "closest .toast-region", "#about-update"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 46, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 47, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -237,7 +238,7 @@ func updateInstallButton(view UpdateView, fromNotification bool) templ.Component
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#about-update button, #about-update input"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 48, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 49, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -250,7 +251,7 @@ func updateInstallButton(view UpdateView, fromNotification bool) templ.Component
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(updateInstallConfirmation(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 49, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 50, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 		if templ_7745c5c3_Err != nil {
@@ -273,7 +274,7 @@ func updateInstallButton(view UpdateView, fromNotification bool) templ.Component
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.IncludePreRelease, "true", "false"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 57, Col: 97}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 58, Col: 97}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -294,7 +295,7 @@ func updateInstallButton(view UpdateView, fromNotification bool) templ.Component
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(view.LatestVersion)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 58, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 59, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -337,7 +338,7 @@ func updateReleaseNotesDialog(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 64, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 65, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 			if templ_7745c5c3_Err != nil {
@@ -350,7 +351,7 @@ func updateReleaseNotesDialog(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID + "-title")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 64, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 65, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 			if templ_7745c5c3_Err != nil {
@@ -363,7 +364,7 @@ func updateReleaseNotesDialog(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(dialogID + "-title")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 65, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 66, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 			if templ_7745c5c3_Err != nil {
@@ -376,7 +377,7 @@ func updateReleaseNotesDialog(view UpdateView, dialogID string) templ.Component 
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(view.LatestVersion)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 65, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 66, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -410,7 +411,7 @@ func updateReleaseNotesDialog(view UpdateView, dialogID string) templ.Component 
 				var templ_7745c5c3_Var19 templ.SafeURL
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(view.ReleaseURL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 72, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `update_actions.templ`, Line: 73, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {

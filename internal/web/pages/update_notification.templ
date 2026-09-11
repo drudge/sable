@@ -54,3 +54,9 @@ templ UpdateNotification(view UpdateView) {
 		@updateReleaseNotesDialog(view, notificationUpdateNotesDialogID)
 	</div>
 }
+
+templ UpdateCompletedToast(release string) {
+	<template data-update-completed-toast={ formatReleaseVersion(release) }>
+		@Toast("Sable was updated to " + formatReleaseVersion(release) + ".", "success")
+	</template>
+}

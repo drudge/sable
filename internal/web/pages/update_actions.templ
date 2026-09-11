@@ -12,6 +12,7 @@ func updateRestartAttributes(view UpdateView, continueURL string) templ.Attribut
 		"data-restart-url": "/ui/updates/restart",
 		"data-health-url": "/api/v1/health",
 		"data-continue-url": continueURL,
+		"data-updated-version": formatReleaseVersion(view.LatestVersion),
 		"data-csrf-token": view.CSRFToken,
 		"data-restart-confirm": updateRestartConfirmation(view),
 		"data-restart-confirm-title": "Restart Sable?",
