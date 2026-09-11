@@ -1,6 +1,6 @@
 # Migrate from Technitium
 
-Build Sable alongside your current DNS service, move one test zone, and verify it before moving clients. This guide covers Sable 1.1.0 and three paths: zone-file import, a one-time AXFR snapshot, or a Secondary that stays synchronized while you prepare the cutover.
+Build Sable alongside your current DNS service, move one test zone, and verify it before moving clients. This guide covers migration to Sable: zone-file import, a one-time AXFR snapshot, synchronized Secondary staging, or bulk import from a catalog. The older-version cutover procedure is retained below.
 
 ## Choose a migration path
 
@@ -8,7 +8,8 @@ Build Sable alongside your current DNS service, move one test zone, and verify i
 | --- | --- | --- |
 | Export a zone file and import it | A few zones and a planned change freeze | Sable after the final import |
 | Retrieve AXFR into a file, then import | Standard authoritative zones with transfer access | Sable after the final snapshot |
-| Run Sable as a Secondary first | Testing with current data while Technitium remains live | Technitium until a separate ownership cutover |
+| Run Sable as a Secondary first | Testing with current data while Technitium remains live | Technitium until conversion to Primary |
+| [Import from Catalog](#3d-import-catalog-members-in-bulk) | Discover and import many authoritative zones together | Technitium for Secondary imports; Sable for Primary imports |
 
 A **Secondary zone** follows another DNS server through AXFR/IXFR. A **Sable cluster replica** follows a Sable primary's application state. Technitium cannot enroll as a Sable cluster member. You can migrate into either a standalone Sable server or the writable primary of a Sable cluster.
 
@@ -20,11 +21,13 @@ Technitium uses a special `cluster-catalog.<cluster-domain>` to distribute membe
 
 For a replacement Sable deployment:
 
-- Export each authoritative member zone individually, or create an individual Sable Secondary for transfer staging. Source-side catalog membership does not make that Sable zone catalog-managed.
+- Use **Zones → Import from Catalog** to discover authoritative member zones and import them as independent Secondaries or Primaries. Alternatively, export zones or create Secondaries individually. Source-side catalog membership does not make that Sable zone catalog-managed.
 - Recreate Forwarder and Stub zones with their intended upstreams and behavior.
 - Review imported SOA/NS records and their address dependencies before retiring the old cluster.
 - Inspect the cluster-domain zone for service names you still need. Preserve those deliberately; do not copy its cluster authentication records as Sable cluster configuration.
 - Check signing status per zone. Catalog membership alone does not mean a zone is signed. Any signed zone you retain needs the DNSSEC review below, including whether a parent DS or private trust anchor exists.
+
+For migration, prefer the one-time catalog import when you want independent zones that can become writable in Sable.
 
 A [Secondary Catalog subscription](../reference/zones/secondary-catalog.md) is optional for staging many zones or ongoing interoperability with independent DNS servers. It is not required for any of the individual-zone migration paths below. Catalog-based staging creates managed members whose ownership must be resolved before making them independent Primaries; the individual Secondary cutover procedure below does not cover those members. Keep the source catalog intact while the old Technitium cluster still relies on it.
 
@@ -64,7 +67,7 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 53:8053/udp \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
-  ghcr.io/drudge/sable:1.1.0
+  ghcr.io/drudge/sable:1.2.0
 ```
 
 Use reachable independent container resolvers if those example resolvers are unsuitable. Both products commonly use console port 5380, as well as DNS port 53; running them on one host requires deliberate address/port bindings for both services. A separate VM or host is simpler for this walkthrough.
@@ -135,13 +138,44 @@ Create each Secondary directly for the member zone you want to migrate, even if 
 
 Follow [zone transfers](zone-transfers.md) for troubleshooting. Keep Technitium available: a Secondary depends on its upstream and eventually expires without successful refreshes.
 
-### Move write ownership to Sable
+## 3D. Import catalog members in bulk
+
+On a standalone server or the writable Sable cluster primary, sign in with permission to create zones. The source must provide an RFC 9432 version 2 catalog with no more than 1,000 members.
+
+Open the **Zones → Import from Catalog** dialog wizard and provide the catalog name, source DNS
+server, transfer protocol, and a configured TSIG key if required. Allow transfers
+of both the catalog and its members to Sable. Discover the members, select up to
+25, and choose **Import selected zones**.
+
+This reads the catalog once for discovery and rechecks membership when importing;
+it does not subscribe Sable to that catalog. Choose **Secondary** (the default) to keep receiving source updates, or
+**Primary** to make Sable writable immediately. Primary imports require the
+**Source writes are paused** confirmation for all selected zones. Sable fetches
+the latest records, applies the conversion checks, and advances the SOA serial
+before saving the Primary. A blocked zone is not created or silently staged as
+a Secondary. Each successful import has no Sable catalog ownership. Existing zones are left
+unchanged. Transfers use the shared source settings shown in the form; catalog
+properties are not imported as zone configuration. Partial failures are reported
+per zone and do not undo successful imports.
+
+Signed zones can be staged as Secondaries but are blocked from Primary import
+until a DNSSEC transition has been completed.
+Recreate Forwarder settings separately. Review and convert eligible zones
+individually after pausing source writes, then verify answers and cluster replicas
+before changing clients or retiring the old servers. Bulk conversion is not yet
+part of this workflow.
+
+If a selected zone already exists in Sable, import will not replace it, change its type, or detach it from a Sable catalog. Zone lists and detail pages identify the managing catalog; the detail page links to it. Plan ownership changes separately for subscribed members. A source-side Technitium catalog does not impose this restriction on independently imported zones.
+
+The wizard allows up to two minutes for an import, with a 30-second timeout per transfer. Review every result before retrying; successfully imported zones remain and are skipped on a later attempt. A warning after a signed Secondary import means it was synchronized successfully but cannot yet become Primary. A failed signed Primary import creates no zone.
+
+## Move write ownership to Sable
 
 A synchronized Secondary is a staging step until you deliberately move write ownership.
 
-#### Development builds after 1.1.0: in-place conversion (unreleased)
+### In-place conversion
 
-This feature targets the next release after 1.1.0; it is not available in released 1.1.0. For independent unsigned Secondaries:
+For independent unsigned Secondaries:
 
 1. Freeze Technitium edits and all automatic writers. Save source and Sable backups.
 2. On Sable's writable cluster primary or standalone node, open the zone's action menu and choose **Convert to Primary**.
@@ -155,7 +189,7 @@ Conversion preserves zone identity, permissions, records, and revision history w
 
 Signed zones and Sable catalog members are rejected with an explanation. Transferred signatures do not supply private signing keys. A Technitium catalog membership alone does not block an individually configured Sable Secondary; leave that source catalog behind as described above. Catalog detachment and seamless key migration are separate work.
 
-#### Released 1.1.0 and earlier: export, remove, and import
+### Sable 1.1.0 and earlier: export, remove, and import
 
 Sable 1.1.0 does not provide in-place Secondary-to-Primary conversion. For that version, use the following maintenance procedure.
 
@@ -194,35 +228,9 @@ Once stable, create a [sealed Sable backup](../backup.md), verify cluster synchr
 
 ## Rehearse with the local migration lab
 
-Contributors can run `mage migrationDemo` from a checkout containing the
-unreleased conversion feature. It stages disposable Technitium catalogs and
+Contributors can run `mage migrationDemo` from a Sable checkout. It stages disposable Technitium catalogs and
 member zones alongside a three-node Sable cluster, ready for manual conversion.
 `mage migrationTest` automates the cutover and failure checks. See the
 [migration lab instructions](../../scripts/demo/README.md#technitium-migration-lab)
 for requirements, fixtures, cleanup, and evidence. This does not modify your
 existing Technitium installation or change client DNS settings.
-
-### Discover and stage a catalog in bulk (unreleased)
-
-Open the **Zones → Import from Catalog** dialog wizard and provide the catalog name, source DNS
-server, transfer protocol, and a configured TSIG key if required. Allow transfers
-of both the catalog and its members to Sable. Discover the members, select up to
-25, and choose **Import selected zones**.
-
-This reads the catalog once for discovery and rechecks membership when importing;
-it does not subscribe Sable to that catalog. Choose **Secondary** (the default) to keep receiving source updates, or
-**Primary** to make Sable writable immediately. Primary imports require the
-**Source writes are paused** confirmation for all selected zones. Sable fetches
-the latest records, applies the conversion checks, and advances the SOA serial
-before saving the Primary. A blocked zone is not created or silently staged as
-a Secondary. Each successful import has no Sable catalog ownership. Existing zones are left
-unchanged. Transfers use the shared source settings shown in the form; catalog
-properties are not imported as zone configuration. Partial failures are reported
-per zone and do not undo successful imports.
-
-Signed zones can be staged as Secondaries but are blocked from Primary import
-until a DNSSEC transition has been completed.
-Recreate Forwarder settings separately. Review and convert eligible zones
-individually after pausing source writes, then verify answers and cluster replicas
-before changing clients or retiring the old servers. Bulk conversion is not yet
-part of this workflow.

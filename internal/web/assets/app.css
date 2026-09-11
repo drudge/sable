@@ -278,8 +278,10 @@ button { cursor: pointer; }
 .stat-card-link:focus-visible { outline-color: var(--foreground); outline-offset: 2px; }
 .dashboard-page:has(.dashboard-update-indicator.htmx-request) .stat-card::after { position: absolute; inset: auto 0 0; height: .2rem; background: linear-gradient(105deg, transparent 25%, rgb(255 255 255 / .22) 48%, transparent 70%); content: ""; pointer-events: none; transform: translateX(-120%); animation: dashboard-update-sweep 1.15s ease-in-out infinite; }
 @keyframes dashboard-update-sweep { to { transform: translateX(120%); } }
-.stat-card [data-stat-number] { font-variant-numeric: tabular-nums; }
+.stat-card [data-stat-number], [data-stat-key] { font-variant-numeric: tabular-nums; }
 .stat-card [data-stat-number].is-morphing { animation: dashboard-number-morph .52s cubic-bezier(.2, .75, .25, 1); }
+.time-morph-digit { display: inline-grid; width: 1ch; vertical-align: baseline; }
+.time-morph-digit > span { grid-area: 1 / 1; }
 @keyframes dashboard-number-morph {
   0% { transform: translateY(.18rem); }
   100% { transform: translateY(0); }
@@ -1954,7 +1956,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-node-portal:hover { text-decoration: underline; }
 .cluster-node-portal .nav-icon { width: .7rem; height: .7rem; flex: 0 0 .7rem; }
 .cluster-node-meta { display: grid; flex: 0 0 auto; justify-items: end; gap: .15rem; font-size: .68rem; }
-.cluster-node-meta span, .cluster-node-meta small { color: var(--muted-foreground); text-transform: capitalize; }
+.cluster-node-meta > span, .cluster-node-meta > small { color: var(--muted-foreground); }
+.cluster-node-meta > span { text-transform: capitalize; }
 .cluster-node-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .cluster-node-actions form { margin: 0; }
 .cluster-remove-node { border-color: rgb(239 68 68 / .45); color: #ef4444; }

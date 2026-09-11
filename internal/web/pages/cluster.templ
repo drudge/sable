@@ -201,7 +201,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
 		</section>
 		<section class="card cluster-nodes-card">
-			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="cluster-updated-badge">@Icon("clock")<span>Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
+			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="cluster-updated-badge">@Icon("clock")<span data-stat-key="cluster-updated">Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
 			<div class="cluster-node-list">
 				for _, node := range view.Nodes {
 					<article class="cluster-node-row">
@@ -229,7 +229,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 								}
 							</div>
 							<div class="cluster-node-meta">
-								<span>{ node.Role }</span><strong>@ReleaseVersion(node.Version)</strong><small>{ nodeUptimeLabel(node) }</small>
+								<span>{ node.Role }</span><strong>@ReleaseVersion(node.Version)</strong><small data-stat-key={ "cluster-uptime:" + node.ID }>{ nodeUptimeLabel(node) }</small>
 							</div>
 						</div>
 						<div class="cluster-sync-progress">

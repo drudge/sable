@@ -51,6 +51,8 @@ The console installs first and then offers a controlled restart. The old process
 
 ## Roll through a cluster
 
+Clustered nodes keep the **Rolling Updates** section visible even when updates are unavailable. A warning names the blocking condition, and update actions are hidden until supported. An active rollout can still offer **Stop rollout** to an authorized operator.
+
 From the primary, open **Cluster → Rolling Updates**, review **Release notes**,
 and choose **Update all**. The update notification also offers **Entire cluster**
 in its scope dropdown when every node supports rolling updates. The dropdown

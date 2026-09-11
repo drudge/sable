@@ -26,9 +26,9 @@ Compare the SOA serial and representative records at both servers. Make a harmle
 
 Follow [Transfer zones securely](../../guides/zone-transfers.md) for a complete setup.
 
-## Convert to Primary (unreleased, after 1.1.0)
+## Convert to Primary
 
-The next release after 1.1.0 adds **Convert to Primary** to the zone action menu for independent unsigned Secondaries. Freeze source writes, review the source/serial/record count, and perform the default final synchronization before confirming. A failed synchronization or stale confirmation leaves the zone unchanged. Using the stored snapshot is an explicit alternative that can promote stale or expired data.
+Choose **Convert to Primary** from the zone action menu for an independent unsigned Secondary. Freeze source writes, review the source/serial/record count, and perform the default final synchronization before confirming. A failed synchronization or stale confirmation leaves the zone unchanged. Using the stored snapshot is an explicit alternative that can promote stale or expired data.
 
 Conversion uses the normal transaction and cluster replication path: identity, permissions, and history remain, and the SOA serial advances. Upstream server and transport settings are cleared; transfer ACLs, NOTIFY, and shared TSIG authentication remain. Dynamic updates are not enabled automatically. Existing SOA/NS targets, disabled status, and record expiry remain. Verify each node before moving clients and writers.
 
@@ -46,3 +46,7 @@ On the writable Sable node, `GET /api/v1/zones/convert-primary?zone=example.test
 - `final_sync=true` (or explicitly `false` to use the stored snapshot)
 
 Conversion requires both zone settings and record-write permissions; final synchronization also requires transfer permission. Bearer tokens use the normal API authentication; browser sessions require their normal CSRF header. Success returns JSON with the converted `zone`. Unsupported or stale conversions return 422 without committing a conversion; cluster replicas return 409. The final transfer has a 30-second timeout. Obtain a new review after a stale confirmation; there is no automatic fallback after a failed transfer.
+
+### Bulk staging
+
+Use [Import from Catalog](../../guides/technitium-migration.md#3d-import-catalog-members-in-bulk) to discover source catalog members and create independent Secondaries in batches. Choose Primary instead only when source writes are paused and the zones pass conversion checks. Existing zones are skipped, and importing does not subscribe to the catalog or detach existing managed members.

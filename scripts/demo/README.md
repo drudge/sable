@@ -161,6 +161,16 @@ Secondary is the default. Choose Primary and confirm **Source writes are paused*
 to import eligible zones directly as writable Primaries. Signed zones can
 synchronize as Secondaries but are blocked from Primary import. Each failed
 Primary import leaves no new zone. Bulk conversion of existing zones is not included.
+
+For a complete manual comparison, first remove only the disposable
+`member.migration.test` and `signed.migration.test` zones from Sable, then import
+both as Primary. Expect `member.migration.test` to become Primary and the signed
+zone to report a DNSSEC blocker without being created. Import the signed zone as
+Secondary separately to test its synchronization and conversion warning.
+`managed.migration.test` belongs to `subscribed-catalog.migration.test` in Sable;
+leave that fixture in place to test the catalog ownership explanation.
+Always use the source port printed by the current run; older runs may use a
+different port.
 ## Update notifications and rolling upgrades
 
 Run the interactive update demo from the repository root:

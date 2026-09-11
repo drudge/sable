@@ -8,19 +8,85 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [Unreleased]
+## [1.2.0]
 
-- Added one-time catalog discovery and bulk import of independent Secondary or Primary zones, with source-write freeze confirmation for Primary imports, per-zone transfer results, and existing-zone protection.
+Sable 1.2.0 makes it easier to migrate authoritative zones from Technitium and
+other DNS servers, with bulk catalog import, in-place conversion to Primary,
+and clearer guidance throughout the cutover. It also improves the everyday
+console experience on desktop and mobile.
 
-- Independent unsigned Secondary zones can be converted to Primary in place from
-  the console or API, with reviewed source/serial/record count and optional final
-  synchronization. Identity, access policy, and history are retained. Signed zones
-  and Sable catalog members are rejected; stale confirmations and late transfers
-  cannot overwrite the converted Primary. This feature is not in released 1.1.0.
-### Fixed
+### Import zones from a catalog
 
-- Cluster keeps Rolling Updates visible when unavailable and explains the blocking condition.
-- Console refinements improve catalog ownership labels, migration dialogs, light-mode logo contrast, dashboard text shadows, and About icons. Blocked and allowed entry delete buttons remain visible, and Cluster ID uses the available space.
+- A new **Zones → Import from Catalog** wizard connects to a source catalog,
+  discovers its members, and lets you import up to 25 selected zones at a time.
+  Configure the source servers, transfer protocol, and TSIG key in the dialog.
+- Choose **Secondary** to keep zones synchronized with the existing DNS server
+  while you test, or **Primary** to make Sable writable immediately. Primary
+  imports require confirmation that source edits and automatic writers are paused.
+- Imported zones are independent of the source catalog. This is a one-time
+  import, not a catalog subscription; Sable's native cluster replication
+  distributes the imported zones to its replicas.
+- Existing Sable zones are left unchanged. Results show each zone's outcome,
+  so a failed transfer does not discard successful imports. Catalog membership
+  is checked again before importing to catch changes since discovery.
+- Signed zones can be imported as Secondaries. Primary import is blocked until
+  their DNSSEC transition is complete; a blocked Primary import does not silently
+  create a Secondary instead. Forwarder settings and catalog-specific properties
+  must be configured separately.
+
+### Convert a Secondary to Primary
+
+- **Convert to Primary Zone** moves write ownership of an independent, unsigned
+  Secondary to Sable without deleting and recreating the zone. Zone identity,
+  records, permissions, and revision history are retained. Conversion is available
+  in the console and API.
+- Review the source servers, SOA serial, and record count, confirm the source
+  write freeze, and synchronize once more before converting. A failed final
+  transfer leaves the zone Secondary. A stored-snapshot option is available when
+  needed, but requires you to verify that the saved data is suitable for cutover.
+- Conversion advances the SOA serial and stops upstream refresh and Secondary
+  expiry tracking. Stale confirmations and late transfers cannot overwrite the
+  converted Primary. Existing SOA and NS targets remain for you to review before
+  retiring the source.
+- DNSSEC-signed zones and members managed by a Sable catalog show why conversion
+  is unavailable. Expandable DNSSEC migration guidance explains the signing
+  transition; transferred public records do not include private signing keys.
+  Membership in a catalog on the source server alone does not block conversion
+  of an independent Sable Secondary.
+- Migration dialogs use clearer status cards, warning and information alerts,
+  and aligned confirmation controls. When conversion is unavailable, the dialog
+  offers **Close** instead of a disabled conversion button.
+
+### Cluster visibility
+
+- Zone lists and detail pages identify the catalog managing each zone, with a
+  link to the catalog on the detail page.
+- **Rolling Updates** remains visible when a clustered installation cannot use
+  it. A warning explains the blocking condition, and unavailable update actions
+  are hidden. Docker guidance clarifies that automatic restart requires both
+  `SABLE_WEB_UPDATES=true` and `updates.restart_managed=true`, plus a working
+  container restart policy.
+- Cluster IDs use the available space and wrap instead of being truncated early.
+- Updated timestamps and node uptime animate changing digits in place, with
+  fixed-width digits and consistent lowercase time units. Reduced-motion
+  preferences are respected.
+
+### Console polish
+
+- The Sable logo uses a black background behind the gold **S** in light mode for
+  stronger contrast, without an extra black outline around the badge.
+- Delete buttons for blocked and allowed entries remain visible without hovering,
+  making them easier to find and use on touchscreens.
+- Dashboard stat text uses darker shadows matched to each tile's color.
+- About, Support, and Metrics headings use consistent icons in the logo's gold.
+
+### Migration documentation and demo
+
+- A Technitium migration guide covers inventory, transfer staging, catalog import,
+  ownership cutover, DNSSEC transitions, verification, and rollback planning.
+- A disposable migration lab runs a real Technitium container alongside a
+  three-node Sable cluster. It includes standalone, catalog-managed, and signed
+  zone examples for trying the workflow before a production migration.
 
 ## [1.1.0] - Unreleased
 
