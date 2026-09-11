@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
@@ -266,6 +267,10 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 	if status.ClusterUpdate {
 		view.CanApply = false
 		view.Blocked = "A rolling update controls this node. Follow its progress on Cluster."
+	}
+	if controller, ok := server.cluster.(clusterUpdateController); ok && view.CanApply && server.canManageClusterUpdate(request) {
+		view.CanUpdateCluster = status.Checked() && !status.Busy() && !status.Installed && !status.ClusterUpdate && status.Error == "" &&
+			server.cluster.Snapshot().LocalRole == cluster.RolePrimary && controller.RollingUpdatesSupported() && !controller.RolloutStatus().Active()
 	}
 	view.CanRestart = view.CanApply && server.restart != nil
 	return view

@@ -46,11 +46,10 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 								<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
 							}
 						} else if view.CanApply && view.Version != "" {
-							<form hx-post="/ui/updates/cluster" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm={ "Install Sable v" + view.Version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." } data-confirm-title="Update the entire cluster?" data-confirm-action="Start rolling update" data-confirm-tone="neutral">
-								<input type="hidden" name="version" value={ view.Version }/>
+							@clusterUpdateForm(view.Version, false) {
 								<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")
 <span>Update all</span></button>
-							</form>
+							}
 						}
 					</div>
 					if view.Version == "" && !view.Rollout.Active() {
@@ -61,6 +60,25 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)
 		}
 	</div>
+}
+
+templ clusterUpdateForm(version string, fromNotification bool) {
+	<form
+		hx-post="/ui/updates/cluster"
+		hx-target={ ifThen(fromNotification, "closest .toast-region", "#cluster-content") }
+		hx-swap="outerHTML"
+		hx-disable={ ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#cluster-updates button, #cluster-updates input") }
+		hx-confirm={ "Install Sable v" + version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." }
+		data-confirm-title="Update the entire cluster?"
+		data-confirm-action="Start rolling update"
+		data-confirm-tone="neutral"
+	>
+		<input type="hidden" name="version" value={ version }/>
+		if fromNotification {
+			<input type="hidden" name="notification" value="true"/>
+		}
+		{ children... }
+	</form>
 }
 
 func rolloutPhaseLabel(phase string) string {

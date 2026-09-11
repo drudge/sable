@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -20,6 +21,7 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	var installs atomic.Int32
 	var polls atomic.Int32
 	var restarts atomic.Int32
+	var rollouts atomic.Int32
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", webassets.Handler())
 	update := pages.UpdateView{Supported: true, Available: true, Checked: true, CanCheck: true, CanApply: true, CheckOnLogin: true,
@@ -31,11 +33,22 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 			return
 		}
 		checks.Add(1)
-		_ = pages.UpdateNotification(update).Render(r.Context(), w)
+		view := update
+		view.CanUpdateCluster = strings.Contains(r.Referer(), "?scope")
+		_ = pages.UpdateNotification(view).Render(r.Context(), w)
 	})
 	mux.HandleFunc("GET /checks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, checks.Load()) })
 	mux.HandleFunc("GET /installs", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, installs.Load()) })
 	mux.HandleFunc("GET /restarts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, restarts.Load()) })
+	mux.HandleFunc("GET /rollouts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, rollouts.Load()) })
+	mux.HandleFunc("POST /ui/updates/cluster", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-CSRF-Token") != "fixture-csrf" || r.PostFormValue("notification") != "true" || r.PostFormValue("version") != "1.1.0" {
+			http.Error(w, "invalid cluster update", http.StatusBadRequest)
+			return
+		}
+		rollouts.Add(1)
+		w.Header().Set("HX-Redirect", "/cluster")
+	})
 	currentUpdate := func() pages.UpdateView {
 		view := update
 		if installs.Load() > 0 {

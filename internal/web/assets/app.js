@@ -307,7 +307,7 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, window.innerHeight * .45);
 	  root.dataset.side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	};
-	const positionFloatingPopover = (root, trigger, popover) => {
+	const positionFloatingPopover = (root, trigger, popover, preferredWidth) => {
 	  const triggerRect = trigger.getBoundingClientRect();
 	  const viewport = window.visualViewport;
 	  const viewportTop = viewport?.offsetTop || 0;
@@ -323,13 +323,13 @@
 	  const preferredHeight = Math.min(popover.scrollHeight, viewportHeight * .45, 288);
 	  const side = availableBelow < preferredHeight && availableAbove > availableBelow ? "top" : "bottom";
 	  const availableHeight = side === "top" ? availableAbove : availableBelow;
-	  const width = Math.min(triggerRect.width, viewportWidth - inset * 2);
+	  const width = Math.min(preferredWidth || triggerRect.width, viewportWidth - inset * 2);
 
 	  root.dataset.side = side;
 	  popover.style.width = `${Math.max(0, width)}px`;
 	  popover.style.maxHeight = `${Math.max(0, Math.min(preferredHeight, availableHeight))}px`;
 	  const height = popover.getBoundingClientRect().height;
-	  const left = Math.min(Math.max(triggerRect.left, viewportLeft + inset), viewportRight - inset - width);
+	  const left = Math.min(Math.max(triggerRect.right - width, viewportLeft + inset), viewportRight - inset - width);
 	  const top = side === "top" ? triggerRect.top - gap - height : triggerRect.bottom + gap;
 	  popover.style.left = `${left}px`;
 	  popover.style.top = `${top}px`;
@@ -1423,6 +1423,65 @@
   };
   queueMicrotask(checkForUpdateNotification);
 
+	const UPDATE_SCOPE_MENU_WIDTH = 288;
+	const setupUpdateScope = (root) => {
+	  if (root.dataset.updateScopeReady === "true") return;
+	  root.dataset.updateScopeReady = "true";
+	  const trigger = root.querySelector("[data-update-scope-trigger]");
+	  const menu = root.querySelector('[role="menu"]');
+	  const items = [...menu.querySelectorAll('[role="menuitem"]')];
+	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
+	  const close = () => {
+		if (menu.matches(":popover-open")) menu.hidePopover();
+	  };
+	  const open = (last = false) => {
+		menu.showPopover();
+		position();
+		(last ? items.at(-1) : items[0])?.focus();
+	  };
+	  trigger.addEventListener("click", () => {
+		if (menu.matches(":popover-open")) close(); else open();
+	  });
+	  trigger.addEventListener("keydown", (event) => {
+		if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+		event.preventDefault();
+		open(event.key === "ArrowUp");
+	  });
+	  menu.addEventListener("toggle", (event) => {
+		const opened = event.newState === "open";
+		trigger.setAttribute("aria-expanded", String(opened));
+		if (opened) root.dataset.open = "true"; else root.removeAttribute("data-open");
+	  });
+	  menu.addEventListener("keydown", (event) => {
+		if (event.key === "Escape" || event.key === "Tab") {
+		  if (event.key === "Escape") event.preventDefault();
+		  close();
+		  trigger.focus();
+		  return;
+		}
+		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+		event.preventDefault();
+		const current = items.indexOf(document.activeElement);
+		const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		items[(index + items.length) % items.length]?.focus();
+	  });
+	  // Close before the shared confirmation captures its return-focus control.
+	  menu.addEventListener("htmx:confirm", () => {
+		close();
+		trigger.focus();
+	  });
+	};
+	window.addEventListener("resize", () => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
+	  });
+	});
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
+		if (!root.contains(event.target)) root.querySelector('[role="menu"]').hidePopover();
+	  });
+	});
+
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
@@ -2485,6 +2544,8 @@
 	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
+	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
+	  root.querySelectorAll?.("[data-update-scope]").forEach(setupUpdateScope);
 	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);
 	  root.querySelectorAll?.("[data-dnssec-denial]").forEach(syncDNSSECDenial);
 	  if (root.matches?.("[data-isotope-tabs]")) setupIsotopeTabs(root);

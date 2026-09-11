@@ -34,15 +34,31 @@ func (server *Server) startClusterUpdate(writer http.ResponseWriter, request *ht
 	status := server.updateStatus()
 	target := request.FormValue("version")
 	if target == "" || target != status.LatestVersion || !status.Checked() || status.Busy() || status.Error != "" {
-		server.renderClusterMutation(writer, request, http.StatusConflict, "", "Check for updates on About and review the release before starting a rollout.")
+		server.renderClusterUpdateResult(writer, request, http.StatusConflict, "", "Check for updates on About and review the release before starting a rollout.")
 		return
 	}
 	if err := controller.StartRollout(request.Context(), target); err != nil {
-		server.renderClusterMutation(writer, request, http.StatusConflict, "", err.Error())
+		server.renderClusterUpdateResult(writer, request, http.StatusConflict, "", err.Error())
 		return
 	}
 	server.recordControlPlaneAudit(request, "update.cluster.start", "started rolling cluster update to "+target)
-	server.renderClusterMutation(writer, request, http.StatusOK, "Rolling update started. Replicas update one at a time; the primary updates last.", "")
+	server.renderClusterUpdateResult(writer, request, http.StatusOK, "Rolling update started. Replicas update one at a time; the primary updates last.", "")
+}
+
+func (server *Server) renderClusterUpdateResult(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
+	if request.FormValue("notification") != "true" {
+		server.renderClusterMutation(writer, request, status, message, errorMessage)
+		return
+	}
+	if errorMessage != "" {
+		writeFragmentStatus(writer, status)
+		server.renderUpdatePanel(writer, request, server.updateStatus(), errorMessage)
+		return
+	}
+	// The Cluster page already follows every node through installation and
+	// restart, including when the notification was opened on another page.
+	writer.Header().Set("HX-Redirect", "/cluster")
+	writer.WriteHeader(http.StatusOK)
 }
 
 func (server *Server) stopClusterUpdate(writer http.ResponseWriter, request *http.Request) {
