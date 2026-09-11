@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/drudge/sable/internal/auth"
@@ -104,7 +103,7 @@ func (server *Server) checkForUpdates(writer http.ResponseWriter, request *http.
 }
 
 // checkForUpdatesCommand runs the same release lookup as the About page, but
-// reports the result as a global toast so a palette action works from any page.
+// reports the result globally so a palette action works from any page.
 // It uses the configured release channel without changing that preference.
 func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request *http.Request) {
 	if server.updates == nil {
@@ -114,7 +113,7 @@ func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request
 	}
 	includePreRelease := server.config.Current().Config.Updates.PreRelease
 	status, err := server.resolveUpdateCheck(request, includePreRelease)
-	server.renderUpdateCheckToast(writer, request, status, err)
+	server.renderUpdateCheckResult(writer, request, status, err)
 }
 
 func (server *Server) resolveUpdateCheck(request *http.Request, includePreRelease bool) (update.Status, error) {
@@ -126,7 +125,7 @@ func (server *Server) resolveUpdateCheck(request *http.Request, includePreReleas
 	return status, err
 }
 
-func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request *http.Request, status update.Status, checkErr error) {
+func (server *Server) renderUpdateCheckResult(writer http.ResponseWriter, request *http.Request, status update.Status, checkErr error) {
 	view := server.updateView(request, status)
 	message, variant, responseStatus := "Update check completed.", "success", http.StatusOK
 	switch {
@@ -139,7 +138,8 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 	case view.Busy || errors.Is(checkErr, update.ErrUpdateInProgress):
 		message = "An update check is already in progress."
 	case view.Available:
-		message = fmt.Sprintf("Sable v%s is available. Open About to review and install it.", view.LatestVersion)
+		_ = pages.UpdateNotification(view).Render(request.Context(), writer)
+		return
 	case view.UpToDate:
 		message = "Sable is up to date."
 	}

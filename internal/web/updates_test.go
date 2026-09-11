@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -153,11 +154,11 @@ func TestAboutPageReportsAnUpToDateInstallation(t *testing.T) {
 	}
 }
 
-func TestCommandPaletteUpdateCheckReturnsToast(t *testing.T) {
+func TestCommandPaletteUpdateCheckReturnsUpdateNotification(t *testing.T) {
 	t.Parallel()
 	controller := &testUpdateController{status: update.Status{
 		Phase: update.PhaseIdle, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
-		Available: true, CheckedAt: time.Now(),
+		Available: true, CheckedAt: time.Now(), ReleaseNotes: "### Improvements\n\n- Faster updates.",
 	}}
 	server := updateTestServer(t, controller)
 	response := serveUpdateForm(server, "/ui/updates/command-check", nil)
@@ -165,16 +166,48 @@ func TestCommandPaletteUpdateCheckReturnsToast(t *testing.T) {
 		t.Fatalf("palette update check status = %d", response.Code)
 	}
 	body := response.Body.String()
-	for _, expected := range []string{`class="toast-region"`, "Sable v9.9.9 is available. Open About to review and install it."} {
+	for _, expected := range []string{
+		`id="update-notification"`, "Sable v9.9.9 is available", `data-toast-duration="0"`,
+		`data-dialog-open="notification-release-notes-dialog"`, "Faster updates.",
+		`hx-post="/ui/updates/install"`, `name="notification" value="true"`, "Install v9.9.9",
+	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("palette update check does not contain %q: %s", expected, body)
 		}
 	}
-	if strings.Contains(body, `id="about-update"`) {
-		t.Error("palette update check returned the About page panel instead of a toast")
+	if strings.Contains(body, `id="about-update"`) || strings.Contains(body, "Open About to review and install") {
+		t.Error("palette update check did not offer the update directly in the notification")
 	}
 	if controller.checks != 1 || controller.preRelease {
 		t.Fatalf("palette update checks = %d pre-release = %t", controller.checks, controller.preRelease)
+	}
+}
+
+func TestCommandPaletteUpdateCheckKeepsStatusToasts(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		checkError error
+		wantStatus int
+		message    string
+	}{
+		{name: "up to date", wantStatus: http.StatusOK, message: "Sable is up to date."},
+		{name: "failed check", checkError: errors.New("release feed unavailable"), wantStatus: http.StatusBadGateway, message: "release feed unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{
+				status:     update.Status{Phase: update.PhaseIdle, CurrentVersion: "9.9.9", LatestVersion: "9.9.9", CheckedAt: time.Now()},
+				checkError: test.checkError,
+			})
+			response := serveUpdateForm(server, "/ui/updates/command-check", nil)
+			body := response.Body.String()
+			if response.Code != test.wantStatus || !strings.Contains(body, test.message) || !strings.Contains(body, `class="toast-region"`) {
+				t.Fatalf("status toast = %d %s", response.Code, body)
+			}
+			if strings.Contains(body, `id="update-notification"`) || strings.Contains(body, `hx-post="/ui/updates/install"`) {
+				t.Fatalf("status toast unexpectedly offered an update: %s", body)
+			}
+		})
 	}
 }
 
