@@ -190,26 +190,43 @@ func (service *Service) RolloutStatus() RolloutStatus {
 // does not hide rollout progress. StartRollout separately requires fresh, healthy
 // reports before any update can begin. Only the primary receives every report.
 func (service *Service) RollingUpdatesSupported() bool {
+	return service.RollingUpdatesUnavailableReason() == ""
+}
+
+// RollingUpdatesUnavailableReason explains the same capability gate used to start a rollout.
+func (service *Service) RollingUpdatesUnavailableReason() string {
 	if service.updates == nil {
-		return false
+		return "This installation does not support automatic updates and restarts."
 	}
 	service.updates.mu.Lock()
 	defer service.updates.mu.Unlock()
 	service.mu.RLock()
 	defer service.mu.RUnlock()
-	if service.manifest == nil || service.manifest.PrimaryID != service.nodeID || len(service.manifest.Nodes) < 2 {
-		return false
+	if service.manifest == nil {
+		return "Initialize or join a cluster to use rolling updates."
+	}
+	if service.manifest.PrimaryID != service.nodeID {
+		return "Start rolling updates from the cluster primary."
+	}
+	if len(service.manifest.Nodes) < 2 {
+		return "Add a replica to use rolling updates."
 	}
 	for _, node := range service.manifest.Nodes {
 		report := &service.updates.local
 		if node.ID != service.nodeID {
 			report = service.telemetry[node.ID].heartbeat.Update
 		}
-		if report == nil || !report.Supported || report.Blocked != "" {
-			return false
+		if report == nil {
+			return fmt.Sprintf("Waiting for update capability information from %s.", node.Name)
+		}
+		if report.Blocked != "" {
+			return fmt.Sprintf("%s: %s", node.Name, report.Blocked)
+		}
+		if !report.Supported {
+			return fmt.Sprintf("%s does not support automatic updates and restarts.", node.Name)
 		}
 	}
-	return true
+	return ""
 }
 
 func (service *Service) localUpdateStatus() *NodeUpdateStatus {

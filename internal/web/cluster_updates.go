@@ -93,7 +93,7 @@ func (server *Server) canManageClusterUpdate(request *http.Request) bool {
 func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpdateView {
 	controller, ok := server.cluster.(clusterUpdateController)
 	if !ok {
-		return pages.ClusterUpdateView{}
+		return pages.ClusterUpdateView{Initialized: server.cluster != nil && server.cluster.Snapshot().Initialized, UnavailableReason: "This installation does not support rolling updates."}
 	}
 	status := server.updateStatus()
 	state := server.cluster.Snapshot()
@@ -102,12 +102,20 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 		rollout = cluster.RolloutStatus{}
 	}
 	view := pages.ClusterUpdateView{
-		Supported: controller.RollingUpdatesSupported(),
-		Rollout:   rollout,
-		CanApply:  server.canManageClusterUpdate(request),
-		Release:   server.updateView(request, status),
+		Initialized: state.Initialized,
+		Supported:   controller.RollingUpdatesSupported(),
+		Rollout:     rollout,
+		CanApply:    server.canManageClusterUpdate(request),
+		Release:     server.updateView(request, status),
+	}
+	if !view.Supported {
+		view.UnavailableReason = "Every cluster member must support automatic updates and restarts."
+		if reasons, ok := server.cluster.(interface{ RollingUpdatesUnavailableReason() string }); ok {
+			view.UnavailableReason = reasons.RollingUpdatesUnavailableReason()
+		}
 	}
 	if state.LocalRole != cluster.RolePrimary {
+		view.UnavailableReason = "Start rolling updates from the cluster primary."
 		view.CanApply = false
 	}
 	if status.Checked() && !status.Busy() && status.Error == "" && slices.ContainsFunc(state.Nodes, func(node cluster.Node) bool {

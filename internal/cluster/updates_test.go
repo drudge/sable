@@ -256,6 +256,12 @@ func TestRollingUpdatesSupportedRequiresEveryMemberCapability(t *testing.T) {
 			}
 			primary.telemetry[replica.nodeID] = observed
 			want := scenario == "supported" || scenario == "restart"
+			if reason := primary.RollingUpdatesUnavailableReason(); (reason == "") != want {
+				t.Fatalf("support and reason disagree: %q", reason)
+			}
+			if scenario == "blocked" && !strings.Contains(primary.RollingUpdatesUnavailableReason(), "automatic restart unavailable") {
+				t.Fatal("node restriction was lost")
+			}
 			if got := primary.RollingUpdatesSupported(); got != want {
 				t.Fatalf("RollingUpdatesSupported() = %t, want %t", got, want)
 			}
