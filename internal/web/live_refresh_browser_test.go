@@ -45,7 +45,7 @@ func TestBrowserLiveRefresh(t *testing.T) {
 	insights := pages.DashboardInsightsView{PollRange: "hour", TopDomains: []pages.RankedStatView{{Name: "example.test", Value: 10}}, QueryTypes: []pages.DistributionItemView{{Name: "A", Value: 10, Percent: 100}}}
 	cluster := pages.ClusterPageView{LocalRole: "Primary", NetworkReady: true, Nodes: []pages.ClusterNodeView{{ID: "replica-1", Name: "Replica", Role: "Replica", AdvertiseURL: "https://example.test", State: "online", SyncState: "current"}}}
 	backup := pages.SettingsBackupView{Available: true, LocalAvailable: true, CanCreate: true, ScheduleDirectory: "backups", ScheduleInterval: "1d", ScheduleRetentionCount: 7, ScheduleRunAt: "01:00", Job: &pages.SettingsBackupJobView{Kind: "local", Title: "Running", Step: 1, Total: 2}}
-	update := pages.UpdateView{Busy: true, Available: true, ReleaseURL: "https://example.test/release"}
+	update := pages.UpdateView{Busy: true, Available: true, LatestVersion: "1.1.0", ReleaseURL: "https://github.com/drudge/sable/releases/tag/v1.1.0", ReleaseNotes: "### Improvements\n\n- More reliable updates."}
 	unifi := pages.UniFiAppView{Enabled: true, Mappings: []pages.UniFiMappingView{{Name: "Office", Zone: "office.example.test", Preview: "workstation-with-a-long-name.office.example.test"}}}
 	dynamic := pages.DynamicDNSAppView{Enabled: true}
 	logs := pages.QueryLogsView{Live: true, PageSize: 25}

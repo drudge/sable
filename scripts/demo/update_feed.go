@@ -53,9 +53,10 @@ func startUpdateDemoFeed(workspace, target string) (*updateDemoFeed, error) {
 		return nil, err
 	}
 	feed := &updateDemoFeed{URL: "http://" + listener.Addr().String()}
+	releaseURL := "https://github.com/drudge/sable/releases/tag/v" + updateDemoTarget
 	metadata := map[string]any{
 		"tag_name": "v" + updateDemoTarget, "draft": false, "prerelease": false,
-		"html_url": feed.URL + "/release-notes", "body": updateDemoNotes,
+		"html_url": releaseURL, "body": updateDemoNotes,
 		"assets": []map[string]any{
 			{"name": archiveName, "size": len(archive), "browser_download_url": feed.URL + "/downloads/" + archiveName},
 			{"name": "checksums.txt", "size": len(checksum), "browser_download_url": feed.URL + "/downloads/checksums.txt"},
@@ -86,8 +87,7 @@ func startUpdateDemoFeed(workspace, target string) (*updateDemoFeed, error) {
 		_, _ = io.WriteString(writer, checksum)
 	})
 	mux.HandleFunc("GET /release-notes", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = io.WriteString(writer, updateDemoNotes)
+		http.Redirect(writer, request, releaseURL, http.StatusFound)
 	})
 	feed.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = feed.server.Serve(listener) }()

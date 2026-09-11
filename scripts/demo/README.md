@@ -104,8 +104,8 @@ A loopback server supplies GitHub-shaped release metadata, curated Markdown
 notes, a real archive, and its SHA-256 checksum. All downloads, verification,
 binary replacements, enrollment, synchronization, and restarts are real. A
 small supervisor handles Sable's restart exit code for each independent process.
-The release notes explicitly identify the local fixture; installed-version
-links still point to the corresponding real GitHub tags.
+The in-app release notes explicitly identify the local fixture. **View release**
+and installed-version links open the corresponding published release on GitHub.
 
 The release feed override is compiled only with the `updatedemo` build tag and
 accepts only a loopback URL. Normal builds always use GitHub. Each run creates a

@@ -14,7 +14,7 @@ const scenarios = [
   {page: 'unifi', name: 'UniFi actions', control: '[data-dialog-open="remove-unifi-dialog"]', interval: 10000},
   {page: 'unifi', name: 'UniFi mapping links', control: '#unifi-mapping-table a', interval: 10000},
   {page: 'dynamic', name: 'Dynamic DNS actions', control: 'a[href="/integrations?setup=dynamic-dns"]', interval: 30000},
-  {page: 'update', name: 'release notes', control: '.about-update-notes', interval: 2000},
+  {page: 'update', name: 'release notes', control: '#update-release-notes-dialog-open', interval: 2000},
 ];
 
 async function refresh(page, interval) {

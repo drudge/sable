@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -34,7 +33,9 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		}
 		checks.Add(1)
 		view := update
-		view.CanUpdateCluster = strings.Contains(r.Referer(), "?scope")
+		if scope, err := r.Cookie("fixture-update-scope"); err == nil {
+			view.CanUpdateCluster = scope.Value == "cluster"
+		}
 		_ = pages.UpdateNotification(view).Render(r.Context(), w)
 	})
 	mux.HandleFunc("GET /checks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, checks.Load()) })
@@ -102,6 +103,13 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		_ = pages.ClusterLiveStatusUpdate(pages.ClusterPageView{Initialized: true, LocalRole: "Primary", Update: refresh}).Render(r.Context(), w)
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		// Keep fixture selection explicit: the real console deliberately sends
+		// no Referer header, including for its automatic update request.
+		scope := "node"
+		if r.URL.Query().Has("scope") {
+			scope = "cluster"
+		}
+		http.SetCookie(w, &http.Cookie{Name: "fixture-update-scope", Value: scope, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
 		view.Username = r.URL.Query().Get("user")
 		if restarts.Load() > 0 {
