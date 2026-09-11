@@ -8,6 +8,14 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [Unreleased]
+
+### Fixed
+
+- Docker deployments with `SABLE_WEB_UPDATES=true` now support rolling cluster
+  updates without an additional `updates.restart_managed` setting. Keep a Docker
+  restart policy configured so each node returns after its update.
+
 ## [1.1.0] - Unreleased
 
 ### Updates
