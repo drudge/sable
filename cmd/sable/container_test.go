@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/drudge/sable/internal/update"
 )
 
 func TestContainerWebUpdatesAreExplicitlyEnabled(t *testing.T) {
@@ -16,16 +18,19 @@ func TestContainerWebUpdatesAreExplicitlyEnabled(t *testing.T) {
 		{value: "false", want: false},
 		{value: "true", want: true},
 		{value: "1", want: true},
+		{value: " TRUE ", want: true},
 	} {
-		got, err := containerWebUpdatesEnabled(test.value)
+		t.Setenv(update.ContainerWebUpdatesEnvironment, test.value)
+		got, err := update.ContainerWebUpdatesEnabled()
 		if err != nil {
-			t.Fatalf("containerWebUpdatesEnabled(%q): %v", test.value, err)
+			t.Fatalf("ContainerWebUpdatesEnabled(%q): %v", test.value, err)
 		}
 		if got != test.want {
-			t.Fatalf("containerWebUpdatesEnabled(%q) = %t, want %t", test.value, got, test.want)
+			t.Fatalf("ContainerWebUpdatesEnabled(%q) = %t, want %t", test.value, got, test.want)
 		}
 	}
-	if _, err := containerWebUpdatesEnabled("sometimes"); err == nil {
+	t.Setenv(update.ContainerWebUpdatesEnvironment, "sometimes")
+	if _, err := update.ContainerWebUpdatesEnabled(); err == nil {
 		t.Fatal("an invalid web-update switch was accepted")
 	}
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/drudge/sable/internal/update"
+	"github.com/drudge/sable/internal/version"
 )
 
 type rolloutTestUpdater struct {
@@ -254,8 +256,62 @@ func TestRollingUpdatesSupportedRequiresEveryMemberCapability(t *testing.T) {
 			}
 			primary.telemetry[replica.nodeID] = observed
 			want := scenario == "supported" || scenario == "restart"
+			if reason := primary.RollingUpdatesUnavailableReason(); (reason == "") != want {
+				t.Fatalf("support and reason disagree: %q", reason)
+			}
+			if scenario == "blocked" && !strings.Contains(primary.RollingUpdatesUnavailableReason(), "automatic restart unavailable") {
+				t.Fatal("node restriction was lost")
+			}
 			if got := primary.RollingUpdatesSupported(); got != want {
 				t.Fatalf("RollingUpdatesSupported() = %t, want %t", got, want)
+			}
+		})
+	}
+}
+
+func TestRollingUpdatesHonorContainerWebUpdateOptIn(t *testing.T) {
+	// Model a Docker replica without systemd or an extra TOML restart setting.
+	t.Setenv("PATH", t.TempDir())
+	originalRelease := version.Release
+	t.Cleanup(func() { version.Release = originalRelease })
+	for _, test := range []struct {
+		name           string
+		enabled        string
+		release        string
+		restartManaged bool
+		unwritable     bool
+		want           bool
+	}{
+		{name: "unset", release: "1.1.0"},
+		{name: "enabled", enabled: "true", release: "1.1.0", want: true},
+		{name: "disabled", enabled: "false", release: "1.1.0"},
+		{name: "invalid", enabled: "sometimes", release: "1.1.0"},
+		{name: "external supervisor", release: "1.1.0", restartManaged: true, want: true},
+		{name: "development build", enabled: "true", release: "dev"},
+		{name: "unwritable binary", enabled: "true", release: "1.1.0", unwritable: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(update.ContainerWebUpdatesEnvironment, test.enabled)
+			version.Release = test.release
+			primary, replica := joinedClusterServices(t)
+			if err := primary.SetUpdateController(&rolloutTestUpdater{}, func() {}); err != nil {
+				t.Fatal(err)
+			}
+			binaryPath := filepath.Join(t.TempDir(), "sable")
+			if test.unwritable {
+				binaryPath = filepath.Join(binaryPath, "missing", "sable")
+			}
+			manager := update.NewManager(update.Options{BinaryPath: binaryPath, RestartManaged: test.restartManaged})
+			if err := replica.SetUpdateController(manager, func() { t.Fatal("capability negotiation requested a restart") }); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if err := replica.syncFromPrimary(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := primary.RollingUpdatesSupported(); got != test.want {
+				t.Fatalf("rolling updates supported = %t, want %t; replica report: %+v", got, test.want, primary.telemetry[replica.nodeID].heartbeat.Update)
 			}
 		})
 	}

@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## Unreleased — next release after 1.1.0
+## [Unreleased]
 
 - Added one-time catalog discovery and bulk import of independent Secondary or Primary zones, with source-write freeze confirmation for Primary imports, per-zone transfer results, and existing-zone protection.
 
@@ -17,6 +17,14 @@ compatibility are not yet a published contract.
   synchronization. Identity, access policy, and history are retained. Signed zones
   and Sable catalog members are rejected; stale confirmations and late transfers
   cannot overwrite the converted Primary. This feature is not in released 1.1.0.
+### Fixed
+
+- Cluster keeps Rolling Updates visible when unavailable and explains the blocking condition.
+- Console refinements improve catalog ownership labels, migration dialogs, light-mode logo contrast, dashboard text shadows, and About icons. Blocked and allowed entry delete buttons remain visible, and Cluster ID uses the available space.
+- Docker deployments with `SABLE_WEB_UPDATES=true` now support rolling cluster
+  updates without an additional `updates.restart_managed` setting. Keep a Docker
+  restart policy configured so each node returns after its update.
+
 ## [1.1.0] - Unreleased
 
 ### Updates

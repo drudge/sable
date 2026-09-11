@@ -206,9 +206,11 @@ the command and service copies.
 
 The container image also runs as `nonroot`. Set `SABLE_WEB_UPDATES=true` to let
 its immutable entrypoint stage verified releases in the `/data` volume and hand
-off to a newer staged build after a controlled container restart. It does not
-need the Docker socket or additional capabilities. Without that environment
-switch, the image remains immutable and the console only reports the release.
+off to a newer staged build after a controlled container restart. With a Docker
+restart policy configured, this same flag enables rolling cluster updates;
+no additional TOML setting is needed. It does not need the Docker socket or
+additional capabilities. Without that environment switch, the image remains
+immutable and the console only reports the release.
 
 The release channel is remembered per node. Changing **Include pre-releases**
 immediately checks that channel and writes `updates.pre_release` to the local

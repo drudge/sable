@@ -129,7 +129,8 @@ func (manager *Manager) Status() Status {
 // ServiceManaged reports whether a service manager is expected to start Sable
 // again after it exits for an update.
 func (manager *Manager) ServiceManaged() bool {
-	return manager.options.RestartManaged || ServiceManaged()
+	containerUpdates, _ := ContainerWebUpdatesEnabled()
+	return manager.options.RestartManaged || containerUpdates || ServiceManaged()
 }
 
 // Check resolves the newest release without installing it. It runs inline

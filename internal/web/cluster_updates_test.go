@@ -67,7 +67,14 @@ func TestClusterUpdateViewRetainsCurrentRolloutDuringCapabilityNegotiation(t *te
 			}
 			server.SetClusterController(controller)
 			view := server.clusterUpdateView(httptest.NewRequest(http.MethodGet, "/cluster", nil))
-			wantVisible := scenario == "restarting" || scenario == "complete"
+			wantVisible := true
+			wantRollout := scenario == "restarting" || scenario == "complete"
+			if (view.Rollout.ID != "") != wantRollout {
+				t.Fatal("unrelated rollout was retained or current rollout was lost")
+			}
+			if view.UnavailableReason == "" {
+				t.Fatal("unsupported cluster must explain why")
+			}
 			if view.Visible() != wantVisible || view.Supported {
 				t.Fatalf("visible=%t supported=%t, want visible=%t without enabling new rollouts", view.Visible(), view.Supported, wantVisible)
 			}
