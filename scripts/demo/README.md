@@ -86,8 +86,8 @@ Open <http://127.0.0.1:6491> and sign in as `art.vandelay` with password
 
 1. After sign-in, choose **Release notes** in the update notification to open
    the same notes dialog as About. **Install** confirms and updates this node,
-   then shows progress on About. Skip installing a single node to try the full
-   cluster rollout below.
+   shows download progress in the notification, then offers **Restart Sable**.
+   Skip installing a single node to try the full cluster rollout below.
 2. **Settings → General → Software Updates** contains the **Check for updates
    on sign-in** preference.
 3. Open **Cluster**, choose **Update all nodes to v1.0.2**, and confirm.

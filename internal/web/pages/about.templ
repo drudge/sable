@@ -145,22 +145,11 @@ templ UpdatePanel(view UpdateView) {
 		id="about-update"
 		data-live-refresh
 		class={ "about-update", "about-update-" + updateVariant(view) }
-		if view.Busy {
-			hx-get="/ui/updates"
-			hx-trigger="every 2s"
-			hx-target="this"
-			hx-swap="outerHTML"
-		}
-		if view.Installed && view.CanRestart {
-			data-sable-restart
-			data-restart-url="/ui/updates/restart"
-			data-health-url="/api/v1/health"
-			data-continue-url="/about"
-			data-csrf-token={ view.CSRFToken }
-			data-restart-confirm={ updateRestartConfirmation(view) }
-			data-restart-confirm-title="Restart Sable?"
-			data-restart-confirm-action="Restart Sable"
-		}
+		hx-get="/ui/updates"
+		hx-trigger={ ifThen(view.Busy, "sableUpdateChanged from:document, every 2s", "sableUpdateChanged from:document") }
+		hx-target="this"
+		hx-swap="outerHTML"
+		{ updateRestartAttributes(view, "/about")... }
 	>
 		<div class="about-update-summary">
 			<span class="about-update-icon" aria-hidden="true">
@@ -184,12 +173,7 @@ templ UpdatePanel(view UpdateView) {
 		</div>
 		<div class="about-update-actions">
 			@updateReleaseNotesButton(view, aboutUpdateNotesDialogID)
-			switch updateAction(view) {
-				case "restart":
-					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
-				case "install":
-					@updateInstallButton(view, false)
-			}
+			@updatePrimaryAction(view, false)
 			if view.Supported && !view.Development && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
 				<form
 					data-update-check

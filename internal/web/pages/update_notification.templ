@@ -9,21 +9,46 @@ templ ReleaseVersion(release string) {
 }
 
 templ UpdateNotification(view UpdateView) {
-	<div class="toast-region" aria-live="polite">
-		<div class="toast toast-update toast-persistent" data-toast data-toast-duration="0" role="status" data-update-version={ view.LatestVersion }>
-			<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
+	<div
+		id="update-notification"
+		class="toast-region"
+		aria-live="polite"
+		data-live-refresh
+		hx-get="/ui/updates?notification=true"
+		hx-trigger={ ifThen(view.Busy, "sableUpdateChanged from:document, every 2s", "sableUpdateChanged from:document") }
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<div
+			class={ "toast toast-update toast-persistent", "toast-update-" + updateVariant(view) }
+			data-toast
+			data-toast-duration="0"
+			role="status"
+			data-update-version={ view.LatestVersion }
+			{ updateRestartAttributes(view, "")... }
+		>
+			<button id="update-notification-dismiss" class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
 			<div class="toast-update-summary">
-				<span class="toast-update-badge" aria-hidden="true">@Icon("sparkles")</span>
+				<span class="toast-update-badge" aria-hidden="true">
+					@Icon(ifThen(updateVariant(view) == "available", "sparkles", updateIcon(view)))
+					if view.Installed && view.CanRestart {
+						@Icon("refresh")
+					}
+				</span>
 				<div class="toast-update-copy">
-					<strong>Sable v{ view.LatestVersion } is available</strong>
-					<p>Review the release notes for what's changed and anything to know before updating. Install when you're ready.</p>
+					<strong>{ updateHeadline(view) }</strong>
+					<p data-restart-status>
+						if updateVariant(view) == "available" && view.Blocked == "" {
+							Review the release notes for what's changed and anything to know before updating. Install when you're ready.
+						} else {
+							{ updateDetail(view) }
+						}
+					</p>
 				</div>
 			</div>
 			<div class="toast-actions">
 				@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
-				if updateAction(view) == "install" {
-					@updateInstallButton(view, true)
-				}
+				@updatePrimaryAction(view, true)
 			</div>
 		</div>
 		@updateReleaseNotesDialog(view, notificationUpdateNotesDialogID)

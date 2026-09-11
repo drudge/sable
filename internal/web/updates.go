@@ -86,6 +86,7 @@ func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages
 // updatePanel renders the current update state. The panel polls this endpoint
 // while a check or an installation is running.
 func (server *Server) updatePanel(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
 }
 
@@ -151,29 +152,17 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 func (server *Server) installUpdate(writer http.ResponseWriter, request *http.Request) {
 	includePreRelease := updatePreReleaseRequested(writer, request)
 	if server.updates == nil {
-		server.renderUpdateInstallResult(writer, request, "Updates are unavailable on this server.")
+		server.renderUpdatePanel(writer, request, update.Status{}, "Updates are unavailable on this server.")
 		return
 	}
 	if err := server.updates.Install(includePreRelease); err != nil {
-		server.renderUpdateInstallResult(writer, request, err.Error())
+		server.renderUpdatePanel(writer, request, server.updateStatus(), err.Error())
 		return
 	}
 	server.logger.Warn("Sable update requested from the console", "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, "update.install", "started installing a newer Sable release")
-	server.renderUpdateInstallResult(writer, request, "")
-}
-
-func (server *Server) renderUpdateInstallResult(writer http.ResponseWriter, request *http.Request, errorMessage string) {
-	if request.PostFormValue("notification") != "true" {
-		server.renderUpdatePanel(writer, request, server.updateStatus(), errorMessage)
-		return
-	}
-	if errorMessage != "" {
-		_ = pages.Toast(errorMessage, "error").Render(request.Context(), writer)
-		return
-	}
-	writer.Header().Set("HX-Redirect", "/about#about-update")
-	writer.WriteHeader(http.StatusNoContent)
+	writer.Header().Set("HX-Trigger", "sableUpdateChanged")
+	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
 }
 
 // rememberReleaseChannel stores the operator's pre-release choice so that a
@@ -229,7 +218,11 @@ func (server *Server) renderUpdatePanel(
 	if errorMessage != "" {
 		view.Error = errorMessage
 	}
-	if err := pages.UpdatePanel(view).Render(request.Context(), writer); err != nil {
+	component := pages.UpdatePanel(view)
+	if request.FormValue("notification") == "true" {
+		component = pages.UpdateNotification(view)
+	}
+	if err := component.Render(request.Context(), writer); err != nil {
 		server.logger.Error("render update panel", "error", err)
 	}
 }

@@ -3,11 +3,40 @@ package pages
 const aboutUpdateNotesDialogID = "update-release-notes-dialog"
 const notificationUpdateNotesDialogID = "notification-release-notes-dialog"
 
+func updateRestartAttributes(view UpdateView, continueURL string) templ.Attributes {
+	if !view.Installed || !view.CanRestart {
+		return nil
+	}
+	return templ.Attributes{
+		"data-sable-restart": true,
+		"data-restart-url": "/ui/updates/restart",
+		"data-health-url": "/api/v1/health",
+		"data-continue-url": continueURL,
+		"data-csrf-token": view.CSRFToken,
+		"data-restart-confirm": updateRestartConfirmation(view),
+		"data-restart-confirm-title": "Restart Sable?",
+		"data-restart-confirm-action": "Restart Sable",
+	}
+}
+
+templ updatePrimaryAction(view UpdateView, fromNotification bool) {
+	if view.Busy {
+		<button class="button compact update-install-progress" type="button" disabled>@Icon("refresh")<span>{ ifThen(view.Phase == "checking", "Checking…", "Installing…") }</span></button>
+	} else {
+		switch updateAction(view) {
+			case "restart":
+				<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
+			case "install":
+				@updateInstallButton(view, fromNotification)
+		}
+	}
+}
+
 templ updateReleaseNotesButton(view UpdateView, dialogID string) {
 	if view.ReleaseNotes != "" {
-		<button class="button outline compact" type="button" data-dialog-open={ dialogID }>Release notes</button>
+		<button id={ dialogID + "-open" } class="button outline compact" type="button" data-dialog-open={ dialogID }>Release notes</button>
 	} else if view.Available && !view.Installed && view.ReleaseURL != "" {
-		<a class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+		<a id={ dialogID + "-open" } class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 	}
 }
 

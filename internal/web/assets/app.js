@@ -1928,6 +1928,7 @@
 	  const buttonLabel = button?.querySelector("span");
 	  const status = root.querySelector("[data-restart-status]");
 	  const exit = root.querySelector("[data-restart-exit]");
+	  const continueURL = root.dataset.continueUrl || window.location.href;
 	  const sleep = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 	  let previousInstance = "";
 	  const fetchHealth = async () => {
@@ -1956,12 +1957,12 @@
 			if (response.ok) {
 			  const health = await response.json();
 			  if (health.instance_id && health.instance_id !== previousInstance) {
-				if (status) status.textContent = "Sable is back online. Continuing setup…";
-				window.location.assign(root.dataset.continueUrl);
+				if (status) status.textContent = "Sable is back online. Reloading…";
+				window.location.assign(continueURL);
 				return;
 			  }
 			  if (stopped && !health.instance_id) {
-				window.location.assign(root.dataset.continueUrl);
+				window.location.assign(continueURL);
 				return;
 			  }
 			}

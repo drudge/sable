@@ -482,26 +482,50 @@ func TestAutomaticUpdateNoticeHonorsPreferenceAndDevelopmentBuilds(t *testing.T)
 	}
 }
 
-func TestNotificationInstallShowsProgressOnAbout(t *testing.T) {
-	controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0-rc.1"}}
+func TestNotificationInstallTracksDownloadAndOffersRestart(t *testing.T) {
+	controller := &testUpdateController{status: update.Status{Available: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}}
 	server := updateTestServer(t, controller)
+	server.SetRestartController(func() {})
 	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}, "pre_release": {"true"}})
-	if response.Code != http.StatusNoContent || response.Header().Get("HX-Redirect") != "/about#about-update" {
+	if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "" {
 		t.Fatalf("notification install = %d, redirect %q", response.Code, response.Header().Get("HX-Redirect"))
+	}
+	for _, expected := range []string{`id="update-notification"`, "Installing Sable v1.2.0-rc.1", "Downloading sable_9.9.9_linux_amd64.tar.gz", `hx-get="/ui/updates?notification=true"`, "every 2s", "update-install-progress"} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("download notification is missing %q: %s", expected, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), "data-sable-restart-button") || response.Header().Get("HX-Trigger") != "sableUpdateChanged" {
+		t.Fatal("download offered an early restart or failed to synchronize other update controls")
 	}
 	if controller.installs != 1 || !controller.preRelease {
 		t.Fatalf("installs = %d, pre-release = %v", controller.installs, controller.preRelease)
 	}
+	controller.status = update.Status{Phase: update.PhaseInstalled, Installed: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}
+	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
+	for _, expected := range []string{`id="update-notification"`, "Sable v1.2.0-rc.1 is installed", "data-sable-restart-button", `data-restart-url="/ui/updates/restart"`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Fatalf("installed notification is missing %q: %s", expected, response.Body.String())
+		}
+	}
+	if strings.Contains(response.Body.String(), "every 2s") || strings.Contains(response.Body.String(), "update-install-progress") || controller.checks != 0 {
+		t.Fatal("installed notification kept polling, showed download progress, or checked for another release")
+	}
+	controller.status.ClusterUpdate = true
+	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
+	if strings.Contains(response.Body.String(), "data-sable-restart-button") {
+		t.Fatal("notification offered a separate restart during a cluster rollout")
+	}
 }
 
 func TestNotificationInstallReportsFailureWithoutNavigating(t *testing.T) {
-	controller := &testUpdateController{installError: update.ErrUpdateInProgress}
+	controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0"}, installError: update.ErrUpdateInProgress}
 	server := updateTestServer(t, controller)
 	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}})
 	if response.Header().Get("HX-Redirect") != "" || controller.installs != 0 {
 		t.Fatal("failed installation redirected or started an update")
 	}
-	if !strings.Contains(response.Body.String(), "toast-error") || !strings.Contains(response.Body.String(), update.ErrUpdateInProgress.Error()) {
+	if !strings.Contains(response.Body.String(), "toast-update-failed") || !strings.Contains(response.Body.String(), update.ErrUpdateInProgress.Error()) || !strings.Contains(response.Body.String(), `hx-post="/ui/updates/install"`) {
 		t.Fatalf("notification error = %s", response.Body.String())
 	}
 }

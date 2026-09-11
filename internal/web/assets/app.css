@@ -1200,10 +1200,21 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .toast-update-summary { display: grid; grid-template-columns: 3rem minmax(0, 1fr); align-items: center; gap: 1rem; min-height: 5.5rem; }
 .toast-update-copy { min-width: 0; }
 .toast-update-copy > strong { display: block; padding-right: 1rem; font-size: .875rem; font-weight: 600; line-height: 1.4; }
-.toast-update-copy > p { margin: .4rem 0 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
+.toast-update-copy > p { margin: .4rem 0 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere; }
 .toast-update-badge { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: .875rem; background: color-mix(in oklch, currentColor 13%, transparent); color: #d97706; }
 .toast-update-badge > .nav-icon { width: 1.75rem; height: 1.75rem; }
 .dark .toast-update-badge { color: #f1ad47; }
+.toast-update-installed .toast-update-badge { color: #16a34a; }
+.dark .toast-update-installed .toast-update-badge { color: #22c55e; }
+.toast-update-failed .toast-update-badge { color: var(--destructive); }
+.toast-update-installed .toast-update-badge .icon-refresh { display: none; }
+.toast-update.is-restarting .toast-update-badge .icon-power { display: none; }
+.toast-update.is-restarting .toast-update-badge .icon-refresh { display: block; }
+.toast-update-busy .toast-update-badge .nav-icon, .toast-update.is-restarting .toast-update-badge .icon-refresh, .update-install-progress .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
+.toast-update-busy, .toast-update.is-restarting { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-update-busy .toast-update-badge .nav-icon, .toast-update.is-restarting .toast-update-badge .icon-refresh, .update-install-progress .icon-refresh { animation: none; }
+}
 .toast-update > .toast-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; }
 .toast-update > .toast-actions:empty { display: none; }
 .toast-update > .toast-actions > :only-child { grid-column: 1 / -1; }

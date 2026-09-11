@@ -50,14 +50,36 @@ const fs = require('node:fs/promises');
     assert.equal(await page.locator('[hx-post="/ui/updates/cluster/stop"]').count(), 1);
     if (process.env.SABLE_UPDATE_SCREENSHOTS) await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/cluster-desktop.png`, fullPage: true});
     const installPage = await browser.newPage();
+    installPage.on('pageerror', error => errors.push(error.message));
     await installPage.goto(`${process.argv[2]}/cluster`);
     await installPage.locator('[data-update-version]').getByRole('button', {name: 'Install v1.1.0', exact: true}).click();
     const confirmation = installPage.locator('dialog.confirmation-dialog[open]');
     await confirmation.waitFor({state: 'visible'});
     assert.equal(await (await page.request.get(`${process.argv[2]}/installs`)).json(), 0, 'install waits for confirmation');
     await confirmation.getByRole('button', {name: 'Download & Install', exact: true}).click();
-    await installPage.waitForURL('**/about#about-update');
+    const installNotice = installPage.locator('[data-update-version]');
+    const installing = installNotice.getByRole('button', {name: 'Installing…', exact: true});
+    await installing.waitFor({state: 'visible'});
+    assert.equal(await installing.isEnabled(), false, 'download cannot be started twice');
+    assert.match(await installNotice.innerText(), /Downloading sable/);
+    assert.equal(await installing.locator('.icon-refresh').evaluate(element => getComputedStyle(element).animationName), 'about-update-spin', 'download has a spinner');
+    assert.equal(new URL(installPage.url()).pathname, '/cluster', 'install stays on the current page');
+    await installNotice.getByRole('button', {name: 'Release notes', exact: true}).click();
+    await installPage.locator('#notification-release-notes-dialog').getByRole('button', {name: 'Done', exact: true}).click();
+    const restartButton = installNotice.getByRole('button', {name: 'Restart Sable', exact: true});
+    await restartButton.waitFor({state: 'visible'});
+    assert.match(await installNotice.innerText(), /Sable v1.1.0 is installed/);
     assert.equal(await (await page.request.get(`${process.argv[2]}/installs`)).json(), 1, 'notification installs from a page without an About panel');
+    await restartButton.click();
+    const restartConfirmation = installPage.locator('dialog.confirmation-dialog[open]');
+    await restartConfirmation.waitFor({state: 'visible'});
+    assert.equal(await (await page.request.get(`${process.argv[2]}/restarts`)).json(), 0, 'restart waits for confirmation');
+    await Promise.all([
+      installPage.waitForEvent('load'),
+      restartConfirmation.getByRole('button', {name: 'Restart Sable', exact: true}).click(),
+    ]);
+    assert.equal(new URL(installPage.url()).pathname, '/cluster', 'restart returns to the same page');
+    assert.equal(await (await page.request.get(`${process.argv[2]}/restarts`)).json(), 1, 'notification restarts once');
     await installPage.close();
     assert.deepEqual(errors, []);
     console.log('PASS login notice, release notes, escaping, release links, mobile layout, dismissal, opt-out, and cluster progress');
