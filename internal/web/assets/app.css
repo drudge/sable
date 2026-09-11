@@ -1195,6 +1195,15 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .toast.is-paused .toast-timer { animation-play-state: paused; }
 .toast.is-leaving { animation: toast-out 160ms ease forwards; }
 
+.toast-update { grid-template-columns: minmax(0, 1fr) auto; gap: .5rem .75rem; padding: 1rem; }
+.toast-update > strong { align-self: center; font-size: .875rem; font-weight: 600; line-height: 1.4; }
+.toast-update > .toast-dismiss { width: 1.5rem; height: 1.5rem; }
+.toast-update > p { grid-column: 1 / -1; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
+.toast-update > .toast-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-top: .25rem; }
+.toast-update > .toast-actions:empty { display: none; }
+.toast-update > .toast-actions > :only-child { grid-column: 1 / -1; }
+.toast-update .toast-actions .button { width: 100%; min-height: 2.25rem; justify-content: center; }
+
 @keyframes toast-in { from { opacity: 0; transform: translate3d(0, .75rem, 0) scale(.98); } }
 @keyframes toast-out { to { opacity: 0; transform: translate3d(.75rem, 0, 0) scale(.98); } }
 @keyframes toast-countdown { to { transform: scaleX(0); } }
