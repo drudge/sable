@@ -14,12 +14,15 @@ templ UpdateNotification(view UpdateView) {
 			<span class="toast-icon" aria-hidden="true">@Icon("download")</span>
 			<div class="toast-content">
 				<strong>Sable v{ view.LatestVersion } is available</strong>
-				if view.ReleaseNotes != "" {
-					<details class="update-release-notes"><summary>Release notes</summary><div class="release-notes-content">@templ.Raw(releaseNotesHTML(view.ReleaseNotes))</div></details>
-				}
-				<div class="toast-actions"><a class="button compact" href="/about#about-update">Review update</a>@ReleaseVersion(view.LatestVersion)</div>
+				<div class="toast-actions">
+					@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
+					if updateAction(view) == "install" {
+						@updateInstallButton(view, true)
+					}
+				</div>
 			</div>
 			<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
 		</div>
+		@updateReleaseNotesDialog(view, notificationUpdateNotesDialogID)
 	</div>
 }

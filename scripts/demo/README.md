@@ -84,10 +84,12 @@ go tool mage demoUpdates
 Open <http://127.0.0.1:6491> and sign in as `art.vandelay` with password
 `LatexImporter2026!` (a disposable fixture account).
 
-1. After sign-in, expand the update notification to read its release notes.
-2. Choose **Review update** to see About, then **Release notes** to read them
-   in a dialog. **Settings → General → Software Updates** contains the
-   **Check for updates on sign-in** preference.
+1. After sign-in, choose **Release notes** in the update notification to open
+   the same notes dialog as About. **Install** confirms and updates this node,
+   then shows progress on About. Skip installing a single node to try the full
+   cluster rollout below.
+2. **Settings → General → Software Updates** contains the **Check for updates
+   on sign-in** preference.
 3. Open **Cluster**, choose **Update all nodes to v1.0.2**, and confirm.
 4. Watch each replica install, restart, and synchronize before the next node
    updates. The primary restarts last; reload its console if needed to see the

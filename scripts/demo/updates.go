@@ -100,7 +100,7 @@ func runUpdateDemo(root string, basePort int, smoke bool) error {
 		return smokeUpdateDemo(ctx, operator, nodes, supervisor, probe)
 	}
 	fmt.Printf("\nOpen %s and sign in:\n  Username: %s\n  Password: %s\n", nodes[0].ConsoleURL(), operatorUsername, operatorPassword)
-	fmt.Println("Expand the update notification's release notes, choose Review update, then open Cluster and choose Update all nodes.")
+	fmt.Println("Choose Release notes in the update notification to open the notes dialog. Install updates this node; Cluster > Update all nodes runs a rolling cluster upgrade.")
 	fmt.Println("Watch replica restarts, followed by the primary. Reload the primary console after its restart.")
 	fmt.Println("DNS availability and restart order appear below. Ctrl-C stops all demo nodes; run again for a fresh demo.")
 	for _, member := range nodes {

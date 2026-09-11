@@ -1,0 +1,49 @@
+package pages
+
+const aboutUpdateNotesDialogID = "update-release-notes-dialog"
+const notificationUpdateNotesDialogID = "notification-release-notes-dialog"
+
+templ updateReleaseNotesButton(view UpdateView, dialogID string) {
+	if view.ReleaseNotes != "" {
+		<button class="button outline compact" type="button" data-dialog-open={ dialogID }>Release notes</button>
+	} else if view.Available && !view.Installed && view.ReleaseURL != "" {
+		<a class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
+	}
+}
+
+templ updateInstallButton(view UpdateView, fromNotification bool) {
+	<form
+		hx-post="/ui/updates/install"
+		hx-target={ ifThen(fromNotification, "closest .toast-region", "#about-update") }
+		hx-swap="outerHTML"
+		hx-disable={ ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#about-update button, #about-update input") }
+		hx-confirm={ updateInstallConfirmation(view) }
+		data-confirm-title="Install this release?"
+		data-confirm-action="Download &amp; Install"
+		data-confirm-tone="neutral"
+	>
+		if fromNotification {
+			<input type="hidden" name="notification" value="true"/>
+		}
+		<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
+		<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
+	</form>
+}
+
+templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
+	if view.ReleaseNotes != "" {
+		<dialog class="custom-server-dialog update-release-dialog" id={ dialogID } aria-labelledby={ dialogID + "-title" }>
+			<div class="dialog-header"><h2 id={ dialogID + "-title" }>Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
+			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+			<div class="release-notes-content">
+				@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
+			</div>
+			<div class="dialog-footer">
+				if view.ReleaseURL != "" {
+					<a class="button outline" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>View release</span>@Icon("external-link")</a>
+				}
+				<button class="button" type="button" data-dialog-close>Done</button>
+			</div>
+		</dialog>
+	}
+}

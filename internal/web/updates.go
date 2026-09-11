@@ -149,18 +149,31 @@ func (server *Server) renderUpdateCheckToast(writer http.ResponseWriter, request
 // installUpdate replaces the installed executable with the newest release.
 // Sable keeps serving the running build until it is restarted.
 func (server *Server) installUpdate(writer http.ResponseWriter, request *http.Request) {
+	includePreRelease := updatePreReleaseRequested(writer, request)
 	if server.updates == nil {
-		server.renderUpdatePanel(writer, request, update.Status{}, "Updates are unavailable on this server.")
+		server.renderUpdateInstallResult(writer, request, "Updates are unavailable on this server.")
 		return
 	}
-	includePreRelease := updatePreReleaseRequested(writer, request)
 	if err := server.updates.Install(includePreRelease); err != nil {
-		server.renderUpdatePanel(writer, request, server.updateStatus(), err.Error())
+		server.renderUpdateInstallResult(writer, request, err.Error())
 		return
 	}
 	server.logger.Warn("Sable update requested from the console", "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, "update.install", "started installing a newer Sable release")
-	server.renderUpdatePanel(writer, request, server.updateStatus(), "")
+	server.renderUpdateInstallResult(writer, request, "")
+}
+
+func (server *Server) renderUpdateInstallResult(writer http.ResponseWriter, request *http.Request, errorMessage string) {
+	if request.PostFormValue("notification") != "true" {
+		server.renderUpdatePanel(writer, request, server.updateStatus(), errorMessage)
+		return
+	}
+	if errorMessage != "" {
+		_ = pages.Toast(errorMessage, "error").Render(request.Context(), writer)
+		return
+	}
+	writer.Header().Set("HX-Redirect", "/about#about-update")
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 // rememberReleaseChannel stores the operator's pre-release choice so that a

@@ -469,7 +469,7 @@ func TestAutomaticUpdateNoticeHonorsPreferenceAndDevelopmentBuilds(t *testing.T)
 			}
 			response := serveUpdateForm(server, "/ui/updates/automatic-check", nil)
 			if scenario == "available" {
-				if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Review update") || strings.Contains(response.Body.String(), "<script>") {
+				if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `hx-post="/ui/updates/install"`) || !strings.Contains(response.Body.String(), `data-dialog-open="notification-release-notes-dialog"`) || strings.Contains(response.Body.String(), "<script>") {
 					t.Fatalf("notification = %d %s", response.Code, response.Body.String())
 				}
 			} else if response.Code != http.StatusNoContent || response.Body.Len() != 0 {
@@ -479,6 +479,30 @@ func TestAutomaticUpdateNoticeHonorsPreferenceAndDevelopmentBuilds(t *testing.T)
 				t.Fatal("disabled check reached the updater")
 			}
 		})
+	}
+}
+
+func TestNotificationInstallShowsProgressOnAbout(t *testing.T) {
+	controller := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0-rc.1"}}
+	server := updateTestServer(t, controller)
+	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}, "pre_release": {"true"}})
+	if response.Code != http.StatusNoContent || response.Header().Get("HX-Redirect") != "/about#about-update" {
+		t.Fatalf("notification install = %d, redirect %q", response.Code, response.Header().Get("HX-Redirect"))
+	}
+	if controller.installs != 1 || !controller.preRelease {
+		t.Fatalf("installs = %d, pre-release = %v", controller.installs, controller.preRelease)
+	}
+}
+
+func TestNotificationInstallReportsFailureWithoutNavigating(t *testing.T) {
+	controller := &testUpdateController{installError: update.ErrUpdateInProgress}
+	server := updateTestServer(t, controller)
+	response := serveUpdateForm(server, "/ui/updates/install", url.Values{"notification": {"true"}})
+	if response.Header().Get("HX-Redirect") != "" || controller.installs != 0 {
+		t.Fatal("failed installation redirected or started an update")
+	}
+	if !strings.Contains(response.Body.String(), "toast-error") || !strings.Contains(response.Body.String(), update.ErrUpdateInProgress.Error()) {
+		t.Fatalf("notification error = %s", response.Body.String())
 	}
 }
 

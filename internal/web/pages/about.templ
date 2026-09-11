@@ -183,19 +183,12 @@ templ UpdatePanel(view UpdateView) {
 			</div>
 		</div>
 		<div class="about-update-actions">
-			if view.ReleaseNotes != "" {
-				<button class="button outline compact" type="button" data-dialog-open="update-release-notes-dialog">Release notes</button>
-			} else if view.Available && !view.Installed && view.ReleaseURL != "" {
-				<a class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
-			}
+			@updateReleaseNotesButton(view, aboutUpdateNotesDialogID)
 			switch updateAction(view) {
 				case "restart":
 					<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
 				case "install":
-					<form hx-post="/ui/updates/install" hx-target="#about-update" hx-swap="outerHTML" hx-disable="#about-update button, #about-update input" hx-confirm={ updateInstallConfirmation(view) } data-confirm-title="Install this release?" data-confirm-action="Download &amp; Install" data-confirm-tone="neutral">
-						<input type="hidden" name="pre_release" value={ ifThen(view.IncludePreRelease, "true", "false") }/>
-						<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
-					</form>
+					@updateInstallButton(view, false)
 			}
 			if view.Supported && !view.Development && view.CanCheck && !view.Busy && !view.Available && !view.Installed {
 				<form
@@ -223,21 +216,7 @@ templ UpdatePanel(view UpdateView) {
 				</form>
 			}
 		</div>
-		if view.ReleaseNotes != "" {
-			<dialog class="custom-server-dialog update-release-dialog" id="update-release-notes-dialog" aria-labelledby="update-release-notes-title">
-				<div class="dialog-header"><h2 id="update-release-notes-title">Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
-				<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-				<div class="release-notes-content">
-					@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
-				</div>
-				<div class="dialog-footer">
-					if view.ReleaseURL != "" {
-						<a class="button outline" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>View release</span>@Icon("external-link")</a>
-					}
-					<button class="button" type="button" data-dialog-close>Done</button>
-				</div>
-			</dialog>
-		}
+		@updateReleaseNotesDialog(view, aboutUpdateNotesDialogID)
 	</div>
 }
 

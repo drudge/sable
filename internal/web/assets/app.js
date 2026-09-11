@@ -1414,7 +1414,8 @@
       const region = template.content.querySelector(".toast-region");
       if (!region) return;
       document.body.append(region);
-      region.querySelectorAll("[data-toast]").forEach(setupToast);
+      window.htmx?.process(region);
+      initializeSwappedContent(region);
     } catch {
       // A release lookup must never interrupt console use.
     }
