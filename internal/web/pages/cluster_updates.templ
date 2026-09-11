@@ -1,6 +1,10 @@
 package pages
 
-import "github.com/drudge/sable/internal/cluster"
+import (
+	"fmt"
+
+	"github.com/drudge/sable/internal/cluster"
+)
 
 type ClusterUpdateView struct {
 	Supported bool
@@ -10,32 +14,72 @@ type ClusterUpdateView struct {
 	Rollout   cluster.RolloutStatus
 }
 
+// Keep a started rollout visible while restarting nodes renegotiate support,
+// and preserve its outcome even if a node later becomes unavailable.
+func (view ClusterUpdateView) Visible() bool {
+	return view.Supported || view.Rollout.ID != ""
+}
+
+func (view ClusterUpdateView) DisplayVersion() string {
+	if view.Rollout.Active() || view.Release.LatestVersion == "" && view.Version == "" {
+		return formatReleaseVersion(view.Rollout.Version)
+	}
+	if view.Release.LatestVersion != "" {
+		return formatReleaseVersion(view.Release.LatestVersion)
+	}
+	return formatReleaseVersion(view.Version)
+}
+
+func (view ClusterUpdateView) UpdateAvailable() bool {
+	return view.Supported && view.Version != "" && !view.Rollout.Active()
+}
+
 templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 	<div
 		id="cluster-updates"
-		hidden?={ !view.Supported }
+		hidden?={ !view.Visible() }
 		if outOfBand {
 			hx-swap-oob="outerHTML"
 		}
 	>
-		if view.Supported {
+		if view.Visible() {
 			<section class="card cluster-update-card">
 				<header>
 					<h2>Rolling Updates</h2>
-					if view.Version != "" {
-						<span class="status-badge">v{ view.Version }</span>
+					if view.DisplayVersion() != "" {
+						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()) }>
+							if view.UpdateAvailable() {
+								@Icon("sparkles")
+								<span class="sr-only">Update available: </span>
+							}
+							{ view.DisplayVersion() }
+						</span>
 					}
 				</header>
 				<div class="cluster-update-content">
 					<p>Update replicas one at a time, then the primary.</p>
 					if view.Rollout.ID != "" {
-						<strong role="status">{ "Sable " + view.Rollout.Version + " · " + rolloutPhaseLabel(view.Rollout.Phase) }</strong>
+						<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
 						if view.Rollout.Error != "" {
 							<p role="alert">{ view.Rollout.Error }</p>
 						}
-						<ol class="cluster-update-nodes">
-							for _, node := range view.Rollout.Nodes {
-								<li>{ node.Name + " · " + rolloutPhaseLabel(node.Phase) }</li>
+						<ol class="cluster-update-nodes" role="list" aria-label="Node update progress">
+							for index, node := range view.Rollout.Nodes {
+								{{ phase := rolloutNodePhase(view.Rollout, index) }}
+								<li class="cluster-update-node" data-state={ phase }>
+									<span class="cluster-update-step" aria-hidden="true">
+										if rolloutNodeBusy(phase) {
+											@Icon("loader-circle")
+										} else if phase == "complete" {
+											@Icon("check")
+										} else if phase == "failed" {
+											@Icon("x")
+										} else {
+											{ fmt.Sprint(index + 1) }
+										}
+									</span>
+									<div><strong>{ node.Name }</strong><span>{ rolloutNodePhaseLabel(phase) }</span></div>
+								</li>
 							}
 						</ol>
 					}
@@ -45,16 +89,18 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							if view.CanApply {
 								<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
 							}
-						} else if view.CanApply && view.Version != "" {
+						} else if view.Supported && view.CanApply && view.Version != "" {
 							@clusterUpdateForm(view.Version, false) {
 								<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")
 <span>Update all</span></button>
 							}
 						}
+						if view.Release.CanCheck && !view.Rollout.Active() && !view.Release.Busy && view.Version == "" {
+							<form data-update-check hx-post="/ui/updates/command-check" hx-target="body" hx-swap="beforeend" hx-disable="find button">
+								<button id="cluster-update-check" class="button outline compact" type="submit">@Icon("refresh")<span class="about-update-check-idle">{ ifThen(view.Rollout.ID != "" || view.Release.Checked, "Check again", "Check for updates") }</span><span class="about-update-check-pending" role="status">Checking…</span></button>
+							</form>
+						}
 					</div>
-					if view.Version == "" && !view.Rollout.Active() {
-						<a class="button outline compact" href="/about#about-update">Check for updates</a>
-					}
 				</div>
 			</section>
 			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)
@@ -81,6 +127,43 @@ templ clusterUpdateForm(version string, fromNotification bool) {
 	</form>
 }
 
+func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {
+	phase := rollout.Nodes[index].Phase
+	if phase == "complete" {
+		return phase
+	}
+	if rollout.Phase == "failed" || rollout.Phase == "stopped" {
+		if index == rollout.Index {
+			return rollout.Phase
+		}
+		return "skipped"
+	}
+	if rollout.Phase == "preparing" || rollout.Phase == "verifying" {
+		return rollout.Phase
+	}
+	return phase
+}
+
+func rolloutNodeBusy(phase string) bool {
+	switch phase {
+	case "preparing", "install", "installing", "restart", "restarting", "verifying":
+		return true
+	default:
+		return false
+	}
+}
+
+func rolloutNodePhaseLabel(phase string) string {
+	switch phase {
+	case "preparing":
+		return "Checking readiness"
+	case "verifying":
+		return "Verifying sync"
+	default:
+		return rolloutPhaseLabel(phase)
+	}
+}
+
 func rolloutPhaseLabel(phase string) string {
 	switch phase {
 	case "preparing":
@@ -91,7 +174,7 @@ func rolloutPhaseLabel(phase string) string {
 		return "Verifying cluster"
 	case "queued":
 		return "Waiting"
-	case "install":
+	case "install", "installing":
 		return "Installing"
 	case "restart", "restarting":
 		return "Restarting"
@@ -101,6 +184,8 @@ func rolloutPhaseLabel(phase string) string {
 		return "Failed"
 	case "stopped":
 		return "Stopped"
+	case "skipped":
+		return "Not updated"
 	default:
 		return phase
 	}

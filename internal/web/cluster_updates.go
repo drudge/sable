@@ -3,10 +3,13 @@ package web
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/web/pages"
+	"golang.org/x/mod/semver"
 )
 
 type clusterUpdateController interface {
@@ -93,16 +96,25 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 		return pages.ClusterUpdateView{}
 	}
 	status := server.updateStatus()
+	state := server.cluster.Snapshot()
+	rollout := controller.RolloutStatus()
+	if rollout.ClusterID != state.ClusterID || rollout.PrimaryID != state.PrimaryID || state.LocalRole != cluster.RolePrimary {
+		rollout = cluster.RolloutStatus{}
+	}
 	view := pages.ClusterUpdateView{
 		Supported: controller.RollingUpdatesSupported(),
-		Rollout:   controller.RolloutStatus(),
+		Rollout:   rollout,
 		CanApply:  server.canManageClusterUpdate(request),
 		Release:   server.updateView(request, status),
 	}
-	if server.cluster.Snapshot().LocalRole != cluster.RolePrimary {
+	if state.LocalRole != cluster.RolePrimary {
 		view.CanApply = false
 	}
-	if status.Checked() && !status.Busy() && status.Error == "" {
+	if status.Checked() && !status.Busy() && status.Error == "" && slices.ContainsFunc(state.Nodes, func(node cluster.Node) bool {
+		current := "v" + strings.TrimPrefix(node.Version, "v")
+		latest := "v" + strings.TrimPrefix(status.LatestVersion, "v")
+		return semver.IsValid(current) && semver.Compare(latest, current) > 0
+	}) {
 		view.Version = status.LatestVersion
 	}
 	return view

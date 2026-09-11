@@ -20,12 +20,16 @@ type testRollingUpdateController struct {
 	clusterController
 	supported bool
 	role      string
+	state     cluster.State
 	rollout   cluster.RolloutStatus
 	startErr  error
 	started   []string
 }
 
 func (controller *testRollingUpdateController) Snapshot() cluster.State {
+	if controller.state.Initialized {
+		return controller.state
+	}
 	return cluster.State{Initialized: true, LocalRole: controller.role}
 }
 func (controller *testRollingUpdateController) RollingUpdatesSupported() bool {
@@ -41,6 +45,59 @@ func (controller *testRollingUpdateController) StartRollout(_ context.Context, v
 	}
 	controller.started = append(controller.started, version)
 	return nil
+}
+
+func TestClusterUpdateViewRetainsCurrentRolloutDuringCapabilityNegotiation(t *testing.T) {
+	for _, scenario := range []string{"restarting", "complete", "old cluster", "old primary", "replica"} {
+		t.Run(scenario, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{})
+			controller := &testRollingUpdateController{
+				state:   cluster.State{Initialized: true, ClusterID: "cluster", PrimaryID: "ns1", LocalRole: cluster.RolePrimary},
+				rollout: cluster.RolloutStatus{ID: "rollout", ClusterID: "cluster", PrimaryID: "ns1", Version: "v1.2.0", Phase: "restarting"},
+			}
+			switch scenario {
+			case "complete":
+				controller.rollout.Phase = "complete"
+			case "old cluster":
+				controller.rollout.ClusterID = "previous-cluster"
+			case "old primary":
+				controller.rollout.PrimaryID = "previous-primary"
+			case "replica":
+				controller.state.LocalRole = cluster.RoleReplica
+			}
+			server.SetClusterController(controller)
+			view := server.clusterUpdateView(httptest.NewRequest(http.MethodGet, "/cluster", nil))
+			wantVisible := scenario == "restarting" || scenario == "complete"
+			if view.Visible() != wantVisible || view.Supported {
+				t.Fatalf("visible=%t supported=%t, want visible=%t without enabling new rollouts", view.Visible(), view.Supported, wantVisible)
+			}
+		})
+	}
+}
+
+func TestClusterUpdateOfferedOnlyWhenANodeNeedsNewerRelease(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		versions []string
+		want     string
+	}{
+		{"all current", []string{"1.2.0", "v1.2.0", "1.2.0+build"}, ""},
+		{"replica behind", []string{"1.2.0", "1.1.0", "1.2.0"}, "1.2.0"},
+		{"newer installed", []string{"1.3.0", "1.3.0"}, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{status: update.Status{LatestVersion: "1.2.0", CheckedAt: time.Now()}})
+			controller := &testRollingUpdateController{supported: true, state: cluster.State{Initialized: true, LocalRole: cluster.RolePrimary}}
+			for _, version := range test.versions {
+				controller.state.Nodes = append(controller.state.Nodes, cluster.Node{Version: version})
+			}
+			server.SetClusterController(controller)
+			view := server.clusterUpdateView(httptest.NewRequest(http.MethodGet, "/cluster", nil))
+			if view.Version != test.want || view.UpdateAvailable() != (test.want != "") {
+				t.Fatalf("version=%q available=%t, want %q", view.Version, view.UpdateAvailable(), test.want)
+			}
+		})
+	}
 }
 
 func TestNotificationClusterChoiceRequiresCapabilityAndPermission(t *testing.T) {

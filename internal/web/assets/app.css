@@ -3315,11 +3315,29 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .release-notes-content pre { white-space: pre-wrap; font-size: .75rem; }
 .release-notes-content img { max-width: 100%; height: auto; }
 .release-notes-content a { text-decoration: underline; }
-.cluster-update-nodes { display: grid; gap: .5rem; padding-left: 1.25rem; }
+.cluster-update-nodes { display: grid; gap: .875rem; padding: 0; list-style: none; }
+.cluster-update-node { position: relative; display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); align-items: center; gap: .65rem; }
+.cluster-update-node:not(:last-child)::after { content: ""; position: absolute; left: .75rem; transform: translateX(-50%); top: calc(50% + .875rem); height: calc(100% - .875rem); width: 1px; background: var(--border); }
+.cluster-update-step { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--muted); color: var(--muted-foreground); font-size: .6875rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cluster-update-step .nav-icon { width: .875rem; height: .875rem; }
+.cluster-update-step:has(.icon-loader-circle) { border-color: transparent; background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
+.dark .cluster-update-step:has(.icon-loader-circle) { color: #f1ad47; }
+.cluster-update-step .icon-loader-circle { animation: about-update-spin 1s linear infinite; }
+.cluster-update-node[data-state="complete"] .cluster-update-step { border-color: transparent; background: color-mix(in oklch, #16a34a 12%, transparent); color: #16a34a; }
+.dark .cluster-update-node[data-state="complete"] .cluster-update-step { color: #22c55e; }
+.cluster-update-node[data-state="failed"] .cluster-update-step { border-color: transparent; background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); }
+.cluster-update-node > div { display: grid; min-width: 0; gap: .1rem; }
+.cluster-update-node strong { font-size: .75rem; font-weight: 500; overflow-wrap: anywhere; }
+.cluster-update-node > div > span { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
+.cluster-update-status { font-size: .75rem; font-weight: 500; }
 
 .cluster-update-card { padding: 1.25rem; }
 .cluster-update-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .cluster-update-card > header h2 { margin: 0; font-size: 1rem; }
+.cluster-update-version { gap: .3rem; }
+.cluster-update-version .nav-icon { width: .8rem; height: .8rem; }
+.cluster-update-version.available { background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
+.dark .cluster-update-version.available { color: #f1ad47; }
 .cluster-update-content { display: grid; gap: 1rem; margin-top: .5rem; font-size: .8125rem; }
 .cluster-update-content > :is(p, ol) { margin: 0; }
 .cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }

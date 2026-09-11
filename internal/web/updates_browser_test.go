@@ -96,7 +96,10 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		Rollout: cluster.RolloutStatus{ID: "fixture", Version: "v1.1.0", Phase: "updating", Nodes: []cluster.RolloutNode{{Name: "ns2-queens", Phase: "complete"}, {Name: "ns3-latham", Phase: "install"}, {Name: "ns1-queens", Phase: "queued"}}},
 	}
 	mux.HandleFunc("GET /ui/cluster/status", func(w http.ResponseWriter, r *http.Request) {
-		_ = pages.ClusterLiveStatusUpdate(pages.ClusterPageView{Initialized: true, LocalRole: "Primary", Update: clusterUpdate}).Render(r.Context(), w)
+		// A restarting replica's first heartbeat renegotiates update support.
+		refresh := clusterUpdate
+		refresh.Supported = false
+		_ = pages.ClusterLiveStatusUpdate(pages.ClusterPageView{Initialized: true, LocalRole: "Primary", Update: refresh}).Render(r.Context(), w)
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
