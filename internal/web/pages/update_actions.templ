@@ -48,7 +48,7 @@ templ updateReleaseNotesButton(view UpdateView, dialogID string) {
 
 templ updateInstallButton(view UpdateView, fromNotification bool) {
 	@updateInstallForm(view, fromNotification) {
-		<button class="button compact" type="submit">@Icon("download")<span>Install v{ view.LatestVersion }</span></button>
+		<button class="button compact" type="submit">@Icon("download")<span>{ ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion) }</span></button>
 	}
 }
 
@@ -73,16 +73,23 @@ templ updateInstallForm(view UpdateView, fromNotification bool) {
 
 templ updateScopeButton(view UpdateView) {
 	<div class="update-split-button" data-update-scope>
-		@updateInstallForm(view, true) {
-			<button id="notification-update-node" class="button compact" type="submit">Update node</button>
-		}
+		<div data-update-scope-action="node">
+			@updateInstallForm(view, true) {
+				<button id="notification-update-node" class="button compact" type="submit">Install update</button>
+			}
+		</div>
+		<div data-update-scope-action="cluster" hidden>
+			@clusterUpdateForm(view.LatestVersion, true) {
+				<button id="notification-update-cluster" class="button compact" type="submit">Update cluster</button>
+			}
+		</div>
 		<button id="notification-update-scope" class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls="notification-update-scope-menu" data-update-scope-trigger>@Icon("chevron-down")</button>
 		<div id="notification-update-scope-menu" class="update-scope-menu" role="menu" aria-label="Update scope" popover="manual">
 			@updateInstallForm(view, true) {
-				<button class="update-scope-option" type="submit" role="menuitem">@Icon("server")<span><strong>Update this node</strong><small>Install here, then restart when ready.</small></span></button>
+				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="true" data-update-scope-option="node">@Icon("server")<span><strong>This node</strong><small>Install here, then restart when ready.</small></span>@Icon("check")</button>
 			}
 			@clusterUpdateForm(view.LatestVersion, true) {
-				<button class="update-scope-option" type="submit" role="menuitem">@Icon("cluster")<span><strong>Update cluster</strong><small>Update all nodes, one at a time.</small></span></button>
+				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="false" data-update-scope-option="cluster">@Icon("cluster")<span><strong>Entire cluster</strong><small>Update all nodes, one at a time.</small></span>@Icon("check")</button>
 			}
 		</div>
 	</div>

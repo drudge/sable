@@ -103,6 +103,7 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
+		view.Username = r.URL.Query().Get("user")
 		if restarts.Load() > 0 {
 			view.Version = "1.1.0"
 		}

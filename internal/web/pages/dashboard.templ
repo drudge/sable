@@ -343,7 +343,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<script src={ assetURL("app.js") } defer></script>
 			<script src={ assetURL("htmx.min.js") } defer></script>
 		</head>
-		<body hx-headers:inherited={ fmt.Sprintf("{\"X-CSRF-Token\":%q}", view.CSRFToken) } data-control-plane-read-only={ fmt.Sprint(view.ControlPlaneReadOnly) } data-cluster-primary-url={ view.PrimaryURL } data-update-check-url={ ifThen(view.CanCheckUpdates && view.CheckUpdatesOnLogin, "/ui/updates/automatic-check", "") } data-update-session={ view.CSRFToken }>
+		<body hx-headers:inherited={ fmt.Sprintf("{\"X-CSRF-Token\":%q}", view.CSRFToken) } data-control-plane-read-only={ fmt.Sprint(view.ControlPlaneReadOnly) } data-cluster-primary-url={ view.PrimaryURL } data-update-check-url={ ifThen(view.CanCheckUpdates && view.CheckUpdatesOnLogin, "/ui/updates/automatic-check", "") } data-update-session={ view.CSRFToken } data-preference-user={ view.Username }>
 			<nav class="skip-links" aria-label="Skip links">
 				<a href="#main-content">Skip to main content</a>
 				<a href="#primary-navigation">Skip to navigation</a>

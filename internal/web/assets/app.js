@@ -1424,12 +1424,34 @@
   queueMicrotask(checkForUpdateNotification);
 
 	const UPDATE_SCOPE_MENU_WIDTH = 288;
+	const updateScopePreferenceKey = `sable-update-scope:${document.body.dataset.preferenceUser || ""}`;
 	const setupUpdateScope = (root) => {
 	  if (root.dataset.updateScopeReady === "true") return;
 	  root.dataset.updateScopeReady = "true";
 	  const trigger = root.querySelector("[data-update-scope-trigger]");
 	  const menu = root.querySelector('[role="menu"]');
-	  const items = [...menu.querySelectorAll('[role="menuitem"]')];
+	  const items = [...menu.querySelectorAll('[data-update-scope-option]')];
+	  const actions = [...root.querySelectorAll(':scope > [data-update-scope-action]')];
+	  const select = (scope) => {
+		const selected = scope === "cluster" ? "cluster" : "node";
+		actions.forEach((action) => { action.hidden = action.dataset.updateScopeAction !== selected; });
+		items.forEach((item) => { item.setAttribute("aria-checked", String(item.dataset.updateScopeOption === selected)); });
+	  };
+	  try {
+		select(localStorage.getItem(updateScopePreferenceKey));
+	  } catch {
+		// Storage may be disabled; the node action remains the initial default.
+	  }
+	  menu.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-update-scope-option]");
+		if (!option) return;
+		select(option.dataset.updateScopeOption);
+		try {
+		  localStorage.setItem(updateScopePreferenceKey, option.dataset.updateScopeOption);
+		} catch {
+		  // The selected action still works for this notification without storage.
+		}
+	  });
 	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
 	  const close = () => {
 		if (menu.matches(":popover-open")) menu.hidePopover();

@@ -169,7 +169,7 @@ func TestCommandPaletteUpdateCheckReturnsUpdateNotification(t *testing.T) {
 	for _, expected := range []string{
 		`id="update-notification"`, "Sable v9.9.9 is available", `data-toast-duration="0"`,
 		`data-dialog-open="notification-release-notes-dialog"`, "Faster updates.",
-		`hx-post="/ui/updates/install"`, `name="notification" value="true"`, "Install v9.9.9",
+		`hx-post="/ui/updates/install"`, `name="notification" value="true"`, "Install update",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("palette update check does not contain %q: %s", expected, body)
