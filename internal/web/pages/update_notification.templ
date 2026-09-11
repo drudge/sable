@@ -13,7 +13,7 @@ templ UpdateNotification(view UpdateView) {
 		<div class="toast toast-update toast-persistent" data-toast data-toast-duration="0" role="status" data-update-version={ view.LatestVersion }>
 			<strong>Sable v{ view.LatestVersion } is available</strong>
 			<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-			<p>See what's new and review any breaking changes before installing.</p>
+			<p>Review the release notes for what's changed and anything to know before updating. Install when you're ready.</p>
 			<div class="toast-actions">
 				@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
 				if updateAction(view) == "install" {
