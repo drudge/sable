@@ -14,6 +14,7 @@ templ UpdateNotification(view UpdateView) {
 			<span class="toast-icon" aria-hidden="true">@Icon("download")</span>
 			<div class="toast-content">
 				<strong>Sable v{ view.LatestVersion } is available</strong>
+				<p>See what's new and review any breaking changes before installing.</p>
 				<div class="toast-actions">
 					@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
 					if updateAction(view) == "install" {
