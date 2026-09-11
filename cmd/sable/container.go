@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,9 +18,10 @@ import (
 )
 
 const (
-	containerUpdateBinaryPath = "/data/.sable/bin/sable"
-	containerVersionTimeout   = 3 * time.Second
-	maximumVersionOutputBytes = 1024
+	containerWebUpdatesEnvironment = "SABLE_WEB_UPDATES"
+	containerUpdateBinaryPath      = "/data/.sable/bin/sable"
+	containerVersionTimeout        = 3 * time.Second
+	maximumVersionOutputBytes      = 1024
 )
 
 // containerCommand is the image's immutable entrypoint. Web updates are
@@ -27,7 +29,7 @@ const (
 // data volume. On the next container restart this launcher selects that build
 // only when it is newer than the one shipped in the image.
 func containerCommand(arguments []string) error {
-	enabled, err := update.ContainerWebUpdatesEnabled()
+	enabled, err := containerWebUpdatesEnabled(os.Getenv(containerWebUpdatesEnvironment))
 	if err != nil {
 		return err
 	}
@@ -51,6 +53,18 @@ func containerCommand(arguments []string) error {
 		return execContainerBinary(containerUpdateBinaryPath, arguments, os.Environ())
 	}
 	return run(arguments)
+}
+
+func containerWebUpdatesEnabled(value string) (bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false, nil
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false", containerWebUpdatesEnvironment)
+	}
+	return enabled, nil
 }
 
 func executableRelease(path string) (string, error) {

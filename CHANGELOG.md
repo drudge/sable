@@ -21,9 +21,6 @@ compatibility are not yet a published contract.
 
 - Cluster keeps Rolling Updates visible when unavailable and explains the blocking condition.
 - Console refinements improve catalog ownership labels, migration dialogs, light-mode logo contrast, dashboard text shadows, and About icons. Blocked and allowed entry delete buttons remain visible, and Cluster ID uses the available space.
-- Docker deployments with `SABLE_WEB_UPDATES=true` now support rolling cluster
-  updates without an additional `updates.restart_managed` setting. Keep a Docker
-  restart policy configured so each node returns after its update.
 
 ## [1.1.0] - Unreleased
 

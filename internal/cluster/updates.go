@@ -112,7 +112,7 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 		updates.local.Blocked = err.Error()
 	}
 	if !controller.ServiceManaged() || restart == nil {
-		updates.local.Blocked = "Automatic restart requires an installed systemd service, SABLE_WEB_UPDATES=true for Docker, or updates.restart_managed=true with a working external supervisor."
+		updates.local.Blocked = "Automatic restart is not configured. Use an installed systemd service or set updates.restart_managed=true with a working external supervisor. For Docker, also set SABLE_WEB_UPDATES=true and configure a container restart policy."
 	}
 	configured := false
 	defer func() {

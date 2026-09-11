@@ -68,7 +68,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				<div class="cluster-update-content">
 					<p>Update replicas one at a time, then the primary.</p>
  if !view.Supported && view.UnavailableReason != "" {
- <div class="cluster-dialog-note">@Icon("info")<p><strong>Rolling updates unavailable</strong><span>{ view.UnavailableReason }</span></p></div>
+ <div class="warning-box zone-conversion-warning" role="alert">@Icon("alert-triangle")<div><strong>Rolling updates unavailable</strong><p>{ view.UnavailableReason }</p></div></div>
  }
 					if view.Rollout.ID != "" {
 						if view.Rollout.Phase != "complete" {
@@ -97,11 +97,10 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							}
 						</ol>
 					}
-					<div class="cluster-update-actions">
+					if view.Supported || view.Rollout.Active() {
+ <div class="cluster-update-actions">
 						@updateReleaseNotesButton(view.Release, clusterUpdateNotesDialogID)
- if !view.Supported && !view.Rollout.Active() {
- <button class="button compact" type="button" disabled>Update all</button>
- }
+
 						if view.Rollout.Active() {
 							if view.CanApply {
 								<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
@@ -118,6 +117,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							</form>
 						}
 					</div>
+ }
 				</div>
 			</section>
 			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)

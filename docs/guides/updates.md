@@ -42,12 +42,10 @@ sudo sable install --enable-web-updates
 ```
 
 For Docker, opt in with `SABLE_WEB_UPDATES=true` and retain a restart policy.
-This flag also enables rolling restarts; no additional TOML setting is required.
-Installed systemd services are detected automatically. For other external
-supervisors, set `updates.restart_managed = true` after verifying that the
-supervisor restarts Sable when it exits. Changes take effect when Sable next
-starts. Otherwise update by pulling and recreating the immutable container
-image with the same volume.
+For rolling restarts, also set `updates.restart_managed = true` in each node’s
+configuration after verifying its supervisor restarts Sable when it exits.
+Installed systemd services are detected automatically. Changes to this supervisor
+setting take effect when Sable next starts. Otherwise update by pulling and recreating the immutable container image with the same volume.
 
 The console installs first and then offers a controlled restart. The old process keeps serving until that restart. The **Include pre-releases** preference is saved per node, including on replicas; changing one node's channel does not change the whole cluster.
 
