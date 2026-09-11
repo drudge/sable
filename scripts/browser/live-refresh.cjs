@@ -14,7 +14,7 @@ const scenarios = [
   {page: 'unifi', name: 'UniFi actions', control: '[data-dialog-open="remove-unifi-dialog"]', interval: 10000},
   {page: 'unifi', name: 'UniFi mapping links', control: '#unifi-mapping-table a', interval: 10000},
   {page: 'dynamic', name: 'Dynamic DNS actions', control: 'a[href="/integrations?setup=dynamic-dns"]', interval: 30000},
-  {page: 'update', name: 'release notes', control: '#update-release-notes-dialog-open', interval: 2000},
+  {page: 'update', name: 'release notes', control: '#update-release-notes-dialog-open', interval: 2000, restoresFocus: true},
 ];
 
 async function refresh(page, interval) {
@@ -30,6 +30,12 @@ async function rememberControl(control) {
 
 async function assertOriginalFocus(control) {
   assert.equal(await control.evaluate(element => element === window.originalControl && element === document.activeElement), true, 'refresh must preserve the focused control');
+}
+
+async function assertRestoredFocus(control) {
+  // Stable IDs let progress refresh while htmx restores focus to the new button.
+  assert.equal(await control.evaluate(element => element === document.activeElement), true, 'refresh must restore focus to the replacement control');
+  assert.equal(await control.evaluate(() => window.originalControl.isConnected), false, 'progress must refresh while a control with a stable ID is focused');
 }
 
 async function holdNextRefresh(page, pattern, interval) {
@@ -71,18 +77,40 @@ async function holdNextRefresh(page, pattern, interval) {
     for (const scenario of scenarios) {
       const page = await open(scenario.page, scenario.width);
       const control = page.locator(scenario.control).first();
+      const assertFocus = scenario.restoresFocus ? assertRestoredFocus : assertOriginalFocus;
       await rememberControl(control);
       await refresh(page, scenario.interval);
-      await assertOriginalFocus(control);
+      await assertFocus(control);
       await page.keyboard.press('Tab');
       assert.equal(await page.evaluate(() => document.activeElement !== document.body), true, 'Tab must continue from the retained control');
       await page.keyboard.press('Shift+Tab');
-      await assertOriginalFocus(control);
+      await assertFocus(control);
+      await rememberControl(control);
       await page.locator('#main-content').focus();
       await refresh(page, scenario.interval);
       await page.waitForFunction(() => !window.originalControl.isConnected);
       assert.equal(await page.locator('#main-content').evaluate(element => element === document.activeElement), true, 'refresh must not pull focus back into the panel');
       console.log(`PASS ${scenario.name}: focus, tab order, and polling resumes`);
+      await page.close();
+    }
+
+    {
+      const page = await open('update');
+      const finish = await holdNextRefresh(page, '**/ui/updates', 2000);
+      const opener = page.locator('#update-release-notes-dialog-open');
+      await opener.click();
+      const dialog = page.locator('#update-release-notes-dialog');
+      const done = dialog.getByRole('button', {name: 'Done', exact: true});
+      await rememberControl(done);
+      await finish();
+      assert.equal(await dialog.evaluate(element => element.open), true, 'release notes must stay open when a pending refresh arrives');
+      await assertOriginalFocus(done);
+      await done.click();
+      assert.equal(await opener.evaluate(element => element === document.activeElement), true, 'closing release notes must return focus to the opener');
+      await rememberControl(opener);
+      await refresh(page, 2000);
+      await assertRestoredFocus(opener);
+      console.log('PASS release notes survive a pending refresh; closing restores focus and resumes progress');
       await page.close();
     }
 
