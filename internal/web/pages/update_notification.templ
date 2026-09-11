@@ -11,9 +11,14 @@ templ ReleaseVersion(release string) {
 templ UpdateNotification(view UpdateView) {
 	<div class="toast-region" aria-live="polite">
 		<div class="toast toast-update toast-persistent" data-toast data-toast-duration="0" role="status" data-update-version={ view.LatestVersion }>
-			<strong>@Icon("sparkles")<span>Sable v{ view.LatestVersion } is available</span></strong>
 			<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-			<p>Review the release notes for what's changed and anything to know before updating. Install when you're ready.</p>
+			<div class="toast-update-summary">
+				<div class="toast-update-copy">
+					<strong>Sable v{ view.LatestVersion } is available</strong>
+					<p>Review the release notes for what's changed and anything to know before updating. Install when you're ready.</p>
+				</div>
+				<span class="toast-update-badge" aria-hidden="true">@Icon("sparkles")</span>
+			</div>
 			<div class="toast-actions">
 				@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
 				if updateAction(view) == "install" {
