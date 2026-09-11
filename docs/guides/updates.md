@@ -24,17 +24,18 @@ After replacement, the previous executable is not a permanent rollback archive. 
 ## Use the console deliberately
 
 The console checks for releases after sign-in by default on both primary and
-replica nodes. A dismissible notice includes the GitHub release notes and a link
-to About. Results, including failed checks, are cached for six hours per node;
+replica nodes. A dismissible notice offers **Release notes** and **Install update**
+without leaving the current page. Results, including failed checks, are cached for six hours per node;
 manual checks remain available. Nothing is installed automatically.
 
-On **About**, turn off **Check for updates on sign-in** to disable automatic
+Under **Settings → General → Software Updates**, turn off **Check for updates on sign-in** to disable automatic
 checks on this node, or set `updates.check_on_login = false` in `sable.toml`.
 The choice persists across restarts and is not replicated. Update readers can
-see notifications; changing the preference requires `updates.apply`.
+see notifications; changing the preference requires `settings.write`.
 
 The **About** page displays release notes and links the installed version to its
-GitHub release. It can check on both primary and replica nodes. Installing requires `updates.apply` and a deployment that opted into writable service binaries:
+GitHub release. Release notes from a successful check or installation survive
+restarts and remain readable while offline. It can check on both primary and replica nodes. Installing requires `updates.apply` and a deployment that opted into writable service binaries:
 
 ```sh
 sudo sable install --enable-web-updates
@@ -50,8 +51,11 @@ The console installs first and then offers a controlled restart. The old process
 
 ## Roll through a cluster
 
-From the primary, review the release on **About**, then open **Cluster → Rolling
-Updates → Update all nodes**. This requires both `updates.apply` and
+From the primary, open **Cluster → Rolling Updates**, review **Release notes**,
+and choose **Update all**. The update notification also offers **Entire cluster**
+in its scope dropdown when every node supports rolling updates. The dropdown
+remembers the last selection per user in this browser; its main button becomes
+**Update cluster** or **Install update** accordingly. This requires both `updates.apply` and
 `cluster.write`. The rollout pins that exact release across every node, even if
 a newer release is published during the operation.
 
@@ -65,7 +69,8 @@ The primary reserves the update mechanism on every node, updates each replica
 in order, and waits until it reports the target running version and current
 configuration generation. It restarts only when every other node is online and
 synchronized. The primary updates last, briefly interrupting its console, then
-verifies the cluster after its restart. Reload Cluster to see the final result.
+verifies the cluster after its restart. The Cluster page keeps progress visible
+through restarts and marks the version badge with a green check when finished.
 
 Progress is saved to the node's cluster data directory. A failure or timeout
 stops further restarts; **Stop rollout** also prevents further nodes from

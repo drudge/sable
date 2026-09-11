@@ -85,12 +85,13 @@ Open <http://127.0.0.1:6491> and sign in as `art.vandelay` with password
 `LatexImporter2026!` (a disposable fixture account).
 
 1. After sign-in, choose **Release notes** in the update notification to open
-   the same notes dialog as About. **Install** confirms and updates this node,
+   the same notes dialog as About. **Install update** confirms and updates this node,
    shows download progress in the notification, then offers **Restart Sable**.
    Skip installing a single node to try the full cluster rollout below.
 2. **Settings → General → Software Updates** contains the **Check for updates
    on sign-in** preference.
-3. Open **Cluster**, choose **Update all nodes to v1.0.2**, and confirm.
+3. Open **Cluster**, choose **Update all**, and confirm. You can also choose
+   **Entire cluster** from the notification dropdown, which remembers your choice.
 4. Watch each replica install, restart, and synchronize before the next node
    updates. The primary restarts last; reload its console if needed to see the
    completed rollout.

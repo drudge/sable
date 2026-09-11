@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [Unreleased]
+## [1.1.0] - Unreleased
 
 ### Updates
 
@@ -16,6 +16,10 @@ compatibility are not yet a published contract.
   notification with release notes. Turn checks off for this node in Settings → General.
 - About displays notes from the GitHub release, and installed versions on About
   and Cluster link to their release pages.
+- Notifications let you install this node or update the entire cluster and
+  remember your last choice in this browser. Installation progress and the
+  restart action stay in the notification, with confirmation after an update.
+- Release notes remain available after restarting, including while offline.
 - Cluster can update all nodes to one reviewed release, restarting replicas one
   at a time and waiting for their running version and synchronization before
   updating the primary. Progress survives the primary's final restart. Failures,

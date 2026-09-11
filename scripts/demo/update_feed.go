@@ -25,7 +25,7 @@ These are local demonstration builds of the current source, labeled 1.0.1 and 1.
 - Update replicas one at a time, verify synchronization, and restart the primary last.
 
 ### Try it
-Open **Cluster**, choose **Update all nodes**, and watch the rollout. The terminal probes DNS throughout the update.
+Open **Cluster**, choose **Update all**, and watch the rollout. The terminal probes DNS throughout the update.
 
 This feed uses curated release notes; merge commits and raw commit lists are excluded.
 `
