@@ -139,6 +139,7 @@ CREATE INDEX IF NOT EXISTS sable_server_log_occurred_at_idx
 ON sable_server_log (occurred_at)`}
 	statements = append(statements, queryStatsTables()...)
 	statements = append(statements, store.authenticationTables()...)
+	statements = append(statements, passkeyTable, "CREATE INDEX IF NOT EXISTS sable_passkeys_user_idx ON sable_passkeys (user_id)")
 	statements = append(statements, trustAnchorTables()...)
 	statements = append(statements, store.zoneTables()...)
 	for _, statement := range statements {

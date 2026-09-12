@@ -208,6 +208,10 @@ tls_insecure = false
 # enabled = true
 
 [security]
+# Hide passkey sign-in and enrollment, keeping saved credentials.
+# Applies locally on standalone servers and replicates in clusters.
+# Ensure every account has another sign-in method before setting true.
+passkeys_disabled = false
 enabled = true
 secure_cookies = false
 session_ttl = "12h"
@@ -222,7 +226,7 @@ secret_key_file = "data/sable.key"
 # Enabling this adds a button to the sign-in page and takes nobody's password
 # away. Moving an account to single sign-on only is a per-account switch on the
 # Administration page, and Sable keeps one administrator able to sign in with a
-# password so a problem at the provider cannot lock everyone out.
+# password or passkey so a problem at the provider cannot lock everyone out.
 [oidc]
 enabled = false
 # display_name = "Pocket ID"

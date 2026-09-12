@@ -1027,6 +1027,8 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cache-action-button { display: flex; width: 100%; align-items: center; justify-content: center; gap: 0.5rem; }
 .cache-action-button .nav-icon { width: 1rem; height: 1rem; }
 .button.destructive { border-color: var(--destructive); background: var(--destructive); color: white; }
+.button.outline.destructive { background: transparent; color: var(--destructive); }
+.button.outline.destructive:hover { background: color-mix(in oklch, var(--destructive) 10%, transparent); }
 .cache-aside { display: grid; gap: 1.5rem; }
 .cache-guidance { padding: 1.5rem; }
 .cache-guidance h2 { margin: 0; font-size: 1.125rem; line-height: 1.35; }
@@ -2215,6 +2217,15 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .profile-username > span { color: var(--muted-foreground); font-size: .6875rem; font-weight: 600; text-transform: uppercase; }
 .profile-username > strong { font: 500 .85rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .profile-username > small, .profile-settings-body .field-control small { color: var(--muted-foreground); font-size: .7rem; }
+.profile-passkey-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; border-radius: .5rem; background: color-mix(in oklch, var(--muted) 55%, transparent); padding: .75rem 1rem; }
+.profile-passkey-details { display: grid; min-width: 0; gap: .2rem; overflow-wrap: anywhere; }
+.profile-passkey-details strong { font-size: .85rem; font-weight: 600; }
+.profile-passkey-details small { color: var(--muted-foreground); font-size: .7rem; }
+.profile-passkey-row > button, .profile-password-header > button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: .4rem; }
+.profile-passkey-row > button .nav-icon, .profile-password-header > button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.profile-password-header { flex-wrap: wrap; }
+.profile-password-header > button { margin-left: auto; }
+[data-passkey-status]:empty { display: none; }
 .profile-security-note { display: flex; align-items: center; gap: .55rem; color: var(--muted-foreground); font-size: .72rem; }
 .profile-security-note .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .profile-card-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--border); padding: .75rem 1.25rem; }
@@ -3396,3 +3407,5 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .cluster-update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .cluster-update-actions:empty { display: none; }
+
+html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !important; }

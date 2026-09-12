@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -39,6 +41,7 @@ type AuthorizationUser struct {
 	// would not know which provider subject owns which account, and every
 	// federated user would silently provision a second account on failover.
 	Identities []AuthorizationIdentity `json:"identities,omitempty"`
+	Passkeys   []auth.Passkey          `json:"passkeys,omitempty"`
 }
 
 // AuthorizationIdentity is one replicated link between an identity provider
@@ -212,6 +215,13 @@ FROM sable_user_identities ORDER BY user_id, provider`)
 		return AuthorizationState{}, fmt.Errorf("iterate authorization memberships: %w", err)
 	}
 
+	for index := range state.Users {
+		keys, err := store.PasskeysForUser(ctx, state.Users[index].ID)
+		if err != nil {
+			return AuthorizationState{}, err
+		}
+		state.Users[index].Passkeys = keys
+	}
 	rows, err = store.database.QueryContext(ctx, `
 SELECT id, token_hash, user_id, name, created_at, expires_at
 FROM sable_api_tokens ORDER BY id`)
@@ -283,6 +293,11 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 	}
 	defer transaction.Rollback()
 
+	localPasskeys, err := store.passkeysInTransaction(ctx, transaction)
+	if err != nil {
+		return err
+	}
+
 	passwords := map[int64]string{}
 	rows, err := transaction.QueryContext(ctx, `SELECT id, password_hash FROM sable_users`)
 	if err != nil {
@@ -336,6 +351,7 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 		"DELETE FROM sable_api_token_roles",
 		"DELETE FROM sable_api_tokens",
 		"DELETE FROM sable_user_identities",
+		"DELETE FROM sable_passkeys",
 		"DELETE FROM sable_user_roles",
 		"DELETE FROM sable_role_grants",
 		"DELETE FROM sable_roles",
@@ -407,6 +423,16 @@ VALUES (`+store.placeholders(5)+`)`, role.ID, grant.Permission, grant.Surface, g
 				return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
 			}
 		}
+		for _, key := range user.Passkeys {
+			key = preservePasskeyActivity(key, localPasskeys[key.ID])
+			data, err := json.Marshal(key)
+			if err != nil {
+				return err
+			}
+			if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, user.ID, string(data)); err != nil {
+				return err
+			}
+		}
 		for _, identity := range user.Identities {
 			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at)
@@ -461,6 +487,7 @@ func validateAuthorizationState(state AuthorizationState) error {
 	userIDs := make(map[int64]struct{}, len(state.Users))
 	usernames := make(map[string]struct{}, len(state.Users))
 	subjects := make(map[string]struct{}, len(state.Users))
+	passkeyIDs := make(map[string]bool)
 	for _, user := range state.Users {
 		if user.ID <= 0 || strings.TrimSpace(user.Username) == "" {
 			return errors.New("replicated authorization state contains an invalid user")
@@ -468,7 +495,7 @@ func validateAuthorizationState(state AuthorizationState) error {
 		// An account needs at least one way in. A password hash was the only
 		// possibility before single sign-on; now a federated account has an
 		// empty hash and is reached through its linked provider instead.
-		if strings.TrimSpace(user.PasswordHash) == "" && len(user.Identities) == 0 {
+		if strings.TrimSpace(user.PasswordHash) == "" && len(user.Identities) == 0 && len(user.Passkeys) == 0 {
 			return fmt.Errorf("replicated authorization user %q has neither a password nor a linked identity", user.Username)
 		}
 		if _, found := userIDs[user.ID]; found {
@@ -476,6 +503,12 @@ func validateAuthorizationState(state AuthorizationState) error {
 		}
 		if _, found := usernames[user.Username]; found {
 			return fmt.Errorf("replicated authorization state contains duplicate username %q", user.Username)
+		}
+		for _, key := range user.Passkeys {
+			if key.UserID != user.ID || key.ID == "" || key.ID != base64.RawURLEncoding.EncodeToString(key.Credential.ID) || len(key.Credential.PublicKey) == 0 || len(key.UserHandle) == 0 || len(key.UserHandle) > 64 || key.RPID == "" || passkeyIDs[key.ID] {
+				return errors.New("replicated authorization state contains an invalid or duplicate passkey")
+			}
+			passkeyIDs[key.ID] = true
 		}
 		for _, identity := range user.Identities {
 			if strings.TrimSpace(identity.Provider) == "" || strings.TrimSpace(identity.Subject) == "" {

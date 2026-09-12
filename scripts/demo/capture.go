@@ -25,6 +25,7 @@ type shot struct {
 }
 
 var shots = []shot{
+	{"profile-passkeys.png", "/profile", 1600, 1500},
 	{"dashboard.png", "/", 1600, 1000},
 	{"dashboard-full.png", "/", 1600, 1400},
 	{"blocking.png", "/blocked", 1600, 880},

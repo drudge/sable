@@ -627,3 +627,34 @@ func TestAutomaticUpdateNoticeWaitsForAnExistingCheck(t *testing.T) {
 		t.Fatalf("pending lookup = %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestSettingsAndAboutShareReleaseChannelPreference(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{})
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+	server.config = configuration
+	for _, enabled := range []bool{true, false} {
+		values := url.Values{"check_on_login": {"true"}, "release_channel_present": {"true"}}
+		if enabled {
+			values.Set("pre_release", "true")
+		}
+		response := serveUpdateForm(server, "/ui/settings/updates", values)
+		if response.Code != http.StatusOK {
+			t.Fatalf("save: %s", response.Body.String())
+		}
+		request := httptest.NewRequest(http.MethodGet, "/about", nil)
+		if server.updateView(request, update.Status{IncludePreRelease: !enabled}).PreferredPreRelease != enabled {
+			t.Fatal("About did not reflect saved preference")
+		}
+		if configuration.Current().Config.Updates.PreRelease != enabled {
+			t.Fatal("preference not saved")
+		}
+	}
+	response := serveUpdateForm(server, "/ui/updates/check", url.Values{"pre_release": {"true"}})
+	if response.Code != http.StatusOK {
+		t.Fatal(response.Body.String())
+	}
+	request := httptest.NewRequest(http.MethodGet, "/settings", nil)
+	if !server.settingsUpdatePreferencesView(request).IncludePreRelease {
+		t.Fatal("Settings did not reflect About change")
+	}
+}

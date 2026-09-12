@@ -165,6 +165,31 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		}
 	}
 	err = editor.Update(request.Context(), func(candidate *config.Config) error {
+		if request.PostForm.Has("update_preferences_present") {
+			if err := server.applyUpdatePreferences(request, candidate); err != nil {
+				return err
+			}
+		}
+		if request.PostForm.Has("passkeys_present") {
+			disabled := request.FormValue("passkeys_enabled") != "true"
+			if disabled {
+				validator, ok := server.auth.(interface {
+					ValidatePasskeyDisable(context.Context, string) error
+				})
+				if !ok {
+					return errors.New("passkey settings are unavailable")
+				}
+				issuer := ""
+				if candidate.OIDC.Enabled {
+					issuer = candidate.OIDC.Issuer
+				}
+				if err := validator.ValidatePasskeyDisable(request.Context(), issuer); err != nil {
+					return err
+				}
+			}
+			candidate.Security.PasskeysDisabled = disabled
+		}
+
 		dnsListeners := formLines(request.FormValue("dns_listen"))
 		resolverMode := strings.ToLower(strings.TrimSpace(request.FormValue("resolver_mode")))
 		if resolverMode == "" {
@@ -492,6 +517,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		ServerLogEnabled:  configuration.ServerLog.Enabled, ServerLogLevel: configuration.ServerLog.Level,
 		ServerLogRetention:  retentionInputValue(configuration.ServerLog.Retention.Duration),
 		StatisticsRetention: retentionInputValue(configuration.Statistics.Retention.Duration),
+		PasskeysEnabled:     !configuration.Security.PasskeysDisabled,
 		SessionTTL:          configuration.Security.SessionTTL.String(),
 		APITokenTTL:         configuration.Security.APITokenTTL.String(), ConfigWatch: configuration.Reload.Watch,
 		BlockingUpdateHours:  max(1, int(configuration.Blocking.UpdateInterval.Duration/time.Hour)),

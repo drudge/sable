@@ -399,6 +399,14 @@ WHERE user_id = `+store.placeholder(3), disabled, now.UTC(), userID)
 }
 
 func (store *Store) SetUserPassword(ctx context.Context, userID int64, passwordHash string, now time.Time) error {
+	return store.setUserPassword(ctx, userID, passwordHash, now, false)
+}
+
+func (store *Store) SetUserPasswordAndLogin(ctx context.Context, userID int64, passwordHash string, now time.Time) error {
+	return store.setUserPassword(ctx, userID, passwordHash, now, true)
+}
+
+func (store *Store) setUserPassword(ctx context.Context, userID int64, passwordHash string, now time.Time, enable bool) error {
 	transaction, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin password reset: %w", err)
@@ -416,6 +424,11 @@ func (store *Store) SetUserPassword(ctx context.Context, userID int64, passwordH
 	if _, err := transaction.ExecContext(ctx,
 		"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2), now.UTC(), userID); err != nil {
 		return fmt.Errorf("update password timestamp: %w", err)
+	}
+	if enable {
+		if _, err := transaction.ExecContext(ctx, "UPDATE sable_user_profiles SET password_login = TRUE WHERE user_id = "+store.placeholder(1), userID); err != nil {
+			return err
+		}
 	}
 	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
 		return fmt.Errorf("revoke password-reset sessions: %w", err)

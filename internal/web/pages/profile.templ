@@ -9,10 +9,13 @@ import (
 )
 
 type ProfilePageView struct {
+ PasskeysDisabled bool
+ HasPassword bool
 	Console         DashboardView
 	User            auth.ManagedUser
 	Roles           []auth.Role
 	Tokens          []auth.APIToken
+ Passkeys []auth.Passkey
 	ActiveTab       string
 	DefaultTokenTTL time.Duration
 	Message         string
@@ -37,7 +40,7 @@ templ ProfilePage(view ProfilePageView) {
 
 templ ProfileContent(view ProfilePageView) {
 	<div class="profile-page" id="profile-content" data-isotope-tabs data-tab-param="tab">
-		<header class="page-heading"><h1>Profile</h1><p>Manage your account, password, and API tokens</p></header>
+		<header class="page-heading"><h1>Profile</h1><p>Manage your account, passkeys, password, and API tokens</p></header>
 		<nav class="isotope-tab-list profile-tabs" aria-label="Profile sections">
 			for _, tab := range profileTabs {
 				<a class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } href={ profileTabHref(tab.Value) } aria-current={ ifThen(view.ActiveTab == tab.Value, "page", "false") }>
@@ -78,18 +81,29 @@ templ ProfileAccountSettings(view ProfilePageView) {
 				<footer class="profile-card-footer"><button class="button" type="submit">Save Changes</button></footer>
 			</form>
 		</section>
-		<section class="card isotope-data-card profile-settings-card">
-			<header class="isotope-data-header"><div><h2>Password</h2><span>Update the password used to sign in to Sable</span></div></header>
+		@ProfilePasskeys(view)
+		<section class="card isotope-data-card profile-settings-card" data-passkeys data-csrf-token={ view.Console.CSRFToken }>
+			<header class="isotope-data-header profile-password-header">
+				<div><h2>Password</h2><span>{ ifThen(view.User.PasswordLogin, "Password sign-in is enabled", ifThen(view.HasPassword, "Password sign-in is disabled. Your existing password is saved.", "Set a password below to enable password sign-in.")) }</span></div>
+				if view.User.PasswordLogin && len(view.Passkeys) > 0 && !view.PasskeysDisabled {
+					<button class="button compact outline" type="button" data-passkey-action="disable-password" disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("pause")<span>Disable password sign-in</span></button>
+				} else if !view.User.PasswordLogin && view.HasPassword {
+ <button class="button compact outline" type="button" data-passkey-action="enable-password" disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("play")<span>Enable password sign-in</span></button>
+ }
+			</header>
 			<form class="profile-settings-form" hx-post="/ui/profile/password" hx-target="#profile-content" hx-swap="outerHTML">
 				<div class="profile-settings-body">
-					<label class="field-control"><span>Current Password</span><input type="password" name="current_password" autocomplete="current-password" required/></label>
+					if view.User.PasswordLogin {
+ <label class="field-control"><span>Current Password</span><input type="password" name="current_password" autocomplete="current-password" required/></label>
+ }
 					<div class="profile-field-grid">
 						<label class="field-control"><span>New Password</span><input type="password" name="new_password" minlength="12" maxlength="1024" autocomplete="new-password" required/><small>Use at least 12 characters.</small></label>
 						<label class="field-control"><span>Confirm New Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
 					</div>
-					<div class="profile-security-note">@Icon("info")<span>Changing your password signs out all active browser sessions.</span></div>
+					<p role="status" data-passkey-status></p>
+					<div class="profile-security-note">@Icon("info")<span>Setting a password enables password sign-in and signs out all active browser sessions.</span></div>
 				</div>
-				<footer class="profile-card-footer"><button class="button" type="submit">Change Password</button></footer>
+				<footer class="profile-card-footer"><button class="button" type="submit">{ ifThen(view.User.PasswordLogin, "Change Password", "Set new password and enable sign-in") }</button></footer>
 			</form>
 		</section>
 	</div>
@@ -157,3 +171,31 @@ templ ProfileCreateTokenDialog(view ProfilePageView) {
 
 func profileDisplayName(user auth.ManagedUser) string { if user.DisplayName != "" { return user.DisplayName }; return user.Username }
 func profileTokenExpiration(value time.Time, display TimeDisplay) string { if value.IsZero() { return "Never" }; return FormatDateTime(value, display) }
+
+
+templ ProfilePasskeys(view ProfilePageView) {
+ <section class="card isotope-data-card profile-settings-card" data-passkeys data-csrf-token={ view.Console.CSRFToken }>
+  <header class="isotope-data-header"><div><h2>Passkeys</h2><span>Sign in with your fingerprint, face, device PIN, or security key</span></div></header>
+  <div class="profile-settings-body">
+   if view.PasskeysDisabled {
+ <p>Passkey sign-in is disabled by your administrator. Your saved passkeys are preserved.</p>
+ } else {
+ <p>Passkeys require HTTPS or localhost and work across cluster nodes on the same domain automatically. Add a backup passkey before disabling your password.</p>
+ }
+   for _, key := range view.Passkeys {
+    <div class="profile-passkey-row"><div class="profile-passkey-details"><strong>{ key.Name }</strong><small>{ key.RPID } · Added { FormatDateTime(key.CreatedAt, view.Console.TimeDisplay) } · Last used { tokenLastUsed(key.LastUsedAt, view.Console.TimeDisplay) }</small></div>
+     <button class="button compact outline destructive" type="button" data-passkey-action="remove" data-passkey-id={ key.ID } disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("trash")<span>Remove</span></button>
+    </div>
+   }
+   if !view.PasskeysDisabled {
+ <label class="field-control" data-passkey-capability><span>Passkey name</span><input data-passkey-name maxlength="100" placeholder="Personal phone or security key" autocomplete="off"/></label>
+ }
+   <p role="status" data-passkey-status></p>
+  </div>
+  if !view.PasskeysDisabled {
+ <footer class="profile-card-footer" data-passkey-capability>
+   <button class="button" type="button" data-passkey-action="register" disabled?={ view.Console.ControlPlaneReadOnly }>Add passkey</button>
+  </footer>
+ }
+ </section>
+}

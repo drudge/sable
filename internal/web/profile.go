@@ -114,12 +114,22 @@ func (server *Server) profileView(request *http.Request, message, errorMessage s
 	if err != nil {
 		return pages.ProfilePageView{}, err
 	}
+	var keys []auth.Passkey
+	if authentication := server.passkeyAuth(); authentication != nil {
+		keys, err = authentication.Passkeys(request.Context(), principal)
+		if err != nil {
+			return pages.ProfilePageView{}, err
+		}
+	}
 	tab := strings.ToLower(strings.TrimSpace(request.URL.Query().Get("tab")))
 	if tab != "tokens" {
 		tab = "profile"
 	}
 	return pages.ProfilePageView{
-		Console: server.consoleView(request), User: snapshot.User, Roles: snapshot.Roles, Tokens: snapshot.Tokens, ActiveTab: tab,
+		Passkeys:         keys,
+		HasPassword:      snapshot.HasPassword,
+		PasskeysDisabled: !server.passkeysEnabled(),
+		Console:          server.consoleView(request), User: snapshot.User, Roles: snapshot.Roles, Tokens: snapshot.Tokens, ActiveTab: tab,
 		DefaultTokenTTL: server.config.Current().Config.Security.APITokenTTL.Duration,
 		Message:         message, Error: errorMessage,
 	}, nil

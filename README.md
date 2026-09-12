@@ -62,6 +62,8 @@ without shipping a Node.js runtime or a separate frontend bundle.
   console navigation
 - Database-backed users, built-in/custom RBAC, separate Web/API permissions,
   per-zone grants, revocable API tokens, and an AES-256-GCM secret vault
+- Native WebAuthn passkeys, passwordless sign-in, and per-account optional
+  passwords with [passkey management in Profile](docs/guides/passkeys.md)
 - OpenID Connect single sign-on with guided setup, PKCE, group-to-role mapping,
   just-in-time provisioning, verified-email linking, and replicated federated
   identities

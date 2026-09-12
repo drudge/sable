@@ -443,11 +443,12 @@ func (unifi UniFi) Runnable() bool {
 }
 
 type Security struct {
-	Enabled       bool     `toml:"enabled"`
-	SecureCookies bool     `toml:"secure_cookies"`
-	SessionTTL    Duration `toml:"session_ttl"`
-	APITokenTTL   Duration `toml:"api_token_ttl"`
-	SecretKeyFile string   `toml:"secret_key_file"`
+	PasskeysDisabled bool     `toml:"passkeys_disabled"`
+	Enabled          bool     `toml:"enabled"`
+	SecureCookies    bool     `toml:"secure_cookies"`
+	SessionTTL       Duration `toml:"session_ttl"`
+	APITokenTTL      Duration `toml:"api_token_ttl"`
+	SecretKeyFile    string   `toml:"secret_key_file"`
 }
 
 // Cluster contains node-local identity settings. Membership and synchronized

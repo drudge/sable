@@ -34,6 +34,7 @@ type UpdateView struct {
 	// IncludePreRelease that the operator asked for pre-release builds.
 	PreRelease        bool
 	IncludePreRelease bool
+ PreferredPreRelease bool
 	// Supported reports whether this Sable process can install releases.
 	Supported bool
 	// Checked reports that a release check has completed at least once.
@@ -193,7 +194,7 @@ templ UpdatePanel(view UpdateView) {
 						<details class="about-update-menu">
 							<summary class="button outline compact" aria-label="Release channel options" title="Release channel options">@Icon("chevron-down")</summary>
 							<div>
-								<label class="about-update-channel"><input type="checkbox" name="pre_release" value="true" checked?={ view.IncludePreRelease }/><span>Include pre-releases</span></label>
+								<label class="about-update-channel"><input type="checkbox" name="pre_release" value="true" checked?={ view.PreferredPreRelease }/><span>Include pre-releases</span></label>
 								<small>This node only · checks again when changed.</small>
 							</div>
 						</details>

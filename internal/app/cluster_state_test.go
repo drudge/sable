@@ -30,6 +30,7 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	sourceConfiguration.Resolver.RootHints = []string{"192.0.2.1:53"}
 	sourceConfiguration.Blocking.Domains = []string{"ads.example"}
 	sourceConfiguration.QueryLog.Enabled = false
+	sourceConfiguration.Security.PasskeysDisabled = true
 	sourceConfiguration.Cluster.AdvertiseURL = "https://ns1.example.test"
 	sourceConfiguration.OIDC = config.DefaultOIDC()
 	sourceConfiguration.OIDC.Enabled = true
@@ -157,6 +158,9 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	}
 	// Single sign-on crosses whole except the callback, which every node builds
 	// from its own advertised address.
+	if !got.Security.PasskeysDisabled {
+		t.Fatal("passkey setting was not replicated")
+	}
 	if !got.OIDC.Enabled || got.OIDC.Issuer != sourceConfiguration.OIDC.Issuer ||
 		got.OIDC.ClientID != sourceConfiguration.OIDC.ClientID ||
 		!reflect.DeepEqual(got.OIDC.RoleMappings, sourceConfiguration.OIDC.RoleMappings) {

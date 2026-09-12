@@ -771,11 +771,32 @@ source compiler statistics, cache entries, and configuration revision.
 ```toml
 [security]
 enabled = true
+passkeys_disabled = false
 secure_cookies = false
 session_ttl = "12h"
 api_token_ttl = "3mo"
 secret_key_file = "data/sable.key"
 ```
+
+Native passkeys work on standalone servers and clusters without a separate RP ID
+or origin list. Enroll them in **Profile → Account → Passkeys** and use **Sign in
+with a passkey** on the login page. HTTPS with a DNS hostname is required;
+`http://localhost` is supported for development. Enrollment and sign-in controls
+are hidden when the browser lacks secure-context or WebAuthn support.
+
+Passwords, OIDC, and passkeys can coexist. In Profile's Password header, disable
+password sign-in after enrollment or re-enable the saved password without a
+reset. Setting a new password is a separate action that revokes browser sessions.
+
+**Settings → Web → Enable passkeys** controls availability. Click **Save
+Settings** to apply it. It defaults on, takes effect without restarting, and
+replicates across a cluster. Disabling preserves saved keys and blocks passkey
+sign-in and enrollment. The settings form requires an alternate sign-in method
+for every active account. Direct TOML edits use `security.passkeys_disabled`;
+verify alternate account access before disabling it that way.
+
+See [Sign in with passkeys](guides/passkeys.md) for hostname derivation, proxy
+configuration, failover, and recovery.
 
 Security is enabled by default. On the first start, all console routes redirect
 to `/setup` until the initial administrator is created. Passwords use Argon2id
@@ -908,7 +929,7 @@ and ACME provider credentials are handled.
 sign-in page; it takes nothing away. Moving an account to SSO only is a
 per-account switch under **Administration → the user → Sign-In**, so people opt
 in one at a time. Sable refuses to leave the deployment without at least one
-administrator who can still sign in with a password, because single sign-on
+administrator who can still sign in with a password or passkey, because single sign-on
 depends on a service Sable does not run: if the provider is unreachable, its
 certificate expires, or a group claim changes shape, that administrator is how
 you get in and fix it.

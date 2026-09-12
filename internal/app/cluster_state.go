@@ -64,10 +64,11 @@ type clusterStateSnapshot struct {
 }
 
 type clusterRuntimeConfiguration struct {
-	Resolver        config.Resolver  `toml:"resolver"`
-	TSIGKeys        []config.TSIGKey `toml:"tsig_keys"`
-	Blocking        config.Blocking  `toml:"blocking"`
-	QueryLogEnabled bool             `toml:"query_log_enabled"`
+	PasskeysDisabled bool             `toml:"passkeys_disabled"`
+	Resolver         config.Resolver  `toml:"resolver"`
+	TSIGKeys         []config.TSIGKey `toml:"tsig_keys"`
+	Blocking         config.Blocking  `toml:"blocking"`
+	QueryLogEnabled  bool             `toml:"query_log_enabled"`
 	// UniFi synchronization only runs on the writable node, but the settings
 	// travel to every node so a promoted replica keeps publishing hosts instead
 	// of silently freezing the records it inherited.
@@ -126,13 +127,14 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 	// changed is that each node stores what it receives in its own vault.
 	tsigKeys, _ := replicator.tsigSecrets.Hydrate(ctx, active.TSIGKeys)
 	runtimeConfiguration := clusterRuntimeConfiguration{
-		Resolver:        active.Resolver,
-		TSIGKeys:        tsigKeys,
-		Blocking:        active.Blocking,
-		QueryLogEnabled: active.QueryLog.Enabled,
-		UniFi:           active.UniFi,
-		DynamicDNS:      active.DynamicDNS,
-		OIDC:            replicatedOIDC(active.OIDC),
+		Resolver:         active.Resolver,
+		TSIGKeys:         tsigKeys,
+		Blocking:         active.Blocking,
+		QueryLogEnabled:  active.QueryLog.Enabled,
+		UniFi:            active.UniFi,
+		DynamicDNS:       active.DynamicDNS,
+		OIDC:             replicatedOIDC(active.OIDC),
+		PasskeysDisabled: active.Security.PasskeysDisabled,
 	}
 	if replicator.dnsProviderCredentials != nil {
 		for _, provider := range active.DynamicDNS.ProviderNames() {
@@ -315,13 +317,14 @@ func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool 
 
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
 	return clusterRuntimeConfiguration{
-		Resolver:        source.Resolver,
-		TSIGKeys:        source.TSIGKeys,
-		Blocking:        source.Blocking,
-		QueryLogEnabled: source.QueryLog.Enabled,
-		UniFi:           source.UniFi,
-		DynamicDNS:      source.DynamicDNS,
-		OIDC:            replicatedOIDC(source.OIDC),
+		Resolver:         source.Resolver,
+		TSIGKeys:         source.TSIGKeys,
+		Blocking:         source.Blocking,
+		QueryLogEnabled:  source.QueryLog.Enabled,
+		UniFi:            source.UniFi,
+		DynamicDNS:       source.DynamicDNS,
+		OIDC:             replicatedOIDC(source.OIDC),
+		PasskeysDisabled: source.Security.PasskeysDisabled,
 	}
 }
 
@@ -333,6 +336,7 @@ func (replicator *clusterStateReplicator) updateConfiguration(ctx context.Contex
 }
 
 func applyReplicatedRuntimeConfiguration(candidate *config.Config, source clusterRuntimeConfiguration) {
+	candidate.Security.PasskeysDisabled = source.PasskeysDisabled
 	candidate.Resolver = source.Resolver
 	candidate.TSIGKeys = append([]config.TSIGKey(nil), source.TSIGKeys...)
 	candidate.Blocking = source.Blocking

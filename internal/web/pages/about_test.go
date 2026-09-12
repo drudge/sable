@@ -34,7 +34,7 @@ func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 		view      UpdateView
 		automatic bool
 	}{
-		{"unchecked", UpdateView{Supported: true, CanCheck: true, IncludePreRelease: true, CheckOnLogin: true}, true},
+		{"unchecked", UpdateView{Supported: true, CanCheck: true, PreferredPreRelease: true, CheckOnLogin: true}, true},
 		{"disabled", UpdateView{Supported: true, CanCheck: true, CheckOnLogin: false}, false},
 		{"checked", UpdateView{Supported: true, CanCheck: true, Checked: true, UpToDate: true}, false},
 		{"failed", UpdateView{Supported: true, CanCheck: true, Checked: true, Error: "offline"}, false},

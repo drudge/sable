@@ -72,37 +72,38 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames     *reverseNameCache
-	reload           func(context.Context) error
-	auth             Authenticator
-	sso              ssoController
-	ssoAdmin         ssoAdministration
-	ssoStateStore    *ssoStateStore
-	preAuthTokens    *preAuthTokenStore
-	crossOrigin      *http.CrossOriginProtection
-	securityEnabled  bool
-	secureCookies    bool
-	sessionCookie    string
-	setupRequired    atomic.Bool
-	history          *statsHistory
-	insightCache     dashboardInsightCache
-	historyStop      chan struct{}
-	historyPrune     chan struct{}
-	historyStopOnce  sync.Once
-	blockLists       *blockcompiler.Updater
-	dnssec           dnssecController
-	cluster          clusterController
-	dynamicDNS       dynamicDNSController
-	unifi            unifiController
-	certificates     certificateController
-	tsigKeys         tsigController
-	updates          updateController
-	backups          backupController
-	backupStaging    backupStaging
-	administrator    administrator
-	restart          func()
-	restartRequested atomic.Bool
-	instanceID       string
+	reverseNames      *reverseNameCache
+	reload            func(context.Context) error
+	auth              Authenticator
+	sso               ssoController
+	ssoAdmin          ssoAdministration
+	ssoStateStore     *ssoStateStore
+	preAuthTokens     *preAuthTokenStore
+	passkeyCeremonies passkeyCeremonyStore
+	crossOrigin       *http.CrossOriginProtection
+	securityEnabled   bool
+	secureCookies     bool
+	sessionCookie     string
+	setupRequired     atomic.Bool
+	history           *statsHistory
+	insightCache      dashboardInsightCache
+	historyStop       chan struct{}
+	historyPrune      chan struct{}
+	historyStopOnce   sync.Once
+	blockLists        *blockcompiler.Updater
+	dnssec            dnssecController
+	cluster           clusterController
+	dynamicDNS        dynamicDNSController
+	unifi             unifiController
+	certificates      certificateController
+	tsigKeys          tsigController
+	updates           updateController
+	backups           backupController
+	backupStaging     backupStaging
+	administrator     administrator
+	restart           func()
+	restartRequested  atomic.Bool
+	instanceID        string
 }
 
 type certificateController interface {
@@ -353,6 +354,13 @@ func New(
 	mux.HandleFunc("POST /setup", server.setup)
 	mux.HandleFunc("GET /login", server.loginPage)
 	mux.HandleFunc("POST /login", server.login)
+	mux.HandleFunc("POST "+passkeyLoginBegin, server.beginPasskeyLogin)
+	mux.HandleFunc("POST "+passkeyLoginFinish, server.finishPasskeyLogin)
+	mux.HandleFunc("POST /ui/profile/passkeys/begin", server.beginPasskeyRegistration)
+	mux.HandleFunc("POST /ui/profile/passkeys/finish", server.finishPasskeyRegistration)
+	mux.HandleFunc("POST /ui/profile/passkeys/remove", server.removeOwnPasskey)
+	mux.HandleFunc("POST /ui/profile/password/disable", server.disableOwnPassword)
+	mux.HandleFunc("POST /ui/profile/password/enable", server.enableOwnPassword)
 	mux.HandleFunc("POST /logout", server.logout)
 	mux.HandleFunc("GET /api/v1/health", server.health)
 	mux.HandleFunc("GET /api/v1/cluster", server.clusterAPI)
