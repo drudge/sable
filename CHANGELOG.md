@@ -8,6 +8,40 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.0]
+
+Sable 1.3.0 adds native passkeys for standalone servers and clusters, making
+passwords optional while retaining OpenID Connect and password sign-in.
+
+### Passkeys and account access
+
+- Register and manage passkeys in **Profile → Account**, below Account details.
+  Sign in without a username using your device's fingerprint, face, PIN, or a
+  security key. Passkeys require an HTTPS DNS hostname; localhost is supported
+  for development. Unsupported browsers and ordinary HTTP connections hide
+  passkey sign-in and registration controls.
+- Disable password sign-in after adding a passkey, then re-enable the existing
+  password without resetting it. Accounts without a password can set one.
+  Credential removal and password controls use Sable's confirmation dialogs.
+- Passkey public credentials replicate and are included in authorization
+  backups. Existing HTTPS identities and cluster membership determine trusted
+  origins, with a stable RP ID derived from the registrable domain. Nodes under
+  the same domain can accept the same credential after replication.
+- **Settings → Web → Enable passkeys** controls availability and defaults on.
+  Disabling preserves saved credentials and blocks passkey authentication and
+  enrollment. The settings form checks that active accounts have an enabled
+  password or a link to the enabled OIDC provider before allowing the change.
+- The [passkey guide](docs/guides/passkeys.md) covers enrollment, password
+  recovery, standalone HTTPS, reverse proxies, cluster failover, and backups.
+  Initial administrator setup still starts with a password.
+
+### Update preferences
+
+- Software Updates in Settings now includes **Include pre-releases** alongside
+  **Check for updates on sign-in**. Both wait for **Save Settings**.
+- The About page retains its release-channel control and shares the same saved,
+  node-local preference with Settings.
+
 ## [1.2.0]
 
 Sable 1.2.0 makes it easier to migrate authoritative zones from Technitium and
