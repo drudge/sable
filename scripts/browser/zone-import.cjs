@@ -95,10 +95,17 @@ module.exports = async (browser, baseURL) => {
     }
     await page.goto(`${baseURL}/?catalog-import`);
     const catalog = page.locator('#catalog-import-dialog');
+    await catalog.waitFor({state: 'visible'});
+    await catalog.evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
     for (const width of [375, 658, 700]) {
       await page.setViewportSize({width, height: 900});
-      const cancel = await catalog.getByRole('button', {name: 'Cancel', exact: true}).boundingBox();
-      const discover = await catalog.getByRole('button', {name: 'Discover zones', exact: true}).boundingBox();
+      const [cancel, discover] = await catalog.evaluate(element => [
+        element.querySelector('.wizard-footer > button'),
+        element.querySelector('button[value="discover"]'),
+      ].map(button => {
+        const {x, width} = button.getBoundingClientRect();
+        return {x, width};
+      }));
       assert.ok(Math.abs(cancel.width - discover.width) < 1, `catalog actions have equal width at ${width}px`);
       assert.ok(Math.abs(cancel.x - discover.x) < 1, 'catalog actions align');
     }
