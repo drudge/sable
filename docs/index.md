@@ -18,7 +18,14 @@ Start with one Sable server and one test device. Get your first DNS answer, then
 - **Configuration and operations references** describe exact behavior when you need to go deeper.
 
 > [!NOTE]
-These guides cover Sable 1.0.0. [Download the release](https://github.com/drudge/sable/releases/tag/v1.0.0) or read the [release notes](../CHANGELOG.md).
+These guides cover Sable 1.3.2. [Download the release](https://github.com/drudge/sable/releases/tag/v1.3.2) or read the [release notes](../CHANGELOG.md).
+
+## Migrating from Technitium
+
+
+- [Migrate from Technitium](guides/technitium-migration.md) into a new instance or cluster using zone files or DNS transfers.
+
+Existing console screenshots were captured on Sable 1.0.0; the written procedures describe 1.3.2.
 
 ## Make DNS work for your network
 

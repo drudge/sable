@@ -164,7 +164,7 @@ sudo sable update
 Use an exact version for a controlled rollout or binary rollback:
 
 ```sh
-sudo sable update --version 1.0.0
+sudo sable update --version 1.3.1
 ```
 
 The updater downloads the platform archive and `checksums.txt`, verifies the

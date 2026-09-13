@@ -1,8 +1,9 @@
 {
-  "version": "1.0.0",
-  "versionLabel": "1.0.0",
+  "version": "1.3.2",
+  "versionLabel": "1.3.2",
   "navigationLabels": {
     "getting-started": "First server",
+    "guides/technitium-migration": "From Technitium",
     "concepts": "Core concepts",
     "installation/linux": "Linux",
     "installation/docker": "Docker",
@@ -21,6 +22,7 @@
     "guides/encrypted-dns": "Encrypted DNS",
     "guides/certificates": "Certificates",
     "guides/access-control": "Users & permissions",
+    "guides/passkeys": "Passkeys",
     "guides/sso": "Single sign-on",
     "guides/api-tokens": "API tokens",
     "guides/dynamic-dns": "Dynamic DNS",
@@ -45,6 +47,7 @@
     ], "pages": [
       { "slug": "", "file": "docs/index.md", "title": "Getting Started", "description": "Start with one server and one test device, then build the DNS setup your network needs." },
       { "slug": "getting-started", "file": "docs/guides/getting-started.md", "title": "Your first Sable server", "description": "From a fresh install to a verified answer, one test device at a time.", "featured": true, "aliases": ["getting-started"] },
+      { "slug": "guides/technitium-migration", "file": "docs/guides/technitium-migration.md", "title": "Migrate from Technitium", "description": "Start an instance or cluster, migrate zones with files or transfers, and verify cutover and rollback." },
       { "slug": "concepts", "file": "docs/guides/concepts.md", "title": "How Sable fits your network", "description": "Resolution, authority, forwarding, and replication—four different jobs with clear boundaries." },
       { "slug": "installation/linux", "file": "docs/guides/install-linux.md", "title": "Install on Linux", "description": "A hardened systemd service, private administration, and a predictable on-disk layout." },
       { "slug": "installation/docker", "file": "docs/guides/install-docker.md", "title": "Run with Docker", "description": "Publish DNS safely and keep configuration, certificates, and data across container replacements." },
@@ -68,12 +71,13 @@
     ] },
     { "title": "Secure and integrate", "collections": [
       { "title": "Security", "pages": ["guides/encrypted-dns", "guides/certificates"] },
-      { "title": "Identity and access", "pages": ["guides/access-control", "guides/sso", "guides/api-tokens"] },
+      { "title": "Identity and access", "pages": ["guides/access-control", "guides/passkeys", "guides/sso", "guides/api-tokens"] },
       { "title": "Integrations", "pages": ["guides/dynamic-dns", "guides/unifi", "guides/glance"] }
     ], "pages": [
       { "slug": "guides/encrypted-dns", "file": "docs/guides/encrypted-dns.md", "title": "Enable encrypted DNS", "description": "Serve DoT, DoH, and DoQ with trusted certificates and test each transport." },
       { "slug": "guides/certificates", "file": "docs/guides/certificates.md", "title": "Manage certificates", "description": "Choose imported, self-signed, or ACME-managed certificates and keep renewal healthy." },
       { "slug": "guides/access-control", "file": "docs/guides/access-control.md", "title": "Manage people and permissions", "description": "Grant the right Web and API access without handing every operator administrator credentials." },
+      { "slug": "guides/passkeys", "file": "docs/guides/passkeys.md", "title": "Sign in with passkeys", "description": "Use passkeys alongside passwords and OIDC on standalone servers and clusters, with recovery and hostname guidance." },
       { "slug": "guides/sso", "file": "docs/guides/sso.md", "title": "Connect single sign-on", "description": "Configure an OpenID Connect provider, map groups, and preserve a recovery administrator." },
       { "slug": "guides/api-tokens", "file": "docs/guides/api-tokens.md", "title": "Create an API token", "description": "Give an integration a revocable credential with only the API permissions it needs." },
       { "slug": "guides/dynamic-dns", "file": "docs/guides/dynamic-dns.md", "title": "Publish a changing public address", "description": "Keep external A and AAAA records synchronized with this deployment's public connection." },

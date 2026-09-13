@@ -778,25 +778,23 @@ api_token_ttl = "3mo"
 secret_key_file = "data/sable.key"
 ```
 
-Native passkeys work on standalone servers and clusters without a separate RP ID
-or origin list. Enroll them in **Profile → Account → Passkeys** and use **Sign in
-with a passkey** on the login page. HTTPS with a DNS hostname is required;
-`http://localhost` is supported for development. Enrollment and sign-in controls
-are hidden when the browser lacks secure-context or WebAuthn support.
+Native passkeys work on standalone servers and clusters alongside passwords and
+OIDC. Enroll in **Profile → Account → Passkeys**, then choose **Sign in with a
+passkey**. Use an HTTPS DNS hostname, or localhost for development. Unsupported
+browsers and insecure connections hide enrollment and sign-in controls.
 
-Passwords, OIDC, and passkeys can coexist. In Profile's Password header, disable
-password sign-in after enrollment or re-enable the saved password without a
-reset. Setting a new password is a separate action that revokes browser sessions.
+The Password header lets you disable password sign-in after enrollment and
+restore the saved password without resetting it. Setting a new password also
+revokes browser sessions.
 
-**Settings → Web → Enable passkeys** controls availability. Click **Save
-Settings** to apply it. It defaults on, takes effect without restarting, and
-replicates across a cluster. Disabling preserves saved keys and blocks passkey
-sign-in and enrollment. The settings form requires an alternate sign-in method
-for every active account. Direct TOML edits use `security.passkeys_disabled`;
-verify alternate account access before disabling it that way.
+**Settings → Web → Enable passkeys** defaults on. Click **Save Settings** to apply
+changes without restarting; this setting replicates in clusters. Disabling
+preserves saved keys and blocks authentication and enrollment. The form checks
+that active accounts have another sign-in method. Verify alternate access
+before setting `security.passkeys_disabled = true` directly in TOML.
 
-See [Sign in with passkeys](guides/passkeys.md) for hostname derivation, proxy
-configuration, failover, and recovery.
+See [Sign in with passkeys](guides/passkeys.md) for hostnames, proxies, failover,
+and recovery.
 
 Security is enabled by default. On the first start, all console routes redirect
 to `/setup` until the initial administrator is created. Passwords use Argon2id
@@ -1128,3 +1126,22 @@ token or console session. Query-string tokens are accepted only on this route;
 use HTTPS and exclude its query string from reverse-proxy access logs. Invalid
 tokens return HTTP 401, missing `metrics.read` returns HTTP 403, and unavailable
 statistics return HTTP 503.
+
+## Software updates
+
+```toml
+[updates]
+pre_release = false
+check_on_login = true
+restart_managed = false
+```
+
+These preferences are node-local. `check_on_login` controls release checks after
+sign-in; it never authorizes automatic installation. `pre_release` includes
+prereleases in this node's checks. Changes to `restart_managed` take effect on
+startup: set it only when a supervisor will restart Sable after it exits.
+Installed systemd services are detected automatically. For Docker rolling
+updates, retain a restart policy, opt into writable updates with
+`SABLE_WEB_UPDATES=true`, and set `restart_managed = true` on every member.
+See [the update guide](guides/updates.md) for permissions, release selection,
+rollout prerequisites, and recovery.

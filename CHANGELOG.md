@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.3.2]
+## [1.3.2] - 2026-09-13
 
 Sable 1.3.2 lets you migrate Technitium forwarder zones with their local overrides,
 keep them synchronized while you test, and move write ownership to Sable when
@@ -68,14 +68,14 @@ for supported settings and the cutover procedure.
 - Standardize search fields across the console, with consistent search icons
   and clear buttons for quickly resetting a query or filter.
 
-## [1.3.1]
+## [1.3.1] - 2026-09-13
 
 - Stack OpenID Connect and passkey sign-in buttons together, with a single
   **or** separator before password authentication.
 - Keep the separator correct when either method is disabled or passkeys are
   unavailable in the browser. Initial administrator setup has no separator.
 
-## [1.3.0]
+## [1.3.0] - 2026-09-13
 
 Sable 1.3.0 adds native passkeys for standalone servers and clusters, making
 passwords optional while retaining OpenID Connect and password sign-in.
@@ -109,7 +109,7 @@ passwords optional while retaining OpenID Connect and password sign-in.
 - The About page retains its release-channel control and shares the same saved,
   node-local preference with Settings.
 
-## [1.2.0]
+## [1.2.0] - 2026-09-11
 
 Sable 1.2.0 makes it easier to migrate authoritative zones from Technitium and
 other DNS servers, with bulk catalog import, in-place conversion to Primary,
@@ -189,7 +189,7 @@ console experience on desktop and mobile.
   three-node Sable cluster. It includes standalone, catalog-managed, and signed
   zone examples for trying the workflow before a production migration.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-09-11
 
 ### Updates
 
@@ -211,7 +211,7 @@ console experience on desktop and mobile.
 - Publishing now requires curated notes for every release, including candidates;
   merge commits and raw commit lists no longer become user-facing notes.
 
-## [1.0.2] - Unreleased
+## [1.0.2] - 2026-09-10
 
 This patch release keeps live console updates from interrupting keyboard
 navigation and makes block-list downloads easier to follow.
@@ -238,7 +238,7 @@ navigation and makes block-list downloads easier to follow.
   and unrendered HTTP errors now show a dismissible notice, including inside
   the open Add dialog, without clearing the custom URL.
 
-## [1.0.1] - Unreleased
+## [1.0.1] - 2026-09-10
 
 This patch release fixes block-list setup, improves the mobile console, and
 protects development builds from being replaced by published releases.

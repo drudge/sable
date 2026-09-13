@@ -6,6 +6,8 @@ Use the dashboard to notice a change, query history to explain a request, and me
 
 Choose the time range before comparing totals or rankings. The range affects the chart, top clients, top domains, blocked names, record types, response sources, and response codes. The selected range is remembered in a browser cookie.
 
+Live refreshes preserve keyboard focus on stat cards and scope controls, keep open controls and unsaved settings intact, and leave routine chart refreshes at full brightness. Loading feedback appears when you change the chart range or scope.
+
 Minute statistics persist across restarts. Lifetime totals are stored separately from retained chart buckets. Downtime appears as a gap, not invented activity. Check the selected card scope and lifetime-versus-range preference before comparing numbers across views.
 
 ![Sable dashboard with query statistics, client rankings, and domain rankings](../assets/guide-screenshots/dashboard-full.webp "Choose the time range first. Follow a ranked client or domain into query history to investigate the same window.")
@@ -21,6 +23,8 @@ Server-log level accepts `debug`, `info`, `warn`, or `error` and applies to pers
 ## Follow one request
 
 Use **Logs → Queries**, filter a bounded window, and click the matching row. The detail drawer explains policy, cache, route, resolution, and DNSSEC decisions. See [Explain a DNS answer](troubleshooting.md).
+
+Pause live updates to inspect a stable view. Since 1.0.2, pausing or changing filters discards older in-flight refreshes so they cannot replace your selected view.
 
 Query recording is asynchronous and bounded. If storage cannot keep up, Sable drops telemetry instead of delaying DNS. A missing log row is therefore not proof that the DNS query never happened; compare dropped-event and write-error metrics.
 

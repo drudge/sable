@@ -2,6 +2,9 @@
 
 Build Sable alongside your current DNS service, move one test zone, and verify it before moving clients. This guide covers migration to Sable: zone-file import, a one-time AXFR snapshot, synchronized Secondary staging, or bulk import from a catalog. The older-version cutover procedure is retained below.
 
+> [!NOTE]
+> **Version availability:** This guide covers Sable 1.3.2. Authoritative conversion and Import from Catalog arrived in 1.2.0; forwarder import, synchronization, and conversion require 1.3.2. Users on 1.1.0 and earlier can upgrade or follow the older export/remove/import procedure below.
+
 ## Choose a migration path
 
 | Method | Best for | Who owns subsequent changes? |
@@ -21,7 +24,7 @@ Technitium uses a special `cluster-catalog.<cluster-domain>` to distribute membe
 
 For a replacement Sable deployment:
 
-- Use **Zones → Import from Catalog** to discover member zones and import them independently. Authoritative zones become Secondaries or Primaries; forwarder zones become Secondary Forwarders or editable Forwarders. Alternatively, export zones or create Secondaries individually. Source-side catalog membership does not make that Sable zone catalog-managed.
+- Use **Zones → Import… → From catalog** to discover member zones and import them independently. Authoritative zones become Secondaries or Primaries; forwarder zones become Secondary Forwarders or editable Forwarders. Alternatively, export zones or create Secondaries individually. Source-side catalog membership does not make that Sable zone catalog-managed.
 - Review imported forwarding rules and local overrides against the source. Recreate unsupported forwarding configurations and Stub zones separately.
 - Review imported SOA/NS records and their address dependencies before retiring the old cluster.
 - Inspect the cluster-domain zone for service names you still need. Preserve those deliberately; do not copy its cluster authentication records as Sable cluster configuration.
@@ -68,8 +71,10 @@ docker run --detach --name sable --restart unless-stopped \
   --publish 53:8053/udp \
   --publish 127.0.0.1:5380:5380/tcp \
   --volume sable-data:/data \
-  ghcr.io/drudge/sable:1.2.0
+  ghcr.io/drudge/sable:1.3.2
 ```
+
+This example pins the published 1.3.2 image, including forwarder synchronization and conversion.
 
 Use reachable independent container resolvers if those example resolvers are unsuitable. Both products commonly use console port 5380, as well as DNS port 53; running them on one host requires deliberate address/port bindings for both services. A separate VM or host is simpler for this walkthrough.
 
@@ -97,7 +102,7 @@ In Technitium, open **Zones**, select a zone, and use its export action to downl
 
 On Sable's writable node:
 
-1. Open **Zones → Import Zone** for a zone that does not exist yet.
+1. Open **Zones → Import… → From file or text** for a zone that does not exist yet.
 2. Select the exported file or paste its contents. Confirm the zone name.
 3. Import, then inspect the SOA, apex NS, record names, TTLs, and values. Fully qualified targets should end in a dot.
 4. Read the result notice for skipped APP records. Replace their behavior before marking that zone ready.
@@ -141,9 +146,9 @@ Follow [zone transfers](zone-transfers.md) for troubleshooting. Keep Technitium 
 
 ## 3D. Import catalog members in bulk
 
-On a standalone server or the writable Sable cluster primary, sign in with permission to create zones. The source must provide an RFC 9432 version 2 catalog with no more than 1,000 members.
+Available in Sable 1.2.0. On a standalone server or the writable Sable cluster primary, sign in with permission to create zones. The source must provide an RFC 9432 version 2 catalog with no more than 1,000 members.
 
-Open the **Zones → Import from Catalog** dialog wizard and provide the catalog name, source DNS
+Open the **Zones → Import… → From catalog** dialog wizard and provide the catalog name, source DNS
 server, transfer protocol, and a configured TSIG key if required. Allow transfers
 of both the catalog and its members to Sable. Discover the members, select up to
 25, and choose **Import selected zones**.
