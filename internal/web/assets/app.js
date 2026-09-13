@@ -244,6 +244,7 @@
 		popover.hidden = false;
 		trigger.setAttribute("aria-expanded", "true");
 		search.value = "";
+		syncSearchClear(search);
 		filterOptions();
 		search.focus();
 	  };
@@ -2857,12 +2858,11 @@
 
 
 	const queryName = document.querySelector("[data-query-name]");
-	const queryClear = document.querySelector("[data-query-clear]");
 	const quickQueryDescription = document.querySelector("[data-quick-query-description]");
 	const updateQueryContext = () => {
 	  if (!queryName) return;
 	  const domain = queryName.value.trim();
-	  if (queryClear) queryClear.hidden = !domain;
+	  syncSearchClear(queryName);
 	  if (quickQueryDescription) {
 		quickQueryDescription.textContent = domain
 		  ? `Query ${domain} for:`
@@ -2898,11 +2898,7 @@
 	  }
 	};
 	queryName?.addEventListener("input", updateQueryContext);
-	queryClear?.addEventListener("click", () => {
-	  queryName.value = "";
-	  queryName.focus();
-	  updateQueryContext();
-	});
+
 	updateQueryContext();
 
 	  const applyTheme = (theme) => {

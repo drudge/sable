@@ -173,7 +173,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 			}
 			<button class="button destructive" type="button" data-dialog-open={ ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog") } data-replica-primary-action disabled?={ len(domains) == 0 }>@Icon("trash")<span>Clear All</span></button>
 		</div>
-		<label class="blocking-search">@Icon("search")<span class="sr-only">Search { domainPolicyKind(allowed) } domains</span><input type="search" placeholder={ "Search " + domainPolicyKind(allowed) + " domains..." } autocomplete="off" data-domain-search={ value }/></label>
+		@SearchField("Search " + domainPolicyKind(allowed) + " domains", "Search " + domainPolicyKind(allowed) + " domains...", "", "blocking-search", templ.Attributes{"data-domain-search": value})
 		<div class="blocked-domain-list">
 			if len(domains) == 0 {
 				<div class="blocking-empty domain-list-empty"><p>No { domainPolicyKind(allowed) } domains yet. Add your first domain to get started.</p></div>

@@ -92,7 +92,7 @@ templ CacheBrowserDialog(domains []CacheDomainView) {
 			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		</header>
 		<div class="cache-browser-body">
-			<label class="cache-browser-search">@Icon("search")<span class="sr-only">Search cached domains</span><input type="search" placeholder="Enter domain name or search..." autocomplete="off" data-cache-search/></label>
+			@SearchField("Search cached domains", "Enter domain name or search...", "", "cache-browser-search", templ.Attributes{"data-cache-search": true})
 			<div class="cache-domain-list">
 				<div class="cache-domain-list-header"><strong>Cached Domains</strong><span>{ fmt.Sprint(len(domains)) }</span></div>
 				if len(domains) == 0 {
