@@ -8,6 +8,25 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.3] - 2026-09-13
+
+Sable 1.3.3 is a hotfix for direct recursive DNS resolution. It fixes `.com`
+delegation failures, DNSSEC validation after cached lookups, and failover when
+an authoritative nameserver stops responding.
+
+- Accept valid root-supplied addresses for `.com` nameservers under
+  `gtld-servers.net`, fixing `delegation for com. has no resolvable name servers`.
+  Referral addresses remain restricted to the named servers within the
+  referring parent's scope.
+- Query the parent authority for DNSSEC DS records even when a previous lookup
+  cached the child delegation, allowing validation to follow the correct
+  chain of trust.
+- Reserve time for alternative authoritative nameservers so retries against a
+  silent server cannot consume the entire resolution timeout before failover.
+
+Existing recursive resolver configurations do not need to change. Conditional
+forwarding routes and Forwarder zones continue to use their configured upstreams.
+
 ## [1.3.2] - 2026-09-13
 
 Sable 1.3.2 lets you migrate Technitium forwarder zones with their local overrides,
