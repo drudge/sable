@@ -2,6 +2,8 @@
 
 A Secondary serves an authoritative copy of a zone whose records are managed by another server. It obtains data using standard DNS transfers, not Sable cluster snapshots.
 
+For synchronized forwarding rules and local overrides, use a [Secondary Forwarder](forwarder.md#secondary-forwarder-synchronization). Its destination after conversion is an editable Forwarder.
+
 ## Configure
 
 Create a **Secondary Zone** with the exact zone name, one or more primary server addresses, TCP or DNS-over-TLS, and the appropriate TSIG key. Sable tries the configured servers in order. The upstream must permit the transfer from this node.

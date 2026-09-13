@@ -9,7 +9,8 @@ Choose based on who owns the data and how this server should obtain an answer. A
 | [Primary](primary.md) | This Sable deployment | Serves authoritative records | Yes |
 | [Secondary](secondary.md) | Another authoritative server | Transfers a full authoritative copy | No; change the primary |
 | [Stub](stub.md) | Configured primary servers | Maintains authority metadata and routes queries | Metadata is refreshed |
-| [Forwarder](forwarder.md) | Upstream resolvers | Routes the namespace using FWD records | Edit routing records |
+| [Forwarder](forwarder.md) | Upstream resolvers | Routes the namespace using FWD records | Edit routing and local overrides |
+| [Secondary Forwarder](forwarder.md#secondary-forwarder-synchronization) | Another DNS server | Transfers forwarding rules and local overrides by AXFR | No; change the source |
 | [Alias](alias.md) | A local Primary or Secondary | Mirrors records under another apex | No; change the source |
 | [Catalog](catalog.md) | Local zone memberships | Publishes a zone inventory over transfers | Membership is managed |
 | [Secondary Catalog](secondary-catalog.md) | An upstream catalog | Provisions and maintains Secondary members | No; change the producer |
@@ -26,7 +27,7 @@ Choose based on who owns the data and how this server should obtain an answer. A
 
 Zones are stored in SQLite or PostgreSQL, not in TOML. Saving a valid change publishes a compiled in-memory view so the DNS request path does not query SQL. A failed activation leaves the previous serving state available.
 
-Primary zones require exactly one apex [SOA](../records/soa.md) and at least one apex [NS](../records/ns.md). Console creation provisions the initial records. Zone type is selected at creation; the settings display is not a general in-place type converter. Independent unsigned Secondaries have a dedicated [Convert to Primary](secondary.md#convert-to-primary) action. For multiple zones, [Import from Catalog](../../guides/technitium-migration.md#3d-import-catalog-members-in-bulk) creates independent Secondaries or Primaries without subscribing to the source catalog.
+Primary zones require exactly one apex [SOA](../records/soa.md) and at least one apex [NS](../records/ns.md). Console creation provisions the initial records. Zone type is selected at creation; the settings display is not a general in-place type converter. Independent unsigned Secondaries have a dedicated [Convert to Primary](secondary.md#convert-to-primary) action. Independent Secondary Forwarders have a [Convert to independent Forwarder](forwarder.md#convert-to-an-independent-forwarder) action. For multiple zones, [Import from Catalog](../../guides/technitium-migration.md#3d-import-catalog-members-in-bulk) creates independent Secondaries or Primaries, or Secondary Forwarders or Forwarders for forwarding members, without subscribing to the source catalog.
 
 The longest matching DNS suffix determines the relevant namespace. Creating a local authoritative zone can shadow public names below it. For private routing without local ownership of records, consider forwarding instead.
 

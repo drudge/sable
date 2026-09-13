@@ -9,7 +9,7 @@ Build Sable alongside your current DNS service, move one test zone, and verify i
 | Export a zone file and import it | A few zones and a planned change freeze | Sable after the final import |
 | Retrieve AXFR into a file, then import | Standard authoritative zones with transfer access | Sable after the final snapshot |
 | Run Sable as a Secondary first | Testing with current data while Technitium remains live | Technitium until conversion to Primary |
-| [Import from Catalog](#3d-import-catalog-members-in-bulk) | Discover and import many authoritative zones together | Technitium for Secondary imports; Sable for Primary imports |
+| [Import from Catalog](#3d-import-catalog-members-in-bulk) | Discover and import authoritative and forwarder zones together | Technitium for Secondary imports; Sable for Primary imports |
 
 A **Secondary zone** follows another DNS server through AXFR/IXFR. A **Sable cluster replica** follows a Sable primary's application state. Technitium cannot enroll as a Sable cluster member. You can migrate into either a standalone Sable server or the writable primary of a Sable cluster.
 
@@ -21,8 +21,8 @@ Technitium uses a special `cluster-catalog.<cluster-domain>` to distribute membe
 
 For a replacement Sable deployment:
 
-- Use **Zones → Import from Catalog** to discover authoritative member zones and import them as independent Secondaries or Primaries. Alternatively, export zones or create Secondaries individually. Source-side catalog membership does not make that Sable zone catalog-managed.
-- Recreate Forwarder and Stub zones with their intended upstreams and behavior.
+- Use **Zones → Import from Catalog** to discover member zones and import them independently. Authoritative zones become Secondaries or Primaries; forwarder zones become Secondary Forwarders or editable Forwarders. Alternatively, export zones or create Secondaries individually. Source-side catalog membership does not make that Sable zone catalog-managed.
+- Review imported forwarding rules and local overrides against the source. Recreate unsupported forwarding configurations and Stub zones separately.
 - Review imported SOA/NS records and their address dependencies before retiring the old cluster.
 - Inspect the cluster-domain zone for service names you still need. Preserve those deliberately; do not copy its cluster authentication records as Sable cluster configuration.
 - Check signing status per zone. Catalog membership alone does not mean a zone is signed. Any signed zone you retain needs the DNSSEC review below, including whether a parent DS or private trust anchor exists.
@@ -41,7 +41,8 @@ List each forward and reverse zone, its type, serial, signing status, update wri
 | --- | --- |
 | Primary authoritative records | Import a complete zone file or transfer a snapshot |
 | Secondary zone | Recreate it against the original authoritative primary if that ownership is staying elsewhere |
-| Conditional forwarding or Stub zone | Recreate the [Forwarder](../reference/zones/forwarder.md) or [Stub](../reference/zones/stub.md), including upstreams and validation policy |
+| Conditional forwarding | Import supported members through the catalog wizard, or create a [Forwarder](../reference/zones/forwarder.md) manually; verify local overrides, upstreams, and validation policy |
+| Stub zone | Recreate the [Stub](../reference/zones/stub.md) against its intended source |
 | Cluster catalog | Use it to identify member zones; normally omit the catalog from the Sable deployment |
 | Cluster-domain zone | Review useful names, SOA/NS dependencies, and signing separately from Technitium's node-authentication records |
 | APP records and DNS apps | Replace the behavior explicitly; Sable's text importer skips Technitium APP records and reports their names |
@@ -160,10 +161,25 @@ per zone and do not undo successful imports.
 
 Signed zones can be staged as Secondaries but are blocked from Primary import
 until a DNSSEC transition has been completed.
-Recreate Forwarder settings separately. Review and convert eligible zones
+Review and convert eligible zones
 individually after pausing source writes, then verify answers and cluster replicas
 before changing clients or retiring the old servers. Bulk conversion is not yet
 part of this workflow.
+
+### Forwarder members
+
+A transferred member with an apex FWD record and no apex NS records is imported as a forwarder zone:
+
+| Import mode | Result | Subsequent edits |
+| --- | --- | --- |
+| **Secondary** (default) | **Secondary Forwarder** | Edit Technitium; Sable synchronizes forwarding rules and overrides by AXFR |
+| **Primary** | Independent **Forwarder** | Edit Sable after confirming source writes are paused |
+
+Supported Technitium transfers preserve UDP, TCP, TLS, and QUIC forwarding, priorities, and consistent per-record DNSSEC validation settings. `this-server` uses Sable's configured default upstreams in forward mode or iterative resolution in recursive mode. Technitium's global resolver and proxy settings are not transferred. Unsupported transports, explicit proxies, pinned-host address syntax, mixed validation settings, or malformed records fail the affected import without creating a zone.
+
+Local answers take precedence for all supported record types, including TXT and MX as well as A, AAAA, and CNAME. Queries without a matching local answer follow the forwarding rule. Verify both paths. This transfer support does not make Technitium's full textual FWD export syntax compatible with the separate zone-file importer.
+
+Secondary Forwarders retain source transfer settings and refresh through full AXFR on the SOA schedule, authorized NOTIFY, or **Resync**, carrying additions, changes, and deletions. Failed refreshes retain the last valid snapshot until SOA expiry, after which local and forwarded queries return SERVFAIL. See [Secondary Forwarder synchronization](../reference/zones/forwarder.md#secondary-forwarder-synchronization).
 
 If a selected zone already exists in Sable, import will not replace it, change its type, or detach it from a Sable catalog. Zone lists and detail pages identify the managing catalog; the detail page links to it. Plan ownership changes separately for subscribed members. A source-side Technitium catalog does not impose this restriction on independently imported zones.
 
@@ -188,6 +204,14 @@ Conversion preserves zone identity, permissions, records, and revision history w
 **Use the stored snapshot** skips the final transfer, including if the source is unavailable. It can promote stale or expired data; only select it after independently verifying the stored contents. Conversion ends Secondary expiry tracking, but preserves the zone's disabled state and individual record expiry settings.
 
 Signed zones and Sable catalog members are rejected with an explanation. Transferred signatures do not supply private signing keys. A Technitium catalog membership alone does not block an individually configured Sable Secondary; leave that source catalog behind as described above. Catalog detachment and seamless key migration are separate work.
+
+### Promote staged forwarder zones
+
+For an independent **Secondary Forwarder**, pause source edits and automatic writers, then choose **Actions → Convert to independent Forwarder**. Review the snapshot and use **Synchronize, then convert** for a final AXFR. The resulting type is **Forwarder**: Sable becomes the writable owner of the forwarding rules and local overrides, while unanswered queries continue to use those forwarding rules.
+
+Conversion preserves forwarding and DNSSEC validation settings, records and metadata, permissions, and history; it advances the SOA serial and removes source server/transport settings. Source refresh, NOTIFY-driven synchronization, and secondary expiry tracking stop. The shared TSIG key and outgoing transfer/NOTIFY settings remain. A failed final synchronization or stale review leaves the zone unchanged. **Use the stored snapshot** is an explicit alternative that may retain stale or expired data.
+
+Sable catalog-managed members cannot be promoted through this action, and there is no general catalog-detachment action. Stage independent members through **Import from Catalog** for this workflow. Verify local TXT/MX and address overrides, CNAME behavior, and a forwarded answer on every serving node before retiring Technitium. See [the Forwarder conversion reference](../reference/zones/forwarder.md#convert-to-an-independent-forwarder).
 
 ### Sable 1.1.0 and earlier: export, remove, and import
 

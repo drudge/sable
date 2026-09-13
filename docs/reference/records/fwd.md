@@ -15,6 +15,10 @@ quic 20 dns.example.net:853
 
 Priority is an unsigned 16-bit number; lower values are preferred. The address is a host or IP with an optional port. UDP/TCP default to 53, TLS/QUIC to 853. Explicit IPv6 ports use bracketed address syntax.
 
+The special value `udp 0 this-server` selects Sable's default resolver path: configured upstreams in forward mode, or iterative resolution in recursive mode. It is not a network hostname. Only UDP syntax is supported for this marker; the actual default upstream configuration controls forwarding transport.
+
+Technitium catalog transfers decode its private FWD wire records into Sable's format. This is separate from parsing Technitium's textual zone exports. See [forwarder migration](../../guides/technitium-migration.md#forwarder-members) for supported settings and limitations.
+
 ## Console and parser support
 
 The console offers UDP, TCP, and TLS in its FWD picker. The underlying parser also accepts `quic`. Do not interpret parser support as a visible console option. `doh` is not accepted as a forwarding protocol.
