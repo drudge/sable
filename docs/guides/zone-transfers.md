@@ -30,6 +30,12 @@ Query the SOA on both nodes. Change a harmless test record on the primary and co
 
 An empty new Secondary is not ready to serve the intended records until its first transfer completes. If the primary remains unavailable beyond the SOA expiry interval, the Secondary cannot continue treating its copy as current indefinitely.
 
+## Synchronize forwarding rules and overrides
+
+A [Secondary Forwarder](../reference/zones/forwarder.md#secondary-forwarder-synchronization) uses full AXFR to copy forwarding rules and local records from its source. Import a supported forwarder member through **Import from Catalog → Secondary** to stage it this way. The transfer protocol and TSIG settings authenticate synchronization separately from the protocols used by FWD records to resolve queries.
+
+SOA timers, authorized NOTIFY, and **Resync** drive refreshes. Test both an added and a deleted override to confirm complete snapshots arrive. Records remain read-only until **Convert to independent Forwarder** ends source synchronization and makes Sable writable. An ordinary independent Forwarder does not poll another server just because it has forwarding rules.
+
 ## Troubleshoot refusals
 
 Check the exact key name, algorithm, secret, time synchronization, transfer ACL, source address after NAT, protocol, and primary reachability. For TLS, check certificate names and trust. Never solve an authentication failure by making the whole zone publicly transferable.

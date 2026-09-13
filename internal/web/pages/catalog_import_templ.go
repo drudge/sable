@@ -709,7 +709,7 @@ func CatalogImportSelection(view CatalogImportView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<p class=\"zone-import-help\">Signed zones can synchronize but need a DNSSEC transition before conversion. Recreate Forwarders separately. Import can take up to two minutes; each zone gets its own result.</p></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<p class=\"zone-import-help\">Signed zones can synchronize but need a DNSSEC transition before conversion. Forwarder zones stay synchronized and read-only in Secondary mode, or become independent and editable in Primary mode. Import can take up to two minutes; each zone gets its own result.</p></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

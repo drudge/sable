@@ -205,6 +205,7 @@ func zoneRecordEditPath(zone ZoneView, record ZoneRecordView) string {
 }
 
 func zoneTypeLabel(value string) string {
+ if value == "secondary_forwarder" { return "Secondary Forwarder" }
 	if strings.EqualFold(value, "primary") {
 		return "Primary"
 	}
@@ -215,6 +216,7 @@ func zoneTypeLabel(value string) string {
 }
 
 func zoneTypeClass(value string) string {
+ if value == "secondary_forwarder" { return "secondary" }
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
 		return "primary"
@@ -268,7 +270,7 @@ func zoneTypeSelectValue(zone ZoneView) string {
 // in an editable zone do.
 func zoneCanOpenRecords(zone ZoneView) bool { return zoneCanEditRecords(zone) || zone.Type == "alias" }
 func zoneCanResync(zone ZoneView) bool {
-	return zone.Type == "secondary" || zone.Type == "stub" || zone.CatalogRole == "subscribed"
+	return zone.Type == "secondary" || zone.Type == "secondary_forwarder" || zone.Type == "stub" || zone.CatalogRole == "subscribed"
 }
 
 // Primary zones manage signing here; forwarder and stub zones manage upstream
@@ -584,7 +586,7 @@ templ ZoneListView(view ZonesPageView) {
 		<div class="zone-filter-bar">
 			@SearchField("Search zones", "Search zones...", "", "zone-search", templ.Attributes{"data-zone-search": true})
 			<div class="zone-filter-selects">
-				<label><span class="sr-only">Zone type</span><select data-zone-type-filter data-styled-select><option value="all">All Types</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="stub">Stub</option><option value="forwarder">Forwarder</option><option value="alias">Alias</option><option value="catalog">Catalog</option></select></label>
+				<label><span class="sr-only">Zone type</span><select data-zone-type-filter data-styled-select><option value="all">All Types</option><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="secondary_forwarder">Secondary Forwarder</option><option value="stub">Stub</option><option value="forwarder">Forwarder</option><option value="alias">Alias</option><option value="catalog">Catalog</option></select></label>
 				<label><span class="sr-only">Zone status</span><select data-zone-status-filter data-styled-select><option value="all">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
 			</div>
 		</div>
@@ -607,7 +609,7 @@ templ ZoneListView(view ZonesPageView) {
 				</div>
 				if zone.CanSettings {
 					@ZoneSettingsDialog(zone, zoneElementID("settings", index))
-					if zone.Type == "secondary" && zone.CanRecords {
+					if (zone.Type == "secondary" || zone.Type == "secondary_forwarder") && zone.CanRecords {
  @ConvertPrimaryDialog(zone, zoneElementID("settings", index) + "-convert")
  }
 				}
@@ -693,7 +695,7 @@ templ ZoneDetailView(zone ZoneView) {
 		}
 		if zone.CanSettings {
 			@ZoneSettingsDialog(zone, "settings-selected-zone-dialog")
-			if zone.Type == "secondary" && zone.CanRecords {
+			if (zone.Type == "secondary" || zone.Type == "secondary_forwarder") && zone.CanRecords {
  @ConvertPrimaryDialog(zone, "settings-selected-zone-dialog-convert")
  }
 		}
@@ -795,7 +797,7 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 			}
 			if zoneCanDNSSECDialog(zone) && zone.CanDNSSEC {
 				<button type="button" data-dialog-open={ dnssecID }>@Icon("shield-check")<span>DNSSEC</span></button>
-			} else if zone.Type == "secondary" {
+			} else if zone.Type == "secondary" || zone.Type == "secondary_forwarder" {
 				<button type="button" disabled title="Signing is managed by the primary server">@Icon("shield-check")<span>DNSSEC</span></button>
 			}
 			<hr/>
@@ -805,8 +807,8 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 			if zoneCanResync(zone) && zone.CanTransfer {
 				<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button type="submit">@Icon("refresh")<span>Resync Zone</span></button></form>
 			}
-			if zone.Type == "secondary" && zone.CanSettings && zone.CanRecords {
-				<button type="button" data-dialog-open={ settingsID + "-convert" } data-replica-primary-action>@Icon("crown")<span>Convert to Primary</span></button>
+			if (zone.Type == "secondary" || zone.Type == "secondary_forwarder") && zone.CanSettings && zone.CanRecords {
+				<button type="button" data-dialog-open={ settingsID + "-convert" } data-replica-primary-action>@Icon("crown")<span>{ ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary") }</span></button>
 			}
 			if zoneCanEditRecords(zone) && zone.CanCreate {
 				<button type="button" data-dialog-open={ cloneID } data-replica-primary-action>@Icon("copy")<span>Clone Zone</span></button>
@@ -891,22 +893,13 @@ templ AddZoneRecordDialog(zone ZoneView) {
 		<form class="isotope-record-form" hx-post="/ui/zones/records/add" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<div class="isotope-record-dialog-body">
-				if zone.Type == "forwarder" {
-					<input type="hidden" name="type" value="FWD"/>
-					<div class="edit-record-type"><span class="record-type-badge">FWD</span><small>{ zoneRecordDescription("FWD") }</small></div>
-				} else {
-					@RecordTypePicker()
-				}
-				<label class="record-field"><span>Name</span><input class="mono-input" name="name" placeholder="@ for zone apex, or subdomain" required/></label>
-				if zone.Type == "forwarder" {
-					@ZoneRecordFields("FWD", "", "", "", false)
-				} else {
-					for _, recordType := range editableZoneRecordTypes() {
-						<div class="record-specific-fields" data-record-fields={ recordType } hidden?={ recordType != "A" }>
-							@ZoneRecordFields(recordType, "", "", "", recordType != "A")
-						</div>
-					}
-				}
+                @RecordTypePicker()
+                <label class="record-field"><span>Name</span><input class="mono-input" name="name" placeholder="@ for zone apex, or subdomain" required/></label>
+                for _, recordType := range editableZoneRecordTypes() {
+                    <div class="record-specific-fields" data-record-fields={ recordType } hidden?={ recordType != "A" }>
+                        @ZoneRecordFields(recordType, "", "", "", recordType != "A")
+                    </div>
+                }
 				@RecordAdvancedOptions("", zone.DefaultTTL, 0, "", false)
 			</div>
 			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Add Record</button></footer>
@@ -1183,7 +1176,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 				</section>
 			</section>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="transfers" hidden>
-				if zone.Type == "secondary" || zone.Type == "stub" || zone.CatalogRole == "subscribed" {
+				if zone.Type == "secondary" || zone.Type == "secondary_forwarder" || zone.Type == "stub" || zone.CatalogRole == "subscribed" {
 					<section class="zone-settings-section first">
 						<div><span class="zone-settings-section-icon">@Icon("server")</span><span><strong>Primary Name Servers</strong><small>Servers used to refresh this { zoneTypeLabel(zone.Type) } zone.</small></span></div>
 						<label><span>Server Addresses</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } required>{ strings.Join(zone.PrimaryServers, "\n") }</textarea><small>One address per line, tried in order.</small></label>
@@ -1314,7 +1307,7 @@ templ ImportNewZoneDialog() {
 
 templ ConvertPrimaryDialog(zone ZoneView, id string) {
  <dialog class="custom-server-dialog isotope-zone-dialog zone-conversion-dialog" id={ id } aria-labelledby={ id + "-title" }>
-  <div class="dialog-header"><h2 id={ id + "-title" }>Convert to Primary Zone</h2><p>Make Sable the writable source for <strong>{ zone.Name }</strong>.</p></div>
+  <div class="dialog-header"><h2 id={ id + "-title" }>{ ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary Zone") }</h2><p>Make Sable the writable source for <strong>{ zone.Name }</strong>.</p></div>
   <button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
   <form class="blocking-dialog-form zone-conversion-form" hx-post="/ui/zones/convert-primary" hx-target="#zones-content" hx-swap="outerHTML">
    <input type="hidden" name="zone" value={ zone.Name }/>
@@ -1355,7 +1348,7 @@ templ ConvertPrimaryDialog(zone ZoneView, id string) {
  <button class="button outline" type="button" data-dialog-close>Close</button>
  } else {
  <button class="button outline" type="button" data-dialog-close>Cancel</button>
- <button class="button" type="submit" data-replica-primary-action>@Icon("crown")<span>Convert to Primary</span></button>
+ <button class="button" type="submit" data-replica-primary-action>@Icon("crown")<span>{ ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary") }</span></button>
  }
  </footer>
   </form>

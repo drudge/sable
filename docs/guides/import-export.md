@@ -4,7 +4,7 @@ Use zone files to move DNS data between systems. Use an application backup to pr
 
 ## Before you begin
 
-Export the destination zone or take a [backup](../backup.md) before replacing live data. Work on a Primary zone and on the writable node of a cluster. Secondary, Alias, and catalog-managed records belong to another source; do not import over them.
+Export the destination zone or take a [backup](../backup.md) before replacing live data. Work on a Primary zone and on the writable node of a cluster. Secondary, Secondary Forwarder, Alias, and catalog-managed records belong to another source; do not import over them.
 
 ## Import a standard zone file
 
@@ -29,6 +29,16 @@ www IN CNAME app.lab.example.
 Fully qualified target names end in a dot. Inspect imported relative names carefully: zone-file origin rules are not the same as Sable's convenience handling of bare labels in individual console fields.
 
 Sable validates the complete candidate before activation. An invalid SOA, out-of-zone owner, malformed record, or conflicting CNAME prevents a safe import. Correct the source file instead of bypassing validation.
+
+## Import from a catalog
+
+The catalog importer discovers member zones and imports selected members independently. Choose Primary or Secondary for authoritative zones. Members with an apex forwarder and no apex NS records retain their forwarding behavior, local records, and supported routing settings. Primary mode creates an independent, editable Forwarder. Secondary mode creates a read-only Secondary Forwarder that keeps its source servers and TSIG authentication, refreshes by AXFR on its SOA schedule or authorized NOTIFY, and stops answering when its source expires. Failed or invalid refreshes retain the last valid snapshot until expiry.
+
+To finish a migration, use **Convert to independent Forwarder** on an independently configured Secondary Forwarder. Pause source edits and choose a final synchronization (the default), or explicitly use the stored snapshot. Conversion preserves forwarding and DNSSEC validation settings, advances the SOA serial, stops source synchronization, and enables record editing. Sable catalog-managed members cannot use this action, and there is no general catalog-detachment action. Stage independent imports for this workflow. See [Forwarder conversion](../reference/zones/forwarder.md#convert-to-an-independent-forwarder) for the full cutover procedure.
+
+Technitium forwarder transfers support UDP, TCP, TLS, and QUIC, including priority and consistent DNSSEC validation settings. `this-server` uses Sable's default resolver path: configured upstreams in forward mode, or iterative resolution in recursive mode. Matching local records take precedence; other queries follow the forwarding rule. The source server's global resolver and proxy configuration is not transferred.
+
+Unsupported transports, explicit proxies, pinned-host address syntax, and mixed per-record DNSSEC validation settings produce an error without creating the affected zone. Review each result and test both local overrides and forwarded answers before moving clients.
 
 ## Export for review or migration
 

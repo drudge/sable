@@ -214,7 +214,7 @@ func Normalize(zone *Zone) {
 	zone.TransferACL = uniqueTrimmed(zone.TransferACL)
 	zone.Notify = normalizeNotifyTargets(zone.Notify)
 	zone.PrimaryProtocol = strings.ToLower(strings.TrimSpace(zone.PrimaryProtocol))
-	if zone.Type == "secondary" && zone.PrimaryProtocol == "" {
+	if (zone.Type == "secondary" || zone.Type == TypeSecondaryForwarder) && zone.PrimaryProtocol == "" {
 		zone.PrimaryProtocol = "tcp"
 	}
 	if zone.Type == "stub" && zone.PrimaryProtocol == "" {
@@ -302,8 +302,8 @@ func ValidateAll(zones []Zone, tsigKeyNames []string) error {
 func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zoneTypes map[string]string) []error {
 	var result []error
 	if current.Type != "primary" && current.Type != "secondary" && current.Type != "stub" &&
-		current.Type != "forwarder" && current.Type != "alias" && current.Type != "catalog" {
-		result = append(result, fmt.Errorf("%s type must be primary, secondary, stub, forwarder, alias, or catalog", field))
+		!IsForwarderType(current.Type) && current.Type != "alias" && current.Type != "catalog" {
+		result = append(result, fmt.Errorf("%s type must be primary, secondary, secondary_forwarder, stub, forwarder, alias, or catalog", field))
 	}
 	if current.DefaultTTL == 0 {
 		result = append(result, fmt.Errorf("%s default TTL must be positive", field))
@@ -322,7 +322,7 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zone
 	if current.DynamicUpdates && (current.Type != "primary" || current.TSIGKey == "") {
 		result = append(result, fmt.Errorf("%s dynamic updates require a primary zone and TSIG key", field))
 	}
-	if current.DNSSECValidationDisabled && current.Type != "forwarder" && current.Type != "stub" {
+	if current.DNSSECValidationDisabled && !IsForwarderType(current.Type) && current.Type != "stub" {
 		result = append(result, fmt.Errorf("%s DNSSEC validation can only be disabled for forwarder or stub zones", field))
 	}
 	result = append(result, validateDNSSEC(field, current)...)
@@ -338,7 +338,7 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zone
 			result = append(result, fmt.Errorf("%s notify target %d: %w", field, index, err))
 		}
 	}
-	if current.Type == "secondary" || current.Type == "stub" || IsConsumerCatalog(current) {
+	if current.Type == "secondary" || current.Type == TypeSecondaryForwarder || current.Type == "stub" || IsConsumerCatalog(current) {
 		result = append(result, validateManagedZone(field, current)...)
 	}
 	result = append(result, validateAliasZone(field, current, zoneTypes)...)
@@ -420,7 +420,7 @@ func validateManagedZone(field string, current Zone) []error {
 	if current.PrimaryProtocol != "udp" && current.PrimaryProtocol != "tcp" && current.PrimaryProtocol != "tls" {
 		result = append(result, fmt.Errorf("%s primary protocol must be udp, tcp, or tls", field))
 	}
-	if (current.Type == "secondary" || current.Type == "catalog") && current.PrimaryProtocol == "udp" {
+	if (current.Type == "secondary" || current.Type == TypeSecondaryForwarder || current.Type == "catalog") && current.PrimaryProtocol == "udp" {
 		result = append(result, fmt.Errorf("%s %s primary protocol must be tcp or tls", field, current.Type))
 	}
 	for index, address := range current.PrimaryServers {
@@ -470,10 +470,10 @@ func validateRecords(field string, current Zone) []error {
 	if soaRecords != 1 {
 		result = append(result, fmt.Errorf("%s must contain exactly one apex SOA record", field))
 	}
-	if current.Type != "forwarder" && !hasApexNS {
+	if !IsForwarderType(current.Type) && !hasApexNS {
 		result = append(result, fmt.Errorf("%s must contain at least one apex NS record", field))
 	}
-	if current.Type == "forwarder" && !hasApexForwarder {
+	if IsForwarderType(current.Type) && !hasApexForwarder {
 		result = append(result, fmt.Errorf("%s must contain at least one active apex FWD record", field))
 	}
 	return result

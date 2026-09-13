@@ -310,7 +310,7 @@ func AboutContent(view AboutPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</a> <a href=\"https://github.com/drudge/sable#readme\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Documentation</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</a> <a href=\"https://sabledns.io/docs\" target=\"_blank\" rel=\"noopener noreferrer\"><span>Documentation</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

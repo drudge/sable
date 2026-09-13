@@ -41,6 +41,12 @@ forwarders = ["10.2.0.53:53"]
 
 Alternatively create a [Forwarder zone](../reference/zones/forwarder.md) and manage its [FWD records](../reference/records/fwd.md) through Zones. Lower numeric priorities are tried first. Do not create conflicting routing objects unless you have a reason and have verified the resulting query path.
 
+## Keep local overrides
+
+Forwarder zones can contain ordinary local records alongside FWD rules. Matching local answers take precedence, including TXT and MX as well as addresses and CNAMEs; other queries use forwarding. A local TXT answer does not prevent an A query for the same name from using the upstream.
+
+When migrating from Technitium, a [Secondary Forwarder](../reference/zones/forwarder.md#secondary-forwarder-synchronization) keeps those overrides and forwarding rules current by AXFR. Promote it with **Convert to independent Forwarder** when Sable should own edits. The resulting Forwarder keeps the same override and fallback behavior.
+
 ## Encrypt an upstream connection
 
 Forwarder endpoints accept `udp://`, `tcp://`, `tls://`, and `quic://`. TLS and QUIC default to port 853; UDP and TCP default to port 53. Upstream forwarding currently does not accept a `doh://` endpoint. This differs from the built-in DNS client's ability to issue DoH queries.

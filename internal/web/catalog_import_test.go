@@ -15,8 +15,9 @@ import (
 
 type catalogImportStats struct {
 	conversionTestStats
-	members []dnsserver.ZoneRecord
-	signed  bool
+	members     []dnsserver.ZoneRecord
+	signed      bool
+	transferred []dnsserver.ZoneRecord
 }
 
 func (s *catalogImportStats) FetchZone(_ context.Context, name, kind string, _ []string, _, _ string) ([]dnsserver.ZoneRecord, error) {
@@ -26,6 +27,9 @@ func (s *catalogImportStats) FetchZone(_ context.Context, name, kind string, _ [
 	}
 	if name == "bad.test" {
 		return nil, errors.New("transfer refused")
+	}
+	if s.transferred != nil {
+		return s.transferred, nil
 	}
 	records := []dnsserver.ZoneRecord{
 		{Name: "@", Type: "SOA", TTL: 300, Value: "ns." + name + ". hostmaster." + name + ". 1 60 10 600 300"},
@@ -249,5 +253,80 @@ func TestCatalogSignedSecondaryImportStillAllowed(t *testing.T) {
 	current := findZone(configuration.zoneSnapshot.Zones, "good.test")
 	if err != nil || current == nil || current.Type != "secondary" || !result.Results[0].Success || !strings.Contains(result.Results[0].Message, "Conversion blocked") {
 		t.Fatalf("signed Secondary: %+v %v", result, err)
+	}
+}
+
+func TestCatalogForwarderImport(t *testing.T) {
+	for _, mode := range []string{"primary", "secondary"} {
+		for _, scenario := range []string{"native", "technitium", "this-server", "invalid", "mixed validation", "unknown"} {
+			t.Run(mode+"/"+scenario, func(t *testing.T) {
+				server, configuration, stats := catalogImportFixture(t)
+				stats.transferred = []dnsserver.ZoneRecord{
+					{Name: "@", Type: "SOA", TTL: 300, Value: "ns.good.test. hostmaster.good.test. 1 60 10 600 300"},
+					{Name: "@", Type: "FWD", TTL: 600, Value: "udp 10 192.0.2.53:53"},
+				}
+				switch scenario {
+				case "technitium", "mixed validation":
+					// UDP, length-prefixed 192.0.2.53, validation disabled, no proxy, priority 10.
+					stats.transferred[1].Type = "TYPE65281"
+					stats.transferred[1].Value = `\# 15 000a3139322e302e322e353300000a`
+					if scenario == "mixed validation" {
+						stats.transferred = append(stats.transferred, dnsserver.ZoneRecord{Name: "@", Type: "TYPE65281", TTL: 600, Value: `\# 15 000a3139322e302e322e353301000a`})
+					}
+				case "this-server":
+					stats.transferred[1].Type = "TYPE65281"
+					stats.transferred[1].Value = `\# 16 000b746869732d736572766572010000`
+				case "invalid":
+					stats.transferred[1].Value = "https 10 https://dns.example/dns-query"
+				case "unknown":
+					stats.transferred[1].Type = "TYPE65282"
+				}
+				form := catalogImportForm()
+				review, err := prepareImport(server, form)
+				if err != nil {
+					t.Fatal(err)
+				}
+				form.Set("step", "stage")
+				form.Set("confirmation", review.Confirmation)
+				form.Set("member", "good.test")
+				form.Set("import_type", mode)
+				form.Set("freeze_confirmed", "true")
+				result, err := prepareImport(server, form)
+				if err != nil {
+					t.Fatal(err)
+				}
+				current := findZone(configuration.zoneSnapshot.Zones, "good.test")
+				if scenario == "invalid" || scenario == "mixed validation" || scenario == "unknown" {
+					if current != nil || result.Results[0].Success {
+						t.Fatalf("invalid forwarder persisted: %+v", result)
+					}
+					return
+				}
+				wantType, wantMessage := "forwarder", "independent Forwarder"
+				if mode == "secondary" {
+					wantType, wantMessage = "secondary_forwarder", "Secondary Forwarder"
+				}
+				if current == nil || current.Type != wantType || current.CatalogZone != "" {
+					t.Fatalf("wrong imported type: %+v", current)
+				}
+				if mode == "secondary" {
+					if len(current.PrimaryServers) != 1 || current.PrimaryServers[0] != "192.0.2.53:53" || current.PrimaryProtocol != "tcp" {
+						t.Fatalf("source lost: %+v", current)
+					}
+				} else if len(current.PrimaryServers) != 0 || current.PrimaryProtocol != "" || current.TSIGKey != "" {
+					t.Fatalf("not an independent forwarder: %+v", current)
+				}
+				wantForwarder := "udp 10 192.0.2.53:53"
+				if scenario == "this-server" {
+					wantForwarder = "udp 0 this-server"
+				}
+				if len(current.Records) != 2 || current.Records[1].Value != wantForwarder || current.Records[1].TTL != 600 || current.DNSSECValidationDisabled != (scenario == "technitium") {
+					t.Fatalf("routing settings changed: %+v", current)
+				}
+				if !result.Results[0].Success || result.Results[0].Warning || !strings.Contains(result.Results[0].Message, wantMessage) {
+					t.Fatalf("incorrect result: %+v", result)
+				}
+			})
+		}
 	}
 }

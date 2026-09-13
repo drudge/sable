@@ -8,6 +8,66 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.2]
+
+Sable 1.3.2 lets you migrate Technitium forwarder zones with their local overrides,
+keep them synchronized while you test, and move write ownership to Sable when
+you are ready. It also improves zone-file imports and search controls throughout
+the console.
+
+### Migrate forwarder zones without rebuilding overrides
+
+- **Zones → Import… → From catalog** now recognizes supported Technitium
+  forwarder zones and preserves their forwarding rules and local records,
+  instead of rejecting them for an unsupported record type or missing apex NS.
+- Choose **Secondary** to create a read-only **Secondary Forwarder** that keeps
+  receiving source changes. Choose **Primary** to create an independent,
+  editable **Forwarder** after confirming that source writes are paused.
+  Importing does not subscribe Sable to the source catalog's membership.
+- Matching local answers take precedence before forwarding, including TXT and
+  MX as well as A, AAAA, and CNAME. Queries without a matching local answer
+  continue through the forwarding rules. Independent Forwarders allow adding
+  ordinary records alongside FWD records in the console.
+- Supported transfers preserve UDP, TCP, TLS, and QUIC forwarding, priorities,
+  and consistent DNSSEC validation settings. Technitium's `this-server` rule
+  uses Sable's default resolver: configured upstreams in forward mode, or
+  iterative resolution in recursive mode.
+
+### Keep source changes in sync, then take ownership
+
+- Secondary Forwarders refresh by full AXFR on their SOA schedule, authorized
+  NOTIFY, or **Resync**. Updates include changed forwarding rules and added or
+  deleted overrides. Failed or invalid refreshes retain the last valid snapshot
+  until SOA expiry; expired zones return SERVFAIL until synchronization recovers.
+- **Actions → Convert to independent Forwarder** makes Sable the writable
+  owner without deleting and recreating the zone. Pause source edits and
+  automatic writers, review the snapshot, and use **Synchronize, then convert**
+  to capture the final source changes.
+- Conversion retains records, forwarding and validation settings, permissions,
+  and history, advances the SOA serial, and stops source synchronization.
+  A failed final transfer or stale review leaves the Secondary Forwarder
+  unchanged. **Use the stored snapshot** explicitly skips the final transfer
+  and may retain stale or expired data.
+
+Sable catalog-managed members cannot use this conversion; stage independent
+imports for migration. Source-wide resolver and proxy settings are not copied.
+Unsupported forwarding options are reported per zone without creating that
+zone. The separate zone-file importer does not support Technitium's full textual
+FWD syntax. See the [migration guide](docs/guides/technitium-migration.md#forwarder-members)
+for supported settings and the cutover procedure.
+
+### Easier imports and consistent search
+
+- A single **Import…** menu offers **From file or text** and **From catalog**.
+  Zone-file dialogs support drag-and-drop uploads, a selected-file summary,
+  and a separate text editor with **Paste from clipboard**. New-zone imports
+  detect the zone name from the file when possible.
+- Fix zone-file imports whose apex SOA owner is written as the full zone name
+  without a trailing dot, while preserving other relative names.
+- Keep catalog import controls positioned correctly as the dialog opens.
+- Standardize search fields across the console, with consistent search icons
+  and clear buttons for quickly resetting a query or filter.
+
 ## [1.3.1]
 
 - Stack OpenID Connect and passkey sign-in buttons together, with a single

@@ -122,7 +122,7 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CanManagePermissions: console.CanAdministration,
 		}
 		zoneView.Revision = zone.Revision
-		if zone.Type == "secondary" {
+		if zone.Type == "secondary" || zone.Type == zonemodel.TypeSecondaryForwarder {
 			zoneView.ConversionFingerprint = zonemodel.ConversionFingerprint(zone)
 			zoneView.ConversionSerial = conversionSerial(zone)
 			if err := zonemodel.CheckPrimaryConversion(zone); err != nil {
@@ -831,9 +831,9 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 				zone.CatalogGroup = strings.TrimSpace(request.FormValue("catalog_group"))
 			}
 		}
-		if (zone.Type == "secondary" || zone.Type == "stub" || zone.Type == "catalog") && request.Form.Has("primary_servers") {
+		if (zone.Type == "secondary" || zone.Type == zonemodel.TypeSecondaryForwarder || zone.Type == "stub" || zone.Type == "catalog") && request.Form.Has("primary_servers") {
 			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
-			if (zone.Type == "secondary" || zone.Type == "catalog") && protocol != "tcp" && protocol != "tls" {
+			if (zone.Type == "secondary" || zone.Type == zonemodel.TypeSecondaryForwarder || zone.Type == "catalog") && protocol != "tcp" && protocol != "tls" {
 				return fmt.Errorf("%s zone transfer protocol must be TCP or DNS-over-TLS", zone.Type)
 			}
 			primaries, primaryErr := normalizeZonePrimaryServers(request.FormValue("primary_servers"), protocol)
@@ -1073,8 +1073,8 @@ func (server *Server) resyncZone(writer http.ResponseWriter, request *http.Reque
 		if zone == nil {
 			return errors.New("zone was not found")
 		}
-		if zone.Type != "secondary" && zone.Type != "stub" {
-			return errors.New("only secondary and stub zones can be synchronized")
+		if zone.Type != "secondary" && zone.Type != zonemodel.TypeSecondaryForwarder && zone.Type != "stub" {
+			return errors.New("only secondary, secondary forwarder, and stub zones can be synchronized")
 		}
 		synchronizer, ok := any(server.stats).(zoneSynchronizer)
 		if !ok {
@@ -1094,7 +1094,14 @@ func (server *Server) resyncZone(writer http.ResponseWriter, request *http.Reque
 			return err
 		}
 		if changed {
-			zone.Records = configuredZoneRecords(records)
+			candidate := *zone
+			candidate.Records = configuredZoneRecords(records)
+			if candidate.Type == zonemodel.TypeSecondaryForwarder {
+				if err := zonemodel.PrepareTransferredForwarder(&candidate, true); err != nil {
+					return err
+				}
+			}
+			*zone = candidate
 		}
 		return nil
 	})
@@ -1138,9 +1145,6 @@ func (server *Server) addZoneRecord(writer http.ResponseWriter, request *http.Re
 			return err
 		}
 		recordType := strings.ToUpper(strings.TrimSpace(request.FormValue("type")))
-		if zone.Type == "forwarder" && recordType != "FWD" {
-			return errors.New("forwarder zones accept only FWD records")
-		}
 		value, err := zoneRecordValueFromForm(request, recordType, "")
 		if err != nil {
 			return err
