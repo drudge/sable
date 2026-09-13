@@ -13,55 +13,59 @@ import (
 
 func TestIterativeResolverMinimizesQNameAndFollowsReferrals(t *testing.T) {
 	t.Parallel()
-	runtime := recursiveTestRuntime(t)
-	handler := NewHandler(runtime)
-	var questions []string
-	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
-		question := request.Question[0]
-		questions = append(questions, fmt.Sprintf("%s/%s@%s", question.Name, dns.TypeToString[question.Qtype], endpoint))
-		switch {
-		case endpoint == "udp://192.0.2.1:53" && question.Name == "com." && question.Qtype == dns.TypeNS:
-			return referralResponse(request, "com.", "ns.com.", "192.0.2.2"), nil
-		case endpoint == "udp://192.0.2.2:53" && question.Name == "example.com." && question.Qtype == dns.TypeNS:
-			return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
-		case endpoint == "udp://192.0.2.3:53" && question.Name == "www.example.com." && question.Qtype == dns.TypeA:
-			response := new(dns.Msg)
-			response.SetReply(request)
-			response.Authoritative = true
-			response.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: []byte{192, 0, 2, 44}}}
-			return response, nil
-		case endpoint == "udp://192.0.2.3:53" && question.Name == "mail.example.com." && question.Qtype == dns.TypeA:
-			return addressResponse(request, "192.0.2.45"), nil
-		default:
-			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
-		}
-	}
+	for _, rootNameServer := range []string{"ns.com.", "a.gtld-servers.net."} {
+		t.Run(rootNameServer, func(t *testing.T) {
+			runtime := recursiveTestRuntime(t)
+			handler := NewHandler(runtime)
+			var questions []string
+			handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+				question := request.Question[0]
+				questions = append(questions, fmt.Sprintf("%s/%s@%s", question.Name, dns.TypeToString[question.Qtype], endpoint))
+				switch {
+				case endpoint == "udp://192.0.2.1:53" && question.Name == "com." && question.Qtype == dns.TypeNS:
+					return referralResponse(request, "com.", rootNameServer, "192.0.2.2"), nil
+				case endpoint == "udp://192.0.2.2:53" && question.Name == "example.com." && question.Qtype == dns.TypeNS:
+					return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
+				case endpoint == "udp://192.0.2.3:53" && question.Name == "www.example.com." && question.Qtype == dns.TypeA:
+					response := new(dns.Msg)
+					response.SetReply(request)
+					response.Authoritative = true
+					response.Answer = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: []byte{192, 0, 2, 44}}}
+					return response, nil
+				case endpoint == "udp://192.0.2.3:53" && question.Name == "mail.example.com." && question.Qtype == dns.TypeA:
+					return addressResponse(request, "192.0.2.45"), nil
+				default:
+					return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+				}
+			}
 
-	request := new(dns.Msg)
-	request.SetQuestion("www.example.com.", dns.TypeA)
-	request.RecursionDesired = true
-	response, err := handler.resolveNetwork(request, runtime, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(response.Answer) != 1 || response.Answer[0].String() != "www.example.com.\t300\tIN\tA\t192.0.2.44" || !response.RecursionAvailable {
-		t.Fatalf("iterative response = %+v", response)
-	}
-	want := []string{
-		"com./NS@udp://192.0.2.1:53",
-		"example.com./NS@udp://192.0.2.2:53",
-		"www.example.com./A@udp://192.0.2.3:53",
-	}
-	if !slices.Equal(questions, want) {
-		t.Fatalf("iterative questions = %v, want %v", questions, want)
-	}
-	second := new(dns.Msg)
-	second.SetQuestion("mail.example.com.", dns.TypeA)
-	if _, err := handler.resolveNetwork(second, runtime, nil); err != nil {
-		t.Fatal(err)
-	}
-	if got := questions[len(questions)-1]; got != "mail.example.com./A@udp://192.0.2.3:53" || len(questions) != len(want)+1 {
-		t.Fatalf("cached delegation did not bypass parent zones: %v", questions)
+			request := new(dns.Msg)
+			request.SetQuestion("www.example.com.", dns.TypeA)
+			request.RecursionDesired = true
+			response, err := handler.resolveNetwork(request, runtime, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(response.Answer) != 1 || response.Answer[0].String() != "www.example.com.\t300\tIN\tA\t192.0.2.44" || !response.RecursionAvailable {
+				t.Fatalf("iterative response = %+v", response)
+			}
+			want := []string{
+				"com./NS@udp://192.0.2.1:53",
+				"example.com./NS@udp://192.0.2.2:53",
+				"www.example.com./A@udp://192.0.2.3:53",
+			}
+			if !slices.Equal(questions, want) {
+				t.Fatalf("iterative questions = %v, want %v", questions, want)
+			}
+			second := new(dns.Msg)
+			second.SetQuestion("mail.example.com.", dns.TypeA)
+			if _, err := handler.resolveNetwork(second, runtime, nil); err != nil {
+				t.Fatal(err)
+			}
+			if got := questions[len(questions)-1]; got != "mail.example.com./A@udp://192.0.2.3:53" || len(questions) != len(want)+1 {
+				t.Fatalf("cached delegation did not bypass parent zones: %v", questions)
+			}
+		})
 	}
 }
 

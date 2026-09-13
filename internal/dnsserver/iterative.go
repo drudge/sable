@@ -222,10 +222,11 @@ func (handler *Handler) resolveIterativeQuestion(
 			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
 		}
 		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, zone, names, response.Extra, runtime, budget, depth+1)
+		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
 		if err != nil {
 			return nil, err
 		}
+		closestZone = zone
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 
@@ -259,10 +260,11 @@ func (handler *Handler) resolveIterativeQuestion(
 			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
 		}
 		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, zone, names, response.Extra, runtime, budget, depth+1)
+		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
 		if err != nil {
 			return nil, err
 		}
+		closestZone = zone
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
@@ -365,6 +367,7 @@ func referralTTL(response *dns.Msg) uint32 {
 
 func (handler *Handler) referralServers(
 	ctx context.Context,
+	parentZone string,
 	zone string,
 	nameServers []string,
 	additional []dns.RR,
@@ -380,7 +383,9 @@ func (handler *Handler) referralServers(
 	resolved := make(map[string]bool, len(nameServers))
 	for _, record := range additional {
 		owner := normalizeName(record.Header().Name)
-		if _, matches := wanted[owner]; !matches || (owner != zone && !strings.HasSuffix(owner, "."+zone)) {
+		// Glue is scoped to the referring parent, which may supply sibling
+		// addresses (for example, the root supplies .com servers under .net).
+		if _, matches := wanted[owner]; !matches || !dns.IsSubDomain(dns.Fqdn(parentZone), dns.Fqdn(owner)) {
 			continue
 		}
 		if address, ok := addressFromRecord(record); ok {
