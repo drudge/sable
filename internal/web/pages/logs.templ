@@ -111,7 +111,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 		// The level sits with the live toggle but posts with the search, so both
 		// controls take effect on their own rather than through a Search button.
 		<form class="log-search-bar" id="runtime-log-search-bar" hx-get="/ui/logs/runtime" hx-target="#runtime-logs-panel" hx-swap="outerHTML" hx-trigger="submit, input delay:400ms from:#runtime-log-search, change from:[data-runtime-level]" hx-include="[data-runtime-level]">
-			<div class="search-field">@Icon("search")<input id="runtime-log-search" type="search" name="search" value={ view.Search } placeholder="Search server logs..." autocomplete="off" aria-label="Search server logs" data-search-clearable/>@SearchClear(view.Search == "")</div>
+			@SearchField("Search server logs", "Search server logs...", view.Search, "", templ.Attributes{"id": "runtime-log-search", "name": "search"})
 			<input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/>
 			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/>
 			<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="runtime-log-copy" aria-label="Copy current entries" title="Copy current entries">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(runtimeExportURL(view)) } aria-label="Export server logs" title="Export server logs">@Icon("download")</a></div>
@@ -200,7 +200,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 				}</div>
 			</form>
 		</div>
-		<div class="log-search-bar query-result-search"><div class="search-field">@Icon("search")<input type="search" placeholder="Search in results..." autocomplete="off" data-query-result-search aria-label="Search in results" data-search-clearable/>@SearchClear(true)</div><div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
+		<div class="log-search-bar query-result-search">@SearchField("Search in results", "Search in results...", "", "", templ.Attributes{"data-query-result-search": true})<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
 		<textarea class="sr-only" id="query-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
 			<div class="logs-empty error" role="alert">{ view.Error }</div>
@@ -327,9 +327,6 @@ templ QueryPolicyAction(domain, action, icon, label string) {
 	<form hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ domain }/><input type="hidden" name="action" value={ action }/><button class={ "query-policy-action " + action } type="submit" aria-label={ label } title={ label }>@Icon(icon)</button></form>
 }
 
-templ SearchClear(empty bool) {
-	<button class="search-clear" type="button" data-search-clear aria-label="Clear search" title="Clear search" hidden?={ empty }>@Icon("x")</button>
-}
 
 templ LogLiveButton(live bool) {
 	<button class={ ifThen(live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(live) }><span class="live-icon play">@Icon("play")</span><span class="live-icon pause">@Icon("pause")</span><span data-log-live-label>{ ifThen(live, "Pause", "Live") }</span></button>

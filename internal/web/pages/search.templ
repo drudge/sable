@@ -1,0 +1,11 @@
+package pages
+
+// SearchField owns search presentation and clearing; attributes preserve each
+// caller's form semantics and filtering hooks. class is for container layout.
+templ SearchField(label, placeholder, value, class string, attributes templ.Attributes) {
+	<div class={ "search-field " + class }>
+		@Icon("search")
+		<input type="search" aria-label={ label } placeholder={ placeholder } value={ value } autocomplete="off" data-search-clearable { attributes... }/>
+		<button class="search-clear" type="button" data-search-clear aria-label={ "Clear " + label } title="Clear search" hidden?={ value == "" }>@Icon("x")</button>
+	</div>
+}

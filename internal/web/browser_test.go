@@ -67,6 +67,9 @@ func TestBrowserConsoleFixes(t *testing.T) {
 		if r.URL.Query().Has("zone-import") {
 			content = pages.ZonesContent(pages.ZonesPageView{CanCreate: true})
 		}
+		if r.URL.Query().Has("dns-client") {
+			content = pages.DNSClientContent(pages.DNSClientPageView{Console: view, QueryName: "example.org"})
+		}
 		if r.URL.Query().Has("about") {
 			content = pages.AboutContent(pages.AboutPageView{
 				Console: view, Commit: "abcdef0123456789abcdef0123456789abcdef0123",

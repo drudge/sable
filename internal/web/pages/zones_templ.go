@@ -801,15 +801,15 @@ func ZoneListView(view ZonesPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</header><div class=\"zone-filter-bar\"><label class=\"zone-search\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</header><div class=\"zone-filter-bar\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("search").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SearchField("Search zones", "Search zones...", "", "zone-search", templ.Attributes{"data-zone-search": true}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span><input type=\"search\" aria-label=\"Search zones\" placeholder=\"Search zones...\" autocomplete=\"off\" data-zone-search></label><div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter data-styled-select><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter data-styled-select><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"zone-filter-selects\"><label><span class=\"sr-only\">Zone type</span><select data-zone-type-filter data-styled-select><option value=\"all\">All Types</option><option value=\"primary\">Primary</option><option value=\"secondary\">Secondary</option><option value=\"stub\">Stub</option><option value=\"forwarder\">Forwarder</option><option value=\"alias\">Alias</option><option value=\"catalog\">Catalog</option></select></label> <label><span class=\"sr-only\">Zone status</span><select data-zone-status-filter data-styled-select><option value=\"all\">All Status</option><option value=\"active\">Active</option><option value=\"disabled\">Disabled</option></select></label></div></div><section class=\"card isotope-zone-list\" aria-label=\"Configured zones\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1573,15 +1573,15 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div></header><div class=\"zone-filter-bar zone-record-filter-bar\"><label class=\"zone-search\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div></header><div class=\"zone-filter-bar zone-record-filter-bar\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("search").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SearchField("Filter zone records", "Filter records...", "", "zone-search", templ.Attributes{"data-record-search": true}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "</span><input type=\"search\" aria-label=\"Filter zone records\" placeholder=\"Filter records...\" autocomplete=\"off\" data-record-search></label> <label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter data-styled-select><option value=\"all\">All Types</option>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "<label class=\"zone-record-type-filter\"><span class=\"sr-only\">Record type</span><select data-record-type-filter data-styled-select><option value=\"all\">All Types</option>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

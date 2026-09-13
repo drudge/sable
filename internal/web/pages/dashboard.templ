@@ -742,13 +742,7 @@ templ DNSClientContent(view DNSClientPageView) {
 				<section class="card emphasized query-composer">
 					<form id="dns-query-form" hx-post="/ui/query" hx-target="#dns-query-result" hx-swap="innerHTML">
 						<div class="query-primary-row">
-							<div class="search-field">
-								<label class="sr-only" for="query-name">Domain name</label>@Icon("search")
-				<input id="query-name" name="name" value={ view.QueryName } placeholder="Domain name" autocomplete="off" data-query-name required/>
-								<button class="query-clear" type="button" data-query-clear aria-label="Clear domain">
-									@Icon("x")
-								</button>
-							</div>
+							@SearchField("Domain name", "Domain name", view.QueryName, "", templ.Attributes{"id": "query-name", "name": "name", "data-query-name": true, "required": true})
 							<label class="sr-only" for="record-type">Record type</label>
 			<select id="record-type" name="type" class="record-type-select" data-styled-select>
 				for _, recordType := range dnsClientRecordTypes {
@@ -770,10 +764,7 @@ templ DNSClientContent(view DNSClientPageView) {
 									<span data-resolver-label>This Server</span><span class="styled-select-chevron" aria-hidden="true"></span>
 								</button>
 								<div class="resolver-popover" data-resolver-popover hidden>
-									<label class="resolver-search">
-										<span class="sr-only">Search servers</span>@Icon("search")
-										<input type="search" placeholder="Search servers..." autocomplete="off" data-resolver-search/>
-									</label>
+									@SearchField("Search servers", "Search servers...", "", "resolver-search", templ.Attributes{"data-resolver-search": true})
 									<div class="resolver-command-list" id="resolver-command-list" role="listbox" data-resolver-list>
 										<div class="resolver-empty" data-resolver-empty hidden>No server found.</div>
 										@ResolverGroup("Local", localResolverOptions)

@@ -16,6 +16,46 @@ async function check(page, label, action) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await check(page, 'shared search clears filters, preserves focus, and never submits DNS queries', async () => {
+      await page.goto(`${process.argv[2]}/?zone-import`);
+      const search = page.locator('[data-zone-search]');
+      const clear = search.locator('..').locator('[data-search-clear]');
+      assert.equal(await clear.isVisible(), false);
+      await search.fill('missing.example');
+      assert.equal(await clear.isVisible(), true);
+      await clear.click();
+      assert.equal(await search.inputValue(), '');
+      assert.equal(await clear.isVisible(), false);
+      assert.equal(await search.evaluate(el => el === document.activeElement), true);
+      await page.goto(`${process.argv[2]}/?dns-client`);
+      await page.locator('#dns-query-form').evaluate(form => {
+        window.searchSubmits = 0;
+        form.addEventListener('submit', event => { window.searchSubmits++; event.preventDefault(); });
+      });
+      const domain = page.locator('[data-query-name]');
+      const domainClear = domain.locator('..').locator('[data-search-clear]');
+      assert.equal(await domainClear.isVisible(), true, 'prefilled domain has a clear button');
+      await domainClear.focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await domain.inputValue(), '');
+      assert.equal(await domain.evaluate(el => el === document.activeElement), true);
+      assert.equal(await page.evaluate(() => window.searchSubmits), 0);
+      await page.locator('[data-resolver-trigger]').click();
+      const resolver = page.locator('[data-resolver-search]');
+      const resolverClear = resolver.locator('..').locator('[data-search-clear]');
+      const options = page.locator('[data-resolver-option]:visible');
+      const originalCount = await options.count();
+      assert.ok(originalCount > 0);
+      await resolver.fill('no-such-resolver');
+      assert.equal(await options.count(), 0);
+      await resolverClear.click();
+      assert.equal(await options.count(), originalCount);
+      await resolver.fill('no-such-resolver');
+      await page.keyboard.press('Escape');
+      await page.locator('[data-resolver-trigger]').click();
+      assert.equal(await resolver.inputValue(), '');
+      assert.equal(await resolverClear.isVisible(), false, 'reopening synchronizes the clear button');
+    });
     await check(page, 'About keeps the short mobile SHA in the upstream build layout', async () => {
       await page.setViewportSize({width: 375, height: 667});
       await page.goto(`${process.argv[2]}/?about`);

@@ -213,15 +213,15 @@ func CacheBrowserDialog(domains []CacheDomainView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</button></header><div class=\"cache-browser-body\"><label class=\"cache-browser-search\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</button></header><div class=\"cache-browser-body\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("search").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = SearchField("Search cached domains", "Enter domain name or search...", "", "cache-browser-search", templ.Attributes{"data-cache-search": true}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<span class=\"sr-only\">Search cached domains</span><input type=\"search\" placeholder=\"Enter domain name or search...\" autocomplete=\"off\" data-cache-search></label><div class=\"cache-domain-list\"><div class=\"cache-domain-list-header\"><strong>Cached Domains</strong><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"cache-domain-list\"><div class=\"cache-domain-list-header\"><strong>Cached Domains</strong><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
