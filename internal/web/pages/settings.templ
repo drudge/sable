@@ -7,6 +7,7 @@ import (
 )
 
 type SettingsPageView struct {
+ PasskeysEnabled bool
  MaxConcurrent int
  MaxConcurrentPerClient int
 	Console             DashboardView
@@ -169,12 +170,14 @@ templ SettingsGeneralPanel(view SettingsPageView) {
 		@SettingsCard("database", "Storage", "Persistent configuration and DNS data backend") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Database Driver</span><strong>{ view.DatabaseDriver }</strong></div><div class="read-only-field"><span>Data Source</span><strong>{ view.DatabaseDSN }</strong></div></div>
 		}
-		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
 		@SettingsUpdatePreferences(view.UpdatePreferences)
+		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
 	</div>
 }
 
 type SettingsUpdatePreferencesView struct {
+ IncludePreRelease bool
+ CanEditReleaseChannel bool
 	CheckOnLogin bool
 	CanEdit bool
 	Message string
@@ -185,10 +188,15 @@ templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
 	<div id="settings-update-preferences">
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
-		@SettingsCard("download", "Software Updates", "Preferences are saved automatically for this node") {
-			<form class="isotope-card-content" hx-post="/ui/settings/updates" hx-target="#settings-update-preferences" hx-swap="outerHTML" hx-trigger="change" hx-disabled-elt="find input">
-				<label class="field-control switch-row"><span><strong>Check for updates on sign-in</strong><small>Notify when a new release is available. Updates are installed only when you choose.</small></span><input type="checkbox" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
-			</form>
+		@SettingsCard("download", "Software Updates", "Update preferences for this node") {
+			<div class="isotope-card-content">
+ <input type="hidden" name="update_preferences_present" value="true" form="settings-form"/>
+				<label class="field-control switch-row"><span><strong>Check for updates on sign-in</strong><small>Notify when a new release is available. Updates are installed only when you choose.</small></span><input type="checkbox" form="settings-form" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
+                if view.CanEditReleaseChannel {
+                    <input type="hidden" form="settings-form" name="release_channel_present" value="true"/>
+                }
+                <label class="field-control switch-row"><span><strong>Include pre-releases</strong><small>Include preview releases when checking for updates.</small></span><input type="checkbox" form="settings-form" name="pre_release" value="true" checked?={ view.IncludePreRelease } disabled?={ !view.CanEditReleaseChannel }/></label>
+			</div>
 		}
 	</div>
 }
@@ -198,6 +206,9 @@ templ SettingsWebPanel(view SettingsPageView) {
 		@SettingsCard("globe", "Web Service Settings", "Configure the web interface and API service") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>HTTP Listen Address</span><strong>{ view.HTTPListen }</strong><small>The local setup and recovery listener is configured in <code>sable.toml</code>.</small></div><label class="field-control"><span>HTTPS Listen Address</span><input name="https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/><small>Uses the public certificate configured under Protocols. Changing this address requires a restart.</small></label></div>
 		}
+		@SettingsCard("fingerprint-pattern", "Passkeys", "Configure passkey sign-in") {
+ <div class="isotope-card-content"><input type="hidden" name="passkeys_present" value="true"/><label class="field-control switch-row"><span><strong>Enable passkeys</strong><small>Allow passkey sign-in and registration alongside passwords and single sign-on. Disabling preserves saved passkeys and requires another sign-in method for every active account.</small></span><input type="checkbox" name="passkeys_enabled" value="true" checked?={ view.PasskeysEnabled }/></label></div>
+ }
 		@SettingsCard("shield", "Session Security", "Configure authentication lifetimes for the web service") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Session Lifetime</span><strong>{ view.SessionTTL }</strong></div><div class="read-only-field"><span>Default API Token Lifetime</span><strong>{ view.APITokenTTL }</strong></div></div>
 		}

@@ -43,7 +43,7 @@ type User struct {
 	LoginAllowed bool
 	// PasswordLogin reports whether a password may be used to sign in as this
 	// account. A federated account that never had a password has it cleared,
-	// and so does anyone who deliberately moved to single sign-on only.
+	// and so does anyone who deliberately moved to passkeys or single sign-on.
 	PasswordLogin bool
 	// AvatarETag identifies the stored profile picture, and is empty when the
 	// account has none. It travels with the account rather than with the image

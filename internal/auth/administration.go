@@ -105,7 +105,7 @@ type ManagedUser struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	// PasswordLogin reports whether this account may still sign in with a
-	// password. Clearing it is how a person moves to single sign-on only.
+	// password. Clearing it allows passkey-only or federated sign-in.
 	PasswordLogin bool
 	// Identities lists the external providers this account is linked to.
 	Identities []LinkedIdentity
@@ -193,9 +193,10 @@ type AdministrationSnapshot struct {
 }
 
 type ProfileSnapshot struct {
-	User   ManagedUser
-	Roles  []Role
-	Tokens []APIToken
+	HasPassword bool
+	User        ManagedUser
+	Roles       []Role
+	Tokens      []APIToken
 }
 
 func (service *Service) Profile(ctx context.Context, principal Principal) (ProfileSnapshot, error) {
@@ -242,7 +243,11 @@ func (service *Service) Profile(ctx context.Context, principal Principal) (Profi
 			owned = append(owned, token)
 		}
 	}
-	return ProfileSnapshot{User: profile, Roles: assignedRoles, Tokens: owned}, nil
+	account, err := service.store.UserByUsername(ctx, principal.Username)
+	if err != nil {
+		return ProfileSnapshot{}, err
+	}
+	return ProfileSnapshot{User: profile, Roles: assignedRoles, Tokens: owned, HasPassword: account.PasswordHash != ""}, nil
 }
 
 func (service *Service) UpdateOwnProfile(ctx context.Context, principal Principal, displayName, email, clientIP, userAgent string) error {
@@ -274,14 +279,24 @@ func (service *Service) ChangeOwnPassword(ctx context.Context, principal Princip
 	}
 	defer service.releasePasswordOperation()
 	user, err := service.store.UserByUsername(ctx, principal.Username)
-	if err != nil || !VerifyPassword(user.PasswordHash, currentPassword) {
+	if err != nil || (user.PasswordLogin && !VerifyPassword(user.PasswordHash, currentPassword)) {
 		return ErrInvalidCredential
 	}
 	passwordHash, err := HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	if err := store.SetUserPassword(ctx, principal.UserID, passwordHash, service.now()); err != nil {
+	if !user.PasswordLogin {
+		passwordStore, ok := service.store.(interface {
+			SetUserPasswordAndLogin(context.Context, int64, string, time.Time) error
+		})
+		if !ok {
+			return errors.New("password setup unavailable")
+		}
+		if err := passwordStore.SetUserPasswordAndLogin(ctx, principal.UserID, passwordHash, service.now()); err != nil {
+			return err
+		}
+	} else if err := store.SetUserPassword(ctx, principal.UserID, passwordHash, service.now()); err != nil {
 		return err
 	}
 	service.audit(ctx, &principal.UserID, "user.password.change", clientIP, userAgent, "all sessions revoked")

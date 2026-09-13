@@ -59,8 +59,7 @@ func (server *Server) updatePreferences(writer http.ResponseWriter, request *htt
 		return
 	}
 	err := editor.Update(request.Context(), func(candidate *config.Config) error {
-		candidate.Updates.CheckOnLogin = request.FormValue("check_on_login") == "true"
-		return nil
+		return server.applyUpdatePreferences(request, candidate)
 	})
 	if err != nil {
 		view := server.settingsUpdatePreferencesView(request)
@@ -69,7 +68,7 @@ func (server *Server) updatePreferences(writer http.ResponseWriter, request *htt
 		_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
 		return
 	}
-	server.recordControlPlaneAudit(request, "update.preferences", "changed automatic update checks")
+	server.recordControlPlaneAudit(request, "update.preferences", "changed update preferences")
 	view := server.settingsUpdatePreferencesView(request)
 	view.Message = "Update preferences saved."
 	_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
@@ -80,7 +79,12 @@ func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		canEdit = auth.HasPermission(principal, auth.PermissionSettingsWrite)
 	}
-	return pages.SettingsUpdatePreferencesView{CheckOnLogin: server.config.Current().Config.Updates.CheckOnLogin, CanEdit: canEdit}
+	canEditReleaseChannel := !server.securityEnabled
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
+		canEditReleaseChannel = auth.HasPermission(principal, auth.PermissionUpdatesApply)
+	}
+	preferences := server.config.Current().Config.Updates
+	return pages.SettingsUpdatePreferencesView{CheckOnLogin: preferences.CheckOnLogin, IncludePreRelease: preferences.PreRelease, CanEdit: canEdit, CanEditReleaseChannel: canEdit && canEditReleaseChannel}
 }
 
 // updatePanel renders the current update state. The panel polls this endpoint
@@ -230,24 +234,25 @@ func (server *Server) renderUpdatePanel(
 
 func (server *Server) updateView(request *http.Request, status update.Status) pages.UpdateView {
 	view := pages.UpdateView{
-		Available:         status.Available,
-		Blocked:           status.Blocked,
-		Busy:              status.Busy(),
-		Checked:           status.Checked(),
-		CurrentVersion:    status.CurrentVersion,
-		Development:       status.Development,
-		Error:             status.Error,
-		IncludePreRelease: status.IncludePreRelease,
-		Installed:         status.Installed,
-		LatestVersion:     status.LatestVersion,
-		Phase:             string(status.Phase),
-		PreRelease:        status.PreRelease,
-		Progress:          status.Progress,
-		ReleaseURL:        status.ReleaseURL,
-		ReleaseNotes:      status.ReleaseNotes,
-		CheckOnLogin:      server.config.Current().Config.Updates.CheckOnLogin,
-		Supported:         server.updates != nil,
-		UpToDate:          status.UpToDate(),
+		Available:           status.Available,
+		Blocked:             status.Blocked,
+		Busy:                status.Busy(),
+		Checked:             status.Checked(),
+		CurrentVersion:      status.CurrentVersion,
+		Development:         status.Development,
+		Error:               status.Error,
+		IncludePreRelease:   status.IncludePreRelease,
+		PreferredPreRelease: server.config.Current().Config.Updates.PreRelease,
+		Installed:           status.Installed,
+		LatestVersion:       status.LatestVersion,
+		Phase:               string(status.Phase),
+		PreRelease:          status.PreRelease,
+		Progress:            status.Progress,
+		ReleaseURL:          status.ReleaseURL,
+		ReleaseNotes:        status.ReleaseNotes,
+		CheckOnLogin:        server.config.Current().Config.Updates.CheckOnLogin,
+		Supported:           server.updates != nil,
+		UpToDate:            status.UpToDate(),
 	}
 	if view.CurrentVersion == "" {
 		view.CurrentVersion = version.Current().Release
@@ -274,4 +279,15 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 	}
 	view.CanRestart = view.CanApply && server.restart != nil
 	return view
+}
+
+func (server *Server) applyUpdatePreferences(request *http.Request, candidate *config.Config) error {
+	candidate.Updates.CheckOnLogin = request.FormValue("check_on_login") == "true"
+	if request.PostForm.Has("release_channel_present") {
+		if !server.settingsUpdatePreferencesView(request).CanEditReleaseChannel {
+			return auth.ErrForbidden
+		}
+		candidate.Updates.PreRelease = request.FormValue("pre_release") == "true"
+	}
+	return nil
 }

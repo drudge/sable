@@ -21,7 +21,7 @@ const (
 	legacyCachePolicy    = "no-cache"
 )
 
-//go:embed app.css app.js bootstrap.js htmx.min.js sable-headshot.png sable-icon-180.png sable-mark.svg
+//go:embed passkeys.js app.css app.js bootstrap.js htmx.min.js sable-headshot.png sable-icon-180.png sable-mark.svg
 var files embed.FS
 
 type asset struct {
@@ -36,7 +36,7 @@ var manifest = loadManifest()
 
 func loadManifest() map[string]asset {
 	names := []string{
-		"app.css", "app.js", "bootstrap.js", "htmx.min.js",
+		"app.css", "app.js", "passkeys.js", "bootstrap.js", "htmx.min.js",
 		"sable-headshot.png", "sable-icon-180.png", "sable-mark.svg",
 	}
 	loaded := make(map[string]asset, len(names))

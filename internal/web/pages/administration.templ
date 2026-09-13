@@ -474,7 +474,7 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 			<div class="signin-method-row">
 				<div>
 					<strong>Password</strong>
-					<span>{ ifThen(user.PasswordLogin, "Enabled", "Off. Signs in through a provider only.") }</span>
+					<span>{ ifThen(user.PasswordLogin, "Enabled", "Off. Uses passkeys or an identity provider.") }</span>
 				</div>
 				<form hx-post="/ui/administration/users/sign-in-method" hx-target="#administration-content" hx-swap="outerHTML">
 					<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
@@ -500,7 +500,7 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 			}
 		</div>
 		if len(user.Identities) == 0 {
-			<p class="muted-cell">No identity provider is linked, so password sign-in cannot be turned off for this account.</p>
+			<p class="muted-cell">Disabling password sign-in requires a passkey or a linked identity provider.</p>
 		}
 	</section>
 }

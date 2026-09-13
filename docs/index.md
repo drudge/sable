@@ -31,7 +31,7 @@ These guides cover Sable 1.0.0. [Download the release](https://github.com/drudge
 ## Secure it and keep it running
 
 - [Enable encrypted DNS](guides/encrypted-dns.md) and [manage certificates](guides/certificates.md).
-- [Grant people the right permissions](guides/access-control.md) or [connect single sign-on](guides/sso.md).
+- [Grant people the right permissions](guides/access-control.md), [use passkeys](guides/passkeys.md), or [connect single sign-on](guides/sso.md).
 - [Back up and rehearse recovery](backup.md) before your first production upgrade.
 - [Build a resilient cluster](clustering.md) and [update nodes safely](guides/updates.md).
 - [Keep a public name pointed at your connection](guides/dynamic-dns.md), [sync UniFi device names](guides/unifi.md), or [add a Glance widget](guides/glance.md).

@@ -2016,8 +2016,7 @@
 	};
 
 	// Shared confirmation dialog. htmx actions reach it through hx-confirm, and
-	// the managed restart button calls it directly because it issues its own
-	// request instead of an htmx one.
+	// managed restart and passkey actions call it directly for their own requests.
 	const confirmAction = (question, options = {}) =>
 	  new Promise((resolve) => {
 		const returnFocus = document.activeElement;
@@ -2047,6 +2046,8 @@
 		dialog.showModal();
 		dialog.querySelector("[data-confirm-cancel]").focus();
 	  });
+
+	window.sableConfirmAction = confirmAction;
 
 	// Keep even a cached release lookup visible long enough to acknowledge it,
 	// without slowing the server or adding delay to an already slow request.

@@ -73,7 +73,8 @@ Replicated state includes:
 - Dynamic DNS settings and external provider credentials;
 - UniFi settings and controller credentials;
 - OpenID Connect settings, client secret, linked identities, and role mappings;
-- users, roles, permission grants, password hashes, API-token hashes, and token
+- passkey availability (`security.passkeys_disabled`);
+- users, roles, permission grants, password hashes, passkey public credentials, API-token hashes, and token
   revocations.
 
 Node-local state includes:
@@ -88,6 +89,11 @@ Node-local state includes:
 Replicas validate and activate a complete candidate before recording the new
 generation. A rejected candidate leaves the previous runtime and manifest
 active.
+
+Passkeys work across trusted node addresses under the same registrable domain.
+Credentials replicate, but browser sessions and in-progress sign-in challenges
+remain node-local. See [Sign in with passkeys](guides/passkeys.md#hostnames-and-cluster-failover)
+for naming and failover examples.
 
 ## Monitoring and node queries
 

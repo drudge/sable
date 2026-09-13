@@ -419,7 +419,7 @@ func clearSessionCookie(writer http.ResponseWriter, request *http.Request, name 
 }
 
 func publicRequest(path string) bool {
-	return path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
+	return path == passkeyLoginBegin || path == passkeyLoginFinish || path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
 		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/")
 }
 
@@ -550,7 +550,7 @@ func (server *Server) renderAuthPage(
 		}
 		returnTo = validatedReturnTarget(rawReturnTo, request.Host)
 	}
-	if err := pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel).Render(request.Context(), writer); err != nil {
+	if err := pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel, server.passkeysEnabled()).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render authentication page", "error", err)
 	}
 }

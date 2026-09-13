@@ -127,6 +127,10 @@ func run(root, binary, output string, basePort int, keep bool) error {
 	if err := operator.CreateOperator(operatorUsername, operatorPassword, operatorName, operatorEmail); err != nil {
 		return err
 	}
+	fmt.Println("Adding sample passkeys to Profile")
+	if err := seedDemoPasskeys(ctx, primary.Configuration.Database.DSN); err != nil {
+		return err
+	}
 	fmt.Println("Storing the UniFi controller credentials")
 	if err := operator.StoreUniFiCredentials(controller.URL(), demoUniFiAPIKey); err != nil {
 		return err

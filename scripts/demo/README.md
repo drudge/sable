@@ -32,6 +32,12 @@ blocked domains, two allowed overrides, and a UniFi integration publishing
 thirty hosts across three networks into `corp.vandelay.com`,
 `warehouse.vandelay.com`, and `iot.vandelay.com`.
 
+## Passkey UI
+
+Open **Profile → Account** to see the Passkeys card below Account details and above Password. The fixture includes a sample MacBook Pro and iPhone with creation and last-used dates, plus the Add, Remove, and Disable password sign-in controls. These entries are labeled `(demo)` and cannot authenticate: their private keys are discarded. Keep the fixture password enabled while exploring the demo.
+
+`mage screenshots` also captures this page as `profile-passkeys.png`.
+
 ## How the numbers are produced
 
 Every figure in the screenshots is Sable's own output. The demo supplies inputs,

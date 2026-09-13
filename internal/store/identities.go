@@ -131,6 +131,9 @@ func (store *Store) UnlinkIdentity(ctx context.Context, userID int64, provider s
 		return fmt.Errorf("begin identity unlink: %w", err)
 	}
 	defer transaction.Rollback()
+	if err := store.lockSignInMethods(ctx, transaction); err != nil {
+		return err
+	}
 	var passwordLogin bool
 	if err := transaction.QueryRowContext(ctx,
 		"SELECT password_login FROM sable_user_profiles WHERE user_id = "+store.placeholder(1), userID,
@@ -146,7 +149,11 @@ func (store *Store) UnlinkIdentity(ctx context.Context, userID int64, provider s
 		userID, provider).Scan(&remaining); err != nil {
 		return fmt.Errorf("count remaining identities: %w", err)
 	}
-	if !passwordLogin && remaining == 0 {
+	var passkeys int
+	if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), userID).Scan(&passkeys); err != nil {
+		return err
+	}
+	if !passwordLogin && remaining == 0 && passkeys == 0 {
 		return errors.New("this account signs in only through that provider; turn password sign-in back on first")
 	}
 	if _, err := transaction.ExecContext(ctx,
@@ -275,15 +282,18 @@ func (store *Store) SetPasswordLogin(ctx context.Context, userID int64, allowed 
 		return fmt.Errorf("begin sign-in method update: %w", err)
 	}
 	defer transaction.Rollback()
+	if err := store.lockSignInMethods(ctx, transaction); err != nil {
+		return err
+	}
 	if !allowed {
 		var identities int
 		if err := transaction.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1), userID,
+			"SELECT (SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+") + (SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(2)+")", userID, userID,
 		).Scan(&identities); err != nil {
 			return fmt.Errorf("count linked identities: %w", err)
 		}
 		if identities == 0 {
-			return errors.New("link an identity provider to this account before turning off password sign-in")
+			return errors.New("add a passkey or link an identity provider before turning off password sign-in")
 		}
 		if err := store.ensurePasswordAdministratorRemains(ctx, transaction, userID); err != nil {
 			return err
@@ -302,7 +312,7 @@ func (store *Store) SetPasswordLogin(ctx context.Context, userID int64, allowed 
 }
 
 // ensurePasswordAdministratorRemains keeps one administrator able to sign in
-// with a password. Single sign-on depends on a service Sable does not run: if
+// with a password or passkey. Single sign-on depends on a service Sable does not run: if
 // the provider is down, its certificate expires, or a group claim changes
 // shape, an all-SSO deployment has nobody who can get in and fix it.
 func (store *Store) ensurePasswordAdministratorRemains(ctx context.Context, transaction *sql.Tx, excluding int64) error {
@@ -310,17 +320,18 @@ func (store *Store) ensurePasswordAdministratorRemains(ctx context.Context, tran
 	err := transaction.QueryRowContext(ctx, `
 SELECT COUNT(*) FROM sable_users AS users
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
-    AND profiles.disabled = FALSE AND profiles.password_login = TRUE
+    AND profiles.disabled = FALSE
 JOIN sable_user_roles AS assignments ON assignments.user_id = users.id
 JOIN sable_roles AS roles ON roles.id = assignments.role_id
-WHERE roles.name = 'Administrator' AND users.id <> `+store.placeholder(1)+`
-    AND users.password_hash <> ''`, excluding).Scan(&count)
+WHERE roles.name = 'Administrator' AND (
+ (users.id <> `+store.placeholder(1)+` AND profiles.password_login = TRUE AND users.password_hash <> '')
+ OR EXISTS (SELECT 1 FROM sable_passkeys WHERE user_id = users.id))`, excluding).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("count password administrators: %w", err)
 	}
 	if count == 0 {
 		return errors.New(
-			"at least one administrator must keep password sign-in, so a problem at the identity provider cannot lock everyone out")
+			"at least one administrator must keep password sign-in or a passkey, so a problem at the identity provider cannot lock everyone out")
 	}
 	return nil
 }

@@ -1,10 +1,12 @@
 # Connect single sign-on
 
 Let operators use an existing OpenID Connect identity provider while keeping a local recovery account. Enabling SSO adds a sign-in choice; it does not automatically remove local passwords.
+[Native Sable passkeys](passkeys.md) can be used alongside OIDC and passwords,
+including by OIDC-provisioned accounts that have never set a local password.
 
 ## Before you begin
 
-Prepare an OIDC client at your provider, a stable HTTPS console URL, and an administrator who can still sign in with a password. Decide whether unknown users may be provisioned and what, if anything, they receive by default.
+Prepare an OIDC client at your provider, a stable HTTPS console URL, and an administrator who can still sign in with a password or passkey. Decide whether unknown users may be provisioned and what, if anything, they receive by default.
 
 Managing the provider, account provisioning, and role mappings requires both `settings.write` and `users.write`. Use an administrator or a role with both permissions.
 
@@ -30,7 +32,7 @@ Turn verified-email linking off if your provider cannot reliably verify addresse
 
 Use a second browser session to test a non-administrator user and an intended administrator. Confirm their effective permissions, group mapping, and logout behavior. Keep the local administrator session open until these checks pass.
 
-Switch an account to SSO-only under its **Sign-In** settings only after testing. Sable preserves a password-capable administrator because it cannot repair an unavailable identity provider for you.
+Switch an account to SSO-only under its **Sign-In** settings only after testing. Sable requires an administrator with password or passkey sign-in because it cannot repair an unavailable identity provider for you.
 
 ## Troubleshoot safely
 

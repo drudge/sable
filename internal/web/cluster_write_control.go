@@ -51,7 +51,7 @@ func replicaLocalWrite(path string) bool {
 	// replica offers the button and then refuses the click, while password
 	// sign-in on the same page works. The callback is a GET and never reaches
 	// this gate.
-	case path == "/login", path == "/logout", path == ssoStartPath,
+	case path == passkeyLoginBegin, path == passkeyLoginFinish, path == "/login", path == "/logout", path == ssoStartPath,
 		path == "/ui/administration/sessions/revoke", path == "/ui/query":
 		return true
 	// Release channels, executable replacements, and restarts affect only
