@@ -1268,8 +1268,9 @@ func zoneRecordsFromRR(zoneName string, records []dns.RR) ([]ZoneRecord, error) 
 		if len(fields) < 5 {
 			return nil, fmt.Errorf("invalid transferred record %q", record.String())
 		}
+		recordType := dns.Type(record.Header().Rrtype).String()
 		result = append(result, ZoneRecord{
-			Name: name, Type: dns.TypeToString[record.Header().Rrtype],
+			Name: name, Type: recordType,
 			Value: strings.Join(fields[4:], " "), TTL: record.Header().Ttl,
 		})
 	}
@@ -1797,7 +1798,7 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 		refusal.Rcode = dns.RcodeRefused
 		return refusal, true
 	}
-	if zone.forwards(queryName) {
+	if zone.forwardsQuestion(queryName, question.Qtype, time.Now()) {
 		return nil, false
 	}
 	response := new(dns.Msg)
@@ -1935,7 +1936,7 @@ func (runtime *Runtime) chaseCNAME(response *dns.Msg, owner string, aliases []dn
 		}
 		visited[target] = struct{}{}
 		zone := runtime.authoritativeZoneFor(target)
-		if zone == nil || zone.kind == "catalog" || zone.forwards(target) {
+		if zone == nil || zone.kind == "catalog" || zone.forwardsQuestion(target, qtype, now) {
 			return chain
 		}
 		records, wildcardOwner, nameExists := zone.recordsAt(target, now)
@@ -2237,6 +2238,16 @@ func compareCanonicalWireName(left, right string) int {
 		}
 	}
 	return len(leftLabels) - len(rightLabels)
+}
+
+func (zone *authoritativeZone) forwardsQuestion(name string, qtype uint16, now time.Time) bool {
+	if zone.kind == "forwarder" {
+		records, _, _ := zone.recordsAt(name, now)
+		if len(cloneRecords(records[qtype], "", now)) > 0 || len(cloneRecords(records[dns.TypeCNAME], "", now)) > 0 || qtype == dns.TypeANY && hasActiveRecords(records, now) {
+			return false
+		}
+	}
+	return zone.forwards(name)
 }
 
 func (zone *authoritativeZone) forwards(name string) bool {
@@ -2570,7 +2581,17 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 	var exchangeErrors []error
 	for index, forwarder := range ordered {
 		attemptContext, release := forwarderBudget(ctx, len(ordered)-index)
-		response, err := handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
+		var response *dns.Msg
+		var err error
+		if forwarder == forwarding.ThisServer {
+			defaults := runtime.forwarders
+			if runtime.mode == "recursive" {
+				defaults = nil
+			}
+			response, err = handler.resolveNetworkContext(attemptContext, request, runtime, defaults)
+		} else {
+			response, err = handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
+		}
 		release()
 		if err == nil {
 			handler.upstreamHealth.markHealthy(forwarder)

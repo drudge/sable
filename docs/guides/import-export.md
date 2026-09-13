@@ -30,6 +30,14 @@ Fully qualified target names end in a dot. Inspect imported relative names caref
 
 Sable validates the complete candidate before activation. An invalid SOA, out-of-zone owner, malformed record, or conflicting CNAME prevents a safe import. Correct the source file instead of bypassing validation.
 
+## Import from a catalog
+
+The catalog importer discovers member zones and imports selected members independently. Choose Primary or Secondary for authoritative zones. Members with an apex forwarder and no apex NS records are created as Forwarder zones in either mode, retaining local records and supported routing settings. Forwarder imports do not keep synchronizing with the source.
+
+Technitium forwarder transfers support UDP, TCP, TLS, and QUIC, including priority and consistent DNSSEC validation settings. `this-server` uses Sable's default resolver path: configured upstreams in forward mode, or iterative resolution in recursive mode. Matching local records take precedence; other queries follow the forwarding rule. The source server's global resolver and proxy configuration is not transferred.
+
+Unsupported transports, explicit proxies, pinned-host address syntax, and mixed per-record DNSSEC validation settings produce an error without creating the affected zone. Review each result and test both local overrides and forwarded answers before moving clients.
+
 ## Export for review or migration
 
 Use the zone export action and keep the original file until the migration is verified. Compare critical records at the receiving server, not just the file size. Sable-specific ANAME and FWD behavior may not have an equivalent in another server's zone-file importer; migrate those deliberately.

@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// ThisServer selects the local resolver's default recursion or forwarding path.
+const ThisServer = "this-server"
+
 type Record struct {
 	Protocol string
 	Priority uint16
@@ -28,6 +31,12 @@ func ParseRecord(value string) (Record, error) {
 	if err != nil {
 		return Record{}, errors.New("FWD priority must be an unsigned 16-bit integer")
 	}
+	if strings.EqualFold(fields[2], ThisServer) {
+		if protocol != "udp" {
+			return Record{}, errors.New("this-server forwarding requires udp")
+		}
+		return Record{Protocol: protocol, Priority: uint16(priority), Address: ThisServer}, nil
+	}
 	address, err := normalizeAddress(fields[2], protocol)
 	if err != nil {
 		return Record{}, err
@@ -43,7 +52,12 @@ func (record Record) String() string {
 	return fmt.Sprintf("%s %d %s", record.Protocol, record.Priority, record.Address)
 }
 
-func (record Record) Endpoint() string { return record.Protocol + "://" + record.Address }
+func (record Record) Endpoint() string {
+	if record.Address == ThisServer {
+		return ThisServer
+	}
+	return record.Protocol + "://" + record.Address
+}
 
 func ParseEndpoint(value string) (protocol, address string, err error) {
 	protocol = "udp"

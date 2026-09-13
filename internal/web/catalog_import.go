@@ -136,6 +136,8 @@ func (server *Server) prepareCatalogImport(request *http.Request, view *pages.Ca
 			result.Message = "Synchronized as an independent Secondary. Ready to review for conversion."
 			if current.Type == "primary" {
 				result.Message = "Imported as an independent Primary. Sable is now the writable source; verify answers before moving clients."
+			} else if current.Type == "forwarder" {
+				result.Message = "Imported as an independent Forwarder. Routing settings were preserved; source changes will not synchronize. Verify answers before moving clients."
 			} else if err := zonemodel.CheckPrimaryConversion(current); err != nil {
 				result.Warning = true
 				result.Message = "Synchronized as an independent Secondary. Conversion blocked: " + err.Error()
@@ -165,10 +167,8 @@ func (server *Server) stageCatalogMember(ctx context.Context, request *http.Requ
 		return current, fmt.Errorf("transfer failed; no zone created: %w", err)
 	}
 	current.Records = configuredZoneRecords(records)
-	for _, record := range current.Records {
-		if strings.EqualFold(record.Type, "FWD") {
-			return current, errors.New("forwarder configuration must be recreated separately; no zone created")
-		}
+	if err := prepareCatalogForwarder(&current); err != nil {
+		return current, fmt.Errorf("forwarder import blocked; no zone created: %w", err)
 	}
 	if err := zonemodel.ValidateAll([]zonemodel.Zone{current}, server.tsigKeyNames(ctx)); err != nil {
 		return current, fmt.Errorf("invalid transferred zone; no zone created: %w", err)
@@ -180,7 +180,7 @@ func (server *Server) stageCatalogMember(ctx context.Context, request *http.Requ
 		if findZone(*zones, name) != nil {
 			return errors.New("already exists in Sable; left unchanged")
 		}
-		if request.FormValue("import_type") == "primary" {
+		if request.FormValue("import_type") == "primary" && current.Type != "forwarder" {
 			if request.FormValue("freeze_confirmed") != "true" {
 				return errors.New("confirm that source writes are paused; no zone created")
 			}
