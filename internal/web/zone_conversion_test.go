@@ -256,3 +256,94 @@ func TestPrimaryConversionAuditsOnlySuccessfulCommitAndBlocksReplica(t *testing.
 		t.Fatalf("audit = %+v", audit.events)
 	}
 }
+
+func TestSecondaryForwarderPromotion(t *testing.T) {
+	for _, scenario := range []string{"stored", "final sync", "failed sync", "invalid sync", "catalog", "missing freeze", "stale review"} {
+		t.Run(scenario, func(t *testing.T) {
+			stats := &conversionTestStats{}
+			server, configuration := newConversionServer(t, stats)
+			current := &configuration.zoneSnapshot.Zones[0]
+			current.Type = zonemodel.TypeSecondaryForwarder
+			current.DNSSECValidationDisabled = true
+			current.Records[1] = zonemodel.Record{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 this-server", Comments: "forwarding metadata"}
+			if scenario == "catalog" {
+				current.CatalogZone = "catalog.test"
+			}
+			form := conversionForm(*current)
+			if scenario == "missing freeze" {
+				form.Del("freeze_confirmed")
+			}
+			if scenario == "stale review" {
+				form.Set("confirmation", "stale")
+			}
+			if strings.Contains(scenario, "sync") {
+				form.Set("final_sync", "true")
+				stats.records = []dnsserver.ZoneRecord{
+					{Name: "@", Type: "SOA", TTL: 300, Value: "ns.secondary.test. hostmaster.secondary.test. 8 60 10 600 300"},
+					{Name: "@", Type: "TYPE65281", TTL: 300, Value: `\# 16 000b746869732d736572766572000000`},
+					{Name: "last", Type: "TXT", TTL: 300, Value: `"final edit"`},
+				}
+				if scenario == "failed sync" {
+					stats.err = errors.New("offline")
+				}
+				if scenario == "invalid sync" {
+					stats.records[1].Value = `\# 16 030b746869732d736572766572000000`
+				}
+			}
+			response := conversionRequest(server, form)
+			stored := configuration.zoneSnapshot.Zones[0]
+			if scenario != "stored" && scenario != "final sync" {
+				if response.Code == 200 || stored.Type != zonemodel.TypeSecondaryForwarder || len(stored.PrimaryServers) == 0 {
+					t.Fatalf("failed conversion changed zone: %d %+v", response.Code, stored)
+				}
+				return
+			}
+			if response.Code != 200 || stored.Type != "forwarder" || len(stored.PrimaryServers) != 0 || stored.PrimaryProtocol != "" || !stored.DNSSECValidationDisabled || stored.Records[1].Value != "udp 0 this-server" || stored.Records[1].Comments != "forwarding metadata" || conversionSerial(stored) <= 8 {
+				t.Fatalf("promotion: %d %s %+v", response.Code, response.Body.String(), stored)
+			}
+			if scenario == "final sync" && stored.Records[2].Name != "last" {
+				t.Fatal("final source edit was lost")
+			}
+		})
+	}
+}
+
+func TestSecondaryForwarderRecordsAreReadOnly(t *testing.T) {
+	server, configuration := newConversionServer(t, &conversionTestStats{})
+	configuration.zoneSnapshot.Zones[0].Type = zonemodel.TypeSecondaryForwarder
+	if zoneRecordsEditable(zonemodel.TypeSecondaryForwarder) {
+		t.Fatal("secondary forwarder marked writable")
+	}
+	for _, path := range []string{"/ui/zones/records/add", "/ui/zones/records/update", "/ui/zones/records/delete"} {
+		before := zonemodel.ConversionFingerprint(configuration.zoneSnapshot.Zones[0])
+		form := url.Values{"zone": {"secondary.test"}, "type": {"TXT"}, "name": {"new"}, "ttl": {"300"}, "value": {"test"}}
+		request := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		if before != zonemodel.ConversionFingerprint(configuration.zoneSnapshot.Zones[0]) || !strings.Contains(response.Body.String(), "read-only") {
+			t.Fatalf("write not rejected for %s: %s", path, response.Body.String())
+		}
+	}
+}
+
+func TestPromotedForwarderAllowsAddingTXTOverride(t *testing.T) {
+	server, configuration := newConversionServer(t, &conversionTestStats{})
+	current := &configuration.zoneSnapshot.Zones[0]
+	current.Type = zonemodel.TypeSecondaryForwarder
+	current.Records[1] = zonemodel.Record{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 this-server", Comments: "forwarding metadata"}
+	if response := conversionRequest(server, conversionForm(*current)); response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	form := url.Values{"zone": {"secondary.test"}, "name": {"verification"}, "type": {"TXT"}, "ttl": {"300"}, "text": {"new local override"}}
+	request := httptest.NewRequest("POST", "/ui/zones/records/add", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+	for _, record := range configuration.zoneSnapshot.Zones[0].Records {
+		if record.Name == "verification" && record.Type == "TXT" && record.Value == `"new local override"` {
+			return
+		}
+	}
+	t.Fatalf("promoted forwarder did not accept TXT override: %s", response.Body.String())
+}

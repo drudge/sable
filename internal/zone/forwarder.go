@@ -1,14 +1,18 @@
-package web
+package zone
 
 import (
 	"errors"
 	"strings"
 
 	"github.com/drudge/sable/internal/forwarding"
-	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
-func prepareCatalogForwarder(current *zonemodel.Zone) error {
+const TypeSecondaryForwarder = "secondary_forwarder"
+
+func IsForwarderType(kind string) bool { return kind == "forwarder" || kind == TypeSecondaryForwarder }
+
+// PrepareTransferredForwarder translates routing records while retaining the chosen ownership model.
+func PrepareTransferredForwarder(current *Zone, secondary bool) error {
 	var validation *bool
 	hasApexForwarder := false
 	hasApexNS := false
@@ -33,15 +37,22 @@ func prepareCatalogForwarder(current *zonemodel.Zone) error {
 	// Authoritative zones can contain forwarding records too. Only an apex
 	// forwarder without authoritative NS records identifies a Forwarder zone.
 	if !hasApexForwarder || hasApexNS {
+		if current.Type == TypeSecondaryForwarder {
+			return errors.New("source no longer contains a valid Forwarder zone")
+		}
 		if validation != nil {
 			return errors.New("Technitium forwarding records in authoritative zones require separate migration")
 		}
 		return nil
 	}
-	current.Type = "forwarder"
-	current.PrimaryServers = nil
-	current.PrimaryProtocol = ""
-	current.TSIGKey = ""
+	if secondary {
+		current.Type = TypeSecondaryForwarder
+	} else {
+		current.Type = "forwarder"
+		current.PrimaryServers = nil
+		current.PrimaryProtocol = ""
+		current.TSIGKey = ""
+	}
 	if validation != nil {
 		current.DNSSECValidationDisabled = !*validation
 	}

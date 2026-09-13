@@ -180,7 +180,7 @@ templ CatalogImportSelection(view CatalogImportView) {
 		if len(view.Members) == 0 {
 			<p>No member zones found.</p>
 		}
-		<p class="zone-import-help">Signed zones can synchronize but need a DNSSEC transition before conversion. Recognized Forwarder zones import as independent Forwarders in either mode; source changes will not synchronize. Import can take up to two minutes; each zone gets its own result.</p>
+		<p class="zone-import-help">Signed zones can synchronize but need a DNSSEC transition before conversion. Forwarder zones stay synchronized and read-only in Secondary mode, or become independent and editable in Primary mode. Import can take up to two minutes; each zone gets its own result.</p>
 	</section>
 }
 

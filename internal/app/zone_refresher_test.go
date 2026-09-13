@@ -271,3 +271,48 @@ func TestLateTransferCannotOverwriteConvertedPrimary(t *testing.T) {
 		t.Fatal("primary still tracked for refresh or expiry")
 	}
 }
+
+func TestSecondaryForwarderRefreshNotifyExpiryAndPromotion(t *testing.T) {
+	current := managedTestZone()
+	current.Type = zonemodel.TypeSecondaryForwarder
+	current.Records = []zonemodel.Record{
+		{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.secondary.test. hostmaster.secondary.test. 1 10 3 20 300"},
+		{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 this-server"},
+		{Name: "old", Type: "A", TTL: 300, Value: "192.0.2.1"},
+	}
+	configuration := &refreshTestConfiguration{snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{current}}}
+	service := &refreshTestDNS{changed: true, expired: make(map[string]bool), updated: []dnsserver.ZoneRecord{
+		{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.secondary.test. hostmaster.secondary.test. 2 10 3 20 300"},
+		{Name: "@", Type: "TYPE65281", TTL: 300, Value: `\# 16 000b746869732d736572766572000000`},
+		{Name: "new", Type: "TXT", TTL: 300, Value: `"refreshed override"`},
+	}}
+	refresher := newZoneRefresher(configuration, service, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	refresher.step(context.Background(), now)
+	refresher.handleNotification(context.Background(), dnsserver.ZoneNotification{Zone: current.Name, ReceivedAt: now.Add(time.Second)})
+	stored := configuration.snapshot.Zones[0]
+	if service.calls != 1 || stored.Type != zonemodel.TypeSecondaryForwarder || !stored.DNSSECValidationDisabled || len(stored.Records) != 3 || stored.Records[1].Value != "udp 0 this-server" || stored.Records[2].Name != "new" || stored.PrimaryServers[0] != current.PrimaryServers[0] {
+		t.Fatalf("refresh lost settings or replacements: %+v", stored)
+	}
+	service.updated[1].Value = `\# 16 030b746869732d736572766572000000`
+	refresher.step(context.Background(), now.Add(11*time.Second))
+	if configuration.updates != 1 || configuration.snapshot.Zones[0].Records[1].Value != "udp 0 this-server" {
+		t.Fatal("invalid refresh replaced the last good snapshot")
+	}
+	if !refresher.states[current.Name].nextAttempt.Equal(now.Add(14 * time.Second)) {
+		t.Fatal("retry timer not scheduled")
+	}
+	service.err = errors.New("source offline")
+	refresher.step(context.Background(), now.Add(22*time.Second))
+	if !service.expired[current.Name] {
+		t.Fatal("unreachable secondary forwarder did not expire")
+	}
+	if err := zonemodel.ConvertToPrimary(&configuration.snapshot.Zones[0], now.Add(23*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	calls := service.calls
+	refresher.step(context.Background(), now.Add(24*time.Second))
+	if service.calls != calls || service.expired[current.Name] || len(refresher.states) != 0 || configuration.snapshot.Zones[0].Type != "forwarder" {
+		t.Fatal("promoted forwarder continued synchronizing or remained expired")
+	}
+}

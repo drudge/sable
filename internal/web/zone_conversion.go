@@ -44,7 +44,7 @@ func conversionSerial(current zonemodel.Zone) uint32 {
 
 func (server *Server) convertZoneToPrimary(writer http.ResponseWriter, request *http.Request) {
 	selected := ""
-	server.updateZones(writer, request, &selected, "Zone converted to Primary; verify answers before moving clients and update writers", func(zones *[]zonemodel.Zone) error {
+	server.updateZones(writer, request, &selected, "Zone is now independently writable; verify answers before moving clients and update writers", func(zones *[]zonemodel.Zone) error {
 		selected = normalizeZoneName(request.FormValue("zone"))
 		current := findZone(*zones, selected)
 		if current == nil {
@@ -58,7 +58,7 @@ func (server *Server) convertZoneToPrimary(writer http.ResponseWriter, request *
 			return err
 		}
 		if request.FormValue("confirmation") != zonemodel.ConversionFingerprint(*current) {
-			return errors.New("zone changed since review; reopen Convert to Primary and review the current source, serial, and records")
+			return errors.New("zone changed since review; reopen the conversion dialog and review the current source, serial, and records")
 		}
 		if request.FormValue("freeze_confirmed") != "true" {
 			return errors.New("confirm that source edits and automatic update writers are frozen")
@@ -83,6 +83,15 @@ func (server *Server) convertZoneToPrimary(writer http.ResponseWriter, request *
 				return fmt.Errorf("final synchronization failed; the zone remains Secondary: %w", err)
 			}
 			transferred := configuredZoneRecords(records)
+			if current.Type == zonemodel.TypeSecondaryForwarder {
+				candidate := *current
+				candidate.Records = transferred
+				if err := zonemodel.PrepareTransferredForwarder(&candidate, true); err != nil {
+					return err
+				}
+				transferred = candidate.Records
+				current.DNSSECValidationDisabled = candidate.DNSSECValidationDisabled
+			}
 			// Retain local metadata for records that survive the final snapshot.
 			metadata := make(map[string]zonemodel.Record, len(current.Records))
 			var soaMetadata zonemodel.Record

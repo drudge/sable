@@ -18,7 +18,7 @@ func ConversionFingerprint(current Zone) string {
 }
 
 func CheckPrimaryConversion(current Zone) error {
-	if current.Type != "secondary" {
+	if current.Type != "secondary" && current.Type != TypeSecondaryForwarder {
 		return errors.New("only an independent Secondary zone can be converted to Primary")
 	}
 	if current.CatalogZone != "" || current.CatalogMemberID != "" || current.CatalogChangeOwner != "" {
@@ -48,7 +48,11 @@ func ConvertToPrimary(current *Zone, now time.Time) error {
 	if err := CheckPrimaryConversion(*current); err != nil {
 		return err
 	}
-	current.Type = "primary"
+	if current.Type == TypeSecondaryForwarder {
+		current.Type = "forwarder"
+	} else {
+		current.Type = "primary"
+	}
 	current.PrimaryServers = nil
 	current.PrimaryProtocol = ""
 	// TSIGKey authenticates outgoing transfers as well as upstream requests.

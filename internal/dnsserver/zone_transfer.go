@@ -372,10 +372,25 @@ func (handler *Handler) RefreshZone(
 ) ([]ZoneRecord, bool, error) {
 	zoneName = normalizeName(zoneName)
 	zoneType = strings.ToLower(strings.TrimSpace(zoneType))
-	if zoneType == "stub" {
+	// Translated FWD records do not retain the source wire representation needed
+	// to match IXFR deletions, so Secondary Forwarders always request AXFR.
+	if zoneType == "stub" || zoneType == "secondary_forwarder" {
 		fresh, err := handler.FetchZone(ctx, zoneName, zoneType, primaries, protocol, tsigKeyName)
 		if err != nil {
 			return nil, false, err
+		}
+		if zoneType == "secondary_forwarder" {
+			_, previousSOA, err := zoneRecordsToRR(zoneName, current)
+			if err != nil {
+				return nil, false, err
+			}
+			_, nextSOA, err := zoneRecordsToRR(zoneName, fresh)
+			if err != nil {
+				return nil, false, err
+			}
+			if nextSOA.Serial != previousSOA.Serial && int32(nextSOA.Serial-previousSOA.Serial) <= 0 {
+				return nil, false, errors.New("forwarder transfer returned an older or ambiguous SOA serial")
+			}
 		}
 		return fresh, !zoneRecordSetsEqual(current, fresh), nil
 	}

@@ -302,7 +302,18 @@ func TestCatalogForwarderImport(t *testing.T) {
 					}
 					return
 				}
-				if current == nil || current.Type != "forwarder" || len(current.PrimaryServers) != 0 || current.PrimaryProtocol != "" || current.TSIGKey != "" || current.CatalogZone != "" {
+				wantType, wantMessage := "forwarder", "independent Forwarder"
+				if mode == "secondary" {
+					wantType, wantMessage = "secondary_forwarder", "Secondary Forwarder"
+				}
+				if current == nil || current.Type != wantType || current.CatalogZone != "" {
+					t.Fatalf("wrong imported type: %+v", current)
+				}
+				if mode == "secondary" {
+					if len(current.PrimaryServers) != 1 || current.PrimaryServers[0] != "192.0.2.53:53" || current.PrimaryProtocol != "tcp" {
+						t.Fatalf("source lost: %+v", current)
+					}
+				} else if len(current.PrimaryServers) != 0 || current.PrimaryProtocol != "" || current.TSIGKey != "" {
 					t.Fatalf("not an independent forwarder: %+v", current)
 				}
 				wantForwarder := "udp 10 192.0.2.53:53"
@@ -312,7 +323,7 @@ func TestCatalogForwarderImport(t *testing.T) {
 				if len(current.Records) != 2 || current.Records[1].Value != wantForwarder || current.Records[1].TTL != 600 || current.DNSSECValidationDisabled != (scenario == "technitium") {
 					t.Fatalf("routing settings changed: %+v", current)
 				}
-				if !result.Results[0].Success || result.Results[0].Warning || !strings.Contains(result.Results[0].Message, "independent Forwarder") {
+				if !result.Results[0].Success || result.Results[0].Warning || !strings.Contains(result.Results[0].Message, wantMessage) {
 					t.Fatalf("incorrect result: %+v", result)
 				}
 			})

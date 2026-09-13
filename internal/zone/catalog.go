@@ -58,7 +58,7 @@ func IsProducerCatalog(current Zone) bool {
 // zone answers nothing and is exempt from the record rules every other zone
 // must satisfy.
 func AwaitingFirstTransfer(current Zone) bool {
-	return current.CatalogZone != "" && current.Type == "secondary" && len(current.Records) == 0
+	return current.CatalogZone != "" && (current.Type == "secondary" || current.Type == TypeSecondaryForwarder) && len(current.Records) == 0
 }
 
 // MemberLabel returns the <unique-N> label identifying a member zone inside a
@@ -551,7 +551,9 @@ func applyCatalogMembership(current *Zone, catalog Zone, member CatalogMember) {
 		// forces a fresh transfer, which is what a re-add means here.
 		current.Records = nil
 	}
-	current.Type = "secondary"
+	if current.Type != TypeSecondaryForwarder {
+		current.Type = "secondary"
+	}
 	current.CatalogZone = catalog.Name
 	current.CatalogGroup = member.Group
 	current.CatalogMemberID = member.Label

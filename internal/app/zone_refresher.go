@@ -105,7 +105,7 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		// A consumer catalog is refreshed on the same schedule as a secondary.
 		// Applying its new membership happens inside the zone transaction that
 		// stores the transferred records.
-		if current.Type != "secondary" && current.Type != "stub" && !zone.IsConsumerCatalog(current) {
+		if current.Type != "secondary" && current.Type != zone.TypeSecondaryForwarder && current.Type != "stub" && !zone.IsConsumerCatalog(current) {
 			continue
 		}
 		managed[current.Name] = struct{}{}
@@ -211,10 +211,17 @@ func (refresher *zoneRefresher) storeRecords(ctx context.Context, zoneName strin
 			return errors.New("zone was removed during refresh")
 		}
 		current := &(*zones)[index]
-		if current.Type != "secondary" && current.Type != "stub" && current.Type != "catalog" {
+		if current.Type != "secondary" && current.Type != zone.TypeSecondaryForwarder && current.Type != "stub" && current.Type != "catalog" {
 			return errors.New("zone type changed during refresh")
 		}
-		current.Records = configuredZoneRecords(records)
+		candidate := *current
+		candidate.Records = configuredZoneRecords(records)
+		if candidate.Type == zone.TypeSecondaryForwarder || candidate.Type == "secondary" {
+			if err := zone.PrepareTransferredForwarder(&candidate, true); err != nil {
+				return err
+			}
+		}
+		*current = candidate
 		return nil
 	})
 }

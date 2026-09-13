@@ -22,6 +22,7 @@ import (
 	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/trustanchor"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 const fallbackErrorCode = dns.RcodeServerFailure
@@ -482,7 +483,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 			zoneType = "primary"
 		}
 		if configuredZone.DNSSECValidationDisabled {
-			if zoneType != "forwarder" && zoneType != "stub" {
+			if !zonemodel.IsForwarderType(zoneType) && zoneType != "stub" {
 				return nil, fmt.Errorf("authoritative zone %q may not disable DNSSEC validation for a %s zone", zoneName, zoneType)
 			}
 			zoneInsecure = append(zoneInsecure, zoneName)
@@ -515,7 +516,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		// secondary. It is compiled into the zone map either way so that a
 		// published catalog can be served over AXFR/IXFR and journaled for
 		// incremental transfers.
-		if zoneType == "secondary" || (zoneType == "catalog" && len(configuredZone.PrimaryServers) > 0) {
+		if zoneType == "secondary" || zoneType == zonemodel.TypeSecondaryForwarder || (zoneType == "catalog" && len(configuredZone.PrimaryServers) > 0) {
 			managedZones[zoneName] = managedZone{kind: zoneType, primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
 		}
 		zone := &authoritativeZone{
@@ -616,10 +617,10 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 			}
 		}
 		zone.signed = hasDNSKEY && hasRRSIG
-		if len(zone.soa) != 1 || (zoneType != "forwarder" && len(zone.records[zoneName][dns.TypeNS]) == 0) {
+		if len(zone.soa) != 1 || (!zonemodel.IsForwarderType(zoneType) && len(zone.records[zoneName][dns.TypeNS]) == 0) {
 			return nil, fmt.Errorf("authoritative zone %q has invalid authority records", zoneName)
 		}
-		if zoneType == "forwarder" && len(zone.forwarders[zoneName]) == 0 {
+		if zonemodel.IsForwarderType(zoneType) && len(zone.forwarders[zoneName]) == 0 {
 			return nil, fmt.Errorf("forwarder zone %q requires an active apex FWD record", zoneName)
 		}
 		for owner, ordered := range zone.forwarders {
@@ -1151,7 +1152,7 @@ func (handler *Handler) FetchZone(
 	auth := handler.transferAuth(zoneName, tsigKeyName)
 	for _, primary := range primaries {
 		var records []dns.RR
-		if zoneType == "secondary" || zoneType == "catalog" {
+		if zoneType == "secondary" || zoneType == zonemodel.TypeSecondaryForwarder || zoneType == "catalog" {
 			records, err = handler.zoneTransfer(ctx, zoneName, primary, protocol, auth, timeout)
 		} else if zoneType == "stub" {
 			records, err = handler.fetchStubZone(ctx, zoneName, primary, protocol, timeout)
@@ -2241,7 +2242,7 @@ func compareCanonicalWireName(left, right string) int {
 }
 
 func (zone *authoritativeZone) forwardsQuestion(name string, qtype uint16, now time.Time) bool {
-	if zone.kind == "forwarder" {
+	if zonemodel.IsForwarderType(zone.kind) {
 		records, _, _ := zone.recordsAt(name, now)
 		if len(cloneRecords(records[qtype], "", now)) > 0 || len(cloneRecords(records[dns.TypeCNAME], "", now)) > 0 || qtype == dns.TypeANY && hasActiveRecords(records, now) {
 			return false
