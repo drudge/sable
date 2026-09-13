@@ -199,7 +199,13 @@ func (handler *Handler) resolveIterativeQuestion(
 	}
 	servers := append([]string(nil), runtime.rootHints...)
 	closestZone := ""
-	if zone, cachedServers, found := runtime.delegations.get(question.Name, time.Now()); found {
+	// DS records belong to the parent side of a delegation, even when the
+	// child authority was cached by an earlier lookup.
+	cacheName := question.Name
+	if question.Qtype == dns.TypeDS {
+		cacheName = parentFQDN(question.Name)
+	}
+	if zone, cachedServers, found := runtime.delegations.get(cacheName, time.Now()); found {
 		closestZone, servers = zone, cachedServers
 	}
 	visited := make(map[string]struct{})
@@ -222,10 +228,11 @@ func (handler *Handler) resolveIterativeQuestion(
 			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
 		}
 		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, zone, names, response.Extra, runtime, budget, depth+1)
+		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
 		if err != nil {
 			return nil, err
 		}
+		closestZone = zone
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 
@@ -259,10 +266,11 @@ func (handler *Handler) resolveIterativeQuestion(
 			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
 		}
 		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, zone, names, response.Extra, runtime, budget, depth+1)
+		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
 		if err != nil {
 			return nil, err
 		}
+		closestZone = zone
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
@@ -307,7 +315,9 @@ func (handler *Handler) exchangeIterative(
 		}
 		budget.remaining--
 		server := servers[(start+uint64(offset))%uint64(len(servers))]
-		response, err := handler.exchangeWithRetries(ctx, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
+		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		release()
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", server, err))
 			continue
@@ -365,6 +375,7 @@ func referralTTL(response *dns.Msg) uint32 {
 
 func (handler *Handler) referralServers(
 	ctx context.Context,
+	parentZone string,
 	zone string,
 	nameServers []string,
 	additional []dns.RR,
@@ -380,7 +391,9 @@ func (handler *Handler) referralServers(
 	resolved := make(map[string]bool, len(nameServers))
 	for _, record := range additional {
 		owner := normalizeName(record.Header().Name)
-		if _, matches := wanted[owner]; !matches || (owner != zone && !strings.HasSuffix(owner, "."+zone)) {
+		// Glue is scoped to the referring parent, which may supply sibling
+		// addresses (for example, the root supplies .com servers under .net).
+		if _, matches := wanted[owner]; !matches || !dns.IsSubDomain(dns.Fqdn(parentZone), dns.Fqdn(owner)) {
 			continue
 		}
 		if address, ok := addressFromRecord(record); ok {
