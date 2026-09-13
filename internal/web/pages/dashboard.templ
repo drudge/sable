@@ -927,13 +927,16 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 							<span>Sign in with { ssoLabel }</span>
 						</button>
 					</form>
-					<div class="auth-divider"><span>or</span></div>
 				}
     if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
      <div class="auth-form auth-sso" data-passkey-capability data-passkeys data-return-to={ returnTo }>
       <button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
       <p role="status" data-passkey-status></p>
      </div>
+    }
+    if !setup && ssoLabel != "" {
+     <div class="auth-divider"><span>or</span></div>
+    } else if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
      <div class="auth-divider" data-passkey-capability><span>or</span></div>
     }
 				<form class="auth-form" method="post" action={ ifThen(setup, "/setup", "/login") }>

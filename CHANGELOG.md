@@ -8,6 +8,13 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.1]
+
+- Stack OpenID Connect and passkey sign-in buttons together, with a single
+  **or** separator before password authentication.
+- Keep the separator correct when either method is disabled or passkeys are
+  unavailable in the browser. Initial administrator setup has no separator.
+
 ## [1.3.0]
 
 Sable 1.3.0 adds native passkeys for standalone servers and clusters, making
