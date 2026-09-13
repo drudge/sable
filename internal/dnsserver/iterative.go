@@ -199,7 +199,13 @@ func (handler *Handler) resolveIterativeQuestion(
 	}
 	servers := append([]string(nil), runtime.rootHints...)
 	closestZone := ""
-	if zone, cachedServers, found := runtime.delegations.get(question.Name, time.Now()); found {
+	// DS records belong to the parent side of a delegation, even when the
+	// child authority was cached by an earlier lookup.
+	cacheName := question.Name
+	if question.Qtype == dns.TypeDS {
+		cacheName = parentFQDN(question.Name)
+	}
+	if zone, cachedServers, found := runtime.delegations.get(cacheName, time.Now()); found {
 		closestZone, servers = zone, cachedServers
 	}
 	visited := make(map[string]struct{})
@@ -309,7 +315,9 @@ func (handler *Handler) exchangeIterative(
 		}
 		budget.remaining--
 		server := servers[(start+uint64(offset))%uint64(len(servers))]
-		response, err := handler.exchangeWithRetries(ctx, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
+		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		release()
 		if err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", server, err))
 			continue
