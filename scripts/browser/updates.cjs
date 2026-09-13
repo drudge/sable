@@ -90,6 +90,10 @@ const fs = require('node:fs/promises');
     assert.ok(scopeBounds.y >= 0 && scopeBounds.y + scopeBounds.height <= 844, 'scope menu opens above the notification');
     assert.match(await scopePage.locator(':focus').innerText(), /Entire cluster/);
     await scopePage.keyboard.press('Escape');
+    await scopeMenu.waitFor({state: 'hidden'});
+    // Popover toggle events update accessibility state asynchronously.
+    await scopePage.waitForFunction(() =>
+      document.querySelector('[data-update-scope-trigger]')?.getAttribute('aria-expanded') === 'false');
     assert.equal(await scopeTrigger.getAttribute('aria-expanded'), 'false');
     assert.equal(await scopeTrigger.evaluate(element => element === document.activeElement), true);
     await scopeTrigger.click();
