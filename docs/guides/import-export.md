@@ -2,6 +2,12 @@
 
 Use zone files to move DNS data between systems. Use an application backup to protect the entire Sable deployment. They solve different problems: a zone export does not contain users, private keys, cluster membership, or integration credentials.
 
+For a complete move from another service, see [Migrate from Technitium](technitium-migration.md), including instance and cluster setup, AXFR, and cutover checks.
+
+## Migration shortcuts in 1.2.0
+
+Use [Convert to Primary](technitium-migration.md#in-place-conversion) to take ownership of an independent unsigned Secondary without deleting it. For many zones, [Import from Catalog](technitium-migration.md#3d-import-catalog-members-in-bulk) creates independent zones in batches without subscribing to the source catalog. These actions require Sable 1.2.0 or later.
+
 ## Before you begin
 
 Export the destination zone or take a [backup](../backup.md) before replacing live data. Work on a Primary zone and on the writable node of a cluster. Secondary, Secondary Forwarder, Alias, and catalog-managed records belong to another source; do not import over them.

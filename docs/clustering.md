@@ -166,6 +166,8 @@ and synchronization, then updates the primary last. See the
 [update guide](guides/updates.md#roll-through-a-cluster) for requirements, failure
 handling, and manual upgrades of nodes that do not yet support this feature.
 
+### Manual rollout for older nodes or image-managed deployments
+
 For a two-node deployment:
 
 1. Create and export a backup from the primary.

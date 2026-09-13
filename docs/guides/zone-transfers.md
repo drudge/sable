@@ -2,6 +2,10 @@
 
 Use a Primary and Secondary when another DNS server needs an authoritative copy of a zone. Transfers move DNS data, not Sable users, policies, or console settings.
 
+For transfer staging followed by a change of write ownership, use the [Technitium migration guide](technitium-migration.md).
+
+Sable 1.2.0 can convert an independent unsigned Secondary to a Primary in place after a final synchronization. See the [conversion procedure](technitium-migration.md#in-place-conversion); 1.1.0 still requires the older export/remove/import procedure.
+
 ## Before you begin
 
 Prepare a working Primary zone and the secondary's stable address. Permit the required transfer transport and NOTIFY path between the servers. Synchronize their clocks for TSIG. Keep transfers denied until the receiving server and authentication are ready.

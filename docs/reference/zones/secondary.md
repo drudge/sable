@@ -30,6 +30,8 @@ Follow [Transfer zones securely](../../guides/zone-transfers.md) for a complete 
 
 ## Convert to Primary
 
+The conversion and one-time catalog-import actions described here require Sable 1.2.0 or later.
+
 Choose **Convert to Primary** from the zone action menu for an independent unsigned Secondary. Freeze source writes, review the source/serial/record count, and perform the default final synchronization before confirming. A failed synchronization or stale confirmation leaves the zone unchanged. Using the stored snapshot is an explicit alternative that can promote stale or expired data.
 
 Conversion uses the normal transaction and cluster replication path: identity, permissions, and history remain, and the SOA serial advances. Upstream server and transport settings are cleared; transfer ACLs, NOTIFY, and shared TSIG authentication remain. Dynamic updates are not enabled automatically. Existing SOA/NS targets, disabled status, and record expiry remain. Verify each node before moving clients and writers.

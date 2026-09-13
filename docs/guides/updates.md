@@ -29,9 +29,15 @@ without leaving the current page. Results, including failed checks, are cached f
 manual checks remain available. Nothing is installed automatically.
 
 Under **Settings → General → Software Updates**, turn off **Check for updates on sign-in** to disable automatic
-checks on this node, or set `updates.check_on_login = false` in `sable.toml`.
+checks on this node and click **Save Settings**, or set `updates.check_on_login = false` in `sable.toml`.
 The choice persists across restarts and is not replicated. Update readers can
 see notifications; changing the preference requires `settings.write`.
+
+**Include pre-releases** is available in the same Software Updates section.
+Both Settings controls wait for **Save Settings**. The About page retains its
+release-channel control and updates the same saved preference when changed.
+The choice is node-local; editing the release channel in Settings also requires
+`updates.apply` permission.
 
 The **About** page displays release notes and links the installed version to its
 GitHub release. Release notes from a successful check or installation survive
@@ -51,7 +57,7 @@ The console installs first and then offers a controlled restart. The old process
 
 ## Roll through a cluster
 
-Clustered nodes keep the **Rolling Updates** section visible even when updates are unavailable. A warning names the blocking condition, and update actions are hidden until supported. An active rollout can still offer **Stop rollout** to an authorized operator.
+Since 1.2.0, clustered nodes keep the **Rolling Updates** section visible even when updates are unavailable. A warning names the blocking condition, and update actions are hidden until supported. An active rollout can still offer **Stop rollout** to an authorized operator.
 
 From the primary, open **Cluster → Rolling Updates**, review **Release notes**,
 and choose **Update all**. The update notification also offers **Entire cluster**

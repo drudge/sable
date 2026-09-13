@@ -10,6 +10,8 @@ Verify a [test device uses Sable](connect-network.md). On a cluster, make policy
 
 Open **Blocked → Block Lists**, choose **Add Block List**, and select a curated source or enter a custom HTTP(S) subscription. Check that it downloads successfully and contributes domains before adding more sources.
 
+While a catalog or custom list downloads and compiles, its Add control shows a spinner and prevents duplicate submissions. The dialog stays open during the operation. Manual add/update failures show error notices; connection failures and unrendered HTTP errors produce a dismissible notice without clearing your custom URL. Correct the cause before retrying.
+
 Sable accepts domain lists, hosts-file lists, and common Adblock domain-rule syntax. Cosmetic rules and Adblock exception syntax are not imported as an allow policy; use Sable's explicit allowed-domain rules for exceptions.
 
 ![DNS Blocking showing the active policy, compiled domain count, and configured subscriptions](../assets/guide-screenshots/blocking.webp "Check Blocking Status and each subscription's health. The compiled domain count is not the number of queries blocked.")
@@ -35,6 +37,8 @@ Retest the client. DNS and application caches can delay the visible effect; dist
 ## Keep subscriptions healthy
 
 Use **Update Block Lists** to retry sources immediately. A previously successful source can keep using its cached list during a download failure while other sources update. A source with no successful cached download cannot safely contribute a complete replacement.
+
+Since 1.0.1, Hagezi Pro uses its working AdBlock feed. Existing subscriptions to the retired URL migrate automatically while retaining cached data. In Docker, a DNS lookup failure during download can come from container DNS rather than Sable forwarding; follow the [container DNS troubleshooting steps](install-docker.md#block-list-downloads-fail-with-a-dns-lookup-error).
 
 Inspect last success, last error, and retry status. Sable backs off failed sources rather than hammering them. Never interpret an unchanged domain count alone as evidence of a failed update: the source may simply contain the same names.
 

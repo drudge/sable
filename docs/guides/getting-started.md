@@ -2,6 +2,8 @@
 
 Get one Sable node answering queries, then try it from one device. Keep your current DNS service available until you have verified the replacement.
 
+Moving an existing deployment? Follow [Migrate from Technitium](technitium-migration.md) for zone imports, transfer staging, and a verified cutover.
+
 ## Before you begin
 
 - Choose a host with a stable IP address and persistent storage.
@@ -26,6 +28,7 @@ For Docker, create a persistent volume and publish both DNS protocols:
 ```sh
 docker volume create sable-data
 docker run --detach --name sable --restart unless-stopped \
+  --dns 1.1.1.1 --dns 9.9.9.9 \
   --publish 53:8053/tcp \
   --publish 53:8053/udp \
   --publish 127.0.0.1:5380:5380/tcp \
