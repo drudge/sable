@@ -1884,6 +1884,7 @@ func parseZoneFile(zone zonemodel.Zone, reader io.Reader) ([]zonemodel.Record, [
 		return nil, nil, errors.New("the zone file is too large")
 	}
 	filtered, skippedAPPRecords, customForwarders := filterTechnitiumZoneRecords(string(contents), zone)
+	filtered = normalizeImportedSOAOwner(filtered, zone.Name)
 	parser := dns.NewZoneParser(strings.NewReader(filtered), dns.Fqdn(zone.Name), "zone import")
 	parser.SetDefaultTTL(zone.DefaultTTL)
 	parser.SetIncludeAllowed(false)
@@ -1924,6 +1925,27 @@ func parseZoneFile(zone zonemodel.Zone, reader io.Reader) ([]zonemodel.Record, [
 		return nil, nil, errors.New("the zone file did not contain any supported records")
 	}
 	return records, skippedAPPRecords, nil
+}
+
+// Some exports omit the terminal dot on an otherwise fully qualified SOA
+// owner. Only normalize that apex SOA; other relative owners and record data
+// must still resolve against the zone origin.
+func normalizeImportedSOAOwner(contents, zoneName string) string {
+	lines := strings.SplitAfter(contents, "\n")
+	for index, line := range lines {
+		recordText, _, _ := strings.Cut(line, ";")
+		fields := strings.Fields(recordText)
+		if len(fields) < 2 || !strings.EqualFold(fields[0], zoneName) {
+			continue
+		}
+		for field := 1; field < len(fields) && field <= 3; field++ {
+			if strings.EqualFold(fields[field], "SOA") && zoneRecordPreamble(fields[1:field]) {
+				lines[index] = strings.Replace(line, fields[0], dns.Fqdn(fields[0]), 1)
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "")
 }
 
 func filterTechnitiumAPPRecords(contents string) (string, []string) {

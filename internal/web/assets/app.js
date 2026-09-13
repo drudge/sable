@@ -4007,6 +4007,129 @@
 	  const bothBlank = first.value === "" && second.value === "";
 	  if (submit) submit.disabled = message !== "" || (!optional && bothBlank) || (!bothBlank && (first.value === "" || second.value === ""));
 	};
+	const formatFileSize = (bytes) => {
+	  const unitSize = 1000;
+	  const units = ["bytes", "KB", "MB", "GB", "TB"];
+	  const unit = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(unitSize)), units.length - 1) : 0;
+	  const size = new Intl.NumberFormat(undefined, {maximumFractionDigits: unit === 0 ? 0 : 1}).format(bytes / unitSize ** unit);
+	  return `${size} ${bytes === 1 ? "byte" : units[unit]}`;
+	};
+	const zoneFileContents = new WeakMap();
+	const zoneDetectionRequests = new WeakMap();
+	const detectZoneName = (contents) => {
+	  const lines = contents.replace(/^\uFEFF/, "").split(/\r?\n/).map(line => line.split(";")[0]);
+	  const origin = lines.map(line => line.match(/^\s*\$ORIGIN\s+(\S+)/i)).find(Boolean);
+	  const soa = lines.map(line => line.match(/^(\S+)\s+(?:(?:IN|CH|HS|[0-9][0-9wdhms]*)\s+)*SOA\s/i)).find(Boolean);
+	  const name = (origin?.[1] || soa?.[1] || "").replace(/\.$/, "").toLowerCase();
+	  return name.length <= 253 && name.split(".").every(label => /^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/i.test(label)) ? name : "";
+	};
+	const updateDetectedZoneName = async (form) => {
+	  const name = form.querySelector("[data-zone-import-name]");
+	  if (!name || name.dataset.manual === "true") return;
+	  const request = {};
+	  zoneDetectionRequests.set(form, request);
+	  const fileInput = form.querySelector("[data-zone-file]");
+	  const file = fileInput.disabled ? null : fileInput.files?.[0];
+	  const help = form.querySelector("[data-zone-name-help]");
+	  let contents = fileInput.disabled ? form.querySelector("[data-zone-import-text]").value : "";
+	  let readFailed = false;
+	  if (file) {
+		name.value = "";
+		help.textContent = "Detecting zone name…";
+		if (!zoneFileContents.has(file)) zoneFileContents.set(file, file.text());
+		try { contents = await zoneFileContents.get(file); } catch { readFailed = true; }
+	  }
+	  if (zoneDetectionRequests.get(form) !== request || name.dataset.manual === "true") return;
+	  name.value = detectZoneName(contents);
+	  help.textContent = name.value ? `Detected from ${file ? "file" : "contents"}. You can edit this name.` :
+		readFailed ? "Couldn’t read the file to detect its zone name. Enter a zone name." :
+		file || contents.trim() ? "No zone name detected. Enter a zone name to continue." :
+		"Detected automatically from $ORIGIN or the SOA record.";
+	};
+	document.body.addEventListener("input", (event) => {
+	  if (!event.target.matches("[data-zone-import-name]")) return;
+	  event.target.dataset.manual = String(Boolean(event.target.value.trim()));
+	  const form = event.target.closest("form");
+	  if (event.target.value.trim()) form.querySelector("[data-zone-name-help]").textContent = "Your zone name will be used for this import.";
+	  else updateDetectedZoneName(form);
+	});
+	const updateZoneImport = (form) => {
+	  updateDetectedZoneName(form);
+	  const fileInput = form.querySelector("[data-zone-file]");
+	  const textarea = form.querySelector("[data-zone-import-text]");
+	  const file = fileInput.files?.[0];
+	  form.querySelector("[data-zone-import-submit]").disabled = fileInput.disabled ? !textarea.value.trim() : !file?.size;
+	  form.querySelector("[data-zone-file-selection]").hidden = !file;
+	  form.querySelector("[data-zone-file-name]").textContent = file?.name || "";
+	  form.querySelector("[data-zone-file-size]").textContent = file ? `${formatFileSize(file.size)} · ${file.size ? "Ready to import" : "File is empty"}` : "";
+	};
+	document.body.addEventListener("click", async (event) => {
+	  const source = event.target.closest("[data-zone-import-source]");
+	  if (!source) return;
+	  const form = source.closest("form");
+	  const textarea = source.querySelector("[data-zone-import-text]");
+	  const fileInput = source.querySelector("[data-zone-file]");
+	  const status = source.querySelector("[data-zone-import-status]");
+	  const mode = event.target.closest("[data-zone-import-mode]");
+	  if (mode) {
+		const selected = mode.dataset.zoneImportMode;
+		source.querySelectorAll("[data-zone-import-mode]").forEach(button => button.setAttribute("aria-pressed", String(button === mode)));
+		source.querySelectorAll("[data-zone-import-panel]").forEach(panel => { panel.hidden = panel.dataset.zoneImportPanel !== selected; });
+		fileInput.disabled = selected !== "file";
+		textarea.disabled = selected !== "text";
+		status.textContent = "";
+		updateZoneImport(form);
+		if (selected === "text") textarea.focus();
+	  }
+	  if (event.target.closest("[data-zone-file-remove]")) {
+		fileInput.value = "";
+		updateZoneImport(form);
+		fileInput.focus();
+	  }
+	  const paste = event.target.closest("[data-zone-clipboard]");
+	  if (paste) {
+		const pasteShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘V" : "Ctrl+V";
+		const showKeyboardPaste = () => {
+		  paste.dataset.keyboardPaste = "true";
+		  paste.textContent = `Paste with ${pasteShortcut}`;
+		  status.textContent = `Press ${pasteShortcut} to paste into the text box below.`;
+		  textarea.focus();
+		};
+		if (paste.dataset.keyboardPaste === "true") {
+		  showKeyboardPaste();
+		  return;
+		}
+		paste.disabled = true;
+		try {
+		  const contents = await navigator.clipboard.readText();
+		  if (contents) textarea.value = contents;
+		  status.textContent = contents ? "Clipboard contents pasted. Review before importing." : "Your clipboard is empty. Paste or type contents below.";
+		  updateZoneImport(form);
+		} catch {
+		  showKeyboardPaste();
+		} finally {
+		  paste.disabled = false;
+		  if (!textarea.disabled) textarea.focus();
+		}
+	  }
+	});
+	["dragover", "dragleave", "drop"].forEach(type => document.body.addEventListener(type, (event) => {
+	  const dropzone = event.target.closest("[data-zone-dropzone]");
+	  if (!dropzone) return;
+	  event.preventDefault();
+	  dropzone.classList.toggle("is-dragging", type === "dragover");
+	  if (type !== "drop") return;
+	  const source = dropzone.closest("[data-zone-import-source]");
+	  const files = event.dataTransfer?.files;
+	  if (files?.length !== 1) {
+		source.querySelector("[data-zone-import-status]").textContent = "Choose one zone file at a time.";
+		return;
+	  }
+	  const input = source.querySelector("[data-zone-file]");
+	  input.files = files;
+	  input.dispatchEvent(new Event("change", {bubbles: true}));
+	}));
+
 	document.body.addEventListener("input", (event) => {
 	  const form = event.target.closest?.("[data-passphrase-pair]");
 	  if (form) syncPassphrasePair(form);
@@ -4187,10 +4310,8 @@
 		return;
 	  }
 	  if (event.target.matches("[data-zone-import-text]")) {
-		const form = event.target.closest("form");
-		const file = form?.querySelector("[data-zone-file]");
-		const submit = form?.querySelector("[data-zone-import-submit]");
-		if (submit) submit.disabled = !event.target.value.trim() && !file?.files?.length;
+		event.target.closest("form").querySelector("[data-zone-import-status]").textContent = "";
+		updateZoneImport(event.target.closest("form"));
 		return;
 	  }
 
@@ -4337,21 +4458,9 @@
 		return;
 	  }
 	  if (event.target.matches("[data-zone-file]")) {
-		const file = event.target.files?.[0];
 		const form = event.target.closest("form");
-		const textarea = form?.querySelector("[data-zone-import-text]");
-		const filename = form?.querySelector("[data-zone-file-name]");
-		const submit = form?.querySelector("[data-zone-import-submit]");
-		if (filename) filename.textContent = file?.name || "No file selected";
-		if (submit) submit.disabled = !file && !textarea?.value.trim();
-		if (file && textarea) {
-		  file.text().then((contents) => {
-			textarea.value = contents;
-			textarea.dispatchEvent(new Event("input", {bubbles: true}));
-		  }).catch(() => {
-			if (filename) filename.textContent = `${file.name} (preview unavailable)`;
-		  });
-		}
+		form.querySelector("[data-zone-import-status]").textContent = "";
+		updateZoneImport(form);
 		return;
 	  }
 	  if (event.target.matches("[data-zone-type-filter], [data-zone-status-filter]")) {
@@ -4365,6 +4474,11 @@
 	  if (event.target.matches("[data-domain-import]") && event.target.files?.length) {
 		event.target.form?.requestSubmit();
 	  }
+	});
+
+	document.body.addEventListener("click", (event) => {
+	  const action = event.target.closest(".zone-import-menu button");
+	  if (action && !action.disabled) action.closest("details").removeAttribute("open");
 	});
 
 	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open]";

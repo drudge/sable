@@ -10,6 +10,7 @@ async function check(page, label, action) {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
   try {
     await require('./block-lists.cjs')(browser, process.argv[2]);
+    await require('./zone-import.cjs')(browser, process.argv[2]);
     const page = await browser.newPage();
     page.setDefaultTimeout(10000);
     const errors = [];
