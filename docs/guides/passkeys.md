@@ -108,12 +108,12 @@ separate allowed-origins list is needed.
 | Console address | RP ID |
 | --- | --- |
 | `https://dns.example.com` | `example.com` |
-| `https://ns1.penree.net` | `penree.net` |
-| `https://ns2.penree.net` | `penree.net` |
+| `https://ns1.vandelay.com` | `vandelay.com` |
+| `https://ns2.vandelay.com` | `vandelay.com` |
 | `http://localhost:5391` | `localhost` |
 
-For a cluster named `ns.penree.net` with nodes `ns1.penree.net` and
-`ns2.penree.net`, the RP ID is `penree.net`. The cluster domain itself does not
+For a cluster named `ns.vandelay.com` with nodes `ns1.vandelay.com` and
+`ns2.vandelay.com`, the RP ID is `vandelay.com`. The cluster domain itself does not
 set the RP ID. Sable handles public suffixes such as `co.uk` and private hosting
 suffixes when deriving the registrable domain.
 
@@ -129,8 +129,8 @@ Sable recognizes the configured HTTPS listener port and standard HTTPS port
 Adding or removing a configured identity changes the trusted origins without
 maintaining another passkey-specific list.
 
-After replication, a credential registered on `ns1.penree.net` can sign in on
-`ns2.penree.net` when both addresses are trusted. Joining a cluster, promoting a
+After replication, a credential registered on `ns1.vandelay.com` can sign in on
+`ns2.vandelay.com` when both addresses are trusted. Joining a cluster, promoting a
 replica, or removing the old primary does not change the RP ID. Browser sessions
 and in-progress authentication challenges are node-local: begin a new sign-in
 on the replacement node if failover interrupts a login.
