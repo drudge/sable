@@ -61,6 +61,12 @@ func TestBrowserConsoleFixes(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		view := pages.DashboardView{CSRFToken: "fixture-csrf", CanSettings: true, CanWriteSettings: true, CanZones: true, CanLogs: true, CanBlocking: true, CanWriteBlocking: true, BlockingEnabled: true}
 		var content templ.Component = pages.BlockingContent(pages.BlockingPageView{ActiveTab: "lists", RemoteListCount: 1})
+		if r.URL.Query().Has("catalog-import") {
+			content = pages.CatalogImportContent(pages.CatalogImportView{})
+		}
+		if r.URL.Query().Has("zone-import") {
+			content = pages.ZonesContent(pages.ZonesPageView{CanCreate: true})
+		}
 		if r.URL.Query().Has("about") {
 			content = pages.AboutContent(pages.AboutPageView{
 				Console: view, Commit: "abcdef0123456789abcdef0123456789abcdef0123",

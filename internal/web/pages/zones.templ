@@ -570,8 +570,13 @@ templ ZoneListView(view ZonesPageView) {
 			<div><h1>Zones</h1><p>{ fmt.Sprint(len(view.Zones)) } zones configured</p></div>
 			if view.CanCreate {
 				<div class="zone-heading-actions">
- <button type="button" class="button outline zone-primary-action" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("download")<span>Import from Catalog</span></button>
-					<button class="button outline zone-primary-action" type="button" aria-label="Import zone" title="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("upload")<span>Import Zone</span></button>
+					<details class="pause-menu zone-import-menu">
+						<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import…</span>@Icon("chevron-down")</summary>
+						<div>
+							<button type="button" aria-label="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("file-text")<span><strong>From file or text</strong><small>Upload a zone file or paste records</small></span></button>
+							<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>
+						</div>
+					</details>
 					<button class="button zone-primary-action" type="button" aria-label="Add zone" title="Add zone" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
 				</div>
 			}
@@ -1231,6 +1236,36 @@ templ DeleteZoneDialog(zone ZoneView, id string) {
 	</dialog>
 }
 
+templ ZoneImportSource(id string, placeholder string) {
+	<div class="zone-import-input" data-zone-import-source>
+		<div class="zone-import-modes" role="group" aria-label="Import source">
+			<button type="button" data-zone-import-mode="file" aria-pressed="true">@Icon("upload") Upload file</button>
+			<button type="button" data-zone-import-mode="text" aria-pressed="false">@Icon("file-text") Paste or enter text</button>
+		</div>
+		<div data-zone-import-panel="file">
+			<label class="zone-import-dropzone" data-zone-dropzone>
+				<svg class="zone-import-dropzone-border" aria-hidden="true" focusable="false"><rect x="1" y="1" rx="8"></rect></svg>
+				<input type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file aria-label="Choose zone file"/>
+				<span class="zone-import-upload-icon">@Icon("upload")</span>
+				<strong>Drop your zone file here</strong>
+				<span>or <span class="zone-import-browse">browse files</span></span>
+				<small>BIND or Technitium · .zone, .txt, .db</small>
+			</label>
+			<div class="zone-import-file" data-zone-file-selection hidden>
+				@Icon("file-text")
+				<div><strong data-zone-file-name></strong><small data-zone-file-size></small></div>
+				<button class="button outline icon-button" type="button" data-zone-file-remove aria-label="Remove selected file">@Icon("x")</button>
+			</div>
+		</div>
+		<div class="zone-import-editor" data-zone-import-panel="text" hidden>
+			<div class="zone-import-editor-heading"><label for={ id + "-text" }>Zone file contents</label><button class="button outline" type="button" data-zone-clipboard>Paste from clipboard</button></div>
+			<textarea id={ id + "-text" } name="zone_text" data-zone-import-text placeholder={ placeholder } spellcheck="false" disabled></textarea>
+			<p class="zone-import-help">Paste your zone file or type records in BIND format.</p>
+		</div>
+		<p class="zone-import-help" data-zone-import-status role="status" aria-live="polite"></p>
+	</div>
+}
+
 templ ImportZoneDialog(zone ZoneView, id string) {
 	<dialog class="custom-server-dialog isotope-zone-import-dialog" id={ id } aria-labelledby={ id + "-title" }>
 		<div class="dialog-header">
@@ -1240,15 +1275,7 @@ templ ImportZoneDialog(zone ZoneView, id string) {
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
-			<label class="zone-import-source">
-				<span>Zone File Contents</span>
-				<textarea name="zone_text" data-zone-import-text placeholder={ "$ORIGIN " + zone.Name + ".\n@  3600  IN  A  192.0.2.1" } spellcheck="false"></textarea>
-			</label>
-			<div class="zone-file-picker">
-				<input class="sr-only" id={ id + "-file" } type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file/>
-				<label class="button outline" for={ id + "-file" }>@Icon("upload")<span>Load from file</span></label>
-				<span data-zone-file-name>No file selected</span>
-			</div>
+			@ZoneImportSource(id, "$ORIGIN " + zone.Name + ".\n@  3600  IN  A  192.0.2.1")
 			<div class="zone-import-options">
 				<label class="zone-import-option">
 					<input type="checkbox" name="overwrite" value="true" checked/>
@@ -1276,17 +1303,9 @@ templ ImportNewZoneDialog() {
 		</div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import-new" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
-			<label><span>Zone Name <small>(optional)</small></span><input class="mono-input" name="zone" placeholder="Inferred from $ORIGIN or SOA" autocomplete="off"/></label>
-			<label class="zone-import-source">
-				<span>Zone File Contents</span>
-				<textarea name="zone_text" data-zone-import-text placeholder="$ORIGIN example.com.&#10;@  3600  IN  SOA  ns1.example.com. hostmaster.example.com. 1 3600 600 1209600 300" spellcheck="false"></textarea>
-			</label>
-			<div class="zone-file-picker">
-				<input class="sr-only" id="import-new-zone-file" type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file/>
-				<label class="button outline" for="import-new-zone-file">@Icon("upload")<span>Load from file</span></label>
-				<span data-zone-file-name>No file selected</span>
-			</div>
-			<p class="zone-import-help">Zone Name is only required when the file does not include <code>$ORIGIN</code> or an absolute SOA owner.</p>
+			@ZoneImportSource("import-new-zone", "$ORIGIN example.com.\n@  3600  IN  SOA  ns1.example.com. hostmaster.example.com. 1 3600 600 1209600 300")
+			<label><span>Zone name <small>Optional</small></span><input class="mono-input" name="zone" placeholder="example.com" autocomplete="off" data-zone-import-name aria-describedby="import-new-zone-help"/></label>
+			<p class="zone-import-help" id="import-new-zone-help" data-zone-name-help aria-live="polite">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>
 			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button></footer>
 		</form>
 	</dialog>
