@@ -79,6 +79,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	if err != nil {
 		return err
 	}
+	// Run is the process lifecycle boundary. If a worker outlives its shutdown
+	// deadline, leave its database open until process exit rather than close a
+	// dependency it may still be using. Incomplete shutdown is returned as an error.
 	storesSafe := true
 	defer func() {
 		if storesSafe {
@@ -101,7 +104,10 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		return fmt.Errorf("start server log recorder: %w", err)
 	}
 	defer func() {
-		closeServerLogRecorder(serverLogRecorder, initial)
+		if err := closeServerLogRecorder(serverLogRecorder, initial); err != nil {
+			storesSafe = false
+			runError = errors.Join(runError, fmt.Errorf("close server log recorder: %w", err))
+		}
 	}()
 	runtimeLogs.Attach(serverLogRecorder)
 	secretVault, err := secrets.Open(initial.SecuritySecretKeyPath(configurationDirectory), database)
@@ -568,7 +574,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	queryContext, queryCancel := recorderContextForShutdown(shutdownContext, shutdownTimeout)
 	queryLogError := queryRecorder.Close(queryContext)
 	queryCancel()
-	if !runtimeDrained {
+	if !runtimeDrained || queryLogError != nil {
 		storesSafe = false
 	}
 	shutdownError := errors.Join(webError, listenerError, workerError, clusterError, handlerError, cacheError, queryLogError)
@@ -740,14 +746,12 @@ func recorderContextForShutdown(ctx context.Context, timeout time.Duration) (con
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-// closeServerLogRecorder flushes on the way out. It takes no error return
-// because it runs from a defer: a failure to persist the last few lines is
-// reported on stderr by the recorder itself, and there is no caller left to
-// hand it to.
-func closeServerLogRecorder(recorder *serverlog.Recorder, configuration config.Config) {
+// closeServerLogRecorder flushes startup and shutdown logs before the database
+// closes. A timeout leaves the database available until the process exits.
+func closeServerLogRecorder(recorder *serverlog.Recorder, configuration config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), configuration.Server.ShutdownTimeout.Duration)
 	defer cancel()
-	_ = recorder.Close(ctx)
+	return recorder.Close(ctx)
 }
 
 func serverLogWorkerChange(active, candidate config.ServerLog) error {
