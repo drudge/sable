@@ -2372,20 +2372,12 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 			return templ_7745c5c3_Err
 		}
 		if view.ExistingClusterCA {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 230, "<div class=\"cluster-dialog-note compact\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = Icon("shield-check").Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 231, "<p><strong>Keep existing private CA</strong><span>Your current CA and HTTPS certificate will be kept unless you explicitly confirm replacement below.</span></p></div><label><input type=\"checkbox\" name=\"replace_cluster_ca\" value=\"confirmed\"><span>Replace this node's CA and HTTPS certificate. I understand existing enrollment tokens and other nodes' trust may stop working, replicas may need to re-enroll, and Sable must restart. Previous certificate files will be preserved for recovery.</span></label> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 230, "<label class=\"field-control switch-row cluster-ca-replacement\"><span><strong>Replace existing CA</strong><small>Off keeps your current CA and certificate. Turning this on confirms replacement: existing tokens and member trust may stop working, and replicas may need to re-enroll. A restart is required; previous files are kept for recovery.</small></span><input type=\"checkbox\" name=\"replace_cluster_ca\" value=\"confirmed\"></label> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 232, "<label><span>HTTPS Listen Address</span><input name=\"generated_https_listen\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 231, "<label><span>HTTPS Listen Address</span><input name=\"generated_https_listen\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2398,7 +2390,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 233, "\" placeholder=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 232, "\" placeholder=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2411,7 +2403,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 234, "\"><small>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 233, "\"><small>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2424,7 +2416,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 235, "</small></label> <input type=\"hidden\" name=\"generated_storage_dir\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 234, "</small></label> <input type=\"hidden\" name=\"generated_storage_dir\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2437,12 +2429,12 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 236, "\"> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 235, "\"> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if workflow == "primary" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "<div class=\"cluster-dialog-note compact\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 236, "<div class=\"cluster-dialog-note compact\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2450,12 +2442,12 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 238, "<p><strong>Automatic private trust</strong><span>Sable includes the public CA in enrollment tokens so replicas trust this node automatically.</span></p></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "<p><strong>Automatic private trust</strong><span>Sable includes the public CA in enrollment tokens so replicas trust this node automatically.</span></p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "<div class=\"cluster-dialog-note compact\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 238, "<div class=\"cluster-dialog-note compact\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2463,12 +2455,12 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 240, "<p><strong>This is ns2's endpoint</strong><span>The primary URL and enrollment token are entered on the next step. The primary's CA trust is carried in that token.</span></p></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "<p><strong>This is ns2's endpoint</strong><span>The primary URL and enrollment token are entered on the next step. The primary's CA trust is carried in that token.</span></p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 241, "<details class=\"cluster-certificate-advanced\"><summary>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 240, "<details class=\"cluster-certificate-advanced\"><summary>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2476,7 +2468,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 242, "<span>Advanced certificate options</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 241, "<span>Advanced certificate options</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2484,7 +2476,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 243, "</summary><div class=\"cluster-certificate-advanced-content\"><label><span>Validity (days)</span><input type=\"number\" name=\"generated_valid_days\" value=\"365\" min=\"1\" max=\"3650\"></label><label><span>Additional DNS Names and IPs (optional)</span><textarea name=\"generated_additional_names\" rows=\"2\" placeholder=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 242, "</summary><div class=\"cluster-certificate-advanced-content\"><label><span>Validity (days)</span><input type=\"number\" name=\"generated_valid_days\" value=\"365\" min=\"1\" max=\"3650\"></label><label><span>Additional DNS Names and IPs (optional)</span><textarea name=\"generated_additional_names\" rows=\"2\" placeholder=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2497,17 +2489,17 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 244, "\"></textarea><small>The hostname or IP from the advertised HTTPS URL is included automatically.</small></label></div></details></div><div class=\"cluster-certificate-panel\" data-cluster-certificate-panel=\"import\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 243, "\"></textarea><small>The hostname or IP from the advertised HTTPS URL is included automatically.</small></label></div></details></div><div class=\"cluster-certificate-panel\" data-cluster-certificate-panel=\"import\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.CertificateSource != "import" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, " hidden")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 244, " hidden")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, "><input type=\"hidden\" name=\"manual_import_storage_dir\" value=\"data/tls/manual\"><label><span>HTTPS Listen Address</span><input name=\"import_https_listen\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "><input type=\"hidden\" name=\"manual_import_storage_dir\" value=\"data/tls/manual\"><label><span>HTTPS Listen Address</span><input name=\"import_https_listen\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2520,7 +2512,7 @@ func ClusterNodeOnboardingForm(view ClusterPageView, workflow string) templ.Comp
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 247, "\" placeholder=\"0.0.0.0:5443\"></label><label><span>Certificate Chain (PEM)</span><textarea name=\"manual_certificate_pem\" rows=\"5\" spellcheck=\"false\" placeholder=\"-----BEGIN CERTIFICATE-----\"></textarea></label><label><span>Private Key (PEM)</span><textarea name=\"manual_private_key_pem\" rows=\"5\" spellcheck=\"false\" placeholder=\"-----BEGIN PRIVATE KEY-----\"></textarea></label></div></div></section></div><div class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close data-cluster-wizard-cancel>Cancel</button><button class=\"button outline\" type=\"button\" data-cluster-wizard-back hidden>Back</button><button class=\"button\" type=\"button\" data-cluster-wizard-next>Continue</button><button class=\"button\" type=\"submit\" data-cluster-wizard-submit hidden>Save &amp; Continue</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, "\" placeholder=\"0.0.0.0:5443\"></label><label><span>Certificate Chain (PEM)</span><textarea name=\"manual_certificate_pem\" rows=\"5\" spellcheck=\"false\" placeholder=\"-----BEGIN CERTIFICATE-----\"></textarea></label><label><span>Private Key (PEM)</span><textarea name=\"manual_private_key_pem\" rows=\"5\" spellcheck=\"false\" placeholder=\"-----BEGIN PRIVATE KEY-----\"></textarea></label></div></div></section></div><div class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close data-cluster-wizard-cancel>Cancel</button><button class=\"button outline\" type=\"button\" data-cluster-wizard-back hidden>Back</button><button class=\"button\" type=\"button\" data-cluster-wizard-next>Continue</button><button class=\"button\" type=\"submit\" data-cluster-wizard-submit hidden>Save &amp; Continue</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2549,7 +2541,7 @@ func ClusterACMECredentialFields(view ClusterPageView) templ.Component {
 			templ_7745c5c3_Var105 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "<div class=\"cluster-acme-credentials\"><div class=\"field-grid two\" data-acme-credentials=\"cloudflare\" hidden><label><span>API Token</span><input type=\"password\" name=\"cloudflare_api_token\" autocomplete=\"new-password\"></label><label><span>Zone ID (optional)</span><input name=\"cloudflare_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"porkbun\" hidden><label><span>API Key</span><input type=\"password\" name=\"porkbun_api_key\"></label><label><span>Secret API Key</span><input type=\"password\" name=\"porkbun_secret\"></label></div><div class=\"field-grid three\" data-acme-credentials=\"namecheap\" hidden><label><span>API Username</span><input name=\"namecheap_username\"></label><label><span>API Key</span><input type=\"password\" name=\"namecheap_api_key\"></label><label><span>Allow-listed Client IP</span><input name=\"namecheap_client_ip\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"godaddy\" hidden><label><span>API Token</span><input type=\"password\" name=\"godaddy_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"digitalocean\" hidden><label><span>API Token</span><input type=\"password\" name=\"digitalocean_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"hetzner\" hidden><label><span>API Token</span><input type=\"password\" name=\"hetzner_api_token\"></label><label><span>Zone ID (optional)</span><input name=\"hetzner_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"route53\" hidden><label><span>Access Key ID</span><input name=\"route53_access_key_id\"></label><label><span>Secret Access Key</span><input type=\"password\" name=\"route53_secret_access_key\"></label><label><span>Hosted Zone ID</span><input name=\"route53_zone_id\"></label><label><span>Session Token (optional)</span><input type=\"password\" name=\"route53_session_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"ovh\" hidden><label><span>API Endpoint</span><select name=\"ovh_endpoint\" data-styled-select><option value=\"ovh-eu\">Europe</option><option value=\"ovh-ca\">Canada</option><option value=\"ovh-us\">United States</option></select></label><label><span>Application Key</span><input name=\"ovh_application_key\"></label><label><span>Application Secret</span><input type=\"password\" name=\"ovh_application_secret\"></label><label><span>Consumer Key</span><input type=\"password\" name=\"ovh_consumer_key\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"rfc2136\" hidden><label><span>Authoritative Server</span><input name=\"rfc2136_server\" placeholder=\"dns.example.com:53\"></label><label><span>TSIG Key Name</span><input name=\"rfc2136_tsig_name\"></label><label><span>TSIG Secret</span><input type=\"password\" name=\"rfc2136_tsig_secret\"></label><label><span>TSIG Algorithm</span><select name=\"rfc2136_tsig_algorithm\" data-styled-select><option value=\"hmac-sha256\">HMAC-SHA256</option><option value=\"hmac-sha384\">HMAC-SHA384</option><option value=\"hmac-sha512\">HMAC-SHA512</option></select></label></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 247, "<div class=\"cluster-acme-credentials\"><div class=\"field-grid two\" data-acme-credentials=\"cloudflare\" hidden><label><span>API Token</span><input type=\"password\" name=\"cloudflare_api_token\" autocomplete=\"new-password\"></label><label><span>Zone ID (optional)</span><input name=\"cloudflare_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"porkbun\" hidden><label><span>API Key</span><input type=\"password\" name=\"porkbun_api_key\"></label><label><span>Secret API Key</span><input type=\"password\" name=\"porkbun_secret\"></label></div><div class=\"field-grid three\" data-acme-credentials=\"namecheap\" hidden><label><span>API Username</span><input name=\"namecheap_username\"></label><label><span>API Key</span><input type=\"password\" name=\"namecheap_api_key\"></label><label><span>Allow-listed Client IP</span><input name=\"namecheap_client_ip\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"godaddy\" hidden><label><span>API Token</span><input type=\"password\" name=\"godaddy_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"digitalocean\" hidden><label><span>API Token</span><input type=\"password\" name=\"digitalocean_api_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"hetzner\" hidden><label><span>API Token</span><input type=\"password\" name=\"hetzner_api_token\"></label><label><span>Zone ID (optional)</span><input name=\"hetzner_zone_id\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"route53\" hidden><label><span>Access Key ID</span><input name=\"route53_access_key_id\"></label><label><span>Secret Access Key</span><input type=\"password\" name=\"route53_secret_access_key\"></label><label><span>Hosted Zone ID</span><input name=\"route53_zone_id\"></label><label><span>Session Token (optional)</span><input type=\"password\" name=\"route53_session_token\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"ovh\" hidden><label><span>API Endpoint</span><select name=\"ovh_endpoint\" data-styled-select><option value=\"ovh-eu\">Europe</option><option value=\"ovh-ca\">Canada</option><option value=\"ovh-us\">United States</option></select></label><label><span>Application Key</span><input name=\"ovh_application_key\"></label><label><span>Application Secret</span><input type=\"password\" name=\"ovh_application_secret\"></label><label><span>Consumer Key</span><input type=\"password\" name=\"ovh_consumer_key\"></label></div><div class=\"field-grid two\" data-acme-credentials=\"rfc2136\" hidden><label><span>Authoritative Server</span><input name=\"rfc2136_server\" placeholder=\"dns.example.com:53\"></label><label><span>TSIG Key Name</span><input name=\"rfc2136_tsig_name\"></label><label><span>TSIG Secret</span><input type=\"password\" name=\"rfc2136_tsig_secret\"></label><label><span>TSIG Algorithm</span><select name=\"rfc2136_tsig_algorithm\" data-styled-select><option value=\"hmac-sha256\">HMAC-SHA256</option><option value=\"hmac-sha384\">HMAC-SHA384</option><option value=\"hmac-sha512\">HMAC-SHA512</option></select></label></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2578,7 +2570,7 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			templ_7745c5c3_Var106 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "<dialog class=\"custom-server-dialog isotope-form-dialog cluster-dialog\" id=\"enrollment-token-dialog\" aria-labelledby=\"enrollment-token-title\" data-dialog-auto-open=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "<dialog class=\"custom-server-dialog isotope-form-dialog cluster-dialog\" id=\"enrollment-token-dialog\" aria-labelledby=\"enrollment-token-title\" data-dialog-auto-open=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2591,12 +2583,12 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "\"><div class=\"dialog-header\"><h2 id=\"enrollment-token-title\">Add Replica</h2><p>Create a short-lived, single-use enrollment token</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "\"><div class=\"dialog-header\"><h2 id=\"enrollment-token-title\">Add Replica</h2><p>Create a short-lived, single-use enrollment token</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.EnrollmentToken == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 251, "<button class=\"dialog-close\" type=\"button\" data-dialog-close aria-label=\"Close\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "<button class=\"dialog-close\" type=\"button\" data-dialog-close aria-label=\"Close\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2604,12 +2596,12 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 252, "</button> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 251, "</button> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 253, "<button class=\"dialog-close\" type=\"button\" hx-get=\"/cluster\" hx-select=\"#cluster-content\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" data-enrollment-token-dismiss aria-label=\"Close and clear enrollment token\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 252, "<button class=\"dialog-close\" type=\"button\" hx-get=\"/cluster\" hx-select=\"#cluster-content\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" data-enrollment-token-dismiss aria-label=\"Close and clear enrollment token\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2617,13 +2609,13 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 254, "</button> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 253, "</button> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
 		if view.EnrollmentToken == "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 255, "<form hx-post=\"/ui/cluster/enrollment-tokens\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\"><div class=\"isotope-dialog-body\"><label><span>Token Lifetime</span><select name=\"ttl\" data-styled-select><option value=\"5m\">5 minutes</option><option value=\"15m\" selected>15 minutes</option><option value=\"30m\">30 minutes</option><option value=\"1h\">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class=\"cluster-dialog-note\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 254, "<form hx-post=\"/ui/cluster/enrollment-tokens\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\"><div class=\"isotope-dialog-body\"><label><span>Token Lifetime</span><select name=\"ttl\" data-styled-select><option value=\"5m\">5 minutes</option><option value=\"15m\" selected>15 minutes</option><option value=\"30m\">30 minutes</option><option value=\"1h\">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class=\"cluster-dialog-note\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2631,12 +2623,12 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 256, "<p><strong>Replica enrollment</strong><span>The joining server receives cluster membership and begins pulling the current generation from this primary.</span></p></div></div><div class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button\" type=\"submit\">Create Token</button></div></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 255, "<p><strong>Replica enrollment</strong><span>The joining server receives cluster membership and begins pulling the current generation from this primary.</span></p></div></div><div class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button\" type=\"submit\">Create Token</button></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 257, "<div class=\"isotope-dialog-body\"><label><span>Enrollment Token</span><div class=\"cluster-token-value\"><code id=\"cluster-enrollment-token\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 256, "<div class=\"isotope-dialog-body\"><label><span>Enrollment Token</span><div class=\"cluster-token-value\"><code id=\"cluster-enrollment-token\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2649,7 +2641,7 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 258, "</code><button class=\"button outline compact cluster-copy-token\" type=\"button\" data-copy-target=\"cluster-enrollment-token\" aria-label=\"Copy enrollment token\" title=\"Copy enrollment token\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 257, "</code><button class=\"button outline compact cluster-copy-token\" type=\"button\" data-copy-target=\"cluster-enrollment-token\" aria-label=\"Copy enrollment token\" title=\"Copy enrollment token\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2657,7 +2649,7 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 259, "<span data-copy-label>Copy token</span></button></div><small>Expires ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 258, "<span data-copy-label>Copy token</span></button></div><small>Expires ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2670,7 +2662,7 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 260, ". This secret will not be shown again.</small></label><div class=\"cluster-dialog-note\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 259, ". This secret will not be shown again.</small></label><div class=\"cluster-dialog-note\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2678,12 +2670,12 @@ func EnrollmentTokenDialog(view ClusterPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class=\"dialog-footer\"><button class=\"button\" type=\"button\" hx-get=\"/cluster\" hx-select=\"#cluster-content\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" data-enrollment-token-dismiss>Done</button></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 260, "<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class=\"dialog-footer\"><button class=\"button\" type=\"button\" hx-get=\"/cluster\" hx-select=\"#cluster-content\" hx-target=\"#cluster-content\" hx-swap=\"outerHTML\" data-enrollment-token-dismiss>Done</button></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 262, "</dialog>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "</dialog>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2712,7 +2704,7 @@ func ClusterGuide(color, title, description string) templ.Component {
 			templ_7745c5c3_Var110 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 263, "<div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 262, "<div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2721,7 +2713,7 @@ func ClusterGuide(color, title, description string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 264, "<i class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 263, "<i class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2734,7 +2726,7 @@ func ClusterGuide(color, title, description string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 265, "\"></i><p><strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 264, "\"></i><p><strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2747,7 +2739,7 @@ func ClusterGuide(color, title, description string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 266, "</strong><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 265, "</strong><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2760,7 +2752,7 @@ func ClusterGuide(color, title, description string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 267, "</span></p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 266, "</span></p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

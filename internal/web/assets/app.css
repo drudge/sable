@@ -3429,3 +3429,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-update-actions:empty { display: none; }
 
 html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !important; }
+
+.cluster-dialog label.cluster-ca-replacement { display: flex; flex-direction: row; align-items: flex-start; gap: 16px; }
+.cluster-dialog label.cluster-ca-replacement > span { flex: 1; min-width: 0; }
+.cluster-dialog label.cluster-ca-replacement > input[type="checkbox"] { flex: 0 0 18px; width: 18px; height: 18px; min-height: 0; margin: 2px 0 0; }
