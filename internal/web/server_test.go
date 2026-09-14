@@ -1683,7 +1683,7 @@ func TestProfilePageProvidesSelfServiceAccountAndTokenControls(t *testing.T) {
 	now := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 	var response bytes.Buffer
 	if err := pages.ProfilePage(pages.ProfilePageView{
-		Console:   pages.DashboardView{Version: "dev", Username: "admin", DisplayName: "Administrator", SecurityEnabled: true},
+		Console:   pages.DashboardView{Version: "dev", Username: "admin", DisplayName: "Administrator", CSRFToken: "csrf-token", SecurityEnabled: true},
 		User:      auth.ManagedUser{ID: 1, Username: "admin", DisplayName: "Administrator", Email: "admin@example.test", Roles: []string{"Administrator"}},
 		Roles:     []auth.Role{{Name: "Administrator", Grants: []auth.Grant{{Surface: auth.SurfaceAPI, Permission: auth.PermissionAll}}}},
 		Tokens:    []auth.APIToken{{ID: 7, UserID: 1, Username: "admin", Name: "automation", Groups: []string{"Administrator"}, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}},

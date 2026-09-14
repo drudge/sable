@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -55,9 +56,24 @@ func (server *Server) accessControl(next http.Handler) http.Handler {
 			server.authenticationFailure(writer, request, http.StatusForbidden, "")
 			return
 		}
-		if !safeMethod(request.Method) && !server.auth.ValidateCSRF(principal, request.Header.Get("X-CSRF-Token")) {
-			server.authenticationFailure(writer, request, http.StatusForbidden, "")
-			return
+		if !safeMethod(request.Method) {
+			csrfToken := request.Header.Get("X-CSRF-Token")
+			if csrfToken == "" && nativeProfileRequest(request) {
+				if !server.requestOriginAllowed(request) {
+					server.authenticationFailure(writer, request, http.StatusForbidden, "")
+					return
+				}
+				var ok bool
+				csrfToken, ok = nativeProfileCSRFToken(writer, request)
+				if !ok {
+					server.authenticationFailure(writer, request, http.StatusForbidden, "")
+					return
+				}
+			}
+			if !server.auth.ValidateCSRF(principal, csrfToken) {
+				server.authenticationFailure(writer, request, http.StatusForbidden, "")
+				return
+			}
 		}
 		writer.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(writer, request.WithContext(context.WithValue(
@@ -557,6 +573,23 @@ func (server *Server) renderAuthPage(
 
 func (server *Server) requestOriginAllowed(request *http.Request) bool {
 	return server.crossOrigin.Check(request) == nil
+}
+
+func nativeProfileRequest(request *http.Request) bool {
+	return request.Method == http.MethodPost && request.URL.Path == "/ui/profile" &&
+		request.Header.Get("HX-Request") != "true" && request.Header.Get("X-CSRF-Token") == ""
+}
+
+func nativeProfileCSRFToken(writer http.ResponseWriter, request *http.Request) (string, bool) {
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/x-www-form-urlencoded" {
+		return "", false
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
+	if err := request.ParseForm(); err != nil {
+		return "", false
+	}
+	return request.PostForm.Get("csrf_token"), true
 }
 
 func requestOrigin(request *http.Request) string {

@@ -91,11 +91,38 @@ func (server *Server) profileMutation(writer http.ResponseWriter, request *http.
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
 	if err := mutate(principal); err != nil {
 		server.logger.Warn("update own profile", "user", principal.Username, "client", requestClientIP(request), "error", err)
+		if nativeProfileRequest(request) {
+			server.renderProfilePage(writer, request, http.StatusUnprocessableEntity, "", profileError(err))
+			return
+		}
 		server.renderProfileContent(writer, request, http.StatusUnprocessableEntity, "", profileError(err))
+		return
+	}
+	if nativeProfileRequest(request) {
+		http.Redirect(writer, request, "/profile", http.StatusSeeOther)
 		return
 	}
 	writer.Header().Set("HX-Redirect", "/profile")
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (server *Server) renderProfilePage(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
+	view, err := server.profileView(request, message, errorMessage)
+	if err != nil {
+		http.Error(writer, "Unable to refresh your profile.", http.StatusInternalServerError)
+		return
+	}
+	if request.PostForm.Has("display_name") {
+		view.User.DisplayName = request.PostForm.Get("display_name")
+	}
+	if request.PostForm.Has("email") {
+		view.User.Email = request.PostForm.Get("email")
+	}
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(status)
+	if err := pages.ProfilePage(view).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render profile", "error", err)
+	}
 }
 
 func (server *Server) renderProfileContent(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
