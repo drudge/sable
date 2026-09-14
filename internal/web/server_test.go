@@ -1300,6 +1300,37 @@ func TestClusterJoinErrorExplainsDNSFailure(t *testing.T) {
 	}
 }
 
+func TestInstalledHTTPSDoesNotSkipClusterOnboarding(t *testing.T) {
+	t.Parallel()
+	configuration := config.Defaults()
+	configuration.Server.HTTPSListen = "127.0.0.1:5443"
+	editor := &editableTestConfiguration{snapshot: config.Snapshot{Config: configuration, Revision: 1}, baseDirectory: t.TempDir()}
+	server, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}}, editor, editor.zoneStore(), "sqlite", testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil }, nil, false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := clusterstate.Open(clusterstate.Options{DataDirectory: configuration.ClusterDataPath(editor.baseDirectory), NodeName: "installer-host", AdvertiseURL: "https://127.0.0.1:5443", HTTPSListen: configuration.Server.HTTPSListen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetClusterController(service)
+	if !service.Snapshot().NetworkReady {
+		t.Fatal("fixture must have a ready HTTPS listener")
+	}
+	for _, workflow := range []string{"primary", "join"} {
+		request := httptest.NewRequest(http.MethodGet, "/cluster?onboarding="+workflow, nil)
+		view := server.clusterView(request, "", "")
+		if !view.ConfigureNode || view.RestartRequired {
+			t.Fatalf("%s skipped setup or incorrectly requires restart: %+v", workflow, view)
+		}
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		if !strings.Contains(response.Body.String(), `data-initial-step="1"`) {
+			t.Fatalf("%s did not render first onboarding step", workflow)
+		}
+	}
+}
+
 func TestClusterOnboardingPrivateCAConfiguresBundledReplicaTrust(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
@@ -1363,6 +1394,36 @@ func TestClusterOnboardingPrivateCAConfiguresBundledReplicaTrust(t *testing.T) {
 	if !strings.HasPrefix(token.Token, "sable-enroll-v1.") {
 		t.Fatalf("private CA enrollment token = %q", token.Token)
 	}
+	// Recreating HTTPS at the same paths must not reuse the in-memory old CA.
+	server.SetClusterController(restarted)
+	if err := restarted.Delete(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	repeatedRequest := httptest.NewRequest(http.MethodPost, "/ui/cluster/onboarding", strings.NewReader(form.Encode()))
+	repeatedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	repeated := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(repeated, repeatedRequest)
+	if repeated.Code != http.StatusOK || !strings.Contains(repeated.Body.String(), "Restart Sable to continue") {
+		t.Fatalf("regenerating at unchanged paths must require restart; status=%d restart=%v", repeated.Code, strings.Contains(repeated.Body.String(), "Restart Sable to continue"))
+	}
+	if err := restarted.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.CreateEnrollmentToken(context.Background(), time.Minute); err == nil {
+		t.Fatal("issued enrollment token using stale CA after regeneration")
+	}
+	fresh, err := clusterstate.Open(clusterstate.Options{DataDirectory: updated.ClusterDataPath(directory), NodeName: updated.Cluster.NodeName, AdvertiseURL: updated.Cluster.AdvertiseURL, HTTPSListen: updated.Server.HTTPSListen, TrustAnchorFile: trustAnchor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetClusterController(fresh)
+	if server.clusterView(httptest.NewRequest(http.MethodGet, "/cluster", nil), "", "").RestartRequired {
+		t.Fatal("restart requirement did not clear")
+	}
+	if _, err := fresh.CreateEnrollmentToken(context.Background(), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestClusterManagedRestartIsSingleShotAndHealthIdentifiesNewProcess(t *testing.T) {
@@ -3039,5 +3100,37 @@ func TestZoneEditorKeepsCatalogManagedZonesReadOnly(t *testing.T) {
 	page := serveRequest(server, http.MethodGet, "/zones")
 	if !strings.Contains(page.Body.String(), ">Secondary Catalog<") {
 		t.Fatalf("zones UI does not label the subscribed catalog: %s", page.Body.String())
+	}
+}
+
+func TestFreshSelfSignedClusterDefaultsToPrivateCA(t *testing.T) {
+	directory := t.TempDir()
+	manager := certificates.New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), directory)
+	generated, err := manager.GenerateSelfSigned(context.Background(), certificates.ManualCertificateOptions{Names: []string{"127.0.0.1"}, ValidFor: 24 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := config.Defaults()
+	configuration.EncryptedDNS.CertificateFile = generated.CertificateFile
+	if got := clusterCertificateSource(configuration, directory); got != "generated" {
+		t.Fatalf("fresh self-signed source = %s", got)
+	}
+	configuration.EncryptedDNS.CertificateMode = "acme"
+	if got := clusterCertificateSource(configuration, directory); got != "acme" {
+		t.Fatalf("ACME source = %s", got)
+	}
+	configuration.EncryptedDNS.CertificateMode = "manual"
+	configuration.Cluster.NodeName = "configured-node"
+	if got := clusterCertificateSource(configuration, directory); got != "import" {
+		t.Fatalf("configured source = %s", got)
+	}
+	configuration.Cluster.NodeName = ""
+	issued, err := manager.GenerateClusterPKI(context.Background(), certificates.ClusterPKIOptions{NodeName: "issued", Names: []string{"127.0.0.1"}, ValidFor: 24 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration.EncryptedDNS.CertificateFile = issued.CertificateFile
+	if got := clusterCertificateSource(configuration, directory); got != "import" {
+		t.Fatalf("issued certificate source = %s", got)
 	}
 }

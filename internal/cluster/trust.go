@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -15,6 +16,20 @@ import (
 	"strings"
 	"time"
 )
+
+// The HTTPS listener can reload a regenerated certificate while cluster trust
+// remains pinned in memory. Compare contents, since regeneration reuses paths.
+// The caller holds service.mu when accessing the active identity.
+func (service *Service) localTrustRestartRequired() bool {
+	anchor, err := readConfiguredTrustAnchor(service.configuredTrustAnchorFile)
+	if err != nil {
+		return true
+	}
+	if len(anchor) == 0 {
+		anchor, err = readSelfSignedTrustAnchor(service.configuredHTTPSCertificateFile)
+	}
+	return err != nil || !bytes.Equal(anchor, service.localTrustAnchorPEM)
+}
 
 const (
 	persistedTrustAnchorFileName = "cluster-trust-anchor.pem"
@@ -115,6 +130,38 @@ func readConfiguredTrustAnchor(file string) ([]byte, error) {
 	return contents, nil
 }
 
+// A self-signed server certificate can be pinned directly, without changing
+// the installed HTTPS identity or trusting unrelated certificates.
+func readSelfSignedTrustAnchor(file string) ([]byte, error) {
+	if strings.TrimSpace(file) == "" {
+		return nil, nil
+	}
+	contents, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read HTTPS certificate for cluster trust: %w", err)
+	}
+	block, _ := pem.Decode(contents)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, nil
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse HTTPS certificate for cluster trust: %w", err)
+	}
+	if !selfSignedCertificate(certificate) {
+		return nil, nil
+	}
+	return pem.EncodeToMemory(block), nil
+}
+
+func selfSignedCertificate(certificate *x509.Certificate) bool {
+	return string(certificate.RawIssuer) == string(certificate.RawSubject) &&
+		certificate.CheckSignature(certificate.SignatureAlgorithm, certificate.RawTBSCertificate, certificate.Signature) == nil
+}
+
 func validateClusterTrustAnchor(contents []byte) error {
 	rest := contents
 	found := false
@@ -134,8 +181,8 @@ func validateClusterTrustAnchor(contents []byte) error {
 		if err != nil {
 			return fmt.Errorf("parse cluster trust anchor: %w", err)
 		}
-		if !certificate.IsCA {
-			return errors.New("cluster trust anchor must contain only CA certificates")
+		if !certificate.IsCA && !selfSignedCertificate(certificate) {
+			return errors.New("cluster trust anchor must contain only CA or self-signed certificates")
 		}
 		found = true
 	}

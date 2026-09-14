@@ -299,17 +299,19 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	dnsProviderCredentials := dnsprovider.NewStore(secretVault)
 	stateReplicator := newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets)
 	stateReplicator.setDNSProviderCredentials(dnsProviderCredentials)
+	clusterCertificateFile, _ := initial.EncryptedDNSCertificatePaths(configurationDirectory)
 	clusterService, err := cluster.Open(cluster.Options{
-		DataDirectory:   initial.ClusterDataPath(configurationDirectory),
-		NodeName:        clusterNodeName(initial.Cluster.NodeName),
-		AdvertiseURL:    clusterAdvertiseURL(initial),
-		HTTPSListen:     initial.Server.HTTPSListen,
-		DNSListeners:    initial.Server.DNSListen,
-		TrustAnchorFile: initial.ClusterTrustAnchorPath(configurationDirectory),
-		Logger:          logger,
-		Replicator:      stateReplicator,
-		Version:         version.Current().Release,
-		StartedAt:       startedAt,
+		HTTPSCertificateFile: clusterCertificateFile,
+		DataDirectory:        initial.ClusterDataPath(configurationDirectory),
+		NodeName:             clusterNodeName(initial.Cluster.NodeName),
+		AdvertiseURL:         clusterAdvertiseURL(initial),
+		HTTPSListen:          initial.Server.HTTPSListen,
+		DNSListeners:         initial.Server.DNSListen,
+		TrustAnchorFile:      initial.ClusterTrustAnchorPath(configurationDirectory),
+		Logger:               logger,
+		Replicator:           stateReplicator,
+		Version:              version.Current().Release,
+		StartedAt:            startedAt,
 	})
 	if err != nil {
 		return errors.Join(

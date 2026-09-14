@@ -3,12 +3,15 @@ package web
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -646,6 +649,11 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	}
 	state := server.cluster.Snapshot()
 	desired := server.config.Current().Config.Cluster
+	// A usable listener is not evidence that the operator completed onboarding.
+	// Installer defaults derive an endpoint and hostname without saving either.
+	if !state.Initialized && (desired.NodeName == "" || desired.AdvertiseURL == "") {
+		view.ConfigureNode = true
+	}
 	active := server.cluster.LocalConfiguration()
 	baseDirectory := "."
 	if located, ok := server.config.(interface{ BaseDirectory() string }); ok {
@@ -655,7 +663,13 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	view.NodeName = firstNonEmpty(desired.NodeName, active.NodeName)
 	view.AdvertiseURL = firstNonEmpty(desired.AdvertiseURL, active.AdvertiseURL)
 	configuration := server.config.Current().Config
-	view.CertificateSource = clusterCertificateSource(configuration)
+	view.DNSServiceAddresses = localClusterDNSAddresses(configuration.Server.DNSListen)
+	view.JoinAddresses = view.DNSServiceAddresses
+	if request != nil && request.Form != nil && request.Form.Has("addresses") {
+		view.DNSServiceAddresses = strings.TrimSpace(request.FormValue("addresses"))
+		view.JoinAddresses = view.DNSServiceAddresses
+	}
+	view.CertificateSource = clusterCertificateSource(configuration, baseDirectory)
 	view.HTTPSListen = configuration.Server.HTTPSListen
 	view.CertificateMode = configuration.EncryptedDNS.CertificateMode
 	view.CertificateFile = configuration.EncryptedDNS.CertificateFile
@@ -692,6 +706,7 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 		}
 	}
 	view.RestartRequired = active.DataDirectory != server.config.Current().Config.ClusterDataPath(baseDirectory) || active.NodeName != view.NodeName || active.AdvertiseURL != view.AdvertiseURL || active.HTTPSListen != configuration.Server.HTTPSListen || active.TrustAnchorFile != configuration.ClusterTrustAnchorPath(baseDirectory)
+	view.RestartRequired = view.RestartRequired || active.TrustRestartRequired
 	view.Initialized, view.NetworkReady = state.Initialized, state.NetworkReady
 	view.NodeID, view.ClusterID, view.ClusterDomain = state.NodeID, state.ClusterID, state.ClusterDomain
 	view.Generation, view.Mode, view.LocalRole = state.Generation, state.Mode, clusterRoleLabel(state.LocalRole)
@@ -731,7 +746,7 @@ func clusterJoinError(err error) string {
 	return err.Error()
 }
 
-func clusterCertificateSource(configuration config.Config) string {
+func clusterCertificateSource(configuration config.Config, baseDirectory string) string {
 	if configuration.Cluster.TrustAnchorFile != "" {
 		return "generated"
 	}
@@ -740,6 +755,19 @@ func clusterCertificateSource(configuration config.Config) string {
 	}
 	certificate := strings.ReplaceAll(configuration.EncryptedDNS.CertificateFile, "\\", "/")
 	if certificate != "" {
+		if configuration.Cluster.NodeName == "" && configuration.Cluster.AdvertiseURL == "" {
+			path, _ := configuration.EncryptedDNSCertificatePaths(baseDirectory)
+			contents, err := os.ReadFile(path)
+			if err == nil {
+				if block, _ := pem.Decode(contents); block != nil && block.Type == "CERTIFICATE" {
+					leaf, err := x509.ParseCertificate(block.Bytes)
+					if err == nil && string(leaf.RawIssuer) == string(leaf.RawSubject) &&
+						leaf.CheckSignature(leaf.SignatureAlgorithm, leaf.RawTBSCertificate, leaf.Signature) == nil {
+						return "generated"
+					}
+				}
+			}
+		}
 		return "import"
 	}
 	return "external"
