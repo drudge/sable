@@ -21,14 +21,18 @@ import (
 // remains pinned in memory. Compare contents, since regeneration reuses paths.
 // The caller holds service.mu when accessing the active identity.
 func (service *Service) localTrustRestartRequired() bool {
-	anchor, err := readConfiguredTrustAnchor(service.configuredTrustAnchorFile)
+	return localTrustRestartRequired(service.configuredTrustAnchorFile, service.configuredHTTPSCertificateFile, service.localTrustAnchorPEM)
+}
+
+func localTrustRestartRequired(anchorFile, certificateFile string, expectedAnchor []byte) bool {
+	anchor, err := readConfiguredTrustAnchor(anchorFile)
 	if err != nil {
 		return true
 	}
 	if len(anchor) == 0 {
-		anchor, err = readSelfSignedTrustAnchor(service.configuredHTTPSCertificateFile)
+		anchor, err = readSelfSignedTrustAnchor(certificateFile)
 	}
-	return err != nil || !bytes.Equal(anchor, service.localTrustAnchorPEM)
+	return err != nil || !bytes.Equal(anchor, expectedAnchor)
 }
 
 const (
