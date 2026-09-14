@@ -3429,4 +3429,3 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-update-actions:empty { display: none; }
 
 html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !important; }
-
