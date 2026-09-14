@@ -32,7 +32,7 @@ The service runs as the dedicated `sable` account, with only `CAP_NET_BIND_SERVI
 
 ## Complete setup and verify
 
-Open `https://HOSTNAME/` and create the first administrator. The initial certificate is self-signed: verify the host before trusting it, then configure a [managed or imported certificate](certificates.md).
+Open `https://HOSTNAME/` and create the first administrator. The initial certificate is self-signed: verify the host before trusting it, then configure a [managed or imported certificate](certificates.md). For a private cluster, use **Cluster → Initialize Primary** and its **Sable Private CA** option instead; follow the [clustering guide](../clustering.md) for enrollment and restart requirements.
 
 ```sh
 systemctl status sable --no-pager

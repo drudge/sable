@@ -8,6 +8,30 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.4] - Unreleased
+
+Sable 1.3.4 is a hotfix for cluster setup and certificate trust, including
+replica enrollment after regenerating a private CA.
+
+- Start initialization and reinitialization at the Node step with saved settings
+  prefilled. Resume the final step after saving or completing a requested restart.
+- Default fresh self-signed installations to **Sable Private CA** and prefill
+  editable DNS service addresses from configured listeners and local interfaces.
+- Support enrollment using the existing self-signed HTTPS certificate without
+  disabling certificate hostname or expiration checks.
+- Confirm replacement of an existing private CA before saving. **Cancel** leaves
+  it unchanged; **Replace CA & Continue** creates new certificate files and
+  preserves the previous CA and keys for recovery.
+- Detect changed certificate trust even at unchanged file paths, require a
+  restart, and reject enrollment-token creation while the loaded trust is stale.
+  **Restart & Continue** resumes setup after the service manager restarts Sable.
+
+Update both nodes before retrying enrollment with an existing self-signed server
+certificate: older builds accept CA certificates only in enrollment bundles.
+Generate a fresh token after the primary has restarted. Replacing a private CA
+can invalidate existing tokens and member trust; this hotfix does not provide
+seamless CA rotation for a running cluster. See the [cluster recovery procedure](https://github.com/drudge/sable/blob/main/docs/clustering.md#retry-a-failed-first-enrollment).
+
 ## [1.3.3] - 2026-09-13
 
 Sable 1.3.3 is a hotfix for direct recursive DNS resolution. It fixes `.com`

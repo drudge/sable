@@ -99,6 +99,9 @@ func (service *Service) CreateEnrollmentToken(_ context.Context, ttl time.Durati
 	if service.manifest.PrimaryID != service.nodeID {
 		return EnrollmentToken{}, ErrNotPrimary
 	}
+	if service.localTrustRestartRequired() {
+		return EnrollmentToken{}, errors.New("restart Sable to activate the changed HTTPS certificate trust before creating an enrollment token")
+	}
 	if !strings.HasPrefix(service.advertiseURL, "https://") {
 		return EnrollmentToken{}, ErrNetworkUnavailable
 	}

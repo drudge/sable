@@ -10,7 +10,7 @@ Use one certificate workflow per endpoint: an imported key pair, a private self-
 | Imported certificate | An existing CA or external certificate manager | Renew and replace both chain and key |
 | ACME DNS-01 | Automatically renewed public certificates | DNS provider authorization and renewal health |
 
-Cluster onboarding can pin private certificate authorities during enrollment. That trust is specific to the cluster and is not automatically installed in every browser or standalone DNS client.
+Cluster onboarding can pin private certificate authorities or an existing self-signed server certificate during enrollment. Both nodes must run 1.3.4 or newer to use server-certificate enrollment bundles. That trust is specific to the cluster and is not automatically installed in every browser or standalone DNS client.
 
 ## Import a certificate
 
@@ -39,3 +39,17 @@ If issuance or renewal fails, check provider authorization, the selected zone, C
 ## Verify the endpoint
 
 Query each enabled [encrypted DNS transport](encrypted-dns.md) using its intended hostname. Confirm the chain is trusted and expiration is reasonable. In a cluster, configure each node's endpoint and verify every node; listener and certificate configuration is not replicated automatically.
+
+## Cluster private CA replacement
+
+Initialization and reinitialization review Node and HTTPS settings first. With
+an existing CA and **Sable Private CA** selected, **Save & Continue** asks for
+confirmation before replacing anything. Cancel leaves the CA unchanged.
+Confirmed replacement retains the old files and writes the new CA and key pair
+to a separate directory, then requires **Restart & Continue** before enrollment.
+Create a fresh token after restart.
+
+This can break existing tokens and member trust. It does not migrate an active
+cluster between CAs or from private trust to ACME automatically. Follow the
+[cluster setup and recovery guide](../clustering.md#retry-a-failed-first-enrollment)
+and preserve the original certificate material for recovery.

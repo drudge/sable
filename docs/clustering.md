@@ -28,15 +28,29 @@ runtime files remain independent.
 The cluster onboarding wizard can use an externally managed certificate,
 request one through ACME, import a PEM key pair, or generate a private
 self-signed identity. Enrollment pins the cluster and member certificate
-authorities, so a private CA is supported without disabling TLS verification.
+authorities or an existing self-signed server certificate, so private trust is
+supported without disabling TLS verification. A fresh self-signed installation
+defaults to **Sable Private CA**; existing ACME and configured certificate setups
+retain their source selection. Cluster trust does not make a certificate trusted
+by browsers automatically.
 
 ## Create the primary
 
 1. Open **Cluster → Initialize Primary**.
 2. Configure the node name, cluster-state directory, advertised HTTPS URL, and
-   certificate source. Restart when the wizard requests it so the stable node
-   identity and listener configuration are active.
-3. Choose a stable cluster domain and enter this node's DNS service addresses.
+   certificate source. Initialization and reinitialization start at the Node
+   step, even when saved settings exist. On **Save & Continue**, an existing
+   private CA with **Sable Private CA** selected triggers **Replace cluster CA?**.
+   **Cancel** saves nothing. **Replace CA & Continue** generates a new CA and
+   certificate in a separate directory, retaining the previous files for recovery.
+   This may break existing tokens and member trust; replicas may need to re-enroll.
+   Choose **Restart & Continue** when prompted. It stops Sable cleanly; the native
+   install's service manager restarts it and the browser resumes the final step.
+   Manually launched processes need a supervisor or a manual relaunch.
+3. Choose a stable cluster domain and review this node's prefilled DNS service
+   addresses. Explicit listener addresses and nonstandard ports are preserved;
+   wildcard listeners use matching local interface IPs. Edit the list to the
+   addresses clients should actually use.
    The cluster domain identifies the deployment; it does not replace the
    member's advertised HTTPS URL.
 4. Initialize the cluster and confirm that the local role is **Primary**.
@@ -57,9 +71,38 @@ mutations, user/role/token changes, integration changes, and RFC 2136 updates.
 4. Wait until both nodes report **Online** and **In sync** at the same applied
    and current generation before relying on the replica.
 
-The enrollment bundle includes the primary cluster trust anchor. The primary
+When private trust is available, the enrollment bundle starts with
+`sable-enroll-v1.` and includes the primary trust anchor. A short token carries
+no private trust and requires the primary certificate to be otherwise trusted. The primary
 records the joining member's identity and certificate authority, and later
 synchronization uses those pinned authorities for member HTTPS connections.
+
+## Retry a failed first enrollment
+
+For an empty cluster whose first replica could not join:
+
+1. Update both nodes to 1.3.4 or newer. Preserve an application backup first.
+2. On the primary, **Delete Cluster** returns it to standalone mode and preserves
+   DNS data. Do not use this procedure to dissolve a cluster with working replicas.
+3. Open **Initialize Primary**, review Node and HTTPS settings, and select
+   **Sable Private CA**. If a CA already exists, explicitly confirm replacement
+   on **Save & Continue**. Previous CA and key files remain in their original
+   directory; the configuration points to a new `replacement-*` subdirectory.
+4. Click **Restart & Continue**, finish initialization, then create a new token.
+5. Configure the replica's own HTTPS endpoint, complete any requested restart,
+   and join with the primary URL and complete new token. Verify both nodes are
+   **Online** and **In sync**.
+
+A long token confirms that trust was bundled, not that it matches the certificate
+currently served. If verification still fails, compare the served certificate
+with the token's trust anchor rather than repeatedly regenerating certificates.
+Certificate names must cover the advertised URL: a stable IP is fine, and a DNS
+name must resolve from every member.
+
+This onboarding flow is not an in-place CA migration for an initialized cluster.
+Do not simply replace its private certificate with an unrelated CA or ACME
+certificate in Settings: existing members retain their pinned trust. Retained
+files are recovery material, not an automatic rollback or trust migration.
 
 ## What replication carries
 

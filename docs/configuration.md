@@ -1031,10 +1031,14 @@ opens it — see the [backup guide](backup.md).
 ## Cluster synchronization
 
 Cluster membership and synchronized state are not stored in TOML. The
-`[cluster]` table contains only `data_dir`, `node_name`, and the node's
-`advertise_url`. Multi-node operation requires an absolute HTTPS advertised URL
+`[cluster]` table contains `data_dir`, `node_name`, `advertise_url`, and
+`trust_anchor_file`. The optional trust-anchor file supplies private certificate
+trust for enrollment; the wizard configures it when generating a cluster CA.
+When absent, Sable can bundle an existing self-signed HTTPS server certificate. Multi-node operation requires an absolute HTTPS advertised URL
 reachable and trusted by every node. Public certificate generation, manual
-certificate import, and ACME renewal are configured in **Settings → Web**.
+certificate import, and ACME renewal are configured in **Settings → Protocols**.
+Use the cluster onboarding wizard for initial cluster trust setup and see the
+[clustering guide](clustering.md) before replacing an existing cluster CA.
 
 Enrollment tokens are created from the Cluster console or
 `POST /api/v1/cluster/enrollment-tokens`. They expire after 15 minutes by

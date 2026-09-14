@@ -41,25 +41,27 @@ var (
 // Options contains only node-local settings. Cluster membership is stored in
 // the durable manifest and synchronized from the primary.
 type Options struct {
-	DataDirectory   string
-	NodeName        string
-	AdvertiseURL    string
-	HTTPSListen     string
-	DNSListeners    []string
-	TrustAnchorFile string
-	HTTPClient      *http.Client
-	Logger          *slog.Logger
-	Replicator      StateReplicator
-	Version         string
-	StartedAt       time.Time
+	DataDirectory        string
+	NodeName             string
+	AdvertiseURL         string
+	HTTPSListen          string
+	DNSListeners         []string
+	TrustAnchorFile      string
+	HTTPSCertificateFile string
+	HTTPClient           *http.Client
+	Logger               *slog.Logger
+	Replicator           StateReplicator
+	Version              string
+	StartedAt            time.Time
 }
 
 type LocalConfiguration struct {
-	DataDirectory   string
-	NodeName        string
-	AdvertiseURL    string
-	HTTPSListen     string
-	TrustAnchorFile string
+	TrustRestartRequired bool
+	DataDirectory        string
+	NodeName             string
+	AdvertiseURL         string
+	HTTPSListen          string
+	TrustAnchorFile      string
 }
 
 type Node struct {
@@ -122,40 +124,41 @@ type manifest struct {
 }
 
 type Service struct {
-	updates                   *clusterUpdates
-	pendingUpdate             *UpdateCommand
-	updatePrimaryID           string
-	mu                        sync.RWMutex
-	directory                 string
-	nodeID                    string
-	nodeName                  string
-	configuredName            string
-	advertiseURL              string
-	httpsListen               string
-	dnsListeners              []string
-	configuredTrustAnchorFile string
-	trustAnchorFile           string
-	trustAnchorPEM            []byte
-	localTrustAnchorPEM       []byte
-	version                   string
-	startedAt                 time.Time
-	manifest                  *manifest
-	revocations               []revokedCluster
-	httpClient                *http.Client
-	baseHTTPClient            *http.Client
-	replicator                StateReplicator
-	joining                   bool
-	telemetry                 map[string]nodeTelemetry
-	monitorOnce               sync.Once
-	monitorLifecycleMu        sync.Mutex
-	monitorCancel             context.CancelFunc
-	monitorDone               <-chan struct{}
-	monitorMu                 sync.Mutex
-	monitorError              string
-	lastSuccessfulSync        time.Time
-	logger                    *slog.Logger
-	clientsMu                 sync.Mutex
-	memberClients             map[string]*http.Client
+	updates                        *clusterUpdates
+	pendingUpdate                  *UpdateCommand
+	updatePrimaryID                string
+	mu                             sync.RWMutex
+	directory                      string
+	nodeID                         string
+	nodeName                       string
+	configuredName                 string
+	advertiseURL                   string
+	httpsListen                    string
+	dnsListeners                   []string
+	configuredHTTPSCertificateFile string
+	configuredTrustAnchorFile      string
+	trustAnchorFile                string
+	trustAnchorPEM                 []byte
+	localTrustAnchorPEM            []byte
+	version                        string
+	startedAt                      time.Time
+	manifest                       *manifest
+	revocations                    []revokedCluster
+	httpClient                     *http.Client
+	baseHTTPClient                 *http.Client
+	replicator                     StateReplicator
+	joining                        bool
+	telemetry                      map[string]nodeTelemetry
+	monitorOnce                    sync.Once
+	monitorLifecycleMu             sync.Mutex
+	monitorCancel                  context.CancelFunc
+	monitorDone                    <-chan struct{}
+	monitorMu                      sync.Mutex
+	monitorError                   string
+	lastSuccessfulSync             time.Time
+	logger                         *slog.Logger
+	clientsMu                      sync.Mutex
+	memberClients                  map[string]*http.Client
 }
 
 func Open(options Options) (*Service, error) {
@@ -180,6 +183,12 @@ func Open(options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(localTrustAnchorPEM) == 0 {
+		localTrustAnchorPEM, err = readSelfSignedTrustAnchor(options.HTTPSCertificateFile)
+		if err != nil {
+			return nil, err
+		}
+	}
 	baseHTTPClient, err := httpClientWithClusterTrust(options.HTTPClient, nil)
 	if err != nil {
 		return nil, err
@@ -187,11 +196,12 @@ func Open(options Options) (*Service, error) {
 	service := &Service{
 		directory: options.DataDirectory, nodeID: nodeID,
 		nodeName: strings.TrimSpace(options.NodeName), configuredName: strings.TrimSpace(options.NodeName),
-		advertiseURL:              strings.TrimRight(strings.TrimSpace(options.AdvertiseURL), "/"),
-		httpsListen:               strings.TrimSpace(options.HTTPSListen),
-		dnsListeners:              append([]string(nil), options.DNSListeners...),
-		configuredTrustAnchorFile: strings.TrimSpace(options.TrustAnchorFile),
-		trustAnchorFile:           trustAnchorFile, trustAnchorPEM: trustAnchorPEM,
+		advertiseURL:                   strings.TrimRight(strings.TrimSpace(options.AdvertiseURL), "/"),
+		httpsListen:                    strings.TrimSpace(options.HTTPSListen),
+		dnsListeners:                   append([]string(nil), options.DNSListeners...),
+		configuredTrustAnchorFile:      strings.TrimSpace(options.TrustAnchorFile),
+		configuredHTTPSCertificateFile: strings.TrimSpace(options.HTTPSCertificateFile),
+		trustAnchorFile:                trustAnchorFile, trustAnchorPEM: trustAnchorPEM,
 		localTrustAnchorPEM: localTrustAnchorPEM,
 		version:             options.Version, startedAt: options.StartedAt,
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
@@ -309,7 +319,7 @@ func sortClusterNodes(nodes []Node, primaryID string) {
 func (service *Service) LocalConfiguration() LocalConfiguration {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
-	return LocalConfiguration{DataDirectory: service.directory, NodeName: service.configuredName, AdvertiseURL: service.advertiseURL, HTTPSListen: service.httpsListen, TrustAnchorFile: service.configuredTrustAnchorFile}
+	return LocalConfiguration{DataDirectory: service.directory, NodeName: service.configuredName, AdvertiseURL: service.advertiseURL, HTTPSListen: service.httpsListen, TrustAnchorFile: service.configuredTrustAnchorFile, TrustRestartRequired: service.localTrustRestartRequired()}
 }
 
 func (service *Service) Initialize(ctx context.Context, domain string, addresses []string) error {

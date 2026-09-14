@@ -3,12 +3,16 @@ package web
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -187,7 +191,17 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 			return
 		}
 	}
-	if source == "generated" {
+	current := server.config.Current().Config
+	reuseCA := source == "generated" && current.Cluster.TrustAnchorFile != "" && request.FormValue("replace_cluster_ca") != "confirmed"
+	if reuseCA {
+		imported = certificates.GeneratedCertificate{CertificateFile: current.EncryptedDNS.CertificateFile, PrivateKeyFile: current.EncryptedDNS.PrivateKeyFile, CAFile: current.Cluster.TrustAnchorFile}
+	}
+	if source == "generated" && !reuseCA {
+		if current.Cluster.TrustAnchorFile != "" {
+			// New paths retain the previous CA and key pair for recovery and avoid
+			// changing the live certificate before configuration is committed.
+			request.Form.Set("generated_storage_dir", filepath.Join(strings.TrimSpace(request.FormValue("generated_storage_dir")), fmt.Sprintf("replacement-%d", time.Now().UnixNano())))
+		}
 		generator, generated := server.certificates.(certificateGenerator)
 		if !generated {
 			server.renderClusterMutation(writer, request, http.StatusNotImplemented, "", "Self-signed certificate generation is unavailable")
@@ -293,8 +307,11 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 		return
 	}
 	request.Form.Del("wizard_step")
+	query := request.URL.Query()
+	query.Set("resume", "ready")
+	request.URL.RawQuery = query.Encode()
 	restartRequired := server.clusterView(request, "", "").RestartRequired
-	writer.Header().Set("HX-Replace-Url", "/cluster?onboarding="+workflow)
+	writer.Header().Set("HX-Replace-Url", "/cluster?onboarding="+workflow+"&resume=ready")
 	server.logger.Info("cluster onboarding staged", "client", requestClientIP(request), "workflow", workflow, "https_source", source, "restart_required", restartRequired)
 	server.recordControlPlaneAudit(request, "cluster.onboarding.configure", "configured node identity and HTTPS for cluster onboarding")
 	message := "Node identity and HTTPS are ready."
@@ -646,6 +663,11 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	}
 	state := server.cluster.Snapshot()
 	desired := server.config.Current().Config.Cluster
+	// Every new setup reviews the saved settings. Only an explicit continuation
+	// after saving/restarting (or a failed join) resumes the final step.
+	if !state.Initialized && (request == nil || (request.URL.Query().Get("resume") != "ready" && request.URL.Path != "/ui/cluster/join")) {
+		view.ConfigureNode = true
+	}
 	active := server.cluster.LocalConfiguration()
 	baseDirectory := "."
 	if located, ok := server.config.(interface{ BaseDirectory() string }); ok {
@@ -655,7 +677,14 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	view.NodeName = firstNonEmpty(desired.NodeName, active.NodeName)
 	view.AdvertiseURL = firstNonEmpty(desired.AdvertiseURL, active.AdvertiseURL)
 	configuration := server.config.Current().Config
-	view.CertificateSource = clusterCertificateSource(configuration)
+	view.DNSServiceAddresses = localClusterDNSAddresses(configuration.Server.DNSListen)
+	view.JoinAddresses = view.DNSServiceAddresses
+	if request != nil && request.Form != nil && request.Form.Has("addresses") {
+		view.DNSServiceAddresses = strings.TrimSpace(request.FormValue("addresses"))
+		view.JoinAddresses = view.DNSServiceAddresses
+	}
+	view.CertificateSource = clusterCertificateSource(configuration, baseDirectory)
+	view.ExistingClusterCA = configuration.Cluster.TrustAnchorFile != ""
 	view.HTTPSListen = configuration.Server.HTTPSListen
 	view.CertificateMode = configuration.EncryptedDNS.CertificateMode
 	view.CertificateFile = configuration.EncryptedDNS.CertificateFile
@@ -692,6 +721,7 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 		}
 	}
 	view.RestartRequired = active.DataDirectory != server.config.Current().Config.ClusterDataPath(baseDirectory) || active.NodeName != view.NodeName || active.AdvertiseURL != view.AdvertiseURL || active.HTTPSListen != configuration.Server.HTTPSListen || active.TrustAnchorFile != configuration.ClusterTrustAnchorPath(baseDirectory)
+	view.RestartRequired = view.RestartRequired || active.TrustRestartRequired
 	view.Initialized, view.NetworkReady = state.Initialized, state.NetworkReady
 	view.NodeID, view.ClusterID, view.ClusterDomain = state.NodeID, state.ClusterID, state.ClusterDomain
 	view.Generation, view.Mode, view.LocalRole = state.Generation, state.Mode, clusterRoleLabel(state.LocalRole)
@@ -731,7 +761,7 @@ func clusterJoinError(err error) string {
 	return err.Error()
 }
 
-func clusterCertificateSource(configuration config.Config) string {
+func clusterCertificateSource(configuration config.Config, baseDirectory string) string {
 	if configuration.Cluster.TrustAnchorFile != "" {
 		return "generated"
 	}
@@ -740,6 +770,19 @@ func clusterCertificateSource(configuration config.Config) string {
 	}
 	certificate := strings.ReplaceAll(configuration.EncryptedDNS.CertificateFile, "\\", "/")
 	if certificate != "" {
+		if configuration.Cluster.NodeName == "" && configuration.Cluster.AdvertiseURL == "" {
+			path, _ := configuration.EncryptedDNSCertificatePaths(baseDirectory)
+			contents, err := os.ReadFile(path)
+			if err == nil {
+				if block, _ := pem.Decode(contents); block != nil && block.Type == "CERTIFICATE" {
+					leaf, err := x509.ParseCertificate(block.Bytes)
+					if err == nil && string(leaf.RawIssuer) == string(leaf.RawSubject) &&
+						leaf.CheckSignature(leaf.SignatureAlgorithm, leaf.RawTBSCertificate, leaf.Signature) == nil {
+						return "generated"
+					}
+				}
+			}
+		}
 		return "import"
 	}
 	return "external"

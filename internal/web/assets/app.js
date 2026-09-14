@@ -1957,6 +1957,12 @@
 	  };
 	  const syncCertificate = () => {
 		const source = sources.find((input) => input.checked)?.value || "external";
+        if (source === "generated" && root.dataset.existingClusterCa === "true") {
+          root.setAttribute("hx-confirm", "Replace this node’s private CA and HTTPS certificate? Existing enrollment tokens and member trust may stop working, and replicas may need to re-enroll. Sable must restart. Previous certificate files will be kept for recovery.");
+        } else {
+          root.removeAttribute("hx-confirm");
+        }
+
 		root.querySelectorAll("[data-cluster-certificate-panel]").forEach((panel) => {
 		  panel.hidden = panel.dataset.clusterCertificatePanel !== source;
 		});
