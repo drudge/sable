@@ -156,6 +156,8 @@ type Service struct {
 	monitorMu                      sync.Mutex
 	monitorError                   string
 	lastSuccessfulSync             time.Time
+	captureMu                      sync.Mutex
+	captureFlight                  *captureFlight
 	logger                         *slog.Logger
 	clientsMu                      sync.Mutex
 	memberClients                  map[string]*http.Client
