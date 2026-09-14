@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/config"
 )
 
 // Exercise real HTTPS listeners and the replica's UI enrollment endpoint.
@@ -58,7 +59,7 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 					"workflow": {"primary"}, "certificate_source": {"generated"},
 					"data_dir": {primaryConfiguration.Cluster.DataDirectory}, "node_name": {"primary"},
 					"advertise_url": {"https://" + primaryPorts.https}, "generated_https_listen": {primaryPorts.https},
-					"generated_valid_days": {"1"}, "generated_storage_dir": {"data/cluster/pki"},
+					"replace_cluster_ca": {"confirmed"}, "generated_valid_days": {"1"}, "generated_storage_dir": {"data/cluster/pki"},
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -71,12 +72,17 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 				if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "Restart Sable to continue") {
 					t.Fatalf("regeneration did not require restart: %d %s", response.StatusCode, body)
 				}
+				primaryClient.CloseIdleConnections()
 				stopIntegrationNode(t, primary)
-				primaryClient = trustedHTTPClient(t, filepath.Join(primaryDirectory, primaryCertificate.CAFile))
+				reloaded, err := config.Load(filepath.Join(primaryDirectory, "sable.toml"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				primaryClient = trustedHTTPClient(t, reloaded.ClusterTrustAnchorPath(primaryDirectory))
 				primary = startIntegrationNode(t, filepath.Join(primaryDirectory, "sable.toml"), primaryClient, primaryPorts.https)
 				initializePrimary(t, primaryClient, primaryPorts.https)
 				enrollment = createEnrollmentToken(t, primaryClient, primaryPorts.https)
-				t.Log("Recreated HTTPS at the same paths, required restart, and issued fresh token")
+				t.Log("Explicitly replaced HTTPS while preserving prior files, required restart, and issued fresh token")
 			}
 
 			replicaCertificate := generateClusterCertificate(t, replicaDirectory, "replica")

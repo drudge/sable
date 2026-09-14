@@ -1204,7 +1204,7 @@ func TestClusterOnboardingStaysInWizardAcrossRestart(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("onboarding response = %d %s", response.Code, response.Body.String())
 	}
-	if response.Header().Get("HX-Replace-Url") != "/cluster?onboarding=primary" {
+	if response.Header().Get("HX-Replace-Url") != "/cluster?onboarding=primary&resume=ready" {
 		t.Fatalf("onboarding URL = %q", response.Header().Get("HX-Replace-Url"))
 	}
 	body := response.Body.String()
@@ -1226,7 +1226,7 @@ func TestClusterOnboardingStaysInWizardAcrossRestart(t *testing.T) {
 	}
 	server.SetClusterController(restartedService)
 	continued := httptest.NewRecorder()
-	server.httpServer.Handler.ServeHTTP(continued, httptest.NewRequest(http.MethodGet, "/cluster?onboarding=primary", nil))
+	server.httpServer.Handler.ServeHTTP(continued, httptest.NewRequest(http.MethodGet, "/cluster?onboarding=primary&resume=ready", nil))
 	continuedBody := continued.Body.String()
 	for _, expected := range []string{"Cluster Domain", "Initialize Primary", `data-dialog-auto-open="true"`, `/cluster?onboarding=primary&amp;configure=https`, `>Back</a>`} {
 		if !strings.Contains(continuedBody, expected) {
@@ -1399,6 +1399,23 @@ func TestClusterOnboardingPrivateCAConfiguresBundledReplicaTrust(t *testing.T) {
 	if err := restarted.Delete(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	oldCA, err := os.ReadFile(trustAnchor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialView := server.clusterView(httptest.NewRequest(http.MethodGet, "/cluster", nil), "", "")
+	if !initialView.ConfigureNode {
+		t.Fatal("reinitialization skipped step 1")
+	}
+	keepRequest := httptest.NewRequest(http.MethodPost, "/ui/cluster/onboarding", strings.NewReader(form.Encode()))
+	keepRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	keepResponse := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(keepResponse, keepRequest)
+	keptCA, err := os.ReadFile(trustAnchor)
+	if err != nil || string(keptCA) != string(oldCA) || editor.Current().Config.Cluster.TrustAnchorFile != updated.Cluster.TrustAnchorFile {
+		t.Fatal("unconfirmed save replaced CA")
+	}
+	form.Set("replace_cluster_ca", "confirmed")
 	repeatedRequest := httptest.NewRequest(http.MethodPost, "/ui/cluster/onboarding", strings.NewReader(form.Encode()))
 	repeatedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	repeated := httptest.NewRecorder()
@@ -1409,9 +1426,15 @@ func TestClusterOnboardingPrivateCAConfiguresBundledReplicaTrust(t *testing.T) {
 	if err := restarted.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := restarted.CreateEnrollmentToken(context.Background(), time.Minute); err == nil {
-		t.Fatal("issued enrollment token using stale CA after regeneration")
+	preserved, err := os.ReadFile(trustAnchor)
+	if err != nil || string(preserved) != string(oldCA) {
+		t.Fatal("old CA was not preserved")
 	}
+	updated = editor.Current().Config
+	if updated.ClusterTrustAnchorPath(directory) == trustAnchor {
+		t.Fatal("replacement overwrote existing path")
+	}
+	trustAnchor = updated.ClusterTrustAnchorPath(directory)
 	fresh, err := clusterstate.Open(clusterstate.Options{DataDirectory: updated.ClusterDataPath(directory), NodeName: updated.Cluster.NodeName, AdvertiseURL: updated.Cluster.AdvertiseURL, HTTPSListen: updated.Server.HTTPSListen, TrustAnchorFile: trustAnchor})
 	if err != nil {
 		t.Fatal(err)

@@ -51,6 +51,7 @@ type ClusterPageView struct {
 	JoinToken string
 	JoinAddresses string
 	DNSServiceAddresses string
+ ExistingClusterCA bool
 }
 
 type ClusterNodeView struct {
@@ -294,7 +295,7 @@ templ JoinClusterDialog(view ClusterPageView) {
 }
 
 templ ClusterRestartStep(view ClusterPageView, workflow string) {
-	<div data-sable-restart data-restart-url="/ui/cluster/restart" data-health-url="/api/v1/health" data-continue-url={ fmt.Sprintf("/cluster?onboarding=%s", workflow) } data-csrf-token={ view.Console.CSRFToken }>
+	<div data-sable-restart data-restart-url="/ui/cluster/restart" data-health-url="/api/v1/health" data-continue-url={ fmt.Sprintf("/cluster?onboarding=%s&resume=ready", workflow) } data-csrf-token={ view.Console.CSRFToken }>
 		<div class="isotope-dialog-body">@ClusterWizardProgress(2, workflow)<div class="cluster-restart-step"><span>@Icon("refresh")</span><h3>Restart Sable to continue</h3><p data-restart-status aria-live="polite">The node and HTTPS configuration are saved. Sable can restart cleanly and continue this wizard automatically.</p></div></div><div class="dialog-footer"><a class="button outline" href="/cluster" data-restart-exit>Exit Setup</a><button class="button" type="button" data-sable-restart-button>@Icon("refresh")<span>Restart &amp; Continue</span></button></div>
 	</div>
 }
@@ -343,6 +344,10 @@ templ ClusterNodeOnboardingForm(view ClusterPageView, workflow string) {
 			<div class="cluster-certificate-panel" data-cluster-certificate-panel="external" hidden?={ view.CertificateSource != "external" }><div class="cluster-dialog-note">@Icon("globe")<p><strong>Reverse proxy or HTTPS already configured</strong><span>Sable keeps the current listener settings. The advertised URL must already route to this node with a certificate trusted by every cluster member.</span></p></div></div>
 			<div class="cluster-certificate-panel" data-cluster-certificate-panel="acme" hidden?={ view.CertificateSource != "acme" }><div class="field-grid two"><label><span>HTTPS Listen Address</span><input name="https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/></label><label><span>Contact Email</span><input type="email" name="acme_email" value={ view.ACMEEmail } placeholder="dns-admin@example.com"/></label><label><span>DNS Names</span><textarea name="acme_domains" rows="2" placeholder="dns-1.example.com">{ view.ACMEDomains }</textarea></label><label><span>DNS Provider</span><select name="acme_dns_provider" data-acme-provider data-styled-select><option value="" data-placeholder selected?={ view.ACMEDNSProvider == "" }>Choose a provider</option><option value="cloudflare" selected?={ view.ACMEDNSProvider == "cloudflare" }>Cloudflare</option><option value="porkbun" selected?={ view.ACMEDNSProvider == "porkbun" }>Porkbun</option><option value="namecheap" selected?={ view.ACMEDNSProvider == "namecheap" }>Namecheap</option><option value="godaddy" selected?={ view.ACMEDNSProvider == "godaddy" }>GoDaddy</option><option value="digitalocean" selected?={ view.ACMEDNSProvider == "digitalocean" }>DigitalOcean</option><option value="hetzner" selected?={ view.ACMEDNSProvider == "hetzner" }>Hetzner</option><option value="route53" selected?={ view.ACMEDNSProvider == "route53" }>Amazon Route 53</option><option value="ovh" selected?={ view.ACMEDNSProvider == "ovh" }>OVHcloud</option><option value="rfc2136" selected?={ view.ACMEDNSProvider == "rfc2136" }>RFC 2136</option></select></label><label><span>DNS Zone (optional)</span><input name="acme_dns_zone" value={ view.ACMEDNSZone } placeholder="example.com"/></label></div><input type="hidden" name="acme_storage_dir" value={ firstNonEmptyPage(view.ACMEStorageDirectory, "data/tls/acme") }/><input type="hidden" name="acme_directory_url" value={ firstNonEmptyPage(view.ACMEDirectoryURL, "https://acme-v02.api.letsencrypt.org/directory") }/><input type="hidden" name="acme_renew_before" value={ firstNonEmptyPage(view.ACMERenewBefore, "30d") }/>@ClusterACMECredentialFields(view)</div>
 			<div class="cluster-certificate-panel" data-cluster-certificate-panel="generated" hidden?={ view.CertificateSource != "generated" }>
+                if view.ExistingClusterCA {
+                    <div class="cluster-dialog-note compact">@Icon("shield-check")<p><strong>Keep existing private CA</strong><span>Your current CA and HTTPS certificate will be kept unless you explicitly confirm replacement below.</span></p></div>
+                    <label><input type="checkbox" name="replace_cluster_ca" value="confirmed"/><span>Replace this node's CA and HTTPS certificate. I understand existing enrollment tokens and other nodes' trust may stop working, replicas may need to re-enroll, and Sable must restart. Previous certificate files will be preserved for recovery.</span></label>
+                }
 				<label><span>HTTPS Listen Address</span><input name="generated_https_listen" value={ clusterWizardHTTPSListen(view.HTTPSListen, workflow) } placeholder={ clusterWizardHTTPSListen("", workflow) }/><small>{ clusterWizardHTTPSListenHelp(workflow) }</small></label>
 				<input type="hidden" name="generated_storage_dir" value={ ifThen(workflow == "primary", "data/cluster/pki", "data/tls/self-signed") }/>
 				if workflow == "primary" {
