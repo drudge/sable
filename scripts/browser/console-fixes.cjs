@@ -9,7 +9,7 @@ async function check(page, label, action) {
 async function checkWidgetLifecycle(page, baseURL) {
   await check(page, 'interactive widgets survive reprocesses and dispose removed trees', async () => {
     const fragment = `
-      <section id="widget-lifecycle-fixture" data-generation="GENERATION" hx-get="/ui/widget-lifecycle-fragment" hx-trigger="never">
+      <section id="widget-lifecycle-fixture" data-generation="GENERATION">
         <label><span>Lifecycle choice</span><select data-styled-select><option value="one">One</option><option value="two">Two</option></select></label>
         <label><span>Lifecycle time</span><input type="time" value="09:30" data-styled-time></label>
         <form>
@@ -66,7 +66,6 @@ async function checkWidgetLifecycle(page, baseURL) {
     await selectTrigger.waitFor();
     await timeEntry.waitFor();
     await resolverTrigger.waitFor();
-    await page.evaluate(() => document.body.dispatchEvent(new CustomEvent('htmx:after:process', {bubbles: true})));
     assert.equal(await fixture.locator('[data-resolver-combobox]').getAttribute('data-resolver-ready'), 'true', 'resolver initializes');
 
     await selectTrigger.click();
@@ -123,6 +122,14 @@ async function checkWidgetLifecycle(page, baseURL) {
     assert.equal(await windowResizeListeners(), resizeBeforeRemoval - 1, 'removed open select releases window positioning listener');
     const afterReprocess = await pointerdownListeners();
     assert.equal(afterReprocess, before, 'reprocess does not add document pointerdown handlers');
+
+    assert.equal(await fixture.evaluate(element => !!element._htmx), false, 'replacement target is not HTMX-powered');
+    await selectTrigger.click();
+    const plainResizeBefore = await windowResizeListeners();
+    await waitForFixtureSwap(() => page.evaluate(() => window.htmx.ajax('GET', '/ui/widget-lifecycle-fragment', {
+      target: '#widget-lifecycle-fixture', swap: 'outerHTML',
+    })));
+    assert.equal(await windowResizeListeners(), plainResizeBefore - 1, 'plain target removal releases open-popover positioning');
 
     const dialog = page.locator('#widget-lifecycle-fixture [data-custom-dialog]');
     const dialogSelect = dialog.locator('.styled-select');
