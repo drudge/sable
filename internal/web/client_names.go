@@ -22,8 +22,7 @@ const (
 	// rankings are sorted by traffic, so the cap always spends itself on the
 	// clients an operator is most likely to be looking at.
 	reverseNameLimit = 50
-	// reverseNameWorkers bounds how many of those run at once.
-	// reverseNameWorkers is shared by every render using this cache.
+	// reverseNameWorkers bounds active lookups across all renders using this cache.
 	reverseNameWorkers = 8
 	// reverseNameInflightLimit bounds claims across all concurrent renders.
 	reverseNameInflightLimit = reverseNameLimit

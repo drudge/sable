@@ -168,6 +168,9 @@ func TestReverseNameCacheLimitsWorkersAcrossConcurrentRenders(t *testing.T) {
 	}
 	close(resolver.block)
 	wait.Wait()
+	if got := resolver.maxActive.Load(); got != reverseNameWorkers {
+		t.Fatalf("peak active lookups = %d, want %d", got, reverseNameWorkers)
+	}
 	if calls := resolver.calls.Load(); calls != 10 {
 		t.Fatalf("reverse lookups = %d, want 10", calls)
 	}
@@ -198,6 +201,10 @@ func TestReverseNameCacheCapsInflightClaimsAcrossRenders(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+	const extraAddress = "192.0.2.250"
+	if _, extra := cache.partition([]string{extraAddress}); len(extra) != 0 {
+		t.Fatal("another render exceeded the cache-wide claim cap")
+	}
 	close(resolver.block)
 	select {
 	case <-done:
@@ -207,6 +214,10 @@ func TestReverseNameCacheCapsInflightClaimsAcrossRenders(t *testing.T) {
 	if calls := resolver.calls.Load(); calls != reverseNameInflightLimit {
 		t.Fatalf("reverse lookups = %d, want %d", calls, reverseNameInflightLimit)
 	}
+	if _, retry := cache.partition([]string{extraAddress}); len(retry) != 1 {
+		t.Fatal("declined address was not available for retry after capacity freed")
+	}
+	cache.unclaim(extraAddress)
 }
 
 func TestReverseNameCacheCanceledQueuedClaimsDoNotResolveOrCache(t *testing.T) {
@@ -283,8 +294,10 @@ func BenchmarkReverseNameCacheStoreAtCapacity(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
+	index := 0
 	for b.Loop() {
-		cache.store(fmt.Sprintf("new-address-%d", b.N), "new-name")
+		cache.store(fmt.Sprintf("new-address-%d", index), "new-name")
+		index++
 	}
 }
 
