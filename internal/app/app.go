@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -34,9 +35,17 @@ import (
 
 var ErrRestartRequested = errors.New("controlled restart requested")
 
-func Run(ctx context.Context, configurationPath string, logger *slog.Logger) error {
+func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (runError error) {
 	runtimeContext, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
+	var runtimeWorkers sync.WaitGroup
+	runRuntimeWorker := func(run func(context.Context)) {
+		runtimeWorkers.Add(1)
+		go func() {
+			defer runtimeWorkers.Done()
+			run(runtimeContext)
+		}()
+	}
 	startedAt := time.Now()
 	runtimeLogs := serverlog.New(serverlog.DefaultCapacity)
 	var minimumLogLevel slog.LevelVar
@@ -70,7 +79,12 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	storesSafe := true
+	defer func() {
+		if storesSafe {
+			database.Close()
+		}
+	}()
 	// The recorder attaches here rather than alongside the other services so
 	// the startup that follows is persisted too, and it is closed by defer so
 	// every path out of Run flushes it, including the startup failures that
@@ -86,7 +100,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("start server log recorder: %w", err)
 	}
-	defer closeServerLogRecorder(serverLogRecorder, initial)
+	defer func() {
+		closeServerLogRecorder(serverLogRecorder, initial)
+	}()
 	runtimeLogs.Attach(serverLogRecorder)
 	secretVault, err := secrets.Open(initial.SecuritySecretKeyPath(configurationDirectory), database)
 	if err != nil {
@@ -118,6 +134,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	var scheduledBackups *scheduledBackupService
 	var webServer *web.Server
 	var handler *dnsserver.Handler
+	var clusterService *cluster.Service
+	var queryRecorder *querylog.Recorder
+	var listeners *dnsserver.ListenerGroup
 	zoneManager, err := zone.NewManager(
 		ctx,
 		database,
@@ -167,6 +186,41 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	handler = dnsserver.NewHandler(runtime)
 	handler.SetLogger(logger)
 	handler.StartMaintenance()
+	startupComplete := false
+	defer func() {
+		if startupComplete {
+			return
+		}
+		cleanupContext, cancel := context.WithTimeout(context.Background(), initial.Server.ShutdownTimeout.Duration)
+		defer cancel()
+		stopRuntime()
+		workerError := waitRuntimeWorkers(cleanupContext, &runtimeWorkers)
+		if workerError != nil {
+			storesSafe = false
+		}
+		var cleanupError error
+		if webServer != nil {
+			cleanupError = errors.Join(cleanupError, webServer.Close(cleanupContext))
+		}
+		if clusterService != nil {
+			cleanupError = errors.Join(cleanupError, clusterService.Close(cleanupContext))
+		}
+		if listeners != nil {
+			cleanupError = errors.Join(cleanupError, listeners.Close(cleanupContext))
+		}
+		if handler != nil {
+			cleanupError = errors.Join(cleanupError, handler.Shutdown(cleanupContext))
+		}
+		if queryRecorder != nil {
+			recorderContext, recorderCancel := recorderContextForShutdown(cleanupContext, initial.Server.ShutdownTimeout.Duration)
+			cleanupError = errors.Join(cleanupError, queryRecorder.Close(recorderContext))
+			recorderCancel()
+		}
+		if workerError != nil || cleanupError != nil {
+			storesSafe = false
+		}
+		runError = errors.Join(runError, workerError, cleanupError)
+	}()
 	if initial.Resolver.SaveCache {
 		restored, restoreErr := restoreDNSCache(ctx, database, handler)
 		if restoreErr != nil {
@@ -183,7 +237,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return fmt.Errorf("initialize RFC 5011 trust-anchor manager: %w", err)
 	}
 	handler.SetTrustAnchorManager(trustAnchorManager)
-	queryRecorder, err := querylog.NewRecorder(database, querylog.Options{
+	queryRecorder, err = querylog.NewRecorder(database, querylog.Options{
 		Enabled:       initial.QueryLog.Enabled,
 		BufferSize:    initial.QueryLog.BufferSize,
 		BatchSize:     initial.QueryLog.BatchSize,
@@ -194,7 +248,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		return fmt.Errorf("start query recorder: %w", err)
 	}
 	handler.SetQueryObserver(queryRecorder)
-	listeners := dnsserver.NewListenerGroup(handler, logger)
+	listeners = dnsserver.NewListenerGroup(handler, logger)
 	certificateManager := certificates.New(secretVault, logger, configurationDirectory)
 
 	apply := func(reloadContext context.Context, active, candidate config.Config) error {
@@ -276,13 +330,13 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	configurationManager = config.NewManager(absolutePath, initial, apply)
 	scheduledBackups, err = newScheduledBackupService(absolutePath, configurationManager, secretVault, logger, initial.Backup)
 	if err != nil {
-		return errors.Join(fmt.Errorf("initialize scheduled backups: %w", err), closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
+		return fmt.Errorf("initialize scheduled backups: %w", err)
 	}
 	if _, err := certificateManager.Ensure(ctx, initial.EncryptedDNS, false); err != nil {
-		return errors.Join(fmt.Errorf("prepare public TLS certificate: %w", err), closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
+		return fmt.Errorf("prepare public TLS certificate: %w", err)
 	}
 	if err := listeners.Replace(ctx, listenerConfiguration(initial, configurationDirectory)); err != nil {
-		return errors.Join(err, closeQueryRecorderAfterStartupFailure(queryRecorder, initial))
+		return err
 	}
 	migrateTSIGSecrets(ctx, configurationManager, tsigSecrets, logger)
 	dynamicUpdater := newDynamicZoneUpdater(ctx, zoneManager, handler, database, logger)
@@ -290,9 +344,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	handler.SetZoneUpdateAuditor(dynamicUpdater.Audit)
 	zoneRefreshContext, stopZoneRefresh := context.WithCancel(runtimeContext)
 	defer stopZoneRefresh()
-	go newZoneRefresher(zoneManager, handler, logger).Run(zoneRefreshContext)
-	go runDNSSECRefresher(zoneRefreshContext, zoneManager, dnssec, handler, logger)
-	go trustAnchorManager.Run(zoneRefreshContext, logger)
+	runRuntimeWorker(func(context.Context) { newZoneRefresher(zoneManager, handler, logger).Run(zoneRefreshContext) })
+	runRuntimeWorker(func(context.Context) { runDNSSECRefresher(zoneRefreshContext, zoneManager, dnssec, handler, logger) })
+	runRuntimeWorker(func(context.Context) { trustAnchorManager.Run(zoneRefreshContext, logger) })
 
 	unifiCredentials := newUniFiCredentialStore(secretVault)
 	oidcSecrets := newOIDCSecretStore(secretVault)
@@ -300,7 +354,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	stateReplicator := newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets)
 	stateReplicator.setDNSProviderCredentials(dnsProviderCredentials)
 	clusterCertificateFile, _ := initial.EncryptedDNSCertificatePaths(configurationDirectory)
-	clusterService, err := cluster.Open(cluster.Options{
+	clusterService, err = cluster.Open(cluster.Options{
 		HTTPSCertificateFile: clusterCertificateFile,
 		DataDirectory:        initial.ClusterDataPath(configurationDirectory),
 		NodeName:             clusterNodeName(initial.Cluster.NodeName),
@@ -314,11 +368,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		StartedAt:            startedAt,
 	})
 	if err != nil {
-		return errors.Join(
-			fmt.Errorf("initialize cluster identity: %w", err),
-			closeListenersAfterStartupFailure(listeners, initial),
-			closeQueryRecorderAfterStartupFailure(queryRecorder, initial),
-		)
+		return fmt.Errorf("initialize cluster identity: %w", err)
 	}
 	handler.SetZoneUpdater(func(updateContext context.Context, request dnsserver.ZoneUpdateRequest) dnsserver.ZoneUpdateResult {
 		state := clusterService.Snapshot()
@@ -338,7 +388,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		},
 		logger,
 	)
-	go unifiSync.Run(zoneRefreshContext)
+	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
 		dnsProviderCredentials,
@@ -349,7 +399,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		},
 		logger,
 	)
-	go dynamicDNS.Run(zoneRefreshContext)
+	runRuntimeWorker(func(context.Context) { dynamicDNS.Run(zoneRefreshContext) })
 
 	var webAuthentication web.Authenticator
 	if authentication != nil {
@@ -370,12 +420,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		initial.Security.SecureCookies,
 	)
 	if err != nil {
-		return errors.Join(
-			err,
-			clusterService.Close(context.Background()),
-			closeListenersAfterStartupFailure(listeners, initial),
-			closeQueryRecorderAfterStartupFailure(queryRecorder, initial),
-		)
+		return err
 	}
 	webServer.SetDNSSECController(dnssec)
 	webServer.SetClusterController(clusterService)
@@ -415,28 +460,20 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 		logger.Error("restore cluster update progress", "error", err)
 	}
 	if err := webServer.Start(initial.Server.HTTPListen); err != nil {
-		return errors.Join(
-			err,
-			clusterService.Close(context.Background()),
-			closeListenersAfterStartupFailure(listeners, initial),
-			closeQueryRecorderAfterStartupFailure(queryRecorder, initial),
-		)
+		return err
 	}
 	if initial.Server.HTTPSListen != "" {
 		certificate, privateKey := initial.EncryptedDNSCertificatePaths(configurationDirectory)
 		if err := webServer.StartTLS(initial.Server.HTTPSListen, certificate, privateKey, initial.EncryptedDNS.MinimumTLSVersion()); err != nil {
-			return errors.Join(
-				err,
-				webServer.Close(context.Background()),
-				clusterService.Close(context.Background()),
-				closeListenersAfterStartupFailure(listeners, initial),
-				closeQueryRecorderAfterStartupFailure(queryRecorder, initial),
-			)
+			return err
 		}
 	}
 	clusterService.StartMonitoring(runtimeContext)
-	go scheduledBackups.Run(runtimeContext)
-	go runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
+	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
+	runRuntimeWorker(func(context.Context) {
+		runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
+	})
+	startupComplete = true
 
 	releaseInfo := version.Current()
 	clusterState := clusterService.Snapshot()
@@ -465,7 +502,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	var watchErrors chan error
 	if initial.Reload.Watch {
 		watchErrors = make(chan error, 1)
-		go func() {
+		runRuntimeWorker(func(runtimeContext context.Context) {
 			watchErrors <- config.Watch(
 				runtimeContext,
 				absolutePath,
@@ -476,7 +513,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 					return configurationManager.Current().Config.ReloadDependencyPaths(configurationDirectory)
 				},
 			)
-		}()
+		})
 	}
 
 	restartRequested := false
@@ -508,18 +545,33 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) err
 	stopRuntime()
 	webError := webServer.Close(shutdownContext)
 	listenerError := listeners.Close(shutdownContext)
+	workerError := waitRuntimeWorkers(shutdownContext, &runtimeWorkers)
+	clusterError := clusterService.Close(shutdownContext)
 	// Stop background cache refreshes before snapshotting, so what gets persisted
 	// is a settled cache rather than one being written to as it is read.
-	handler.Close()
-	cacheError := persistDNSCache(
-		shutdownContext,
-		database,
-		handler,
-		configurationManager.Current().Config.Resolver.SaveCache,
-	)
-	queryLogError := queryRecorder.Close(shutdownContext)
-	clusterError := clusterService.Close(shutdownContext)
-	shutdownError := errors.Join(webError, listenerError, cacheError, queryLogError, clusterError)
+	handlerError := handler.Shutdown(shutdownContext)
+	cacheError := error(nil)
+	runtimeDrained := workerError == nil && webError == nil && listenerError == nil && clusterError == nil && handlerError == nil
+	if runtimeDrained {
+		cacheError = persistDNSCache(
+			shutdownContext,
+			database,
+			handler,
+			configurationManager.Current().Config.Resolver.SaveCache,
+		)
+	} else {
+		cacheError = errors.Join(
+			errors.New("skip DNS cache persistence because runtime shutdown was incomplete"),
+			workerError, webError, listenerError, handlerError,
+		)
+	}
+	queryContext, queryCancel := recorderContextForShutdown(shutdownContext, shutdownTimeout)
+	queryLogError := queryRecorder.Close(queryContext)
+	queryCancel()
+	if !runtimeDrained {
+		storesSafe = false
+	}
+	shutdownError := errors.Join(webError, listenerError, workerError, clusterError, handlerError, cacheError, queryLogError)
 	if restartRequested {
 		if shutdownError != nil {
 			logger.Error("controlled restart shutdown failed", "error", shutdownError)
@@ -663,16 +715,29 @@ func loadConfiguration(configurationPath string) (string, config.Config, error) 
 	return absolutePath, configuration, nil
 }
 
-func closeListenersAfterStartupFailure(listeners *dnsserver.ListenerGroup, configuration config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), configuration.Server.ShutdownTimeout.Duration)
-	defer cancel()
-	return listeners.Close(ctx)
+func waitRuntimeWorkers(ctx context.Context, workers *sync.WaitGroup) error {
+	done := make(chan struct{})
+	go func() {
+		workers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("runtime workers did not stop before shutdown deadline: %w", ctx.Err())
+	}
 }
 
-func closeQueryRecorderAfterStartupFailure(recorder *querylog.Recorder, configuration config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), configuration.Server.ShutdownTimeout.Duration)
-	defer cancel()
-	return recorder.Close(ctx)
+// recorderContextForShutdown gives recorder.Close a fresh bounded context when
+// the shared shutdown deadline has already expired. Recorder.Close checks the
+// context before signaling its worker, while the other components signal their
+// own cancellation before waiting and can safely use the shared deadline.
+func recorderContextForShutdown(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if ctx.Err() == nil {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(context.Background(), timeout)
 }
 
 // closeServerLogRecorder flushes on the way out. It takes no error return

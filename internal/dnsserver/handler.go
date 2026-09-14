@@ -262,6 +262,13 @@ type Handler struct {
 	maintenanceDone      chan struct{}
 	maintenanceStarted   atomic.Bool
 	maintenanceOnce      sync.Once
+	prefetchContext      context.Context
+	prefetchCancel       context.CancelFunc
+	prefetchMu           sync.Mutex
+	prefetchClosed       bool
+	prefetchWG           sync.WaitGroup
+	prefetchWaitOnce     sync.Once
+	prefetchDone         chan struct{}
 	routedQueries        atomic.Uint64
 	localAnswers         atomic.Uint64
 	authoritativeAnswers atomic.Uint64
@@ -689,6 +696,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 
 func NewHandler(runtime *Runtime) *Handler {
 	forwarders := newForwarderPool()
+	prefetchContext, prefetchCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
 		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
@@ -696,6 +704,7 @@ func NewHandler(runtime *Runtime) *Handler {
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),
 		maintenanceStop: make(chan struct{}), maintenanceDone: make(chan struct{}),
+		prefetchContext: prefetchContext, prefetchCancel: prefetchCancel, prefetchDone: make(chan struct{}),
 	}
 	emptyExpired := make(map[string]struct{})
 	handler.expiredZones.Store(&emptyExpired)
@@ -740,19 +749,54 @@ func (handler *Handler) maintainCache() {
 	}
 }
 
-// Close stops cache maintenance. It is safe to call more than once, and safe to
-// call before persisting the cache: no refresh is in flight once it returns.
+// Close stops cache maintenance and waits for all background prefetches. It is
+// retained as the unbounded compatibility form of Shutdown.
 func (handler *Handler) Close() {
-	handler.maintenanceOnce.Do(func() { close(handler.maintenanceStop) })
-	// Swap reports what came before: true means maintainCache is running and will
-	// close maintenanceDone, false means it never started and now never will, so
-	// there is nothing to wait for.
-	if handler.maintenanceStarted.Swap(true) {
-		<-handler.maintenanceDone
+	_ = handler.Shutdown(context.Background())
+}
+
+// Shutdown stops cache maintenance, cancels background prefetches, and waits
+// for them to leave the shared cache. A deadline returns an error while leaving
+// the forwarder pool open for any prefetch that is still unwinding.
+func (handler *Handler) Shutdown(ctx context.Context) error {
+	handler.maintenanceOnce.Do(func() {
+		close(handler.maintenanceStop)
+		if !handler.maintenanceStarted.Swap(true) {
+			close(handler.maintenanceDone)
+		}
+	})
+	handler.prefetchMu.Lock()
+	if !handler.prefetchClosed {
+		handler.prefetchClosed = true
+		handler.prefetchCancel()
+	}
+	handler.prefetchMu.Unlock()
+	handler.prefetchWaitOnce.Do(func() {
+		go func() {
+			handler.prefetchWG.Wait()
+			close(handler.prefetchDone)
+		}()
+	})
+	var shutdownError error
+	select {
+	case <-handler.maintenanceDone:
+	case <-ctx.Done():
+		shutdownError = ctx.Err()
+	}
+	if shutdownError == nil {
+		select {
+		case <-handler.prefetchDone:
+		case <-ctx.Done():
+			shutdownError = ctx.Err()
+		}
+	}
+	if shutdownError != nil {
+		return shutdownError
 	}
 	if handler.forwarderConnections != nil {
 		handler.forwarderConnections.Close()
 	}
+	return nil
 }
 
 func (handler *Handler) ExportCache() ([]PersistedResponse, error) {
@@ -1580,16 +1624,26 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
+	handler.prefetchMu.Lock()
+	if handler.prefetchClosed {
+		handler.prefetchMu.Unlock()
+		runtime.cache.CancelPrefetch(request)
+		return
+	}
+	handler.prefetchWG.Add(1)
+	handler.prefetchMu.Unlock()
 	release, admitted := handler.admission.acquire("", runtime.maxConcurrent, runtime.maxConcurrentPerClient)
 	if !admitted {
+		handler.prefetchWG.Done()
 		runtime.cache.CancelPrefetch(request)
 		return
 	}
 	request = request.Copy()
 	go func() {
+		defer handler.prefetchWG.Done()
 		defer release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
-		response, validation, err := handler.resolveUpstream(request, runtime, forwarders)
+		response, validation, err := handler.resolveUpstreamContext(handler.prefetchContext, request, runtime, forwarders)
 		if err != nil || response == nil || validation == validationBogus {
 			runtime.cache.CancelPrefetch(request)
 			return
@@ -2747,22 +2801,29 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 }
 
 func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
+	return handler.resolveUpstreamContext(context.Background(), request, runtime, forwarders)
+}
+
+func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
+	networkContext, cancelNetwork := context.WithTimeout(ctx, runtime.timeout)
 	if runtime.dnssec == nil {
-		response, err := handler.resolveNetwork(request, runtime, forwarders)
+		defer cancelNetwork()
+		response, err := handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
 		if response != nil {
 			response.AuthenticatedData = false
 		}
 		return response, validationIndeterminate, err
 	}
 	upstreamRequest := dnssecUpstreamRequest(request)
-	response, err := handler.resolveNetwork(upstreamRequest, runtime, forwarders)
+	response, err := handler.resolveNetworkContext(networkContext, upstreamRequest, runtime, forwarders)
+	cancelNetwork()
 	if err != nil {
 		return nil, validationIndeterminate, err
 	}
 	if response == nil {
 		return nil, validationIndeterminate, errors.New("upstream returned no response")
 	}
-	validationContext, cancel := context.WithTimeout(context.Background(), max(4*runtime.timeout, 2*time.Second))
+	validationContext, cancel := context.WithTimeout(ctx, max(4*runtime.timeout, 2*time.Second))
 	defer cancel()
 	query := func(ctx context.Context, name string, recordType uint16) (*dns.Msg, error) {
 		message := new(dns.Msg)
