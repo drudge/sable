@@ -67,79 +67,21 @@ type backupStaging struct {
 	job     *backupJob
 }
 
-// BackupSummary reports what a restore applied. It lives here rather than in
-// the application package so the console does not depend on the wiring that
-// drives it.
-type BackupSummary struct {
-	Sections              []string
-	Zones                 int
-	Users                 int
-	Roles                 int
-	Tokens                int
-	Secrets               int
-	TrustAnchors          int
-	Files                 int
-	ConfigurationBackedUp string
-}
-
-// BackupProgress is one stage report from a running operation.
-type BackupProgress struct {
-	Stage string
-	Step  int
-	Total int
-}
-
-// BackupSchedule is the node-local archive policy and its current runtime
-// state. The passphrase itself never crosses this interface.
-type BackupSchedule struct {
-	Enabled           bool
-	Directory         string
-	ResolvedDirectory string
-	Interval          time.Duration
-	RunAt             string
-	RetentionCount    int
-	PassphraseStored  bool
-	NextRun           time.Time
-	LastSuccess       time.Time
-	LastError         string
-}
-
-// BackupScheduleUpdate is an operator's replacement local-backup policy. A
-// blank passphrase keeps the encrypted value already in the vault.
-type BackupScheduleUpdate struct {
-	Enabled        bool
-	Directory      string
-	Interval       time.Duration
-	RunAt          string
-	RetentionCount int
-	Passphrase     string
-}
-
-// LocalBackup describes one valid archive in the configured local directory.
-type LocalBackup struct {
-	Name         string
-	CreatedAt    time.Time
-	Hostname     string
-	SableVersion string
-	Size         int64
-	Scheduled    bool
-}
-
 // backupController captures deployment backups and stages restores for the next
 // controlled restart. Both calls report their stages so the console can show
 // real movement instead of a spinner.
 type backupController interface {
-	CreateBackup(ctx context.Context, passphrase string, progress func(BackupProgress)) ([]byte, error)
-	StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error)
+	CreateBackup(ctx context.Context, passphrase string, progress func(backup.Progress)) ([]byte, error)
+	StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error)
 }
 
 // localBackupController is optional so the browser can still expose manual
 // create/restore when an embedding application has no scheduler or local disk.
 type localBackupController interface {
-	BackupSchedule(context.Context) (BackupSchedule, error)
-	UpdateBackupSchedule(context.Context, BackupScheduleUpdate) error
-	CreateLocalBackup(context.Context, string, func(BackupProgress)) (LocalBackup, error)
-	LocalBackups(context.Context) ([]LocalBackup, error)
+	BackupSchedule(context.Context) (backup.Schedule, error)
+	UpdateBackupSchedule(context.Context, backup.ScheduleUpdate) error
+	CreateLocalBackup(context.Context, string, func(backup.Progress)) (backup.LocalArchive, error)
+	LocalBackups(context.Context) ([]backup.LocalArchive, error)
 	LocalBackupContents(context.Context, string) ([]byte, error)
 	DeleteLocalBackup(context.Context, string) error
 	LocalBackupForRestore(context.Context, string, string) ([]byte, string, error)
@@ -196,7 +138,7 @@ func (server *Server) updateBackupSchedule(writer http.ResponseWriter, request *
 			return
 		}
 	}
-	update := BackupScheduleUpdate{
+	update := backup.ScheduleUpdate{
 		Enabled: request.FormValue("enabled") == "on", Directory: request.FormValue("directory"),
 		Interval: interval, RunAt: runAt, RetentionCount: retention, Passphrase: passphrase,
 	}
@@ -436,7 +378,7 @@ func (server *Server) startBackupJob(kind, stage string) bool {
 	return true
 }
 
-func (server *Server) reportBackupProgress(progress BackupProgress) {
+func (server *Server) reportBackupProgress(progress backup.Progress) {
 	server.backupStaging.mu.Lock()
 	defer server.backupStaging.mu.Unlock()
 	job := server.backupStaging.job
@@ -596,7 +538,7 @@ var sectionLabels = map[string]string{
 
 // restoreMessage tells an operator what is staged and that the node is still
 // running the previous state until a controlled restart applies it.
-func restoreMessage(summary BackupSummary) string {
+func restoreMessage(summary backup.RestoreSummary) string {
 	sections := make([]string, 0, len(summary.Sections))
 	for _, section := range summary.Sections {
 		if label, ok := sectionLabels[section]; ok {
