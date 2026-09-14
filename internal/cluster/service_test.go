@@ -1527,3 +1527,43 @@ func (roundTripper serviceRoundTripper) RoundTrip(request *http.Request) (*http.
 		Body: io.NopCloser(bytes.NewReader(contents)), Request: request,
 	}, nil
 }
+
+func TestRefreshPrimaryStateDiscardsCaptureAfterStateReplacement(t *testing.T) {
+	for _, replaceCluster := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cluster-replaced-%t", replaceCluster), func(t *testing.T) {
+			replicator := &controlledStateReplicator{}
+			replicator.replace([]byte(`{"state":"initial"}`))
+			service, err := Open(Options{DataDirectory: t.TempDir(), Replicator: replicator})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+				t.Fatal(err)
+			}
+			replicator.replace([]byte(`{"state":"captured"}`))
+			replicator.captureStarted = make(chan struct{})
+			replicator.captureRelease = make(chan struct{})
+			done := make(chan error, 1)
+			go func() { done <- service.refreshPrimaryState(context.Background()) }()
+			<-replicator.captureStarted
+			service.mu.Lock()
+			service.manifest.Generation++
+			if replaceCluster {
+				service.manifest.ClusterID = "replacement-cluster"
+			} else {
+				service.manifest.StateDigest = stateDigest([]byte(`{"state":"applied"}`))
+			}
+			expectedID, expectedDigest, expectedGeneration := service.manifest.ClusterID, service.manifest.StateDigest, service.manifest.Generation
+			service.mu.Unlock()
+			close(replicator.captureRelease)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			service.mu.RLock()
+			defer service.mu.RUnlock()
+			if service.manifest.ClusterID != expectedID || service.manifest.StateDigest != expectedDigest || service.manifest.Generation != expectedGeneration {
+				t.Fatalf("stale capture overwrote replacement: %+v", service.manifest)
+			}
+		})
+	}
+}
