@@ -23,7 +23,10 @@ const (
 	// clients an operator is most likely to be looking at.
 	reverseNameLimit = 50
 	// reverseNameWorkers bounds how many of those run at once.
+	// reverseNameWorkers is shared by every render using this cache.
 	reverseNameWorkers = 8
+	// reverseNameInflightLimit bounds claims across all concurrent renders.
+	reverseNameInflightLimit = reverseNameLimit
 	// reverseNameBudget is how long a render waits. Lookups that miss it keep
 	// running on their own deadline, so their answers are already cached by the
 	// time the page is next drawn.
@@ -34,6 +37,9 @@ const (
 	// next DHCP sync runs.
 	reverseNameLifetime     = 30 * time.Minute
 	reverseNameMissLifetime = 5 * time.Minute
+	// reverseNameCacheCapacity bounds retained answers; expired entries are
+	// pruned before inserts and the soonest-expiring answer is evicted at cap.
+	reverseNameCacheCapacity = 4_096
 )
 
 type reverseResolver interface {
@@ -52,6 +58,7 @@ type reverseNameCache struct {
 	resolver reverseResolver
 	logger   *slog.Logger
 	now      func() time.Time
+	workers  chan struct{}
 }
 
 func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverseNameCache {
@@ -61,6 +68,7 @@ func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverse
 		resolver: resolver,
 		logger:   logger,
 		now:      time.Now,
+		workers:  make(chan struct{}, reverseNameWorkers),
 	}
 }
 
@@ -71,12 +79,14 @@ func (cache *reverseNameCache) names(addresses []string) map[string]string {
 		return nil
 	}
 	known, pending := cache.partition(addresses)
-	if len(pending) > 0 {
-		cache.resolve(pending)
-		for _, address := range pending {
-			if name, found := cache.cached(address); found && name != "" {
-				known[address] = name
-			}
+	if len(pending) == 0 {
+		return known
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), reverseNameDeadline)
+	cache.resolve(ctx, cancel, pending)
+	for _, address := range pending {
+		if name, found := cache.cached(address); found && name != "" {
+			known[address] = name
 		}
 	}
 	return known
@@ -91,9 +101,10 @@ func (cache *reverseNameCache) partition(addresses []string) (map[string]string,
 
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
+	cache.pruneExpiredLocked(moment)
 	for _, address := range addresses {
 		entry, cached := cache.entries[address]
-		if cached && moment.Before(entry.expiresAt) {
+		if cached {
 			if entry.name != "" {
 				known[address] = entry.name
 			}
@@ -102,7 +113,7 @@ func (cache *reverseNameCache) partition(addresses []string) (map[string]string,
 		if _, claimed := cache.inflight[address]; claimed {
 			continue
 		}
-		if len(pending) >= reverseNameLimit {
+		if len(cache.inflight) >= reverseNameInflightLimit || len(pending) >= reverseNameLimit {
 			continue
 		}
 		cache.inflight[address] = struct{}{}
@@ -116,9 +127,20 @@ func (cache *reverseNameCache) cached(address string) (string, bool) {
 	defer cache.mutex.Unlock()
 	entry, found := cache.entries[address]
 	if !found || !cache.now().Before(entry.expiresAt) {
+		if found {
+			delete(cache.entries, address)
+		}
 		return "", false
 	}
 	return entry.name, true
+}
+
+func (cache *reverseNameCache) pruneExpiredLocked(moment time.Time) {
+	for address, entry := range cache.entries {
+		if !moment.Before(entry.expiresAt) {
+			delete(cache.entries, address)
+		}
+	}
 }
 
 func (cache *reverseNameCache) store(address, name string) {
@@ -128,19 +150,41 @@ func (cache *reverseNameCache) store(address, name string) {
 	}
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
-	cache.entries[address] = reverseNameEntry{name: name, expiresAt: cache.now().Add(lifetime)}
+	moment := cache.now()
+	cache.pruneExpiredLocked(moment)
+	if _, exists := cache.entries[address]; !exists && len(cache.entries) >= reverseNameCacheCapacity {
+		var oldestAddress string
+		var oldest time.Time
+		for candidate, entry := range cache.entries {
+			if oldestAddress == "" || entry.expiresAt.Before(oldest) {
+				oldestAddress, oldest = candidate, entry.expiresAt
+			}
+		}
+		delete(cache.entries, oldestAddress)
+	}
+	cache.entries[address] = reverseNameEntry{name: name, expiresAt: moment.Add(lifetime)}
 	delete(cache.inflight, address)
+}
+
+func (cache *reverseNameCache) unclaim(address string) {
+	cache.mutex.Lock()
+	delete(cache.inflight, address)
+	cache.mutex.Unlock()
 }
 
 // resolve looks the addresses up and waits out the render's budget. The lookups
 // carry their own context so the ones that outlast the budget still finish and
 // leave their answer behind for the next render.
-func (cache *reverseNameCache) resolve(addresses []string) {
-	ctx, cancel := context.WithTimeout(context.Background(), reverseNameDeadline)
-	workers := make(chan struct{}, reverseNameWorkers)
+func (cache *reverseNameCache) resolve(ctx context.Context, cancel context.CancelFunc, addresses []string) {
 	finished := make(chan struct{})
 	var group sync.WaitGroup
 	for _, address := range addresses {
+		select {
+		case <-ctx.Done():
+			cache.unclaim(address)
+			continue
+		default:
+		}
 		parsed, err := netip.ParseAddr(address)
 		if err != nil {
 			cache.store(address, "")
@@ -149,10 +193,25 @@ func (cache *reverseNameCache) resolve(addresses []string) {
 		group.Add(1)
 		go func(address string, parsed netip.Addr) {
 			defer group.Done()
-			workers <- struct{}{}
-			defer func() { <-workers }()
+			select {
+			case cache.workers <- struct{}{}:
+			case <-ctx.Done():
+				cache.unclaim(address)
+				return
+			}
+			defer func() { <-cache.workers }()
+			select {
+			case <-ctx.Done():
+				cache.unclaim(address)
+				return
+			default:
+			}
 			name, err := cache.resolver.ReverseLookup(ctx, parsed)
 			if err != nil {
+				if ctx.Err() != nil {
+					cache.unclaim(address)
+					return
+				}
 				// A client with no PTR is the ordinary case, not a fault, so
 				// the miss is remembered at debug level and nothing else.
 				cache.logger.Debug("reverse lookup for dashboard client", "address", address, "error", err)
