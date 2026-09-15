@@ -554,10 +554,10 @@ func (server *Server) renderZoneMutation(
 		}
 		writer.Header().Set("HX-Push-Url", pushURL)
 	}
-	if status != http.StatusOK && request.Header.Get("HX-Request") != "true" {
-		writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
+	if err := pages.ZonesContent(server.zonesView(request, message, errorMessage, selected)).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render zone mutation fragment", "error", err)
 	}
-	_ = pages.ZonesContent(server.zonesView(request, message, errorMessage, selected)).Render(request.Context(), writer)
 }
 
 func (server *Server) addZone(writer http.ResponseWriter, request *http.Request) {

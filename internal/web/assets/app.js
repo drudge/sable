@@ -3275,6 +3275,13 @@
 	  const palette = document.querySelector("[data-command-palette]");
 	  if (!palette || palette.dataset.commandReady === "true") return;
 	  palette.dataset.commandReady = "true";
+	  let commandFeedback = document.querySelector("#command-feedback");
+	  if (!commandFeedback) {
+		commandFeedback = document.createElement("div");
+		commandFeedback.id = "command-feedback";
+		commandFeedback.setAttribute("aria-live", "polite");
+		document.body.append(commandFeedback);
+	  }
 	  setupDialogAccessibility(palette);
 	  const input = palette.querySelector("[data-command-input]");
 	  const list = palette.querySelector("[data-command-list]");
@@ -3560,41 +3567,52 @@
 		window.location.assign(target.href);
 	  };
 	  const runPostCommand = async (item) => {
+		if (item.dataset.commandPending === "true") return;
 		const label = item.dataset.commandLabel;
 		let values = {};
 		let headers = {};
 		try { values = JSON.parse(item.dataset.commandValues || "{}"); } catch (_) {}
 		try { headers = JSON.parse(document.body.getAttribute("hx-headers:inherited") || "{}"); } catch (_) {}
+		item.dataset.commandPending = "true";
+		item.setAttribute("aria-busy", "true");
 		palette.close();
 		announce(`${label} started`);
-		try {
-		  const response = await fetch(new URL(item.dataset.commandPost, window.location.origin), {
-			method: "POST",
-			headers: {...headers, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
-			body: new URLSearchParams(values),
-		  });
-		  const markup = await response.text();
-		  const responseDocument = new DOMParser().parseFromString(markup, "text/html");
-		  const updatedBlocking = responseDocument.querySelector("#blocking-content");
-		  const currentBlocking = document.querySelector("#blocking-content");
-		  if (currentBlocking && updatedBlocking) {
-			currentBlocking.replaceWith(updatedBlocking);
-			window.htmx?.process(updatedBlocking);
-			initializeSwappedContent(updatedBlocking);
-			document.body.dispatchEvent(new CustomEvent("htmx:after:swap", {bubbles: true, detail: {target: updatedBlocking}}));
-		  } else {
-			const toast = responseDocument.querySelector(".toast-region");
-			if (toast) {
-			  document.querySelectorAll(".toast-region").forEach((region) => region.remove());
-			  document.body.append(toast);
-			  window.htmx?.process(toast);
-			  initializeSwappedContent(toast);
+		const blockingTarget = item.dataset.commandPost.startsWith("/ui/blocking/") ? document.querySelector("#blocking-content") : null;
+		const target = blockingTarget || commandFeedback;
+		const targetSelector = blockingTarget ? undefined : ".toast-region";
+		const targetName = target.id ? `#${CSS.escape(target.id)}` : "#command-feedback";
+		let requestContext;
+		const observeRequest = (event) => {
+			const ctx = event.detail?.ctx;
+			if (event.type === "htmx:before:request") {
+				if (ctx?.sourceElement === item) requestContext = ctx;
+				return;
 			}
-		  }
-		  if (!response.ok) throw new Error(`command returned ${response.status}`);
-		  announce(`${label} completed`);
+			if (event.type === "htmx:finally:request" && ctx === requestContext) requestContext = ctx;
+		};
+		document.addEventListener("htmx:before:request", observeRequest);
+		document.addEventListener("htmx:finally:request", observeRequest);
+		try {
+		  if (!window.htmx?.ajax) throw new Error("HTMX is unavailable");
+		  await window.htmx.ajax("POST", new URL(item.dataset.commandPost, window.location.origin).href, {
+			source: item,
+			target,
+			select: targetSelector,
+			swap: blockingTarget ? "outerHTML" : "innerHTML",
+			values,
+			headers: {...headers, "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "HX-Target": targetName},
+		  });
+		  const statusCode = requestContext?.response?.status;
+		  const requestFailed = !requestContext || !Number.isInteger(statusCode) || statusCode < 200 || statusCode >= 300 || String(requestContext.status || "").startsWith("error:");
+		  if (!requestFailed) announce(`${label} completed`);
+		  else announce(`${label} failed`);
 		} catch (_) {
 		  announce(`${label} failed`);
+		} finally {
+		  document.removeEventListener("htmx:before:request", observeRequest);
+		  document.removeEventListener("htmx:finally:request", observeRequest);
+		  item.removeAttribute("aria-busy");
+		  delete item.dataset.commandPending;
 		}
 	  };
 	  const execute = (item) => {

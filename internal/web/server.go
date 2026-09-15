@@ -1692,6 +1692,7 @@ const consoleFragmentHeader = "X-Sable-Console-Fragment"
 // fragment, flagging anything other than 200 so the browser can distinguish it
 // from an unrendered server error.
 func writeFragmentStatus(writer http.ResponseWriter, status int) {
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if status != http.StatusOK {
 		writer.Header().Set(consoleFragmentHeader, "true")
 	}
