@@ -78,7 +78,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	for _, expected := range []string{
 		`id="command-page-zones"`, `id="command-page-query-logs"`,
 		`id="command-action-query"`, `data-command-keywords="rdq resolve lookup dig nslookup"`,
-		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `data-command-dialog="import-new-zone-dialog"`, `id="command-action-block-domain"`,
+		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `id="command-action-import-catalog"`, `data-command-dialog="import-new-zone-dialog"`, `data-command-route="/zones/import-catalog"`, `data-command-dialog="catalog-import-dialog"`, `id="command-action-block-domain"`,
 		`id="command-action-search-server-logs"`, `id="command-action-search-query-logs"`, `id="command-action-search-cache"`,
 		`id="command-action-search-blocked"`, `data-command-focus="[data-domain-search=domains]"`,
 		`id="command-action-search-allowed"`, `data-command-focus="[data-domain-search=allowed]"`,
@@ -116,7 +116,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	fullAccess.ControlPlaneReadOnly = true
 	replica := renderComponent(t, CommandPalette(fullAccess))
 	for _, forbidden := range []string{
-		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `id="command-action-block-domain"`,
+		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `id="command-action-import-catalog"`, `id="command-action-block-domain"`,
 		`id="command-action-pause-blocking-5"`, `id="command-action-resume-blocking"`, `id="command-action-update-block-lists"`,
 		`id="command-action-create-token"`, `id="command-action-add-user"`,
 	} {
@@ -131,7 +131,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	}
 
 	restricted := renderComponent(t, CommandPalette(DashboardView{}))
-	for _, forbidden := range []string{`id="command-page-zones"`, `id="command-page-settings"`, `id="command-settings-title"`, `id="command-action-check-updates"`, `id="command-page-administration"`} {
+	for _, forbidden := range []string{`id="command-action-import-catalog"`, `id="command-page-zones"`, `id="command-page-settings"`, `id="command-settings-title"`, `id="command-action-check-updates"`, `id="command-page-administration"`} {
 		if strings.Contains(restricted, forbidden) {
 			t.Errorf("restricted command palette unexpectedly contains %q", forbidden)
 		}
