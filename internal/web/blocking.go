@@ -691,7 +691,7 @@ func (server *Server) runBlockListScheduler() {
 		if len(sources) == 0 {
 			server.blockLists.SetNext(time.Time{})
 			select {
-			case <-server.historyStop:
+			case <-server.runtimeContext.Done():
 				return
 			case <-server.blockLists.Wake():
 				continue
@@ -704,7 +704,7 @@ func (server *Server) runBlockListScheduler() {
 		}
 		timer := time.NewTimer(max(time.Until(next), time.Second))
 		select {
-		case <-server.historyStop:
+		case <-server.runtimeContext.Done():
 			timer.Stop()
 			return
 		case <-server.blockLists.Wake():
@@ -712,7 +712,7 @@ func (server *Server) runBlockListScheduler() {
 			continue
 		case <-timer.C:
 			started := time.Now()
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			ctx, cancel := context.WithTimeout(server.runtimeContext, 10*time.Minute)
 			err := server.refreshRemoteBlockLists(ctx)
 			cancel()
 			status := server.blockLists.Status()

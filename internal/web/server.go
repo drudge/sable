@@ -72,38 +72,44 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames      *reverseNameCache
-	reload            func(context.Context) error
-	auth              Authenticator
-	sso               ssoController
-	ssoAdmin          ssoAdministration
-	ssoStateStore     *ssoStateStore
-	preAuthTokens     *preAuthTokenStore
-	passkeyCeremonies passkeyCeremonyStore
-	crossOrigin       *http.CrossOriginProtection
-	securityEnabled   bool
-	secureCookies     bool
-	sessionCookie     string
-	setupRequired     atomic.Bool
-	history           *statsHistory
-	insightCache      dashboardInsightCache
-	historyStop       chan struct{}
-	historyPrune      chan struct{}
-	historyStopOnce   sync.Once
-	blockLists        *blockcompiler.Updater
-	dnssec            dnssecController
-	cluster           clusterController
-	dynamicDNS        dynamicDNSController
-	unifi             unifiController
-	certificates      certificateController
-	tsigKeys          tsigController
-	updates           updateController
-	backups           backupController
-	backupStaging     backupStaging
-	administrator     administrator
-	restart           func()
-	restartRequested  atomic.Bool
-	instanceID        string
+	reverseNames       *reverseNameCache
+	reload             func(context.Context) error
+	auth               Authenticator
+	sso                ssoController
+	ssoAdmin           ssoAdministration
+	ssoStateStore      *ssoStateStore
+	preAuthTokens      *preAuthTokenStore
+	passkeyCeremonies  passkeyCeremonyStore
+	crossOrigin        *http.CrossOriginProtection
+	securityEnabled    bool
+	secureCookies      bool
+	sessionCookie      string
+	setupRequired      atomic.Bool
+	history            *statsHistory
+	insightCache       dashboardInsightCache
+	historyPrune       chan struct{}
+	runtimeContext     context.Context
+	runtimeCancel      context.CancelFunc
+	runtimeLifecycleMu sync.Mutex
+	runtimeStarted     bool
+	runtimeClosed      bool
+	runtimeWG          sync.WaitGroup
+	runtimeWaitOnce    sync.Once
+	runtimeDone        chan struct{}
+	blockLists         *blockcompiler.Updater
+	dnssec             dnssecController
+	cluster            clusterController
+	dynamicDNS         dynamicDNSController
+	unifi              unifiController
+	certificates       certificateController
+	tsigKeys           tsigController
+	updates            updateController
+	backups            backupController
+	backupStaging      backupStaging
+	administrator      administrator
+	restart            func()
+	restartRequested   atomic.Bool
+	instanceID         string
 }
 
 type certificateController interface {
@@ -186,15 +192,17 @@ func New(
 	setupRequired bool,
 	secureCookies bool,
 ) (*Server, error) {
+	runtimeContext, runtimeCancel := context.WithCancel(context.Background())
 	server := &Server{
 		logger: logger, stats: stats, config: configuration, zones: zones, database: database,
 		queryLog: queryLog, queries: queries, reload: reload,
 		auth: authentication, preAuthTokens: newPreAuthTokenStore(), ssoStateStore: newSSOStateStore(),
-		crossOrigin: http.NewCrossOriginProtection(),
-		history:     newStatsHistory(logger, configuration.Current().Config.Statistics.Retention.Duration),
-		historyStop: make(chan struct{}), historyPrune: make(chan struct{}, 1),
+		crossOrigin:     http.NewCrossOriginProtection(),
+		history:         newStatsHistory(logger, configuration.Current().Config.Statistics.Retention.Duration),
+		historyPrune:    make(chan struct{}, 1),
 		securityEnabled: securityEnabled, secureCookies: secureCookies,
-		instanceID: strconv.FormatInt(time.Now().UnixNano(), 36),
+		instanceID:     strconv.FormatInt(time.Now().UnixNano(), 36),
+		runtimeContext: runtimeContext, runtimeCancel: runtimeCancel, runtimeDone: make(chan struct{}),
 	}
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
@@ -443,14 +451,23 @@ func (server *Server) sharedDoHHandler(next http.Handler) http.Handler {
 }
 
 func (server *Server) Start(address string) error {
+	server.runtimeLifecycleMu.Lock()
+	if server.runtimeClosed || server.runtimeStarted {
+		server.runtimeLifecycleMu.Unlock()
+		return errors.New("web server lifecycle has already started or closed")
+	}
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
+		server.runtimeLifecycleMu.Unlock()
 		return fmt.Errorf("listen for web console on %s: %w", address, err)
 	}
 	server.listener = listener
+	server.runtimeStarted = true
+	server.runtimeWG.Add(2)
+	server.runtimeLifecycleMu.Unlock()
 	server.history.record(time.Now(), server.stats.Stats())
-	go server.collectStatsHistory()
-	go server.runBlockListScheduler()
+	go func() { defer server.runtimeWG.Done(); server.collectStatsHistory() }()
+	go func() { defer server.runtimeWG.Done(); server.runBlockListScheduler() }()
 	go func() {
 		if err := server.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			server.logger.Error("web console stopped", "error", err)
@@ -499,8 +516,26 @@ func (server *Server) ReplaceCertificate(certificateFile, privateKeyFile string)
 }
 
 func (server *Server) Close(ctx context.Context) error {
-	server.historyStopOnce.Do(func() { close(server.historyStop) })
+	server.runtimeLifecycleMu.Lock()
+	server.runtimeClosed = true
+	server.runtimeCancel()
+	server.runtimeLifecycleMu.Unlock()
 	shutdownError := server.httpServer.Shutdown(ctx)
+	server.runtimeWaitOnce.Do(func() {
+		go func() {
+			server.runtimeWG.Wait()
+			close(server.runtimeDone)
+		}()
+	})
+	var runtimeError error
+	select {
+	case <-server.runtimeDone:
+	case <-ctx.Done():
+		runtimeError = ctx.Err()
+	}
+	if runtimeError != nil {
+		return errors.Join(shutdownError, runtimeError)
+	}
 	// The collector also flushes on its way out, but Close can win the race, so
 	// persist the trailing counters here too. A flush clears what it wrote, so
 	// whichever call runs second only writes what the first one missed.
