@@ -3,9 +3,11 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,16 +16,27 @@ import (
 )
 
 type stubReverseResolver struct {
-	names  map[string]string
-	fail   map[string]bool
-	calls  atomic.Int64
-	block  chan struct{}
-	slowIP string
+	names     map[string]string
+	fail      map[string]bool
+	calls     atomic.Int64
+	active    atomic.Int64
+	maxActive atomic.Int64
+	block     chan struct{}
+	blockAll  bool
+	slowIP    string
 }
 
 func (stub *stubReverseResolver) ReverseLookup(ctx context.Context, address netip.Addr) (string, error) {
 	stub.calls.Add(1)
-	if stub.slowIP == address.String() && stub.block != nil {
+	active := stub.active.Add(1)
+	defer stub.active.Add(-1)
+	for {
+		maximum := stub.maxActive.Load()
+		if active <= maximum || stub.maxActive.CompareAndSwap(maximum, active) {
+			break
+		}
+	}
+	if (stub.blockAll || stub.slowIP == address.String()) && stub.block != nil {
 		select {
 		case <-stub.block:
 		case <-ctx.Done():
@@ -129,6 +142,162 @@ func TestReverseNameCacheCapsLookupsPerRender(t *testing.T) {
 	cache.names(addresses)
 	if calls := resolver.calls.Load(); calls != reverseNameLimit {
 		t.Fatalf("reverse lookups = %d, want %d", calls, reverseNameLimit)
+	}
+}
+
+func TestReverseNameCacheLimitsWorkersAcrossConcurrentRenders(t *testing.T) {
+	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
+	cache := newTestNameCache(resolver)
+	start := make(chan struct{})
+	var wait sync.WaitGroup
+	wait.Add(10)
+	for index := range 10 {
+		go func(index int) {
+			defer wait.Done()
+			<-start
+			cache.names([]string{netip.AddrFrom4([4]byte{10, 1, 0, byte(index)}).String()})
+		}(index)
+	}
+	close(start)
+	deadline := time.Now().Add(time.Second)
+	for resolver.maxActive.Load() < reverseNameWorkers && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := resolver.maxActive.Load(); got > reverseNameWorkers {
+		t.Fatalf("maximum concurrent reverse lookups = %d, want at most %d", got, reverseNameWorkers)
+	}
+	close(resolver.block)
+	wait.Wait()
+	if got := resolver.maxActive.Load(); got != reverseNameWorkers {
+		t.Fatalf("peak active lookups = %d, want %d", got, reverseNameWorkers)
+	}
+	if calls := resolver.calls.Load(); calls != 10 {
+		t.Fatalf("reverse lookups = %d, want 10", calls)
+	}
+}
+
+func TestReverseNameCacheCapsInflightClaimsAcrossRenders(t *testing.T) {
+	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
+	cache := newTestNameCache(resolver)
+	addresses := make([]string, 0, reverseNameCacheCapacity+1)
+	for index := range reverseNameCacheCapacity + 1 {
+		addresses = append(addresses, netip.AddrFrom4([4]byte{10, byte(index / 256), byte(index / 256), byte(index % 256)}).String())
+	}
+	done := make(chan struct{})
+	go func() {
+		cache.names(addresses)
+		close(done)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for {
+		cache.mutex.Lock()
+		claims := len(cache.inflight)
+		cache.mutex.Unlock()
+		if claims == reverseNameInflightLimit || !time.Now().Before(deadline) {
+			if claims != reverseNameInflightLimit {
+				t.Fatalf("inflight claims = %d, want %d", claims, reverseNameInflightLimit)
+			}
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	const extraAddress = "192.0.2.250"
+	if _, extra := cache.partition([]string{extraAddress}); len(extra) != 0 {
+		t.Fatal("another render exceeded the cache-wide claim cap")
+	}
+	close(resolver.block)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("cache render did not finish")
+	}
+	if calls := resolver.calls.Load(); calls != reverseNameInflightLimit {
+		t.Fatalf("reverse lookups = %d, want %d", calls, reverseNameInflightLimit)
+	}
+	if _, retry := cache.partition([]string{extraAddress}); len(retry) != 1 {
+		t.Fatal("declined address was not available for retry after capacity freed")
+	}
+	cache.unclaim(extraAddress)
+}
+
+func TestReverseNameCacheCanceledQueuedClaimsDoNotResolveOrCache(t *testing.T) {
+	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
+	cache := newTestNameCache(resolver)
+	addresses := make([]string, 0, reverseNameWorkers+1)
+	for index := range reverseNameWorkers + 1 {
+		addresses = append(addresses, netip.AddrFrom4([4]byte{10, 2, 0, byte(index)}).String())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	_, pending := cache.partition(addresses)
+	if len(pending) != len(addresses) {
+		t.Fatalf("pending claims = %d, want %d", len(pending), len(addresses))
+	}
+	done := make(chan struct{})
+	go func() {
+		cache.resolve(ctx, cancel, pending)
+		close(done)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for resolver.calls.Load() < reverseNameWorkers && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if calls := resolver.calls.Load(); calls != reverseNameWorkers {
+		t.Fatalf("started reverse lookups = %d, want %d", calls, reverseNameWorkers)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("canceled cache resolve did not finish")
+	}
+	if calls := resolver.calls.Load(); calls != reverseNameWorkers {
+		t.Fatalf("reverse lookups after cancellation = %d, want %d", calls, reverseNameWorkers)
+	}
+	cache.mutex.Lock()
+	defer cache.mutex.Unlock()
+	if len(cache.inflight) != 0 || len(cache.entries) != 0 {
+		t.Fatalf("canceled claims left cache state: inflight=%d entries=%d", len(cache.inflight), len(cache.entries))
+	}
+}
+
+func TestReverseNameCachePrunesExpiredAndEvictsSoonestExpiry(t *testing.T) {
+	moment := time.Unix(100, 0)
+	cache := newTestNameCache(&stubReverseResolver{})
+	cache.now = func() time.Time { return moment }
+	for index := range reverseNameCacheCapacity {
+		cache.entries[fmt.Sprintf("address-%d", index)] = reverseNameEntry{
+			name: fmt.Sprintf("name-%d", index), expiresAt: moment.Add(time.Duration(index+1) * time.Second),
+		}
+	}
+	cache.store("new-address", "new-name")
+	if len(cache.entries) != reverseNameCacheCapacity {
+		t.Fatalf("cache size after eviction = %d, want %d", len(cache.entries), reverseNameCacheCapacity)
+	}
+	if _, found := cache.entries["address-0"]; found {
+		t.Fatal("earliest-expiring entry was not evicted")
+	}
+	moment = moment.Add(2 * time.Hour)
+	cache.store("fresh-address", "fresh-name")
+	if len(cache.entries) != 1 {
+		t.Fatalf("cache size after expiry prune = %d, want 1", len(cache.entries))
+	}
+}
+
+func BenchmarkReverseNameCacheStoreAtCapacity(b *testing.B) {
+	cache := newTestNameCache(&stubReverseResolver{})
+	moment := time.Unix(100, 0)
+	cache.now = func() time.Time { return moment }
+	for index := range reverseNameCacheCapacity {
+		cache.entries[fmt.Sprintf("address-%d", index)] = reverseNameEntry{
+			name: "name", expiresAt: moment.Add(time.Hour),
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	index := 0
+	for b.Loop() {
+		cache.store(fmt.Sprintf("new-address-%d", index), "new-name")
+		index++
 	}
 }
 
