@@ -39,9 +39,9 @@ module.exports = async function checkCommandPalettePosts(page, baseURL, errors) 
     await open.click();
     await command.click();
     await page.waitForFunction(() => Boolean(document.querySelector('#command-action-check-updates')?.dataset.commandPending));
+    const pendingRoute = await waitForRoute(checkRoute.intercepted, 'update check request');
     await page.evaluate(() => document.querySelector('#command-action-check-updates').click());
     assert.equal(requestCount, 1, 'duplicate command clicks are ignored while pending');
-    const pendingRoute = await waitForRoute(checkRoute.intercepted, 'update check request');
     const checkRequest = pendingRoute.request();
     assert.equal(checkRequest.method(), 'POST');
     assert.equal(checkRequest.headers()['x-csrf-token'], 'fixture-csrf');
