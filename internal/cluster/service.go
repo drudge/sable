@@ -318,8 +318,14 @@ func sortClusterNodes(nodes []Node, primaryID string) {
 
 func (service *Service) LocalConfiguration() LocalConfiguration {
 	service.mu.RLock()
-	defer service.mu.RUnlock()
-	return LocalConfiguration{DataDirectory: service.directory, NodeName: service.configuredName, AdvertiseURL: service.advertiseURL, HTTPSListen: service.httpsListen, TrustAnchorFile: service.configuredTrustAnchorFile, TrustRestartRequired: service.localTrustRestartRequired()}
+	configuration := LocalConfiguration{DataDirectory: service.directory, NodeName: service.configuredName, AdvertiseURL: service.advertiseURL, HTTPSListen: service.httpsListen, TrustAnchorFile: service.configuredTrustAnchorFile}
+	certificateFile := service.configuredHTTPSCertificateFile
+	anchor := append([]byte(nil), service.localTrustAnchorPEM...)
+	service.mu.RUnlock()
+	// Certificate files can be replaced in place. Inspect them on every full
+	// configuration read without blocking cluster state updates on disk I/O.
+	configuration.TrustRestartRequired = localTrustRestartRequired(configuration.TrustAnchorFile, certificateFile, anchor)
+	return configuration
 }
 
 func (service *Service) Initialize(ctx context.Context, domain string, addresses []string) error {
