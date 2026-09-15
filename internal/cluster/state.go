@@ -17,6 +17,11 @@ const (
 	stateSnapshotSuffix = ".snapshot"
 )
 
+type captureFlight struct {
+	done chan struct{}
+	err  error
+}
+
 // StateReplicator captures and applies the application state governed by the
 // cluster. Implementations must keep node-local listener, storage, and secret
 // bootstrap settings outside the snapshot.
@@ -26,6 +31,57 @@ type StateReplicator interface {
 }
 
 func (service *Service) refreshPrimaryState(ctx context.Context) error {
+	primary, err := service.primaryCaptureAllowed()
+	if err != nil {
+		return err
+	}
+	if !primary {
+		return nil
+	}
+	service.captureMu.Lock()
+	if flight := service.captureFlight; flight != nil {
+		service.captureMu.Unlock()
+		select {
+		case <-flight.done:
+			return flight.err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	flight := &captureFlight{done: make(chan struct{})}
+	service.captureFlight = flight
+	service.captureMu.Unlock()
+
+	flight.err = service.refreshPrimaryStateLeader(ctx)
+	service.captureMu.Lock()
+	service.captureFlight = nil
+	close(flight.done)
+	service.captureMu.Unlock()
+	return flight.err
+}
+
+func (service *Service) primaryCaptureAllowed() (bool, error) {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	if service.manifest == nil {
+		return false, ErrNotInitialized
+	}
+	return service.manifest.PrimaryID == service.nodeID, nil
+}
+
+func (service *Service) refreshPrimaryStateLeader(ctx context.Context) error {
+	service.mu.RLock()
+	if service.manifest == nil {
+		service.mu.RUnlock()
+		return ErrNotInitialized
+	}
+	if service.manifest.PrimaryID != service.nodeID {
+		service.mu.RUnlock()
+		return nil
+	}
+	clusterID := service.manifest.ClusterID
+	stateDigest := service.manifest.StateDigest
+	service.mu.RUnlock()
 	contents, digest, err := service.captureState(ctx)
 	if err != nil {
 		return err
@@ -36,6 +92,9 @@ func (service *Service) refreshPrimaryState(ctx context.Context) error {
 		return ErrNotInitialized
 	}
 	if service.manifest.PrimaryID != service.nodeID {
+		return nil
+	}
+	if service.manifest.ClusterID != clusterID || service.manifest.StateDigest != stateDigest {
 		return nil
 	}
 	memberIndex := slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == service.nodeID })

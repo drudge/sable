@@ -11,18 +11,31 @@ import (
 )
 
 type memoryWriter struct {
-	mu      sync.Mutex
-	entries []Entry
-	pruned  []time.Time
-	gate    <-chan struct{}
-	failure error
+	mu            sync.Mutex
+	entries       []Entry
+	pruned        []time.Time
+	gate          chan struct{}
+	pruneGate     <-chan struct{}
+	writeStarted  chan struct{}
+	writeCanceled chan struct{}
+	pruneStarted  chan struct{}
+	writeOnce     sync.Once
+	cancelOnce    sync.Once
+	pruneOnce     sync.Once
+	failure       error
 }
 
 func (writer *memoryWriter) WriteServerLogEntries(ctx context.Context, entries []Entry) error {
+	if writer.writeStarted != nil {
+		writer.writeOnce.Do(func() { close(writer.writeStarted) })
+	}
 	if writer.gate != nil {
 		select {
 		case <-writer.gate:
 		case <-ctx.Done():
+			if writer.writeCanceled != nil {
+				writer.cancelOnce.Do(func() { close(writer.writeCanceled) })
+			}
 			return ctx.Err()
 		}
 	}
@@ -35,7 +48,17 @@ func (writer *memoryWriter) WriteServerLogEntries(ctx context.Context, entries [
 	return nil
 }
 
-func (writer *memoryWriter) PruneServerLogEntries(_ context.Context, before time.Time) error {
+func (writer *memoryWriter) PruneServerLogEntries(ctx context.Context, before time.Time) error {
+	if writer.pruneStarted != nil {
+		writer.pruneOnce.Do(func() { close(writer.pruneStarted) })
+	}
+	if writer.pruneGate != nil {
+		select {
+		case <-writer.pruneGate:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	writer.pruned = append(writer.pruned, before)
@@ -121,6 +144,165 @@ func TestRecorderCanBeDisabledWithoutStoppingWorker(t *testing.T) {
 	}
 	if writer.count() != 1 {
 		t.Fatalf("persisted = %d, want 1", writer.count())
+	}
+}
+
+func TestRecorderCloseCancelsBlockedWriteAndCountsBatch(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{gate: make(chan struct{}), writeStarted: make(chan struct{})}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 1, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	recorder.Record(Entry{Message: "blocked"})
+	select {
+	case <-writer.writeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("writer did not start")
+	}
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	stats := recorder.Stats()
+	if stats.WriteErrors != 1 || stats.Dropped != 1 || stats.Queued != 0 {
+		t.Fatalf("canceled write stats = %+v, want one error and dropped batch", stats)
+	}
+}
+
+func TestRecorderCloseDrainsQueuedBatchAfterCanceledWrite(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{
+		gate:          make(chan struct{}),
+		writeStarted:  make(chan struct{}),
+		writeCanceled: make(chan struct{}),
+	}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 1, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	recorder.Record(Entry{Message: "uncertain"})
+	select {
+	case <-writer.writeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("writer did not start")
+	}
+	recorder.Record(Entry{Message: "queued"})
+	deadline := time.Now().Add(time.Second)
+	for recorder.Stats().Queued != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if stats := recorder.Stats(); stats.Queued != 1 {
+		t.Fatalf("queued stats = %+v, want second entry queued", stats)
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- recorder.Close(context.Background()) }()
+	select {
+	case <-writer.writeCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("normal write was not canceled")
+	}
+	close(writer.gate)
+	if err := <-closeDone; err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	stats := recorder.Stats()
+	if stats.WriteErrors != 1 || stats.Dropped != 1 || stats.Persisted != 1 || stats.Queued != 0 {
+		t.Fatalf("shutdown stats = %+v, want one uncertain drop and one queued entry persisted", stats)
+	}
+	if got := writer.count(); got != 1 {
+		t.Fatalf("persisted entries = %d, want queued entry only", got)
+	}
+}
+
+func TestRecorderCloseCancelsBlockedPrune(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{pruneGate: make(chan struct{}), pruneStarted: make(chan struct{})}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 2, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	select {
+	case <-writer.pruneStarted:
+	case <-time.After(time.Second):
+		t.Fatal("pruner did not start")
+	}
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if stats := recorder.Stats(); stats.WriteErrors != 1 {
+		t.Fatalf("canceled prune stats = %+v, want one error", stats)
+	}
+}
+
+func TestRecorderExpiredCloseStillStopsWorker(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{gate: make(chan struct{}), writeStarted: make(chan struct{})}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 1, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	recorder.Record(Entry{Message: "expired-close"})
+	select {
+	case <-writer.writeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("writer did not start")
+	}
+	closeContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := recorder.Close(closeContext); err != context.Canceled {
+		t.Fatalf("expired Close() error = %v, want context canceled", err)
+	}
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("repeated Close() error = %v", err)
+	}
+	if stats := recorder.Stats(); stats.WriteErrors != 1 || stats.Dropped != 1 {
+		t.Fatalf("expired Close() stats = %+v, want canceled batch accounted", stats)
+	}
+}
+
+func TestRecorderCloseCanBeCalledConcurrently(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, &memoryWriter{}, Options{
+		Enabled: true, BufferSize: 4, BatchSize: 2, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	const closers = 8
+	errorsByCloser := make(chan error, closers)
+	var wait sync.WaitGroup
+	wait.Add(closers)
+	for range closers {
+		go func() {
+			defer wait.Done()
+			errorsByCloser <- recorder.Close(context.Background())
+		}()
+	}
+	wait.Wait()
+	close(errorsByCloser)
+	for err := range errorsByCloser {
+		if err != nil {
+			t.Fatalf("concurrent Close() error = %v", err)
+		}
+	}
+	before := recorder.Stats()
+	recorder.Record(Entry{Message: "after-close"})
+	if after := recorder.Stats(); after != before {
+		t.Fatalf("Record after Close changed stats from %+v to %+v", before, after)
+	}
+}
+
+func BenchmarkRecorderRecord(b *testing.B) {
+	recorder, err := NewRecorder(&memoryWriter{}, Options{
+		Enabled: true, BufferSize: 1_024, BatchSize: 1_024, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer recorder.Close(context.Background())
+	entry := Entry{Message: "benchmark"}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		recorder.Record(entry)
 	}
 }
 
