@@ -6,122 +6,6 @@ async function check(page, label, action) {
   console.log(`PASS ${label}`);
 }
 
-async function checkCommandPalettePosts(page, baseURL, errors) {
-  await check(page, 'command palette posts use HTMX targets and status', async () => {
-    let pendingRoute;
-    let requestCount = 0;
-    await page.route('**/ui/updates/command-check', route => {
-      requestCount++;
-      pendingRoute = route;
-    });
-    await page.goto(`${baseURL}/?dashboard`);
-    const open = page.locator('[data-command-open]').first();
-    const command = page.locator('#command-action-check-updates');
-    await open.click();
-    await command.click();
-    await page.waitForFunction(() => Boolean(document.querySelector('#command-action-check-updates')?.dataset.commandPending));
-    await page.evaluate(() => document.querySelector('#command-action-check-updates').click());
-    assert.equal(requestCount, 1, 'duplicate command clicks are ignored while pending');
-    const checkRequest = pendingRoute.request();
-    assert.equal(checkRequest.method(), 'POST');
-    assert.equal(checkRequest.headers()['x-csrf-token'], 'fixture-csrf');
-    assert.equal(checkRequest.headers()['hx-target'], '#command-feedback');
-    assert.equal(checkRequest.postData(), null);
-    await page.evaluate(() => document.querySelector('#command-action-check-updates').remove());
-    await pendingRoute.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<div class="toast-region"><div class="toast toast-success" data-toast role="status"><p>Update check completed.</p></div></div>',
-    });
-    await page.locator('#command-feedback .toast-region').waitFor();
-    await page.waitForFunction(() => !document.querySelector('#command-action-check-updates')?.dataset.commandPending);
-    await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Check for Updates completed');
-    assert.equal(await page.locator('#command-feedback .toast-region').count(), 1, 'off-page commands use stable feedback');
-    await page.unroute('**/ui/updates/command-check');
-
-    let pauseResponse;
-    await page.route('**/ui/blocking/pause', route => { pauseResponse = route; });
-    await page.goto(`${baseURL}/?blocking`);
-    const pause = page.locator('#command-action-pause-blocking-5');
-    await page.locator('[data-command-open]').first().click();
-    await pause.click();
-    await page.waitForFunction(() => Boolean(document.querySelector('#command-action-pause-blocking-5')?.dataset.commandPending));
-    const pauseRequest = pauseResponse.request();
-    assert.equal(pauseRequest.method(), 'POST');
-    assert.equal(pauseRequest.headers()['x-csrf-token'], 'fixture-csrf');
-    assert.equal(pauseRequest.headers()['hx-target'], '#blocking-content');
-    assert.match(pauseRequest.postData(), /minutes=5/);
-    await pauseResponse.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<div id="blocking-content" data-blocking-state="paused"><h1>DNS Blocking</h1><p>Paused for 5 minutes.</p></div>',
-    });
-    await page.waitForFunction(() => document.querySelector('#blocking-content')?.dataset.blockingState === 'paused');
-    await page.waitForFunction(() => !document.querySelector('#command-action-pause-blocking-5')?.dataset.commandPending);
-    await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Pause Blocking for 5 Minutes completed');
-
-    let markedError;
-    await page.route('**/ui/blocking/lists/update', route => { markedError = route; });
-    await page.locator('[data-command-open]').first().click();
-    const update = page.locator('#command-action-update-block-lists');
-    await update.click();
-    await page.waitForFunction(() => Boolean(document.querySelector('#command-action-update-block-lists')?.dataset.commandPending));
-    assert.equal(markedError.request().headers()['x-csrf-token'], 'fixture-csrf');
-    await markedError.fulfill({
-      status: 422,
-      contentType: 'text/html',
-      headers: {'X-Sable-Console-Fragment': 'true'},
-      body: '<div id="blocking-content" data-blocking-state="update-error"><p>Could not update the block lists.</p></div>',
-    });
-    await page.waitForFunction(() => document.querySelector('#blocking-content')?.dataset.blockingState === 'update-error');
-    await page.waitForFunction(() => !document.querySelector('#command-action-update-block-lists')?.dataset.commandPending);
-    await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Update Block Lists failed');
-    await page.unroute('**/ui/blocking/lists/update');
-    const expectedMarkedError = 'Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)';
-    for (let index = errors.length - 1; index >= 0; index--) {
-      if (errors[index] === expectedMarkedError) errors.splice(index, 1);
-    }
-    await page.unroute('**/ui/blocking/pause');
-
-    let badResponse;
-    await page.route('**/ui/blocking/pause', route => { badResponse = route; });
-    await page.goto(`${baseURL}/?blocking`);
-    const failedPause = page.locator('#command-action-pause-blocking-5');
-    await page.locator('[data-command-open]').first().click();
-    await failedPause.click();
-    await page.waitForFunction(() => Boolean(document.querySelector('#command-action-pause-blocking-5')?.dataset.commandPending));
-    assert.equal(badResponse.request().headers()['x-csrf-token'], 'fixture-csrf');
-    await badResponse.fulfill({status: 503, contentType: 'text/plain', body: 'service unavailable'});
-    await page.waitForFunction(() => !document.querySelector('#command-action-pause-blocking-5')?.dataset.commandPending);
-    await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Pause Blocking for 5 Minutes failed');
-    assert.equal(await page.locator('#blocking-content').count(), 1, 'bare command errors do not replace the blocking panel');
-    await page.unroute('**/ui/blocking/pause');
-    const expectedConsoleError = 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
-    for (let index = errors.length - 1; index >= 0; index--) {
-      if (errors[index] === expectedConsoleError) errors.splice(index, 1);
-    }
-    let abortedRequest;
-    const networkErrorStart = errors.length;
-    await page.route('**/ui/updates/command-check', route => {
-      abortedRequest = route;
-      void route.abort();
-    });
-    await page.goto(`${baseURL}/?dashboard`);
-    const networkFailure = page.locator('#command-action-check-updates');
-    await page.locator('[data-command-open]').first().click();
-    await networkFailure.click();
-    await page.waitForFunction(() => Boolean(document.querySelector('#command-action-check-updates')?.dataset.commandPending));
-    await page.waitForFunction(() => !document.querySelector('#command-action-check-updates')?.dataset.commandPending);
-    await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Check for Updates failed');
-    assert.ok(abortedRequest, 'network failure reached the command endpoint');
-    await page.unroute('**/ui/updates/command-check');
-    const networkErrors = errors.splice(networkErrorStart);
-    assert.equal(networkErrors.length, 2, 'network failure only reports its expected browser and HTMX errors');
-    assert.ok(networkErrors.includes('Failed to load resource: net::ERR_FAILED'));
-    assert.ok(networkErrors.some(error => error.startsWith('htmx: htmx:error: Failed to fetch')));
-  });
-}
-
 (async () => {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
   try {
@@ -132,6 +16,7 @@ async function checkCommandPalettePosts(page, baseURL, errors) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await require('./command-posts.cjs')(page, process.argv[2], errors);
     await check(page, 'shared search clears filters, preserves focus, and never submits DNS queries', async () => {
       await page.goto(`${process.argv[2]}/?zone-import`);
       const search = page.locator('[data-zone-search]');
@@ -296,7 +181,6 @@ async function checkCommandPalettePosts(page, baseURL, errors) {
       assert.equal(await page.locator('.stats-range-label').count(), 0);
       assert.equal(await totalCard.getAttribute('href'), '/logs?tab=queries');
     });
-    await checkCommandPalettePosts(page, process.argv[2], errors);
     assert.deepEqual(errors, [], 'console fixes produce no browser errors');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
