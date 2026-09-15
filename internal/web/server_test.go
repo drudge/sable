@@ -1977,7 +1977,7 @@ dynamic 60 IN APP "Wild IP" "WildIp.App" -
 	invalidWipe := importFile("/ui/zones/import", "api 60 IN A 192.0.2.45\n", map[string]string{
 		"zone": "example.test", "overwrite_zone": "true",
 	})
-	if invalidWipe.Code != http.StatusOK || !strings.Contains(invalidWipe.Body.String(), "requires an apex SOA record") {
+	if invalidWipe.Code != http.StatusUnprocessableEntity || invalidWipe.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(invalidWipe.Body.String(), "requires an apex SOA record") {
 		t.Fatalf("invalid zone wipe response = %d %s", invalidWipe.Code, invalidWipe.Body.String())
 	}
 	if configuration.zoneSnapshot.Revision != revision || len(configuration.zoneSnapshot.Zones[0].Records) != 4 {
@@ -2194,7 +2194,7 @@ func TestZoneEditorCreatesAndResyncsSecondaryStubAndForwarderZones(t *testing.T)
 	readOnly := post("/ui/zones/records/add", url.Values{
 		"zone": {"secondary.test"}, "type": {"A"}, "name": {"blocked"}, "value": {"192.0.2.9"}, "ttl": {"300"},
 	})
-	if readOnly.Code != http.StatusOK || !strings.Contains(readOnly.Body.String(), "read-only") {
+	if readOnly.Code != http.StatusUnprocessableEntity || readOnly.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(readOnly.Body.String(), "read-only") {
 		t.Fatalf("secondary record mutation = %d %s", readOnly.Code, readOnly.Body.String())
 	}
 
@@ -2296,7 +2296,7 @@ func TestZoneRecordWritesEnforceCNAMEExclusivity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			before := zonemodel.Clone(configuration.zoneSnapshot.Zones)
 			response := post(test.path, test.form)
-			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), test.wantErr) {
+			if response.Code != http.StatusUnprocessableEntity || response.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(response.Body.String(), test.wantErr) {
 				t.Fatalf("record write response = %d %s, want error %q", response.Code, response.Body.String(), test.wantErr)
 			}
 			if !reflect.DeepEqual(before, configuration.zoneSnapshot.Zones) {
@@ -2366,7 +2366,7 @@ func TestZoneEditorCreatesAliasZonesAndKeepsTheirRecordsReadOnly(t *testing.T) {
 	readOnly := post("/ui/zones/records/add", url.Values{
 		"zone": {"example.lan"}, "type": {"A"}, "name": {"blocked"}, "value": {"192.0.2.9"}, "ttl": {"300"},
 	})
-	if readOnly.Code != http.StatusOK || !strings.Contains(readOnly.Body.String(), "read-only") {
+	if readOnly.Code != http.StatusUnprocessableEntity || readOnly.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(readOnly.Body.String(), "read-only") {
 		t.Fatalf("alias record mutation = %d %s", readOnly.Code, readOnly.Body.String())
 	}
 
@@ -2598,7 +2598,7 @@ func TestBlockingEditorUpdatesTheRenderedPolicy(t *testing.T) {
 	if got := configuration.Current().Config.Blocking.Domains; len(got) != 1 || got[0] != "telemetry.example" {
 		t.Fatalf("blocked domains = %v", got)
 	}
-	if duplicate := postDomain(true); duplicate.Code != http.StatusOK || !strings.Contains(duplicate.Body.String(), "already blocked") ||
+	if duplicate := postDomain(true); duplicate.Code != http.StatusUnprocessableEntity || duplicate.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(duplicate.Body.String(), "already blocked") ||
 		!strings.Contains(duplicate.Body.String(), `class="toast toast-error"`) || !strings.Contains(duplicate.Body.String(), `role="alert"`) {
 		t.Fatalf("HTMX duplicate toast response = %d %s", duplicate.Code, duplicate.Body.String())
 	}
@@ -2662,7 +2662,7 @@ func TestBlockingEditorAddsRemoteListBeforeActivatingPolicy(t *testing.T) {
 	if string(contents) != "0.0.0.0 telemetry.example\n" {
 		t.Fatalf("cached list contents = %q", contents)
 	}
-	if duplicate := post(); duplicate.Code != http.StatusOK || !strings.Contains(duplicate.Body.String(), "already added") {
+	if duplicate := post(); duplicate.Code != http.StatusUnprocessableEntity || duplicate.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(duplicate.Body.String(), "already added") {
 		t.Fatalf("duplicate list response = %d %s", duplicate.Code, duplicate.Body.String())
 	}
 	if requests.Load() != 1 {

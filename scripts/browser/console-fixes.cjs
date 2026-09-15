@@ -166,6 +166,7 @@ async function checkWidgetLifecycle(page, baseURL) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await require('./command-posts.cjs')(page, process.argv[2], errors);
     await check(page, 'shared search clears filters, preserves focus, and never submits DNS queries', async () => {
       await page.goto(`${process.argv[2]}/?zone-import`);
       const search = page.locator('[data-zone-search]');

@@ -147,7 +147,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 		"const tabFromKey", "setupDialogAccessibility", "setupScrollableRegion",
 		"Live log updates paused", "data-chart-keyboard-status", "sidebar-mobile-open",
 		`!control.closest("[hidden]")`, `mobileOpen ? "Close navigation" : "Open navigation"`,
-		"setupCommandPalette", "sable-command", "sable-search", "commandRank", "commandAcronym", "beginSearch", "selectSearchMode", "commandSearchModesConfig", "commandSearchModeExtraParam", "commandSearchModeValueTarget", "searchModeFooterItems", `["ArrowLeft", "ArrowRight"].includes(event.key)`, "requestSubmit", "runSearch", "runPostCommand", "visibleDialogTrigger", `target.closest("dialog")`, "responseDocument", "toast-region", "commandValues", `event.key.toLowerCase() !== "k"`, "data-record-dialog-row", "recordInteractive",
+		"setupCommandPalette", "sable-command", "sable-search", "commandRank", "commandAcronym", "beginSearch", "selectSearchMode", "commandSearchModesConfig", "commandSearchModeExtraParam", "commandSearchModeValueTarget", "searchModeFooterItems", `["ArrowLeft", "ArrowRight"].includes(event.key)`, "requestSubmit", "runSearch", "runPostCommand", "visibleDialogTrigger", `target.closest("dialog")`, "htmx.ajax", "command-feedback", "commandPending", "finally:request", "commandValues", `event.key.toLowerCase() !== "k"`, "data-record-dialog-row", "recordInteractive",
 	} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain accessibility behavior %q", expected)

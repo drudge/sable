@@ -161,10 +161,7 @@ func (server *Server) updateBlocking(writer http.ResponseWriter, request *http.R
 }
 
 func writeBlockingErrorStatus(writer http.ResponseWriter, request *http.Request, status int) {
-	if request.Header.Get("HX-Request") == "true" {
-		return
-	}
-	writer.WriteHeader(status)
+	writeFragmentStatus(writer, status)
 }
 
 func (server *Server) logBlockingOperation(request *http.Request, operationErr error, attributes ...any) {
