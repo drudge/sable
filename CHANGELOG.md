@@ -8,6 +8,41 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.5] - Unreleased
+
+Sable 1.3.5 improves performance and reliability across catalog imports, cluster
+status, and the web console, with more orderly shutdowns and clearer feedback
+when console actions fail.
+
+### Faster imports and lighter background work
+
+- Reduce processing time and memory use when reviewing large catalog imports.
+- Reduce the work needed to refresh live cluster status and avoid repeating
+  cluster configuration capture when multiple refreshes arrive together.
+- Limit concurrent client-name lookups and bound their cache size, reducing
+  background DNS traffic and memory use when several console views are open.
+
+### A more reliable console
+
+- Clean up dropdown, time-picker, and resolver controls when page sections are
+  refreshed, preventing unused event handlers from accumulating over time.
+- Show command-palette results consistently, including when the relevant page
+  is not open. Prevent duplicate submissions while an action is running and
+  report failed requests instead of announcing success.
+- Preserve useful validation and permission errors for zone and blocking
+  actions without replacing page content with an unformatted server error.
+- Save your profile display name and email with JavaScript disabled. Invalid
+  submissions return a full page with the entered values and an error message.
+
+### More orderly shutdowns
+
+- Stop background tasks and DNS prefetch work before releasing the resources
+  they use during shutdown or failed startup.
+- Cancel stalled query-log and server-log writes during shutdown and give
+  queued entries a bounded opportunity to finish writing.
+- Skip DNS cache persistence when shutdown is incomplete, avoiding a snapshot
+  while background work may still be changing it.
+
 ## [1.3.4] - 2026-09-14
 
 Sable 1.3.4 is a hotfix for cluster setup and certificate trust, including
