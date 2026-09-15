@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
-	shutdownDrainBatchSize = 1_024
-	retentionSweepInterval = time.Hour
+	shutdownDrainBatchSize   = 1_024
+	retentionSweepInterval   = time.Hour
+	recorderOperationTimeout = 30 * time.Second
 )
 
 type Writer interface {
@@ -43,6 +45,9 @@ type Recorder struct {
 	pruneNow    chan struct{}
 	shutdown    chan context.Context
 	done        chan struct{}
+	lifetime    context.Context
+	cancel      context.CancelFunc
+	acceptMu    sync.RWMutex
 	enabled     atomic.Bool
 	closed      atomic.Bool
 	persisted   atomic.Uint64
@@ -76,6 +81,7 @@ func NewRecorder(writer Writer, options Options, logger *slog.Logger) (*Recorder
 		shutdown:   make(chan context.Context, 1),
 		done:       make(chan struct{}),
 	}
+	recorder.lifetime, recorder.cancel = context.WithCancel(context.Background())
 	recorder.retention.Store(int64(options.Retention))
 	recorder.enabled.Store(options.Enabled)
 	if recorder.logger == nil {
@@ -108,7 +114,9 @@ func (recorder *Recorder) SetRetention(retention time.Duration) error {
 }
 
 func (recorder *Recorder) Record(event Event) {
-	if !recorder.Enabled() {
+	recorder.acceptMu.RLock()
+	defer recorder.acceptMu.RUnlock()
+	if !recorder.enabled.Load() || recorder.closed.Load() {
 		return
 	}
 	select {
@@ -128,18 +136,18 @@ func (recorder *Recorder) Stats() Stats {
 }
 
 func (recorder *Recorder) Close(ctx context.Context) error {
+	recorder.acceptMu.Lock()
+	first := recorder.closed.CompareAndSwap(false, true)
+	recorder.acceptMu.Unlock()
+	if first {
+		recorder.cancel()
+		// The channel is buffered and only the first closer sends, so a caller
+		// whose context is already expired still wakes the worker for cleanup.
+		recorder.shutdown <- ctx
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !recorder.closed.CompareAndSwap(false, true) {
-		select {
-		case <-recorder.done:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	recorder.shutdown <- ctx
 	select {
 	case <-recorder.done:
 		return nil
@@ -150,7 +158,8 @@ func (recorder *Recorder) Close(ctx context.Context) error {
 
 func (recorder *Recorder) run() {
 	defer close(recorder.done)
-	recorder.prune(context.Background())
+	defer recorder.cancel()
+	recorder.prune()
 	ticker := time.NewTicker(recorder.flushEvery)
 	defer ticker.Stop()
 	retentionTicker := time.NewTicker(retentionSweepInterval)
@@ -158,17 +167,30 @@ func (recorder *Recorder) run() {
 	batch := make([]Event, 0, recorder.batchSize)
 	for {
 		select {
+		case ctx := <-recorder.shutdown:
+			batch = recorder.drain(ctx, batch)
+			recorder.write(ctx, batch)
+			return
+		default:
+		}
+		select {
 		case event := <-recorder.events:
 			batch = append(batch, event)
-			if len(batch) >= recorder.batchSize {
-				batch = recorder.write(context.Background(), batch)
+			if len(batch) >= recorder.batchSize && recorder.lifetime.Err() == nil {
+				batch = recorder.writeNormal(batch)
 			}
 		case <-ticker.C:
-			batch = recorder.write(context.Background(), batch)
+			if recorder.lifetime.Err() == nil {
+				batch = recorder.writeNormal(batch)
+			}
 		case <-retentionTicker.C:
-			recorder.prune(context.Background())
+			if recorder.lifetime.Err() == nil {
+				recorder.prune()
+			}
 		case <-recorder.pruneNow:
-			recorder.prune(context.Background())
+			if recorder.lifetime.Err() == nil {
+				recorder.prune()
+			}
 		case ctx := <-recorder.shutdown:
 			batch = recorder.drain(ctx, batch)
 			recorder.write(ctx, batch)
@@ -177,12 +199,20 @@ func (recorder *Recorder) run() {
 	}
 }
 
-func (recorder *Recorder) prune(ctx context.Context) {
+func (recorder *Recorder) prune() {
+	ctx, cancel := context.WithTimeout(recorder.lifetime, recorderOperationTimeout)
+	defer cancel()
 	retention := time.Duration(recorder.retention.Load())
 	if err := recorder.writer.PruneQueryEvents(ctx, time.Now().Add(-retention)); err != nil {
 		recorder.writeErrors.Add(1)
 		recorder.logger.Error("prune query log", "error", err)
 	}
+}
+
+func (recorder *Recorder) writeNormal(batch []Event) []Event {
+	ctx, cancel := context.WithTimeout(recorder.lifetime, recorderOperationTimeout)
+	defer cancel()
+	return recorder.write(ctx, batch)
 }
 
 func (recorder *Recorder) drain(ctx context.Context, batch []Event) []Event {

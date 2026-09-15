@@ -6,6 +6,156 @@ async function check(page, label, action) {
   console.log(`PASS ${label}`);
 }
 
+async function checkWidgetLifecycle(page, baseURL) {
+  await check(page, 'interactive widgets survive reprocesses and dispose removed trees', async () => {
+    const fragment = `
+      <section id="widget-lifecycle-fixture" data-generation="GENERATION">
+        <label><span>Lifecycle choice</span><select data-styled-select><option value="one">One</option><option value="two">Two</option></select></label>
+        <label><span>Lifecycle time</span><input type="time" value="09:30" data-styled-time></label>
+        <form>
+          <div data-resolver-combobox>
+            <input type="hidden" data-resolver-value value="one">
+            <input type="hidden" data-custom-name>
+            <input type="hidden" data-custom-ip>
+            <button type="button" data-resolver-trigger aria-expanded="false"><span data-resolver-label>This server</span></button>
+            <div data-resolver-popover hidden>
+              <input data-resolver-search aria-label="Search servers">
+              <div data-resolver-group>
+                <button type="button" data-resolver-option="one" data-resolver-label-value="One" data-search="one">One</button>
+                <button type="button" data-resolver-option="two" data-resolver-label-value="Two" data-search="two">Two</button>
+              </div>
+              <div data-resolver-empty hidden>No server found.</div>
+              <button type="button" data-resolver-custom-edit data-search="custom server address"><span>Custom...</span></button>
+              <button type="button" data-resolver-option="custom" data-resolver-label-value="" data-resolver-custom-option hidden><span data-resolver-custom-label></span></button>
+            </div>
+          </div>
+          <dialog data-custom-dialog>
+            <label>Name <input data-custom-name-draft></label>
+            <label>IP <input data-custom-ip-draft></label>
+            <div data-custom-preview><span data-custom-preview-value></span></div>
+            <button type="button" data-custom-apply>Apply</button>
+            <button type="button" data-custom-cancel>Cancel</button>
+            <label><span>Dialog choice</span><select data-dialog-choice data-styled-select><option value="a">A</option><option value="b">B</option></select></label>
+          </dialog>
+        </form>
+      </section>`;
+    let servedGeneration = 0;
+    await page.route('**/ui/widget-lifecycle-fragment', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: fragment.replaceAll('GENERATION', String(++servedGeneration)),
+    }));
+    await page.goto(`${baseURL}/?dashboard`);
+    const devtools = await page.context().newCDPSession(page);
+    await page.evaluate(() => {
+      const host = document.createElement('div');
+      host.id = 'widget-lifecycle-host';
+      document.body.append(host);
+      window.htmx.ajax('GET', '/ui/widget-lifecycle-fragment', {target: '#widget-lifecycle-host', swap: 'innerHTML'});
+    });
+    const fixture = page.locator('#widget-lifecycle-fixture');
+    const waitForFixtureSwap = async (action) => {
+      const expectedGeneration = servedGeneration + 1;
+      await action();
+      await page.locator(`#widget-lifecycle-fixture[data-generation="${expectedGeneration}"]`).waitFor({state: 'attached'});
+    };
+    const selectTrigger = fixture.locator('.styled-select-trigger').first();
+    const timeEntry = fixture.locator('.styled-time-entry');
+    const resolverTrigger = fixture.locator('[data-resolver-trigger]');
+    await page.locator('#widget-lifecycle-fixture[data-generation="1"]').waitFor({state: 'attached'});
+    await selectTrigger.waitFor();
+    await timeEntry.waitFor();
+    await resolverTrigger.waitFor();
+    assert.equal(await fixture.locator('[data-resolver-combobox]').getAttribute('data-resolver-ready'), 'true', 'resolver initializes');
+
+    await selectTrigger.click();
+    await fixture.locator('[role="option"][data-value="two"]').click();
+    assert.equal(await fixture.locator('select[data-styled-select]').first().inputValue(), 'two');
+    assert.equal(await selectTrigger.evaluate(element => element === document.activeElement), true, 'selection restores select focus');
+    await selectTrigger.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await selectTrigger.evaluate(element => element === document.activeElement), true, 'Escape restores select focus');
+
+    await timeEntry.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await timeEntry.evaluate(element => element === document.activeElement), true, 'Escape restores time focus');
+    await resolverTrigger.click();
+    await fixture.locator('[data-resolver-option="two"]').click();
+    assert.equal(await fixture.locator('[data-resolver-value]').inputValue(), 'two');
+    assert.equal(await resolverTrigger.evaluate(element => element === document.activeElement), true, 'selection restores resolver focus');
+    await resolverTrigger.click();
+    await page.keyboard.press('Escape');
+    assert.equal(await resolverTrigger.evaluate(element => element === document.activeElement), true, 'Escape restores resolver focus');
+
+    const listenerCount = async (expression) => {
+      const result = await devtools.send('Runtime.evaluate', {
+        expression,
+        includeCommandLineAPI: true,
+        returnByValue: true,
+      });
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'listener count evaluation failed');
+      assert.equal(typeof result.result.value, 'number', `listener count is numeric for ${expression}`);
+      return result.result.value;
+    };
+    const pointerdownListeners = () => listenerCount('(getEventListeners(document).pointerdown || []).length');
+    const windowResizeListeners = () => listenerCount('(getEventListeners(window).resize || []).length');
+    const before = await pointerdownListeners();
+    await page.evaluate(() => {
+      const fixture = document.querySelector('#widget-lifecycle-fixture');
+      fixture.setAttribute('hx-get', '/ui/widget-lifecycle-fragment');
+      fixture.setAttribute('hx-trigger', 'never');
+      window.htmx.process(fixture);
+      window.htmx.process(fixture, true);
+    });
+    await selectTrigger.waitFor();
+    await page.evaluate(() => {
+      const fixture = document.querySelector('#widget-lifecycle-fixture');
+      fixture.removeAttribute('hx-get');
+      fixture.removeAttribute('hx-trigger');
+    });
+    await selectTrigger.click();
+    const resizeBeforeRemoval = await windowResizeListeners();
+    await waitForFixtureSwap(() => page.evaluate(() => window.htmx.ajax('GET', '/ui/widget-lifecycle-fragment', {
+      target: '#widget-lifecycle-fixture', swap: 'outerHTML',
+    })));
+    assert.equal(await page.locator('#widget-lifecycle-fixture [data-open="true"]').count(), 0, 'removed open popovers are closed');
+    assert.equal(await windowResizeListeners(), resizeBeforeRemoval - 1, 'removed open select releases window positioning listener');
+    const afterReprocess = await pointerdownListeners();
+    assert.equal(afterReprocess, before, 'reprocess does not add document pointerdown handlers');
+
+    assert.equal(await fixture.evaluate(element => !!element._htmx), false, 'replacement target is not HTMX-powered');
+    await selectTrigger.click();
+    const plainResizeBefore = await windowResizeListeners();
+    await waitForFixtureSwap(() => page.evaluate(() => window.htmx.ajax('GET', '/ui/widget-lifecycle-fragment', {
+      target: '#widget-lifecycle-fixture', swap: 'outerHTML',
+    })));
+    assert.equal(await windowResizeListeners(), plainResizeBefore - 1, 'plain target removal releases open-popover positioning');
+
+    const dialog = page.locator('#widget-lifecycle-fixture [data-custom-dialog]');
+    const dialogSelect = dialog.locator('.styled-select');
+    await dialogSelect.waitFor({state: 'attached'});
+    const dialogCloseListeners = () => listenerCount("(getEventListeners(document.querySelector('#widget-lifecycle-fixture [data-custom-dialog]')).close || []).length");
+    const dialogListenersBeforeRemoval = await dialogCloseListeners();
+    assert.ok(dialogListenersBeforeRemoval >= 2, 'dialog select installs close handling alongside dialog accessibility');
+    await page.evaluate(() => {
+      document.querySelector('#widget-lifecycle-fixture [data-custom-dialog] .styled-select').remove();
+    });
+    await page.waitForTimeout(0);
+    const dialogListenersAfterRemoval = await dialogCloseListeners();
+    assert.equal(dialogListenersAfterRemoval, dialogListenersBeforeRemoval - 1, 'removed dialog select releases close handling');
+
+    for (let index = 0; index < 20; index++) {
+      await waitForFixtureSwap(() => page.evaluate(() => window.htmx.ajax('GET', '/ui/widget-lifecycle-fragment', {
+        target: '#widget-lifecycle-fixture', swap: 'outerHTML',
+      })));
+    }
+    const afterSwaps = await pointerdownListeners();
+    assert.equal(afterSwaps, before, 'repeated swaps keep document pointerdown handlers bounded');
+    await page.locator('#widget-lifecycle-fixture .styled-select-trigger').first().click();
+    await page.keyboard.press('Escape');
+  });
+}
+
 (async () => {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
   try {
@@ -180,6 +330,7 @@ async function check(page, label, action) {
       assert.equal(await page.locator('.stats-range-label').count(), 0);
       assert.equal(await totalCard.getAttribute('href'), '/logs?tab=queries');
     });
+    await checkWidgetLifecycle(page, process.argv[2]);
     assert.deepEqual(errors, [], 'console fixes produce no browser errors');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
