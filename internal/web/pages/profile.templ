@@ -70,7 +70,8 @@ templ ProfileAccountSettings(view ProfilePageView) {
 	<div class="profile-account-stack">
 		<section class="card isotope-data-card profile-settings-card">
 			<header class="isotope-data-header"><div><h2>Account details</h2><span>Your name and contact information</span></div></header>
-			<form class="profile-settings-form" hx-post="/ui/profile" hx-target="#profile-content" hx-swap="outerHTML">
+			<form class="profile-settings-form" method="post" action="/ui/profile" hx-post="/ui/profile" hx-target="#profile-content" hx-swap="outerHTML">
+				<input type="hidden" name="csrf_token" value={ view.Console.CSRFToken }/>
 				<div class="profile-settings-body">
 					<div class="profile-username"><span>Username</span><strong>{ view.User.Username }</strong><small>Usernames are managed by an administrator.</small></div>
 					<div class="profile-field-grid">

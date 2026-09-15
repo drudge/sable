@@ -102,8 +102,9 @@ func (server *Server) prepareCatalogImport(request *http.Request, view *pages.Ca
 	// Bind review to membership and source, without invalidating it on SOA refreshes.
 	binding, _ := json.Marshal([]any{name, primaries, view.Protocol, view.Key, catalog.Members})
 	view.Confirmation = fmt.Sprintf("%x", sha256.Sum256(binding))
+	currentZones := server.zones.Current().Zones
 	for _, member := range catalog.Members {
-		view.Members = append(view.Members, pages.CatalogImportMember{Name: member.Zone, Exists: findZone(server.zones.Current().Zones, member.Zone) != nil})
+		view.Members = append(view.Members, pages.CatalogImportMember{Name: member.Zone, Exists: findZone(currentZones, member.Zone) != nil})
 	}
 	if request.FormValue("step") != "stage" {
 		return nil
@@ -147,8 +148,9 @@ func (server *Server) prepareCatalogImport(request *http.Request, view *pages.Ca
 		}
 		view.Results = append(view.Results, result)
 	}
+	currentZones = server.zones.Current().Zones
 	for i := range view.Members {
-		view.Members[i].Exists = findZone(server.zones.Current().Zones, view.Members[i].Name) != nil
+		view.Members[i].Exists = findZone(currentZones, view.Members[i].Name) != nil
 	}
 	return nil
 }

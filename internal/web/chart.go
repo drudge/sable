@@ -622,7 +622,7 @@ func (server *Server) collectStatsHistory() {
 			server.pruneStatsHistory(at)
 		case <-server.historyPrune:
 			server.pruneStatsHistory(time.Now())
-		case <-server.historyStop:
+		case <-server.runtimeContext.Done():
 			server.flushStatsHistory()
 			return
 		}

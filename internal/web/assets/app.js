@@ -193,6 +193,7 @@
 	};
 
 	const setupResolverCombobox = (root) => {
+	  if (!root || root.dataset.resolverReady === "true") return;
 	  const trigger = root.querySelector("[data-resolver-trigger]");
 	  const popover = root.querySelector("[data-resolver-popover]");
 	  const search = root.querySelector("[data-resolver-search]");
@@ -220,8 +221,11 @@
 	  const closePopover = ({restoreFocus = false} = {}) => {
 		popover.hidden = true;
 		trigger.setAttribute("aria-expanded", "false");
+		root.removeAttribute("data-open");
 		if (restoreFocus) trigger.focus();
 	  };
+	  root.dataset.resolverReady = "true";
+	  root.sableClosePopover = closePopover;
 
 	  const filterOptions = () => {
 		const query = search.value.trim().toLowerCase();
@@ -241,8 +245,12 @@
 	  };
 
 	  const openPopover = () => {
+		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
+		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
+		});
 		popover.hidden = false;
 		trigger.setAttribute("aria-expanded", "true");
+		root.dataset.open = "true";
 		search.value = "";
 		syncSearchClear(search);
 		filterOptions();
@@ -323,21 +331,32 @@
 	  });
 	  allOptions().forEach((option) => option.addEventListener("click", () => choose(option)));
 	  customEdit.addEventListener("click", openCustomDialog);
-	  draftName.addEventListener("input", updateCustomDraft);
-	  draftIP.addEventListener("input", updateCustomDraft);
-	  applyButton.addEventListener("click", applyCustom);
-	  dialog.querySelectorAll("[data-custom-cancel]").forEach((button) => {
-		button.addEventListener("click", () => dialog.close());
-	  });
-	  dialog.addEventListener("keydown", (event) => {
+	  const handleDraftInput = () => updateCustomDraft();
+	  const handleApply = () => applyCustom();
+	  const handleDialogCancel = () => dialog.close();
+	  const handleDialogKeydown = (event) => {
 		if (event.key === "Enter" && event.target.matches("input")) {
 		  event.preventDefault();
 		  applyCustom();
 		}
-	  });
-	  document.addEventListener("pointerdown", (event) => {
-		if (!popover.hidden && !root.contains(event.target)) closePopover();
-	  });
+	  };
+	  draftName.addEventListener("input", handleDraftInput);
+	  draftIP.addEventListener("input", handleDraftInput);
+	  applyButton.addEventListener("click", handleApply);
+	  const cancelButtons = [...dialog.querySelectorAll("[data-custom-cancel]")];
+	  cancelButtons.forEach((button) => button.addEventListener("click", handleDialogCancel));
+	  dialog.addEventListener("keydown", handleDialogKeydown);
+	  root.sableDispose = () => {
+		closePopover();
+		draftName.removeEventListener("input", handleDraftInput);
+		draftIP.removeEventListener("input", handleDraftInput);
+		applyButton.removeEventListener("click", handleApply);
+		cancelButtons.forEach((button) => button.removeEventListener("click", handleDialogCancel));
+		dialog.removeEventListener("keydown", handleDialogKeydown);
+		if (dialog.sableReturnFocus === customEdit) dialog.sableReturnFocus = null;
+		root.sableClosePopover = null;
+		root.sableDispose = null;
+	  };
 	};
 
 	document.querySelectorAll("[data-resolver-combobox]").forEach(setupResolverCombobox);
@@ -540,15 +559,22 @@
 		trigger.setAttribute("aria-invalid", "true");
 		trigger.focus();
 	  });
-	  document.addEventListener("pointerdown", (event) => {
-		if (!popover.hidden && !root.contains(event.target)) closePopover();
-	  });
-	  select.closest("dialog")?.addEventListener("close", () => closePopover());
-	  new MutationObserver(syncAvailability).observe(select, {
+	  const dialog = select.closest("dialog");
+	  const closeDialog = () => closePopover();
+	  dialog?.addEventListener("close", closeDialog);
+	  const availabilityObserver = new MutationObserver(syncAvailability);
+	  availabilityObserver.observe(select, {
 		attributes: true,
 		subtree: true,
 		attributeFilter: ["disabled", "selected"],
 	  });
+	  root.sableDispose = () => {
+		closePopover();
+		availabilityObserver.disconnect();
+		dialog?.removeEventListener("close", closeDialog);
+		root.sableClosePopover = null;
+		root.sableDispose = null;
+	  };
 	  syncAvailability();
 	};
 
@@ -931,15 +957,20 @@
 		entry.setAttribute("aria-invalid", "true");
 		entry.focus();
 	  });
-	  document.addEventListener("pointerdown", (event) => {
-		if (!popover.hidden && !root.contains(event.target)) closePicker();
-	  });
-	  new MutationObserver(() => {
+	  const disabledObserver = new MutationObserver(() => {
 		entry.disabled = input.disabled;
 		toggle.disabled = input.disabled;
 		root.dataset.disabled = String(input.disabled);
 		if (input.disabled) closePicker();
-	  }).observe(input, {attributes: true, attributeFilter: ["disabled"]});
+	  });
+	  disabledObserver.observe(input, {attributes: true, attributeFilter: ["disabled"]});
+	  root.sableDispose = () => {
+		closePicker();
+		resetDigitBuffer();
+		disabledObserver.disconnect();
+		root.sableClosePopover = null;
+		root.sableDispose = null;
+	  };
 	  entry.disabled = input.disabled;
 	  toggle.disabled = input.disabled;
 	  root.dataset.disabled = String(input.disabled);
@@ -2600,9 +2631,35 @@
 	  if (window.ResizeObserver) new ResizeObserver(sync).observe(region);
 	};
 
+	const interactiveComponentSelector = ".styled-select, .styled-time, [data-resolver-combobox]";
+	const disposeInteractiveComponent = (component) => {
+	  component?.sableDispose?.();
+	};
+	const interactiveRemovalObserver = new MutationObserver((records) => {
+	  const removedComponents = new Set();
+	  records.forEach(({removedNodes}) => removedNodes.forEach((node) => {
+		if (!(node instanceof Element)) return;
+		if (node.matches(interactiveComponentSelector)) removedComponents.add(node);
+		node.querySelectorAll(interactiveComponentSelector).forEach((component) => removedComponents.add(component));
+	  }));
+	  queueMicrotask(() => removedComponents.forEach((component) => {
+		if (!component.isConnected) disposeInteractiveComponent(component);
+	  }));
+	});
+	interactiveRemovalObserver.observe(document, {childList: true, subtree: true});
+	const closeInteractivePopovers = (event) => {
+	  document.querySelectorAll('[data-open="true"]').forEach((root) => {
+		if (event.target instanceof Node && root.contains(event.target)) return;
+		root.sableClosePopover?.();
+	  });
+	};
+	document.addEventListener("pointerdown", closeInteractivePopovers);
+
 	const initializeSwappedContent = (root) => {
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
+	  if (root.matches?.("[data-resolver-combobox]")) setupResolverCombobox(root);
+	  root.querySelectorAll?.("[data-resolver-combobox]").forEach(setupResolverCombobox);
 	  // Range pickers populate their year choices before their native selects are
 	  // promoted into styled comboboxes.
 	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);

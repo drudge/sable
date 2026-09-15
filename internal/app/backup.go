@@ -18,7 +18,6 @@ import (
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/trustanchor"
 	"github.com/drudge/sable/internal/version"
-	"github.com/drudge/sable/internal/web"
 	"github.com/drudge/sable/internal/zone"
 )
 
@@ -34,18 +33,9 @@ const (
 	clusterTrustEntry      = "trust-anchor.pem"
 )
 
-// Progress reports how far a backup or restore has advanced. Step counts
-// completed stages, so a caller can show real movement rather than a spinner
-// that says nothing about what is happening.
-type Progress struct {
-	Stage string
-	Step  int
-	Total int
-}
-
 // ProgressFunc receives progress updates. It is called from the goroutine
 // running the operation and must not block for long.
-type ProgressFunc func(Progress)
+type ProgressFunc func(backup.Progress)
 
 // reporter turns a caller's optional callback into something the capture and
 // restore paths can call unconditionally.
@@ -65,7 +55,7 @@ func (progress *reporter) stage(name string) {
 	if progress == nil || progress.report == nil {
 		return
 	}
-	progress.report(Progress{Stage: name, Step: progress.step, Total: progress.total})
+	progress.report(backup.Progress{Stage: name, Step: progress.step, Total: progress.total})
 	progress.step++
 }
 
@@ -73,7 +63,7 @@ func (progress *reporter) done(name string) {
 	if progress == nil || progress.report == nil {
 		return
 	}
-	progress.report(Progress{Stage: name, Step: progress.total, Total: progress.total})
+	progress.report(backup.Progress{Stage: name, Step: progress.total, Total: progress.total})
 }
 
 // BackupOptions describes a backup to capture.
@@ -789,39 +779,30 @@ type consoleBackups struct {
 	configurationPath string
 }
 
-func (backups *consoleBackups) CreateBackup(ctx context.Context, passphrase string, progress func(web.BackupProgress)) ([]byte, error) {
+func (backups *consoleBackups) CreateBackup(ctx context.Context, passphrase string, progress func(backup.Progress)) ([]byte, error) {
 	return CreateBackup(ctx, BackupOptions{
 		ConfigurationPath: backups.configurationPath,
 		Passphrase:        passphrase,
-		Progress:          consoleProgress(progress),
+		Progress:          progress,
 	})
 }
 
-func (backups *consoleBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(web.BackupProgress)) (web.BackupSummary, error) {
+func (backups *consoleBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
 	result, err := StageRestore(RestoreOptions{
 		ConfigurationPath: backups.configurationPath,
 		Contents:          contents,
 		Passphrase:        passphrase,
 		KeepConfiguration: keepConfiguration,
-		Progress:          consoleProgress(progress),
+		Progress:          progress,
 	})
 	if err != nil {
-		return web.BackupSummary{}, err
+		return backup.RestoreSummary{}, err
 	}
-	return web.BackupSummary{
+	return backup.RestoreSummary{
 		Sections: result.Sections, Zones: result.Zones, Users: result.Users, Roles: result.Roles,
 		Tokens: result.Tokens, Secrets: result.Secrets, TrustAnchors: result.TrustAnchors,
 		Files: result.Files, ConfigurationBackedUp: result.ConfigurationBackedUp,
 	}, nil
-}
-
-func consoleProgress(report func(web.BackupProgress)) ProgressFunc {
-	if report == nil {
-		return nil
-	}
-	return func(progress Progress) {
-		report(web.BackupProgress{Stage: progress.Stage, Step: progress.Step, Total: progress.Total})
-	}
 }
 
 func clusterIDFromManifest(contents []byte) string {
