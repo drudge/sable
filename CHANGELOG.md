@@ -24,6 +24,10 @@ when console actions fail.
 
 ### A more reliable console
 
+- Open **Import from Catalog** directly from the command palette. The action
+  follows zone-creation permissions and is hidden on read-only replicas.
+- Keep release versions such as `v1.3.5-rc.1` on one line in the rolling-update
+  badge instead of splitting the version across lines.
 - Clean up dropdown, time-picker, and resolver controls when page sections are
   refreshed, preventing unused event handlers from accumulating over time.
 - Show command-palette results consistently, including when the relevant page
@@ -42,6 +46,16 @@ when console actions fail.
   queued entries a bounded opportunity to finish writing.
 - Skip DNS cache persistence when shutdown is incomplete, avoiding a snapshot
   while background work may still be changing it.
+
+## [1.3.5-rc.2] - Unreleased
+
+This second release candidate includes the performance and reliability
+improvements from 1.3.5-rc.1, plus two console fixes found during cluster testing.
+
+- Open **Import from Catalog** directly from the command palette. The action
+  follows zone-creation permissions and is hidden on read-only replicas.
+- Keep release versions such as `v1.3.5-rc.1` on one line in the rolling-update
+  badge instead of splitting the version across lines.
 
 ## [1.3.5-rc.1] - Unreleased
 
