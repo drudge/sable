@@ -3416,7 +3416,7 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .cluster-update-card { padding: 1.25rem; }
 .cluster-update-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .cluster-update-card > header h2 { margin: 0; font-size: 1rem; }
-.cluster-update-version { gap: .3rem; }
+.cluster-update-version { flex: 0 0 auto; gap: .3rem; white-space: nowrap; }
 .cluster-update-version .nav-icon { width: .8rem; height: .8rem; }
 .cluster-update-version.available { background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
 .dark .cluster-update-version.available { color: #f1ad47; }
