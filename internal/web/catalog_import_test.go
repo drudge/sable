@@ -413,3 +413,20 @@ func TestCatalogForwarderImport(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogImportNavigationOpensWizardWithoutDiscovery(t *testing.T) {
+	server, _, stats := catalogImportFixture(t)
+	response := httptest.NewRecorder()
+	server.importCatalog(response, httptest.NewRequest(http.MethodGet, "/zones/import-catalog", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	for _, expected := range []string{`<html`, `id="catalog-import-dialog"`, `data-dialog-auto-open="true"`, `Import from Catalog`} {
+		if !strings.Contains(response.Body.String(), expected) {
+			t.Errorf("catalog navigation missing %q", expected)
+		}
+	}
+	if stats.calls != 0 {
+		t.Fatal("opening the wizard started catalog discovery")
+	}
+}
