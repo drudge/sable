@@ -408,10 +408,10 @@ func TestRestoreRefusesToLeaveTheDestinationDirectory(t *testing.T) {
 
 func TestBackupReportsEveryStageInOrder(t *testing.T) {
 	ctx := context.Background()
-	reports := []Progress{}
+	reports := []backup.Progress{}
 	sealed, err := CreateBackup(ctx, BackupOptions{
 		ConfigurationPath: newBackupDeployment(t), Passphrase: backupTestPassphrase,
-		Progress: func(progress Progress) { reports = append(reports, progress) },
+		Progress: func(progress backup.Progress) { reports = append(reports, progress) },
 	})
 	if err != nil {
 		t.Fatalf("CreateBackup() error = %v", err)
@@ -436,10 +436,10 @@ func TestBackupReportsEveryStageInOrder(t *testing.T) {
 		}
 	}
 
-	restoreReports := []Progress{}
+	restoreReports := []backup.Progress{}
 	if _, err := RestoreBackup(ctx, RestoreOptions{
 		ConfigurationPath: freshConfigurationPath(t), Contents: sealed, Passphrase: backupTestPassphrase,
-		Progress: func(progress Progress) { restoreReports = append(restoreReports, progress) },
+		Progress: func(progress backup.Progress) { restoreReports = append(restoreReports, progress) },
 	}); err != nil {
 		t.Fatalf("RestoreBackup() error = %v", err)
 	}

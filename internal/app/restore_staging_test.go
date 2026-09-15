@@ -121,7 +121,7 @@ func TestRestoreRollsBackSectionsAppliedBeforeALateFailure(t *testing.T) {
 		Contents:          sealed,
 		Passphrase:        backupTestPassphrase,
 		KeepConfiguration: true,
-		Progress: func(progress Progress) {
+		Progress: func(progress backup.Progress) {
 			if progress.Stage == "Restoring users, roles, and tokens" {
 				cancel()
 			}

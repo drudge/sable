@@ -26,9 +26,9 @@ type stubBackups struct {
 	contents   []byte
 	createErr  error
 	restoreErr error
-	summary    BackupSummary
+	summary    backup.RestoreSummary
 	// stages, when set, are reported before the operation returns.
-	stages []BackupProgress
+	stages []backup.Progress
 	// release, when set, blocks the operation until it is closed, which is how
 	// a test observes a job while it is still running.
 	release chan struct{}
@@ -41,29 +41,29 @@ type stubBackups struct {
 
 type stubLocalBackups struct {
 	*stubBackups
-	archives         []LocalBackup
+	archives         []backup.LocalArchive
 	files            map[string][]byte
 	storedPassphrase string
-	scheduleUpdate   BackupScheduleUpdate
+	scheduleUpdate   backup.ScheduleUpdate
 }
 
-func (stub *stubLocalBackups) BackupSchedule(context.Context) (BackupSchedule, error) {
+func (stub *stubLocalBackups) BackupSchedule(context.Context) (backup.Schedule, error) {
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
-	return BackupSchedule{
+	return backup.Schedule{
 		Directory: "data/backups", Interval: 24 * time.Hour, RunAt: "02:00", RetentionCount: 7,
 		PassphraseStored: stub.storedPassphrase != "",
 	}, nil
 }
 
-func (stub *stubLocalBackups) UpdateBackupSchedule(_ context.Context, update BackupScheduleUpdate) error {
+func (stub *stubLocalBackups) UpdateBackupSchedule(_ context.Context, update backup.ScheduleUpdate) error {
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
 	stub.scheduleUpdate = update
 	return nil
 }
 
-func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase string, progress func(BackupProgress)) (LocalBackup, error) {
+func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase string, progress func(backup.Progress)) (backup.LocalArchive, error) {
 	stub.mu.Lock()
 	if passphrase == "" {
 		passphrase = stub.storedPassphrase
@@ -71,10 +71,10 @@ func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase st
 	stub.lastPassphrase = passphrase
 	stub.mu.Unlock()
 	stub.run(progress)
-	archive := LocalBackup{Name: "sable-backup-ns1-20260901.sablebackup", CreatedAt: time.Now(), Size: 6}
+	archive := backup.LocalArchive{Name: "sable-backup-ns1-20260901.sablebackup", CreatedAt: time.Now(), Size: 6}
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
-	stub.archives = append([]LocalBackup{archive}, stub.archives...)
+	stub.archives = append([]backup.LocalArchive{archive}, stub.archives...)
 	if stub.files == nil {
 		stub.files = map[string][]byte{}
 	}
@@ -82,10 +82,10 @@ func (stub *stubLocalBackups) CreateLocalBackup(_ context.Context, passphrase st
 	return archive, nil
 }
 
-func (stub *stubLocalBackups) LocalBackups(context.Context) ([]LocalBackup, error) {
+func (stub *stubLocalBackups) LocalBackups(context.Context) ([]backup.LocalArchive, error) {
 	stub.mu.Lock()
 	defer stub.mu.Unlock()
-	return append([]LocalBackup(nil), stub.archives...), nil
+	return append([]backup.LocalArchive(nil), stub.archives...), nil
 }
 
 func (stub *stubLocalBackups) LocalBackupContents(_ context.Context, name string) ([]byte, error) {
@@ -119,7 +119,7 @@ func (stub *stubLocalBackups) LocalBackupForRestore(ctx context.Context, name, p
 	return contents, passphrase, err
 }
 
-func (stub *stubBackups) run(progress func(BackupProgress)) {
+func (stub *stubBackups) run(progress func(backup.Progress)) {
 	for _, stage := range stub.stages {
 		progress(stage)
 	}
@@ -128,7 +128,7 @@ func (stub *stubBackups) run(progress func(BackupProgress)) {
 	}
 }
 
-func (stub *stubBackups) CreateBackup(_ context.Context, passphrase string, progress func(BackupProgress)) ([]byte, error) {
+func (stub *stubBackups) CreateBackup(_ context.Context, passphrase string, progress func(backup.Progress)) ([]byte, error) {
 	stub.mu.Lock()
 	stub.lastPassphrase = passphrase
 	stub.mu.Unlock()
@@ -139,13 +139,13 @@ func (stub *stubBackups) CreateBackup(_ context.Context, passphrase string, prog
 	return stub.contents, nil
 }
 
-func (stub *stubBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(BackupProgress)) (BackupSummary, error) {
+func (stub *stubBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
 	stub.mu.Lock()
 	stub.restored, stub.lastPassphrase, stub.keptLocal = contents, passphrase, keepConfiguration
 	stub.mu.Unlock()
 	stub.run(progress)
 	if stub.restoreErr != nil {
-		return BackupSummary{}, stub.restoreErr
+		return backup.RestoreSummary{}, stub.restoreErr
 	}
 	return stub.summary, nil
 }
@@ -394,7 +394,7 @@ func TestLocalBackupCanBeDeletedFromHistory(t *testing.T) {
 	name := "sable-backup-ns1-20260901.sablebackup"
 	stub := &stubLocalBackups{
 		stubBackups: &stubBackups{}, files: map[string][]byte{name: []byte("sealed archive")},
-		archives: []LocalBackup{{Name: name, CreatedAt: time.Now(), Size: 14}},
+		archives: []backup.LocalArchive{{Name: name, CreatedAt: time.Now(), Size: 14}},
 	}
 	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
 	recorder := httptest.NewRecorder()
@@ -439,7 +439,7 @@ func TestBackupProgressReportsRealStages(t *testing.T) {
 	release := make(chan struct{})
 	stub := &stubBackups{
 		contents: []byte("sealed"),
-		stages:   []BackupProgress{{Stage: "Collecting zones and records", Step: 2, Total: 8}},
+		stages:   []backup.Progress{{Stage: "Collecting zones and records", Step: 2, Total: 8}},
 		release:  release,
 	}
 	server := newBackupServer(stub)
@@ -543,7 +543,7 @@ func TestBackupDownloadNeverEchoesThePassphrase(t *testing.T) {
 
 func TestBackupRestoreStagesTheUploadedArchive(t *testing.T) {
 	archive := sealedArchive(t)
-	stub := &stubBackups{summary: BackupSummary{
+	stub := &stubBackups{summary: backup.RestoreSummary{
 		Sections: []string{backup.SectionZones, backup.SectionAuthorization}, Zones: 3, Users: 2,
 	}}
 	server := newBackupServer(stub)
@@ -791,7 +791,7 @@ func toastRegion(t *testing.T, body string) string {
 // carries the restart button and must not count itself down out from under the
 // operator before they can reach it.
 func TestRestoreNoticeCarriesARestartButton(t *testing.T) {
-	server := newBackupServer(&stubBackups{summary: BackupSummary{Sections: []string{backup.SectionZones}, Zones: 3}})
+	server := newBackupServer(&stubBackups{summary: backup.RestoreSummary{Sections: []string{backup.SectionZones}, Zones: 3}})
 	server.restart = func() {}
 
 	recorder := httptest.NewRecorder()
@@ -820,7 +820,7 @@ func TestRestoreNoticeCarriesARestartButton(t *testing.T) {
 
 // A node with no managed restart must not offer a button that cannot work.
 func TestRestoreNoticeOmitsRestartWithoutAController(t *testing.T) {
-	server := newBackupServer(&stubBackups{summary: BackupSummary{Sections: []string{backup.SectionZones}}})
+	server := newBackupServer(&stubBackups{summary: backup.RestoreSummary{Sections: []string{backup.SectionZones}}})
 	recorder := httptest.NewRecorder()
 	server.restoreBackup(recorder, restoreUpload(t, sealedArchive(t), url.Values{
 		"passphrase": {"a long enough passphrase"},
@@ -854,7 +854,7 @@ func TestBackupNoticeDoesNotOfferARestart(t *testing.T) {
 }
 
 func TestRestoreMessageReadsAsASentence(t *testing.T) {
-	message := restoreMessage(BackupSummary{
+	message := restoreMessage(backup.RestoreSummary{
 		Sections: []string{
 			backup.SectionConfiguration, backup.SectionAuthorization,
 			backup.SectionTrustAnchors, backup.SectionCertificates, backup.SectionCluster,

@@ -17,7 +17,6 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/backup"
 	"github.com/drudge/sable/internal/config"
-	"github.com/drudge/sable/internal/web"
 )
 
 const (
@@ -33,11 +32,17 @@ type backupSecretVault interface {
 	Delete(context.Context, string) error
 }
 
+type backupConfiguration interface {
+	Current() config.Snapshot
+	Update(context.Context, func(*config.Config) error) error
+	BaseDirectory() string
+}
+
 // scheduledBackupService owns both browser backup operations and the local
 // scheduler so a scheduled capture cannot race a manual capture or restore.
 type scheduledBackupService struct {
 	configurationPath string
-	configuration     *config.Manager
+	configuration     backupConfiguration
 	vault             backupSecretVault
 	logger            *slog.Logger
 
@@ -50,7 +55,7 @@ type scheduledBackupService struct {
 	wake        chan struct{}
 }
 
-func newScheduledBackupService(configurationPath string, manager *config.Manager, vault backupSecretVault, logger *slog.Logger, policy config.Backup) (*scheduledBackupService, error) {
+func newScheduledBackupService(configurationPath string, manager backupConfiguration, vault backupSecretVault, logger *slog.Logger, policy config.Backup) (*scheduledBackupService, error) {
 	service := &scheduledBackupService{
 		configurationPath: configurationPath,
 		configuration:     manager,
@@ -95,17 +100,17 @@ func (service *scheduledBackupService) Apply(policy config.Backup) {
 	service.notify()
 }
 
-func (service *scheduledBackupService) CreateBackup(ctx context.Context, passphrase string, progress func(web.BackupProgress)) ([]byte, error) {
+func (service *scheduledBackupService) CreateBackup(ctx context.Context, passphrase string, progress func(backup.Progress)) ([]byte, error) {
 	service.operationMu.Lock()
 	defer service.operationMu.Unlock()
 	return CreateBackup(ctx, BackupOptions{
 		ConfigurationPath: service.configurationPath,
 		Passphrase:        passphrase,
-		Progress:          consoleProgress(progress),
+		Progress:          progress,
 	})
 }
 
-func (service *scheduledBackupService) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(web.BackupProgress)) (web.BackupSummary, error) {
+func (service *scheduledBackupService) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
 	service.operationMu.Lock()
 	defer service.operationMu.Unlock()
 	result, err := StageRestore(RestoreOptions{
@@ -113,25 +118,25 @@ func (service *scheduledBackupService) StageRestore(_ context.Context, contents 
 		Contents:          contents,
 		Passphrase:        passphrase,
 		KeepConfiguration: keepConfiguration,
-		Progress:          consoleProgress(progress),
+		Progress:          progress,
 	})
 	if err != nil {
-		return web.BackupSummary{}, err
+		return backup.RestoreSummary{}, err
 	}
-	return web.BackupSummary{
+	return backup.RestoreSummary{
 		Sections: result.Sections, Zones: result.Zones, Users: result.Users, Roles: result.Roles,
 		Tokens: result.Tokens, Secrets: result.Secrets, TrustAnchors: result.TrustAnchors,
 		Files: result.Files, ConfigurationBackedUp: result.ConfigurationBackedUp,
 	}, nil
 }
 
-func (service *scheduledBackupService) BackupSchedule(ctx context.Context) (web.BackupSchedule, error) {
+func (service *scheduledBackupService) BackupSchedule(ctx context.Context) (backup.Schedule, error) {
 	policy, nextRun, lastSuccess, lastError := service.snapshot()
 	_, stored, err := service.passphrase(ctx)
 	if err != nil {
-		return web.BackupSchedule{}, err
+		return backup.Schedule{}, err
 	}
-	return web.BackupSchedule{
+	return backup.Schedule{
 		Enabled: policy.Enabled, Directory: policy.Directory,
 		ResolvedDirectory: service.resolveDirectory(policy.Directory),
 		Interval:          policy.Interval.Duration, RunAt: policy.RunAt, RetentionCount: policy.RetentionCount,
@@ -139,7 +144,7 @@ func (service *scheduledBackupService) BackupSchedule(ctx context.Context) (web.
 	}, nil
 }
 
-func (service *scheduledBackupService) UpdateBackupSchedule(ctx context.Context, update web.BackupScheduleUpdate) error {
+func (service *scheduledBackupService) UpdateBackupSchedule(ctx context.Context, update backup.ScheduleUpdate) error {
 	oldSecret, hadOldSecret, err := service.passphrase(ctx)
 	if err != nil {
 		return err
@@ -175,40 +180,40 @@ func (service *scheduledBackupService) UpdateBackupSchedule(ctx context.Context,
 	return err
 }
 
-func (service *scheduledBackupService) LocalBackups(ctx context.Context) ([]web.LocalBackup, error) {
+func (service *scheduledBackupService) LocalBackups(ctx context.Context) ([]backup.LocalArchive, error) {
 	policy, _, _, _ := service.snapshot()
 	return service.localBackups(ctx, policy)
 }
 
-func (service *scheduledBackupService) CreateLocalBackup(ctx context.Context, passphrase string, progress func(web.BackupProgress)) (web.LocalBackup, error) {
+func (service *scheduledBackupService) CreateLocalBackup(ctx context.Context, passphrase string, progress func(backup.Progress)) (backup.LocalArchive, error) {
 	service.operationMu.Lock()
 	defer service.operationMu.Unlock()
 	passphrase, err := service.localBackupPassphrase(ctx, passphrase)
 	if err != nil {
-		return web.LocalBackup{}, err
+		return backup.LocalArchive{}, err
 	}
 	contents, err := CreateBackup(ctx, BackupOptions{
 		ConfigurationPath: service.configurationPath,
 		Passphrase:        passphrase,
-		Progress:          consoleProgress(progress),
+		Progress:          progress,
 	})
 	if err != nil {
-		return web.LocalBackup{}, err
+		return backup.LocalArchive{}, err
 	}
 	summary, err := backup.Inspect(contents)
 	if err != nil {
-		return web.LocalBackup{}, err
+		return backup.LocalArchive{}, err
 	}
 	policy, _, _, _ := service.snapshot()
 	directory := service.resolveDirectory(policy.Directory)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return web.LocalBackup{}, fmt.Errorf("create backup directory: %w", err)
+		return backup.LocalArchive{}, fmt.Errorf("create backup directory: %w", err)
 	}
 	name := strings.Replace(service.scheduledPrefix(), "sable-scheduled-", "sable-backup-", 1) + summary.CreatedAt.UTC().Format("20060102-150405.000") + ".sablebackup"
 	if err := writeLocalBackup(filepath.Join(directory, name), contents); err != nil {
-		return web.LocalBackup{}, err
+		return backup.LocalArchive{}, err
 	}
-	return web.LocalBackup{
+	return backup.LocalArchive{
 		Name: name, CreatedAt: summary.CreatedAt, Hostname: summary.Hostname,
 		SableVersion: summary.SableVersion, Size: int64(len(contents)), Scheduled: false,
 	}, nil
@@ -231,7 +236,7 @@ func (service *scheduledBackupService) localBackupPassphrase(ctx context.Context
 	return string(secret), nil
 }
 
-func (service *scheduledBackupService) localBackups(ctx context.Context, policy config.Backup) ([]web.LocalBackup, error) {
+func (service *scheduledBackupService) localBackups(ctx context.Context, policy config.Backup) ([]backup.LocalArchive, error) {
 	directory := service.resolveDirectory(policy.Directory)
 	entries, err := os.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
@@ -241,7 +246,7 @@ func (service *scheduledBackupService) localBackups(ctx context.Context, policy 
 		return nil, fmt.Errorf("read backup directory %s: %w", directory, err)
 	}
 	prefix := service.scheduledPrefix()
-	archives := make([]web.LocalBackup, 0, len(entries))
+	archives := make([]backup.LocalArchive, 0, len(entries))
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -266,7 +271,7 @@ func (service *scheduledBackupService) localBackups(ctx context.Context, policy 
 		if err != nil {
 			continue
 		}
-		archives = append(archives, web.LocalBackup{
+		archives = append(archives, backup.LocalArchive{
 			Name: entry.Name(), CreatedAt: summary.CreatedAt, Hostname: summary.Hostname,
 			SableVersion: summary.SableVersion, Size: info.Size(), Scheduled: strings.HasPrefix(entry.Name(), prefix),
 		})
