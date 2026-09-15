@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.3.4] - Unreleased
+## [1.3.4] - 2026-09-14
 
 Sable 1.3.4 is a hotfix for cluster setup and certificate trust, including
 replica enrollment after regenerating a private CA.

@@ -82,6 +82,9 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 // endpoint so replicas can learn a planned primary handoff without a push
 // connection from the former primary.
 func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, signature string) (result SyncConfiguration, resultErr error) {
+	if err := service.validateSynchronizationHeartbeat(heartbeat, signature); err != nil {
+		return SyncConfiguration{}, err
+	}
 	if err := service.refreshPrimaryState(ctx); err != nil && !errors.Is(err, ErrNotInitialized) {
 		return SyncConfiguration{}, err
 	}
@@ -95,26 +98,11 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 			}
 		}
 	}()
+	if err := service.validateSynchronizationHeartbeatLocked(heartbeat, signature); err != nil {
+		return SyncConfiguration{}, err
+	}
 	now := time.Now()
-	if heartbeat.SentAt.Before(now.Add(-heartbeatClockSkew)) || heartbeat.SentAt.After(now.Add(heartbeatClockSkew)) {
-		return SyncConfiguration{}, errors.New("synchronization timestamp is outside the accepted clock window")
-	}
-	if service.heartbeatRevoked(heartbeat, signature) {
-		return SyncConfiguration{}, ErrNodeRemoved
-	}
-	if service.manifest == nil {
-		return SyncConfiguration{}, ErrNotInitialized
-	}
-	if heartbeat.NodeID == service.nodeID {
-		return SyncConfiguration{}, errors.New("synchronization node must be remote")
-	}
-	if !validHeartbeatSignature(service.manifest.StatusKey, heartbeat, signature) {
-		return SyncConfiguration{}, errors.New("synchronization signature is invalid")
-	}
 	memberIndex := slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID })
-	if memberIndex < 0 {
-		return SyncConfiguration{}, ErrNodeRemoved
-	}
 	localIsPrimary := service.manifest.PrimaryID == service.nodeID
 	if heartbeat.AdvertiseURL != "" && localIsPrimary {
 		name, advertiseURL, trustAnchor, version, addresses, err := validateHeartbeatIdentity(heartbeat)
@@ -173,6 +161,38 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	}
 	configuration := joinConfiguration(service.manifest, stateSnapshot)
 	return SyncConfiguration(configuration), nil
+}
+
+func (service *Service) validateSynchronizationHeartbeat(heartbeat Heartbeat, signature string) error {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	return service.validateSynchronizationHeartbeatLocked(heartbeat, signature)
+}
+
+func (service *Service) validateSynchronizationHeartbeatLocked(heartbeat Heartbeat, signature string) error {
+	now := time.Now()
+	if heartbeat.SentAt.Before(now.Add(-heartbeatClockSkew)) || heartbeat.SentAt.After(now.Add(heartbeatClockSkew)) {
+		return errors.New("synchronization timestamp is outside the accepted clock window")
+	}
+	if service.heartbeatRevoked(heartbeat, signature) {
+		return ErrNodeRemoved
+	}
+	if service.manifest == nil {
+		return ErrNotInitialized
+	}
+	if heartbeat.NodeID == service.nodeID {
+		return errors.New("synchronization node must be remote")
+	}
+	if !validHeartbeatSignature(service.manifest.StatusKey, heartbeat, signature) {
+		return errors.New("synchronization signature is invalid")
+	}
+	if !slices.ContainsFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID }) {
+		return ErrNodeRemoved
+	}
+	if previous, observed := service.telemetry[heartbeat.NodeID]; observed && !heartbeat.SentAt.After(previous.heartbeat.SentAt) {
+		return errors.New("synchronization heartbeat is stale or replayed")
+	}
+	return nil
 }
 
 func (service *Service) monitorPrimary(ctx context.Context) {

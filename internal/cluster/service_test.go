@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -308,6 +310,356 @@ func TestRefreshPrimaryStateHealsDemotedPrimaryRole(t *testing.T) {
 	}
 	if state := primary.Snapshot(); state.LocalRole != RolePrimary || state.Nodes[0].Role != RolePrimary {
 		t.Fatalf("primary role was not healed: %#v", state)
+	}
+}
+
+func TestSynchronizeRejectsUnauthenticatedHeartbeatBeforeCapture(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	replicator.captureCalls.Store(0)
+	heartbeat := Heartbeat{NodeID: "remote-node", SentAt: time.Now(), UpSince: time.Now()}
+	if _, err := service.Synchronize(context.Background(), heartbeat, "invalid"); err == nil || !strings.Contains(err.Error(), "signature") {
+		t.Fatalf("unauthenticated Synchronize() error = %v, want signature error", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 0 {
+		t.Fatalf("unauthenticated heartbeat captures = %d, want 0", got)
+	}
+}
+
+func TestSynchronizeRejectsReplayBeforeCapture(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.CreateEnrollmentToken(context.Background(), 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const memberID = "11111111-1111-4111-8111-111111111111"
+	if _, err := service.Enroll(context.Background(), JoinRequest{
+		Token: token.Token, NodeID: memberID, Name: "dns-2", AdvertiseURL: "https://dns-2.example:5380",
+		Addresses: []string{"192.0.2.2"}, Version: "dev",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	heartbeat := Heartbeat{NodeID: memberID, SentAt: time.Now(), UpSince: time.Now().Add(-time.Minute)}
+	signature := heartbeatSignature(service.manifest.StatusKey, heartbeat)
+	if _, err := service.Synchronize(context.Background(), heartbeat, signature); err != nil {
+		t.Fatalf("initial Synchronize() error = %v", err)
+	}
+	replicator.captureCalls.Store(0)
+	if _, err := service.Synchronize(context.Background(), heartbeat, signature); err == nil || !strings.Contains(err.Error(), "stale or replayed") {
+		t.Fatalf("replayed Synchronize() error = %v, want stale heartbeat error", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 0 {
+		t.Fatalf("replayed heartbeat captures = %d, want 0", got)
+	}
+}
+
+func TestRefreshPrimaryStateSkipsUninitializedAndReplica(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{DataDirectory: t.TempDir(), Replicator: replicator})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.refreshPrimaryState(context.Background()); !errors.Is(err, ErrNotInitialized) {
+		t.Fatalf("uninitialized refresh error = %v, want not initialized", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 0 {
+		t.Fatalf("uninitialized captures = %d, want 0", got)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	service.mu.Lock()
+	service.manifest.PrimaryID = "another-node"
+	service.mu.Unlock()
+	replicator.captureCalls.Store(0)
+	if err := service.refreshPrimaryState(context.Background()); err != nil {
+		t.Fatalf("replica refresh error = %v", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 0 {
+		t.Fatalf("replica captures = %d, want 0", got)
+	}
+}
+
+func TestRefreshPrimaryStateSingleFlight(t *testing.T) {
+	for _, callers := range []int{1, 3, 10} {
+		t.Run(fmt.Sprintf("callers-%d", callers), func(t *testing.T) {
+			replicator := &controlledStateReplicator{}
+			service, err := Open(Options{
+				DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+				t.Fatal(err)
+			}
+			replicator.captureCalls.Store(0)
+			replicator.captureStarted = make(chan struct{})
+			replicator.captureRelease = make(chan struct{})
+			leaderDone := make(chan error, 1)
+			go func() { leaderDone <- service.refreshPrimaryState(context.Background()) }()
+			select {
+			case <-replicator.captureStarted:
+			case <-time.After(time.Second):
+				t.Fatal("single-flight leader did not start")
+			}
+			errorsByCaller := make([]error, callers)
+			var wait sync.WaitGroup
+			waitersObserved := make([]chan struct{}, 0, callers-1)
+			wait.Add(callers - 1)
+			for index := 1; index < callers; index++ {
+				observed := make(chan struct{})
+				waitersObserved = append(waitersObserved, observed)
+				go func(index int) {
+					defer wait.Done()
+					errorsByCaller[index] = service.refreshPrimaryState(&observedWaitContext{Context: context.Background(), observed: observed})
+				}(index)
+			}
+			for _, observed := range waitersObserved {
+				select {
+				case <-observed:
+				case <-time.After(time.Second):
+					t.Fatal("single-flight waiter did not start")
+				}
+			}
+			if got := replicator.captureCalls.Load(); got != 1 {
+				t.Fatalf("overlapping captures = %d, want 1", got)
+			}
+			close(replicator.captureRelease)
+			errorsByCaller[0] = <-leaderDone
+			wait.Wait()
+			if got := replicator.captureCalls.Load(); got != 1 {
+				t.Fatalf("overlapping captures after release = %d, want 1", got)
+			}
+			for index, err := range errorsByCaller {
+				if err != nil {
+					t.Errorf("caller %d refresh error = %v", index, err)
+				}
+			}
+		})
+	}
+}
+
+func TestRefreshPrimaryStateWaiterCancellationAndFailureRetry(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	replicator.captureCalls.Store(0)
+	replicator.captureStarted = make(chan struct{})
+	replicator.captureRelease = make(chan struct{})
+	leaderDone := make(chan error, 1)
+	go func() { leaderDone <- service.refreshPrimaryState(context.Background()) }()
+	select {
+	case <-replicator.captureStarted:
+	case <-time.After(time.Second):
+		t.Fatal("leader capture did not start")
+	}
+	waitContext, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := service.refreshPrimaryState(waitContext); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("canceled waiter error = %v, want deadline exceeded", err)
+	}
+	close(replicator.captureRelease)
+	if err := <-leaderDone; err != nil {
+		t.Fatalf("leader refresh error = %v", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 1 {
+		t.Fatalf("capture calls after canceled waiter = %d, want 1", got)
+	}
+
+	replicator.captureStarted = nil
+	replicator.captureRelease = nil
+	replicator.failCapture.Store(true)
+	if err := service.refreshPrimaryState(context.Background()); err == nil || !strings.Contains(err.Error(), "capture cluster state") {
+		t.Fatalf("failed refresh error = %v, want capture error", err)
+	}
+	if err := service.refreshPrimaryState(context.Background()); err != nil {
+		t.Fatalf("retry refresh error = %v", err)
+	}
+	if got := replicator.captureCalls.Load(); got != 3 {
+		t.Fatalf("capture calls after retry = %d, want 3", got)
+	}
+}
+
+func TestRefreshPrimaryStatePublishesChangedCaptureOnNextCall(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replicator.replace([]byte(`{"state":"one"}`))
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	initial := service.Snapshot()
+	replicator.replace([]byte(`{"state":"two"}`))
+	if err := service.refreshPrimaryState(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	updated := service.Snapshot()
+	if updated.Generation != initial.Generation+1 || updated.Generation == 0 || updated.ClusterID != initial.ClusterID {
+		t.Fatalf("changed capture publication = %#v, want next generation", updated)
+	}
+	if updatedNodes := updated.Nodes; len(updatedNodes) != 1 || updatedNodes[0].Role != RolePrimary {
+		t.Fatalf("published membership = %#v", updatedNodes)
+	}
+}
+
+func TestRefreshPrimaryStateDoesNotPublishAfterDemotionDuringCapture(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	initial := service.Snapshot()
+	replicator.captureStarted = make(chan struct{})
+	replicator.captureRelease = make(chan struct{})
+	refreshDone := make(chan error, 1)
+	go func() { refreshDone <- service.refreshPrimaryState(context.Background()) }()
+	select {
+	case <-replicator.captureStarted:
+	case <-time.After(time.Second):
+		t.Fatal("capture did not start")
+	}
+	service.mu.Lock()
+	service.manifest.PrimaryID = "promoted-node"
+	service.mu.Unlock()
+	close(replicator.captureRelease)
+	if err := <-refreshDone; err != nil {
+		t.Fatalf("demoted refresh error = %v", err)
+	}
+	if current := service.Snapshot(); current.Generation != initial.Generation {
+		t.Fatalf("demoted capture changed generation from %d to %d", initial.Generation, current.Generation)
+	}
+}
+
+func TestSynchronizeReturnsRemovedAfterMembershipChangesDuringCapture(t *testing.T) {
+	replicator := &controlledStateReplicator{}
+	service, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := service.CreateEnrollmentToken(context.Background(), 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const memberID = "11111111-1111-4111-8111-111111111111"
+	if _, err := service.Enroll(context.Background(), JoinRequest{
+		Token: token.Token, NodeID: memberID, Name: "dns-2", AdvertiseURL: "https://dns-2.example:5380",
+		Addresses: []string{"192.0.2.2"}, Version: "dev",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	heartbeat := Heartbeat{NodeID: memberID, SentAt: time.Now(), UpSince: time.Now().Add(-time.Minute)}
+	signature := heartbeatSignature(service.manifest.StatusKey, heartbeat)
+	replicator.captureStarted = make(chan struct{})
+	replicator.captureRelease = make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		_, err := service.Synchronize(context.Background(), heartbeat, signature)
+		result <- err
+	}()
+	select {
+	case <-replicator.captureStarted:
+	case <-time.After(time.Second):
+		t.Fatal("synchronization capture did not start")
+	}
+	service.mu.Lock()
+	service.manifest.Nodes = slices.DeleteFunc(service.manifest.Nodes, func(node member) bool { return node.ID == memberID })
+	service.mu.Unlock()
+	close(replicator.captureRelease)
+	if err := <-result; !errors.Is(err, ErrNodeRemoved) {
+		t.Fatalf("removed synchronization error = %v, want node removed", err)
+	}
+}
+
+func BenchmarkRefreshPrimaryStateOverlapping(b *testing.B) {
+	for _, callers := range []int{1, 3, 10} {
+		b.Run(fmt.Sprintf("callers-%d", callers), func(b *testing.B) {
+			replicator := &controlledStateReplicator{}
+			service, err := Open(Options{
+				DataDirectory: b.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Replicator: replicator,
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+			if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+				b.Fatal(err)
+			}
+			replicator.captureCalls.Store(0)
+			b.ResetTimer()
+			for b.Loop() {
+				replicator.captureStarted = make(chan struct{})
+				replicator.captureRelease = make(chan struct{})
+				replicator.startOnce = sync.Once{}
+				leaderDone := make(chan error, 1)
+				go func() { leaderDone <- service.refreshPrimaryState(context.Background()) }()
+				<-replicator.captureStarted
+				errorsByCaller := make([]error, callers)
+				var wait sync.WaitGroup
+				waitersObserved := make([]chan struct{}, 0, callers-1)
+				wait.Add(callers - 1)
+				for index := 1; index < callers; index++ {
+					observed := make(chan struct{})
+					waitersObserved = append(waitersObserved, observed)
+					go func(index int) {
+						defer wait.Done()
+						errorsByCaller[index] = service.refreshPrimaryState(&observedWaitContext{Context: context.Background(), observed: observed})
+					}(index)
+				}
+				for _, observed := range waitersObserved {
+					<-observed
+				}
+				close(replicator.captureRelease)
+				errorsByCaller[0] = <-leaderDone
+				wait.Wait()
+				for _, err := range errorsByCaller {
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+			if got := replicator.captureCalls.Load(); got != int32(b.N) {
+				b.Fatalf("captures = %d, want %d", got, b.N)
+			}
+			b.ReportMetric(float64(replicator.captureCalls.Load())/float64(b.N), "captures/op")
+		})
 	}
 }
 
@@ -1058,6 +1410,44 @@ type memoryStateReplicator struct {
 	contents []byte
 }
 
+type controlledStateReplicator struct {
+	memoryStateReplicator
+	captureCalls   atomic.Int32
+	captureStarted chan struct{}
+	captureRelease chan struct{}
+	failCapture    atomic.Bool
+	startOnce      sync.Once
+}
+
+type observedWaitContext struct {
+	context.Context
+	observed chan struct{}
+	once     sync.Once
+}
+
+func (ctx *observedWaitContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.observed) })
+	return nil
+}
+
+func (replicator *controlledStateReplicator) Capture(ctx context.Context) ([]byte, error) {
+	replicator.captureCalls.Add(1)
+	if replicator.captureStarted != nil {
+		replicator.startOnce.Do(func() { close(replicator.captureStarted) })
+	}
+	if replicator.captureRelease != nil {
+		select {
+		case <-replicator.captureRelease:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if replicator.failCapture.CompareAndSwap(true, false) {
+		return nil, errors.New("simulated state capture failure")
+	}
+	return replicator.current(), nil
+}
+
 type failOnceStateReplicator struct {
 	memoryStateReplicator
 	failures int
@@ -1136,4 +1526,44 @@ func (roundTripper serviceRoundTripper) RoundTrip(request *http.Request) (*http.
 		StatusCode: status, Status: http.StatusText(status), Header: make(http.Header),
 		Body: io.NopCloser(bytes.NewReader(contents)), Request: request,
 	}, nil
+}
+
+func TestRefreshPrimaryStateDiscardsCaptureAfterStateReplacement(t *testing.T) {
+	for _, replaceCluster := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cluster-replaced-%t", replaceCluster), func(t *testing.T) {
+			replicator := &controlledStateReplicator{}
+			replicator.replace([]byte(`{"state":"initial"}`))
+			service, err := Open(Options{DataDirectory: t.TempDir(), Replicator: replicator})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := service.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+				t.Fatal(err)
+			}
+			replicator.replace([]byte(`{"state":"captured"}`))
+			replicator.captureStarted = make(chan struct{})
+			replicator.captureRelease = make(chan struct{})
+			done := make(chan error, 1)
+			go func() { done <- service.refreshPrimaryState(context.Background()) }()
+			<-replicator.captureStarted
+			service.mu.Lock()
+			service.manifest.Generation++
+			if replaceCluster {
+				service.manifest.ClusterID = "replacement-cluster"
+			} else {
+				service.manifest.StateDigest = stateDigest([]byte(`{"state":"applied"}`))
+			}
+			expectedID, expectedDigest, expectedGeneration := service.manifest.ClusterID, service.manifest.StateDigest, service.manifest.Generation
+			service.mu.Unlock()
+			close(replicator.captureRelease)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			service.mu.RLock()
+			defer service.mu.RUnlock()
+			if service.manifest.ClusterID != expectedID || service.manifest.StateDigest != expectedDigest || service.manifest.Generation != expectedGeneration {
+				t.Fatalf("stale capture overwrote replacement: %+v", service.manifest)
+			}
+		})
+	}
 }

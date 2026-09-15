@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/web/pages"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 type catalogImportStats struct {
@@ -18,6 +20,16 @@ type catalogImportStats struct {
 	members     []dnsserver.ZoneRecord
 	signed      bool
 	transferred []dnsserver.ZoneRecord
+}
+
+type countingCatalogZones struct {
+	snapshot zonemodel.Snapshot
+	calls    int
+}
+
+func (zones *countingCatalogZones) Current() zonemodel.Snapshot {
+	zones.calls++
+	return zonemodel.Snapshot{Zones: zonemodel.Clone(zones.snapshot.Zones), Revision: zones.snapshot.Revision, LoadedAt: zones.snapshot.LoadedAt}
 }
 
 func (s *catalogImportStats) FetchZone(_ context.Context, name, kind string, _ []string, _, _ string) ([]dnsserver.ZoneRecord, error) {
@@ -75,6 +87,18 @@ func TestCatalogImportDiscoveryAndPartialStaging(t *testing.T) {
 	if err != nil || len(result.Results) != 2 || result.Results[0].Success || !result.Results[1].Success {
 		t.Fatalf("results: %+v %v", result, err)
 	}
+	var goodExists, badExists bool
+	for _, member := range result.Members {
+		switch member.Name {
+		case "good.test":
+			goodExists = member.Exists
+		case "bad.test":
+			badExists = member.Exists
+		}
+	}
+	if !goodExists || badExists {
+		t.Fatalf("staged membership existence = good:%t bad:%t, want good:true bad:false", goodExists, badExists)
+	}
 	current := findZone(configuration.zoneSnapshot.Zones, "good.test")
 	if current == nil || current.Type != "secondary" || current.CatalogZone != "" || current.CatalogMemberID != "" || len(current.Records) != 2 {
 		t.Fatalf("not independent: %+v", current)
@@ -82,6 +106,65 @@ func TestCatalogImportDiscoveryAndPartialStaging(t *testing.T) {
 	repeated, err := prepareImport(server, form)
 	if err != nil || repeated.Results[1].Success || len(configuration.zoneSnapshot.Zones) != 2 {
 		t.Fatalf("repeated import: %+v %v", repeated, err)
+	}
+}
+
+func TestCatalogImportDiscoverySnapshotsZonesOnce(t *testing.T) {
+	for _, memberCount := range []int{1, 100} {
+		t.Run(fmt.Sprintf("%d members", memberCount), func(t *testing.T) {
+			server, configuration, stats := catalogImportFixture(t)
+			stats.members = []dnsserver.ZoneRecord{{Name: "version", Type: "TXT", TTL: 300, Value: `"2"`}}
+			for index := 0; index < memberCount; index++ {
+				stats.members = append(stats.members, dnsserver.ZoneRecord{
+					Name: fmt.Sprintf("member-%d.zones", index), Type: "PTR", TTL: 300,
+					Value: fmt.Sprintf("zone-%d.test.", index),
+				})
+			}
+			counting := &countingCatalogZones{snapshot: configuration.zoneSnapshot}
+			server.zones = counting
+			if _, err := prepareImport(server, catalogImportForm()); err != nil {
+				t.Fatal(err)
+			}
+			if counting.calls != 1 {
+				t.Fatalf("Current() calls = %d for %d members, want 1", counting.calls, memberCount)
+			}
+		})
+	}
+}
+
+func BenchmarkPrepareCatalogImportManyZones(b *testing.B) {
+	stats := &catalogImportStats{}
+	server := &Server{stats: stats}
+	const memberCount = 1_000
+	stats.members = []dnsserver.ZoneRecord{{Name: "version", Type: "TXT", TTL: 300, Value: `"2"`}}
+	for index := 0; index < memberCount; index++ {
+		stats.members = append(stats.members, dnsserver.ZoneRecord{
+			Name: fmt.Sprintf("member-%d.zones", index), Type: "PTR", TTL: 300,
+			Value: fmt.Sprintf("zone-%d.test.", index),
+		})
+	}
+	zones := make([]zonemodel.Zone, 500)
+	for index := range zones {
+		zoneName := fmt.Sprintf("existing-%d.test", index)
+		zones[index] = zonemodel.Zone{
+			Name:    zoneName,
+			Records: make([]zonemodel.Record, 20),
+		}
+	}
+	server.zones = &countingCatalogZones{snapshot: zonemodel.Snapshot{Zones: zones}}
+	requestForm := catalogImportForm()
+	request := httptest.NewRequest("POST", "/ui/zones/import-catalog", strings.NewReader(requestForm.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := request.ParseForm(); err != nil {
+		b.Fatal(err)
+	}
+	view := pages.CatalogImportView{Catalog: requestForm.Get("catalog"), Source: requestForm.Get("primary_servers"), Protocol: requestForm.Get("primary_protocol")}
+	b.ReportAllocs()
+	for b.Loop() {
+		view.Members = nil
+		if err := server.prepareCatalogImport(request, &view); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 func TestCatalogImportRejectsUnreviewedSelections(t *testing.T) {

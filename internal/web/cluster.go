@@ -48,8 +48,12 @@ func (server *Server) clusterPage(writer http.ResponseWriter, request *http.Requ
 
 func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	view := server.clusterView(request, "", "")
+	view := pages.ClusterPageView{Console: pages.DashboardView{TimeDisplay: requestTimeDisplay(request)}}
+	if server.cluster != nil {
+		populateClusterStateView(&view, server.cluster.Snapshot())
+	}
 	if !view.Initialized {
+		view = server.clusterView(request, "", "")
 		writer.Header().Set("HX-Retarget", "#cluster-content")
 		writer.Header().Set("HX-Reswap", "outerHTML")
 		if err := pages.ClusterContent(view).Render(request.Context(), writer); err != nil {
@@ -57,6 +61,7 @@ func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *htt
 		}
 		return
 	}
+	view.Update = server.clusterUpdateView(request)
 	if err := pages.ClusterLiveStatusUpdate(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render live cluster status", "error", err)
 	}
@@ -722,6 +727,12 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	}
 	view.RestartRequired = active.DataDirectory != server.config.Current().Config.ClusterDataPath(baseDirectory) || active.NodeName != view.NodeName || active.AdvertiseURL != view.AdvertiseURL || active.HTTPSListen != configuration.Server.HTTPSListen || active.TrustAnchorFile != configuration.ClusterTrustAnchorPath(baseDirectory)
 	view.RestartRequired = view.RestartRequired || active.TrustRestartRequired
+	populateClusterStateView(&view, state)
+	return view
+}
+
+// populateClusterStateView is shared by the full page and the lightweight live fragment.
+func populateClusterStateView(view *pages.ClusterPageView, state cluster.State) {
 	view.Initialized, view.NetworkReady = state.Initialized, state.NetworkReady
 	view.NodeID, view.ClusterID, view.ClusterDomain = state.NodeID, state.ClusterID, state.ClusterDomain
 	view.Generation, view.Mode, view.LocalRole = state.Generation, state.Mode, clusterRoleLabel(state.LocalRole)
@@ -746,7 +757,6 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 			Local: node.ID == state.NodeID,
 		})
 	}
-	return view
 }
 
 func clusterJoinError(err error) string {
