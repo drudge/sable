@@ -595,6 +595,7 @@ templ CommandPalette(view DashboardView) {
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
 					@CommandOption("command-action-import-zone", "Import Zone", "Open the zone file import workflow", "upload", "Action", "upload bind file records origin", "", "/zones", "import-new-zone-dialog", "", "")
+					@CommandOption("command-action-import-catalog", "Import from Catalog", "Import catalog members from another DNS server", "layers", "Action", "catalog migration technitium transfer secondary primary zones", "", "/zones/import-catalog", "catalog-import-dialog", "", "")
 				}
 				if view.CanWriteBlocking && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-block-domain", "Block Domain", "Add a custom blocked domain", "shield-x", "Action", "deny blacklist policy", "", "/blocked?tab=domains", "add-blocked-domain-dialog", "", "")
