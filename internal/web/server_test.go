@@ -2823,6 +2823,16 @@ func TestFirstRunSetupProtectsConsoleAndEnforcesCSRF(t *testing.T) {
 	if root.Code != http.StatusSeeOther || root.Header().Get("Location") != "/setup" {
 		t.Fatalf("initial root response = %d Location=%q", root.Code, root.Header().Get("Location"))
 	}
+	htmxRequest := httptest.NewRequest(http.MethodGet, "/ui/cluster/status", nil)
+	htmxRequest.Header.Set("HX-Request", "true")
+	htmxResponse := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(htmxResponse, htmxRequest)
+	if htmxResponse.Code != http.StatusNoContent || htmxResponse.Header().Get("HX-Redirect") != "/setup" {
+		t.Fatalf("setup HTMX response = %d HX-Redirect=%q, want 204 /setup", htmxResponse.Code, htmxResponse.Header().Get("HX-Redirect"))
+	}
+	if htmxResponse.Body.Len() != 0 {
+		t.Fatalf("setup HTMX response unexpectedly contains a partial page: %q", htmxResponse.Body.String())
+	}
 	setupPage := serveRequest(server, http.MethodGet, "/setup")
 	if setupPage.Code != http.StatusOK || !strings.Contains(setupPage.Body.String(), "Create your administrator") {
 		t.Fatalf("setup page = %d %s", setupPage.Code, setupPage.Body.String())

@@ -214,3 +214,26 @@ func TestMetricLinksExposeVisibleValuesAsTheirAccessibleName(t *testing.T) {
 		}
 	}
 }
+
+func TestOperationalMetricCardMovesDescriptionIntoAccessibleTooltip(t *testing.T) {
+	t.Parallel()
+
+	card := renderComponent(t, OperationalMetricCard("sparkles", "Cache Hits", "12,345", "Queries served from cache", "amber"))
+	for _, expected := range []string{
+		`class="operational-metric-row"`,
+		`class="operational-metric-value"`,
+		`class="operational-metric-info"`,
+		`aria-label="Cache Hits: Queries served from cache"`,
+		`class="operational-metric-tooltip" role="tooltip" aria-hidden="true"`,
+	} {
+		if !strings.Contains(card, expected) {
+			t.Errorf("operational metric does not contain %q: %s", expected, card)
+		}
+	}
+	if strings.Contains(card, `<p>Queries served from cache</p>`) {
+		t.Errorf("operational metric still renders its description in the card body: %s", card)
+	}
+	if strings.Index(card, `Cache Hits`) > strings.Index(card, `12,345`) {
+		t.Errorf("operational metric label should precede its right-aligned value: %s", card)
+	}
+}

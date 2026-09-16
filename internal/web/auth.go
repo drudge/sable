@@ -460,11 +460,11 @@ func (server *Server) authenticationFailure(writer http.ResponseWriter, request 
 		if redirect == "/login" {
 			clearSessionCookie(writer, request, server.sessionCookieName(), server.secureCookies)
 			redirect = loginLocation(request)
-			if request.Header.Get("HX-Request") == "true" {
-				writer.Header().Set("HX-Redirect", redirect)
-				writer.WriteHeader(http.StatusNoContent)
-				return
-			}
+		}
+		if request.Header.Get("HX-Request") == "true" {
+			writer.Header().Set("HX-Redirect", redirect)
+			writer.WriteHeader(http.StatusNoContent)
+			return
 		}
 		http.Redirect(writer, request, redirect, http.StatusSeeOther)
 		return

@@ -28,10 +28,17 @@ func TestClusterNodeStatusUsesAvatarIndicators(t *testing.T) {
 		`class="cluster-node-icon online local"`, `aria-label="Connection status: Online"`,
 		`class="cluster-node-icon unreachable"`, `aria-label="Connection status: Unreachable"`,
 		`class="cluster-updated-badge"`, `icon-clock`, `Updated`,
+		`class="cluster-node-actions split"`,
+		`class="button outline compact"`, `class="button outline destructive compact cluster-remove-node"`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Fatalf("cluster content missing %q: %s", expected, markup)
 		}
+	}
+	removeIndex := strings.Index(markup, `class="button outline destructive compact cluster-remove-node"`)
+	promoteIndex := strings.Index(markup, `class="button outline compact"`)
+	if removeIndex == -1 || promoteIndex == -1 || removeIndex > promoteIndex {
+		t.Fatalf("cluster replica actions should render Remove Replica before Promote to Primary: %s", markup)
 	}
 	if strings.Contains(markup, `status-badge active">Online`) {
 		t.Fatalf("cluster content still renders Online as a text badge: %s", markup)
