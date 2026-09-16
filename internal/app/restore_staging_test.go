@@ -22,7 +22,7 @@ func TestStageRestoreDefersEveryMutationUntilStartup(t *testing.T) {
 	sealed = backupWithZoneName(t, sealed, "restored.test")
 	targetPath := newBackupDeployment(t)
 
-	result, err := StageRestore(RestoreOptions{
+	result, err := StageRestore(ctx, RestoreOptions{
 		ConfigurationPath: targetPath,
 		Contents:          sealed,
 		Passphrase:        backupTestPassphrase,
@@ -68,10 +68,10 @@ func TestStageRestoreRejectsReplacementUntilThePendingRestoreIsApplied(t *testin
 		Passphrase:        backupTestPassphrase,
 		KeepConfiguration: true,
 	}
-	if _, err := StageRestore(options); err != nil {
+	if _, err := StageRestore(ctx, options); err != nil {
 		t.Fatalf("first StageRestore() error = %v", err)
 	}
-	if _, err := StageRestore(options); err == nil {
+	if _, err := StageRestore(ctx, options); err == nil {
 		t.Fatal("second StageRestore() replaced the pending restore")
 	}
 }
@@ -85,7 +85,7 @@ func TestApplyStagedRestoreResumesAnAlreadyClaimedRestore(t *testing.T) {
 	}
 	sealed = backupWithZoneName(t, sealed, "resumed.test")
 	targetPath := newBackupDeployment(t)
-	if _, err := StageRestore(RestoreOptions{
+	if _, err := StageRestore(ctx, RestoreOptions{
 		ConfigurationPath: targetPath,
 		Contents:          sealed,
 		Passphrase:        backupTestPassphrase,

@@ -110,10 +110,10 @@ func (service *scheduledBackupService) CreateBackup(ctx context.Context, passphr
 	})
 }
 
-func (service *scheduledBackupService) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
+func (service *scheduledBackupService) StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
 	service.operationMu.Lock()
 	defer service.operationMu.Unlock()
-	result, err := StageRestore(RestoreOptions{
+	result, err := StageRestore(ctx, RestoreOptions{
 		ConfigurationPath: service.configurationPath,
 		Contents:          contents,
 		Passphrase:        passphrase,
@@ -210,6 +210,9 @@ func (service *scheduledBackupService) CreateLocalBackup(ctx context.Context, pa
 		return backup.LocalArchive{}, fmt.Errorf("create backup directory: %w", err)
 	}
 	name := strings.Replace(service.scheduledPrefix(), "sable-scheduled-", "sable-backup-", 1) + summary.CreatedAt.UTC().Format("20060102-150405.000") + ".sablebackup"
+	if err := ctx.Err(); err != nil {
+		return backup.LocalArchive{}, err
+	}
 	if err := writeLocalBackup(filepath.Join(directory, name), contents); err != nil {
 		return backup.LocalArchive{}, err
 	}

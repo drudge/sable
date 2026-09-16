@@ -38,6 +38,11 @@ const (
 	backupJobKindRestore = "restore"
 )
 
+var (
+	errBackupJobRunning = errors.New("another backup operation is already running")
+	errBackupJobsClosed = errors.New("backup operations are unavailable while the server is shutting down")
+)
+
 // pendingBackup is the single staged archive waiting to be downloaded.
 type pendingBackup struct {
 	token     string
@@ -177,30 +182,37 @@ func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.R
 		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", message)
 		return
 	}
-	if !server.startBackupJob(backupJobKindBackup, "Preparing") {
-		server.renderBackupPanel(writer, request, http.StatusConflict, "", "Another backup operation is already running on this node.")
+	if err := server.startBackupJob(backupJobKindBackup, "Preparing"); err != nil {
+		status, message := http.StatusConflict, "Another backup operation is already running on this node."
+		if errors.Is(err, errBackupJobsClosed) {
+			status, message = http.StatusServiceUnavailable, "Backups are unavailable while this node is shutting down."
+		}
+		server.renderBackupPanel(writer, request, status, "", message)
 		return
 	}
 	server.recordControlPlaneAudit(request, "backup.create", "started a deployment backup")
 
-	// The operation outlives the request that started it, so it runs on a
-	// background context; a browser that navigates away must not abort a
-	// backup halfway through.
+	// The operation outlives the request that started it, so it uses the
+	// server-lifetime context; a browser that navigates away must not abort a
+	// backup halfway through, while shutdown can still cancel and join it.
 	// Render the accepted state before work can finish. A fast job must not let
 	// this response consume the one-shot completion notice before the browser's
 	// polling request can receive it.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
-	go server.runBackupJob(passphrase, useStoredPassphrase)
+	go func() {
+		defer server.runtimeWG.Done()
+		server.runBackupJob(server.runtimeContext, passphrase, useStoredPassphrase)
+	}()
 }
 
-func (server *Server) runBackupJob(passphrase string, useStoredPassphrase bool) {
+func (server *Server) runBackupJob(ctx context.Context, passphrase string, useStoredPassphrase bool) {
 	if controller, ok := server.backups.(localBackupController); ok {
 		if useStoredPassphrase {
 			// Empty is an internal signal to resolve the encrypted vault value;
 			// the archive encoder never receives an empty passphrase.
 			passphrase = ""
 		}
-		archive, err := controller.CreateLocalBackup(context.Background(), passphrase, server.reportBackupProgress)
+		archive, err := controller.CreateLocalBackup(ctx, passphrase, server.reportBackupProgress)
 		if err != nil {
 			server.logger.Error("create local backup", "error", err)
 			server.failBackupJob("Could not create the local backup: " + err.Error())
@@ -211,7 +223,7 @@ func (server *Server) runBackupJob(passphrase string, useStoredPassphrase bool) 
 		})
 		return
 	}
-	contents, err := server.backups.CreateBackup(context.Background(), passphrase, server.reportBackupProgress)
+	contents, err := server.backups.CreateBackup(ctx, passphrase, server.reportBackupProgress)
 	if err != nil {
 		server.logger.Error("create backup", "error", err)
 		server.failBackupJob("Could not create the backup: " + err.Error())
@@ -304,8 +316,12 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	if !server.startBackupJob(backupJobKindRestore, "Preparing") {
-		server.renderBackupPanel(writer, request, http.StatusConflict, "", "Another backup operation is already running on this node.")
+	if err := server.startBackupJob(backupJobKindRestore, "Preparing"); err != nil {
+		status, message := http.StatusConflict, "Another backup operation is already running on this node."
+		if errors.Is(err, errBackupJobsClosed) {
+			status, message = http.StatusServiceUnavailable, "Backups are unavailable while this node is shutting down."
+		}
+		server.renderBackupPanel(writer, request, status, "", message)
 		return
 	}
 	keepConfiguration := request.FormValue("keep_configuration") == "on"
@@ -315,7 +331,10 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 	// one-shot result; otherwise this request could consume the result before
 	// the browser has rendered the response.
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
-	go server.runRestoreJob(contents, passphrase, keepConfiguration, header.Filename)
+	go func() {
+		defer server.runtimeWG.Done()
+		server.runRestoreJob(server.runtimeContext, contents, passphrase, keepConfiguration, header.Filename)
+	}()
 }
 
 func (server *Server) restoreLocalBackup(writer http.ResponseWriter, request *http.Request) {
@@ -339,19 +358,26 @@ func (server *Server) restoreLocalBackup(writer http.ResponseWriter, request *ht
 		server.renderBackupPanel(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	if !server.startBackupJob(backupJobKindRestore, "Preparing") {
-		server.renderBackupPanel(writer, request, http.StatusConflict, "", "Another backup operation is already running on this node.")
+	if err := server.startBackupJob(backupJobKindRestore, "Preparing"); err != nil {
+		status, message := http.StatusConflict, "Another backup operation is already running on this node."
+		if errors.Is(err, errBackupJobsClosed) {
+			status, message = http.StatusServiceUnavailable, "Backups are unavailable while this node is shutting down."
+		}
+		server.renderBackupPanel(writer, request, status, "", message)
 		return
 	}
 	keepConfiguration := request.FormValue("keep_configuration") == "on"
 	server.recordControlPlaneAudit(request, "backup.restore", "started a restore from local backup "+name)
 	server.renderBackupPanel(writer, request, http.StatusAccepted, "", "")
-	go server.runRestoreJob(contents, passphrase, keepConfiguration, name)
+	go func() {
+		defer server.runtimeWG.Done()
+		server.runRestoreJob(server.runtimeContext, contents, passphrase, keepConfiguration, name)
+	}()
 }
 
-func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConfiguration bool, filename string) {
+func (server *Server) runRestoreJob(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, filename string) {
 	summary, err := server.backups.StageRestore(
-		context.Background(), contents, passphrase, keepConfiguration, server.reportBackupProgress,
+		ctx, contents, passphrase, keepConfiguration, server.reportBackupProgress,
 	)
 	if err != nil {
 		if errors.Is(err, backup.ErrWrongPassphrase) || errors.Is(err, backup.ErrNotBackup) {
@@ -368,14 +394,20 @@ func (server *Server) runRestoreJob(contents []byte, passphrase string, keepConf
 
 // startBackupJob claims the single job slot. One operation at a time keeps a
 // restore from racing a backup over the same files.
-func (server *Server) startBackupJob(kind, stage string) bool {
+func (server *Server) startBackupJob(kind, stage string) error {
+	server.runtimeLifecycleMu.Lock()
+	defer server.runtimeLifecycleMu.Unlock()
+	if server.runtimeClosed {
+		return errBackupJobsClosed
+	}
 	server.backupStaging.mu.Lock()
 	defer server.backupStaging.mu.Unlock()
 	if running := server.backupStaging.job; running != nil && !running.finished {
-		return false
+		return errBackupJobRunning
 	}
 	server.backupStaging.job = &backupJob{kind: kind, stage: stage, total: 1, startedAt: time.Now()}
-	return true
+	server.runtimeWG.Add(1)
+	return nil
 }
 
 func (server *Server) reportBackupProgress(progress backup.Progress) {

@@ -38,14 +38,39 @@ when console actions fail.
 - Save your profile display name and email with JavaScript disabled. Invalid
   submissions return a full page with the entered values and an error message.
 
+### Consistent DNS after configuration changes
+
+- Apply forwarding changes consistently: discard cached answers from previous
+  zone forwarding rules and keep new lookups from sharing work started before
+  a resolver configuration reload.
+
 ### More orderly shutdowns
 
+- Wait for stale-answer refreshes and manual backup/restore jobs during
+  shutdown. Stop accepting new background jobs and report a timeout if work
+  cannot finish safely before the shutdown deadline.
+- Honor backup and restore cancellation at safe boundaries, including before
+  scheduling a restore for the next restart.
 - Stop background tasks and DNS prefetch work before releasing the resources
   they use during shutdown or failed startup.
 - Cancel stalled query-log and server-log writes during shutdown and give
   queued entries a bounded opportunity to finish writing.
 - Skip DNS cache persistence when shutdown is incomplete, avoiding a snapshot
   while background work may still be changing it.
+
+## [1.3.5-rc.3] - Unreleased
+
+This third release candidate includes the improvements from 1.3.5-rc.2 and
+fixes DNS behavior during forwarding changes and background-job shutdown.
+
+- Apply forwarding changes consistently: discard cached answers from previous
+  zone forwarding rules and keep new lookups from sharing work started before
+  a resolver configuration reload.
+- Wait for stale-answer refreshes and manual backup/restore jobs during
+  shutdown. Stop accepting new background jobs and report a timeout if work
+  cannot finish safely before the shutdown deadline.
+- Honor backup and restore cancellation at safe boundaries, including before
+  scheduling a restore for the next restart.
 
 ## [1.3.5-rc.2] - Unreleased
 

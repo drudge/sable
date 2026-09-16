@@ -168,8 +168,13 @@ func (stub *stubBackups) keptConfiguration() bool {
 	return stub.keptLocal
 }
 
-func newBackupServer(stub *stubBackups) *Server {
-	return &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+func newBackupServer(stub backupController) *Server {
+	runtimeContext, runtimeCancel := context.WithCancel(context.Background())
+	return &Server{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub,
+		runtimeContext: runtimeContext, runtimeCancel: runtimeCancel,
+		runtimeDone: make(chan struct{}),
+	}
 }
 
 func postForm(target string, values url.Values) *http.Request {
@@ -286,7 +291,7 @@ func TestBackupDownloadStagesASingleUseLink(t *testing.T) {
 
 func TestRunBackupNowCreatesALocalArchive(t *testing.T) {
 	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
 		"passphrase":              {"a long enough passphrase"},
@@ -309,7 +314,7 @@ func TestRunBackupNowCreatesALocalArchive(t *testing.T) {
 
 func TestUpdateBackupScheduleStoresTheWallClockAnchor(t *testing.T) {
 	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.updateBackupSchedule(recorder, postForm("http://sable.test/ui/backup/schedule", url.Values{
 		"directory":       {"data/backups"},
@@ -327,7 +332,7 @@ func TestUpdateBackupScheduleStoresTheWallClockAnchor(t *testing.T) {
 
 func TestUpdateBackupScheduleRejectsAnInvalidWallClockAnchor(t *testing.T) {
 	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.updateBackupSchedule(recorder, postForm("http://sable.test/ui/backup/schedule", url.Values{
 		"directory":       {"data/backups"},
@@ -344,7 +349,7 @@ func TestRunBackupNowUsesTheStoredLocalPassphrase(t *testing.T) {
 	stub := &stubLocalBackups{
 		stubBackups: &stubBackups{}, files: map[string][]byte{}, storedPassphrase: "the vaulted backup passphrase",
 	}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
 		"use_stored_passphrase": {"on"},
@@ -360,7 +365,7 @@ func TestRunBackupNowUsesTheStoredLocalPassphrase(t *testing.T) {
 
 func TestRunBackupNowRejectsAStoredPassphraseRequestWhenNoneExists(t *testing.T) {
 	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{}}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.downloadBackup(recorder, postForm("http://sable.test/ui/backup/run", url.Values{
 		"use_stored_passphrase": {"on"},
@@ -376,7 +381,7 @@ func TestRunBackupNowRejectsAStoredPassphraseRequestWhenNoneExists(t *testing.T)
 func TestLocalBackupCanBeDownloadedFromHistory(t *testing.T) {
 	name := "sable-backup-ns1-20260901.sablebackup"
 	stub := &stubLocalBackups{stubBackups: &stubBackups{}, files: map[string][]byte{name: []byte("sealed archive")}}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.downloadLocalBackup(recorder, httptest.NewRequest(http.MethodGet, "http://sable.test/ui/backup/local?name="+name, nil))
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "sealed archive" {
@@ -396,7 +401,7 @@ func TestLocalBackupCanBeDeletedFromHistory(t *testing.T) {
 		stubBackups: &stubBackups{}, files: map[string][]byte{name: []byte("sealed archive")},
 		archives: []backup.LocalArchive{{Name: name, CreatedAt: time.Now(), Size: 14}},
 	}
-	server := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil)), backups: stub}
+	server := newBackupServer(stub)
 	recorder := httptest.NewRecorder()
 	server.deleteLocalBackup(recorder, postForm("http://sable.test/ui/backup/delete-local", url.Values{"name": {name}}))
 	if recorder.Code != http.StatusOK {

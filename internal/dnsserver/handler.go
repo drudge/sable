@@ -262,13 +262,13 @@ type Handler struct {
 	maintenanceDone      chan struct{}
 	maintenanceStarted   atomic.Bool
 	maintenanceOnce      sync.Once
-	prefetchContext      context.Context
-	prefetchCancel       context.CancelFunc
-	prefetchMu           sync.Mutex
-	prefetchClosed       bool
-	prefetchWG           sync.WaitGroup
-	prefetchWaitOnce     sync.Once
-	prefetchDone         chan struct{}
+	backgroundContext    context.Context
+	backgroundCancel     context.CancelFunc
+	backgroundMu         sync.Mutex
+	backgroundClosed     bool
+	backgroundWG         sync.WaitGroup
+	backgroundWaitOnce   sync.Once
+	backgroundDone       chan struct{}
 	routedQueries        atomic.Uint64
 	localAnswers         atomic.Uint64
 	authoritativeAnswers atomic.Uint64
@@ -696,7 +696,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 
 func NewHandler(runtime *Runtime) *Handler {
 	forwarders := newForwarderPool()
-	prefetchContext, prefetchCancel := context.WithCancel(context.Background())
+	backgroundContext, backgroundCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
 		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
@@ -704,7 +704,7 @@ func NewHandler(runtime *Runtime) *Handler {
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),
 		maintenanceStop: make(chan struct{}), maintenanceDone: make(chan struct{}),
-		prefetchContext: prefetchContext, prefetchCancel: prefetchCancel, prefetchDone: make(chan struct{}),
+		backgroundContext: backgroundContext, backgroundCancel: backgroundCancel, backgroundDone: make(chan struct{}),
 	}
 	emptyExpired := make(map[string]struct{})
 	handler.expiredZones.Store(&emptyExpired)
@@ -749,15 +749,15 @@ func (handler *Handler) maintainCache() {
 	}
 }
 
-// Close stops cache maintenance and waits for all background prefetches. It is
+// Close stops cache maintenance and waits for all detached cache work. It is
 // retained as the unbounded compatibility form of Shutdown.
 func (handler *Handler) Close() {
 	_ = handler.Shutdown(context.Background())
 }
 
-// Shutdown stops cache maintenance, cancels background prefetches, and waits
-// for them to leave the shared cache. A deadline returns an error while leaving
-// the forwarder pool open for any prefetch that is still unwinding.
+// Shutdown stops cache maintenance, cancels detached cache work, and waits for
+// it to leave the shared cache. A deadline returns an error while leaving the
+// forwarder pool open for work that is still unwinding.
 func (handler *Handler) Shutdown(ctx context.Context) error {
 	handler.maintenanceOnce.Do(func() {
 		close(handler.maintenanceStop)
@@ -765,16 +765,16 @@ func (handler *Handler) Shutdown(ctx context.Context) error {
 			close(handler.maintenanceDone)
 		}
 	})
-	handler.prefetchMu.Lock()
-	if !handler.prefetchClosed {
-		handler.prefetchClosed = true
-		handler.prefetchCancel()
+	handler.backgroundMu.Lock()
+	if !handler.backgroundClosed {
+		handler.backgroundClosed = true
+		handler.backgroundCancel()
 	}
-	handler.prefetchMu.Unlock()
-	handler.prefetchWaitOnce.Do(func() {
+	handler.backgroundMu.Unlock()
+	handler.backgroundWaitOnce.Do(func() {
 		go func() {
-			handler.prefetchWG.Wait()
-			close(handler.prefetchDone)
+			handler.backgroundWG.Wait()
+			close(handler.backgroundDone)
 		}()
 	})
 	var shutdownError error
@@ -785,7 +785,7 @@ func (handler *Handler) Shutdown(ctx context.Context) error {
 	}
 	if shutdownError == nil {
 		select {
-		case <-handler.prefetchDone:
+		case <-handler.backgroundDone:
 		case <-ctx.Done():
 			shutdownError = ctx.Err()
 		}
@@ -1466,10 +1466,14 @@ func dnssecDecision(validation validationState) querylog.DNSSECDecision {
 // that started it. Followers asking the same question at the same moment share
 // that outcome without appearing in the line.
 func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+	return handler.resolveSharedContext(context.Background(), request, runtime, forwarders, staleFallback, clientIP)
+}
+
+func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	key := coalesceKey(request)
 	key.runtime = runtime
-	result, _ := handler.inflight.do(key, func() resolution {
-		return handler.resolveLiveUpstream(request, runtime, forwarders, staleFallback, clientIP)
+	result, _ := handler.inflight.doContext(ctx, key, func() resolution {
+		return handler.resolveLiveUpstreamContext(ctx, request, runtime, forwarders, staleFallback, clientIP)
 	})
 	if result.response == nil {
 		return result
@@ -1515,11 +1519,19 @@ func newInflightGroup() *inflightGroup {
 // shared with an in-flight call (true for waiters), so the caller knows it must
 // copy a shared response before mutating it.
 func (group *inflightGroup) do(key inflightKey, fn func() resolution) (resolution, bool) {
+	return group.doContext(context.Background(), key, fn)
+}
+
+func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn func() resolution) (resolution, bool) {
 	group.mu.Lock()
 	if call, ok := group.calls[key]; ok {
 		group.mu.Unlock()
-		<-call.wait
-		return call.result, true
+		select {
+		case <-call.wait:
+			return call.result, true
+		case <-ctx.Done():
+			return resolution{}, true
+		}
 	}
 	call := &inflightCall{wait: make(chan struct{})}
 	group.calls[key] = call
@@ -1553,17 +1565,22 @@ func coalesceKey(request *dns.Msg) inflightKey {
 }
 
 func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string, release func()) resolution {
+	if !handler.startBackground() {
+		release()
+		return handler.resolveUpstreamFailure(request, runtime)
+	}
 	result := make(chan resolution, 1)
 	go func() {
+		defer handler.backgroundWG.Done()
 		// Keep the permit until work finishes, even after a stale answer returns.
 		defer release()
-		result <- handler.resolveShared(request.Copy(), runtime, forwarders, false, clientIP)
+		result <- handler.resolveSharedContext(handler.backgroundContext, request.Copy(), runtime, forwarders, false, clientIP)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
 	defer timer.Stop()
 	select {
 	case resolved := <-result:
-		if resolved.transientFailure {
+		if resolved.response == nil || resolved.transientFailure {
 			return handler.resolveUpstreamFailure(request, runtime)
 		}
 		return resolved
@@ -1579,7 +1596,11 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 }
 
 func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	response, validation, validationErr := handler.resolveUpstream(request, runtime, forwarders)
+	return handler.resolveLiveUpstreamContext(context.Background(), request, runtime, forwarders, staleFallback, clientIP)
+}
+
+func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+	response, validation, validationErr := handler.resolveUpstreamContext(ctx, request, runtime, forwarders)
 	decision := querylog.Decision{Resolver: resolverDecision(runtime, forwarders), DNSSEC: dnssecDecision(validation)}
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
@@ -1636,26 +1657,22 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
-	handler.prefetchMu.Lock()
-	if handler.prefetchClosed {
-		handler.prefetchMu.Unlock()
+	if !handler.startBackground() {
 		runtime.cache.CancelPrefetch(request)
 		return
 	}
-	handler.prefetchWG.Add(1)
-	handler.prefetchMu.Unlock()
 	release, admitted := handler.admission.acquire("", runtime.maxConcurrent, runtime.maxConcurrentPerClient)
 	if !admitted {
-		handler.prefetchWG.Done()
+		handler.backgroundWG.Done()
 		runtime.cache.CancelPrefetch(request)
 		return
 	}
 	request = request.Copy()
 	go func() {
-		defer handler.prefetchWG.Done()
+		defer handler.backgroundWG.Done()
 		defer release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
-		response, validation, err := handler.resolveUpstreamContext(handler.prefetchContext, request, runtime, forwarders)
+		response, validation, err := handler.resolveUpstreamContext(handler.backgroundContext, request, runtime, forwarders)
 		if err != nil || response == nil || validation == validationBogus {
 			runtime.cache.CancelPrefetch(request)
 			return
@@ -1668,6 +1685,20 @@ func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
 			runtime.cache.CancelPrefetch(request)
 		}
 	}()
+}
+
+// startBackground closes the admission race with Shutdown: once the lifecycle
+// gate is closed, no new detached work may be added after Shutdown begins
+// waiting. Callers that succeed must pair this with backgroundWG.Done when the
+// work has actually exited.
+func (handler *Handler) startBackground() bool {
+	handler.backgroundMu.Lock()
+	defer handler.backgroundMu.Unlock()
+	if handler.backgroundClosed {
+		return false
+	}
+	handler.backgroundWG.Add(1)
+	return true
 }
 
 func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtime) resolution {
