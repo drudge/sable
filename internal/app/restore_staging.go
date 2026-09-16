@@ -38,11 +38,20 @@ type restoreRollback struct {
 // StageRestore validates and durably stages an encrypted archive. The running
 // node never mutates its own configuration, database, or keys; app startup
 // consumes the marker before opening any of those resources.
-func StageRestore(options RestoreOptions) (RestoreResult, error) {
-	progress := newReporter(options.Progress, 1)
+func StageRestore(ctx context.Context, options RestoreOptions) (RestoreResult, error) {
+	if err := ctx.Err(); err != nil {
+		return RestoreResult{}, err
+	}
+	progress := newReporter(options.Progress, 2)
 	progress.stage("Opening the archive")
+	if err := ctx.Err(); err != nil {
+		return RestoreResult{}, err
+	}
 	archive, err := backup.Decode(options.Contents, options.Passphrase)
 	if err != nil {
+		return RestoreResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return RestoreResult{}, err
 	}
 	sections, err := restoreSections(archive, options.Sections)
@@ -69,11 +78,18 @@ func StageRestore(options RestoreOptions) (RestoreResult, error) {
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("encode staged restore: %w", err)
 	}
+	progress.stage("Staging the restore")
+	if err := ctx.Err(); err != nil {
+		return RestoreResult{}, err
+	}
 	if err := atomicWriteFile(absolutePath+pendingRestoreArchiveSuffix, 0o600, options.Contents); err != nil {
 		return RestoreResult{}, fmt.Errorf("stage restore archive: %w", err)
 	}
 	// The marker lands last. Its presence is the commit record that startup uses,
 	// so a crash while writing the larger archive never schedules partial bytes.
+	if err := ctx.Err(); err != nil {
+		return RestoreResult{}, err
+	}
 	if err := atomicWriteFile(absolutePath+pendingRestoreMarkerSuffix, 0o600, marker); err != nil {
 		return RestoreResult{}, fmt.Errorf("stage restore marker: %w", err)
 	}

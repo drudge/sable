@@ -130,6 +130,9 @@ type RestoreResult struct {
 // the configuration and the database directly rather than going through a
 // running server, so it works whether or not Sable is up.
 func CreateBackup(ctx context.Context, options BackupOptions) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(options.Passphrase) == "" {
 		return nil, backup.ErrPassphraseRequired
 	}
@@ -214,8 +217,14 @@ func CreateBackup(ctx context.Context, options BackupOptions) ([]byte, error) {
 	}
 
 	progress.stage("Sealing the archive")
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sealed, err := backup.Encode(archive, options.Passphrase)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	progress.done("Backup ready")
@@ -787,8 +796,8 @@ func (backups *consoleBackups) CreateBackup(ctx context.Context, passphrase stri
 	})
 }
 
-func (backups *consoleBackups) StageRestore(_ context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
-	result, err := StageRestore(RestoreOptions{
+func (backups *consoleBackups) StageRestore(ctx context.Context, contents []byte, passphrase string, keepConfiguration bool, progress func(backup.Progress)) (backup.RestoreSummary, error) {
+	result, err := StageRestore(ctx, RestoreOptions{
 		ConfigurationPath: backups.configurationPath,
 		Contents:          contents,
 		Passphrase:        passphrase,
