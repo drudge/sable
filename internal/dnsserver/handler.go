@@ -824,9 +824,10 @@ func (handler *Handler) Activate(runtime *Runtime) {
 }
 
 // ActivateZones compiles only authoritative data and atomically swaps it into
-// the active runtime. Blocking tables, hosts, DNSSEC validation state, and the
-// response cache are reused, so a zone mutation does not rebuild large policy
-// lists or put SQL on the DNS request path.
+// the active runtime. Blocking tables, hosts, and DNSSEC validation state are
+// reused, as is the response cache when recursive routes and validation policy
+// are unchanged, so a zone mutation does not rebuild large policy lists or put
+// SQL on the DNS request path.
 func (handler *Handler) ActivateZones(zones []AuthoritativeZone, keys []TSIGKey) error {
 	active := handler.runtime.Load()
 	compiled, err := Compile(RuntimeConfig{
@@ -849,12 +850,20 @@ func (handler *Handler) ActivateZones(zones []AuthoritativeZone, keys []TSIGKey)
 	candidate.tsigKeys = compiled.tsigKeys
 	candidate.zoneCount = compiled.zoneCount
 	candidate.zoneInsecure = compiled.zoneInsecure
+	routesChanged := !forwardingRouteMapsEqual(active.routes, candidate.routes)
+	zoneInsecureChanged := !slices.Equal(active.zoneInsecure, candidate.zoneInsecure)
 	if candidate.dnssec != nil {
 		candidate.dnssec.setZoneInsecure(compiled.zoneInsecure)
 	}
-	if !forwardingRouteMapsEqual(active.routes, candidate.routes) || !slices.Equal(active.zoneInsecure, candidate.zoneInsecure) {
+	if routesChanged || zoneInsecureChanged {
 		candidate.upstreams = active.upstreams + "|zone-routes=" + upstreamSignature(nil, candidate.routes) +
 			"|zone-insecure=" + strings.Join(candidate.zoneInsecure, ",")
+		// Zone-derived routes and DNSSEC policy change the meaning of recursive
+		// answers. Do not reuse the active cache, since an in-flight resolver can
+		// still publish into it after this runtime is activated.
+		candidate.cache = NewResponseCacheWithOptions(active.cache.Capacity(), active.cache.options)
+		candidate.delegations = compiled.delegations
+		candidate.nameServers = compiled.nameServers
 	}
 	handler.Activate(&candidate)
 	return nil
@@ -1457,7 +1466,9 @@ func dnssecDecision(validation validationState) querylog.DNSSECDecision {
 // that started it. Followers asking the same question at the same moment share
 // that outcome without appearing in the line.
 func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	result, _ := handler.inflight.do(coalesceKey(request), func() resolution {
+	key := coalesceKey(request)
+	key.runtime = runtime
+	result, _ := handler.inflight.do(key, func() resolution {
 		return handler.resolveLiveUpstream(request, runtime, forwarders, staleFallback, clientIP)
 	})
 	if result.response == nil {
@@ -1482,6 +1493,7 @@ type inflightGroup struct {
 }
 
 type inflightKey struct {
+	runtime          *Runtime
 	name             string
 	recordType       uint16
 	class            uint16
