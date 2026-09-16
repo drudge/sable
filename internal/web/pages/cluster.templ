@@ -244,17 +244,17 @@ templ ClusterLiveStatus(view ClusterPageView) {
 						</div>
 						<div class="cluster-sync-grid"><div><span>Applied / Current</span><strong>{ fmt.Sprintf("%d / %d", node.AppliedGeneration, node.CurrentGeneration) }</strong></div><div><span>Generation Lag</span><strong>{ nodeLagLabel(node) }</strong></div><div><span>Last Contact</span><strong title={ node.LastContactAt }>{ node.LastContact }</strong></div><div><span>Last Successful Sync</span><strong title={ node.LastSyncAt }>{ node.LastSync }</strong></div></div>
 						if (node.Local && node.Role == "Replica") || (!node.Local && view.LocalRole == "Primary") {
-							<div class="cluster-node-actions">
+							<div class={ "cluster-node-actions", templ.KV("split", !node.Local && view.LocalRole == "Primary") }>
 								if node.Local && node.Role == "Replica" {
 									<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm="Promote this replica for recovery? Ensure the former primary is offline to avoid two writable primaries." data-confirm-title="Promote for recovery?" data-confirm-action="Promote"><button class="button outline compact" type="submit">@Icon("arrow-right")<span>Promote This Replica</span></button></form>
 								}
 								if !node.Local && view.LocalRole == "Primary" {
+									<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/remove" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm={ "Remove " + node.Name + " from this cluster? This only removes its membership; it does not erase data on that server." } data-confirm-title="Remove replica?" data-confirm-action="Remove Replica"><button class="button outline destructive compact cluster-remove-node" type="submit">@Icon("trash")<span>Remove Replica</span></button></form>
 									if node.State == "online" && node.SyncState == "current" {
 										<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm={ "Hand the writable primary role to " + node.Name + "? This server will become a read-only replica." } data-confirm-title="Promote replica to primary?" data-confirm-action="Promote Replica"><button class="button outline compact" type="submit">@Icon("arrow-right")<span>Promote to Primary</span></button></form>
 									} else {
 										<button class="button outline compact" type="button" disabled title="The replica must be online and fully synchronized before handoff">@Icon("arrow-right")<span>Promote to Primary</span></button>
 									}
-									<form hx-post={ "/ui/cluster/nodes/" + node.ID + "/remove" } hx-target="#cluster-content" hx-swap="outerHTML" hx-sync="#cluster-content:replace" hx-confirm={ "Remove " + node.Name + " from this cluster? This only removes its membership; it does not erase data on that server." } data-confirm-title="Remove replica?" data-confirm-action="Remove Replica"><button class="button outline compact cluster-remove-node" type="submit">@Icon("trash")<span>Remove Replica</span></button></form>
 								}
 							</div>
 						}

@@ -37,6 +37,14 @@ when console actions fail.
   actions without replacing page content with an unformatted server error.
 - Save your profile display name and email with JavaScript disabled. Invalid
   submissions return a full page with the entered values and an error message.
+- Redirect expired or unauthenticated partial-page requests to login or setup
+  at the browser level, instead of rendering an authentication form inside the
+  existing console frame.
+- Make shared status metrics more compact, keep values and descriptions
+  accessible, and align their responsive layouts consistently.
+- Use consistent hover and selection borders for navigation and outlined
+  controls. Place replica removal before promotion and distinguish it as an
+  outlined destructive action.
 
 ### Consistent DNS after configuration changes
 
@@ -57,6 +65,20 @@ when console actions fail.
   queued entries a bounded opportunity to finish writing.
 - Skip DNS cache persistence when shutdown is incomplete, avoiding a snapshot
   while background work may still be changing it.
+
+## [1.3.5-rc.4] - Unreleased
+
+This fourth release candidate includes the reliability fixes from 1.3.5-rc.3
+and polishes authentication transitions and the web console layout.
+
+- Redirect expired or unauthenticated partial-page requests to login or setup
+  at the browser level, preventing authentication forms from appearing inside
+  the existing console frame.
+- Make shared status metrics more compact, with right-aligned values,
+  accessible description tooltips, consistent wrapping, and balanced spacing.
+- Add consistent hover and selection borders to sidebar and outlined controls.
+- Place **Remove Replica** before promotion, align it to the left, and use the
+  established outlined destructive style.
 
 ## [1.3.5-rc.3] - Unreleased
 

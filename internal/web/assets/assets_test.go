@@ -174,6 +174,55 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	}
 }
 
+func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if !strings.Contains(stylesheet, ".nav-item + .nav-item { margin-top: .25rem; }") {
+		t.Fatal("adjacent sidebar navigation items do not have visual separation")
+	}
+}
+
+func TestSidebarHoverAndActiveBorders(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"border: 1px solid transparent",
+		".nav-item:hover { border-color: var(--border); }",
+		".nav-item.active { border-color: var(--ring); }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("sidebar navigation does not contain border treatment %q", expected)
+		}
+	}
+}
+
+func TestOutlineButtonsShareIconButtonHoverTreatment(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if !strings.Contains(stylesheet, ".button.outline:hover { background: var(--accent); color: var(--accent-foreground); opacity: 1; }") {
+		t.Fatal("outline buttons do not use the accent hover treatment")
+	}
+}
+
+func TestOperationalMetricCardsUseCompactResponsiveLayout(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		".operational-metric { display: flex; min-width: 0; min-height: 4.5rem; align-items: center;",
+		".operational-metric-row { display: flex; width: 100%;",
+		".operational-metric-value > b { display: block; overflow: hidden; font-size: 1.3rem;",
+		".blocking-status-stats .operational-metric-value { width: 100%; justify-content: flex-end; }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("operational metrics do not contain compact responsive treatment %q", expected)
+		}
+	}
+}
+
 func TestNativeSelectOptionsRemainReadableOnLightPopups(t *testing.T) {
 	t.Parallel()
 

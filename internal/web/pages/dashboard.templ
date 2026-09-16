@@ -1321,15 +1321,23 @@ templ SummaryCard(label string, value string) {
 
 templ OperationalMetricCard(icon, label, value, description, color string) {
 	<article class={ "operational-metric " + color }>
-		<div class="operational-metric-label">
-			<span>
-				@Icon(icon)
-			</span><strong>{ label }</strong>
+		<div class="operational-metric-row">
+			<div class="operational-metric-label">
+				<span class="operational-metric-icon">
+					@Icon(icon)
+				</span>
+				<strong>{ label }</strong>
+			</div>
+			<div class="operational-metric-value">
+				<b>{ value }</b>
+				if description != "" {
+					<button class="operational-metric-info" type="button" aria-label={ label + ": " + description }>
+						@Icon("info")
+						<span class="operational-metric-tooltip" role="tooltip" aria-hidden="true">{ description }</span>
+					</button>
+				}
+			</div>
 		</div>
-		<b>{ value }</b>
-		if description != "" {
-			<p>{ description }</p>
-		}
 	</article>
 }
 
