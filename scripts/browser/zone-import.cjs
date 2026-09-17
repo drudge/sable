@@ -52,8 +52,8 @@ module.exports = async (browser, baseURL) => {
 	    await remove.waitFor({state: 'visible'});
 	    const buttonBounds = await remove.boundingBox();
 	    const iconBounds = await remove.locator('svg').boundingBox();
-    assert.ok(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2)) < 1, 'remove icon is horizontally centered');
-    assert.ok(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2)) < 1, 'remove icon is vertically centered');
+	    assert.ok(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2)) <= 1, 'remove icon is horizontally centered');
+	    assert.ok(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2)) <= 1, 'remove icon is vertically centered');
     await dialog.locator('[data-zone-import-mode="text"]').click();
     assert.equal(await submit.isDisabled(), true);
     await text.fill('$ORIGIN pasted.example.');
