@@ -350,6 +350,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 				<a href="#primary-navigation">Skip to navigation</a>
 			</nav>
 			<div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-a11y-announcer></div>
+			<div class="notification-stack" data-notification-stack></div>
 			@UpdateCompletedToast(view.Version)
 			@CommandPalette(view)
 			<div class="app-shell">

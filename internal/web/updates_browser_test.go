@@ -42,6 +42,18 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	mux.HandleFunc("GET /installs", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, installs.Load()) })
 	mux.HandleFunc("GET /restarts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, restarts.Load()) })
 	mux.HandleFunc("GET /rollouts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, http.StatusOK, rollouts.Load()) })
+	mux.HandleFunc("GET /test/notification/{variant}", func(w http.ResponseWriter, r *http.Request) {
+		variant := r.PathValue("variant")
+		if variant == "transient" {
+			label := r.URL.Query().Get("label")
+			_ = pages.Toast("Test transient notification "+label, "success").Render(r.Context(), w)
+			return
+		}
+		if variant != "error" {
+			variant = "success"
+		}
+		_ = pages.ToastSticky("Test "+variant+" notification", variant).Render(r.Context(), w)
+	})
 	mux.HandleFunc("POST /ui/updates/cluster", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-CSRF-Token") != "fixture-csrf" || r.PostFormValue("notification") != "true" || r.PostFormValue("version") != "1.1.0" {
 			http.Error(w, "invalid cluster update", http.StatusBadRequest)

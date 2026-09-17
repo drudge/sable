@@ -1472,6 +1472,80 @@
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;
+
+  let notificationStackFrame = 0;
+  const notificationLength = (value) => {
+    const length = value.trim();
+    if (length.endsWith("rem")) return Number.parseFloat(length) * Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Number.parseFloat(length) || 0;
+  };
+  const syncNotificationStack = () => {
+    notificationStackFrame = 0;
+    const stack = document.querySelector("[data-notification-stack]");
+    if (!stack) return;
+    const regions = [...stack.querySelectorAll(":scope > .toast-region")];
+    if (!regions.length) {
+      stack.style.removeProperty("--notification-collapsed-height");
+      stack.style.removeProperty("--notification-expanded-height");
+      return;
+    }
+    const gap = notificationLength(getComputedStyle(stack).getPropertyValue("--notification-gap"));
+    const collapsedCardHeight = notificationLength(getComputedStyle(stack).getPropertyValue("--notification-collapsed-card-height"));
+    const expandedHeights = regions.map((region) => {
+      const card = region.querySelector(":scope > .toast");
+      const style = getComputedStyle(card);
+      const height = Math.max(collapsedCardHeight, card.scrollHeight + Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth));
+      region.style.setProperty("--notification-expanded-card-height", `${height}px`);
+      return height;
+    });
+    let expandedOffset = 0;
+    for (let index = regions.length - 1; index >= 0; index -= 1) {
+      const region = regions[index];
+      const depth = regions.length - 1 - index;
+      const visibleDepth = Math.min(depth, 2);
+      region.style.setProperty("--notification-depth", String(depth));
+      region.style.setProperty("--notification-collapsed-offset", `${visibleDepth * -10}px`);
+      region.style.setProperty("--notification-collapsed-scale", String(1 - visibleDepth * .03));
+      region.style.setProperty("--notification-expanded-offset", `${expandedOffset * -1}px`);
+      region.style.zIndex = String(index + 1);
+      expandedOffset += expandedHeights[index] + gap;
+    }
+    stack.style.setProperty("--notification-collapsed-height", `${collapsedCardHeight + Math.min(regions.length - 1, 2) * 10}px`);
+    stack.style.setProperty("--notification-expanded-height", `${expandedOffset - gap}px`);
+  };
+  function queueNotificationStackSync() {
+    if (notificationStackFrame) return;
+    notificationStackFrame = requestAnimationFrame(syncNotificationStack);
+  }
+
+  const mountNotificationRegion = (region) => {
+    if (!region || region.hasAttribute("data-notification-local")) return region;
+    const stack = document.querySelector("[data-notification-stack]");
+    if (!stack) return region;
+    if (region.parentElement !== stack) {
+      const existing = region.id ? stack.querySelector(`#${CSS.escape(region.id)}`) : null;
+      if (existing && existing !== region) existing.replaceWith(region);
+      else stack.append(region);
+    }
+    queueNotificationStackSync();
+    return region;
+  };
+  window.addEventListener("resize", queueNotificationStackSync);
+  const notificationStack = document.querySelector("[data-notification-stack]");
+  const setNotificationStackPaused = (paused) => {
+    notificationStack?.querySelectorAll("[data-toast]").forEach((toast) => {
+      toast.dispatchEvent(new CustomEvent(paused ? "notification:pause" : "notification:resume"));
+    });
+  };
+  notificationStack?.addEventListener("pointerenter", () => setNotificationStackPaused(true));
+  notificationStack?.addEventListener("pointerleave", () => {
+    if (!notificationStack.matches(":focus-within")) setNotificationStackPaused(false);
+  });
+  notificationStack?.addEventListener("focusin", () => setNotificationStackPaused(true));
+  notificationStack?.addEventListener("focusout", () => requestAnimationFrame(() => {
+    if (!notificationStack.matches(":hover, :focus-within")) setNotificationStackPaused(false);
+  }));
+
   const checkForUpdateNotification = async () => {
     const endpoint = document.body.dataset.updateCheckUrl;
     if (!endpoint) return;
@@ -1495,7 +1569,7 @@
       template.innerHTML = await response.text();
       const region = template.content.querySelector(".toast-region");
       if (!region) return;
-      document.body.append(region);
+      mountNotificationRegion(region);
       window.htmx?.process(region);
       initializeSwappedContent(region);
     } catch {
@@ -1588,6 +1662,7 @@
 	const setupToast = (toast) => {
 	  if (toast.dataset.toastReady === "true") return;
 	  toast.dataset.toastReady = "true";
+	  const region = mountNotificationRegion(toast.closest(".toast-region"));
 
 	  // A duration of zero means the toast carries an action and waits for the
 	  // operator instead of counting itself down.
@@ -1597,11 +1672,13 @@
 	  let remaining = duration;
 	  let startedAt = 0;
 	  let timeoutID;
+	  let paused = false;
+	  const stackIsActive = () => region?.parentElement?.matches("[data-notification-stack]:hover, [data-notification-stack]:focus-within");
 
 	  const remove = () => {
-		const region = toast.closest(".toast-region");
 		toast.remove();
 		if (region && !region.querySelector("[data-toast]")) region.remove();
+		queueNotificationStackSync();
 	  };
 	  const dismiss = () => {
 		if (toast.classList.contains("is-leaving")) return;
@@ -1610,22 +1687,35 @@
 		window.setTimeout(remove, 160);
 	  };
 	  const schedule = () => {
-		if (persistent) return;
+		if (persistent || paused) return;
 		startedAt = Date.now();
 		timeoutID = window.setTimeout(dismiss, remaining);
 	  };
-
-	  toast.querySelector("[data-toast-close]")?.addEventListener("click", dismiss);
-	  toast.addEventListener("pointerenter", () => {
+	  const pause = () => {
+		if (persistent || paused) return;
+		paused = true;
 		remaining = Math.max(0, remaining - (Date.now() - startedAt));
 		window.clearTimeout(timeoutID);
 		toast.classList.add("is-paused");
-	  });
-	  toast.addEventListener("pointerleave", () => {
+	  };
+	  const resume = () => {
+		if (persistent || !paused || stackIsActive()) return;
+		paused = false;
 		toast.classList.remove("is-paused");
 		schedule();
-	  });
-	  schedule();
+	  };
+
+	  toast.querySelector("[data-toast-close]")?.addEventListener("click", dismiss);
+	  toast.addEventListener("pointerenter", pause);
+	  toast.addEventListener("pointerleave", resume);
+	  toast.addEventListener("notification:pause", pause);
+	  toast.addEventListener("notification:resume", resume);
+	  if (stackIsActive()) {
+		paused = true;
+		toast.classList.add("is-paused");
+	  } else {
+		schedule();
+	  }
 	};
 
 	const showCompletedUpdateToast = () => {
@@ -1641,7 +1731,7 @@
 	  if (template?.dataset.updateCompletedToast !== updatedVersion) return;
 	  const region = template.content.firstElementChild?.cloneNode(true);
 	  if (!region) return;
-	  document.body.append(region);
+	  mountNotificationRegion(region);
 	  setupToast(region.querySelector("[data-toast]"));
 	};
 	showCompletedUpdateToast();
@@ -2798,6 +2888,7 @@
 	    if (!region) return;
 	    root.querySelector("[data-block-list-error]")?.remove();
 	    region.setAttribute("data-block-list-error", "");
+	    region.setAttribute("data-notification-local", "");
 	    // Keep the toast above an open modal without moving the form or its fields.
 	    (root.querySelector("dialog[open]") || root).append(region);
 	    setupToast(region.querySelector("[data-toast]"));

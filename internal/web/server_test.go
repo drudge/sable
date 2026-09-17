@@ -625,7 +625,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	if flushResponse.Code != http.StatusOK || !strings.Contains(flushResponse.Body.String(), "Cleared 3 cached DNS records") {
 		t.Fatalf("cache flush response = %d %s", flushResponse.Code, flushResponse.Body.String())
 	}
-	for _, expected := range []string{`class="toast toast-success"`, `data-toast`, `data-toast-close`, `role="status"`} {
+	for _, expected := range []string{`class="toast notification toast-success`, `data-toast`, `data-toast-close`, `role="status"`} {
 		if !strings.Contains(flushResponse.Body.String(), expected) {
 			t.Errorf("cache flush toast does not contain %q", expected)
 		}
@@ -2590,7 +2590,7 @@ func TestBlockingEditorUpdatesTheRenderedPolicy(t *testing.T) {
 		!strings.Contains(response.Body.String(), "telemetry.example") {
 		t.Fatalf("add blocked domain response = %d %s", response.Code, response.Body.String())
 	}
-	for _, expected := range []string{`class="toast toast-success"`, `data-toast`, `data-toast-close`, `role="status"`} {
+	for _, expected := range []string{`class="toast notification toast-success`, `data-toast`, `data-toast-close`, `role="status"`} {
 		if !strings.Contains(response.Body.String(), expected) {
 			t.Errorf("blocking success toast does not contain %q", expected)
 		}
@@ -2599,7 +2599,7 @@ func TestBlockingEditorUpdatesTheRenderedPolicy(t *testing.T) {
 		t.Fatalf("blocked domains = %v", got)
 	}
 	if duplicate := postDomain(true); duplicate.Code != http.StatusUnprocessableEntity || duplicate.Header().Get(consoleFragmentHeader) != "true" || !strings.Contains(duplicate.Body.String(), "already blocked") ||
-		!strings.Contains(duplicate.Body.String(), `class="toast toast-error"`) || !strings.Contains(duplicate.Body.String(), `role="alert"`) {
+		!strings.Contains(duplicate.Body.String(), `class="toast notification toast-error`) || !strings.Contains(duplicate.Body.String(), `role="alert"`) {
 		t.Fatalf("HTMX duplicate toast response = %d %s", duplicate.Code, duplicate.Body.String())
 	}
 	if duplicate := postDomain(false); duplicate.Code != http.StatusUnprocessableEntity {

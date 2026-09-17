@@ -2,10 +2,25 @@ const assert = require('node:assert/strict');
 const {chromium} = require('playwright');
 const fs = require('node:fs/promises');
 
+async function assertDismissAlignment(regions, viewport) {
+  const alignment = await regions.evaluateAll(elements => elements.map(element => {
+    const button = element.querySelector('[data-toast-close]').getBoundingClientRect();
+    const icon = element.querySelector('[data-toast-close] svg').getBoundingClientRect();
+    return {
+      x: (icon.x + icon.width / 2) - (button.x + button.width / 2),
+      y: (icon.y + icon.height / 2) - (button.y + button.height / 2),
+    };
+  }));
+  alignment.forEach(({x, y}) => {
+    assert.ok(Math.abs(x) < 0.1, `${viewport} dismiss icon is horizontally centered: ${x}`);
+    assert.ok(Math.abs(y) < 0.1, `${viewport} dismiss icon is vertically centered: ${y}`);
+  });
+}
+
 (async () => {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
   try {
-    const page = await browser.newPage({viewport: {width: 390, height: 844}});
+    const page = await browser.newPage({viewport: {width: 390, height: 844}, colorScheme: 'dark'});
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route("**/ui/updates/automatic-check", route => route.fulfill({status: 202}), {times: 1});
@@ -36,6 +51,113 @@ const fs = require('node:fs/promises');
       await fs.mkdir(process.env.SABLE_UPDATE_SCREENSHOTS, {recursive: true});
       await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/notification-mobile.png`, fullPage: true});
     }
+
+    // Every notification source mounts into one stack. Desktop keeps the
+    // newest card in front until pointer or keyboard interaction expands it;
+    // touch-sized layouts remain expanded.
+    await page.setViewportSize({width: 1440, height: 900});
+    const addNotification = path => page.evaluate(async path => {
+      await window.htmx.ajax('GET', path, {target: document.body, swap: 'beforeend'});
+    }, path);
+    await addNotification('/test/notification/success');
+    await addNotification('/test/notification/error');
+    const stack = page.locator('[data-notification-stack]');
+    const regions = stack.locator(':scope > .toast-region');
+    await regions.nth(2).waitFor();
+    await page.mouse.move(0, 0);
+    await stack.evaluate(element => Promise.all(
+      element.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => {})),
+    ));
+    assert.equal(await regions.count(), 3, 'update and ordinary notifications share one stack');
+    assert.equal(await page.locator('body > .toast-region').count(), 0, 'global notifications do not create competing fixed regions');
+    await page.waitForFunction(() => {
+      const cards = [...document.querySelectorAll('[data-notification-stack] > .toast-region')].map(region => region.getBoundingClientRect());
+      return cards.length === 3 && cards[0].width < cards[2].width - 1 && cards.slice(1).every((card, index) => cards[index].bottom > card.top);
+    });
+    const collapsedBounds = await regions.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
+    const collapsedHeights = await regions.evaluateAll(elements => elements.map(element => element.offsetHeight));
+    assert.ok(collapsedBounds[0].width < collapsedBounds[2].width, 'older cards scale into the collapsed deck');
+    assert.ok(Math.max(...collapsedHeights) - Math.min(...collapsedHeights) < 1, 'collapsed cards use one uniform layout height');
+    assert.equal(await regions.nth(0).evaluate(element => getComputedStyle(element).opacity), '1', 'collapsed layers are the real notification cards');
+    assert.equal(await regions.nth(0).locator('.notification-summary').evaluate(element => getComputedStyle(element).opacity), '0', 'collapsed backing cards hide their content');
+    if (process.env.SABLE_UPDATE_SCREENSHOTS) await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/stack-collapsed-desktop.png`, fullPage: false});
+
+    await stack.hover();
+    assert.ok(await stack.evaluate(element => element.getAnimations({subtree: true}).some(animation => animation.playState === 'running')), 'real cards animate out of the collapsed deck');
+    await page.waitForFunction(() => {
+      const cards = [...document.querySelectorAll('[data-notification-stack] > .toast-region')].map(region => region.getBoundingClientRect());
+      return cards.slice(1).every((card, index) => cards[index].bottom <= card.top + 1);
+    });
+    await stack.evaluate(element => Promise.all(
+      element.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => {})),
+    ));
+    const expandedBounds = await regions.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
+    for (let index = 1; index < expandedBounds.length; index++) {
+      assert.ok(expandedBounds[index - 1].y + expandedBounds[index - 1].height <= expandedBounds[index].y + 1, 'expanded notifications do not overlap');
+    }
+    const expandedGaps = expandedBounds.slice(1).map((card, index) => card.y - (expandedBounds[index].y + expandedBounds[index].height));
+    assert.ok(Math.max(...expandedGaps) - Math.min(...expandedGaps) < 1, 'expanded notification gaps are equal');
+    assert.ok(expandedBounds[0].height > expandedBounds[1].height, 'the update card grows to its natural action-card height');
+    const dismissInsets = await regions.evaluateAll(elements => elements.map(element => {
+      const style = getComputedStyle(element.querySelector('[data-toast-close]'));
+      return {top: style.top, right: style.right};
+    }));
+    dismissInsets.forEach(({top, right}) => {
+      assert.equal(top, '8px', 'dismiss controls share the update card top inset');
+      assert.equal(right, '8px', 'dismiss controls share the update card right inset');
+    });
+    await assertDismissAlignment(regions, 'desktop');
+    if (process.env.SABLE_UPDATE_SCREENSHOTS) await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/stack-expanded-desktop.png`, fullPage: false});
+
+    await page.mouse.move(0, 0);
+    await regions.nth(0).getByRole('button', {name: 'Dismiss notification'}).focus();
+    await page.waitForFunction(() => {
+      const cards = [...document.querySelectorAll('[data-notification-stack] > .toast-region')].map(region => region.getBoundingClientRect());
+      return cards.slice(1).every((card, index) => cards[index].bottom <= card.top + 1);
+    });
+    assert.equal(await regions.nth(0).getByRole('button', {name: 'Dismiss notification'}).evaluate(element => element === document.activeElement), true, 'keyboard focus expands the stack');
+
+    await page.setViewportSize({width: 390, height: 844});
+    const sidebarScrim = page.locator('.sidebar-scrim');
+    if (await sidebarScrim.isVisible()) await sidebarScrim.click();
+    await page.locator('#app-sidebar').evaluate(element => Promise.all(
+      element.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => {})),
+    ));
+    const mobileBounds = await regions.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().toJSON()));
+    for (let index = 1; index < mobileBounds.length; index++) {
+      assert.ok(mobileBounds[index - 1].y + mobileBounds[index - 1].height <= mobileBounds[index].y, 'mobile notifications remain expanded');
+    }
+    await assertDismissAlignment(regions, 'mobile');
+    if (process.env.SABLE_UPDATE_SCREENSHOTS) await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/stack-mobile.png`, fullPage: false});
+    await page.locator('.toast-success').getByRole('button', {name: 'Dismiss notification'}).click();
+    await page.locator('.toast-error').getByRole('button', {name: 'Dismiss notification'}).click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-notification-stack] > .toast-region').length === 1);
+
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.mouse.move(0, 0);
+    await addNotification('/test/notification/transient?label=one');
+    await addNotification('/test/notification/transient?label=two');
+    await addNotification('/test/notification/transient?label=three');
+    const transients = stack.locator('.toast-success').filter({hasText: 'Test transient notification'});
+    await page.waitForFunction(() => document.querySelectorAll('[data-notification-stack] .toast-success').length === 3);
+    await page.waitForTimeout(4000);
+    await stack.hover();
+    await page.waitForFunction(() => {
+      const cards = [...document.querySelectorAll('[data-notification-stack] > .toast-region')].map(region => region.getBoundingClientRect());
+      return cards.slice(1).every((card, index) => cards[index].bottom <= card.top + 1);
+    });
+    for (let index = 0; index < await transients.count(); index++) {
+      const bounds = await transients.nth(index).boundingBox();
+      assert.ok(bounds, 'transient notification has rendered bounds');
+      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    }
+    await page.waitForTimeout(700);
+    assert.equal(await transients.count(), 3, 'moving between cards keeps every transient notification timer paused while the stack remains open');
+    while (await transients.count()) {
+      await transients.first().getByRole('button', {name: 'Dismiss notification'}).click();
+      await page.waitForTimeout(180);
+    }
+
     await notice.locator('[data-toast-close]').click();
     await notice.waitFor({state: 'detached'});
     assert.equal(await notesDialog.count(), 0, 'dismissing the notification removes its dialog');

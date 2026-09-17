@@ -30,10 +30,28 @@ module.exports = async function checkBlockListFeedback(browser, baseURL) {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   let receiveRequest;
+  let receiveDeleteRequest;
+  let receiveListDeleteRequest;
   let requestCount = 0;
+  const deleteRequests = [];
+  const listDeleteRequests = [];
   await page.route('**/ui/blocking/lists/add', route => {
     requestCount++;
     receiveRequest(route);
+  });
+  await page.route(/\/ui\/blocking\/(allowed|domains)\/delete$/, route => {
+    const request = route.request();
+    deleteRequests.push(request);
+    receiveDeleteRequest?.(request);
+    receiveDeleteRequest = undefined;
+    route.fulfill({status: 204});
+  });
+  await page.route('**/ui/blocking/lists/delete', route => {
+    const request = route.request();
+    listDeleteRequests.push(request);
+    receiveListDeleteRequest?.(request);
+    receiveListDeleteRequest = undefined;
+    route.fulfill({status: 204});
   });
   try {
     for (const mode of ['catalog', 'catalog-mobile', 'custom', 'server-error', 'connection-error', 'http-error']) {
@@ -42,6 +60,11 @@ module.exports = async function checkBlockListFeedback(browser, baseURL) {
       await page.goto(`${baseURL}/?blocking`);
       await page.locator('[data-dialog-open="add-block-list-dialog"]').click();
       const dialog = page.locator('#add-block-list-dialog');
+      assert.equal(
+        await dialog.evaluate(element => getComputedStyle(element, '::backdrop').backdropFilter),
+        'blur(4px)',
+        `${mode}: modal backdrop blurs the page`,
+      );
       const custom = !mode.startsWith('catalog');
       const url = mode === 'server-error' ? 'https://example.test/unavailable.txt' : 'https://example.test/large.txt';
       if (custom) {
@@ -135,6 +158,52 @@ module.exports = async function checkBlockListFeedback(browser, baseURL) {
       assert.equal(await button.getAttribute('aria-busy'), null);
       assert.equal(await button.evaluate(element => element.classList.contains('htmx-request')), false);
       console.log(`PASS block list update feedback: ${mode}`);
+    }
+
+    await page.goto(`${baseURL}/?blocking`);
+    const listRemove = page.getByRole('button', {name: 'Remove Fixture Block List', exact: true});
+    await listRemove.click();
+    const listConfirmation = page.locator('dialog.confirmation-dialog[open]');
+    await listConfirmation.waitFor();
+    assert.equal(await listConfirmation.getByRole('heading').innerText(), 'Remove block list?');
+    assert.equal(await listConfirmation.locator('#sable-confirm-description').innerText(), 'Remove Fixture Block List from the block lists?');
+    assert.equal(await listConfirmation.locator('[data-confirm-accept]').innerText(), 'Remove Block List');
+    const listRequestsBeforeCancel = listDeleteRequests.length;
+    await listConfirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
+    assert.equal(listDeleteRequests.length, listRequestsBeforeCancel, 'cancel does not remove the block list');
+    assert.equal(await listRemove.isVisible(), true, 'cancelled block list remains listed');
+    await listRemove.click();
+    const pendingListDelete = new Promise(resolve => { receiveListDeleteRequest = resolve; });
+    await listConfirmation.locator('[data-confirm-accept]').click();
+    const listDeleteRequest = await pendingListDelete;
+    assert.equal(new URL(listDeleteRequest.url()).pathname, '/ui/blocking/lists/delete');
+    assert.equal(new URLSearchParams(listDeleteRequest.postData()).get('name'), 'Fixture Block List');
+    console.log('PASS block list removal confirmation');
+
+    for (const policy of [
+      {tab: 'Allowed', domain: 'trusted.example', title: 'Remove allowed domain?', endpoint: '/ui/blocking/allowed/delete'},
+      {tab: 'Blocked', domain: 'ads.example', title: 'Remove blocked domain?', endpoint: '/ui/blocking/domains/delete'},
+    ]) {
+      await page.getByRole('tab', {name: policy.tab, exact: true}).click();
+      const remove = page.getByRole('button', {name: `Remove ${policy.domain}`, exact: true});
+      await remove.click();
+      const confirmation = page.locator('dialog.confirmation-dialog[open]');
+      await confirmation.waitFor();
+      assert.equal(await confirmation.getByRole('heading').innerText(), policy.title);
+      assert.equal(await confirmation.locator('#sable-confirm-description').innerText(), `Remove ${policy.domain} from the ${policy.tab.toLowerCase()} list?`);
+      assert.equal(await confirmation.locator('[data-confirm-accept]').innerText(), 'Remove Domain');
+      const requestsBeforeCancel = deleteRequests.length;
+      await confirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
+      assert.equal(deleteRequests.length, requestsBeforeCancel, `${policy.tab}: cancel does not remove the domain`);
+      assert.equal(await remove.isVisible(), true, `${policy.tab}: cancelled domain remains listed`);
+
+      await remove.click();
+      const pendingDelete = new Promise(resolve => { receiveDeleteRequest = resolve; });
+      await confirmation.locator('[data-confirm-accept]').click();
+      const request = await pendingDelete;
+      assert.equal(new URL(request.url()).pathname, policy.endpoint);
+      assert.equal(new URLSearchParams(request.postData()).get('domain'), policy.domain);
+      console.log(`PASS ${policy.tab.toLowerCase()} domain removal confirmation`);
     }
     assert.deepEqual(errors, [], 'block list feedback has no unhandled errors');
     assert.equal(consoleErrors.some(message => /CSP|Content Security Policy|\[hx-csp\]/.test(message)), false);

@@ -157,7 +157,7 @@ templ BlockListRow(list BlockListSourceView) {
 		if list.URL != "" {
 			<a class="icon-button" href={ templ.SafeURL(list.URL) } target="_blank" rel="noreferrer" aria-label={ "Open " + list.Name }>@Icon("external-link")</a>
 		}
-		<button class="icon-button danger" type="button" hx-post="/ui/blocking/lists/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", list.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + list.Name + "?" } aria-label={ "Remove " + list.Name }>@Icon("trash")</button>
+		<button class="icon-button danger" type="button" hx-post="/ui/blocking/lists/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", list.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + list.Name + " from the block lists?" } data-confirm-title="Remove block list?" data-confirm-action="Remove Block List" aria-label={ "Remove " + list.Name }>@Icon("trash")</button>
 	</article>
 }
 
@@ -179,7 +179,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 				<div class="blocking-empty domain-list-empty"><p>No { domainPolicyKind(allowed) } domains yet. Add your first domain to get started.</p></div>
 			}
 			for _, domain := range domains {
-				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
+				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list?" } data-confirm-title={ "Remove " + domainPolicyKind(allowed) + " domain?" } data-confirm-action="Remove Domain" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
 			}
 			<div class="blocking-filter-empty" data-domain-empty={ value } hidden>No domains match your search.</div>
 		</div>
