@@ -92,6 +92,14 @@ func TestScheduledBackupInventoryAndRotation(t *testing.T) {
 	oldest := writeScheduledTestArchive(t, service, policy, now.Add(-48*time.Hour), "oldest")
 	writeScheduledTestArchive(t, service, policy, now.Add(-24*time.Hour), "middle")
 	writeScheduledTestArchive(t, service, policy, now, "newest")
+	manualSource := writeScheduledTestArchive(t, service, policy, now.Add(-72*time.Hour), "manual")
+	manual := "sable-backup-manual.sablebackup"
+	if err := os.Rename(
+		filepath.Join(service.resolveDirectory(policy.Directory), manualSource),
+		filepath.Join(service.resolveDirectory(policy.Directory), manual),
+	); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(service.resolveDirectory(policy.Directory), "foreign.sablebackup"), []byte("not a backup"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +108,7 @@ func TestScheduledBackupInventoryAndRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LocalBackups() error = %v", err)
 	}
-	if len(archives) != 3 || archives[0].CreatedAt != now {
+	if len(archives) != 4 || archives[0].CreatedAt != now {
 		t.Fatalf("archives = %+v", archives)
 	}
 	if err := service.pruneScheduled(context.Background(), policy); err != nil {
@@ -110,8 +118,52 @@ func TestScheduledBackupInventoryAndRotation(t *testing.T) {
 		t.Fatalf("oldest archive stat error = %v, want not exist", err)
 	}
 	archives, err = service.LocalBackups(context.Background())
-	if err != nil || len(archives) != 2 {
+	if err != nil || len(archives) != 3 {
 		t.Fatalf("archives after prune = %+v, error = %v", archives, err)
+	}
+	if _, err := os.Stat(filepath.Join(service.resolveDirectory(policy.Directory), manual)); err != nil {
+		t.Fatalf("manual archive was removed by scheduled retention: %v", err)
+	}
+}
+
+func TestScheduledBackupRunEnforcesRetentionBeforeTheNextBackupIsDue(t *testing.T) {
+	service, policy := newScheduledBackupTestService(t, 2)
+	if err := service.vault.Put(context.Background(), scheduledBackupPassphraseSecret, []byte("the vaulted backup passphrase")); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	oldest := writeScheduledTestArchive(t, service, policy, now.Add(-48*time.Hour), "oldest")
+	writeScheduledTestArchive(t, service, policy, now.Add(-24*time.Hour), "middle")
+	writeScheduledTestArchive(t, service, policy, now, "newest")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		service.Run(ctx)
+		close(done)
+	}()
+
+	oldestPath := filepath.Join(service.resolveDirectory(policy.Directory), oldest)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, err := os.Stat(oldestPath)
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("stat oldest archive: %v", err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("scheduler did not enforce retention before waiting for the next run")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not stop after cancellation")
 	}
 }
 

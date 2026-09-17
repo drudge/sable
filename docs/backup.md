@@ -204,10 +204,11 @@ retention_count = 14
 ```
 
 Sable writes the first archive immediately, then anchors the configured
-interval to `run_at` in the node's local timezone. It writes a new archive
-before deleting anything, then keeps the newest configured number of its own
-scheduled archives. It does not purge invalid files, manually named backups,
-or another node's scheduled backups if a directory is shared.
+interval to `run_at` in the node's local timezone. While the policy is enabled,
+it enforces retention when the service starts, when the policy changes, and
+after each atomic archive write. It keeps the newest configured number of its
+own scheduled archives. It does not purge invalid files, manually named
+backups, or another node's scheduled backups if a directory is shared.
 
 The CLI remains useful when an external scheduler, remote destination, or
 different retention policy owns the workflow:

@@ -48,6 +48,10 @@ func (view ClusterUpdateView) UpToDate() bool {
 	return view.Rollout.Phase == "complete" && view.Version == "" && view.DisplayVersion() == formatReleaseVersion(view.Rollout.Version)
 }
 
+func (view ClusterUpdateView) UnavailableWarningVisible() bool {
+	return !view.Supported && view.UnavailableReason != "" && !view.Rollout.Active()
+}
+
 func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -139,7 +143,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(view.DisplayVersion())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 64, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 68, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -154,7 +158,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if !view.Supported && view.UnavailableReason != "" {
+			if view.UnavailableWarningVisible() {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"warning-box zone-conversion-warning\" role=\"alert\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -170,7 +174,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(view.UnavailableReason)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 71, Col: 162}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 77, Col: 83}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -190,7 +194,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(rolloutPhaseLabel(view.Rollout.Phase))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 75, Col: 98}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 82, Col: 98}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -213,7 +217,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(view.Rollout.Error)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 78, Col: 43}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 85, Col: 43}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -237,7 +241,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(phase)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 83, Col: 58}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 90, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 					if templ_7745c5c3_Err != nil {
@@ -266,7 +270,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 						var templ_7745c5c3_Var9 string
 						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(index + 1))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 92, Col: 34}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 99, Col: 34}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 						if templ_7745c5c3_Err != nil {
@@ -280,7 +284,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(node.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 95, Col: 33}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 102, Col: 33}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -293,7 +297,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(rolloutNodePhaseLabel(phase))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 95, Col: 80}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 102, Col: 80}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -373,7 +377,7 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 					var templ_7745c5c3_Var13 string
 					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Rollout.ID != "" || view.Release.Checked, "Check again", "Check for updates"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 116, Col: 232}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 123, Col: 232}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 					if templ_7745c5c3_Err != nil {
@@ -434,7 +438,7 @@ func clusterUpdateForm(version string, fromNotification bool) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(fromNotification, "closest .toast-region", "#cluster-content"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 131, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 138, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -447,7 +451,7 @@ func clusterUpdateForm(version string, fromNotification bool) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#cluster-updates button, #cluster-updates input"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 133, Col: 151}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 140, Col: 151}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
@@ -460,7 +464,7 @@ func clusterUpdateForm(version string, fromNotification bool) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue("Install Sable v" + version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 134, Col: 246}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 141, Col: 246}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -473,7 +477,7 @@ func clusterUpdateForm(version string, fromNotification bool) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(version)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 139, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 146, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {

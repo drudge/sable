@@ -10,61 +10,81 @@ compatibility are not yet a published contract.
 
 ## [1.3.5] - Unreleased
 
-Sable 1.3.5 improves performance and reliability across catalog imports, cluster
-status, and the web console, with more orderly shutdowns and clearer feedback
-when console actions fail.
+Sable 1.3.5 makes everyday administration faster and safer, with particular
+improvements to large catalog imports, backups, cluster maintenance, DNS
+configuration changes, and service shutdowns.
 
-### Faster imports and lighter background work
+### Faster administration
 
-- Reduce processing time and memory use when reviewing large catalog imports.
-- Reduce the work needed to refresh live cluster status and avoid repeating
-  cluster configuration capture when multiple refreshes arrive together.
-- Limit concurrent client-name lookups and bound their cache size, reducing
-  background DNS traffic and memory use when several console views are open.
+- Review large catalog imports with substantially less processing and memory
+  use, and open **Import from Catalog** directly from the command palette.
+- Refresh live cluster status with less background work, even when several
+  updates arrive together.
+- Limit client-name lookup traffic and memory use when multiple console views
+  are open.
 
-### A more reliable console
+### Safer backups and maintenance
 
-- Open **Import from Catalog** directly from the command palette. The action
-  follows zone-creation permissions and is hidden on read-only replicas.
-- Keep release versions such as `v1.3.5-rc.1` on one line in the rolling-update
-  badge instead of splitting the version across lines.
-- Clean up dropdown, time-picker, and resolver controls when page sections are
-  refreshed, preventing unused event handlers from accumulating over time.
-- Show command-palette results consistently, including when the relevant page
-  is not open. Prevent duplicate submissions while an action is running and
-  report failed requests instead of announcing success.
-- Preserve useful validation and permission errors for zone and blocking
-  actions without replacing page content with an unformatted server error.
-- Save your profile display name and email with JavaScript disabled. Invalid
-  submissions return a full page with the entered values and an error message.
-- Redirect expired or unauthenticated partial-page requests to login or setup
-  at the browser level, instead of rendering an authentication form inside the
-  existing console frame.
-- Make shared status metrics more compact, keep values and descriptions
-  accessible, and align their responsive layouts consistently.
-- Use consistent hover and selection borders for navigation and outlined
-  controls. Place replica removal before promotion and distinguish it as an
-  outlined destructive action.
+- Reliably enforce the configured scheduled-backup retention limit without
+  deleting manual, imported, invalid, or other-node archives.
+- Show backup history and next and last run times using your configured time
+  zone and preferred 12- or 24-hour clock.
+- Add drag-and-drop file selection when uploading a backup to restore.
+- Let in-progress backup, restore, DNS refresh, and logging work finish safely
+  during shutdown. New background work is refused once shutdown begins, and
+  incomplete shutdowns no longer write a potentially inconsistent DNS cache.
 
-### Consistent DNS after configuration changes
+### Predictable DNS configuration changes
 
-- Apply forwarding changes consistently: discard cached answers from previous
-  zone forwarding rules and keep new lookups from sharing work started before
-  a resolver configuration reload.
+- Apply forwarding changes immediately by discarding answers cached under the
+  previous rules and isolating lookups that began before the resolver reload.
+- Stop DNS prefetch and stale-answer refresh work cleanly before releasing the
+  resources it uses during shutdown or failed startup.
 
-### More orderly shutdowns
+### A more dependable console
 
-- Wait for stale-answer refreshes and manual backup/restore jobs during
-  shutdown. Stop accepting new background jobs and report a timeout if work
-  cannot finish safely before the shutdown deadline.
-- Honor backup and restore cancellation at safe boundaries, including before
-  scheduling a restore for the next restart.
-- Stop background tasks and DNS prefetch work before releasing the resources
-  they use during shutdown or failed startup.
-- Cancel stalled query-log and server-log writes during shutdown and give
-  queued entries a bounded opportunity to finish writing.
-- Skip DNS cache persistence when shutdown is incomplete, avoiding a snapshot
-  while background work may still be changing it.
+- Keep command-palette and form actions from submitting twice, report request
+  failures instead of announcing success, and preserve useful validation and
+  permission errors.
+- Recover cleanly when a session expires by sending the browser to login or
+  setup instead of placing an authentication form inside the current page.
+- Save profile changes without JavaScript and return invalid entries with a
+  useful error message.
+- Clean up interactive controls as page sections refresh, avoiding accumulated
+  handlers during long console sessions.
+- Hide transient rolling-update capability warnings while an update is already
+  running, and keep release-version badges readable.
+
+### Interface refinements
+
+- Use accessible switches for independent on/off settings and clearer states
+  for disabled controls.
+- Improve cluster-node spacing, status-metric layouts, light-mode navigation
+  contrast, and hover and selection treatments across the console.
+- Keep the scheduled-backup time picker visible and clarify which archives its
+  retention setting controls.
+- Make replica removal easier to distinguish from promotion by using the
+  established outlined destructive style.
+
+## [1.3.5-rc.5] - Unreleased
+
+This fifth release candidate includes the reliability fixes from 1.3.5-rc.4
+and polishes backup, settings, and cluster workflows in the web console.
+
+- Enforce scheduled-backup retention at startup, after policy changes, and
+  after successful archive creation. Manual, imported, invalid, and other-node
+  archives remain untouched.
+- Show backup history and next/last run times in the operator's preferred time
+  zone and 12- or 24-hour format, without adding a one-off timezone suffix.
+- Keep the scheduled-backup time picker visible outside its settings card and
+  clarify that the retention limit applies only to scheduled archives.
+- Use the catalog import dropzone behavior for uploaded restores, including a
+  solid drop target, animated selected-file state, inline backup identity, and
+  clearer replacement warnings.
+- Render independent boolean settings as accessible switches while preserving
+  their existing form behavior and disabled states.
+- Improve cluster-node spacing and light-mode sidebar selection contrast, and
+  hide transient capability warnings while a rolling update is already active.
 
 ## [1.3.5-rc.4] - Unreleased
 

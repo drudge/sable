@@ -634,6 +634,7 @@ func (server *Server) renderBackupPanel(writer http.ResponseWriter, request *htt
 }
 
 func (server *Server) backupView(request *http.Request, message, errorMessage string) pages.SettingsBackupView {
+	display := requestTimeDisplay(request)
 	view := pages.SettingsBackupView{
 		Available:  server.backups != nil,
 		CanCreate:  server.allowsBackup(request, auth.PermissionBackupCreate),
@@ -656,10 +657,10 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 			view.ScheduleRunAt = schedule.RunAt
 			view.ScheduleRetentionCount = schedule.RetentionCount
 			view.SchedulePassphraseStored = schedule.PassphraseStored
-			view.ScheduleNextRun = humanBackupScheduleTime(schedule.NextRun)
-			view.ScheduleNextRunCompact = compactBackupScheduleTime(schedule.NextRun)
-			view.ScheduleLastSuccess = humanBackupScheduleTime(schedule.LastSuccess)
-			view.ScheduleLastSuccessCompact = compactBackupScheduleTime(schedule.LastSuccess)
+			view.ScheduleNextRun = humanBackupScheduleTime(schedule.NextRun, display)
+			view.ScheduleNextRunCompact = compactBackupScheduleTime(schedule.NextRun, display)
+			view.ScheduleLastSuccess = humanBackupScheduleTime(schedule.LastSuccess, display)
+			view.ScheduleLastSuccessCompact = compactBackupScheduleTime(schedule.LastSuccess, display)
 			view.ScheduleLastError = schedule.LastError
 		}
 		if view.CanCreate || view.CanRestore {
@@ -672,7 +673,7 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 				view.LocalBackups = make([]pages.SettingsLocalBackupView, 0, len(local))
 				for _, archive := range local {
 					view.LocalBackups = append(view.LocalBackups, pages.SettingsLocalBackupView{
-						Name: archive.Name, Created: humanBackupTime(archive.CreatedAt), Hostname: archive.Hostname,
+						Name: archive.Name, Created: humanBackupTime(archive.CreatedAt, display), Hostname: archive.Hostname,
 						SableVersion: archive.SableVersion, Size: humanBackupSize64(archive.Size), Scheduled: archive.Scheduled,
 					})
 				}
@@ -706,25 +707,34 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 	return view
 }
 
-func humanBackupTime(value time.Time) string {
+func humanBackupTime(value time.Time, display pages.TimeDisplay) string {
 	if value.IsZero() {
 		return ""
 	}
-	return value.Local().Format("Jan 2, 2006 at 3:04 PM")
+	if display.TwentyFourHour() {
+		return display.In(value).Format("Jan 2, 2006 at 15:04")
+	}
+	return display.In(value).Format("Jan 2, 2006 at 3:04 PM")
 }
 
-func humanBackupScheduleTime(value time.Time) string {
+func humanBackupScheduleTime(value time.Time, display pages.TimeDisplay) string {
 	if value.IsZero() {
 		return ""
 	}
-	return value.Local().Format("Jan 2, 2006 at 3:04 PM MST")
+	if display.TwentyFourHour() {
+		return display.In(value).Format("Jan 2, 2006 at 15:04")
+	}
+	return display.In(value).Format("Jan 2, 2006 at 3:04 PM")
 }
 
-func compactBackupScheduleTime(value time.Time) string {
+func compactBackupScheduleTime(value time.Time, display pages.TimeDisplay) string {
 	if value.IsZero() {
 		return ""
 	}
-	return value.Local().Format("Jan 2 · 3:04 PM MST")
+	if display.TwentyFourHour() {
+		return display.In(value).Format("Jan 2 · 15:04")
+	}
+	return display.In(value).Format("Jan 2 · 3:04 PM")
 }
 
 func humanBackupSize64(size int64) string {
