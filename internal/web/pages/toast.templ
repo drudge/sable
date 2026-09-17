@@ -39,33 +39,32 @@ templ toastNotice(message string, variant string, action ToastAction, persistent
 				data-toast-duration={ ifThen(persistent, "0", ifThen(variant == "error", "6500", "4500")) }
 				role={ ifThen(variant == "error", "alert", "status") }
 			>
-				<span class="toast-icon" aria-hidden="true">@Icon(ifThen(variant == "error", "x-circle", "check-circle"))</span>
-				<div class="toast-content">
-					<strong>{ ifThen(variant == "error", "Error", "Success") }</strong>
-					<p>{ message }</p>
-					if action.Present() {
-						<div class="toast-actions">
-							<button
-								class="button compact"
-								type="button"
-								hx-post={ action.Post }
-								hx-swap="none"
-								hx-confirm={ action.Confirm }
-								data-confirm-title={ action.ConfirmTitle }
-								data-confirm-action={ action.ConfirmAction }
-							>
-								if action.Icon != "" {
-									@Icon(action.Icon)
-								}
-								<span>{ action.Label }</span>
-							</button>
-						</div>
-					}
+				<div class="toast-summary">
+					<span class="toast-icon" aria-hidden="true">@Icon(ifThen(variant == "error", "x-circle", "check-circle"))</span>
+					<div class="toast-content">
+						<strong>{ ifThen(variant == "error", "Error", "Success") }</strong>
+						<p>{ message }</p>
+						if action.Present() {
+							<div class="toast-actions">
+								<button
+									class="button compact"
+									type="button"
+									hx-post={ action.Post }
+									hx-swap="none"
+									hx-confirm={ action.Confirm }
+									data-confirm-title={ action.ConfirmTitle }
+									data-confirm-action={ action.ConfirmAction }
+								>
+									if action.Icon != "" {
+										@Icon(action.Icon)
+									}
+									<span>{ action.Label }</span>
+								</button>
+							</div>
+						}
+					</div>
 				</div>
 				<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-				if !persistent {
-					<span class="toast-timer" aria-hidden="true"></span>
-				}
 			</div>
 		</div>
 	}

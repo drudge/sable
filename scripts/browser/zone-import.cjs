@@ -47,13 +47,16 @@ module.exports = async (browser, baseURL) => {
     for (const [size, label] of [[1, '1 byte'], [12776, '12.8 KB'], [1500000, '1.5 MB']]) {
       await file.setInputFiles({name: 'example.zone', mimeType: 'text/plain', buffer: Buffer.alloc(size, 'a')});
       assert.equal(await dialog.locator('[data-zone-file-size]').innerText(), `${label} · Ready to import`);
-	    }
-	    const remove = dialog.locator('[data-zone-file-remove]');
-	    await remove.waitFor({state: 'visible'});
-	    const buttonBounds = await remove.boundingBox();
-	    const iconBounds = await remove.locator('svg').boundingBox();
-	    assert.ok(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2)) <= 1, 'remove icon is horizontally centered');
-	    assert.ok(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2)) <= 1, 'remove icon is vertically centered');
+    }
+    const remove = dialog.locator('[data-zone-file-remove]');
+    await remove.waitFor({state: 'visible'});
+    await dialog.locator('[data-file-dropzone-root]').evaluate(root => Promise.all(
+      root.getAnimations({subtree: true}).map(animation => animation.finished.catch(() => {})),
+    ));
+    const buttonBounds = await remove.boundingBox();
+    const iconBounds = await remove.locator('svg').boundingBox();
+    assert.ok(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2)) <= 1, 'remove icon is horizontally centered');
+    assert.ok(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2)) <= 1, 'remove icon is vertically centered');
     await dialog.locator('[data-zone-import-mode="text"]').click();
     assert.equal(await submit.isDisabled(), true);
     await text.fill('$ORIGIN pasted.example.');
