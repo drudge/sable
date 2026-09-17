@@ -56,10 +56,11 @@ module.exports = async function checkCommandPalettePosts(page, baseURL, errors) 
       contentType: 'text/html',
       body: '<div class="toast-region"><div class="toast toast-success" data-toast role="status"><p>Update check completed.</p></div></div>',
     });
-    await page.locator('#command-feedback .toast-region').waitFor();
+    await page.locator('[data-notification-stack] .toast-region').waitFor();
     await page.waitForFunction(() => window.removedCommand && !window.removedCommand.isConnected && !window.removedCommand.dataset.commandPending && !window.removedCommand.hasAttribute('aria-busy'));
     await page.waitForFunction(() => document.querySelector('[data-a11y-announcer]')?.textContent === 'Check for Updates completed');
-    assert.equal(await page.locator('#command-feedback .toast-region').count(), 1, 'off-page commands use stable feedback');
+    assert.equal(await page.locator('[data-notification-stack] .toast-region').count(), 1, 'off-page commands use the shared notification stack');
+    assert.equal(await page.locator('#command-feedback .toast-region').count(), 0, 'mounted notifications leave the command target reusable');
     await page.unroute('**/ui/updates/command-check');
 
     const pauseRoute = deferredRoute();

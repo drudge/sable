@@ -8,6 +8,33 @@ templ ReleaseVersion(release string) {
 	}
 }
 
+func updateNotificationOptions(view UpdateView) NotificationOptions {
+	attributes := updateRestartAttributes(view, "")
+	if attributes == nil {
+		attributes = templ.Attributes{}
+	}
+	attributes["data-update-version"] = view.LatestVersion
+	message := updateDetail(view)
+	if updateVariant(view) == "available" && view.Blocked == "" {
+		message = "Review the release notes for what's changed and anything to know before updating. Install when you're ready."
+	}
+	return NotificationOptions{
+		Variant:           "update",
+		Class:             "toast-update-" + updateVariant(view),
+		Icon:              ifThen(updateVariant(view) == "available", "sparkles", updateIcon(view)),
+		SecondaryIcon:     ifThen(view.Installed && view.CanRestart, "refresh", ""),
+		Title:             updateHeadline(view),
+		Message:           message,
+		Duration:          "0",
+		Role:              "status",
+		Persistent:        true,
+		HasActions:        true,
+		Attributes:        attributes,
+		MessageAttributes: templ.Attributes{"data-restart-status": true},
+		DismissAttributes: templ.Attributes{"id": "update-notification-dismiss"},
+	}
+}
+
 templ UpdateNotification(view UpdateView) {
 	<div
 		id="update-notification"
@@ -19,38 +46,10 @@ templ UpdateNotification(view UpdateView) {
 		hx-target="this"
 		hx-swap="outerHTML"
 	>
-		<div
-			class={ "toast toast-update toast-persistent", "toast-update-" + updateVariant(view) }
-			data-toast
-			data-toast-duration="0"
-			role="status"
-			data-update-version={ view.LatestVersion }
-			{ updateRestartAttributes(view, "")... }
-		>
-			<button id="update-notification-dismiss" class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-			<div class="toast-update-summary">
-				<span class="toast-update-badge" aria-hidden="true">
-					@Icon(ifThen(updateVariant(view) == "available", "sparkles", updateIcon(view)))
-					if view.Installed && view.CanRestart {
-						@Icon("refresh")
-					}
-				</span>
-				<div class="toast-update-copy">
-					<strong>{ updateHeadline(view) }</strong>
-					<p data-restart-status>
-						if updateVariant(view) == "available" && view.Blocked == "" {
-							Review the release notes for what's changed and anything to know before updating. Install when you're ready.
-						} else {
-							{ updateDetail(view) }
-						}
-					</p>
-				</div>
-			</div>
-			<div class="toast-actions">
-				@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
-				@updatePrimaryAction(view, true)
-			</div>
-		</div>
+		@Notification(updateNotificationOptions(view)) {
+			@updateReleaseNotesButton(view, notificationUpdateNotesDialogID)
+			@updatePrimaryAction(view, true)
+		}
 		@updateReleaseNotesDialog(view, notificationUpdateNotesDialogID)
 	</div>
 }

@@ -60,7 +60,11 @@ func TestBrowserConsoleFixes(t *testing.T) {
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		view := pages.DashboardView{CSRFToken: "fixture-csrf", CanSettings: true, CanWriteSettings: true, CanZones: true, CanLogs: true, CanBlocking: true, CanWriteBlocking: true, BlockingEnabled: true, HasRemoteBlockLists: true, CanCheckUpdates: true}
-		var content templ.Component = pages.BlockingContent(pages.BlockingPageView{ActiveTab: "lists", RemoteListCount: 1})
+		var content templ.Component = pages.BlockingContent(pages.BlockingPageView{
+			ActiveTab: "lists", RemoteListCount: 1,
+			Lists:   []pages.BlockListSourceView{{Name: "Fixture Block List", URL: "https://fixture.example/block.txt", Format: "auto", Accepted: 1200, Healthy: true}},
+			Domains: []string{"ads.example"}, AllowedDomains: []string{"trusted.example"},
+		})
 		if r.URL.Query().Has("catalog-import") {
 			content = pages.CatalogImportContent(pages.CatalogImportView{})
 		}

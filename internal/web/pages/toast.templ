@@ -1,5 +1,24 @@
 package pages
 
+// NotificationOptions configures the shared notification card. The surrounding
+// region remains the server-owned HTMX fragment, while this component owns the
+// visual and interaction contract shared by transient toasts and live notices.
+type NotificationOptions struct {
+	Variant           string
+	Class             string
+	Icon              string
+	SecondaryIcon     string
+	Title             string
+	Message           string
+	Duration          string
+	Role              string
+	Persistent        bool
+	HasActions        bool
+	Attributes        templ.Attributes
+	MessageAttributes templ.Attributes
+	DismissAttributes templ.Attributes
+}
+
 // ToastAction is an optional button carried by a toast.
 type ToastAction struct {
 	Label         string
@@ -30,42 +49,75 @@ templ ToastSticky(message string, variant string) {
 	@toastNotice(message, variant, ToastAction{}, true)
 }
 
+// Notification is the single card used by every toast and update notice. Its
+// children are optional actions, allowing callers to render buttons, links,
+// forms, or split controls without duplicating the card shell.
+templ Notification(options NotificationOptions) {
+	<div
+		class={
+			"toast",
+			"notification",
+			"toast-" + options.Variant,
+			options.Class,
+			templ.KV("toast-persistent", options.Persistent),
+			templ.KV("notification-has-actions", options.HasActions),
+		}
+		data-toast
+		data-toast-duration={ options.Duration }
+		role={ options.Role }
+		{ options.Attributes... }
+	>
+		<button class="toast-dismiss notification-dismiss" type="button" data-toast-close aria-label="Dismiss notification" { options.DismissAttributes... }>@Icon("x")</button>
+		<div class="notification-summary">
+			<span class="notification-badge" aria-hidden="true">
+				@Icon(options.Icon)
+				if options.SecondaryIcon != "" {
+					@Icon(options.SecondaryIcon)
+				}
+			</span>
+			<div class="notification-copy">
+				<strong>{ options.Title }</strong>
+				<p { options.MessageAttributes... }>{ options.Message }</p>
+			</div>
+		</div>
+		if options.HasActions {
+			<div class="toast-actions notification-actions">
+				{ children... }
+			</div>
+		}
+	</div>
+}
+
 templ toastNotice(message string, variant string, action ToastAction, persistent bool) {
 	if message != "" {
 		<div class="toast-region" aria-live={ ifThen(variant == "error", "assertive", "polite") } aria-atomic="true">
-			<div
-				class={ "toast", "toast-" + variant, templ.KV("toast-persistent", persistent) }
-				data-toast
-				data-toast-duration={ ifThen(persistent, "0", ifThen(variant == "error", "6500", "4500")) }
-				role={ ifThen(variant == "error", "alert", "status") }
-			>
-				<div class="toast-summary">
-					<span class="toast-icon" aria-hidden="true">@Icon(ifThen(variant == "error", "x-circle", "check-circle"))</span>
-					<div class="toast-content">
-						<strong>{ ifThen(variant == "error", "Error", "Success") }</strong>
-						<p>{ message }</p>
-						if action.Present() {
-							<div class="toast-actions">
-								<button
-									class="button compact"
-									type="button"
-									hx-post={ action.Post }
-									hx-swap="none"
-									hx-confirm={ action.Confirm }
-									data-confirm-title={ action.ConfirmTitle }
-									data-confirm-action={ action.ConfirmAction }
-								>
-									if action.Icon != "" {
-										@Icon(action.Icon)
-									}
-									<span>{ action.Label }</span>
-								</button>
-							</div>
+			@Notification(NotificationOptions{
+				Variant: variant,
+				Icon: ifThen(variant == "error", "x-circle", "check-circle"),
+				Title: ifThen(variant == "error", "Error", "Success"),
+				Message: message,
+				Duration: ifThen(persistent, "0", ifThen(variant == "error", "6500", "4500")),
+				Role: ifThen(variant == "error", "alert", "status"),
+				Persistent: persistent,
+				HasActions: action.Present(),
+			}) {
+				if action.Present() {
+					<button
+						class="button compact"
+						type="button"
+						hx-post={ action.Post }
+						hx-swap="none"
+						hx-confirm={ action.Confirm }
+						data-confirm-title={ action.ConfirmTitle }
+						data-confirm-action={ action.ConfirmAction }
+					>
+						if action.Icon != "" {
+							@Icon(action.Icon)
 						}
-					</div>
-				</div>
-				<button class="toast-dismiss" type="button" data-toast-close aria-label="Dismiss notification">@Icon("x")</button>
-			</div>
+						<span>{ action.Label }</span>
+					</button>
+				}
+			}
 		</div>
 	}
 }
