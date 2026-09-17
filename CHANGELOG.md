@@ -43,6 +43,10 @@ configuration changes, and service shutdowns.
 
 ### A more dependable console
 
+- Present update notices and success or error messages in one consistent
+  notification stack. Multiple notices collapse into a compact deck, expand
+  smoothly on hover or keyboard focus, and pause timed dismissal while you
+  inspect them.
 - Keep command-palette and form actions from submitting twice, report request
   failures instead of announcing success, and preserve useful validation and
   permission errors.
@@ -61,6 +65,9 @@ configuration changes, and service shutdowns.
   for disabled controls.
 - Improve cluster-node spacing, status-metric layouts, light-mode navigation
   contrast, and hover and selection treatments across the console.
+- Add clear, item-specific confirmation dialogs before removing block lists or
+  individual allowed and blocked domains, with a softer blurred backdrop that
+  keeps attention on the decision.
 - Keep the scheduled-backup time picker visible and clarify which archives its
   retention setting controls.
 - Make replica removal easier to distinguish from promotion by using the
