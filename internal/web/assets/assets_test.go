@@ -162,6 +162,37 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 	}
 }
 
+func TestSharedFileDropzoneAssets(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"border: 1px solid var(--dropzone-border)",
+		".file-dropzone.is-dragging",
+		".file-dropzone-selection",
+		"[data-file-dropzone-status]:empty",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("shared file dropzone styles are missing %q", expected)
+		}
+	}
+
+	script := string(manifest["app.js"].content)
+	for _, expected := range []string{
+		`event.target.closest("[data-file-dropzone]")`,
+		`dropzone.querySelector("[data-file-dropzone-input]")`,
+		"const setFileDropzoneState = async (input, hasFile, animate = true) =>",
+		`window.matchMedia("(prefers-reduced-motion: reduce)").matches`,
+		"root.animate([{height: `${startHeight}px`}, {height: `${endHeight}px`}],",
+		"const updateBackupFileSelection = (input, animate = true) =>",
+		`event.target.closest("[data-backup-file-remove]")`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Errorf("shared file dropzone behavior is missing %q", expected)
+		}
+	}
+}
+
 func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	t.Parallel()
 
@@ -311,6 +342,9 @@ func TestStyledTimePickerOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain styled time rule %q", expected)
 		}
+	}
+	if !strings.Contains(stylesheet, `.settings-source-card:has(.styled-time[data-open="true"]) {`) {
+		t.Error("open settings time picker remains clipped by its card")
 	}
 
 	script := string(manifest["app.js"].content)

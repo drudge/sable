@@ -45,6 +45,8 @@ type stubLocalBackups struct {
 	files            map[string][]byte
 	storedPassphrase string
 	scheduleUpdate   backup.ScheduleUpdate
+	nextRun          time.Time
+	lastSuccess      time.Time
 }
 
 func (stub *stubLocalBackups) BackupSchedule(context.Context) (backup.Schedule, error) {
@@ -53,6 +55,8 @@ func (stub *stubLocalBackups) BackupSchedule(context.Context) (backup.Schedule, 
 	return backup.Schedule{
 		Directory: "data/backups", Interval: 24 * time.Hour, RunAt: "02:00", RetentionCount: 7,
 		PassphraseStored: stub.storedPassphrase != "",
+		NextRun:          stub.nextRun,
+		LastSuccess:      stub.lastSuccess,
 	}, nil
 }
 
@@ -660,12 +664,42 @@ func TestSettingsPageShowsTheBackupPanel(t *testing.T) {
 	}
 }
 
+func TestBackupViewUsesTheRequestedTimeZoneAndFormat(t *testing.T) {
+	t.Parallel()
+
+	nextRun := time.Date(2026, time.September, 2, 1, 54, 0, 0, time.UTC)
+	lastSuccess := nextRun.Add(-24 * time.Hour)
+	stub := &stubLocalBackups{
+		stubBackups: &stubBackups{},
+		files:       map[string][]byte{},
+		nextRun:     nextRun,
+		lastSuccess: lastSuccess,
+		archives: []backup.LocalArchive{{
+			Name: "sable-scheduled-ns1-20260901.sablebackup", CreatedAt: lastSuccess,
+		}},
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://sable.test/settings?tab=backup", nil)
+	request.AddCookie(&http.Cookie{Name: timeZoneCookie, Value: "America/New_York"})
+	request.AddCookie(&http.Cookie{Name: timeFormatCookie, Value: pages.TimeFormat24})
+
+	view := newBackupServer(stub).backupView(request, "", "")
+	if view.ScheduleNextRun != "Sep 1, 2026 at 21:54" || view.ScheduleNextRunCompact != "Sep 1 · 21:54" {
+		t.Fatalf("next run = %q / %q", view.ScheduleNextRun, view.ScheduleNextRunCompact)
+	}
+	if view.ScheduleLastSuccess != "Aug 31, 2026 at 21:54" || view.ScheduleLastSuccessCompact != "Aug 31 · 21:54" {
+		t.Fatalf("last success = %q / %q", view.ScheduleLastSuccess, view.ScheduleLastSuccessCompact)
+	}
+	if len(view.LocalBackups) != 1 || view.LocalBackups[0].Created != "Aug 31, 2026 at 21:54" {
+		t.Fatalf("local backups = %+v", view.LocalBackups)
+	}
+}
+
 func TestLocalBackupRestorePassphraseLivesInTheRestoreDialog(t *testing.T) {
 	view := pages.SettingsBackupView{
 		Available: true, LocalAvailable: true, CanCreate: true, CanRestore: true,
-		ScheduleResolvedDirectory: "/srv/sable/backups", ScheduleRunAt: "14:30", SchedulePassphraseStored: true,
-		ScheduleNextRun: "Sep 2, 2026 at 5:54 PM EDT", ScheduleNextRunCompact: "Sep 2 · 5:54 PM EDT",
-		ScheduleLastSuccess: "Sep 1, 2026 at 5:54 PM EDT", ScheduleLastSuccessCompact: "Sep 1 · 5:54 PM EDT",
+		ScheduleResolvedDirectory: "/srv/sable/backups", ScheduleRunAt: "14:30", ScheduleRetentionCount: 7, SchedulePassphraseStored: true,
+		ScheduleNextRun: "Sep 2, 2026 at 5:54 PM", ScheduleNextRunCompact: "Sep 2 · 5:54 PM",
+		ScheduleLastSuccess: "Sep 1, 2026 at 5:54 PM", ScheduleLastSuccessCompact: "Sep 1 · 5:54 PM",
 		LocalBackups: []pages.SettingsLocalBackupView{{
 			Name: "sable-scheduled-ns1-20260901.sablebackup", Created: "Sep 1, 2026", Size: "12.0 KiB", Scheduled: true,
 		}},
@@ -678,7 +712,7 @@ func TestLocalBackupRestorePassphraseLivesInTheRestoreDialog(t *testing.T) {
 	if !strings.Contains(panelBody, `data-local-backup-name="sable-scheduled-ns1-20260901.sablebackup"`) {
 		t.Fatalf("local backup row has no restore button:\n%s", panelBody)
 	}
-	for _, expected := range []string{`type="time" name="run_at" value="14:30" step="60" data-styled-time`, `Your browser uses your preferred 12- or 24-hour display.`, `class="backup-schedule-status"`, `class="backup-schedule-timestamps"`, `>Next backup<`, `class="backup-schedule-time-full"`, `class="backup-schedule-time-compact"`, `Sep 2 · 5:54 PM EDT`, `>Save Schedule<`, `class="backup-history-header-actions"`, `data-local-backup-run-stored-form`, `name="use_stored_passphrase" value="on"`, `data-run-local-backup`, `>Use a different passphrase…<`, `data-upload-backup-restore`, `>Local Backups<`, `Encrypted backups stored on this node, ready to download or restore.`, `>Backup Now<`, `>Restore from File…<`, `hx-post="/ui/backup/delete-local"`, `data-confirm-action="Delete Backup"`, `icon-trash`, `>Delete<`, `icon-rotate-ccw`, `class="backup-local-restore-note"`, `class="backup-history-footer"`, `/srv/sable/backups`} {
+	for _, expected := range []string{`type="time" name="run_at" value="14:30" step="60" data-styled-time`, `Your browser uses your preferred 12- or 24-hour display.`, `>Scheduled Backups to Keep<`, `Manual and imported backups remain until deleted.`, `class="backup-schedule-status"`, `class="backup-schedule-timestamps"`, `>Next backup<`, `class="backup-schedule-time-full"`, `class="backup-schedule-time-compact"`, `Sep 2 · 5:54 PM`, `>Save Schedule<`, `class="backup-history-header-actions"`, `data-local-backup-run-stored-form`, `name="use_stored_passphrase" value="on"`, `data-run-local-backup`, `>Use a different passphrase…<`, `data-upload-backup-restore`, `>Local Backups<`, `Encrypted backups stored on this node, ready to download or restore.`, `>Backup Now<`, `>Restore from File…<`, `hx-post="/ui/backup/delete-local"`, `data-confirm-action="Delete Backup"`, `icon-trash`, `>Delete<`, `icon-rotate-ccw`, `class="backup-local-restore-note"`, `class="backup-local-retention-note"`, `Scheduled rotation keeps at most 7 archives created by this node.`, `class="backup-history-footer"`, `/srv/sable/backups`} {
 		if !strings.Contains(panelBody, expected) {
 			t.Fatalf("local backups card does not contain %q:\n%s", expected, panelBody)
 		}
@@ -699,7 +733,7 @@ func TestLocalBackupRestorePassphraseLivesInTheRestoreDialog(t *testing.T) {
 	if err := pages.LocalBackupRestoreDialog().Render(context.Background(), dialog); err != nil {
 		t.Fatalf("LocalBackupRestoreDialog.Render() error = %v", err)
 	}
-	for _, expected := range []string{`data-local-backup-restore-form`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
+	for _, expected := range []string{`data-local-backup-restore-form`, `class="warning-box zone-conversion-warning backup-restore-warning" role="alert"`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
 		if !strings.Contains(dialog.String(), expected) {
 			t.Fatalf("restore dialog does not contain %q:\n%s", expected, dialog.String())
 		}
@@ -709,7 +743,7 @@ func TestLocalBackupRestorePassphraseLivesInTheRestoreDialog(t *testing.T) {
 	if err := pages.UploadBackupRestoreDialog().Render(context.Background(), upload); err != nil {
 		t.Fatalf("UploadBackupRestoreDialog.Render() error = %v", err)
 	}
-	for _, expected := range []string{`data-upload-backup-restore-form`, `name="archive"`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
+	for _, expected := range []string{`data-upload-backup-restore-form`, `class="warning-box zone-conversion-warning backup-restore-warning" role="alert"`, `data-file-dropzone-root`, `data-file-dropzone-state="empty"`, `class="file-dropzone"`, `data-file-dropzone`, `accept=".sablebackup"`, `data-backup-file-selection`, `class="backup-archive-preview inline"`, `icon-hard-drive`, `data-backup-file-remove`, `name="passphrase"`, `name="keep_configuration"`, "Restore Backup"} {
 		if !strings.Contains(upload.String(), expected) {
 			t.Fatalf("upload restore dialog does not contain %q:\n%s", expected, upload.String())
 		}

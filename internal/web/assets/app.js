@@ -3937,10 +3937,7 @@
 		const dialog = document.getElementById("upload-backup-restore-dialog");
 		const form = dialog?.querySelector("[data-upload-backup-restore-form]");
 		form?.reset();
-		const preview = form?.querySelector("[data-backup-archive-preview]");
-		if (preview) preview.hidden = true;
-		const fileName = form?.querySelector("[data-file-picker-name]");
-		if (fileName) fileName.textContent = "No file selected";
+		updateBackupFileSelection(form?.querySelector("[data-backup-archive-input]"), false);
 		setBackupUpload(form, 0, false);
 		showRoutedDialog(dialog, false, uploadBackupRestore);
 		return;
@@ -4136,7 +4133,7 @@
 	  const textarea = form.querySelector("[data-zone-import-text]");
 	  const file = fileInput.files?.[0];
 	  form.querySelector("[data-zone-import-submit]").disabled = fileInput.disabled ? !textarea.value.trim() : !file?.size;
-	  form.querySelector("[data-zone-file-selection]").hidden = !file;
+	  void setFileDropzoneState(fileInput, Boolean(file));
 	  form.querySelector("[data-zone-file-name]").textContent = file?.name || "";
 	  form.querySelector("[data-zone-file-size]").textContent = file ? `${formatFileSize(file.size)} · ${file.size ? "Ready to import" : "File is empty"}` : "";
 	};
@@ -4190,19 +4187,20 @@
 		}
 	  }
 	});
-	["dragover", "dragleave", "drop"].forEach(type => document.body.addEventListener(type, (event) => {
-	  const dropzone = event.target.closest("[data-zone-dropzone]");
+	["dragenter", "dragover", "dragleave", "drop"].forEach(type => document.body.addEventListener(type, (event) => {
+	  const dropzone = event.target.closest("[data-file-dropzone]");
 	  if (!dropzone) return;
 	  event.preventDefault();
-	  dropzone.classList.toggle("is-dragging", type === "dragover");
+	  if (type === "dragleave" && event.relatedTarget && dropzone.contains(event.relatedTarget)) return;
+	  dropzone.classList.toggle("is-dragging", type === "dragenter" || type === "dragover");
 	  if (type !== "drop") return;
-	  const source = dropzone.closest("[data-zone-import-source]");
 	  const files = event.dataTransfer?.files;
 	  if (files?.length !== 1) {
-		source.querySelector("[data-zone-import-status]").textContent = "Choose one zone file at a time.";
+		const status = dropzone.parentElement?.querySelector("[data-file-dropzone-status]");
+		if (status) status.textContent = "Choose one file at a time.";
 		return;
 	  }
-	  const input = source.querySelector("[data-zone-file]");
+	  const input = dropzone.querySelector("[data-file-dropzone-input]");
 	  input.files = files;
 	  input.dispatchEvent(new Event("change", {bubbles: true}));
 	}));
@@ -4241,31 +4239,102 @@
 	  const title = preview.querySelector("[data-backup-archive-title]");
 	  const detail = preview.querySelector("[data-backup-archive-detail]");
 	  const file = input.files?.[0];
+	  const selection = preview.closest(".file-dropzone-selection");
 	  if (!file) {
 		preview.hidden = true;
+		selection?.classList.remove("is-invalid");
 		return;
 	  }
+	  const inline = preview.classList.contains("inline");
+	  const titleWithSize = (value) => inline ? `${formatFileSize(file.size)} · ${value}` : value;
 	  preview.hidden = false;
 	  preview.classList.remove("is-invalid");
-	  if (title) title.textContent = "Reading archive…";
+	  selection?.classList.remove("is-invalid");
+	  if (title) title.textContent = titleWithSize("Reading archive…");
 	  if (detail) detail.textContent = "";
 	  try {
 		const summary = await describeArchive(file);
+		if (input.files?.[0] !== file) return;
 		const host = summary.hostname || "an unnamed host";
 		const taken = summary.created_at ? new Date(summary.created_at) : null;
 		const when = taken && !Number.isNaN(taken.valueOf())
 		  ? taken.toLocaleString(undefined, {dateStyle: "medium", timeStyle: "short"})
 		  : "an unknown date";
-		if (title) title.textContent = `Backup from ${host}`;
+		if (title) title.textContent = titleWithSize(`Backup from ${host}`);
 		if (detail) {
 		  detail.textContent = summary.sable_version
 			? `Taken ${when} · Sable ${summary.sable_version}`
 			: `Taken ${when}`;
 		}
 	  } catch {
+		if (input.files?.[0] !== file) return;
 		preview.classList.add("is-invalid");
-		if (title) title.textContent = "This file is not a Sable backup";
+		selection?.classList.add("is-invalid");
+		if (title) title.textContent = titleWithSize("Not a Sable backup");
 		if (detail) detail.textContent = "Choose a .sablebackup archive.";
+	  }
+	};
+	const setFileDropzoneState = async (input, hasFile, animate = true) => {
+	  const root = input?.closest("[data-file-dropzone-root]");
+	  const dropzone = root?.querySelector("[data-file-dropzone]");
+	  const selection = root?.querySelector(".file-dropzone-selection");
+	  if (!root || !dropzone || !selection) return;
+	  const state = hasFile ? "selected" : "empty";
+	  const show = hasFile ? selection : dropzone;
+	  const hide = hasFile ? dropzone : selection;
+	  root.getAnimations().forEach((animation) => animation.cancel());
+	  dropzone.getAnimations().forEach((animation) => animation.cancel());
+	  selection.getAnimations().forEach((animation) => animation.cancel());
+	  const transition = String(Number(root.dataset.fileDropzoneTransition || 0) + 1);
+	  root.dataset.fileDropzoneTransition = transition;
+	  root.dataset.fileDropzoneState = state;
+	  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	  if (!animate || reducedMotion || hide.hidden) {
+		hide.hidden = true;
+		show.hidden = false;
+		root.style.removeProperty("overflow");
+		return;
+	  }
+	  try {
+		await hide.animate([
+		  {opacity: 1, transform: "translateY(0) scale(1)"},
+		  {opacity: 0, transform: "translateY(-.3rem) scale(.985)"},
+		], {duration: 120, easing: "ease-in", fill: "forwards"}).finished;
+	  } catch (_) {
+		return;
+	  }
+	  if (root.dataset.fileDropzoneTransition !== transition) return;
+	  const startHeight = root.getBoundingClientRect().height;
+	  hide.hidden = true;
+	  show.hidden = false;
+	  const endHeight = root.getBoundingClientRect().height;
+	  root.style.overflow = "hidden";
+	  try {
+		await Promise.all([
+		  root.animate([{height: `${startHeight}px`}, {height: `${endHeight}px`}], {duration: 180, easing: "ease-out"}).finished,
+		  show.animate([
+			{opacity: 0, transform: "translateY(.3rem) scale(.985)"},
+			{opacity: 1, transform: "translateY(0) scale(1)"},
+		  ], {duration: 180, easing: "ease-out"}).finished,
+		]);
+	  } catch (_) {
+		return;
+	  } finally {
+		if (root.dataset.fileDropzoneTransition === transition) root.style.removeProperty("overflow");
+	  }
+	};
+	const updateBackupFileSelection = (input, animate = true) => {
+	  if (!input) return;
+	  const upload = input.closest("[data-backup-file-upload]");
+	  const file = input.files?.[0];
+	  const name = upload?.querySelector("[data-file-picker-name]");
+	  const status = upload?.querySelector("[data-file-dropzone-status]");
+	  void setFileDropzoneState(input, Boolean(file), animate);
+	  if (name) name.textContent = file?.name || "";
+	  if (status) status.textContent = "";
+	  if (!file) {
+		const preview = input.closest("form")?.querySelector("[data-backup-archive-preview]");
+		if (preview) preview.hidden = true;
 	  }
 	};
 
@@ -4524,7 +4593,10 @@
 		selectRecordType(event.target.closest("form"), event.target.value);
 		return;
 	  }
-	  if (event.target.matches("[data-backup-archive-input]")) showArchivePreview(event.target);
+	  if (event.target.matches("[data-backup-archive-input]")) {
+		updateBackupFileSelection(event.target);
+		showArchivePreview(event.target);
+	  }
 	  if (event.target.matches("[data-file-picker-input]")) {
 		// A generic picker that only reports the chosen name. Binary uploads
 		// such as backups must never be read into a textarea the way a zone
@@ -4554,6 +4626,17 @@
 	});
 
 	document.body.addEventListener("click", (event) => {
+	  const removeBackup = event.target.closest("[data-backup-file-remove]");
+	  if (removeBackup) {
+		const upload = removeBackup.closest("[data-backup-file-upload]");
+		const input = upload?.querySelector("[data-backup-archive-input]");
+		if (input) {
+		  input.value = "";
+		  input.dispatchEvent(new Event("change", {bubbles: true}));
+		  input.focus();
+		}
+		return;
+	  }
 	  const action = event.target.closest(".zone-import-menu button");
 	  if (action && !action.disabled) action.closest("details").removeAttribute("open");
 	});

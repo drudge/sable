@@ -737,10 +737,11 @@ the directory containing `sable.toml`; the default is `data/backups`.
 
 The archive passphrase is configured in **Settings → Backup** and stored in the
 node's encrypted secret vault, never in TOML. The schedule cannot be enabled
-until a passphrase has been stored. After each successful atomic archive write,
-Sable keeps the newest `retention_count` scheduled archives belonging to this
-node and purges older ones. Invalid files, manually named archives, and
-scheduled archives from another node are never removed by rotation.
+until a passphrase has been stored. While enabled, Sable enforces retention at
+startup, after policy changes, and after each successful atomic archive write.
+It keeps the newest `retention_count` scheduled archives belonging to this node
+and purges older ones. Invalid files, manually named archives, and scheduled
+archives from another node are never removed by rotation.
 
 The same panel lists every valid `.sablebackup` file in the configured local
 directory and provides Download, Restore, and confirmed Delete actions for

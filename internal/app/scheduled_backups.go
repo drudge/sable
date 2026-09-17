@@ -376,7 +376,18 @@ func (service *scheduledBackupService) Run(ctx context.Context) {
 			}
 			continue
 		}
+		if !service.operationMu.TryLock() {
+			service.setNextRun(time.Now().Add(time.Minute))
+			if !service.wait(ctx, time.Minute) {
+				return
+			}
+			continue
+		}
 		archives, err := service.localBackups(ctx, policy)
+		if err == nil {
+			err = service.pruneScheduledArchives(ctx, policy, archives)
+		}
+		service.operationMu.Unlock()
 		if err != nil {
 			service.recordScheduledFailure(err)
 			service.setNextRun(time.Now().Add(scheduledBackupRetryDelay))
@@ -506,8 +517,15 @@ func (service *scheduledBackupService) pruneScheduled(ctx context.Context, polic
 	if err != nil {
 		return err
 	}
+	return service.pruneScheduledArchives(ctx, policy, archives)
+}
+
+func (service *scheduledBackupService) pruneScheduledArchives(ctx context.Context, policy config.Backup, archives []backup.LocalArchive) error {
 	kept := 0
 	for _, archive := range archives {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if !archive.Scheduled {
 			continue
 		}

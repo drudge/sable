@@ -47,10 +47,11 @@ module.exports = async (browser, baseURL) => {
     for (const [size, label] of [[1, '1 byte'], [12776, '12.8 KB'], [1500000, '1.5 MB']]) {
       await file.setInputFiles({name: 'example.zone', mimeType: 'text/plain', buffer: Buffer.alloc(size, 'a')});
       assert.equal(await dialog.locator('[data-zone-file-size]').innerText(), `${label} · Ready to import`);
-    }
-    const remove = dialog.locator('[data-zone-file-remove]');
-    const buttonBounds = await remove.boundingBox();
-    const iconBounds = await remove.locator('svg').boundingBox();
+	    }
+	    const remove = dialog.locator('[data-zone-file-remove]');
+	    await remove.waitFor({state: 'visible'});
+	    const buttonBounds = await remove.boundingBox();
+	    const iconBounds = await remove.locator('svg').boundingBox();
     assert.ok(Math.abs((buttonBounds.x + buttonBounds.width / 2) - (iconBounds.x + iconBounds.width / 2)) < 1, 'remove icon is horizontally centered');
     assert.ok(Math.abs((buttonBounds.y + buttonBounds.height / 2) - (iconBounds.y + iconBounds.height / 2)) < 1, 'remove icon is vertically centered');
     await dialog.locator('[data-zone-import-mode="text"]').click();
@@ -64,7 +65,7 @@ module.exports = async (browser, baseURL) => {
     assert.equal(await submit.isEnabled(), true);
     await dialog.locator('[data-zone-file-remove]').click();
     assert.equal(await submit.isDisabled(), true);
-    await dialog.locator('[data-zone-dropzone]').evaluate(element => {
+	    await dialog.locator('[data-file-dropzone]').evaluate(element => {
       const transfer = new DataTransfer();
       transfer.items.add(new File(['$ORIGIN dropped.example.'], 'dropped.zone', {type: 'text/plain'}));
       element.dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));

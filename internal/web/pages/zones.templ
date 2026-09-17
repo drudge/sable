@@ -1235,16 +1235,15 @@ templ ZoneImportSource(id string, placeholder string) {
 			<button type="button" data-zone-import-mode="file" aria-pressed="true">@Icon("upload") Upload file</button>
 			<button type="button" data-zone-import-mode="text" aria-pressed="false">@Icon("file-text") Paste or enter text</button>
 		</div>
-		<div data-zone-import-panel="file">
-			<label class="zone-import-dropzone" data-zone-dropzone>
-				<svg class="zone-import-dropzone-border" aria-hidden="true" focusable="false"><rect x="1" y="1" rx="8"></rect></svg>
-				<input type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-zone-file aria-label="Choose zone file"/>
-				<span class="zone-import-upload-icon">@Icon("upload")</span>
+		<div data-file-dropzone-root data-file-dropzone-state="empty" data-zone-import-panel="file">
+			<label class="file-dropzone" data-file-dropzone>
+				<input type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-file-dropzone-input data-zone-file aria-label="Choose zone file"/>
+				<span class="file-dropzone-upload-icon">@Icon("upload")</span>
 				<strong>Drop your zone file here</strong>
-				<span>or <span class="zone-import-browse">browse files</span></span>
+				<span>or <span class="file-dropzone-browse">browse files</span></span>
 				<small>BIND or Technitium · .zone, .txt, .db</small>
 			</label>
-			<div class="zone-import-file" data-zone-file-selection hidden>
+			<div class="file-dropzone-selection" data-zone-file-selection hidden>
 				@Icon("file-text")
 				<div><strong data-zone-file-name></strong><small data-zone-file-size></small></div>
 				<button class="button outline icon-button" type="button" data-zone-file-remove aria-label="Remove selected file">@Icon("x")</button>
@@ -1255,7 +1254,7 @@ templ ZoneImportSource(id string, placeholder string) {
 			<textarea id={ id + "-text" } name="zone_text" data-zone-import-text placeholder={ placeholder } spellcheck="false" disabled></textarea>
 			<p class="zone-import-help">Paste your zone file or type records in BIND format.</p>
 		</div>
-		<p class="zone-import-help" data-zone-import-status role="status" aria-live="polite"></p>
+		<p class="zone-import-help" data-file-dropzone-status data-zone-import-status role="status" aria-live="polite"></p>
 	</div>
 }
 

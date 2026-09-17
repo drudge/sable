@@ -40,6 +40,10 @@ func (view ClusterUpdateView) UpToDate() bool {
 	return view.Rollout.Phase == "complete" && view.Version == "" && view.DisplayVersion() == formatReleaseVersion(view.Rollout.Version)
 }
 
+func (view ClusterUpdateView) UnavailableWarningVisible() bool {
+	return !view.Supported && view.UnavailableReason != "" && !view.Rollout.Active()
+}
+
 templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 	<div
 		id="cluster-updates"
@@ -67,9 +71,12 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				</header>
 				<div class="cluster-update-content">
 					<p>Update replicas one at a time, then the primary.</p>
- if !view.Supported && view.UnavailableReason != "" {
- <div class="warning-box zone-conversion-warning" role="alert">@Icon("alert-triangle")<div><strong>Rolling updates unavailable</strong><p>{ view.UnavailableReason }</p></div></div>
- }
+					if view.UnavailableWarningVisible() {
+						<div class="warning-box zone-conversion-warning" role="alert">
+							@Icon("alert-triangle")
+							<div><strong>Rolling updates unavailable</strong><p>{ view.UnavailableReason }</p></div>
+						</div>
+					}
 					if view.Rollout.ID != "" {
 						if view.Rollout.Phase != "complete" {
 							<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
