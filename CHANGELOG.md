@@ -29,9 +29,7 @@ configuration changes, and service shutdowns.
   deleting manual, imported, invalid, or other-node archives.
 - Show backup history and next and last run times using your configured time
   zone and preferred 12- or 24-hour clock.
-- Make uploaded restores easier to review with the same file-selection pattern
-  used by catalog imports, clear backup identity, and a distinct replacement
-  warning before continuing.
+- Add drag-and-drop file selection when uploading a backup to restore.
 - Let in-progress backup, restore, DNS refresh, and logging work finish safely
   during shutdown. New background work is refused once shutdown begins, and
   incomplete shutdowns no longer write a potentially inconsistent DNS cache.
