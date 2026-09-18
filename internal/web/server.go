@@ -763,6 +763,9 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		SecurityEnabled:     server.securityEnabled,
 		CanSettings:         !server.securityEnabled,
 		CanWriteSettings:    !server.securityEnabled,
+		BackupsAvailable:    server.backups != nil,
+		CanCreateBackups:    !server.securityEnabled,
+		CanRestoreBackups:   !server.securityEnabled,
 		CanZones:            !server.securityEnabled,
 		CanCreateZones:      !server.securityEnabled,
 		CanBlocking:         !server.securityEnabled,
@@ -794,6 +797,8 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.CSRFToken = principal.CSRFToken
 		view.CanSettings = auth.HasPermission(principal, auth.PermissionSettingsRead)
 		view.CanWriteSettings = auth.HasPermission(principal, auth.PermissionSettingsWrite)
+		view.CanCreateBackups = auth.HasPermission(principal, auth.PermissionBackupCreate)
+		view.CanRestoreBackups = auth.HasPermission(principal, auth.PermissionBackupRestore)
 		view.CanAdministration = auth.HasPermission(principal, auth.PermissionUsersRead)
 		view.CanWriteUsers = auth.HasPermission(principal, auth.PermissionUsersWrite)
 		view.CanZones = auth.HasPermission(principal, auth.PermissionZonesRead)
@@ -812,6 +817,11 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.PrimaryURL = clusterState.PrimaryURL
 	}
 	view.CommandEntities = server.commandPaletteEntities(request, snapshot, view)
+	if controller, ok := server.backups.(localBackupController); ok {
+		if schedule, err := controller.BackupSchedule(request.Context()); err == nil {
+			view.BackupPassphraseStored = schedule.PassphraseStored
+		}
+	}
 	return view
 }
 

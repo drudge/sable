@@ -67,6 +67,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	fullAccess := DashboardView{
 		SecurityEnabled: true,
 		CanSettings:     true, CanWriteSettings: true,
+		BackupsAvailable: true, CanCreateBackups: true, CanRestoreBackups: true, BackupPassphraseStored: true,
 		CanAdministration: true, CanWriteUsers: true,
 		CanZones: true, CanCreateZones: true,
 		CanBlocking: true, CanWriteBlocking: true,
@@ -76,7 +77,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	}
 	page := renderComponent(t, CommandPalette(fullAccess))
 	for _, expected := range []string{
-		`id="command-page-zones"`, `id="command-page-query-logs"`,
+		`id="command-page-zones"`, `id="command-page-query-logs"`, `id="command-page-block-lists"`, `data-command-href="/blocked?tab=lists"`,
 		`id="command-action-query"`, `data-command-keywords="rdq resolve lookup dig nslookup"`,
 		`id="command-action-add-zone"`, `id="command-action-import-zone"`, `id="command-action-import-catalog"`, `data-command-dialog="import-new-zone-dialog"`, `data-command-route="/zones/import-catalog"`, `data-command-dialog="catalog-import-dialog"`, `id="command-action-block-domain"`,
 		`id="command-action-search-server-logs"`, `id="command-action-search-query-logs"`, `id="command-action-search-cache"`,
@@ -89,7 +90,10 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		`id="command-action-pause-blocking-5"`,
 		`id="command-action-pause-blocking-15"`, `id="command-action-pause-blocking-30"`,
 		`id="command-action-pause-blocking-60"`, `id="command-action-resume-blocking"`,
-		`id="command-action-update-block-lists"`, `data-command-post="/ui/blocking/pause"`,
+		`id="command-action-update-block-lists"`, `data-command-post="/ui/blocking/lists/update"`,
+		`id="command-action-backup-now"`, `data-command-post="/ui/backup/run"`, `data-command-route-after="/settings?tab=backup"`,
+		`id="command-action-backup-different-passphrase"`, `data-command-dialog="run-local-backup-dialog"`,
+		`id="command-action-restore-backup"`, `data-command-dialog="upload-backup-restore-dialog"`,
 		`id="command-settings-title"`, `>Settings</h3>`, `id="command-settings-protocols"`, `data-command-href="/settings?tab=protocols"`,
 		`id="command-settings-backup"`, `data-command-href="/settings?tab=backup"`, `>Settings</span>`,
 		`id="command-action-check-updates"`, `data-command-post="/ui/updates/command-check"`,
@@ -99,6 +103,15 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		if !strings.Contains(page, expected) {
 			t.Errorf("full-access command palette does not contain %q", expected)
 		}
+	}
+	withoutStoredPassphrase := fullAccess
+	withoutStoredPassphrase.BackupPassphraseStored = false
+	withoutStored := renderComponent(t, CommandPalette(withoutStoredPassphrase))
+	if !strings.Contains(withoutStored, `id="command-action-backup-now"`) || !strings.Contains(withoutStored, `data-command-dialog="run-local-backup-dialog"`) {
+		t.Fatal("backup now should prompt when no configured passphrase is stored")
+	}
+	if strings.Contains(withoutStored, `id="command-action-backup-different-passphrase"`) {
+		t.Fatal("different-passphrase backup action should only appear when a configured passphrase exists")
 	}
 	for _, tab := range []string{"general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "logging", "backup"} {
 		for _, expected := range []string{`id="command-settings-` + tab + `"`, `data-command-href="/settings?tab=` + tab + `"`} {

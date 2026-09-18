@@ -3721,6 +3721,7 @@
 	  const runPostCommand = async (item) => {
 		if (item.dataset.commandPending === "true") return;
 		const label = item.dataset.commandLabel;
+		const routeAfter = item.dataset.commandRouteAfter || "";
 		let values = {};
 		let headers = {};
 		try { values = JSON.parse(item.dataset.commandValues || "{}"); } catch (_) {}
@@ -3756,7 +3757,10 @@
 		  });
 		  const statusCode = requestContext?.response?.status;
 		  const requestFailed = !requestContext || !Number.isInteger(statusCode) || statusCode < 200 || statusCode >= 300 || String(requestContext.status || "").startsWith("error:");
-		  if (!requestFailed) announce(`${label} completed`);
+		  if (!requestFailed) {
+			announce(`${label} completed`);
+			if (routeAfter) window.location.assign(new URL(routeAfter, window.location.origin).href);
+		  }
 		  else announce(`${label} failed`);
 		} catch (_) {
 		  announce(`${label} failed`);

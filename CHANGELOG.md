@@ -8,6 +8,28 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.6-rc.3] - Unreleased
+
+This release candidate continues the console modernization with more responsive
+zone workflows and faster access to common maintenance actions.
+
+### Responsive zone workflows
+
+- Give narrow zone detail headers a deliberate title-and-actions layout instead
+  of squeezing every control onto one row.
+- Prioritize DNS record names and values on phones, while keeping secondary
+  TTL and source metadata out of the way.
+- Keep record values readable at tablet widths and preserve a clear gap before
+  the trailing record action.
+- Let record editor descriptions wrap on mobile, including the SOA editor,
+  without clipping the form or its controls.
+
+### Command palette actions
+
+- Add a direct **Block Lists** page action.
+- Add quick actions for restoring a backup and creating a backup with the
+  configured passphrase, with an alternate-passphrase path when needed.
+
 ## [1.3.6-rc.2] - Unreleased
 
 This release candidate refines the notification stack introduced in the first
