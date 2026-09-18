@@ -27,6 +27,24 @@ func TestAboutVersionLabels(t *testing.T) {
 	}
 }
 
+func TestAboutLicenseUsesInAppDialog(t *testing.T) {
+	var body bytes.Buffer
+	if err := AboutContent(AboutPageView{Console: DashboardView{Version: "dev"}}).Render(context.Background(), &body); err != nil {
+		t.Fatal(err)
+	}
+	html := body.String()
+	for _, expected := range []string{
+		`data-dialog-open="mit-license-dialog"`,
+		`id="mit-license-dialog"`,
+		"Copyright (c) 2026 Nicholas Penree",
+		`href="https://github.com/drudge/sable/blob/main/LICENSE"`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("About page is missing %q", expected)
+		}
+	}
+}
+
 func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

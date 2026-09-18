@@ -95,7 +95,8 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		zoneView := pages.ZoneView{
 			ID:   zone.ID,
 			Name: zone.Name, Type: zone.Type, DefaultTTL: zone.DefaultTTL, Disabled: zone.Disabled,
-			ZoneTransfer: zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
+			ShowFullRecordNames: console.ShowFullRecordNames,
+			ZoneTransfer:        zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
 			PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
 			AliasZone: zone.AliasZone, AliasSources: aliasZoneChoices(aliasSources, zone),
 			CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,

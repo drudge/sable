@@ -25,6 +25,17 @@ func TestAuthPageGroupsAlternateSignInMethods(t *testing.T) {
 				t.Fatal(err)
 			}
 			html := body.String()
+			brand := strings.Index(html, `class="auth-brand"`)
+			card := strings.Index(html, `class="auth-card"`)
+			if brand < 0 || card < 0 || brand > card || !strings.Contains(html, `<strong>Sable</strong>`) {
+				t.Fatal("brand should be rendered outside the authentication card")
+			}
+			if !strings.Contains(html, `data-dialog-open="mit-license-dialog"`) ||
+				!strings.Contains(html, `id="mit-license-dialog"`) ||
+				!strings.Contains(html, "Copyright (c) 2026 Nicholas Penree") ||
+				!strings.Contains(html, `href="https://github.com/drudge/sable/blob/main/LICENSE"`) {
+				t.Fatal("authentication page should provide an in-app MIT license dialog with a repository link")
+			}
 			if got := strings.Count(html, `class="auth-divider"`); got != test.dividers {
 				t.Fatalf("got %d dividers, want %d", got, test.dividers)
 			}
@@ -37,6 +48,12 @@ func TestAuthPageGroupsAlternateSignInMethods(t *testing.T) {
 			}
 			if test.sso == "" && test.passkeys && !test.setup && !strings.Contains(html, `class="auth-divider" data-passkey-capability`) {
 				t.Fatal("passkey-only divider must hide with unsupported passkeys")
+			}
+			if test.passkeys && !test.setup && !strings.Contains(html, `class="auth-error" role="status" data-passkey-status`) {
+				t.Fatal("passkey status should use the authentication error treatment")
+			}
+			if test.passkeys && !test.setup && strings.Index(html, `data-passkey-status`) > strings.Index(html, `data-passkey-action="login"`) {
+				t.Fatal("passkey status should appear above the passkey button")
 			}
 		})
 	}

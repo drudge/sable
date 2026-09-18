@@ -654,7 +654,7 @@ func ClusterLiveStatus(view ClusterPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</code></div></footer></section><section class=\"card cluster-nodes-card\"><header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class=\"cluster-updated-badge\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</code></div></footer></section><section class=\"card cluster-nodes-card\"><header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class=\"status-badge cluster-updated-badge\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -669,7 +669,7 @@ func ClusterLiveStatus(view ClusterPageView) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 206, Col: 274}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 206, Col: 287}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {

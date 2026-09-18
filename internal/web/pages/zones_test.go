@@ -127,6 +127,32 @@ func TestZoneRecordRowsOpenWithoutOwningNestedControls(t *testing.T) {
 	}
 }
 
+func TestZoneRecordDisplayNameUsesRelativeOwnerByDefault(t *testing.T) {
+	zone := ZoneView{Name: "example.test"}
+	tests := []struct {
+		name   string
+		record string
+		want   string
+	}{
+		{name: "apex", record: "@", want: "@"},
+		{name: "relative", record: "www", want: "www"},
+		{name: "fully qualified", record: "www.example.test.", want: "www"},
+		{name: "outside zone", record: "service.other.test.", want: "service.other.test"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := zoneRecordDisplayName(zone, ZoneRecordView{Name: test.record})
+			if got != test.want {
+				t.Fatalf("zoneRecordDisplayName(%q) = %q, want %q", test.record, got, test.want)
+			}
+		})
+	}
+	zone.ShowFullRecordNames = true
+	if got := zoneRecordDisplayName(zone, ZoneRecordView{Name: "www"}); got != "www.example.test" {
+		t.Fatalf("full zoneRecordDisplayName = %q, want www.example.test", got)
+	}
+}
+
 func renderComponent(t *testing.T, component interface {
 	Render(context.Context, io.Writer) error
 },

@@ -32,6 +32,7 @@ type node struct {
 	Configuration config.Config
 	Ports         nodePorts
 	TrustAnchor   string
+	Environment   []string
 
 	configurationPath string
 	command           *exec.Cmd
@@ -110,6 +111,7 @@ func (n *node) Start(ctx context.Context, binary string) error {
 		return fmt.Errorf("create %s log: %w", n.Name, err)
 	}
 	command := exec.Command(binary, "serve", "--config", n.configurationPath)
+	command.Env = append(os.Environ(), n.Environment...)
 	command.Stdout = logFile
 	command.Stderr = logFile
 	if err := command.Start(); err != nil {

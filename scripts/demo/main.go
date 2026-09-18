@@ -190,6 +190,13 @@ func buildNodes(ctx context.Context, root, controllerURL string, basePort int) (
 		if err != nil {
 			return nil, err
 		}
+		if index == 0 {
+			built.Environment = []string{
+				"SABLE_DEV_DEMO_AUTO_LOGIN=1",
+				"SABLE_DEV_DEMO_USERNAME=" + operatorUsername,
+				"SABLE_DEV_DEMO_PASSWORD=" + operatorPassword,
+			}
+		}
 		nodes = append(nodes, built)
 	}
 	return nodes, nil

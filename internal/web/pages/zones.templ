@@ -27,11 +27,12 @@ type ZonesPageView struct {
 }
 
 type ZoneView struct {
- ConversionFingerprint string
- ConversionSerial uint32
+	ConversionFingerprint string
+	ConversionSerial uint32
  ConversionError string
 	ID           string
 	Name         string
+	ShowFullRecordNames bool
 	Type         string
 	DefaultTTL   uint32
 	Disabled     bool
@@ -288,6 +289,22 @@ func zoneRecordOwner(zone ZoneView, record ZoneRecordView) string {
 		return strings.TrimSuffix(name, ".")
 	}
 	return name + "." + zone.Name
+}
+
+func zoneRecordDisplayName(zone ZoneView, record ZoneRecordView) string {
+	owner := zoneRecordOwner(zone, record)
+	if zone.ShowFullRecordNames {
+		return owner
+	}
+	zoneName := strings.TrimSuffix(strings.TrimSpace(zone.Name), ".")
+	if strings.EqualFold(owner, zoneName) {
+		return "@"
+	}
+	suffix := "." + zoneName
+	if strings.HasSuffix(strings.ToLower(owner), strings.ToLower(suffix)) {
+		return owner[:len(owner)-len(suffix)]
+	}
+	return owner
 }
 
 // zoneRecordSourceClass tints a record's source badge. An alias record carries
@@ -671,13 +688,15 @@ templ ZoneDetailView(zone ZoneView) {
 				<div class={ ifThen(record.Disabled, "isotope-record-row disabled", ifThen(record.Type == "SOA", "isotope-record-row managed", "isotope-record-row")) } data-record-row data-record-dialog-row data-record-name={ strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value) } data-record-type={ strings.ToLower(record.Type) }>
 					<span class="record-type-badge">{ record.Type }</span>
 					<span class="record-owner-cell">
-						@ZoneCopyableText(zoneElementID("owner", index), zoneRecordOwner(zone, record), "record-owner-copy")
-						if record.SourceLabel != "" {
-							<span class={ "record-source-badge " + zoneRecordSourceClass(record.SourceLabel) } title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
-						}
+						@ZoneCopyableText(zoneElementID("owner", index), zoneRecordDisplayName(zone, record), "record-owner-copy")
 					</span>
 					@ZoneCopyableText(zoneElementID("value", index), zoneRecordDisplayValue(record.Type, record.Value), "record-value-copy")
 					<span class="record-ttl">{ fmt.Sprint(record.TTL) }s</span>
+					if record.SourceLabel != "" {
+						<span class={ "record-source-badge " + zoneRecordSourceClass(record.SourceLabel) } title={ zoneRecordSourceTitle(zone, record.SourceLabel) }>{ record.SourceLabel }</span>
+					} else {
+						<span class="record-source-badge record-source-badge-empty" aria-hidden="true"></span>
+					}
 					if zoneCanOpenRecords(zone) && zone.CanRecords && !record.Managed {
 						<button class="record-open-button" type="button" data-dialog-open={ zoneElementID("record", index) } data-dialog-url={ zoneRecordEditPath(zone, record) } aria-label={ zoneRecordOpenLabel(zone, record) }>@Icon("chevron-right")</button>
 					} else {

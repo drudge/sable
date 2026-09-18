@@ -132,7 +132,7 @@ func CacheContent(view CachePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><div class=\"cache-explainer\"><h3>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</div><details class=\"cache-explainer\" data-cache-explainer open><summary>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -140,7 +140,7 @@ func CacheContent(view CachePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>How DNS Caching Works</span></h3><p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p></div><div class=\"cache-actions\"><div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class=\"button outline cache-action-button\" type=\"button\" data-dialog-open=\"cache-browser-dialog\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>How DNS Caching Works</span></summary><p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p></details><div class=\"cache-actions\"><div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class=\"button outline cache-action-button\" type=\"button\" data-dialog-open=\"cache-browser-dialog\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

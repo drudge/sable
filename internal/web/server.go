@@ -110,6 +110,13 @@ type Server struct {
 	restart            func()
 	restartRequested   atomic.Bool
 	instanceID         string
+	demoLogin          devDemoAutoLoginState
+}
+
+type devDemoAutoLoginState struct {
+	username  string
+	password  string
+	available atomic.Bool
 }
 
 type certificateController interface {
@@ -215,6 +222,7 @@ func New(
 		baseDirectory = located.BaseDirectory()
 	}
 	server.sessionCookie = scopedSessionCookieName(configuration.Current().Config.SecuritySecretKeyPath(baseDirectory))
+	server.configureDevDemoAutoLogin()
 	server.blockLists = blockcompiler.NewUpdater(baseDirectory)
 	if securityEnabled && authentication == nil {
 		return nil, errors.New("authentication service is required when security is enabled")
@@ -760,6 +768,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 	view := pages.DashboardView{
 		Version:             version.Current().Release,
 		TimeDisplay:         display,
+		ShowFullRecordNames: requestShowFullRecordNames(request),
 		SecurityEnabled:     server.securityEnabled,
 		CanSettings:         !server.securityEnabled,
 		CanWriteSettings:    !server.securityEnabled,

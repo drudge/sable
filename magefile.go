@@ -305,6 +305,11 @@ func Dev(ctx context.Context) error {
 	return run(ctx, nil, "go", "run", "github.com/air-verse/air@"+airVersion, "-c", ".air.toml")
 }
 
+// DevDemo starts Air against the disposable, seeded Vandelay UI fixture.
+func DevDemo(ctx context.Context) error {
+	return run(ctx, nil, "go", "run", "github.com/air-verse/air@"+airVersion, "-c", ".air-demo.toml")
+}
+
 // ReleaseCheck validates Sable's generated GoReleaser configuration.
 func ReleaseCheck(ctx context.Context) error {
 	return withGoReleaserConfigEnvironment(ctx, []string{"SABLE_CONTAINER_RELEASE=true"}, "check")

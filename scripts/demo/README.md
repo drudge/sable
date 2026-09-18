@@ -7,6 +7,7 @@ photographs its console for the website and the documentation.
 ```bash
 mage screenshots   # rebuild the deployment, write docs/assets/screenshots, exit
 mage demo          # rebuild it and leave it running to click around in
+mage devDemo       # run the seeded deployment under Air for UI iteration
 ```
 
 Everything lands under `_work/demo`, which is deleted and rebuilt on every run.
@@ -25,7 +26,9 @@ Three Sable servers form a cluster for `vandelay.com`:
 Only the primary carries the fixture and requires a sign-in; the replicas
 receive everything through replication. Sign in as `art.vandelay` with the
 password in `fixture.go`. It is a fixture, not a secret: the database holding it
-is thrown away on the next run.
+is thrown away on the next run. `mage devDemo` automatically signs into the
+primary once after each process restart; signing out still leaves the normal
+login page available for authentication testing.
 
 The primary is set up with three block list subscriptions, seven hand-written
 blocked domains, two allowed overrides, and a UniFi integration publishing
