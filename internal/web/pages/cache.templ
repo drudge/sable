@@ -58,10 +58,10 @@ templ CacheContent(view CachePageView) {
 						@OperationalMetricCard("hard-drive", "Cached Entries", formatNumber(uint64(view.Entries)), "Total DNS responses in cache", "blue")
 						@OperationalMetricCard("sparkles", "Cache Hits (Last Hour)", formatNumber(view.HitsLastHour), "Queries served from cache", "amber")
 					</div>
-					<div class="cache-explainer">
-						<h3>@Icon("database")<span>How DNS Caching Works</span></h3>
+					<details class="cache-explainer" data-cache-explainer open>
+						<summary>@Icon("database")<span>How DNS Caching Works</span></summary>
 						<p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p>
-					</div>
+					</details>
 					<div class="cache-actions">
 						<div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class="button outline cache-action-button" type="button" data-dialog-open="cache-browser-dialog">@Icon("folder")<span>Open Cache Browser</span></button></div>
 						<div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p><button class="button destructive cache-action-button" type="button" data-dialog-open="cache-flush-dialog">@Icon("trash")<span>Flush DNS Cache</span></button></div>

@@ -3092,6 +3092,21 @@
 	  });
 	  applyTheme(currentTheme());
 
+	  // Keep the cache explainer expanded on desktop while reclaiming the
+	  // vertical space on phones. Refreshing or flushing the cache swaps the
+	  // whole cache fragment, so reapply the responsive default after swaps.
+	  const cacheExplainerMedia = window.matchMedia("(max-width: 767px)");
+	  const syncCacheExplainer = () => {
+	    const explainer = document.querySelector("[data-cache-explainer]");
+	    if (!explainer) return;
+	    explainer.open = !cacheExplainerMedia.matches;
+	  };
+	  syncCacheExplainer();
+	  cacheExplainerMedia.addEventListener("change", syncCacheExplainer);
+	  document.body.addEventListener("htmx:afterSwap", (event) => {
+	    if (event.detail?.target?.id === "cache-content") syncCacheExplainer();
+	  });
+
 	  const closeAccountMenus = (except = null, restoreFocus = false) => {
 		document.querySelectorAll("[data-account-menu]").forEach((menu) => {
 		  if (menu === except) return;
@@ -3182,6 +3197,36 @@
 	  return { hide };
 	})();
 
+	const updateSidebarNavScrollHint = () => {
+	  const nav = document.querySelector(".nav");
+	  const hint = document.querySelector(".sidebar-nav-hint");
+	  if (!nav || !hint) return;
+	  const scrollable = nav.scrollHeight > nav.clientHeight + 2;
+	  const atStart = nav.scrollTop <= 2;
+	  const atEnd = nav.scrollTop + nav.clientHeight >= nav.scrollHeight - 2;
+	  const hasMoreBelow = scrollable && !atEnd;
+	  const hasMoreAbove = scrollable && !atStart;
+	  nav.dataset.scrollFadeTop = String(hasMoreAbove);
+	  nav.dataset.scrollFadeBottom = String(hasMoreBelow);
+	  hint.dataset.visible = String(hasMoreBelow);
+};
+	const sidebarNav = document.querySelector(".nav");
+	if (sidebarNav && !document.querySelector(".sidebar-nav-hint")) {
+	  const navWrap = document.createElement("div");
+	  navWrap.className = "sidebar-nav-wrap";
+	  sidebarNav.parentNode?.insertBefore(navWrap, sidebarNav);
+	  navWrap.append(sidebarNav);
+	  const hint = document.createElement("div");
+	  hint.className = "sidebar-nav-hint";
+	  hint.setAttribute("aria-hidden", "true");
+	  const profileChevron = document.querySelector(".user-action .nav-icon");
+	  if (profileChevron) hint.append(profileChevron.cloneNode(true));
+	  navWrap.append(hint);
+}
+	sidebarNav?.addEventListener("scroll", updateSidebarNavScrollHint, { passive: true });
+	window.addEventListener("resize", updateSidebarNavScrollHint);
+	updateSidebarNavScrollHint();
+
 	const syncSidebarToggleState = () => {
 	  const mobile = window.matchMedia("(max-width: 767px)").matches;
 	  const collapsed = document.documentElement.classList.contains("sidebar-collapsed");
@@ -3189,6 +3234,8 @@
 	  const sidebar = document.getElementById("app-sidebar");
 	  const main = document.getElementById("main-content");
 	  const mobileToggle = document.querySelector("[data-mobile-header] [data-sidebar-toggle]");
+	  document.documentElement.classList.toggle("sidebar-mobile-open", mobile && mobileOpen);
+	  window.requestAnimationFrame(updateSidebarNavScrollHint);
 	  // Offscreen navigation must leave the tab order and accessibility tree.
 	  // Keep this in the shared sync path so initial load and resizing agree.
 	  const returnToPage = mobile && !mobileOpen && sidebar?.contains(document.activeElement);
@@ -4652,6 +4699,12 @@
 	  if (event.target.matches("[data-time-format-preference]")) {
 		const value = event.target.value === "24" ? "24" : "12";
 		document.cookie = `sable_time_format=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
+		window.location.reload();
+		return;
+	  }
+	  if (event.target.matches("[data-record-name-preference]")) {
+		const value = event.target.value === "full" ? "true" : "false";
+		document.cookie = `sable_full_record_names=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
 		window.location.reload();
 		return;
 	  }

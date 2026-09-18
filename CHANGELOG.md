@@ -8,58 +8,54 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.3.6-rc.3] - Unreleased
+## [1.4.0] - 2026-09-18
 
-This release candidate continues the console modernization with more responsive
-zone workflows and faster access to common maintenance actions.
+Sable 1.4.0 gives the console a more deliberate visual hierarchy across desktop
+and mobile, with clearer data-first layouts, calmer surfaces, and more useful
+dialogs and maintenance controls.
 
-### Responsive zone workflows
+### Console polish
 
-- Give narrow zone detail headers a deliberate title-and-actions layout instead
-  of squeezing every control onto one row.
-- Prioritize DNS record names and values on phones, while keeping secondary
-  TTL and source metadata out of the way.
-- Keep record values readable at tablet widths and preserve a clear gap before
-  the trailing record action.
-- Let record editor descriptions wrap on mobile, including the SOA editor,
-  without clipping the form or its controls.
-
-### Command palette actions
-
-- Add a direct **Block Lists** page action.
-- Add quick actions for restoring a backup and creating a backup with the
-  configured passphrase, with an alternate-passphrase path when needed.
-
-## [1.3.6-rc.2] - Unreleased
-
-This release candidate refines the notification stack introduced in the first
-1.3.6 candidate.
-
-### Notifications
-
-- Keep the frontmost update notification fully readable and anchored to the
-  bottom of the console, including when it is taller than a transient toast.
-- Keep older notifications visible as compact cards peeking out behind the
-  frontmost notification instead of letting the taller update card cover them.
-- Preserve the existing hover and keyboard-focus expansion behavior for the
-  full stack.
-
-## [1.3.6-rc.1] - Unreleased
-
-This first release candidate modernizes the Sable console while preserving its
-existing navigation, behavior, and responsive workflows.
-
-### Console modernization
-
-- Give the desktop console a calmer shell hierarchy with an inset rounded
-  workspace surface and a sidebar that sits directly on the application
-  background.
+- Refine the desktop shell with a rounded workspace surface, clearer sidebar
+  hierarchy, and consistent muted treatments for table headers, card headers,
+  and action footers.
 - Standardize compact rounded controls, icon actions, dialog and toast close
   buttons, button heights, and subtle borders across the console.
+- Improve tab hover and focus states so inactive controls remain discoverable
+  without competing with the selected tab.
 - Improve expanded, collapsed, and mobile sidebar spacing, touch targets,
-  selection states, and responsive layout behavior.
-- Keep status panels and metric cards visually quieter, with edge-to-edge
-  dividers where the surrounding layout calls for them.
+  selection states, and responsive navigation behavior.
+- Make dialogs, release notes, license text, and ranking views feel like part
+  of the same console, with readable scroll regions and distinct action
+  footers.
+
+### Responsive workflows
+
+- Prioritize DNS record names and values on phones while reducing the visual
+  weight of TTL and integration metadata.
+- Give narrow zone detail headers a deliberate title-and-actions layout,
+  preserve readable record values at tablet widths, and keep a clear gap
+  before trailing record actions.
+- Improve mobile layouts for blocking actions, cluster actions, sidebar
+  navigation, forms, and record editors, including scroll locking and visual
+  cues when navigation continues below the viewport.
+- Let record editor descriptions wrap on mobile, including SOA editors,
+  without clipping the form or its controls.
+- Collapse the DNS cache explainer by default on phones while keeping it open
+  on larger screens.
+- Keep long names, values, descriptions, and license text readable instead of
+  allowing cramped layouts to clip the surrounding controls.
+- Show record names relative to their zone by default, with a browser display
+  preference for operators who want fully qualified names.
+
+### Cluster and maintenance
+
+- Clarify cluster identity and node status with stronger value contrast,
+  updated-state badges, and consistent shaded status and action footers.
+- Improve rolling-update and blocking-maintenance controls across narrow
+  screens, including better button grouping and next-update presentation.
+- Add a seeded Air-backed demo workflow with automatic login after restart,
+  while preserving the normal login flow after an explicit sign-out.
 
 ### Logs and administration
 
@@ -67,6 +63,25 @@ existing navigation, behavior, and responsive workflows.
   preserving explicit pause, filtering, paging, and incremental refresh.
 - Improve log toolbar wrapping and mobile readability, and keep zone import
   actions compact and clearly menu-driven.
+
+### Command palette and notifications
+
+- Add a direct **Block Lists** page action.
+- Add quick actions for restoring a backup and creating a backup with the
+  configured passphrase, with an alternate-passphrase path when needed.
+- Keep the frontmost update notification fully readable and anchored to the
+  bottom of the console, including when it is taller than a transient toast.
+- Keep older notifications visible as compact cards behind the frontmost
+  update card, while preserving hover and keyboard-focus expansion.
+
+### Sign-in and attribution
+
+- Move the Sable brand outside the sign-in panel and simplify the welcome copy
+  for a cleaner authentication screen.
+- Present passkey failures using the same prominent status treatment as other
+  sign-in errors.
+- Show the MIT license in an in-app dialog, with an option to view the source
+  license in the repository.
 
 ## [1.3.5] - Unreleased
 

@@ -27,7 +27,7 @@ func TestClusterNodeStatusUsesAvatarIndicators(t *testing.T) {
 	for _, expected := range []string{
 		`class="cluster-node-icon online local"`, `aria-label="Connection status: Online"`,
 		`class="cluster-node-icon unreachable"`, `aria-label="Connection status: Unreachable"`,
-		`class="cluster-updated-badge"`, `icon-clock`, `Updated`,
+		`class="status-badge cluster-updated-badge"`, `icon-clock`, `Updated`,
 		`class="cluster-node-actions split"`,
 		`class="button outline compact"`, `class="button outline destructive compact cluster-remove-node"`,
 	} {

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +22,9 @@ const (
 	legacySessionCookieName = "sable_session"
 	sessionCookiePrefix     = "sable_session_"
 	authFormLimit           = 32 << 10
+	devDemoAutoLoginEnv     = "SABLE_DEV_DEMO_AUTO_LOGIN"
+	devDemoUsernameEnv      = "SABLE_DEV_DEMO_USERNAME"
+	devDemoPasswordEnv      = "SABLE_DEV_DEMO_PASSWORD"
 )
 
 type principalContextKey struct{}
@@ -237,7 +241,48 @@ func (server *Server) loginPage(writer http.ResponseWriter, request *http.Reques
 		http.Redirect(writer, request, "/setup", http.StatusSeeOther)
 		return
 	}
+	if server.tryDevDemoAutoLogin(writer, request) {
+		return
+	}
 	server.renderAuthPage(writer, request, false, "", http.StatusOK)
+}
+
+func (server *Server) configureDevDemoAutoLogin() {
+	// This is intentionally process-scoped: a restart gets one convenience login,
+	// while an explicit logout returns to the real sign-in flow.
+	if !server.securityEnabled || os.Getenv(devDemoAutoLoginEnv) != "1" {
+		return
+	}
+	username := strings.TrimSpace(os.Getenv(devDemoUsernameEnv))
+	password := os.Getenv(devDemoPasswordEnv)
+	if username == "" || password == "" {
+		return
+	}
+	server.demoLogin.username = username
+	server.demoLogin.password = password
+	server.demoLogin.available.Store(true)
+}
+
+func (server *Server) tryDevDemoAutoLogin(writer http.ResponseWriter, request *http.Request) bool {
+	clientIP := net.ParseIP(requestClientIP(request))
+	if clientIP == nil || !clientIP.IsLoopback() {
+		return false
+	}
+	if !server.demoLogin.available.CompareAndSwap(true, false) {
+		return false
+	}
+	credentials, err := server.auth.Login(
+		request.Context(), server.demoLogin.username, server.demoLogin.password,
+		clientIP.String(), request.UserAgent(),
+	)
+	if err != nil {
+		server.demoLogin.available.Store(true)
+		server.logger.Warn("dev demo auto-login failed", "error", err)
+		return false
+	}
+	setSessionCookie(writer, request, server.sessionCookieName(), credentials, server.secureCookies)
+	http.Redirect(writer, request, validatedReturnTarget(request.URL.Query().Get("return_to"), request.Host), http.StatusSeeOther)
+	return true
 }
 
 func (server *Server) login(writer http.ResponseWriter, request *http.Request) {

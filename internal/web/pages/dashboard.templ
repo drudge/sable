@@ -15,6 +15,7 @@ const htmxConfig = `{"includeIndicatorCSS":false,"defaultTimeout":0,"history":"r
 type DashboardView struct {
 	Version     string
 	TimeDisplay TimeDisplay
+	ShowFullRecordNames bool
 	Username    string
 	DisplayName string
 	// AvatarURL points at the signed-in operator's profile picture, and is
@@ -915,13 +916,17 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
  <script src={ assetURL("passkeys.js") } defer></script>
 		</head>
 		<body class="auth-body">
+			<div class="auth-shell">
+				<div class="auth-brand" aria-label="Sable">
+					<div class="auth-logo" aria-hidden="true"><img src={ assetURL("sable-mark.svg") } alt="" width="32" height="32"/></div>
+					<strong>Sable</strong>
+				</div>
 			<main class="auth-card">
-				<div class="auth-logo" aria-hidden="true"><img src={ assetURL("sable-mark.svg") } alt="" width="32" height="32"/></div>
 				if setup {
-					<h1>Sable</h1>
+					<h1>Set up Sable</h1>
 					<p>Create your administrator account</p>
 				} else {
-					<h1>Sable</h1>
+					<h1>Welcome back</h1>
 					<p>Sign in to your Sable DNS server</p>
 				}
 				if errorMessage != "" {
@@ -939,8 +944,8 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 				}
     if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
      <div class="auth-form auth-sso" data-passkey-capability data-passkeys data-return-to={ returnTo }>
+      <p class="auth-error" role="status" data-passkey-status></p>
       <button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
-      <p role="status" data-passkey-status></p>
      </div>
     }
     if !setup && ssoLabel != "" {
@@ -961,8 +966,32 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 					<button type="submit">{ ifThen(setup, "Create administrator", "Sign in") }</button>
 				</form>
 			</main>
+			<footer class="about-footer">
+				<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>
+			</footer>
+			</div>
+			@mitLicenseDialog()
 		</body>
 	</html>
+}
+
+templ mitLicenseDialog() {
+	<dialog class="custom-server-dialog license-dialog" id="mit-license-dialog" aria-labelledby="mit-license-dialog-title">
+		<div class="dialog-header">
+			<h2 id="mit-license-dialog-title">MIT License</h2>
+			<p>Sable is free and open source software.</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="release-notes-content license-content">
+			<pre>{ mitLicenseText }</pre>
+		</div>
+		<div class="dialog-footer">
+			<a class="button outline" href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+				<span>View on GitHub</span>@Icon("external-link")
+			</a>
+			<button class="button" type="button" data-dialog-close>Done</button>
+		</div>
+	</dialog>
 }
 
 templ APITokenResult(token string, expires string, errorMessage string) {

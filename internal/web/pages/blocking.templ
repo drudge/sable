@@ -137,7 +137,7 @@ templ BlockingStatus(view BlockingPageView) {
 			}
 			<button class={ ifThen(view.Updating, "button outline blocking-update-button is-updating", "button outline blocking-update-button") } hx-post="/ui/blocking/lists/update" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="this" disabled?={ view.RemoteListCount == 0 || view.Updating } aria-label={ ifThen(view.Updating, "Updating block lists", "Update block lists") } data-blocking-update>@Icon("refresh")<span class="update-label">{ ifThen(view.Updating, "Updating…", "Update Block Lists") }</span></button>
 			if !view.NextUpdate.IsZero() && view.RemoteListCount > 0 {
-				<small>Next update: { FormatShortDateTime(view.NextUpdate, view.Console.TimeDisplay, false) }</small>
+				<small><span>Next update</span><strong>{ FormatShortDateTime(view.NextUpdate, view.Console.TimeDisplay, false) }</strong></small>
 			}
 		</footer>
 	</section>
@@ -164,14 +164,14 @@ templ BlockListRow(list BlockListSourceView) {
 templ DomainPanel(value string, domains []string, active string, allowed bool) {
 	<div class="blocking-panel isotope-domain-panel" id={ "blocking-panel-" + value } role="tabpanel" aria-labelledby={ "blocking-tab-" + value } data-blocking-panel={ value } hidden?={ active != value }>
 		<div class="domain-list-toolbar">
-			<button class="button" type="button" data-dialog-open={ ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog") } data-replica-primary-action>@Icon("plus")<span>Add Domain</span></button>
-			<form class="domain-import-form" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
+			<button class="button domain-list-add" type="button" data-dialog-open={ ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog") } data-replica-primary-action>@Icon("plus")<span>Add Domain</span></button>
+			<form class="domain-import-form domain-list-import" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
 			if len(domains) > 0 {
-				<a class="button outline" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") }>@Icon("download")<span>Export</span></a>
+				<a class="button outline domain-list-export" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") }>@Icon("download")<span>Export</span></a>
 			} else {
-				<span class="button outline disabled" aria-disabled="true">@Icon("download")<span>Export</span></span>
+				<span class="button outline disabled domain-list-export" aria-disabled="true">@Icon("download")<span>Export</span></span>
 			}
-			<button class="button destructive" type="button" data-dialog-open={ ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog") } data-replica-primary-action disabled?={ len(domains) == 0 }>@Icon("trash")<span>Clear All</span></button>
+			<button class="button destructive domain-list-clear" type="button" data-dialog-open={ ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog") } data-replica-primary-action disabled?={ len(domains) == 0 }>@Icon("trash")<span>Clear All</span></button>
 		</div>
 		@SearchField("Search " + domainPolicyKind(allowed) + " domains", "Search " + domainPolicyKind(allowed) + " domains...", "", "blocking-search", templ.Attributes{"data-domain-search": value})
 		<div class="blocked-domain-list">
