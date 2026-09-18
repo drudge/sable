@@ -573,7 +573,7 @@ templ ZoneListView(view ZonesPageView) {
 			if view.CanCreate {
 				<div class="zone-heading-actions">
 					<details class="pause-menu zone-import-menu">
-						<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import…</span>@Icon("chevron-down")</summary>
+						<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import</span>@Icon("chevron-down")</summary>
 						<div>
 							<button type="button" aria-label="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("file-text")<span><strong>From file or text</strong><small>Upload a zone file or paste records</small></span></button>
 							<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>

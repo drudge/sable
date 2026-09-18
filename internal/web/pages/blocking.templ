@@ -122,7 +122,7 @@ templ BlockingContent(view BlockingPageView) {
 }
 
 templ BlockingStatus(view BlockingPageView) {
-	<section class="card blocking-status-card emphasized">
+	<section class="card blocking-status-card">
 		<header><div><h2>@Icon(ifThen(view.Enabled && view.PausedUntil.IsZero(), "shield", "shield-off"))<span>Blocking Status</span></h2><p>{ blockingStatusDescription(view) }</p></div><div class="blocking-status-actions"><a class="icon-button" href="/settings?tab=blocking" aria-label="Blocking settings" title="Blocking settings">@Icon("settings")</a><button class="button outline" hx-post="/ui/blocking/toggle" hx-target="#blocking-content" hx-swap="outerHTML">@Icon(ifThen(view.Enabled, "shield-off", "shield"))<span>{ ifThen(view.Enabled, "Disable", "Enable") }</span></button></div></header>
 		<div class="operational-metric-grid blocking-status-stats">
 			@OperationalMetricCard("ban", "Blocked (Last Hour)", formatNumber(view.BlockedQueries), "Queries stopped by blocking policy", "red")

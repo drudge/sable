@@ -86,7 +86,7 @@ templ ClusterContent(view ClusterPageView) {
 		<div class="cluster-layout">
 			<div class="cluster-main-column">
 				if !view.Initialized {
-					<section class="card cluster-status-card emphasized">
+					<section class="card cluster-status-card">
 						<header><div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>This server is operating independently</p></div><span class="status-badge">Not configured</span></header>
 						<div class="cluster-empty-state">
 							<span class="cluster-empty-icon">@Icon("server")</span>
@@ -184,7 +184,7 @@ templ ClusterLiveStatusUpdate(view ClusterPageView) {
 
 templ ClusterLiveStatus(view ClusterPageView) {
 	<div class="cluster-live-status" id="cluster-live-status" data-live-refresh hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
-		<section class="card cluster-status-card emphasized">
+		<section class="card cluster-status-card">
 			<header>
 				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>
 				<div class="cluster-header-actions">

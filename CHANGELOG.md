@@ -8,6 +8,30 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.6-rc.1] - Unreleased
+
+This first release candidate modernizes the Sable console while preserving its
+existing navigation, behavior, and responsive workflows.
+
+### Console modernization
+
+- Give the desktop console a calmer shell hierarchy with an inset rounded
+  workspace surface and a sidebar that sits directly on the application
+  background.
+- Standardize compact rounded controls, icon actions, dialog and toast close
+  buttons, button heights, and subtle borders across the console.
+- Improve expanded, collapsed, and mobile sidebar spacing, touch targets,
+  selection states, and responsive layout behavior.
+- Keep status panels and metric cards visually quieter, with edge-to-edge
+  dividers where the surrounding layout calls for them.
+
+### Logs and administration
+
+- Make Query Logs follow new entries by default, matching Server Logs, while
+  preserving explicit pause, filtering, paging, and incremental refresh.
+- Improve log toolbar wrapping and mobile readability, and keep zone import
+  actions compact and clearly menu-driven.
+
 ## [1.3.5] - Unreleased
 
 Sable 1.3.5 makes everyday administration faster and safer, with particular

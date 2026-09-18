@@ -95,6 +95,21 @@ func TestRuntimeLogPanelServesPersistedHistoryWithPaging(t *testing.T) {
 	}
 }
 
+func TestQueryLogPanelFollowsByDefault(t *testing.T) {
+	t.Parallel()
+
+	server := newRuntimeLogTestServerWithStore(t, config.Defaults(), &testServerLogStore{})
+	body := serveRequest(server, "GET", "/ui/logs/queries").Body.String()
+
+	for _, expected := range []string{
+		`data-live="true"`, `aria-pressed="true"`, `data-live-url="/ui/logs/queries?after_id=1&amp;known_total=1&amp;live=1&amp;page=1&amp;page_size=50"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("query log panel does not follow by default; missing %q", expected)
+		}
+	}
+}
+
 // Switching persistence off has to fall back to the live buffer. Serving the
 // table anyway would show whatever was captured before it was switched off and
 // then simply stop, which reads as a broken log rather than a disabled one.

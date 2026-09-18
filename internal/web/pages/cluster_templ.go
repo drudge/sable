@@ -149,7 +149,7 @@ func ClusterContent(view ClusterPageView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if !view.Initialized {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card cluster-status-card emphasized\"><header><div><h2>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<section class=\"card cluster-status-card\"><header><div><h2>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -569,7 +569,7 @@ func ClusterLiveStatus(view ClusterPageView) templ.Component {
 			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"cluster-live-status\" id=\"cluster-live-status\" data-live-refresh hx-get=\"/ui/cluster/status\" hx-trigger=\"every 2s\" hx-target=\"this\" hx-swap=\"outerHTML\" hx-sync=\"#cluster-content:drop\"><section class=\"card cluster-status-card emphasized\"><header><div><h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"cluster-live-status\" id=\"cluster-live-status\" data-live-refresh hx-get=\"/ui/cluster/status\" hx-trigger=\"every 2s\" hx-target=\"this\" hx-swap=\"outerHTML\" hx-sync=\"#cluster-content:drop\"><section class=\"card cluster-status-card\"><header><div><h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

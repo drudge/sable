@@ -914,7 +914,7 @@ func AppDocument(view DashboardView, pageTitle string, activePage string, page t
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div></div></div><button class=\"sidebar-rail\" type=\"button\" data-sidebar-toggle aria-controls=\"app-sidebar\" aria-expanded=\"true\" aria-label=\"Expand sidebar\" title=\"Expand sidebar\"></button></aside><div class=\"sidebar-scrim\" data-sidebar-toggle aria-hidden=\"true\"></div><main class=\"main\" id=\"main-content\" tabindex=\"-1\"><header class=\"mobile-header\" data-mobile-header><button type=\"button\" data-sidebar-toggle aria-controls=\"app-sidebar\" aria-expanded=\"false\" aria-label=\"Open navigation\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div></div></div><button class=\"sidebar-rail\" type=\"button\" data-sidebar-toggle aria-controls=\"app-sidebar\" aria-expanded=\"true\" aria-label=\"Expand sidebar\"></button></aside><div class=\"sidebar-scrim\" data-sidebar-toggle aria-hidden=\"true\"></div><main class=\"main\" id=\"main-content\" tabindex=\"-1\"><header class=\"mobile-header\" data-mobile-header><button type=\"button\" data-sidebar-toggle aria-controls=\"app-sidebar\" aria-expanded=\"false\" aria-label=\"Open navigation\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2191,7 +2191,7 @@ func DNSClientContent(view DNSClientPageView) templ.Component {
 			templ_7745c5c3_Var77 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 133, "<div class=\"dns-client-page page-stack\"><header class=\"page-heading\"><h1>DNS Client</h1><p>Resolve DNS records and diagnose name resolution issues</p></header><div class=\"page-columns\"><div class=\"page-main\"><section class=\"card emphasized query-composer\"><form id=\"dns-query-form\" hx-post=\"/ui/query\" hx-target=\"#dns-query-result\" hx-swap=\"innerHTML\"><div class=\"query-primary-row\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 133, "<div class=\"dns-client-page page-stack\"><header class=\"page-heading\"><h1>DNS Client</h1><p>Resolve DNS records and diagnose name resolution issues</p></header><div class=\"page-columns\"><div class=\"page-main\"><section class=\"card query-composer\"><form id=\"dns-query-form\" hx-post=\"/ui/query\" hx-target=\"#dns-query-result\" hx-swap=\"innerHTML\"><div class=\"query-primary-row\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5445,7 +5445,7 @@ func QueryResult(view QueryView) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if view.Success {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "<section class=\"card emphasized dns-result-card\"><div class=\"dns-result-header\"><div><div class=\"result-status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "<section class=\"card dns-result-card\"><div class=\"dns-result-header\"><div><div class=\"result-status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -447,7 +447,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 							</div>
 						</div>
 					</div>
-					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar" title="Expand sidebar"></button>
+					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar"></button>
 				</aside>
 				<div class="sidebar-scrim" data-sidebar-toggle aria-hidden="true"></div>
 				<main class="main" id="main-content" tabindex="-1">
@@ -741,7 +741,7 @@ templ DNSClientContent(view DNSClientPageView) {
 		</header>
 		<div class="page-columns">
 			<div class="page-main">
-				<section class="card emphasized query-composer">
+				<section class="card query-composer">
 					<form id="dns-query-form" hx-post="/ui/query" hx-target="#dns-query-result" hx-swap="innerHTML">
 						<div class="query-primary-row">
 							@SearchField("Domain name", "Domain name", view.QueryName, "", templ.Attributes{"id": "query-name", "name": "name", "data-query-name": true, "required": true})
@@ -1532,7 +1532,7 @@ templ Icon(kind string) {
 
 templ QueryResult(view QueryView) {
 	if view.Success {
-		<section class="card emphasized dns-result-card">
+		<section class="card dns-result-card">
 			<div class="dns-result-header">
 				<div>
 					<div class="result-status">

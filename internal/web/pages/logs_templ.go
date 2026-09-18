@@ -319,14 +319,14 @@ func RuntimeLogsPanel(view RuntimeLogsView) templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<section class=\"card logs-card emphasized\" id=\"runtime-logs-panel\" aria-labelledby=\"runtime-log-title\" tabindex=\"-1\" data-log-live-panel data-live-refresh data-live=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<section class=\"card logs-card\" id=\"runtime-logs-panel\" aria-labelledby=\"runtime-log-title\" tabindex=\"-1\" data-log-live-panel data-live-refresh data-live=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.Live))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 103, Col: 189}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 103, Col: 178}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -339,7 +339,7 @@ func RuntimeLogsPanel(view RuntimeLogsView) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(runtimePanelURL(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 103, Col: 229}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 103, Col: 218}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -826,14 +826,14 @@ func QueryLogsPanel(view QueryLogsView) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		tokens := queryFilterTokens(view)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "<section class=\"card logs-card emphasized\" id=\"query-logs-panel\" aria-labelledby=\"query-log-title\" tabindex=\"-1\" data-log-live-panel data-live-refresh data-live=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "<section class=\"card logs-card\" id=\"query-logs-panel\" aria-labelledby=\"query-log-title\" tabindex=\"-1\" data-log-live-panel data-live-refresh data-live=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.Live))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 141, Col: 185}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 141, Col: 174}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
@@ -846,7 +846,7 @@ func QueryLogsPanel(view QueryLogsView) templ.Component {
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(queryPanelLiveURL(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 141, Col: 227}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 141, Col: 216}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 		if templ_7745c5c3_Err != nil {
