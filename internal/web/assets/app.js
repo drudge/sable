@@ -1498,19 +1498,22 @@
       region.style.setProperty("--notification-expanded-card-height", `${height}px`);
       return height;
     });
+    const frontCardHeight = expandedHeights.at(-1) || collapsedCardHeight;
+    const frontCardLift = Math.max(0, frontCardHeight - collapsedCardHeight);
     let expandedOffset = 0;
     for (let index = regions.length - 1; index >= 0; index -= 1) {
       const region = regions[index];
       const depth = regions.length - 1 - index;
       const visibleDepth = Math.min(depth, 2);
       region.style.setProperty("--notification-depth", String(depth));
-      region.style.setProperty("--notification-collapsed-offset", `${visibleDepth * -10}px`);
+      const collapsedOffset = depth === 0 ? 0 : -(frontCardLift + visibleDepth * 10);
+      region.style.setProperty("--notification-collapsed-offset", `${collapsedOffset}px`);
       region.style.setProperty("--notification-collapsed-scale", String(1 - visibleDepth * .03));
       region.style.setProperty("--notification-expanded-offset", `${expandedOffset * -1}px`);
       region.style.zIndex = String(index + 1);
       expandedOffset += expandedHeights[index] + gap;
     }
-    stack.style.setProperty("--notification-collapsed-height", `${collapsedCardHeight + Math.min(regions.length - 1, 2) * 10}px`);
+    stack.style.setProperty("--notification-collapsed-height", `${frontCardHeight + Math.min(regions.length - 1, 2) * 10}px`);
     stack.style.setProperty("--notification-expanded-height", `${expandedOffset - gap}px`);
   };
   function queueNotificationStackSync() {

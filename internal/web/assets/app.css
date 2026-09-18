@@ -1302,6 +1302,14 @@ dialog[open]::backdrop {
   }
 }
 
+@media (hover: hover) and (min-width: 640px) {
+  /* Keep the frontmost notification readable; older cards are the compact
+     layers that sit behind it in the stack. */
+  .notification-stack > .toast-region:last-child {
+    height: var(--notification-expanded-card-height, var(--notification-collapsed-card-height));
+  }
+}
+
 @keyframes toast-in { from { opacity: 0; transform: translate3d(0, .75rem, 0) scale(.98); } }
 @keyframes toast-out { to { opacity: 0; transform: translate3d(.75rem, 0, 0) scale(.98); } }
 

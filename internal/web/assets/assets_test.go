@@ -214,6 +214,23 @@ func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	}
 }
 
+func TestFrontmostNotificationKeepsItsFullCardHeight(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if !strings.Contains(stylesheet, ".notification-stack > .toast-region:last-child {\n    height: var(--notification-expanded-card-height, var(--notification-collapsed-card-height));\n  }") {
+		t.Error("frontmost notification should keep its natural height")
+	}
+
+	script := string(manifest["app.js"].content)
+	if !strings.Contains(script, "const frontCardHeight = expandedHeights.at(-1) || collapsedCardHeight;") {
+		t.Error("notification stack should size itself around the frontmost card")
+	}
+	if !strings.Contains(script, "const frontCardLift = Math.max(0, frontCardHeight - collapsedCardHeight);") || !strings.Contains(script, "const collapsedOffset = depth === 0 ? 0 : -(frontCardLift + visibleDepth * 10);") {
+		t.Error("collapsed notifications should clear the frontmost card when it is taller")
+	}
+}
+
 func TestSidebarHoverAndActiveBorders(t *testing.T) {
 	t.Parallel()
 
