@@ -8,6 +8,20 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.3.6-rc.2] - Unreleased
+
+This release candidate refines the notification stack introduced in the first
+1.3.6 candidate.
+
+### Notifications
+
+- Keep the frontmost update notification fully readable and anchored to the
+  bottom of the console, including when it is taller than a transient toast.
+- Keep older notifications visible as compact cards peeking out behind the
+  frontmost notification instead of letting the taller update card cover them.
+- Preserve the existing hover and keyboard-focus expansion behavior for the
+  full stack.
+
 ## [1.3.6-rc.1] - Unreleased
 
 This first release candidate modernizes the Sable console while preserving its
