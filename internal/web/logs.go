@@ -194,7 +194,7 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 		ResponseCode: strings.ToUpper(raw.Get("response_code")), Source: raw.Get("source"), Protocol: strings.ToUpper(raw.Get("protocol")),
 		Start: logTimeField(filter.Since, display), End: logTimeField(filter.Until, display),
 		Exact: filter.Exact,
-		Live:  liveRequested(raw, false), FiltersOpen: raw.Get("filters") == "1",
+		Live:  liveRequested(raw, true), FiltersOpen: raw.Get("filters") == "1",
 	}
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {

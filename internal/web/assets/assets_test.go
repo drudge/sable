@@ -200,7 +200,7 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	if !strings.Contains(stylesheet, "height: 100vh;\n  height: 100dvh;") {
 		t.Fatal("sidebar does not provide a legacy viewport fallback followed by a dynamic viewport height")
 	}
-	if !strings.Contains(stylesheet, ".mobile-header [data-sidebar-toggle] .nav-icon { width: 1.125rem; height: 1.125rem; }") {
+	if !strings.Contains(stylesheet, ".mobile-header [data-sidebar-toggle] .nav-icon { width: 1.25rem; height: 1.25rem; }") {
 		t.Fatal("mobile menu icon does not use its larger header size")
 	}
 }
@@ -221,7 +221,7 @@ func TestSidebarHoverAndActiveBorders(t *testing.T) {
 	for _, expected := range []string{
 		"border: 1px solid transparent",
 		".nav-item:hover { border-color: var(--border); }",
-		".nav-item.active { border-color: var(--ring); }",
+		".nav-item.active { border-color: var(--sidebar-border); }",
 	} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("sidebar navigation does not contain border treatment %q", expected)

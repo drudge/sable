@@ -3199,7 +3199,8 @@
 		const label = mobile ? (mobileOpen ? "Close navigation" : "Open navigation") : (collapsed ? "Expand sidebar" : "Collapse sidebar");
 		button.setAttribute("aria-label", label);
 		button.setAttribute("aria-expanded", String(mobile ? mobileOpen : !collapsed));
-		button.title = label;
+		if (button.classList.contains("sidebar-rail")) button.removeAttribute("title");
+		else button.title = label;
 	  });
 	  document.querySelectorAll("[data-mobile-header] [data-sidebar-toggle]").forEach((button) => {
 		button.setAttribute("aria-expanded", String(mobile && mobileOpen));
