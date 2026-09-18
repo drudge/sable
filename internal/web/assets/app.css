@@ -1404,7 +1404,7 @@ dialog[open]::backdrop {
 .zone-records-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .5rem; }
 .detail-menu .zone-menu-content { top: calc(100% + .25rem); }
 .zone-record-filter-bar .zone-search { flex: 1; }
-.isotope-record-row { display: grid; min-height: 3.6rem; grid-template-columns: 3.5rem minmax(8rem, 3fr) minmax(8rem, 2fr) 4rem 1.25rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .65rem 1rem; transition: background 120ms; }
+.isotope-record-row { display: grid; min-height: 3.6rem; grid-template-columns: 3.5rem minmax(0, 3fr) minmax(0, 2fr) 4rem 1.75rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .65rem 1rem; transition: background 120ms; }
 .isotope-record-row:has(> .record-open-button) { cursor: pointer; }
 .isotope-record-row:first-of-type { border-top: 0; }
 .isotope-record-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
@@ -1420,8 +1420,8 @@ dialog[open]::backdrop {
 .zone-copyable .copy-icon-success { display: none; }
 .zone-copyable button.is-copied .copy-icon-default { display: none; }
 .zone-copyable button.is-copied .copy-icon-success { display: inline-grid; color: #22c55e; }
-.record-ttl { color: var(--muted-foreground); font-size: .72rem; text-align: right; font-variant-numeric: tabular-nums; }
-.record-open-button { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; color: var(--muted-foreground); }
+.record-ttl { min-width: 0; padding-right: .3rem; color: var(--muted-foreground); font-size: .72rem; text-align: right; font-variant-numeric: tabular-nums; }
+.record-open-button { display: grid; width: 1.5rem; min-width: 1.5rem; height: 1.5rem; justify-self: end; place-items: center; border: 0; border-radius: .3rem; background: transparent; color: var(--muted-foreground); }
 .record-open-button:hover { background: var(--accent); color: var(--foreground); }
 .zone-history-dialog { width: min(52rem, calc(100vw - 2rem)); max-width: 52rem; max-height: 85dvh; overflow: hidden; padding: 0; }
 .zone-history-dialog[open] { display: flex; flex-direction: column; gap: 0; }
@@ -1468,7 +1468,7 @@ dialog[open]::backdrop {
 .zone-history-rollback .button { display: inline-flex; align-items: center; gap: .4rem; }
 .zone-history-rollback .nav-icon { width: .9rem; height: .9rem; }
 .record-open-button .nav-icon { width: 1rem; height: 1rem; }
-.record-open-placeholder { width: 1.5rem; }
+.record-open-placeholder { width: 1.5rem; min-width: 1.5rem; justify-self: end; }
 .isotope-zone-dialog { width: min(32rem, calc(100vw - 2rem)); }
 .zone-settings-dialog { max-height: min(90vh, 48rem); overflow: hidden; }
 .zone-settings-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr); }
@@ -1750,7 +1750,8 @@ dialog[open]::backdrop {
 	.sidebar-header { padding: .75rem; }
 	.sidebar-collapse { top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; border-radius: .625rem; }
 	.nav { padding: .25rem .75rem .75rem; }
-	.nav-group { padding: .75rem 0; }
+	/* Keep the section break visible without spending a full touch target on it. */
+	.nav-group { padding: .375rem 0; }
 	.nav-label { height: 2.5rem; padding: .625rem .75rem; font-size: .8125rem; }
 	.nav-item, .sidebar-collapsed .nav-item { height: 3rem; min-height: 3rem; gap: .75rem; border-radius: .625rem; padding: 0 .75rem; font-size: .9375rem; }
 	.nav-item + .nav-item { margin-top: .35rem; }
@@ -1836,6 +1837,12 @@ dialog[open]::backdrop {
 	.resolver-popover { width: 100%; }
 	.dialog-footer { flex-direction: column-reverse; }
 	.dialog-footer .button { width: 100%; }
+	.isotope-record-dialog { width: calc(100vw - 1rem); max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+	.isotope-record-dialog-header { padding: 1.25rem 3rem .85rem 1rem; }
+	.isotope-record-dialog-body { gap: 1.25rem; padding: 1rem; }
+	.edit-record-type { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .65rem; }
+	.edit-record-type small { overflow: visible; line-height: 1.4; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+	.edit-record-type .record-enabled { grid-column: 1 / -1; margin-left: 0; }
 	.chart-range-popover { top: 6.5rem; right: 1rem; }
 	.result-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
 	.dns-result-header { align-items: stretch; flex-direction: column; padding-inline: 1rem; }
@@ -1907,7 +1914,7 @@ dialog[open]::backdrop {
 	.zone-history-rollback .button { justify-content: center; }
 	.zone-record-filter-bar { flex-direction: row; }
 	.zone-record-type-filter { width: 7.5rem; }
-	.isotope-record-row { grid-template-columns: 3.25rem minmax(0, 1fr) 3.5rem 1.25rem; gap: .5rem; padding-inline: .75rem; }
+	.isotope-record-row { grid-template-columns: 3.25rem minmax(0, 1fr) 3.5rem 1.75rem; gap: .5rem; padding-inline: .75rem; }
 	.record-value-copy { display: none; }
 	.zone-copyable button { opacity: 1; }
 	.record-type-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3295,10 +3302,47 @@ dialog[open]::backdrop {
 .record-source-badge.alias { background: #ede9fe; color: #5b21b6; }
 .dark .record-source-badge.alias { background: #4c1d95; color: #ddd6fe; }
 
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
+	.zone-records-heading {
+		display: grid;
+		grid-template-columns: 2.25rem minmax(0, 1fr);
+		gap: .5rem .75rem;
+	}
+	.zone-back-button { grid-column: 1; grid-row: 1; }
+	.zone-records-title { grid-column: 2; grid-row: 1; }
+	.zone-records-actions {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		width: 100%;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: .4rem;
+	}
+	.isotope-record-row {
+		grid-template-columns: 3.25rem minmax(0, 2fr) minmax(0, 3fr) 3.5rem 1.75rem;
+		gap: .5rem;
+		padding-inline: .75rem;
+	}
 	.integration-card-actions { align-items: stretch; flex-direction: column-reverse; }
 	.integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }
 	.integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 767px) {
+	.isotope-record-row {
+		grid-template-columns: 3.25rem minmax(0, 1fr) 1.75rem;
+		grid-template-areas:
+			"type owner open"
+			"type value open";
+		min-height: 4.4rem;
+		gap: .25rem .5rem;
+		padding-block: .55rem;
+	}
+	.record-type-badge { grid-area: type; }
+	.record-owner-cell { grid-area: owner; }
+	.record-value-copy { display: flex; grid-area: value; min-width: 0; }
+	.record-ttl, .record-source-badge { display: none; }
+	.record-open-button, .record-open-placeholder { grid-area: open; align-self: center; }
 }
 
 @media (max-width: 700px) {

@@ -24,6 +24,10 @@ type DashboardView struct {
 	SecurityEnabled      bool
 	CanSettings          bool
 	CanWriteSettings     bool
+	BackupsAvailable     bool
+	CanCreateBackups     bool
+	CanRestoreBackups    bool
+	BackupPassphraseStored bool
 	CanAdministration    bool
 	CanWriteUsers        bool
 	CanZones             bool
@@ -520,6 +524,7 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-cache", "DNS Cache", "Inspect cached resolver responses", "database", "Page", "resolver cached responses purge", "/cache", "", "", "", "")
 				}
 				if view.CanBlocking {
+					@CommandOption("command-page-block-lists", "Block Lists", "Curated and custom DNS block lists", "list", "Page", "block blocklist lists sources filters", "/blocked?tab=lists", "", "", "", "")
 					@CommandOption("command-page-allowed", "Allowed Domains", "Domains exempt from blocking", "shield-check", "Page", "allow permit whitelist exceptions", "/blocked?tab=allowed", "", "", "", "")
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
 				}
@@ -591,7 +596,7 @@ templ CommandPalette(view DashboardView) {
 			<section class="command-palette-group" role="group" aria-labelledby="command-actions-title" data-command-group>
 				<h3 id="command-actions-title">Quick actions</h3>
 				if view.CanCheckUpdates {
-					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`)
+					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`, "")
 				}
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
@@ -602,18 +607,29 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-action-block-domain", "Block Domain", "Add a custom blocked domain", "shield-x", "Action", "deny blacklist policy", "", "/blocked?tab=domains", "add-blocked-domain-dialog", "", "")
 					@CommandOption("command-action-allow-domain", "Allow Domain", "Add a blocking policy exception", "shield-check", "Action", "permit whitelist exception", "", "/blocked?tab=allowed", "add-allowed-domain-dialog", "", "")
 					if view.BlockingEnabled {
-						@CommandPostOption("command-action-pause-blocking-5", "Pause Blocking for 5 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"5"}`)
-						@CommandPostOption("command-action-pause-blocking-15", "Pause Blocking for 15 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"15"}`)
-						@CommandPostOption("command-action-pause-blocking-30", "Pause Blocking for 30 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"30"}`)
-						@CommandPostOption("command-action-pause-blocking-60", "Pause Blocking for 1 Hour", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"60"}`)
-						@CommandPostOption("command-action-resume-blocking", "Resume Blocking", "Resume DNS filtering immediately", "play", "unpause restart filtering policy", "/ui/blocking/resume", `{}`)
+						@CommandPostOption("command-action-pause-blocking-5", "Pause Blocking for 5 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"5"}`, "")
+						@CommandPostOption("command-action-pause-blocking-15", "Pause Blocking for 15 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"15"}`, "")
+						@CommandPostOption("command-action-pause-blocking-30", "Pause Blocking for 30 Minutes", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"30"}`, "")
+						@CommandPostOption("command-action-pause-blocking-60", "Pause Blocking for 1 Hour", "Temporarily bypass blocking policy", "clock", "stop suspend bypass filtering policy", "/ui/blocking/pause", `{"minutes":"60"}`, "")
+						@CommandPostOption("command-action-resume-blocking", "Resume Blocking", "Resume DNS filtering immediately", "play", "unpause restart filtering policy", "/ui/blocking/resume", `{}`, "")
 					}
 					if view.HasRemoteBlockLists {
-						@CommandPostOption("command-action-update-block-lists", "Update Block Lists", "Download and compile remote blocking sources", "refresh", "download refresh compile blocking sources", "/ui/blocking/lists/update", `{}`)
+						@CommandPostOption("command-action-update-block-lists", "Update Block Lists", "Download and compile remote blocking sources", "refresh", "download refresh compile blocking sources", "/ui/blocking/lists/update", `{}`, "")
 					}
 				}
 				if view.CanSettings {
 					@CommandOption("command-action-browse-cache", "Browse DNS Cache", "Search cached domains and responses", "folder", "Action", "resolver inspect cached", "", "/cache", "cache-browser-dialog", "", "")
+				}
+				if view.BackupsAvailable && view.CanSettings && view.CanCreateBackups {
+					if view.BackupPassphraseStored {
+						@CommandPostOption("command-action-backup-now", "Backup Now", "Create an encrypted backup with the configured passphrase", "hard-drive", "backup export archive snapshot", "/ui/backup/run", `{"use_stored_passphrase":"on"}`, "/settings?tab=backup")
+						@CommandOption("command-action-backup-different-passphrase", "Backup with Different Passphrase", "Create an encrypted backup with another passphrase", "key", "Action", "backup export archive alternate passphrase", "", "/settings?tab=backup", "run-local-backup-dialog", "", "")
+					} else {
+						@CommandOption("command-action-backup-now", "Backup Now", "Create an encrypted backup of this deployment", "hard-drive", "Action", "backup export archive snapshot", "", "/settings?tab=backup", "run-local-backup-dialog", "", "")
+					}
+				}
+				if view.BackupsAvailable && view.CanSettings && view.CanRestoreBackups {
+					@CommandOption("command-action-restore-backup", "Restore from Backup", "Restore this deployment from an encrypted archive", "rotate-ccw", "Action", "restore import archive backup recovery", "", "/settings?tab=backup", "upload-backup-restore-dialog", "", "")
 				}
 				if view.CanWriteSettings {
 					@CommandOption("command-action-flush-cache", "Flush DNS Cache", "Open the cache-clearing confirmation", "trash", "Action", "clear purge cached resolver", "", "/cache", "cache-flush-dialog", "", "")
@@ -719,8 +735,8 @@ templ CommandSearchModesOption(id, label, description, icon, keywords, route, mo
 	</button>
 }
 
-templ CommandPostOption(id, label, description, icon, keywords, post, values string) {
-	<button type="button" id={ id } role="option" aria-selected="false" tabindex="-1" data-command-item data-command-label={ label } data-command-keywords={ keywords } data-command-post={ post } data-command-values={ values }>
+templ CommandPostOption(id, label, description, icon, keywords, post, values, routeAfter string) {
+	<button type="button" id={ id } role="option" aria-selected="false" tabindex="-1" data-command-item data-command-label={ label } data-command-keywords={ keywords } data-command-post={ post } data-command-values={ values } data-command-route-after={ routeAfter }>
 		<span class="command-palette-option-icon">
 			@Icon(icon)
 		</span>
