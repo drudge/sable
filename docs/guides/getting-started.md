@@ -58,7 +58,7 @@ sable query --transport tcp --server 192.0.2.53:53 example.com A
 
 A successful lookup returns an answer and a successful response code. Open **Logs → Queries** and confirm that the client, name, and result match your test. TCP matters too: DNS needs it for replies that do not fit in UDP.
 
-![Sable dashboard with query activity, response breakdowns, and client statistics](../assets/guide-screenshots/dashboard-full.webp "The dashboard gives you an overview after queries start arriving. Use the query log to verify an individual request. Sable 1.0.0 with demo data.")
+![Sable dashboard with query activity, response breakdowns, and client statistics](../assets/guide-screenshots/dashboard-full.webp "The dashboard gives you an overview after queries start arriving. Use the query log to verify an individual request. Sable 1.4.0 with demo data.")
 
 ## 4. Connect one test device
 
