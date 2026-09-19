@@ -3,7 +3,7 @@
 Build Sable alongside your current DNS service, move one test zone, and verify it before moving clients. This guide covers migration to Sable: zone-file import, a one-time AXFR snapshot, synchronized Secondary staging, or bulk import from a catalog. The older-version cutover procedure is retained below.
 
 > [!NOTE]
-> **Version availability:** This guide covers Sable 1.3.3. Authoritative conversion and Import from Catalog arrived in 1.2.0; forwarder import, synchronization, and conversion require 1.3.2. Users on 1.1.0 and earlier can upgrade or follow the older export/remove/import procedure below.
+> **Version availability:** This guide covers Sable 1.4.0. Authoritative conversion and Import from Catalog arrived in 1.2.0; forwarder import, synchronization, and conversion require 1.3.2. Users on 1.1.0 and earlier can upgrade or follow the older export/remove/import procedure below.
 
 ## Choose a migration path
 

@@ -18,7 +18,7 @@ Start with one Sable server and one test device. Get your first DNS answer, then
 - **Configuration and operations references** describe exact behavior when you need to go deeper.
 
 > [!NOTE]
-These guides cover Sable 1.3.3. [Download the release](https://github.com/drudge/sable/releases/tag/v1.3.3) or read the [release notes](../CHANGELOG.md).
+These guides cover Sable 1.4.0. [Download the release](https://github.com/drudge/sable/releases/tag/v1.4.0) or read the [release notes](../CHANGELOG.md).
 
 ## Migrating from Technitium
 
