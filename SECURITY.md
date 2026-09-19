@@ -19,7 +19,7 @@ released in the newest available version.
 
 Use [GitHub private vulnerability reporting](https://github.com/drudge/sable/security/advisories/new)
 when it is available. If the private form is unavailable, email
-[nick@penree.com](mailto:nick@penree.com) with the subject **Sable Security**.
+[security@sabledns.io](mailto:security@sabledns.io) with the subject **Sable Security**.
 
 Do not open a public issue, discussion, or pull request containing vulnerability
 details. Include as much of the following as possible in the private report:
