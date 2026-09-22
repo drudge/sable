@@ -258,8 +258,8 @@ templ InsightsContent(view InsightsOverviewView) {
 				@insightsSkeleton(view)
 			} else {
 				@insightsNotes(view)
-				@InsightFindings(view)
 				@insightsOverviewMetrics(view)
+				@InsightFindings(view)
 			}
 		</div>
 		if view.CanLogs {
@@ -295,6 +295,11 @@ templ InsightsContent(view InsightsOverviewView) {
 templ insightsSkeleton(view InsightsOverviewView) {
 	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
 		<span class="sr-only">Analyzing your network…</span>
+		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
+			for range 4 {
+				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
+			}
+		</div>
 		<section class="card insight-findings insight-findings-skeleton" aria-hidden="true">
 			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div></header>
 			for range 3 {
@@ -307,11 +312,6 @@ templ insightsSkeleton(view InsightsOverviewView) {
 				</div>
 			}
 		</section>
-		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
-			for range 4 {
-				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
-			}
-		</div>
 	</div>
 }
 

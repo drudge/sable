@@ -3797,9 +3797,19 @@ a.insight-client-row:focus-visible { outline: 2px solid var(--ring); outline-off
 	.insights-range .range-select { width: 100%; }
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: minmax(0, 1fr); }
 	.insight-metrics[data-metric-count="3"] > :last-child { grid-column: auto; }
-	.insight-finding { grid-template-columns: 2.25rem minmax(0, 1fr); align-items: start; }
+	.insight-finding { grid-template-columns: 2.25rem minmax(0, 1fr) 2rem; align-items: start; gap: .75rem; }
 	.insight-finding-copy strong { white-space: normal; overflow-wrap: anywhere; }
-	.insight-evidence-button { grid-column: 2; justify-self: start; }
+	/* On a phone the button shrinks to its chevron and stretches its tap area
+	   over the whole finding; the label stays as its accessible name. */
+	.insight-finding { position: relative; }
+	.insight-finding:has(.insight-evidence-button:hover) { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+	.insight-finding .insight-evidence-button { position: static; width: 2rem; height: 2rem; align-self: center; justify-content: center; border-color: transparent; background: transparent; padding: 0; box-shadow: none; }
+	.insight-finding .insight-evidence-button::after { position: absolute; inset: 0; content: ""; }
+	.insight-finding .insight-evidence-button:hover { background: transparent; }
+	.insight-finding .insight-evidence-button:focus-visible { outline: none; }
+	.insight-finding:has(.insight-evidence-button:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+	.insight-evidence-button > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+	.insight-evidence-button .nav-icon { width: 1rem; height: 1rem; color: var(--muted-foreground); }
 }
 
 html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !important; }
