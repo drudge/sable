@@ -110,7 +110,11 @@ func run(root, binary, output string, basePort int, keep bool) error {
 		}
 	}
 	fmt.Println("Seeding query history")
-	if err := seedTraffic(ctx, primary.Configuration.Database.DSN); err != nil {
+	policy, err := loadDemoBlockPolicy(primary.Directory, primary.Configuration.Blocking)
+	if err != nil {
+		return err
+	}
+	if err := seedTraffic(ctx, primary.Configuration.Database.DSN, policy); err != nil {
 		return err
 	}
 

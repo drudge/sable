@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
 )
@@ -30,7 +34,7 @@ const (
 // seedTraffic fills the query log and the chart history. It runs before the
 // node starts, because the console adopts the stored lifetime totals as its
 // baseline at startup and would otherwise overwrite them on its first flush.
-func seedTraffic(ctx context.Context, dsn string) error {
+func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error {
 	backing, err := store.Open(ctx, "sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("open demo database: %w", err)
@@ -39,10 +43,13 @@ func seedTraffic(ctx context.Context, dsn string) error {
 
 	random := rand.New(rand.NewSource(20260820))
 	now := time.Now().Truncate(time.Second)
-	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now)); err != nil {
+	if err := backdateSourceRecording(ctx, dsn, now.Add(-chartHistoryLength)); err != nil {
+		return err
+	}
+	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo query events: %w", err)
 	}
-	if err := backing.WriteQueryEvents(ctx, seedPastBlocks(random, now)); err != nil {
+	if err := backing.WriteQueryEvents(ctx, seedPastBlocks(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo past blocks: %w", err)
 	}
 	buckets, totals := seedChartHistory(random, now)
@@ -54,7 +61,7 @@ func seedTraffic(ctx context.Context, dsn string) error {
 	return nil
 }
 
-func seedQueryEvents(random *rand.Rand, now time.Time) []querylog.Event {
+func seedQueryEvents(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
 	clients := newWeightedClients(queryClients)
 	resolved := newWeightedDomains(resolvedDomains)
 	local := newWeightedDomains(localDomains)
@@ -72,14 +79,14 @@ func seedQueryEvents(random *rand.Rand, now time.Time) []querylog.Event {
 		default:
 			domain = resolved.pick(random)
 		}
-		events = append(events, seedQueryEvent(random, at, clients.pick(random), domain))
+		events = append(events, seedQueryEvent(random, at, clients.pick(random), domain, policy))
 	}
 	return events
 }
 
 // seedPastBlocks writes the blocked queries behind each allowed override, spread
 // across the days before somebody allowed the name.
-func seedPastBlocks(random *rand.Rand, now time.Time) []querylog.Event {
+func seedPastBlocks(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
 	events := make([]querylog.Event, 0)
 	for _, block := range pastBlocks {
 		clients := newWeightedClients(block.clients)
@@ -91,14 +98,14 @@ func seedPastBlocks(random *rand.Rand, now time.Time) []querylog.Event {
 				OccurredAt: at, ClientIP: clients.pick(random).address, Name: block.name + ".",
 				RecordType: seedRecordType(random), Class: 1, ResponseCode: 3,
 				Source: querylog.SourceBlocked, Protocol: seedProtocol(random), Duration: microseconds(random, 120, 400),
-				Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: block.rule, Resolver: querylog.ResolverBlocked},
+				Decision: policy.blockedDecision(block.name),
 			})
 		}
 	}
 	return events
 }
 
-func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain) querylog.Event {
+func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain, policy *demoBlockPolicy) querylog.Event {
 	responseCode, answer, duration := 0, "", time.Duration(0)
 	switch domain.source {
 	case querylog.SourceBlocked:
@@ -122,14 +129,14 @@ func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain
 		OccurredAt: at, ClientIP: client.address, Name: domain.name + ".",
 		RecordType: seedRecordType(random), Class: 1, ResponseCode: responseCode,
 		Source: domain.source, Protocol: seedProtocol(random), Answer: answer, Duration: duration,
-		Decision: seedQueryDecision(domain),
+		Decision: seedQueryDecision(domain, policy),
 	}
 }
 
-func seedQueryDecision(domain queryDomain) querylog.Decision {
+func seedQueryDecision(domain queryDomain, policy *demoBlockPolicy) querylog.Decision {
 	switch domain.source {
 	case querylog.SourceBlocked:
-		return querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: domain.name + ".", Resolver: querylog.ResolverBlocked}
+		return policy.blockedDecision(domain.name)
 	case querylog.SourceAuthoritative:
 		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}
 	case querylog.SourceCache:
@@ -294,4 +301,61 @@ func (table *weighted[T]) pick(random *rand.Rand) T {
 		}
 	}
 	return table.items[len(table.items)-1]
+}
+
+// demoBlockPolicy answers which rule and which sources block a name, compiled
+// from the demo's own block list files so seeded decisions match what Sable
+// would record for the same query.
+type demoBlockPolicy struct {
+	owners map[string][]string
+}
+
+func loadDemoBlockPolicy(directory string, blocking config.Blocking) (*demoBlockPolicy, error) {
+	sources := make([]blockcompiler.Source, 0, len(blocking.Lists))
+	for _, list := range blocking.Lists {
+		sources = append(sources, blockcompiler.Source{Name: list.Name, Path: list.Path, Format: blockcompiler.Format(list.Format)})
+	}
+	compiled, err := blockcompiler.Compile(directory, blocking.Domains, sources)
+	if err != nil {
+		return nil, fmt.Errorf("compile demo block lists: %w", err)
+	}
+	policy := &demoBlockPolicy{owners: make(map[string][]string, len(compiled.Domains))}
+	for index, domain := range compiled.Domains {
+		policy.owners[domain] = compiled.OwnerSets[compiled.Owners[index]]
+	}
+	return policy, nil
+}
+
+func (policy *demoBlockPolicy) blockedDecision(name string) querylog.Decision {
+	decision := querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: name, Resolver: querylog.ResolverBlocked}
+	for candidate := name; candidate != ""; {
+		if sources, found := policy.owners[candidate]; found {
+			decision.PolicyRule, decision.PolicySources = candidate, sources
+			break
+		}
+		_, rest, cut := strings.Cut(candidate, ".")
+		if !cut {
+			break
+		}
+		candidate = rest
+	}
+	return decision
+}
+
+// backdateSourceRecording dates the start of block-source recording to the
+// start of the seeded history. The history is written after this database was
+// created, so without it every seeded query would predate the recording.
+func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) error {
+	database, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return fmt.Errorf("open demo database: %w", err)
+	}
+	defer database.Close()
+	if _, err := database.ExecContext(ctx,
+		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since')",
+		since.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		return fmt.Errorf("backdate demo source recording: %w", err)
+	}
+	return nil
 }

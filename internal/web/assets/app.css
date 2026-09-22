@@ -3725,6 +3725,9 @@ dialog[open]::backdrop {
 .insight-overlap-share { margin-left: .25rem; color: var(--muted-foreground); font-size: .75rem; }
 .insight-contribution .blocklist-health-warning { display: flex; align-items: center; gap: .35rem; color: var(--destructive); font-size: .75rem; }
 .insight-contribution .blocklist-health-warning .nav-icon { width: .875rem; height: .875rem; flex: 0 0 auto; }
+.insight-queries-cell { display: inline-grid; justify-items: end; gap: .1rem; }
+.insight-queries-cell small { color: var(--muted-foreground); font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.insight-card-note p + p { margin-top: .35rem; }
 .insight-card-note { border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem 1rem; }
 .insight-card-note p { margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .insight-card-note strong { color: var(--foreground); font-weight: 600; }

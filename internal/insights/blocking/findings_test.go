@@ -215,3 +215,32 @@ func findingOfKind(t *testing.T, findings []insights.Finding, kind string) insig
 	t.Fatalf("no %s finding in %+v", kind, findings)
 	return insights.Finding{}
 }
+
+func TestListFindingsIncludeTheQueriesEachListBlocked(t *testing.T) {
+	t.Parallel()
+	contribution := Contribution{Analyzed: 2, Lists: []ListContribution{
+		{Name: "Overlapped", Available: true, Domains: 1_000, Unique: 2, Covered: 998, LargestOverlap: Overlap{Name: "Main", Domains: 998}},
+		{Name: "Main", Available: true, Domains: 5_000, Unique: 4_002, Covered: 998},
+	}}
+	queries := &SourceQueries{Lists: map[string]querylog.SourceActivity{
+		"Overlapped": {Blocked: 40, Sole: 0},
+		"Main":       {Blocked: 900, Sole: 860},
+	}}
+	findings := Findings(FindingsInput{Contribution: &contribution, Queries: queries})
+	low := findingOfKind(t, findings, KindLowUnique)
+	if low.Summary != "99.8% of this list's domains are also covered by Main. No blocked query in this period depended on it alone." {
+		t.Fatalf("summary = %q", low.Summary)
+	}
+	if findFact(low.Facts, "Blocked queries it matched").Value != "40" || findFact(low.Facts, "Blocked by this list alone").Value != "0" {
+		t.Fatalf("facts = %+v", low.Facts)
+	}
+
+	// A count that starts partway through the period cannot speak for all of
+	// it, so the summary stays quiet and the facts say when counting began.
+	began := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	queries.Since = began
+	low = findingOfKind(t, Findings(FindingsInput{Contribution: &contribution, Queries: queries}), KindLowUnique)
+	if strings.Contains(low.Summary, "depended") || !findFact(low.Facts, "Queries counted since").Time.Equal(began) {
+		t.Fatalf("partial coverage finding = %+v", low)
+	}
+}

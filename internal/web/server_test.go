@@ -208,6 +208,24 @@ func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
 	}
 }
 
+func TestQueryDecisionViewNamesTheBlockListsBehindABlock(t *testing.T) {
+	t.Parallel()
+	for sources, want := range map[string]string{
+		"":                           "Matched ads.example",
+		"OISD Big":                   "Matched ads.example from OISD Big",
+		"OISD Big|HaGeZi":            "Matched ads.example from OISD Big and HaGeZi",
+		"A|B|Custom blocked domains": "Matched ads.example from A, B, and Custom blocked domains",
+	} {
+		decision := querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "ads.example"}
+		if sources != "" {
+			decision.PolicySources = strings.Split(sources, "|")
+		}
+		if got := queryDecisionView(decision).PolicyDetail; got != want {
+			t.Errorf("sources %q: detail = %q, want %q", sources, got, want)
+		}
+	}
+}
+
 func TestDNSQueryResultIncludesIsotopeActionsAndCopyTargets(t *testing.T) {
 	t.Parallel()
 

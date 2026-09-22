@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -76,7 +77,7 @@ func TestOpenMigratesExistingQueryLogForDecisions(t *testing.T) {
 		}
 	}
 	page, err := opened.QueryEvents(context.Background(), querylog.Filter{Page: 1, PageSize: 25, ClientIP: "192.0.2.10", Name: "legacy.example", Exact: true})
-	if err != nil || len(page.Entries) != 1 || page.Entries[0].Decision != (querylog.Decision{}) {
+	if err != nil || len(page.Entries) != 1 || !reflect.DeepEqual(page.Entries[0].Decision, querylog.Decision{}) {
 		t.Fatalf("legacy query decision = %+v, %v", page.Entries, err)
 	}
 }

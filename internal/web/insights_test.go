@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"database/sql"
 	"html"
 	"io"
 	"log/slog"
@@ -77,18 +78,33 @@ func newInsightsTestServer(t *testing.T) insightsTestServer {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { opened.Close() })
+	// A server that has been recording block sources for longer than the
+	// backdated history below.
+	metadata, err := sql.Open("sqlite", filepath.Join(directory, "sable.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := metadata.Exec("UPDATE sable_metadata SET value = ? WHERE key LIKE 'query_log_rollup_%_since'",
+		now.Add(-7*24*time.Hour).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	metadata.Close()
 	event := func(offset time.Duration, client, name string, source querylog.Source) querylog.Event {
 		return querylog.Event{
 			OccurredAt: now.Add(offset), ClientIP: client, Name: name, RecordType: dns.TypeA,
 			Class: dns.ClassINET, ResponseCode: dns.RcodeNameError, Source: source, Protocol: "UDP",
 		}
 	}
+	blockedBy := func(event querylog.Event, rule string, sources ...string) querylog.Event {
+		event.Decision = querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: rule, PolicySources: sources}
+		return event
+	}
 	if err := opened.WriteQueryEvents(context.Background(), []querylog.Event{
 		event(-5*time.Hour, "10.0.0.5", "telemetry.example.com.", querylog.SourceBlocked),
 		event(-4*time.Hour, "10.0.0.5", "telemetry.example.com.", querylog.SourceBlocked),
 		event(-3*time.Hour, "10.0.0.9", "telemetry.example.com.", querylog.SourceBlocked),
-		event(-2*time.Hour, "10.0.0.5", "ads.example.", querylog.SourceBlocked),
-		event(-90*time.Minute, "10.0.0.50", "ads.example.", querylog.SourceBlocked),
+		blockedBy(event(-2*time.Hour, "10.0.0.5", "ads.example.", querylog.SourceBlocked), "ads.example", "Alpha", "Beta"),
+		blockedBy(event(-90*time.Minute, "10.0.0.50", "ads.example.", querylog.SourceBlocked), "ads.example", "Alpha"),
 		event(-time.Hour, "10.0.0.5", "www.example.org.", querylog.SourceUpstream),
 		// Outside the day window.
 		event(-72*time.Hour, "10.0.0.5", "telemetry.example.com.", querylog.SourceBlocked),
@@ -224,6 +240,10 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
 		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable found this",
 		"george-laptop.corp.example",
+		`<th scope="col" class="right-cell">Queries blocked</th>`,
+		// Alpha matched both blocked ads.example queries; Beta shared one.
+		`<span class="numeric-cell">2</span> <small>1 alone</small>`,
+		`<span class="numeric-cell">1</span> <small>0 alone</small>`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("overview is missing %q", expected)

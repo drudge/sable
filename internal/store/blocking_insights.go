@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,6 +17,10 @@ import (
 // written without it, so a window reaching further back reads those minutes
 // from the raw log instead of undercounting them.
 const blockedClientRollupSinceKey = "query_log_rollup_blocked_client_since"
+
+// blockedSourceRollupSinceKey records when blocked queries began carrying the
+// block lists that supplied their rule.
+const blockedSourceRollupSinceKey = "query_log_rollup_blocked_source_since"
 
 // maximumBlockingRanks bounds the Insights rankings the same way the dashboard
 // rankings are bounded.
@@ -82,6 +87,10 @@ func (store *Store) BlockingActivity(ctx context.Context, since, until time.Time
 	if err != nil {
 		return querylog.BlockingActivity{}, err
 	}
+	sources, sourcesSince, err := store.blockedSourceActivity(ctx, since, until)
+	if err != nil {
+		return querylog.BlockingActivity{}, err
+	}
 	return querylog.BlockingActivity{
 		Queries:        all.total,
 		Blocked:        domains.total,
@@ -89,7 +98,99 @@ func (store *Store) BlockingActivity(ctx context.Context, since, until time.Time
 		BlockedClients: clients.distinct,
 		TopDomains:     domains.ranks,
 		TopClients:     clients.ranks,
+		Sources:        sources,
+		SourcesSince:   sourcesSince,
 	}, nil
+}
+
+// blockedSourceActivity counts blocked queries per block list in [since,
+// until]. Queries written before blocked queries recorded their source carry
+// none, so counting starts at that moment and reports it when it falls inside
+// the window. Whole minutes come from the rollups; the ragged edges are read
+// from the raw log and their recorded decisions decoded, which is at most a
+// couple of minutes of blocked rows.
+func (store *Store) blockedSourceActivity(ctx context.Context, since, until time.Time) (map[string]querylog.SourceActivity, time.Time, error) {
+	activity := map[string]querylog.SourceActivity{}
+	since, until = since.UTC(), until.UTC()
+	began, found, err := store.blockedSourceRollupSince(ctx)
+	if err != nil || !found {
+		return activity, time.Time{}, err
+	}
+	began = began.UTC()
+	start := maxTime(since, began.Truncate(time.Minute))
+	reported := time.Time{}
+	if began.After(since) {
+		reported = began
+	}
+	if !start.Before(until) {
+		return activity, reported, nil
+	}
+	fullStart, fullEnd := ceilMinute(start), until.Truncate(time.Minute)
+	if !fullStart.Before(fullEnd) {
+		fullStart, fullEnd = until, until
+	}
+
+	rows, err := store.database.QueryContext(ctx, `
+SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
+FROM sable_query_log_rollup
+WHERE dimension IN (`+store.placeholder(1)+`, `+store.placeholder(2)+`)
+  AND bucket_start >= `+store.placeholder(3)+` AND bucket_start < `+store.placeholder(4)+`
+GROUP BY dimension, value`,
+		queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource, fullStart, fullEnd)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("read blocked source rollups: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dimension, source string
+		var hits uint64
+		if err := rows.Scan(&dimension, &source, &hits); err != nil {
+			return nil, time.Time{}, fmt.Errorf("scan blocked source rollup: %w", err)
+		}
+		counts := activity[source]
+		if dimension == queryLogRollupBlockedSoleSource {
+			counts.Sole += hits
+		} else {
+			counts.Blocked += hits
+		}
+		activity[source] = counts
+	}
+	if err := rows.Err(); err != nil {
+		return nil, time.Time{}, fmt.Errorf("iterate blocked source rollups: %w", err)
+	}
+
+	edges, err := store.database.QueryContext(ctx, `
+SELECT decision FROM sable_query_log
+WHERE source = `+store.placeholder(1)+`
+  AND ((occurred_at >= `+store.placeholder(2)+` AND occurred_at < `+store.placeholder(3)+`)
+    OR (occurred_at >= `+store.placeholder(4)+` AND occurred_at <= `+store.placeholder(5)+`))`,
+		string(querylog.SourceBlocked), start, fullStart, fullEnd, until)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("read blocked source edges: %w", err)
+	}
+	defer edges.Close()
+	for edges.Next() {
+		var raw string
+		if err := edges.Scan(&raw); err != nil {
+			return nil, time.Time{}, fmt.Errorf("scan blocked source edge: %w", err)
+		}
+		var decision querylog.Decision
+		if err := json.Unmarshal([]byte(raw), &decision); err != nil {
+			continue
+		}
+		for _, source := range decision.PolicySources {
+			counts := activity[source]
+			counts.Blocked++
+			if len(decision.PolicySources) == 1 {
+				counts.Sole++
+			}
+			activity[source] = counts
+		}
+	}
+	if err := edges.Err(); err != nil {
+		return nil, time.Time{}, fmt.Errorf("iterate blocked source edges: %w", err)
+	}
+	return activity, reported, nil
 }
 
 // BlockedNamesMatching counts the blocked queries in [since, until] whose name
@@ -314,33 +415,45 @@ func escapeLike(value string) string {
 // blockedClientRollupSince reports when the blocked-client dimension started
 // being written, as recorded by the migration that introduced it.
 func (store *Store) blockedClientRollupSince(ctx context.Context) (time.Time, bool, error) {
+	return store.rollupMarker(ctx, blockedClientRollupSinceKey)
+}
+
+// blockedSourceRollupSince reports when blocked queries began carrying the
+// block lists behind them. Older queries never recorded their source.
+func (store *Store) blockedSourceRollupSince(ctx context.Context) (time.Time, bool, error) {
+	return store.rollupMarker(ctx, blockedSourceRollupSinceKey)
+}
+
+func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bool, error) {
 	var raw string
 	err := store.database.QueryRowContext(ctx,
-		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), blockedClientRollupSinceKey,
+		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), key,
 	).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, false, nil
 	}
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("read blocked client rollup coverage: %w", err)
+		return time.Time{}, false, fmt.Errorf("read %s: %w", key, err)
 	}
 	since, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
-		return time.Time{}, false, fmt.Errorf("parse blocked client rollup coverage: %w", err)
+		return time.Time{}, false, fmt.Errorf("parse %s: %w", key, err)
 	}
 	return since, true, nil
 }
 
-// migrateBlockedClientRollup marks the moment this database began writing the
-// blocked-client dimension. The first migration wins, so an existing marker is
-// never moved forward over minutes that were already rolled up with it.
-func (store *Store) migrateBlockedClientRollup(ctx context.Context) error {
-	_, err := store.database.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		blockedClientRollupSinceKey, time.Now().UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("record blocked client rollup coverage: %w", err)
+// migrateBlockingRollups marks the moment this database began writing the
+// blocked-client and blocked-source dimensions. The first migration wins, so a
+// marker is never moved forward over minutes already rolled up with it.
+func (store *Store) migrateBlockingRollups(ctx context.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey} {
+		if _, err := store.database.ExecContext(ctx,
+			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
+			key, now,
+		); err != nil {
+			return fmt.Errorf("record %s: %w", key, err)
+		}
 	}
 	return nil
 }

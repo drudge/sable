@@ -186,3 +186,75 @@ func TestBlockedNameEvidenceMatchesTheQueryLogLink(t *testing.T) {
 		t.Fatalf("limited evidence = %+v, want the full total and the busiest client", limited)
 	}
 }
+
+func TestBlockingActivityCountsBlockedQueriesPerSourceList(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	blocked := func(offset time.Duration, sources ...string) querylog.Event {
+		event := blockingEvent(now.Add(offset), "10.0.7.16", "ads.example.com.", querylog.SourceBlocked)
+		event.Decision = querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "ads.example.com", PolicySources: sources}
+		return event
+	}
+	opened := openQueryLogStore(t, []querylog.Event{
+		blocked(-50*time.Minute, "OISD Big", "HaGeZi Pro"),
+		blocked(-40*time.Minute, "OISD Big"),
+		blocked(-30*time.Minute, "OISD Big"),
+		blocked(-20*time.Minute, "HaGeZi Pro"),
+		// The newest partial minute is recounted from the raw log.
+		blocked(-10*time.Second, "Custom blocked domains"),
+		blocked(-3*time.Hour, "OISD Big"),
+	})
+	// These events are backdated, so date the recording marker before them the
+	// way it would be on a server that has been attributing blocks for a while.
+	if _, err := opened.database.ExecContext(context.Background(),
+		"UPDATE sable_metadata SET value = ? WHERE key = ?", now.Add(-4*time.Hour).Format(time.RFC3339Nano), blockedSourceRollupSinceKey,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	activity, err := opened.BlockingActivity(context.Background(), now.Add(-time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]querylog.SourceActivity{
+		"OISD Big":               {Blocked: 3, Sole: 2},
+		"HaGeZi Pro":             {Blocked: 2, Sole: 1},
+		"Custom blocked domains": {Blocked: 1, Sole: 1},
+	}
+	if len(activity.Sources) != len(want) {
+		t.Fatalf("sources = %+v, want %+v", activity.Sources, want)
+	}
+	for source, counts := range want {
+		if activity.Sources[source] != counts {
+			t.Errorf("%s = %+v, want %+v", source, activity.Sources[source], counts)
+		}
+	}
+	if !activity.SourcesSince.IsZero() {
+		t.Fatalf("sources since = %s, want the whole window covered", activity.SourcesSince)
+	}
+}
+
+// Queries logged before sources were recorded cannot be attributed, so the
+// counts start when recording began and say so.
+func TestBlockingActivityReportsWhenSourceCountingBegan(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	event := blockingEvent(now.Add(-10*time.Minute), "10.0.7.16", "ads.example.com.", querylog.SourceBlocked)
+	event.Decision.PolicySources = []string{"OISD Big"}
+	opened := openQueryLogStore(t, []querylog.Event{event})
+	began := now.Add(-30 * time.Minute)
+	if _, err := opened.database.ExecContext(context.Background(),
+		"UPDATE sable_metadata SET value = ? WHERE key = ?", began.Format(time.RFC3339Nano), blockedSourceRollupSinceKey,
+	); err != nil {
+		t.Fatal(err)
+	}
+	activity, err := opened.BlockingActivity(context.Background(), now.Add(-time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !activity.SourcesSince.Equal(began) || activity.Sources["OISD Big"].Blocked != 1 {
+		t.Fatalf("sources = %+v since %s, want 1 since %s", activity.Sources, activity.SourcesSince, began)
+	}
+}

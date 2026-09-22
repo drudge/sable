@@ -65,6 +65,16 @@ type FindingsInput struct {
 	Health         []ListHealth
 	UpdateInterval time.Duration
 	PastBlocks     []PastBlock
+	// Queries holds blocked query counts per list when the operator may read
+	// query history. Nil leaves query counts out of the list findings.
+	Queries *SourceQueries
+}
+
+// SourceQueries is how many blocked queries each list accounted for in the
+// window, counted from Since when attribution began partway through it.
+type SourceQueries struct {
+	Lists map[string]querylog.SourceActivity
+	Since time.Time
 }
 
 // Findings turns the inputs into a short list of evidence-backed findings,
@@ -78,7 +88,7 @@ func Findings(input FindingsInput) []insights.Finding {
 	findings = append(findings, updateFindings(input)...)
 	if input.Contribution != nil {
 		findings = append(findings, unreadableFindings(*input.Contribution)...)
-		findings = append(findings, coverageFindings(*input.Contribution)...)
+		findings = append(findings, coverageFindings(*input.Contribution, input.Queries)...)
 	}
 	return findings[:min(len(findings), maximumFindings)]
 }
@@ -205,7 +215,7 @@ func unreadableFindings(contribution Contribution) []insights.Finding {
 	return findings
 }
 
-func coverageFindings(contribution Contribution) []insights.Finding {
+func coverageFindings(contribution Contribution, queries *SourceQueries) []insights.Finding {
 	if contribution.Analyzed < 2 {
 		return nil
 	}
@@ -233,13 +243,18 @@ func coverageFindings(contribution Contribution) []insights.Finding {
 		if list.LargestOverlap.Domains == list.Covered {
 			summary = covered + " of this list's domains are also covered by " + list.LargestOverlap.Name + "."
 		}
+		// Only a count over the whole window can support a statement about
+		// the whole period.
+		if queries != nil && queries.Since.IsZero() && queries.Lists[list.Name].Sole == 0 {
+			summary += " No blocked query in this period depended on it alone."
+		}
 		findings = append(findings, insights.Finding{
 			Kind:             KindLowUnique,
 			Tone:             insights.ToneNotice,
 			Title:            "Little unique coverage",
 			Subject:          list.Name,
 			Summary:          summary,
-			Facts:            coverageFacts(list),
+			Facts:            coverageFacts(list, queries),
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -260,7 +275,7 @@ func coverageFindings(contribution Contribution) []insights.Finding {
 			Subject: best.Name,
 			Summary: fmt.Sprintf("%s of this list's domains (%s) are not covered by any other enabled list.",
 				insights.FormatCount(uint64(best.Unique)), insights.FormatShare(uint64(best.Unique), uint64(best.Domains))),
-			Facts:            coverageFacts(best),
+			Facts:            coverageFacts(best, queries),
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -273,12 +288,22 @@ const coverageMethod = "Sable reads every enabled list's cached copy with the sa
 	"A domain counts as covered by another list when that list contains the same name or one of its parent domains, " +
 	"because a blocked domain also blocks its subdomains. This describes list contents, not which list answered a query."
 
-func coverageFacts(list ListContribution) []insights.Fact {
+func coverageFacts(list ListContribution, queries *SourceQueries) []insights.Fact {
 	facts := []insights.Fact{
 		{Label: "Domains in list", Value: insights.FormatCount(uint64(list.Domains))},
 		{Label: "Unique to this list", Value: insights.FormatCount(uint64(list.Unique))},
 		{Label: "Also covered elsewhere", Value: insights.FormatCount(uint64(list.Covered))},
 		{Label: "Unique share", Value: insights.FormatShare(uint64(list.Unique), uint64(list.Domains))},
+	}
+	if queries != nil {
+		activity := queries.Lists[list.Name]
+		facts = append(facts,
+			insights.Fact{Label: "Blocked queries it matched", Value: insights.FormatCount(activity.Blocked)},
+			insights.Fact{Label: "Blocked by this list alone", Value: insights.FormatCount(activity.Sole)},
+		)
+		if !queries.Since.IsZero() {
+			facts = append(facts, insights.Fact{Label: "Queries counted since", Time: queries.Since})
+		}
 	}
 	if list.LargestOverlap.Name != "" {
 		facts = append(facts, insights.Fact{

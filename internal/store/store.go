@@ -159,7 +159,7 @@ ON sable_server_log (occurred_at)`}
 	if err := store.migrateQueryLogIndexes(ctx); err != nil {
 		return fmt.Errorf("migrate %s query log indexes: %w", store.driver, err)
 	}
-	if err := store.migrateBlockedClientRollup(ctx); err != nil {
+	if err := store.migrateBlockingRollups(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
 	if err := store.migrateZoneRecordSchema(ctx); err != nil {

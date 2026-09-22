@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/insights"
+	"github.com/drudge/sable/internal/querylog"
 )
 
 type InsightsPageView struct {
@@ -85,6 +86,17 @@ type InsightsContributionView struct {
 	Unique     int
 	AnalyzedAt time.Time
 	Lists      []InsightListView
+	// HasQueries is set when blocked query counts per list are available,
+	// counted from QueriesSince when attribution began inside the window.
+	HasQueries   bool
+	QueriesSince time.Time
+	Custom       *InsightCustomSourceView
+}
+
+// InsightCustomSourceView is the operator's own blocked domains.
+type InsightCustomSourceView struct {
+	Domains int
+	Queries querylog.SourceActivity
 }
 
 type InsightListView struct {
@@ -97,6 +109,7 @@ type InsightListView struct {
 	Covered               int
 	LargestOverlap        string
 	LargestOverlapDomains int
+	Queries               querylog.SourceActivity
 }
 
 var insightsRangeChoices = []RangeChoice{{"Day", "day"}, {"Week", "week"}, {"Month", "month"}, {"Year", "year"}}
@@ -381,6 +394,10 @@ templ InsightContribution(view InsightsOverviewView) {
 								<div><dt>Domains</dt><dd>{ formatNumber(uint64(list.Domains)) }</dd></div>
 								<div><dt>Unique</dt><dd>{ formatNumber(uint64(list.Unique)) }</dd></div>
 								<div><dt>Elsewhere</dt><dd>{ formatNumber(uint64(list.Covered)) }</dd></div>
+								if view.Contribution.HasQueries {
+									<div><dt>Queries blocked</dt><dd>{ formatNumber(list.Queries.Blocked) }</dd></div>
+									<div><dt>This list alone</dt><dd>{ formatNumber(list.Queries.Sole) }</dd></div>
+								}
 							</dl>
 							if list.LargestOverlap != "" {
 								<small class="insight-overlap">Largest overlap: { list.LargestOverlap } ({ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) })</small>
@@ -388,6 +405,20 @@ templ InsightContribution(view InsightsOverviewView) {
 						} else {
 							<small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small>
 						}
+					</article>
+				}
+				if custom := view.Contribution.Custom; custom != nil {
+					<article class="insight-list-mobile-row data-mobile-row">
+						<div class="data-mobile-heading">
+							<span><strong>Custom blocked domains</strong><small>Blocked domains you added</small></span>
+						</div>
+						<dl>
+							<div><dt>Domains</dt><dd>{ formatNumber(uint64(custom.Domains)) }</dd></div>
+							if view.Contribution.HasQueries {
+								<div><dt>Queries blocked</dt><dd>{ formatNumber(custom.Queries.Blocked) }</dd></div>
+								<div><dt>Custom alone</dt><dd>{ formatNumber(custom.Queries.Sole) }</dd></div>
+							}
+						</dl>
 					</article>
 				}
 			</div>
@@ -402,6 +433,9 @@ templ InsightContribution(view InsightsOverviewView) {
 							<th scope="col" class="right-cell">Also elsewhere</th>
 							<th scope="col">Unique share</th>
 							<th scope="col">Largest overlap</th>
+							if view.Contribution.HasQueries {
+								<th scope="col" class="right-cell">Queries blocked</th>
+							}
 						</tr>
 					</thead>
 					<tbody>
@@ -428,16 +462,45 @@ templ InsightContribution(view InsightsOverviewView) {
 								} else {
 									<td colspan="5"><small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small></td>
 								}
+								if view.Contribution.HasQueries {
+									@insightQueriesCell(list.Queries)
+								}
+							</tr>
+						}
+						if custom := view.Contribution.Custom; custom != nil {
+							<tr class="insight-custom-row">
+								<th scope="row"><span class="insight-list-name"><strong>Custom blocked domains</strong><code>Blocked domains you added</code></span></th>
+								<td class="right-cell numeric-cell">{ formatNumber(uint64(custom.Domains)) }</td>
+								<td colspan="4" class="muted-cell">Not compared with lists</td>
+								if view.Contribution.HasQueries {
+									@insightQueriesCell(custom.Queries)
+								}
 							</tr>
 						}
 					</tbody>
 				</table>
 			</div>
 			<footer class="insight-card-note">
-				<p><strong>Unique</strong> means no other enabled list contains the domain or one of its parent domains. These counts describe list contents, not which list answered a query.</p>
+				<p><strong>Unique</strong> means no other enabled list contains the domain or one of its parent domains; those columns describe list contents.</p>
+				if view.Contribution.HasQueries {
+					<p><strong>Queries blocked</strong> counts blocked queries whose matching rule the source contains, and <strong>alone</strong> counts the ones no other source would have blocked. A rule in several lists counts for each.
+						if !view.Contribution.QueriesSince.IsZero() {
+							Counted since { FormatShortDateTime(view.Contribution.QueriesSince, view.TimeDisplay, false) }, when Sable began recording which list blocked a query.
+						}
+					</p>
+				}
 			</footer>
 		}
 	</section>
+}
+
+templ insightQueriesCell(queries querylog.SourceActivity) {
+	<td class="right-cell">
+		<span class="insight-queries-cell">
+			<span class="numeric-cell">{ formatNumber(queries.Blocked) }</span>
+			<small>{ formatNumber(queries.Sole) } alone</small>
+		</span>
+	</td>
 }
 
 // insightShareBar draws a list's unique share against the part other lists

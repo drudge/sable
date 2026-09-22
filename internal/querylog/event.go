@@ -63,12 +63,16 @@ const (
 // bypass rules. PolicyRule and Route only contain normalized DNS suffixes that
 // are already represented by the logged query or Sable's DNS configuration.
 type Decision struct {
-	Policy     PolicyDecision   `json:"policy,omitempty"`
-	PolicyRule string           `json:"policy_rule,omitempty"`
-	Cache      CacheDecision    `json:"cache,omitempty"`
-	Resolver   ResolverDecision `json:"resolver,omitempty"`
-	Route      string           `json:"route,omitempty"`
-	DNSSEC     DNSSECDecision   `json:"dnssec,omitempty"`
+	Policy     PolicyDecision `json:"policy,omitempty"`
+	PolicyRule string         `json:"policy_rule,omitempty"`
+	// PolicySources names the block lists that contain PolicyRule, or the
+	// custom blocked domains, when a query was blocked. More than one source
+	// can list the same rule, and every one is recorded.
+	PolicySources []string         `json:"policy_sources,omitempty"`
+	Cache         CacheDecision    `json:"cache,omitempty"`
+	Resolver      ResolverDecision `json:"resolver,omitempty"`
+	Route         string           `json:"route,omitempty"`
+	DNSSEC        DNSSECDecision   `json:"dnssec,omitempty"`
 }
 
 type Event struct {
@@ -145,6 +149,21 @@ type BlockingActivity struct {
 	BlockedClients uint64
 	TopDomains     map[string]uint64
 	TopClients     map[string]uint64
+	// Sources counts blocked queries per block list, from the moment blocked
+	// queries began recording their source. SourcesSince is that moment when
+	// it falls inside the window, so a partial count is never passed off as
+	// the whole period; it is zero when the whole window is covered.
+	Sources      map[string]SourceActivity
+	SourcesSince time.Time
+}
+
+// SourceActivity is how many blocked queries one source accounts for.
+type SourceActivity struct {
+	// Blocked counts queries whose matching rule this source contained. A rule
+	// several lists share counts once for each of them.
+	Blocked uint64
+	// Sole counts queries no other source would have blocked.
+	Sole uint64
 }
 
 // BlockedNameEvidence is what the query log retained about one name that was

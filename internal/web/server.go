@@ -73,49 +73,49 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames       *reverseNameCache
-	reload             func(context.Context) error
-	auth               Authenticator
-	sso                ssoController
-	ssoAdmin           ssoAdministration
-	ssoStateStore      *ssoStateStore
-	preAuthTokens      *preAuthTokenStore
-	passkeyCeremonies  passkeyCeremonyStore
-	crossOrigin        *http.CrossOriginProtection
-	securityEnabled    bool
-	secureCookies      bool
-	sessionCookie      string
-	setupRequired      atomic.Bool
-	history            *statsHistory
-	insightCache       dashboardInsightCache
+	reverseNames      *reverseNameCache
+	reload            func(context.Context) error
+	auth              Authenticator
+	sso               ssoController
+	ssoAdmin          ssoAdministration
+	ssoStateStore     *ssoStateStore
+	preAuthTokens     *preAuthTokenStore
+	passkeyCeremonies passkeyCeremonyStore
+	crossOrigin       *http.CrossOriginProtection
+	securityEnabled   bool
+	secureCookies     bool
+	sessionCookie     string
+	setupRequired     atomic.Bool
+	history           *statsHistory
+	insightCache      dashboardInsightCache
 	// blockingActivityCache and blockListAnalysis back the Insights page.
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	blockListAnalysis     blockinginsights.Analyzer
 	baseDirectory         string
-	historyPrune       chan struct{}
-	runtimeContext     context.Context
-	runtimeCancel      context.CancelFunc
-	runtimeLifecycleMu sync.Mutex
-	runtimeStarted     bool
-	runtimeClosed      bool
-	runtimeWG          sync.WaitGroup
-	runtimeWaitOnce    sync.Once
-	runtimeDone        chan struct{}
-	blockLists         *blockcompiler.Updater
-	dnssec             dnssecController
-	cluster            clusterController
-	dynamicDNS         dynamicDNSController
-	unifi              unifiController
-	certificates       certificateController
-	tsigKeys           tsigController
-	updates            updateController
-	backups            backupController
-	backupStaging      backupStaging
-	administrator      administrator
-	restart            func()
-	restartRequested   atomic.Bool
-	instanceID         string
-	demoLogin          devDemoAutoLoginState
+	historyPrune          chan struct{}
+	runtimeContext        context.Context
+	runtimeCancel         context.CancelFunc
+	runtimeLifecycleMu    sync.Mutex
+	runtimeStarted        bool
+	runtimeClosed         bool
+	runtimeWG             sync.WaitGroup
+	runtimeWaitOnce       sync.Once
+	runtimeDone           chan struct{}
+	blockLists            *blockcompiler.Updater
+	dnssec                dnssecController
+	cluster               clusterController
+	dynamicDNS            dynamicDNSController
+	unifi                 unifiController
+	certificates          certificateController
+	tsigKeys              tsigController
+	updates               updateController
+	backups               backupController
+	backupStaging         backupStaging
+	administrator         administrator
+	restart               func()
+	restartRequested      atomic.Bool
+	instanceID            string
+	demoLogin             devDemoAutoLoginState
 }
 
 type devDemoAutoLoginState struct {
@@ -1648,6 +1648,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.PolicyBlocked:
 		view.Policy = "Blocked by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
+			view.PolicyDetail += " from " + sources
+		}
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
 	}
@@ -1699,6 +1702,21 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		view.DNSSEC = "DNSSEC not validated"
 	}
 	return view
+}
+
+// joinSourceNames lists block sources in a sentence: "A", "A and B", or
+// "A, B, and C".
+func joinSourceNames(sources []string) string {
+	switch len(sources) {
+	case 0:
+		return ""
+	case 1:
+		return sources[0]
+	case 2:
+		return sources[0] + " and " + sources[1]
+	default:
+		return strings.Join(sources[:len(sources)-1], ", ") + ", and " + sources[len(sources)-1]
+	}
 }
 
 func matchedDecisionRule(rule string) string {

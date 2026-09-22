@@ -40,26 +40,70 @@ type SourceStats struct {
 	Invalid  int    `json:"invalid"`
 }
 
+// CustomSourceName labels the domains an operator blocked by hand rather than
+// through a block list.
+const CustomSourceName = "Custom blocked domains"
+
 type Result struct {
-	Domains []string      `json:"domains"`
-	Sources []SourceStats `json:"sources"`
+	Domains []string `json:"domains"`
+	// Owners runs parallel to Domains and indexes OwnerSets, naming every
+	// source that contributed each domain. Sets are shared, so a million
+	// domains drawn from three lists hold a handful of small slices.
+	Owners    []uint32      `json:"-"`
+	OwnerSets [][]string    `json:"-"`
+	Sources   []SourceStats `json:"sources"`
+}
+
+// ownerSets interns the combinations of sources that contribute a domain. Set
+// zero is empty. Sources are applied in compile order, so a set only ever grows
+// by appending the source currently being read.
+type ownerSets struct {
+	sets        [][]string
+	transitions map[ownerTransition]uint32
+}
+
+type ownerTransition struct {
+	from   uint32
+	source string
+}
+
+func newOwnerSets() *ownerSets {
+	return &ownerSets{sets: [][]string{nil}, transitions: make(map[ownerTransition]uint32)}
+}
+
+func (owners *ownerSets) add(current uint32, source string) uint32 {
+	set := owners.sets[current]
+	if len(set) > 0 && set[len(set)-1] == source {
+		return current
+	}
+	key := ownerTransition{from: current, source: source}
+	if next, found := owners.transitions[key]; found {
+		return next
+	}
+	next := uint32(len(owners.sets))
+	owners.sets = append(owners.sets, append(append(make([]string, 0, len(set)+1), set...), source))
+	owners.transitions[key] = next
+	return next
 }
 
 func Compile(baseDirectory string, inlineDomains []string, sources []Source) (Result, error) {
-	domains := make(map[string]struct{}, len(inlineDomains))
+	owners := newOwnerSets()
+	domains := make(map[string]uint32, len(inlineDomains))
 	for _, domain := range inlineDomains {
 		normalized, valid := normalizeDomain(domain)
 		if !valid {
 			return Result{}, fmt.Errorf("invalid inline blocked domain %q", domain)
 		}
-		domains[normalized] = struct{}{}
+		domains[normalized] = owners.add(domains[normalized], CustomSourceName)
 	}
 	result := Result{Sources: make([]SourceStats, 0, len(sources))}
 	for _, source := range sources {
 		if err := ValidateFormat(string(source.Format)); err != nil {
 			return Result{}, fmt.Errorf("block list %q: %w", source.Name, err)
 		}
-		stats, err := compileSource(baseDirectory, source, domains)
+		stats, err := ReadSource(baseDirectory, source, func(domain string) {
+			domains[domain] = owners.add(domains[domain], source.Name)
+		})
 		if err != nil {
 			return Result{}, err
 		}
@@ -70,11 +114,12 @@ func Compile(baseDirectory string, inlineDomains []string, sources []Source) (Re
 		result.Domains = append(result.Domains, domain)
 	}
 	slices.Sort(result.Domains)
+	result.Owners = make([]uint32, len(result.Domains))
+	for index, domain := range result.Domains {
+		result.Owners[index] = domains[domain]
+	}
+	result.OwnerSets = owners.sets
 	return result, nil
-}
-
-func compileSource(baseDirectory string, source Source, domains map[string]struct{}) (SourceStats, error) {
-	return ReadSource(baseDirectory, source, func(domain string) { domains[domain] = struct{}{} })
 }
 
 // SourcePath resolves a configured block-list path the way the compiler opens

@@ -36,6 +36,9 @@ func writeBlockListCaches(directory string) error {
 func blockListDomains(source blockListSource, generated map[string][]string) []string {
 	random := rand.New(rand.NewSource(int64(len(source.URL)) * 104729))
 	unique := make(map[string]struct{}, source.Count)
+	for _, domain := range source.Pinned {
+		unique[domain] = struct{}{}
+	}
 	for _, shared := range source.Shared {
 		pool := generated[shared.From]
 		for _, index := range random.Perm(len(pool)) {

@@ -850,6 +850,8 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		CachePrefetchHitsPerHour:   configuration.Resolver.CachePrefetchHitsPerHour,
 		Blocking:                   configuration.Blocking.Enabled,
 		BlockedDomains:             compiledBlocking.Domains,
+		BlockedDomainOwners:        compiledBlocking.Owners,
+		BlockedDomainOwnerSets:     compiledBlocking.OwnerSets,
 		AllowedDomains:             configuration.Blocking.AllowedDomains,
 		BlockLists:                 blockListStats,
 		BlockingType:               configuration.Blocking.ResponseType,

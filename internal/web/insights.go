@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
@@ -110,6 +111,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 
 	input := blockinginsights.FindingsInput{Now: window.End, UpdateInterval: blocking.UpdateInterval.Duration}
 	var reader blockingInsightReader
+	var sources *blockinginsights.SourceQueries
 	if console.CanLogs {
 		reader, _ = server.queries.(blockingInsightReader)
 		if reader == nil {
@@ -132,6 +134,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			hosts, zones := snapshot.Config.Resolver.Hosts, server.zones.Current().Zones
 			view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, hosts, zones), insightsRankLimit)
 			view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
+			sources = &blockinginsights.SourceQueries{Lists: activity.Sources, Since: activity.SourcesSince}
 			server.nameRankedClients(view.TopClients)
 		}
 	}
@@ -147,7 +150,8 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.ListsUnavailable = true
 		} else {
 			input.Contribution = &contribution
-			view.Contribution = insightsContributionView(contribution, blocking)
+			input.Queries = sources
+			view.Contribution = insightsContributionView(contribution, blocking, sources)
 		}
 		status := server.blockLists.Status()
 		health := make(map[string]blockinginsights.ListHealth, len(status.Sources))
@@ -248,27 +252,43 @@ func insightFindingIcon(kind string) string {
 	}
 }
 
-func insightsContributionView(contribution blockinginsights.Contribution, blocking config.Blocking) *pages.InsightsContributionView {
+func insightsContributionView(contribution blockinginsights.Contribution, blocking config.Blocking, queries *blockinginsights.SourceQueries) *pages.InsightsContributionView {
 	locations := make(map[string]string, len(blocking.Lists))
 	for _, list := range blocking.Lists {
 		locations[list.Name] = pages.BlockListLocation(list.URL, list.Path)
 	}
 	view := &pages.InsightsContributionView{
 		Analyzed: contribution.Analyzed, Domains: contribution.Domains, Unique: contribution.Unique,
-		AnalyzedAt: contribution.AnalyzedAt,
+		AnalyzedAt: contribution.AnalyzedAt, HasQueries: queries != nil,
+	}
+	if queries != nil {
+		view.QueriesSince = queries.Since
 	}
 	for _, list := range contribution.Lists {
 		view.Lists = append(view.Lists, pages.InsightListView{
 			Name: list.Name, Location: locations[list.Name], Available: list.Available, Problem: list.Problem,
 			Domains: list.Domains, Unique: list.Unique, Covered: list.Covered,
 			LargestOverlap: list.LargestOverlap.Name, LargestOverlapDomains: list.LargestOverlap.Domains,
+			Queries: sourceActivity(queries, list.Name),
 		})
+	}
+	// Hand-written blocked domains are a source too. They are not a list to
+	// compare, but they belong in an answer to what is doing the blocking.
+	if len(blocking.Domains) > 0 {
+		view.Custom = &pages.InsightCustomSourceView{Domains: len(blocking.Domains), Queries: sourceActivity(queries, blockcompiler.CustomSourceName)}
 	}
 	return view
 }
 
 // insightsCheckedSummary tells an operator with nothing to review what Sable
 // actually looked at, so an empty list reads as a result rather than a gap.
+func sourceActivity(queries *blockinginsights.SourceQueries, name string) querylog.SourceActivity {
+	if queries == nil {
+		return querylog.SourceActivity{}
+	}
+	return queries.Lists[name]
+}
+
 func insightsCheckedSummary(console pages.DashboardView, window insightWindow) string {
 	period := strings.ToLower(window.Label)
 	switch {

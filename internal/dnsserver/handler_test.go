@@ -923,6 +923,45 @@ func TestHandlerReportsBlockedQueryWithoutCallingUpstream(t *testing.T) {
 	}
 }
 
+func TestHandlerRecordsWhichBlockListsSuppliedTheRule(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Forwarders = []string{"127.0.0.1:1"}
+	configuration.Blocking = true
+	configuration.BlockedDomains = []string{"ads.example", "tracker.example"}
+	configuration.BlockedDomainOwners = []uint32{2, 1}
+	configuration.BlockedDomainOwnerSets = [][]string{nil, {"OISD Big"}, {"OISD Big", "HaGeZi Pro"}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	for name, want := range map[string][]string{
+		"pixel.ads.example.": {"OISD Big", "HaGeZi Pro"},
+		"tracker.example.":   {"OISD Big"},
+	} {
+		request := new(dns.Msg)
+		request.SetQuestion(name, dns.TypeA)
+		got := handler.resolveForClient(request, runtime, "192.0.2.4")
+		if got.decision.Policy != querylog.PolicyBlocked || !slices.Equal(got.decision.PolicySources, want) {
+			t.Errorf("%s decision = %+v, want sources %v", name, got.decision, want)
+		}
+	}
+
+	// A runtime compiled without attribution still blocks, just without names.
+	configuration.BlockedDomainOwners, configuration.BlockedDomainOwnerSets = nil, nil
+	plain, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("ads.example.", dns.TypeA)
+	if got := NewHandler(plain).resolveForClient(request, plain, "192.0.2.4"); got.decision.Policy != querylog.PolicyBlocked || got.decision.PolicySources != nil {
+		t.Fatalf("unattributed decision = %+v", got.decision)
+	}
+}
+
 func TestHandlerCapturesClientAddressOncePerQuery(t *testing.T) {
 	t.Parallel()
 

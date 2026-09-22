@@ -87,3 +87,35 @@ func writeList(t *testing.T, directory, name, contents string) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 }
+
+func TestCompileRecordsEverySourceOfEachDomain(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	writeList(t, directory, "alpha.txt", "shared.example\nalpha-only.example\nshared.example\n")
+	writeList(t, directory, "beta.txt", "0.0.0.0 shared.example\n0.0.0.0 custom.example\n")
+	result, err := Compile(directory, []string{"custom.example"}, []Source{
+		{Name: "Alpha", Path: "alpha.txt", Format: FormatAuto},
+		{Name: "Beta", Path: "beta.txt", Format: FormatAuto},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Owners) != len(result.Domains) {
+		t.Fatalf("owners = %d, domains = %d", len(result.Owners), len(result.Domains))
+	}
+	want := map[string][]string{
+		"alpha-only.example": {"Alpha"},
+		"custom.example":     {CustomSourceName, "Beta"},
+		"shared.example":     {"Alpha", "Beta"},
+	}
+	for index, domain := range result.Domains {
+		if got := result.OwnerSets[result.Owners[index]]; !slices.Equal(got, want[domain]) {
+			t.Errorf("sources of %s = %v, want %v", domain, got, want[domain])
+		}
+	}
+	// Owner sets are shared, not rebuilt per domain.
+	if len(result.OwnerSets) > 5 {
+		t.Fatalf("owner sets = %v, want the few distinct combinations only", result.OwnerSets)
+	}
+}
