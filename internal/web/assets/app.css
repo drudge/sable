@@ -3796,7 +3796,19 @@ dialog[open]::backdrop {
 .insight-device-loading { display: grid; gap: .75rem; }
 .insight-device-badges { flex-wrap: wrap; }
 .insight-device-badges:empty { display: none; }
-.insight-device-name-form form { display: grid; gap: .75rem; }
+.query-detail-title-row { display: flex; min-width: 0; align-items: center; gap: .35rem; }
+.query-detail-title-row > h2 { min-width: 0; }
+.query-detail-title-action { display: grid; width: 1.75rem; height: 1.75rem; flex: 0 0 1.75rem; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: 0; color: var(--muted-foreground); }
+.query-detail-title-action:hover { background: var(--muted); color: var(--foreground); }
+.query-detail-title-action:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.query-detail-title-action .nav-icon { width: .875rem; height: .875rem; }
+.query-detail-header > .query-detail-title-editor { display: grid; width: 100%; gap: .2rem; }
+/* The drawer's body flexes to fill the dialog; the header must keep its own
+   height when an inline editor makes it taller. */
+.insight-device-dialog .query-detail-header { flex: 0 0 auto; }
+.insight-name-editor { display: grid; gap: .5rem; margin-top: .35rem; }
+.insight-name-editor input[name="name"] { font: 500 .9375rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.insight-name-help { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
 .insight-name-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 
 @media (max-width: 1279px) {

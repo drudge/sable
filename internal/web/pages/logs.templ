@@ -329,6 +329,10 @@ type DetailDrawerView struct {
 	Title           string
 	TitleAttributes templ.Attributes
 	CloseLabel      string
+	// TitleAction sits beside the title, such as a rename button, and
+	// TitleEditor replaces the visible title while it is being edited.
+	TitleAction templ.Component
+	TitleEditor templ.Component
 }
 
 // DetailDrawer renders the drawer shell. The body is passed as children and the
@@ -345,7 +349,13 @@ templ DetailDrawer(view DetailDrawerView, footer templ.Component) {
 // loaded on demand swaps this into an already open dialog.
 templ DetailDrawerContent(view DetailDrawerView, footer templ.Component) {
 	<header class="query-detail-header">
-		<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
+		if view.TitleEditor != nil {
+			<div class="query-detail-title-editor"><span>{ view.Eyebrow }</span><h2 class="sr-only" id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleEditor</div>
+		} else if view.TitleAction != nil {
+			<div><span>{ view.Eyebrow }</span><div class="query-detail-title-row"><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleAction</div></div>
+		} else {
+			<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
+		}
 		<button class="dialog-close" type="button" data-dialog-close aria-label={ view.CloseLabel }>@Icon("x")</button>
 	</header>
 	<div class="query-detail-body">

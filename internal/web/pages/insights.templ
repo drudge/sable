@@ -100,6 +100,8 @@ type InsightDeviceDrawerView struct {
 	LogWindowQuery string
 	TimeDisplay    TimeDisplay
 	CanName        bool
+	// Editing shows the name field in place of the drawer's title.
+	Editing        bool
 	Message        string
 	Error          string
 	Missing        bool
@@ -883,7 +885,7 @@ templ insightDeviceCloseFooter() {
 
 // InsightDeviceDrawer is one device's details, loaded into the open drawer.
 templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
-	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}, insightDeviceFooter(view)) {
+	@DetailDrawerContent(insightDeviceDrawerHeader(view), insightDeviceFooter(view)) {
 		@Toast(view.Message, "success")
 		if view.Error != "" {
 			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
@@ -932,28 +934,6 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 				<section class="query-detail-answer" aria-labelledby="insight-device-new">
 					<h3 id="insight-device-new">First-time domains</h3>
 					@insightDomainList("insight-device-new", view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
-				</section>
-			}
-			if view.CanName {
-				<section class="query-detail-explain insight-device-name-form" aria-labelledby="insight-device-name-title">
-					<div class="query-detail-section-heading">
-						<h3 id="insight-device-name-title">Name this device</h3>
-						<p>{ insightNameHelp(view.Device) }</p>
-					</div>
-					<form hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="find button">
-						<input type="hidden" name="key" value={ view.Device.Key }/>
-						<input type="hidden" name="range" value={ view.Range }/>
-						<label class="insight-name-field">
-							<span class="sr-only">Device name</span>
-							<input name="name" maxlength="64" autocomplete="off" placeholder="Kids iPad" value={ ifThen(view.Device.OperatorNamed, view.Device.Label, "") } required/>
-						</label>
-						<div class="insight-name-actions">
-							if view.Device.OperatorNamed {
-								<button class="button outline" type="submit" name="remove" value="1" formnovalidate data-replica-primary-action>Remove Name</button>
-							}
-							<button class="button" type="submit" data-replica-primary-action>Save Name</button>
-						</div>
-					</form>
 				</section>
 			}
 		}
@@ -1011,9 +991,9 @@ func insightDeviceTime(moment time.Time, display TimeDisplay) string {
 
 func insightNameHelp(device InsightDeviceView) string {
 	if device.MAC != "" {
-		return "The name follows this device's hardware address, so it stays with the device when its IP address changes."
+		return "Follows the hardware address, so it survives IP changes."
 	}
-	return "Sable has not tied this address to hardware, so the name applies to this IP address."
+	return "Applies to this IP address; Sable has not tied it to hardware."
 }
 
 // InsightListRowView is one row of a drawer list: a value that can be copied,
@@ -1075,4 +1055,41 @@ func insightDomainDetail(domain InsightDeviceDomainView, display TimeDisplay) st
 	default:
 		return ""
 	}
+}
+
+func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
+	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
+	if view.CanName && view.Device.Key != "" && !view.Missing {
+		if view.Editing {
+			header.TitleEditor = insightDeviceNameEditor(view)
+		} else {
+			header.TitleAction = insightDeviceRenameButton(view)
+		}
+	}
+	return header
+}
+
+templ insightDeviceRenameButton(view InsightDeviceDrawerView) {
+	<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=1" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Rename " + view.Device.Label } title="Rename device" data-replica-primary-action>@Icon("pencil")</button>
+}
+
+// insightDeviceNameEditor edits the device's name in place of its title. Enter
+// saves, and Escape or Cancel returns to the title without closing the drawer.
+templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
+	<form class="insight-name-editor" hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button">
+		<input type="hidden" name="key" value={ view.Device.Key }/>
+		<input type="hidden" name="range" value={ view.Range }/>
+		<label class="insight-name-field">
+			<span class="sr-only">Device name</span>
+			<input name="name" maxlength="64" autocomplete="off" placeholder="Name this device" value={ ifThen(view.Device.Named, view.Device.Label, "") } required autofocus data-escape-click="#insight-device-content [data-name-cancel]"/>
+		</label>
+		<small class="insight-name-help">{ insightNameHelp(view.Device) }</small>
+		<div class="insight-name-actions">
+			if view.Device.OperatorNamed {
+				<button class="button outline compact destructive" type="submit" name="remove" value="1" formnovalidate data-replica-primary-action>Remove Name</button>
+			}
+			<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-name-cancel>Cancel</button>
+			<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+		</div>
+	</form>
 }

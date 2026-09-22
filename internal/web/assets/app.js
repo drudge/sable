@@ -4193,6 +4193,18 @@
       }
     });
 
+	// An inline editor can ask Escape to press its Cancel button instead of
+	// closing the dialog around it, so backing out of an edit keeps the drawer.
+	document.addEventListener("keydown", (event) => {
+	  if (event.key !== "Escape") return;
+	  const field = event.target.closest?.("[data-escape-click]");
+	  const cancel = field && document.querySelector(field.dataset.escapeClick);
+	  if (!cancel) return;
+	  event.preventDefault();
+	  event.stopPropagation();
+	  cancel.click();
+	}, true);
+
 	document.addEventListener("keydown", (event) => {
 	  const tab = event.target.closest?.("[data-blocking-tab], [data-catalog-tab]");
 	  if (!tab) return;

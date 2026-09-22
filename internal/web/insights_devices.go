@@ -163,13 +163,14 @@ func (server *Server) insightsDevicePanel(writer http.ResponseWriter, request *h
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
-	server.renderDeviceDrawer(writer, request, console, window, request.URL.Query().Get("key"), "", "")
+	editing := request.URL.Query().Get("edit") == "1"
+	server.renderDeviceDrawer(writer, request, console, window, request.URL.Query().Get("key"), editing, "", "")
 }
 
-func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key, message, errorMessage string) {
+func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key string, editing bool, message, errorMessage string) {
 	view := pages.InsightDeviceDrawerView{
 		Range: window.Range, TimeDisplay: console.TimeDisplay, CanName: console.CanWriteSettings,
-		Message: message, Error: errorMessage,
+		Editing: editing && console.CanWriteSettings, Message: message, Error: errorMessage,
 	}
 	reader, ok := server.queries.(deviceInsightReader)
 	if !ok {
@@ -264,7 +265,7 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	if err != nil {
 		server.logger.Warn("name insights device", "client", requestClientIP(request), "error", err)
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		server.renderDeviceDrawer(writer, request, console, window, key, "", err.Error())
+		server.renderDeviceDrawer(writer, request, console, window, key, true, "", err.Error())
 		return
 	}
 	message := "Name saved."
@@ -275,7 +276,7 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	server.recordControlPlaneAudit(request, "insights.device.name", summary)
 	// The page behind the drawer shows the old name until it reloads itself.
 	writer.Header().Set("HX-Trigger", "insightsChanged")
-	server.renderDeviceDrawer(writer, request, console, window, key, message, "")
+	server.renderDeviceDrawer(writer, request, console, window, key, false, message, "")
 }
 
 // clientForDeviceKey turns a device key into the configuration entry that

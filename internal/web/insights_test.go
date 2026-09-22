@@ -373,7 +373,8 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 	}
 	body := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
 	for _, expected := range []string{
-		"george-laptop.corp.example", "Most queried domains", "telemetry.example.com", "Name this device", "hardware address, so it stays with the device",
+		"george-laptop.corp.example", "Most queried domains", "telemetry.example.com",
+		`aria-label="Rename george-laptop.corp.example"`, `hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day&amp;edit=1"`,
 		// Useful values carry a copy button labeled with what it copies.
 		`<code id="insight-device-mac">3c:22:fb:01:02:03</code>`, `data-copy-target="insight-device-mac" aria-label="Copy hardware address"`,
 		`data-copy-target="insight-device-address-0" aria-label="Copy address"`, `aria-label="Copy domain"`,
@@ -398,6 +399,18 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 	// single query log link can reproduce, so those rows are not links.
 	if strings.Contains(body, "name=telemetry.example.com") {
 		t.Fatal("a multi-address device linked a domain count to a single address")
+	}
+	if strings.Contains(body, `name="name"`) {
+		t.Fatal("the name field showed before the operator chose to rename")
+	}
+	editing := server.get(t, "everything", "/ui/insights/device?range=day&edit=1&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+	for _, expected := range []string{`class="insight-name-editor"`, `name="name"`, "autofocus", `data-escape-click="#insight-device-content [data-name-cancel]"`, "Follows the hardware address", "data-name-cancel", `value="george-laptop.corp.example"`} {
+		if !strings.Contains(editing, expected) {
+			t.Errorf("rename editor is missing %q", expected)
+		}
+	}
+	if readOnly := server.get(t, "logs-reader", "/ui/insights/device?range=day&edit=1&key="+url.QueryEscape(insightsTestLaptop), true).Body.String(); strings.Contains(readOnly, "Rename ") || strings.Contains(readOnly, `name="name"`) {
+		t.Fatal("an operator without settings write could rename a device")
 	}
 	if missing := server.get(t, "everything", "/ui/insights/device?range=day&key=mac:00:00:00:00:00:01", true).Body.String(); !strings.Contains(missing, "sent no queries in the selected period") {
 		t.Fatal("an unknown device did not explain itself")
