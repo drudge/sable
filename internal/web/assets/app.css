@@ -3750,6 +3750,36 @@ a.insight-client-row:focus-visible { outline: 2px solid var(--ring); outline-off
 .insight-client-row small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .insight-client-row > span { color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+.insights-tab-list .isotope-tab { min-width: 7.5rem; }
+.insights-tab-list .nav-icon { width: 1rem; height: 1rem; }
+.insights-tab-panel { display: grid; min-width: 0; gap: 1.5rem; }
+.insights-tab-panel[hidden] { display: none; }
+.insight-device-table tbody th { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; color: var(--foreground); font-size: .8125rem; font-weight: 400; text-align: left; }
+.insight-device-table td:last-child { width: 3rem; }
+.insight-device-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
+.insight-device-table .icon-button:hover { background: var(--accent); }
+.insight-device-table .muted-cell { white-space: nowrap; }
+.insight-device-cell { display: grid; min-width: 0; max-width: 26rem; gap: .2rem; }
+.insight-device-cell code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.insight-device-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }
+.insight-device-name strong { min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.insight-device-name strong.mono { font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.insight-device-name .status-badge, .insight-device-badges .status-badge { padding: .1rem .45rem; font-size: .625rem; }
+.insight-device-mobile-row .insight-device-name strong:not(.mono) { font-family: inherit; font-weight: 600; }
+.insight-device-mobile-row .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
+.admin-mobile-row > div.insight-device-mobile-copy { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+.insight-device-mobile-copy small { font-variant-numeric: tabular-nums; }
+.insight-device-content { display: contents; }
+/* Visually hidden labels are absolutely positioned; anchoring them to the
+   scrolling body keeps them from making the whole drawer scrollable. */
+.insight-device-dialog .query-detail-body { position: relative; }
+.insight-device-content.htmx-request > * { opacity: .55; transition: opacity 150ms ease; }
+.insight-device-loading { display: grid; gap: .75rem; }
+.insight-device-badges { flex-wrap: wrap; }
+.insight-device-badges:empty { display: none; }
+.insight-device-name-form form { display: grid; gap: .75rem; }
+.insight-name-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+
 @media (max-width: 1279px) {
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.insight-metrics[data-metric-count="3"] > :last-child { grid-column: 1 / -1; }
@@ -3760,6 +3790,8 @@ a.insight-client-row:focus-visible { outline: 2px solid var(--ring); outline-off
 }
 
 @media (max-width: 639px) {
+	.insights-tab-list { width: 100%; }
+	.insights-tab-list .isotope-tab { min-width: 0; flex: 1; }
 	.insights-heading { display: grid; }
 	.insights-range { width: 100%; padding-top: 0; }
 	.insights-range .range-select { width: 100%; }

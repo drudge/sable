@@ -61,6 +61,8 @@ var unifiHosts = []unifiHost{
 	{"b8:27:eb:33:0c:c3", "dock-camera-02", "10.20.30.43", iotNetworkID, true},
 	{"b8:27:eb:33:0c:c4", "breakroom-display", "10.20.30.44", iotNetworkID, true},
 	{"b8:27:eb:33:0c:c5", "espresso-machine", "10.20.30.45", iotNetworkID, true},
+	// Installed two days ago; Insights reports it as a new device.
+	{"b8:27:eb:33:0c:c6", "front-door-doorbell", "10.20.30.46", iotNetworkID, false},
 	{"3c:22:fb:55:11:d1", "jerry-thinkpad", "10.20.10.132", corporateNetworkID, false},
 	{"3c:22:fb:55:11:d2", "morty-surface", "10.20.10.145", corporateNetworkID, false},
 	{"3c:22:fb:55:11:d3", "helen-ipad", "10.20.10.151", corporateNetworkID, false},
@@ -104,7 +106,7 @@ var queryClients = []clientWeight{
 	{"10.20.10.16", 44}, {"10.20.10.145", 40}, {"10.20.10.151", 36}, {"10.20.10.158", 33},
 	{"10.20.10.164", 30}, {"10.20.20.21", 48}, {"10.20.20.22", 45}, {"10.20.20.30", 38},
 	{"10.20.20.31", 30}, {"10.20.20.32", 26}, {"10.20.20.118", 22}, {"10.20.20.126", 20},
-	{"10.20.20.140", 14}, {"10.20.30.41", 26}, {"10.20.30.42", 24}, {"10.20.30.43", 23},
+	{"10.20.20.140", 14}, {"10.20.30.41", 26}, {"10.20.30.42", 24},
 	{"10.20.30.44", 18}, {"10.20.30.45", 16}, {"10.20.30.112", 14}, {"10.20.30.119", 12},
 	{"10.20.40.104", 20}, {"10.20.40.111", 15},
 }
@@ -246,3 +248,36 @@ const (
 	// fixture rather than a secret.
 	operatorPassword = "LatexImporter2026!"
 )
+
+// deviceStory scripts one device's history so Insights has something true to
+// say about it: a device that went quiet, one that got busy, one that is new,
+// and one that started talking to new places.
+type deviceStory struct {
+	address string
+	domains []string
+	// perDay queries are spread across each day from daysFrom to daysTo ago,
+	// and recent more across the last day.
+	perDay           int
+	daysFrom, daysTo int
+	recent           int
+	// established devices share the office's long history, so only their
+	// recent change is news.
+	established bool
+}
+
+var deviceStories = []deviceStory{
+	// dock-camera-02 streamed steadily all week and stopped yesterday.
+	{address: "10.20.30.43", domains: []string{"stream.dockcam-cloud.net", "ntp.ubnt.com"}, perDay: 160, daysFrom: 9, daysTo: 1, established: true},
+	// The breakroom display normally checks in a little; today it is looping.
+	{address: "10.20.30.44", domains: []string{"api.breakroom-signage.io", "cdn.breakroom-signage.io"}, perDay: 110, daysFrom: 9, daysTo: 1, recent: 1_450, established: true},
+	// The doorbell was installed two days ago.
+	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
+}
+
+// georgeNewDomains are the collaboration tools George started using this week.
+var georgeNewDomains = []string{
+	"zoom.us", "us02web.zoom.us", "api.zoom.us", "figma.com", "www.figma.com", "static.figma.com",
+	"api.notion.com", "www.notion.so", "msgstore.www.notion.so", "calendly.com", "assets.calendly.com",
+	"api.loom.com", "cdn.loom.com", "app.asana.com", "api.asana.com", "miro.com", "api.miro.com",
+	"linear.app", "api.linear.app", "cdn.linear.app", "docusign.net", "account.docusign.com",
+}

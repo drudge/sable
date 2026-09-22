@@ -90,6 +90,7 @@ type Server struct {
 	insightCache      dashboardInsightCache
 	// blockingActivityCache and blockListAnalysis back the Insights page.
 	blockingActivityCache windowCache[querylog.BlockingActivity]
+	deviceActivityCache   windowCache[querylog.ClientActivityReport]
 	blockListAnalysis     blockinginsights.Analyzer
 	baseDirectory         string
 	historyPrune          chan struct{}
@@ -242,6 +243,8 @@ func New(
 	mux.HandleFunc("GET /about", server.aboutPage)
 	mux.HandleFunc("GET /insights", server.insightsPage)
 	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
+	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
+	mux.HandleFunc("POST /ui/insights/devices/name", server.nameInsightsDevice)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)

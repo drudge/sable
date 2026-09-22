@@ -442,12 +442,12 @@ func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bo
 	return since, true, nil
 }
 
-// migrateBlockingRollups marks the moment this database began writing the
-// blocked-client and blocked-source dimensions. The first migration wins, so a
-// marker is never moved forward over minutes already rolled up with it.
-func (store *Store) migrateBlockingRollups(ctx context.Context) error {
+// migrateActivityMarkers marks the moment this database began writing the
+// blocked-client and blocked-source rollups and client sightings. The first
+// migration wins, so a marker never moves forward over data written with it.
+func (store *Store) migrateActivityMarkers(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey} {
+	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey} {
 		if _, err := store.database.ExecContext(ctx,
 			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
 			key, now,

@@ -178,6 +178,52 @@ type BlockedNameEvidence struct {
 	Clients     map[string]uint64
 }
 
+// ClientActivity is one client address's traffic in a window, with when it was
+// first and last seen across all retained history.
+type ClientActivity struct {
+	Client    string
+	Queries   uint64
+	Blocked   uint64
+	FirstSeen time.Time
+	LastSeen  time.Time
+	// NewDomains counts names this client queried for the first time inside
+	// the window.
+	NewDomains uint64
+	// Recent counts queries in the 24 hours before the window's end and
+	// Baseline the queries in the seven days before that.
+	Recent   uint64
+	Baseline uint64
+}
+
+// ClientActivityReport is every client with traffic in a window. SeenSince is
+// when first-seen tracking began; a client first seen at that moment may have
+// been around before it.
+type ClientActivityReport struct {
+	Clients   []ClientActivity
+	SeenSince time.Time
+}
+
+// ClientDomain is a name one client queried.
+type ClientDomain struct {
+	Name      string
+	Queries   uint64
+	Blocked   uint64
+	FirstSeen time.Time
+}
+
+// ClientIdentity ties a client address to a hardware address, as reported by a
+// source such as a UniFi controller or the server's neighbor table.
+type ClientIdentity struct {
+	Address  string
+	MAC      string
+	Source   string
+	Hostname string
+	SeenAt   time.Time
+	// FirstSeen and LastSeen are filled in when identities are read back.
+	FirstSeen time.Time
+	LastSeen  time.Time
+}
+
 type Page struct {
 	Entries      []Entry `json:"entries"`
 	Page         int     `json:"page"`

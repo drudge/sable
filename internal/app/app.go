@@ -21,6 +21,7 @@ import (
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
+	"github.com/drudge/sable/internal/neighbors"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/secrets"
 	"github.com/drudge/sable/internal/serverlog"
@@ -394,7 +395,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		},
 		logger,
 	)
+	unifiSync.identities = database.RecordClientIdentities
 	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
+	runRuntimeWorker(func(context.Context) {
+		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)
+	})
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
 		dnsProviderCredentials,

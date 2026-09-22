@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
+	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -45,6 +47,41 @@ type blockingInsightReader interface {
 // is enough: each section then shows only what the operator may read.
 var insightsPermissions = []string{auth.PermissionBlockingRead, auth.PermissionLogsRead}
 
+// insightsTabs are the Insights sections in display order.
+var insightsTabs = []string{"overview", "devices", "blocking"}
+
+// maximumOverviewFindings keeps the Overview to what is worth reading.
+const maximumOverviewFindings = 8
+
+// insightsTab picks the section to show. A range change arrives without its
+// own tab parameter, so the tab the operator is on is read from the page URL
+// htmx reports.
+func insightsTab(request *http.Request, console pages.DashboardView) string {
+	tab := request.URL.Query().Get("tab")
+	if tab == "" {
+		if current, err := url.Parse(request.Header.Get("HX-Current-URL")); err == nil {
+			tab = current.Query().Get("tab")
+		}
+	}
+	if tab == "devices" && !console.CanLogs {
+		tab = ""
+	}
+	for _, offered := range insightsTabs {
+		if tab == offered {
+			return tab
+		}
+	}
+	return "overview"
+}
+
+func insightsPageURL(window insightWindow, tab string) string {
+	values := url.Values{"range": []string{window.Range}}
+	if tab != "overview" {
+		values.Set("tab", tab)
+	}
+	return "/insights?" + values.Encode()
+}
+
 func insightsRoute(path string) bool {
 	return path == "/insights" || strings.HasPrefix(path, "/ui/insights/")
 }
@@ -56,9 +93,10 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	tab := insightsTab(request, console)
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
-		Range: window.Range, RangeLabel: window.Label, Loading: true,
-		LoadURL: "/ui/insights/overview?range=" + url.QueryEscape(window.Range),
+		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
+		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
@@ -77,8 +115,9 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
 	view := server.insightsOverview(request, console, window)
+	view.ActiveTab = insightsTab(request, console)
 	if request.Header.Get("HX-Request") == "true" {
-		writer.Header().Set("HX-Replace-Url", "/insights?range="+url.QueryEscape(window.Range))
+		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab))
 	}
 	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights overview", "error", err)
@@ -101,6 +140,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 		TimeDisplay:     console.TimeDisplay,
 		BlockingEnabled: blocking.Enabled,
+		CanNameDevices:  console.CanWriteSettings,
 	}
 	if console.CanLogs {
 		view.QueryLogDisabled = !snapshot.Config.QueryLog.Enabled
@@ -171,10 +211,50 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	if reader != nil && console.CanBlocking && !view.ActivityUnavailable {
 		input.PastBlocks = server.pastBlocks(request.Context(), reader, window, blocking)
 	}
-	findings := blockinginsights.Findings(input)
-	view.Findings = server.insightFindingViews(findings, snapshot.Config)
+	findings := make([]insights.Finding, 0)
+	if console.CanLogs {
+		if reader, ok := server.queries.(deviceInsightReader); ok {
+			report, err := server.insightDevices(request.Context(), reader, window)
+			if err != nil {
+				server.logger.Warn("build insights devices", "error", err)
+				view.DevicesUnavailable = true
+			} else {
+				view.Devices = insightDeviceViews(report)
+				view.DeviceSummary = insightDeviceSummary(view.Devices)
+				findings = append(findings, server.deviceChanges(request.Context(), reader, report)...)
+			}
+		} else {
+			view.DevicesUnavailable = true
+		}
+	}
+	findings = append(findings, blockinginsights.Findings(input)...)
+	view.Findings = server.insightFindingViews(prioritizeFindings(findings), snapshot.Config)
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 	return view
+}
+
+// prioritizeFindings puts what needs attention first and keeps each area's
+// own order within a tone, then trims the list to a readable length.
+func prioritizeFindings(findings []insights.Finding) []insights.Finding {
+	rank := map[insights.Tone]int{insights.ToneAttention: 0, insights.ToneNotice: 1, insights.TonePositive: 2}
+	ordered := slices.Clone(findings)
+	slices.SortStableFunc(ordered, func(left, right insights.Finding) int { return rank[left.Tone] - rank[right.Tone] })
+	return ordered[:min(len(ordered), maximumOverviewFindings)]
+}
+
+func insightDeviceSummary(views []pages.InsightDeviceView) pages.InsightDeviceSummaryView {
+	summary := pages.InsightDeviceSummaryView{Devices: len(views)}
+	for _, device := range views {
+		summary.Queries += device.Queries
+		summary.Blocked += device.Blocked
+		if device.New {
+			summary.New++
+		}
+		if device.Named {
+			summary.Named++
+		}
+	}
+	return summary
 }
 
 // pastBlocks finds the names an allow rule matches that the query log shows as
@@ -222,6 +302,14 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 		if finding.Query != nil {
 			view.Query = &pages.InsightQueryView{Name: finding.Query.Name, ClientIP: finding.Query.ClientIP, Blocked: finding.Query.Blocked}
 		}
+		view.DeviceKey = finding.Device
+		for _, domain := range finding.Domains {
+			item := pages.InsightDeviceDomainView{Name: domain.Name, FirstSeen: domain.FirstSeen}
+			if domain.Query != nil {
+				item.ClientIP = domain.Query.ClientIP
+			}
+			view.Domains = append(view.Domains, item)
+		}
 		if len(finding.Clients) > 0 {
 			counts := make(map[string]uint64, len(finding.Clients))
 			for _, client := range finding.Clients {
@@ -247,6 +335,14 @@ func insightFindingIcon(kind string) string {
 		return "layers"
 	case blockinginsights.KindUniqueCoverage:
 		return "check-circle"
+	case devices.KindNewDevice:
+		return "plus"
+	case devices.KindNewDestinations:
+		return "globe"
+	case devices.KindTrafficSpike:
+		return "line-chart"
+	case devices.KindWentQuiet:
+		return "power"
 	default:
 		return "info"
 	}
@@ -280,8 +376,6 @@ func insightsContributionView(contribution blockinginsights.Contribution, blocki
 	return view
 }
 
-// insightsCheckedSummary tells an operator with nothing to review what Sable
-// actually looked at, so an empty list reads as a result rather than a gap.
 func sourceActivity(queries *blockinginsights.SourceQueries, name string) querylog.SourceActivity {
 	if queries == nil {
 		return querylog.SourceActivity{}
@@ -289,13 +383,15 @@ func sourceActivity(queries *blockinginsights.SourceQueries, name string) queryl
 	return queries.Lists[name]
 }
 
+// insightsCheckedSummary tells an operator with nothing to review what Sable
+// actually looked at, so an empty list reads as a result rather than a gap.
 func insightsCheckedSummary(console pages.DashboardView, window insightWindow) string {
 	period := strings.ToLower(window.Label)
 	switch {
 	case console.CanLogs && console.CanBlocking:
-		return "Sable checked blocked queries, allowed domains, block list updates, and block list overlap for the " + period + "."
+		return "Sable checked new and changed devices, blocked queries, allowed domains, block list updates, and block list overlap for the " + period + "."
 	case console.CanLogs:
-		return "Sable checked blocked queries for the " + period + "."
+		return "Sable checked new and changed devices and blocked queries for the " + period + "."
 	default:
 		return "Sable checked block list updates and block list overlap."
 	}

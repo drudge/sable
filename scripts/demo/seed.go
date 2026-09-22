@@ -43,7 +43,7 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 
 	random := rand.New(rand.NewSource(20260820))
 	now := time.Now().Truncate(time.Second)
-	if err := backdateSourceRecording(ctx, dsn, now.Add(-chartHistoryLength)); err != nil {
+	if err := backdateSourceRecording(ctx, dsn, now.Add(-deviceHistoryLength-24*time.Hour)); err != nil {
 		return err
 	}
 	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now, policy)); err != nil {
@@ -51,6 +51,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	}
 	if err := backing.WriteQueryEvents(ctx, seedPastBlocks(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo past blocks: %w", err)
+	}
+	if err := backing.WriteQueryEvents(ctx, seedDeviceHistory(random, now, policy)); err != nil {
+		return fmt.Errorf("write demo device history: %w", err)
 	}
 	buckets, totals := seedChartHistory(random, now)
 	if err := backing.RecordQueryStats(ctx, buckets, totals); err != nil {
@@ -100,6 +103,57 @@ func seedPastBlocks(random *rand.Rand, now time.Time, policy *demoBlockPolicy) [
 				Source: querylog.SourceBlocked, Protocol: seedProtocol(random), Duration: microseconds(random, 120, 400),
 				Decision: policy.blockedDecision(block.name),
 			})
+		}
+	}
+	return events
+}
+
+// deviceHistoryLength is how long ago the office's regular devices first
+// appeared, well before the month Insights opens on.
+const deviceHistoryLength = 40 * 24 * time.Hour
+
+// seedDeviceHistory gives every regular device a history older than the
+// Insights window, so only the scripted stories read as new, then plays out
+// each device story.
+func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
+	events := make([]querylog.Event, 0)
+	known := make([]queryDomain, 0, len(resolvedDomains)+len(localDomains)+len(blockedTraffic))
+	known = append(append(append(known, resolvedDomains...), localDomains...), blockedTraffic...)
+	first := now.Add(-deviceHistoryLength)
+	for _, client := range queryClients {
+		for index, domain := range known {
+			at := first.Add(time.Duration(index) * time.Minute)
+			events = append(events, seedQueryEvent(random, at, client, domain, policy))
+		}
+	}
+	for _, story := range deviceStories {
+		client := clientWeight{address: story.address}
+		if story.established {
+			for index, name := range story.domains {
+				at := first.Add(time.Duration(index) * time.Minute)
+				events = append(events, seedQueryEvent(random, at, client, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
+			}
+		}
+		for day := story.daysFrom; day > story.daysTo; day-- {
+			start := now.Add(-time.Duration(day) * 24 * time.Hour)
+			for range story.perDay {
+				at := start.Add(time.Duration(random.Int63n(int64(24 * time.Hour))))
+				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+				events = append(events, seedQueryEvent(random, at, client, domain, policy))
+			}
+		}
+		for range story.recent {
+			at := now.Add(-time.Duration(random.Int63n(int64(24 * time.Hour))))
+			domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+			events = append(events, seedQueryEvent(random, at, client, domain, policy))
+		}
+	}
+	// George's laptop picked up a batch of new tools in the last three days.
+	george := clientWeight{address: "10.20.10.12"}
+	for index, name := range georgeNewDomains {
+		at := now.Add(-72*time.Hour + time.Duration(index)*3*time.Hour)
+		for range 1 + random.Intn(6) {
+			events = append(events, seedQueryEvent(random, at.Add(time.Duration(random.Intn(3600))*time.Second), george, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
 		}
 	}
 	return events
@@ -352,7 +406,7 @@ func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) e
 	}
 	defer database.Close()
 	if _, err := database.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since')",
+		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since')",
 		since.UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return fmt.Errorf("backdate demo source recording: %w", err)

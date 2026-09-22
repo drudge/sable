@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/insights"
@@ -39,6 +40,72 @@ type InsightsOverviewView struct {
 	TopClients          []RankedStatView
 	TopDomains          []RankedStatView
 	Contribution        *InsightsContributionView
+	ActiveTab           string
+	CanNameDevices      bool
+	DevicesUnavailable  bool
+	Devices             []InsightDeviceView
+	DeviceSummary       InsightDeviceSummaryView
+}
+
+// InsightDeviceView is one device with its traffic in the window.
+type InsightDeviceView struct {
+	Key        string
+	Label      string
+	Named      bool
+	NameSource string
+	// OperatorNamed is set when the name is one the operator gave in Sable.
+	OperatorNamed bool
+	MAC           string
+	PrivateMAC    bool
+	Addresses     []InsightDeviceAddressView
+	Queries       uint64
+	Blocked       uint64
+	NewDomains    uint64
+	FirstSeen     time.Time
+	LastSeen      time.Time
+	// New is set when the device was first seen inside the window and
+	// first-seen tracking covered that moment.
+	New bool
+}
+
+// InsightDeviceAddressView is one client address of a device and its own
+// counts, which a query log link for that address reproduces.
+type InsightDeviceAddressView struct {
+	Address string
+	Queries uint64
+	Blocked uint64
+}
+
+type InsightDeviceSummaryView struct {
+	Devices int
+	New     int
+	Named   int
+	Queries uint64
+	Blocked uint64
+}
+
+// InsightDeviceDomainView is one name a device queried. ClientIP is set when a
+// query log link for that single address reproduces the row.
+type InsightDeviceDomainView struct {
+	Name      string
+	ClientIP  string
+	Queries   uint64
+	Blocked   uint64
+	FirstSeen time.Time
+}
+
+// InsightDeviceDrawerView is the device drawer's content.
+type InsightDeviceDrawerView struct {
+	Range          string
+	LogWindowQuery string
+	TimeDisplay    TimeDisplay
+	CanName        bool
+	Message        string
+	Error          string
+	Missing        bool
+	Device         InsightDeviceView
+	TopDomains     []InsightDeviceDomainView
+	NewDomains     []InsightDeviceDomainView
 }
 
 // InsightsActivityView holds exact counts of blocked queries in the window.
@@ -64,6 +131,8 @@ type InsightFindingView struct {
 	Query            *InsightQueryView
 	Destination      string
 	DestinationLabel string
+	DeviceKey        string
+	Domains          []InsightDeviceDomainView
 }
 
 type InsightFactView struct {
@@ -121,31 +190,54 @@ func insightsRangeControl(active string) RangeControlView {
 	}
 }
 
-templ InsightsPage(view InsightsPageView) {
-	@AppDocument(view.Console, "Insights", "insights", insightsDocument(view.Overview))
+var insightsTabOptions = []tabOption{
+	{"overview", "Overview", "sparkles"},
+	{"devices", "Devices", "users"},
+	{"blocking", "Blocking", "shield"},
 }
 
-// insightsDocument keeps the update indicator outside the swapped overview, so
-// it reports range changes but not the first load, which has its own skeleton.
+templ InsightsPage(view InsightsPageView) {
+	@AppDocument(view.Console, documentTitle(tabLabel(insightsTabOptions, view.Overview.ActiveTab), "Insights"), "insights", insightsDocument(view.Overview))
+}
+
+// insightsDocument keeps the update indicator and the device drawer outside the
+// swapped overview: the indicator reports range changes but not the first load,
+// which has its own skeleton, and the drawer stays open while the page behind
+// it refreshes after a device is renamed.
 templ insightsDocument(view InsightsOverviewView) {
 	<div id="insights-update-indicator" class="dashboard-update-indicator htmx-indicator" role="status" aria-live="polite">
 		@Icon("refresh")
 		<span>Updating insights…</span>
 	</div>
 	@InsightsContent(view)
+	if view.CanLogs {
+		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title">
+			<div class="insight-device-content" id="insight-device-content">
+				@insightDeviceLoading()
+			</div>
+		</dialog>
+	}
 }
 
-// InsightsContent is the whole Overview, including its range control, so one
-// swap updates the control and the numbers it describes together.
+// InsightsContent is the whole Insights page below the navigation, including
+// its range control and tabs, so one swap updates the control and the numbers
+// it describes together.
 templ InsightsContent(view InsightsOverviewView) {
 	<div
 		class="insights-page page-stack"
 		id="insights-content"
+		data-isotope-tabs
+		data-active-tab={ view.ActiveTab }
+		data-tab-param="tab"
+		data-title-base="Insights"
 		if view.Loading {
 			hx-get={ templ.SafeURL(view.LoadURL) }
 			hx-trigger="load"
-			hx-swap="outerHTML"
+		} else {
+			hx-get={ templ.SafeURL("/ui/insights/overview?range=" + url.QueryEscape(view.Range)) }
+			hx-trigger="insightsChanged from:body"
 		}
+		hx-swap="outerHTML"
 	>
 		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
 			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
@@ -154,26 +246,49 @@ templ InsightsContent(view InsightsOverviewView) {
 				@RangeSelect(insightsRangeControl(view.Range))
 			</div>
 		</header>
-		if view.Loading {
-			@insightsSkeleton(view)
-		} else {
-			@insightsNotes(view)
-			@InsightFindings(view)
-			if view.CanLogs {
-				@insightsMetrics(view)
-				if view.Activity != nil {
+		<div class="isotope-tab-list insights-tab-list" role="tablist" aria-label="Insights sections">
+			for _, tab := range insightsTabOptions {
+				if tab.Value != "devices" || view.CanLogs {
+					<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) } tabindex={ ifThen(view.ActiveTab == tab.Value, "0", "-1") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
+				}
+			}
+		</div>
+		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="overview" hidden?={ view.ActiveTab != "overview" }>
+			if view.Loading {
+				@insightsSkeleton(view)
+			} else {
+				@insightsNotes(view)
+				@InsightFindings(view)
+				@insightsOverviewMetrics(view)
+			}
+		</div>
+		if view.CanLogs {
+			<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="devices" hidden?={ view.ActiveTab != "devices" }>
+				if view.Loading {
+					@insightDevicesSkeleton()
+				} else {
+					@InsightDevices(view)
+				}
+			</div>
+		}
+		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>
+			if view.Loading {
+				@insightBlockingSkeleton(view)
+			} else {
+				if view.CanLogs || view.CanBlocking {
+					@insightsMetrics(view)
+				}
+				if view.CanLogs && view.Activity != nil {
 					<section class="dashboard-rankings insight-rankings" aria-label="Blocked query rankings">
 						@RankedPanel("Clients With Most Blocks", "blocked-clients", view.TopClients, insightsRankingWindow(view))
 						@RankedPanel("Most Blocked Domains", "blocked", view.TopDomains, insightsRankingWindow(view))
 					</section>
 				}
-			} else if view.CanBlocking {
-				@insightsMetrics(view)
+				if view.CanBlocking {
+					@InsightContribution(view)
+				}
 			}
-			if view.CanBlocking {
-				@InsightContribution(view)
-			}
-		}
+		</div>
 	</div>
 }
 
@@ -181,7 +296,7 @@ templ insightsSkeleton(view InsightsOverviewView) {
 	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
 		<span class="sr-only">Analyzing your network…</span>
 		<section class="card insight-findings insight-findings-skeleton" aria-hidden="true">
-			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span>{ view.RangeLabel }</span></div></header>
+			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div></header>
 			for range 3 {
 				<div class="insight-finding">
 					<span class="insight-finding-icon insights-skeleton-block"></span>
@@ -193,6 +308,33 @@ templ insightsSkeleton(view InsightsOverviewView) {
 			}
 		</section>
 		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
+			for range 4 {
+				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
+			}
+		</div>
+	</div>
+}
+
+templ insightDevicesSkeleton() {
+	<section class="card isotope-data-card insight-devices" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Loading devices…</span>
+		<header class="isotope-data-header" aria-hidden="true"><div><h2>Devices</h2></div></header>
+		for range 6 {
+			<div class="insight-finding" aria-hidden="true">
+				<span class="insight-finding-icon insights-skeleton-block"></span>
+				<div class="insight-finding-copy">
+					<span class="insight-skeleton-title insights-skeleton-block"></span>
+					<span class="insight-skeleton-line insights-skeleton-block"></span>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ insightBlockingSkeleton(view InsightsOverviewView) {
+	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Loading blocking insights…</span>
+		<div class="operational-metric-grid insight-metrics" data-metric-count={ fmt.Sprint(insightsMetricCount(view)) } aria-hidden="true">
 			for range insightsMetricCount(view) {
 				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
 			}
@@ -204,6 +346,17 @@ templ insightsSkeleton(view InsightsOverviewView) {
 			</section>
 		}
 	</div>
+}
+
+templ insightsOverviewMetrics(view InsightsOverviewView) {
+	if view.CanLogs && !view.DevicesUnavailable {
+		<div class="operational-metric-grid insight-metrics" data-metric-count="4">
+			@OperationalMetricCard("users", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue")
+			@OperationalMetricCard("plus", "New Devices", formatNumber(uint64(view.DeviceSummary.New)), "First seen during this period, while Sable was already watching", "green")
+			@OperationalMetricCard("line-chart", "Queries", formatNumber(view.DeviceSummary.Queries), "Every query in this period, from query history", "purple")
+			@OperationalMetricCard("ban", "Blocked", percent(view.DeviceSummary.Blocked, view.DeviceSummary.Queries), formatNumber(view.DeviceSummary.Blocked) + " queries answered by blocking policy in this period", "red")
+		</div>
+	}
 }
 
 // insightsNotes explains the limits of what the page can see before it shows
@@ -300,6 +453,12 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				</div>
 			</section>
 		}
+		if len(finding.Domains) > 0 {
+			<section class="query-detail-answer insight-evidence-domains" aria-labelledby={ finding.ID + "-domains" }>
+				<h3 id={ finding.ID + "-domains" }>First-time domains</h3>
+				@insightDomainList(finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
+			</section>
+		}
 		if finding.Method != "" {
 			<section class="query-detail-explain" aria-labelledby={ finding.ID + "-method" }>
 				<div class="query-detail-section-heading">
@@ -324,6 +483,11 @@ templ insightClientCopy(client RankedStatView) {
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions">
+		if finding.DeviceKey != "" && view.CanLogs {
+			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
+				<span>Device Details</span>
+			</button>
+		}
 		if finding.Destination != "" && view.CanBlocking {
 			<a class="button outline" href={ templ.SafeURL(finding.Destination) }>
 				<span>{ finding.DestinationLabel }</span>
@@ -616,4 +780,261 @@ func insightQueryURL(query InsightQueryView, window string) string {
 		link += "&" + window
 	}
 	return link
+}
+
+templ insightDomainList(domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool) {
+	<div class="insight-client-list">
+		for _, domain := range domains {
+			if canLogs && domain.ClientIP != "" {
+				<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: domain.Name, ClientIP: domain.ClientIP}, window)) }>
+					@insightDomainCopy(domain, display)
+				</a>
+			} else {
+				<div class="insight-client-row">
+					@insightDomainCopy(domain, display)
+				</div>
+			}
+		}
+	</div>
+}
+
+templ insightDomainCopy(domain InsightDeviceDomainView, display TimeDisplay) {
+	<div>
+		<strong>{ domain.Name }</strong>
+		if !domain.FirstSeen.IsZero() {
+			<small>First queried { FormatShortDateTime(domain.FirstSeen, display, false) }</small>
+		} else if domain.Blocked > 0 {
+			<small>{ formatNumber(domain.Blocked) } blocked</small>
+		}
+	</div>
+	if domain.Queries > 0 {
+		<span>{ formatNumber(domain.Queries) }</span>
+	}
+}
+
+// InsightDevices lists every device with traffic in the window.
+templ InsightDevices(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-devices-title">Devices</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			if len(view.Devices) > 0 {
+				<span class="count-badge">{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
+			}
+		</header>
+		if view.DevicesUnavailable {
+			<div class="insight-section-empty">
+				@Icon("alert-triangle")
+				<strong>Devices could not be loaded</strong>
+				<p>Sable could not read device activity from query history right now. Try again in a moment.</p>
+			</div>
+		} else if len(view.Devices) == 0 {
+			<div class="insight-section-empty">
+				@Icon("users")
+				<strong>No devices in this period</strong>
+				<p>Devices appear here once they send queries that Sable records in query history.</p>
+			</div>
+		} else {
+			<div class="admin-mobile-list insight-device-mobile">
+				for _, device := range view.Devices {
+					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
+						<div class="insight-device-mobile-copy">
+							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device)</span>
+							<small>{ insightDeviceSubtitle(device) }</small>
+							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
+						</div>
+						@Icon("chevron-right")
+					</button>
+				}
+			</div>
+			<div class="admin-desktop-table">
+				<table class="isotope-table insight-device-table">
+					<caption class="sr-only">Devices with queries in this period</caption>
+					<thead>
+						<tr>
+							<th scope="col">Device</th>
+							<th scope="col" class="right-cell">Queries</th>
+							<th scope="col" class="right-cell">Blocked</th>
+							<th scope="col" class="right-cell">First-time domains</th>
+							<th scope="col">First seen</th>
+							<th scope="col">Last seen</th>
+							<th scope="col"><span class="sr-only">Details</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, device := range view.Devices {
+							<tr>
+								<th scope="row">
+									<span class="insight-device-cell">
+										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device)</span>
+										<code>{ insightDeviceSubtitle(device) }</code>
+									</span>
+								</th>
+								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
+								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
+								<td class="right-cell numeric-cell">{ formatNumber(device.NewDomains) }</td>
+								<td class="muted-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
+								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
+								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<footer class="insight-card-note">
+				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
+			</footer>
+		}
+	</section>
+}
+
+templ insightDeviceBadges(device InsightDeviceView) {
+	if device.New {
+		<span class="status-badge active">New</span>
+	}
+	if device.NameSource != "" {
+		<span class="status-badge">{ device.NameSource }</span>
+	}
+	if device.PrivateMAC {
+		<span class="status-badge" title="The device uses a randomized hardware address on this network">Private address</span>
+	}
+}
+
+templ insightDeviceLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: "Loading…", CloseLabel: "Close device details"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading device details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+templ insightDeviceCloseFooter() {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+}
+
+// InsightDeviceDrawer is one device's details, loaded into the open drawer.
+templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}, insightDeviceFooter(view)) {
+		@Toast(view.Message, "success")
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
+		}
+		if view.Missing {
+			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
+		} else if view.Device.Key != "" {
+			<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device)</div>
+			<dl class="query-detail-grid">
+				if view.Device.MAC != "" {
+					<div class="query-detail-fact-wide insight-fact-full"><dt>Hardware address</dt><dd><code>{ view.Device.MAC }</code>{ ifThen(view.Device.PrivateMAC, " · private, randomized by the device", "") }</dd></div>
+				}
+				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.Device.Queries) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.Device.Blocked) } ({ percent(view.Device.Blocked, view.Device.Queries) })</dd></div>
+				<div class="query-detail-fact-wide"><dt>First seen</dt><dd>{ insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Last seen</dt><dd>{ insightDeviceTime(view.Device.LastSeen, view.TimeDisplay) }</dd></div>
+			</dl>
+			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
+				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
+				<div class="insight-client-list">
+					for _, address := range view.Device.Addresses {
+						<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: address.Address}, view.LogWindowQuery)) }>
+							<div><strong>{ address.Address }</strong><small>{ formatNumber(address.Blocked) } blocked</small></div>
+							<span>{ formatNumber(address.Queries) }</span>
+						</a>
+					}
+				</div>
+			</section>
+			if len(view.TopDomains) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-top">
+					<h3 id="insight-device-top">Most queried domains</h3>
+					@insightDomainList(view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true)
+				</section>
+			}
+			if len(view.NewDomains) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-new">
+					<h3 id="insight-device-new">First-time domains</h3>
+					@insightDomainList(view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
+				</section>
+			}
+			if view.CanName {
+				<section class="query-detail-explain insight-device-name-form" aria-labelledby="insight-device-name-title">
+					<div class="query-detail-section-heading">
+						<h3 id="insight-device-name-title">Name this device</h3>
+						<p>{ insightNameHelp(view.Device) }</p>
+					</div>
+					<form hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="find button">
+						<input type="hidden" name="key" value={ view.Device.Key }/>
+						<input type="hidden" name="range" value={ view.Range }/>
+						<label class="insight-name-field">
+							<span class="sr-only">Device name</span>
+							<input name="name" maxlength="64" autocomplete="off" placeholder="Kids iPad" value={ ifThen(view.Device.OperatorNamed, view.Device.Label, "") } required/>
+						</label>
+						<div class="insight-name-actions">
+							if view.Device.OperatorNamed {
+								<button class="button outline" type="submit" name="remove" value="1" formnovalidate data-replica-primary-action>Remove Name</button>
+							}
+							<button class="button" type="submit" data-replica-primary-action>Save Name</button>
+						</div>
+					</form>
+				</section>
+			}
+		}
+	}
+}
+
+templ insightDeviceFooter(view InsightDeviceDrawerView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if len(view.Device.Addresses) == 1 {
+		<div class="query-detail-policy-actions">
+			<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
+				@Icon("logs")
+				<span>View Query Logs</span>
+			</a>
+		</div>
+	}
+}
+
+func insightDeviceURL(key, rangeName string) string {
+	return "/ui/insights/device?" + url.Values{"key": []string{key}, "range": []string{rangeName}}.Encode()
+}
+
+func insightDrawerTitle(view InsightDeviceDrawerView) string {
+	if view.Device.Label != "" {
+		return view.Device.Label
+	}
+	return "Device"
+}
+
+// insightDeviceSubtitle is the identifying detail under a device's name: its
+// addresses, and its hardware address when that is not already the name.
+func insightDeviceSubtitle(device InsightDeviceView) string {
+	parts := make([]string, 0, 3)
+	if device.MAC != "" && device.Label != device.MAC {
+		parts = append(parts, device.MAC)
+	}
+	for index, address := range device.Addresses {
+		if index == 2 {
+			parts = append(parts, fmt.Sprintf("+%d more", len(device.Addresses)-2))
+			break
+		}
+		if address.Address != device.Label {
+			parts = append(parts, address.Address)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func insightDeviceTime(moment time.Time, display TimeDisplay) string {
+	if moment.IsZero() {
+		return "—"
+	}
+	return FormatShortDateTime(moment, display, false)
+}
+
+func insightNameHelp(device InsightDeviceView) string {
+	if device.MAC != "" {
+		return "The name follows this device's hardware address, so it stays with the device when its IP address changes."
+	}
+	return "Sable has not tied this address to hardware, so the name applies to this IP address."
 }

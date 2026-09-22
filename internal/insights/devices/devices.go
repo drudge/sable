@@ -1,0 +1,257 @@
+// Package devices turns client addresses into devices and reports what changed
+// about them. An address is tied to a device through the names an operator
+// gave it, a UniFi controller's inventory, or the host's neighbor table, so a
+// laptop's IPv4 and rotating IPv6 addresses count as one device. When nothing
+// ties an address to hardware, the address stands on its own and every
+// sentence about it says "address" rather than claiming a device.
+package devices
+
+import (
+	"cmp"
+	"net"
+	"net/netip"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/querylog"
+)
+
+// Name sources, in the order a device's name is chosen.
+const (
+	SourceOperator = "Your name"
+	SourceUniFi    = "UniFi"
+	SourceLocal    = "Local host"
+	SourceReverse  = "Reverse DNS"
+)
+
+// Identity sources recorded by the store.
+const (
+	identityUniFi    = "unifi"
+	identityNeighbor = "neighbor"
+)
+
+// Device is one piece of hardware, or one address that could not be tied to
+// hardware, with its traffic in a window.
+type Device struct {
+	// Key is "mac:<address>" for hardware Sable identified and "ip:<address>"
+	// otherwise. It is stable for as long as that identity holds.
+	Key        string
+	Name       string
+	NameSource string
+	MAC        string
+	// PrivateMAC marks a randomized per-network hardware address.
+	PrivateMAC bool
+	// Named is set when the operator named this device in Sable.
+	Named bool
+	// Addresses are the client addresses that sent traffic, busiest first.
+	Addresses []Address
+	Queries   uint64
+	Blocked   uint64
+	// NewDomains counts names first queried in the window; it is exact for a
+	// single-address device and filled in by the caller for the rest.
+	NewDomains uint64
+	FirstSeen  time.Time
+	LastSeen   time.Time
+	Recent     uint64
+	Baseline   uint64
+}
+
+// Address is one client address of a device and its own traffic, which is
+// what a query log link for that address reproduces.
+type Address struct {
+	Address string
+	Queries uint64
+	Blocked uint64
+}
+
+// Identified reports whether the device is tied to hardware or to a name the
+// operator gave, rather than to a bare address.
+func (device Device) Identified() bool { return device.MAC != "" || device.Named }
+
+// ClientAddresses lists the device's addresses.
+func (device Device) ClientAddresses() []string {
+	addresses := make([]string, 0, len(device.Addresses))
+	for _, address := range device.Addresses {
+		addresses = append(addresses, address.Address)
+	}
+	return addresses
+}
+
+// Input is everything devices are built from. Names holds names discovered
+// for individual addresses, such as local host entries and PTR records, with
+// the source of each.
+type Input struct {
+	Activity   querylog.ClientActivityReport
+	Identities []querylog.ClientIdentity
+	Clients    []config.Client
+	Names      map[string]DiscoveredName
+}
+
+// DiscoveredName is a name found for one address and where it came from.
+type DiscoveredName struct {
+	Name   string
+	Source string
+}
+
+// Build groups client activity into devices, busiest first.
+func Build(input Input) []Device {
+	identities := latestIdentities(input.Identities)
+	named := newOperatorNames(input.Clients)
+	devices := make(map[string]*Device)
+	order := make([]string, 0)
+	for _, activity := range input.Activity.Clients {
+		address := activity.Client
+		identity, identified := identities[address]
+		key := "ip:" + address
+		if identified {
+			key = "mac:" + identity.MAC
+		}
+		device, found := devices[key]
+		if !found {
+			device = &Device{Key: key}
+			if identified {
+				device.MAC = identity.MAC
+				if parsed, err := net.ParseMAC(identity.MAC); err == nil {
+					device.PrivateMAC = len(parsed) > 0 && parsed[0]&0x02 != 0
+				}
+			}
+			devices[key] = device
+			order = append(order, key)
+		}
+		device.Addresses = append(device.Addresses, Address{Address: address, Queries: activity.Queries, Blocked: activity.Blocked})
+		device.Queries += activity.Queries
+		device.Blocked += activity.Blocked
+		device.NewDomains += activity.NewDomains
+		device.Recent += activity.Recent
+		device.Baseline += activity.Baseline
+		if !activity.FirstSeen.IsZero() && (device.FirstSeen.IsZero() || activity.FirstSeen.Before(device.FirstSeen)) {
+			device.FirstSeen = activity.FirstSeen
+		}
+		if activity.LastSeen.After(device.LastSeen) {
+			device.LastSeen = activity.LastSeen
+		}
+	}
+
+	result := make([]Device, 0, len(order))
+	for _, key := range order {
+		device := devices[key]
+		slices.SortFunc(device.Addresses, func(left, right Address) int {
+			if order := cmp.Compare(right.Queries, left.Queries); order != 0 {
+				return order
+			}
+			return cmp.Compare(left.Address, right.Address)
+		})
+		device.Name, device.NameSource, device.Named = chooseName(*device, named, identities, input.Names)
+		result = append(result, *device)
+	}
+	slices.SortFunc(result, func(left, right Device) int {
+		if order := cmp.Compare(right.Queries, left.Queries); order != 0 {
+			return order
+		}
+		return cmp.Compare(left.Key, right.Key)
+	})
+	return result
+}
+
+// latestIdentities keeps each address's most recent hardware sighting. A UniFi
+// sighting wins a tie because it also carries the host's name.
+func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.ClientIdentity {
+	latest := make(map[string]querylog.ClientIdentity, len(identities))
+	for _, identity := range identities {
+		current, found := latest[identity.Address]
+		if !found || identity.LastSeen.After(current.LastSeen) ||
+			(identity.LastSeen.Equal(current.LastSeen) && identity.Source == identityUniFi && current.Source != identityUniFi) {
+			latest[identity.Address] = identity
+		}
+	}
+	return latest
+}
+
+// operatorNames resolves the names an operator gave: by hardware address, by
+// exact address, and by the most specific network containing an address.
+type operatorNames struct {
+	byMAC     map[string]string
+	byAddress map[string]string
+	networks  []namedNetwork
+}
+
+type namedNetwork struct {
+	prefix netip.Prefix
+	name   string
+}
+
+func newOperatorNames(clients []config.Client) operatorNames {
+	names := operatorNames{byMAC: map[string]string{}, byAddress: map[string]string{}}
+	for _, client := range clients {
+		switch {
+		case client.MAC != "":
+			names.byMAC[strings.ToLower(client.MAC)] = client.Name
+		case strings.Contains(client.Address, "/"):
+			if prefix, err := netip.ParsePrefix(client.Address); err == nil {
+				names.networks = append(names.networks, namedNetwork{prefix: prefix.Masked(), name: client.Name})
+			}
+		default:
+			if address, err := netip.ParseAddr(client.Address); err == nil {
+				names.byAddress[address.Unmap().String()] = client.Name
+			}
+		}
+	}
+	slices.SortFunc(names.networks, func(left, right namedNetwork) int {
+		return cmp.Compare(right.prefix.Bits(), left.prefix.Bits())
+	})
+	return names
+}
+
+func (names operatorNames) forDevice(device Device) string {
+	if device.MAC != "" {
+		if name := names.byMAC[device.MAC]; name != "" {
+			return name
+		}
+	}
+	for _, address := range device.Addresses {
+		if name := names.byAddress[address.Address]; name != "" {
+			return name
+		}
+	}
+	for _, address := range device.Addresses {
+		parsed, err := netip.ParseAddr(address.Address)
+		if err != nil {
+			continue
+		}
+		for _, network := range names.networks {
+			if network.prefix.Contains(parsed.Unmap()) {
+				return network.name
+			}
+		}
+	}
+	return ""
+}
+
+func chooseName(device Device, named operatorNames, identities map[string]querylog.ClientIdentity, discovered map[string]DiscoveredName) (string, string, bool) {
+	if name := named.forDevice(device); name != "" {
+		return name, SourceOperator, true
+	}
+	for _, address := range device.Addresses {
+		if identity := identities[address.Address]; identity.Source == identityUniFi && identity.Hostname != "" {
+			return identity.Hostname, SourceUniFi, false
+		}
+	}
+	for _, address := range device.Addresses {
+		if name := discovered[address.Address]; name.Name != "" {
+			return name.Name, name.Source, false
+		}
+	}
+	return "", "", false
+}
+
+// Find returns the device with a key.
+func Find(devices []Device, key string) (Device, bool) {
+	for _, device := range devices {
+		if device.Key == key {
+			return device, true
+		}
+	}
+	return Device{}, false
+}

@@ -58,6 +58,13 @@ type QueryFilter struct {
 	Blocked  bool
 }
 
+// DomainEvidence is one name behind a finding.
+type DomainEvidence struct {
+	Name      string
+	FirstSeen time.Time
+	Query     *QueryFilter
+}
+
 // Finding is one thing worth knowing, with the evidence that supports it.
 type Finding struct {
 	// Kind identifies the rule that produced the finding.
@@ -73,6 +80,12 @@ type Finding struct {
 	Facts   []Fact
 	// Clients lists the clients the evidence involves, busiest first.
 	Clients []Count
+	// Domains lists the names the evidence involves, with the query filter
+	// that reproduces each one's rows.
+	Domains []DomainEvidence
+	// Device is the identity key of the device a finding is about, which the
+	// console uses to open that device's details.
+	Device string
 	// Method explains how Sable arrived at the finding and what it does not
 	// claim.
 	Method string
@@ -136,11 +149,13 @@ func FormatDuration(elapsed time.Duration) string {
 	case elapsed < time.Hour:
 		minutes := int(elapsed / time.Minute)
 		return fmt.Sprintf("%d %s", minutes, Plural(minutes, "minute", "minutes"))
-	case elapsed < 48*time.Hour:
+	case elapsed < 24*time.Hour:
 		hours := int(elapsed / time.Hour)
 		return fmt.Sprintf("%d %s", hours, Plural(hours, "hour", "hours"))
 	default:
-		days := int(elapsed / (24 * time.Hour))
+		// Past a day, the nearest whole day reads better than a floor: 47
+		// hours is "2 days", not "1 day".
+		days := int((elapsed + 12*time.Hour) / (24 * time.Hour))
 		return fmt.Sprintf("%d %s", days, Plural(days, "day", "days"))
 	}
 }

@@ -335,17 +335,25 @@ type DetailDrawerView struct {
 // footer actions as a component.
 templ DetailDrawer(view DetailDrawerView, footer templ.Component) {
 	<dialog class="query-detail-dialog" id={ view.ID } aria-labelledby={ view.TitleID }>
-		<header class="query-detail-header">
-			<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
-			<button class="dialog-close" type="button" data-dialog-close aria-label={ view.CloseLabel }>@Icon("x")</button>
-		</header>
-		<div class="query-detail-body">
+		@DetailDrawerContent(view, footer) {
 			{ children... }
-		</div>
-		<footer class="query-detail-footer">
-			@footer
-		</footer>
+		}
 	</dialog>
+}
+
+// DetailDrawerContent is the inside of a drawer. A drawer whose record is
+// loaded on demand swaps this into an already open dialog.
+templ DetailDrawerContent(view DetailDrawerView, footer templ.Component) {
+	<header class="query-detail-header">
+		<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label={ view.CloseLabel }>@Icon("x")</button>
+	</header>
+	<div class="query-detail-body">
+		{ children... }
+	</div>
+	<footer class="query-detail-footer">
+		@footer
+	</footer>
 }
 
 templ QueryDecisionStep(name, title string) {

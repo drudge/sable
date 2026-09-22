@@ -83,6 +83,7 @@ func cloneConfig(source Config) Config {
 		cloned.Resolver.Hosts[index].Addresses = append([]string(nil), host.Addresses...)
 	}
 	cloned.TSIGKeys = append([]TSIGKey(nil), source.TSIGKeys...)
+	cloned.Clients = append([]Client(nil), source.Clients...)
 	cloned.Blocking.Domains = append([]string(nil), source.Blocking.Domains...)
 	cloned.Blocking.AllowedDomains = append([]string(nil), source.Blocking.AllowedDomains...)
 	cloned.Blocking.Lists = append([]BlockList(nil), source.Blocking.Lists...)

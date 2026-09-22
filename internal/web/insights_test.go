@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,6 +42,7 @@ func (authenticator permissionAuthenticator) AuthenticateSession(_ context.Conte
 
 var insightsTestSessions = map[string][]string{
 	"everything":    {auth.PermissionAll},
+	"logs-reader":   {auth.PermissionLogsRead, auth.PermissionSettingsRead},
 	"blocking-only": {auth.PermissionBlockingRead},
 	"logs-only":     {auth.PermissionLogsRead},
 	"zones-only":    {auth.PermissionZonesRead},
@@ -84,7 +86,7 @@ func newInsightsTestServer(t *testing.T) insightsTestServer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := metadata.Exec("UPDATE sable_metadata SET value = ? WHERE key LIKE 'query_log_rollup_%_since'",
+	if _, err := metadata.Exec("UPDATE sable_metadata SET value = ? WHERE key LIKE 'query_log_%_since'",
 		now.Add(-7*24*time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +108,18 @@ func newInsightsTestServer(t *testing.T) insightsTestServer {
 		blockedBy(event(-2*time.Hour, "10.0.0.5", "ads.example.", querylog.SourceBlocked), "ads.example", "Alpha", "Beta"),
 		blockedBy(event(-90*time.Minute, "10.0.0.50", "ads.example.", querylog.SourceBlocked), "ads.example", "Alpha"),
 		event(-time.Hour, "10.0.0.5", "www.example.org.", querylog.SourceUpstream),
+		event(-50*time.Minute, "fd00::5", "www.example.org.", querylog.SourceUpstream),
+		// The laptop has been around for days, so it is not new.
+		event(-6*24*time.Hour, "10.0.0.5", "www.example.org.", querylog.SourceUpstream),
 		// Outside the day window.
 		event(-72*time.Hour, "10.0.0.5", "telemetry.example.com.", querylog.SourceBlocked),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := opened.RecordClientIdentities(context.Background(), []querylog.ClientIdentity{
+		{Address: "10.0.0.5", MAC: "3c:22:fb:01:02:03", Source: "neighbor", SeenAt: now.Add(-time.Minute)},
+		{Address: "fd00::5", MAC: "3c:22:fb:01:02:03", Source: "neighbor", SeenAt: now.Add(-time.Minute)},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +219,8 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 
 	page := server.get(t, "everything", "/insights?range=week", false).Body.String()
 	for _, expected := range []string{
-		`<title>Insights · Sable</title>`,
+		`<title>Overview · Insights · Sable</title>`,
+		`data-isotope-tabs`, `data-active-tab="overview"`, `data-isotope-tab="devices"`, `id="insight-device-dialog"`,
 		`aria-current="page"`,
 		`hx-get="/ui/insights/overview?range=week"`, `hx-trigger="load"`,
 		`id="insights-range-week" class="active" aria-pressed="true"`,
@@ -296,5 +309,120 @@ func TestRequiredAnyPermissionCoversInsightsRoutes(t *testing.T) {
 	}
 	if permissions := requiredAnyPermission(httptest.NewRequest(http.MethodGet, "/insightsx", nil)); permissions != nil {
 		t.Errorf("unrelated path permissions = %v", permissions)
+	}
+}
+
+func (server insightsTestServer) post(t *testing.T, session, target string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	request.Header.Set("X-CSRF-Token", "csrf-token")
+	request.AddCookie(&http.Cookie{Name: server.sessionCookieName(), Value: session})
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+	return response
+}
+
+const insightsTestLaptop = "mac:3c:22:fb:01:02:03"
+
+func TestInsightsDevicesGroupAddressesAndReportNewOnes(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	body := server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true).Body.String()
+	for _, expected := range []string{
+		`data-active-tab="devices"`, `id="insight-devices-title"`,
+		// The laptop's IPv4 and IPv6 addresses are one device, named from its
+		// local host entry and tied together by the neighbor table.
+		"george-laptop.corp.example", `<span class="status-badge">Local host</span>`, "3c:22:fb:01:02:03 · 10.0.0.5 · fd00::5",
+		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
+		// 10.0.0.50 first appeared today while tracking was already running,
+		// and nothing ties it to hardware, so it is a new address.
+		"New address on the network", `<span class="status-badge active">New</span>`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("devices tab is missing %q", expected)
+		}
+	}
+	if strings.Contains(body, "New device on the network") {
+		t.Error("an address with no hardware identity was reported as a new device")
+	}
+	if got := server.get(t, "everything", "/ui/insights/overview?range=week", true).Header().Get("HX-Replace-Url"); got != "/insights?range=week" {
+		t.Errorf("overview HX-Replace-Url = %q", got)
+	}
+	// A range change keeps the tab the operator is on.
+	request := httptest.NewRequest(http.MethodGet, "/ui/insights/overview?range=week", nil)
+	request.Header.Set("HX-Request", "true")
+	request.Header.Set("HX-Current-URL", "https://sable.example/insights?range=day&tab=devices")
+	request.AddCookie(&http.Cookie{Name: server.sessionCookieName(), Value: "everything"})
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+	if got := response.Header().Get("HX-Replace-Url"); got != "/insights?range=week&tab=devices" {
+		t.Errorf("range change HX-Replace-Url = %q, want the devices tab kept", got)
+	}
+	if blockingOnly := server.get(t, "blocking-only", "/ui/insights/overview?range=day", true).Body.String(); strings.Contains(blockingOnly, `data-isotope-tab="devices"`) {
+		t.Error("an operator without logs access saw the Devices tab")
+	}
+}
+
+func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	if response := server.get(t, "blocking-only", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true); response.Code != http.StatusForbidden {
+		t.Fatalf("device drawer without logs access = %d", response.Code)
+	}
+	body := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+	for _, expected := range []string{"george-laptop.corp.example", "Most queried domains", "telemetry.example.com", "Name this device", "hardware address, so it stays with the device"} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("device drawer is missing %q", expected)
+		}
+	}
+	match := regexp.MustCompile(`href="(/logs\?client_ip=10\.0\.0\.5&amp;tab=queries[^"]*)"><div><strong>10\.0\.0\.5</strong><small>(\d+) blocked</small></div><span>(\d+)</span>`).FindStringSubmatch(body)
+	if match == nil {
+		t.Fatal("device drawer has no query log link for 10.0.0.5")
+	}
+	filter, _ := queryLogFilter(httptest.NewRequest(http.MethodGet, html.UnescapeString(match[1]), nil))
+	page, err := server.store.QueryEvents(context.Background(), filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strconv.Itoa(page.TotalEntries) != match[3] {
+		t.Fatalf("link reports %d queries, drawer %s", page.TotalEntries, match[3])
+	}
+	// A multi-address device's domain counts cover every address, which no
+	// single query log link can reproduce, so those rows are not links.
+	if strings.Contains(body, "name=telemetry.example.com") {
+		t.Fatal("a multi-address device linked a domain count to a single address")
+	}
+	if missing := server.get(t, "everything", "/ui/insights/device?range=day&key=mac:00:00:00:00:00:01", true).Body.String(); !strings.Contains(missing, "sent no queries in the selected period") {
+		t.Fatal("an unknown device did not explain itself")
+	}
+}
+
+func TestInsightsDeviceNamingFollowsTheHardwareAddress(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	form := url.Values{"key": {insightsTestLaptop}, "name": {"George's MacBook"}, "range": {"day"}}
+	if response := server.post(t, "logs-reader", "/ui/insights/devices/name", form); response.Code != http.StatusForbidden {
+		t.Fatalf("naming without settings write = %d", response.Code)
+	}
+	response := server.post(t, "everything", "/ui/insights/devices/name", form)
+	if response.Code != http.StatusOK || response.Header().Get("HX-Trigger") != "insightsChanged" || !strings.Contains(response.Body.String(), "Name saved.") {
+		t.Fatalf("naming = %d %q %s", response.Code, response.Header().Get("HX-Trigger"), response.Body.String())
+	}
+	clients := server.config.Current().Config.Clients
+	if len(clients) != 1 || clients[0] != (config.Client{Name: "George's MacBook", MAC: "3c:22:fb:01:02:03"}) {
+		t.Fatalf("configured clients = %+v", clients)
+	}
+	devicesTab := server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true).Body.String()
+	if !strings.Contains(devicesTab, "George&#39;s MacBook") || !strings.Contains(devicesTab, `<span class="status-badge">Your name</span>`) {
+		t.Fatal("the devices tab did not use the operator's name")
+	}
+	removed := server.post(t, "everything", "/ui/insights/devices/name", url.Values{"key": {insightsTestLaptop}, "name": {"George's MacBook"}, "remove": {"1"}, "range": {"day"}})
+	if removed.Code != http.StatusOK || len(server.config.Current().Config.Clients) != 0 || !strings.Contains(removed.Body.String(), "Name removed.") {
+		t.Fatalf("removing = %d, clients %+v", removed.Code, server.config.Current().Config.Clients)
+	}
+	if invalid := server.post(t, "everything", "/ui/insights/devices/name", url.Values{"key": {"nonsense"}, "name": {"x"}}); invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unknown device key = %d", invalid.Code)
 	}
 }
