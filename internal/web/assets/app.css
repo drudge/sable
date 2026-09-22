@@ -3739,15 +3739,15 @@ dialog[open]::backdrop {
 .insight-list-mobile-row dd { font-variant-numeric: tabular-nums; }
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
 .query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
-.insight-reasons { display: grid; gap: .5rem; }
-.insight-reasons h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.insight-reasons ul { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
-.insight-reasons li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
-.insight-reasons li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
-.dark .insight-reasons li .nav-icon { color: #22c55e; }
-.insight-explanations li > i { width: .35rem; height: .35rem; flex: 0 0 .35rem; margin: .45rem .275rem 0; border-radius: 999px; background: var(--muted-foreground); }
-.insight-explanations li { color: var(--muted-foreground); }
-.insight-method { border-top: 1px solid var(--border); padding-top: 1rem; }
+.insight-why { display: grid; gap: .65rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
+.insight-why h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insight-why ul { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.insight-why li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
+.insight-why li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
+.dark .insight-why li .nav-icon { color: #22c55e; }
+.insight-causes { margin: 0; color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
+.insight-causes strong { color: var(--foreground); font-weight: 500; }
+.insight-method { margin-top: .1rem; }
 .insight-method > summary { display: flex; width: fit-content; align-items: center; gap: .4rem; border-radius: calc(var(--radius) - 4px); color: var(--muted-foreground); cursor: pointer; font-size: .7rem; font-weight: 600; letter-spacing: .04em; list-style: none; text-transform: uppercase; }
 .insight-method > summary::-webkit-details-marker { display: none; }
 .insight-method > summary::after { width: .4rem; height: .4rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; content: ""; transform: rotate(-45deg); transition: transform 150ms ease; }

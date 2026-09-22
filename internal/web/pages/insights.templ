@@ -420,32 +420,12 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
 		CloseLabel: "Close evidence",
 	}, insightEvidenceFooter(finding, view)) {
-		// The checklist states the summary point by point, so the drawer shows
-		// the sentence only when there is no checklist to read instead.
+		// The cards come first because they are the evidence itself; the one
+		// block after them says why that evidence matters.
 		if len(finding.Reasons) == 0 {
 			<div class="query-detail-section-heading insight-evidence-summary">
 				<p>{ finding.Summary }</p>
 			</div>
-		}
-		if len(finding.Reasons) > 0 {
-			<section class="insight-reasons" aria-labelledby={ finding.ID + "-reasons" }>
-				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
-				<ul>
-					for _, reason := range finding.Reasons {
-						<li>@Icon("check")<span>{ reason }</span></li>
-					}
-				</ul>
-			</section>
-		}
-		if len(finding.Explanations) > 0 {
-			<section class="insight-reasons insight-explanations" aria-labelledby={ finding.ID + "-explanations" }>
-				<h3 id={ finding.ID + "-explanations" }>What it could mean</h3>
-				<ul>
-					for _, explanation := range finding.Explanations {
-						<li><i aria-hidden="true"></i><span>{ explanation }</span></li>
-					}
-				</ul>
-			</section>
 		}
 		if len(finding.Facts) > 0 {
 			<dl class="query-detail-grid insight-evidence-facts">
@@ -484,11 +464,26 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
 			</section>
 		}
-		if finding.Method != "" {
-			<details class="insight-method">
-				<summary>How Sable decides</summary>
-				<p>{ finding.Method }</p>
-			</details>
+		if len(finding.Reasons) > 0 || finding.Method != "" {
+			<section class="insight-why" aria-labelledby={ finding.ID + "-reasons" }>
+				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
+				if len(finding.Reasons) > 0 {
+					<ul>
+						for _, reason := range finding.Reasons {
+							<li>@Icon("check")<span>{ reason }</span></li>
+						}
+					</ul>
+				}
+				if len(finding.Explanations) > 0 {
+					<p class="insight-causes"><strong>Possible causes:</strong> { insightCauses(finding.Explanations) }</p>
+				}
+				if finding.Method != "" {
+					<details class="insight-method">
+						<summary>How Sable decides</summary>
+						<p>{ finding.Method }</p>
+					</details>
+				}
+			</section>
 		}
 	}
 }
@@ -1116,4 +1111,29 @@ templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
 			<button class="button compact" type="submit" data-replica-primary-action>Save</button>
 		</div>
 	</form>
+}
+
+// insightCauses joins possible causes into one sentence: "a, b, or c."
+func insightCauses(causes []string) string {
+	lowered := make([]string, len(causes))
+	for index, cause := range causes {
+		lowered[index] = lowerFirst(cause)
+	}
+	switch len(lowered) {
+	case 1:
+		return lowered[0] + "."
+	case 2:
+		return lowered[0] + " or " + lowered[1] + "."
+	default:
+		return strings.Join(lowered[:len(lowered)-1], ", ") + ", or " + lowered[len(lowered)-1] + "."
+	}
+}
+
+// lowerFirst lowercases a sentence's first letter unless it starts an acronym
+// or a name such as "DNS" or "UniFi".
+func lowerFirst(text string) string {
+	if len(text) < 2 || (text[1] >= 'A' && text[1] <= 'Z') {
+		return text
+	}
+	return strings.ToLower(text[:1]) + text[1:]
 }

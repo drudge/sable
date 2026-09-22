@@ -251,7 +251,7 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		"Possible past blocking issue", "Blocked 3 times during the selected period and is now explicitly allowed.",
 		"Little unique coverage", "100% of this list&#39;s domains are also covered by Alpha.",
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
-		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", "What it could mean",
+		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", "Possible causes:",
 		"Why Sable surfaced this", "Now allowed by telemetry.example.com", "Blocked 3 times during the selected period",
 		"george-laptop.corp.example",
 		`<th scope="col" class="right-cell">Queries blocked</th>`,
