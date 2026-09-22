@@ -372,12 +372,17 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 		t.Fatalf("device drawer without logs access = %d", response.Code)
 	}
 	body := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
-	for _, expected := range []string{"george-laptop.corp.example", "Most queried domains", "telemetry.example.com", "Name this device", "hardware address, so it stays with the device"} {
+	for _, expected := range []string{
+		"george-laptop.corp.example", "Most queried domains", "telemetry.example.com", "Name this device", "hardware address, so it stays with the device",
+		// Useful values carry a copy button labeled with what it copies.
+		`<code id="insight-device-mac">3c:22:fb:01:02:03</code>`, `data-copy-target="insight-device-mac" aria-label="Copy hardware address"`,
+		`data-copy-target="insight-device-address-0" aria-label="Copy address"`, `aria-label="Copy domain"`,
+	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("device drawer is missing %q", expected)
 		}
 	}
-	match := regexp.MustCompile(`href="(/logs\?client_ip=10\.0\.0\.5&amp;tab=queries[^"]*)"><div><strong>10\.0\.0\.5</strong><small>(\d+) blocked</small></div><span>(\d+)</span>`).FindStringSubmatch(body)
+	match := regexp.MustCompile(`href="(/logs\?client_ip=10\.0\.0\.5&amp;tab=queries[^"]*)"><div><strong id="insight-device-address-\d+">10\.0\.0\.5</strong><small>(\d+) blocked</small></div><span>(\d+)</span>`).FindStringSubmatch(body)
 	if match == nil {
 		t.Fatal("device drawer has no query log link for 10.0.0.5")
 	}

@@ -1783,7 +1783,7 @@ templ DynamicDNSAddressFact(label, id, value string, copyable bool) {
 	<div class="integration-fact-address" title={ value } aria-label={ label + ": " + value }>
 		<span class="integration-fact-label">{ label }</span>
 		if copyable {
-			<button class="integration-fact-copy" type="button" data-copy-target={ id } aria-label={ "Copy " + label + " address" } title={ "Copy " + label + " address" }>@CopyIcons()</button>
+			@FactCopyButton(id, "Copy " + label + " address")
 		}
 		<span class="integration-fact-value">
 			if copyable {

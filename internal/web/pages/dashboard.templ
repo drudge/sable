@@ -1729,10 +1729,21 @@ templ MetadataCard(color string, icon string, label string, value string) {
 templ CopyableText(id string, text string, kind string) {
 	<div class={ "copyable-text " + kind }>
 		<span id={ id }>{ text }</span>
-		<button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">
-			@CopyIcons()
-		</button>
+		@CopyButton(id, "Copy to clipboard")
 	</div>
+}
+
+// FactCopyButton sits in the corner of a fact card and copies the card's value.
+templ FactCopyButton(target string, label string) {
+	<button class="fact-copy" type="button" data-copy-target={ target } aria-label={ label } title={ label }>@CopyIcons()</button>
+}
+
+// CopyButton copies the text of the element with the target id. The label
+// names what is copied, such as "Copy hardware address".
+templ CopyButton(target string, label string) {
+	<button type="button" data-copy-target={ target } aria-label={ label } title={ label }>
+		@CopyIcons()
+	</button>
 }
 
 templ RecordSection(title string, icon string, records []RecordView) {

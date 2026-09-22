@@ -421,12 +421,13 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		</div>
 		if len(finding.Facts) > 0 {
 			<dl class="query-detail-grid insight-evidence-facts">
-				for _, fact := range finding.Facts {
-					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", insightFactFull(fact)) }>
+				for index, fact := range finding.Facts {
+					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", insightFactFull(fact)), templ.KV("insight-fact-copyable", fact.Monospace) }>
 						<dt>{ fact.Label }</dt>
 						<dd>
 							if fact.Monospace {
-								<code>{ insightFactValue(fact, view.TimeDisplay) }</code>
+								<code id={ fmt.Sprintf("%s-fact-%d", finding.ID, index) }>{ insightFactValue(fact, view.TimeDisplay) }</code>
+								@FactCopyButton(fmt.Sprintf("%s-fact-%d", finding.ID, index), "Copy "+strings.ToLower(fact.Label))
 							} else {
 								{ insightFactValue(fact, view.TimeDisplay) }
 							}
@@ -439,16 +440,19 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 			<section class="query-detail-answer insight-evidence-clients" aria-labelledby={ finding.ID + "-clients" }>
 				<h3 id={ finding.ID + "-clients" }>Affected clients</h3>
 				<div class="insight-client-list">
-					for _, client := range finding.Clients {
-						if view.CanLogs && finding.Query != nil {
-							<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: finding.Query.Name, ClientIP: client.Name, Blocked: finding.Query.Blocked}, view.LogWindowQuery)) }>
-								@insightClientCopy(client)
-							</a>
-						} else {
-							<div class="insight-client-row">
-								@insightClientCopy(client)
-							</div>
-						}
+					for index, client := range finding.Clients {
+						<div class="insight-list-row">
+							if view.CanLogs && finding.Query != nil {
+								<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: finding.Query.Name, ClientIP: client.Name, Blocked: finding.Query.Blocked}, view.LogWindowQuery)) }>
+									@insightClientCopy(client, fmt.Sprintf("%s-client-%d", finding.ID, index))
+								</a>
+							} else {
+								<div class="insight-client-row">
+									@insightClientCopy(client, fmt.Sprintf("%s-client-%d", finding.ID, index))
+								</div>
+							}
+							@CopyButton(fmt.Sprintf("%s-client-%d", finding.ID, index), "Copy address")
+						</div>
 					}
 				</div>
 			</section>
@@ -456,7 +460,7 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		if len(finding.Domains) > 0 {
 			<section class="query-detail-answer insight-evidence-domains" aria-labelledby={ finding.ID + "-domains" }>
 				<h3 id={ finding.ID + "-domains" }>First-time domains</h3>
-				@insightDomainList(finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
+				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
 			</section>
 		}
 		if finding.Method != "" {
@@ -470,9 +474,9 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 	}
 }
 
-templ insightClientCopy(client RankedStatView) {
+templ insightClientCopy(client RankedStatView, id string) {
 	<div>
-		<strong>{ client.Name }</strong>
+		<strong id={ id }>{ client.Name }</strong>
 		if client.Secondary != "" {
 			<small>{ client.Secondary }</small>
 		}
@@ -782,25 +786,28 @@ func insightQueryURL(query InsightQueryView, window string) string {
 	return link
 }
 
-templ insightDomainList(domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool) {
+templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool) {
 	<div class="insight-client-list">
-		for _, domain := range domains {
-			if canLogs && domain.ClientIP != "" {
-				<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: domain.Name, ClientIP: domain.ClientIP}, window)) }>
-					@insightDomainCopy(domain, display)
-				</a>
-			} else {
-				<div class="insight-client-row">
-					@insightDomainCopy(domain, display)
-				</div>
-			}
+		for index, domain := range domains {
+			<div class="insight-list-row">
+				if canLogs && domain.ClientIP != "" {
+					<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: domain.Name, ClientIP: domain.ClientIP}, window)) }>
+						@insightDomainCopy(domain, display, fmt.Sprintf("%s-%d", idPrefix, index))
+					</a>
+				} else {
+					<div class="insight-client-row">
+						@insightDomainCopy(domain, display, fmt.Sprintf("%s-%d", idPrefix, index))
+					</div>
+				}
+				@CopyButton(fmt.Sprintf("%s-%d", idPrefix, index), "Copy domain")
+			</div>
 		}
 	</div>
 }
 
-templ insightDomainCopy(domain InsightDeviceDomainView, display TimeDisplay) {
+templ insightDomainCopy(domain InsightDeviceDomainView, display TimeDisplay, id string) {
 	<div>
-		<strong>{ domain.Name }</strong>
+		<strong id={ id }>{ domain.Name }</strong>
 		if !domain.FirstSeen.IsZero() {
 			<small>First queried { FormatShortDateTime(domain.FirstSeen, display, false) }</small>
 		} else if domain.Blocked > 0 {
@@ -927,7 +934,16 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 			<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device)</div>
 			<dl class="query-detail-grid">
 				if view.Device.MAC != "" {
-					<div class="query-detail-fact-wide insight-fact-full"><dt>Hardware address</dt><dd><code>{ view.Device.MAC }</code>{ ifThen(view.Device.PrivateMAC, " · private, randomized by the device", "") }</dd></div>
+					<div class="query-detail-fact-wide insight-fact-full insight-fact-copyable">
+						<dt>Hardware address</dt>
+						<dd>
+							<code id="insight-device-mac">{ view.Device.MAC }</code>
+							@FactCopyButton("insight-device-mac", "Copy hardware address")
+							if view.Device.PrivateMAC {
+								<small class="insight-fact-note">Private, randomized by the device</small>
+							}
+						</dd>
+					</div>
 				}
 				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.Device.Queries) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.Device.Blocked) } ({ percent(view.Device.Blocked, view.Device.Queries) })</dd></div>
@@ -937,24 +953,27 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
 				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
 				<div class="insight-client-list">
-					for _, address := range view.Device.Addresses {
-						<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: address.Address}, view.LogWindowQuery)) }>
-							<div><strong>{ address.Address }</strong><small>{ formatNumber(address.Blocked) } blocked</small></div>
-							<span>{ formatNumber(address.Queries) }</span>
-						</a>
+					for index, address := range view.Device.Addresses {
+						<div class="insight-list-row">
+							<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: address.Address}, view.LogWindowQuery)) }>
+								<div><strong id={ fmt.Sprintf("insight-device-address-%d", index) }>{ address.Address }</strong><small>{ formatNumber(address.Blocked) } blocked</small></div>
+								<span>{ formatNumber(address.Queries) }</span>
+							</a>
+							@CopyButton(fmt.Sprintf("insight-device-address-%d", index), "Copy address")
+						</div>
 					}
 				</div>
 			</section>
 			if len(view.TopDomains) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-device-top">
 					<h3 id="insight-device-top">Most queried domains</h3>
-					@insightDomainList(view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true)
+					@insightDomainList("insight-device-top", view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true)
 				</section>
 			}
 			if len(view.NewDomains) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-device-new">
 					<h3 id="insight-device-new">First-time domains</h3>
-					@insightDomainList(view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
+					@insightDomainList("insight-device-new", view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
 				</section>
 			}
 			if view.CanName {

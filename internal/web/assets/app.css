@@ -1674,15 +1674,15 @@ dialog[open]::backdrop {
 .integration-fact-address .integration-fact-label { grid-column: 1; grid-row: 1; }
 .integration-fact-address .integration-fact-value { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
 .integration-fact-address code { display: block; overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
-.integration-fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: 0; color: var(--muted-foreground); }
-.integration-fact-copy:hover { background: color-mix(in oklch, var(--foreground) 9%, transparent); color: var(--foreground); }
-.integration-fact-copy:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.integration-fact-copy > span { width: 100%; height: 100%; align-items: center; justify-content: center; line-height: 0; }
-.integration-fact-copy .copy-icon-default { display: flex; }
-.integration-fact-copy .copy-icon-success { display: none; }
-.integration-fact-copy .nav-icon { display: block; width: .8rem; height: .8rem; }
-.integration-fact-copy.is-copied .copy-icon-default { display: none; }
-.integration-fact-copy.is-copied .copy-icon-success { display: flex; color: #22c55e; }
+.fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: 0; color: var(--muted-foreground); }
+.fact-copy:hover { background: color-mix(in oklch, var(--foreground) 9%, transparent); color: var(--foreground); }
+.fact-copy:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.fact-copy > span { width: 100%; height: 100%; align-items: center; justify-content: center; line-height: 0; }
+.fact-copy .copy-icon-default { display: flex; }
+.fact-copy .copy-icon-success { display: none; }
+.fact-copy .nav-icon { display: block; width: .8rem; height: .8rem; }
+.fact-copy.is-copied .copy-icon-default { display: none; }
+.fact-copy.is-copied .copy-icon-success { display: flex; color: #22c55e; }
 .sso-review-note { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
 .sso-badge { margin-left: 0.35rem; }
 .signin-methods { display: grid; gap: 0.5rem; }
@@ -3740,6 +3740,28 @@ dialog[open]::backdrop {
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
 .query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
 .insight-evidence-summary p { color: var(--foreground); font-size: .875rem; }
+.insight-list-row { display: flex; min-width: 0; align-items: stretch; border-top: 1px solid var(--border); }
+.insight-list-row:first-child { border-top: 0; }
+.insight-list-row > .insight-client-row { min-width: 0; flex: 1; border-top: 0; }
+/* The whole row highlights, including the copy button beside the link, so the
+   hover state always fills the row edge to edge. */
+.insight-list-row:has(> a.insight-client-row:hover) { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.insight-list-row > a.insight-client-row:hover { background: transparent; }
+.insight-list-row > button[data-copy-target] { display: grid; width: 1.75rem; height: 1.75rem; flex: 0 0 1.75rem; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); }
+.insight-list-row > button[data-copy-target] { align-self: center; margin-right: .5rem; }
+.insight-list-row > button[data-copy-target]:hover { background: var(--muted); color: var(--foreground); }
+.insight-list-row > button[data-copy-target]:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.insight-list-row > button .nav-icon { width: .85rem; height: .85rem; }
+/* A fact tile with a copyable value carries its copy button in the corner,
+   like the Dynamic DNS address cards. */
+.query-detail-grid > .insight-fact-copyable { position: relative; }
+.insight-fact-copyable > dt { padding-right: 1.75rem; }
+.insight-fact-copyable .fact-copy { position: absolute; top: .5rem; right: .5rem; }
+.insight-fact-copyable code { overflow-wrap: anywhere; }
+.insight-fact-note { display: block; margin-top: .2rem; color: var(--muted-foreground); font-size: .72rem; font-weight: 400; }
+/* The drawer spaces the children of its sections apart; a list's rows must
+   touch so their dividers and hover states meet. */
+.query-detail-answer > .insight-client-list { gap: 0; }
 .insight-client-list { display: grid; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
 .insight-client-row { display: flex; min-height: 3rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .5rem .75rem; }
 .insight-client-row:first-child { border-top: 0; }
