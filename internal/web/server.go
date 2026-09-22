@@ -91,7 +91,7 @@ type Server struct {
 	// blockingActivityCache and blockListAnalysis back the Insights page.
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	deviceActivityCache   windowCache[querylog.ClientActivityReport]
-	blockListAnalysis     blockinginsights.Analyzer
+	blockListAnalysis     blockinginsights.ContributionCache
 	baseDirectory         string
 	historyPrune          chan struct{}
 	runtimeContext        context.Context

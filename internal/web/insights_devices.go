@@ -96,21 +96,6 @@ func (server *Server) discoveredClientNames(activity querylog.ClientActivityRepo
 	return names
 }
 
-// deviceChanges reports what changed about the window's devices.
-func (server *Server) deviceChanges(ctx context.Context, reader deviceInsightReader, report deviceReport) []insights.Finding {
-	return devices.Changes(devices.ChangesInput{
-		Devices: report.devices, WindowStart: report.window.Start, Now: report.window.End, SeenSince: report.seenSince,
-		NewDomains: func(device devices.Device) []insights.DomainEvidence {
-			found, err := reader.ClientNewDomains(ctx, device.ClientAddresses(), report.window.Start, report.window.End, insightsDeviceDomains)
-			if err != nil {
-				server.logger.Warn("read device first-time domains", "error", err)
-				return nil
-			}
-			return domainEvidence(device, found)
-		},
-	})
-}
-
 // domainEvidence links each name to the query log only when the device has a
 // single address, because a link covers one client address and must reproduce
 // what the list says about the whole device.

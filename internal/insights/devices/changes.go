@@ -2,6 +2,7 @@ package devices
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -79,18 +80,18 @@ func newDeviceFindings(input ChangesInput) []insights.Finding {
 	slices.SortFunc(candidates, func(left, right Device) int { return right.FirstSeen.Compare(left.FirstSeen) })
 	findings := make([]insights.Finding, 0, min(len(candidates), maximumNewDevices))
 	for _, device := range candidates[:min(len(candidates), maximumNewDevices)] {
-		title, subject := "New device on the network", Label(device)
+		title, subject := "New device on the network", deviceSubject(device)
 		if !device.Identified() {
 			title = "New address on the network"
 		}
 		findings = append(findings, insights.Finding{
 			Kind: KindNewDevice, Tone: insights.ToneNotice, Title: title,
-			Subject: subject, SubjectMonospace: device.Name == "",
+			Subject: subject,
 			Summary: fmt.Sprintf("First seen %s ago and has sent %s %s since.",
 				insights.FormatDuration(input.Now.Sub(device.FirstSeen)), insights.FormatCount(device.Queries), insights.Plural(device.Queries, "query", "queries")),
-			Facts:  deviceFacts(device, true),
-			Method: newDeviceMethod(device),
-			Device: device.Key,
+			Reasons: newDeviceReasons(device, input),
+			Facts:   deviceFacts(device, true),
+			Method:  newDeviceMethod(device),
 		})
 	}
 	return findings
@@ -119,13 +120,16 @@ func destinationFindings(input ChangesInput) []insights.Finding {
 	for _, device := range candidates[:min(len(candidates), maximumDestinations)] {
 		finding := insights.Finding{
 			Kind: KindNewDestinations, Tone: insights.ToneNotice, Title: "Talking to new places",
-			Subject: Label(device), SubjectMonospace: device.Name == "",
+			Subject: deviceSubject(device),
 			Summary: fmt.Sprintf("Queried %s %s for the first time during the selected period.",
 				insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain", "domains")),
+			Reasons: []string{
+				fmt.Sprintf("%s %s queried for the first time during the selected period", insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain was", "domains were")),
+				"Seen on the network for " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + ", so these are new to it",
+			},
 			Facts: append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
 			Method: "Sable remembers every domain each client has queried. These are domains this " + noun(device) +
 				" had never queried before the selected period. A software update or a new app often explains a burst like this.",
-			Device: device.Key,
 		}
 		if input.NewDomains != nil {
 			finding.Domains = input.NewDomains(device)
@@ -163,16 +167,20 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 		ratio := float64(device.Recent) / dailyAverage(device)
 		findings = append(findings, insights.Finding{
 			Kind: KindTrafficSpike, Tone: insights.ToneAttention, Title: "Unusually busy",
-			Subject: Label(device), SubjectMonospace: device.Name == "",
+			Subject: deviceSubject(device),
 			Summary: fmt.Sprintf("Sent %s queries in the last 24 hours, %.1f× its daily average over the week before.",
 				insights.FormatCount(device.Recent), ratio),
+			Reasons: []string{
+				fmt.Sprintf("%s queries in the last 24 hours", insights.FormatCount(device.Recent)),
+				fmt.Sprintf("%.1f× its daily average of %s over the week before", ratio, insights.FormatCount(uint64(dailyAverage(device)+0.5))),
+				"Seen on the network for " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + ", so its week is a real baseline",
+			},
 			Facts: append(deviceFacts(device, false),
 				insights.Fact{Label: "Last 24 hours", Value: insights.FormatCount(device.Recent)},
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
 			),
 			Method: "Sable compares each " + noun(device) + "'s last 24 hours with its own average over the seven days before. " +
 				"It only reports devices that were active the whole week and at least tripled their usual volume.",
-			Device: device.Key,
 		})
 	}
 	return findings
@@ -190,15 +198,15 @@ func quietFindings(input ChangesInput) []insights.Finding {
 	for _, device := range candidates[:min(len(candidates), maximumQuiet)] {
 		findings = append(findings, insights.Finding{
 			Kind: KindWentQuiet, Tone: insights.ToneAttention, Title: "Went quiet",
-			Subject: Label(device), SubjectMonospace: device.Name == "",
+			Subject: deviceSubject(device),
 			Summary: fmt.Sprintf("No queries in the last 24 hours. It averaged %s a day over the week before.",
 				insights.FormatCount(uint64(dailyAverage(device)+0.5))),
+			Reasons: quietReasons(device, input.Now),
 			Facts: append(deviceFacts(device, false),
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
 			),
 			Method: "Sable reports a " + noun(device) + " that was steadily active all of the previous week and has sent nothing for a full day. " +
 				"It may be switched off, unplugged, or using a different DNS server.",
-			Device: device.Key,
 		})
 	}
 	return findings
@@ -246,4 +254,74 @@ func deviceFacts(device Device, includeFirstSeen bool) []insights.Fact {
 	}
 	facts = append(facts, insights.Fact{Label: "Queries in period", Value: insights.FormatCount(device.Queries)})
 	return facts
+}
+
+// deviceSubject identifies a device durably by its identity key, so anything
+// later attached to a finding about it follows the device rather than its name.
+func deviceSubject(device Device) insights.Subject {
+	return insights.Subject{Label: Label(device), Monospace: device.Name == "", Device: device.Key}
+}
+
+func newDeviceReasons(device Device, input ChangesInput) []string {
+	reasons := []string{
+		"First seen " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + " ago",
+		"Sable has been watching for " + insights.FormatDuration(input.Now.Sub(input.SeenSince)) + ", so it was not here before",
+	}
+	switch {
+	case device.Named:
+		reasons = append(reasons, "Identified by the name you gave it")
+	case device.MAC != "":
+		reasons = append(reasons, "Identified by hardware address "+device.MAC)
+	default:
+		reasons = append(reasons, "Not tied to hardware yet, so it may be a known device at a new address")
+	}
+	return reasons
+}
+
+func quietReasons(device Device, now time.Time) []string {
+	reasons := []string{
+		"No queries in the last 24 hours",
+		fmt.Sprintf("Averaged %s a day over the week before", insights.FormatCount(uint64(dailyAverage(device)+0.5))),
+	}
+	if !device.LastSeen.IsZero() {
+		reasons = append(reasons, "Last query "+insights.FormatDuration(now.Sub(device.LastSeen))+" ago")
+	}
+	return reasons
+}
+
+// Report is the devices seen in a window, with when first-seen tracking began.
+type Report struct {
+	Devices   []Device
+	SeenSince time.Time
+	Window    insights.Window
+}
+
+// Sources is what the device analyzer reads. The console implements it over
+// its caches and the query log store.
+type Sources interface {
+	Devices(context.Context, insights.Window) (Report, error)
+	NewDomains(context.Context, Device, insights.Window) ([]insights.DomainEvidence, error)
+}
+
+// Analyzer reports what changed about the network's devices.
+type Analyzer struct {
+	Sources Sources
+}
+
+// Analyze compares each device in the window with its own history.
+func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([]insights.Finding, error) {
+	report, err := analyzer.Sources.Devices(ctx, window)
+	if err != nil {
+		return nil, err
+	}
+	return Changes(ChangesInput{
+		Devices: report.Devices, WindowStart: report.Window.Start, Now: report.Window.End, SeenSince: report.SeenSince,
+		NewDomains: func(device Device) []insights.DomainEvidence {
+			domains, err := analyzer.Sources.NewDomains(ctx, device, report.Window)
+			if err != nil {
+				return nil
+			}
+			return domains
+		},
+	}), nil
 }

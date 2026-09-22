@@ -2,9 +2,9 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -149,24 +149,22 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		}
 	}
 
-	input := blockinginsights.FindingsInput{Now: window.End, UpdateInterval: blocking.UpdateInterval.Duration}
-	var reader blockingInsightReader
-	var sources *blockinginsights.SourceQueries
-	if console.CanLogs {
-		reader, _ = server.queries.(blockingInsightReader)
-		if reader == nil {
-			view.ActivityUnavailable = true
-		}
-	}
+	analyzers, blockingData, deviceData := server.insightAnalyzers(console, window)
+	findings := insights.Collect(request.Context(), insights.Window{Start: window.Start, End: window.End}, analyzers,
+		func(analyzer insights.Analyzer, err error) {
+			server.logger.Warn("analyze insights", "analyzer", fmt.Sprintf("%T", analyzer), "error", err)
+		})
+	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], snapshot.Config)
+	view.CheckedSummary = insightsCheckedSummary(console, window)
 
-	if reader != nil {
-		activity, countedWindow, err := server.blockingActivityCache.load(request.Context(), window, reader.BlockingActivity)
-		if err != nil {
-			server.logger.Warn("count blocking activity for insights", "error", err)
+	// The page's own sections show the material the analyzers examined; the
+	// sources kept it, so nothing is loaded twice.
+	if console.CanLogs {
+		activity, err := blockingData.loadActivity(request.Context())
+		if err != nil || activity == nil {
 			view.ActivityUnavailable = true
 		} else {
-			window = countedWindow
-			view.LogWindowQuery = window.logWindowQuery()
+			view.LogWindowQuery = blockingData.counted.logWindowQuery()
 			view.Activity = &pages.InsightsActivityView{
 				Queries: activity.Queries, Blocked: activity.Blocked,
 				BlockedDomains: activity.BlockedDomains, BlockedClients: activity.BlockedClients,
@@ -174,72 +172,27 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			hosts, zones := snapshot.Config.Resolver.Hosts, server.zones.Current().Zones
 			view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, hosts, zones), insightsRankLimit)
 			view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
-			sources = &blockinginsights.SourceQueries{Lists: activity.Sources, Since: activity.SourcesSince}
 			server.nameRankedClients(view.TopClients)
 		}
-	}
-
-	if console.CanBlocking {
-		lists := make([]blockinginsights.List, 0, len(blocking.Lists))
-		for _, list := range blocking.Lists {
-			lists = append(lists, blockinginsights.List{Name: list.Name, Path: list.Path, URL: list.URL, Format: list.Format})
+		if deviceData == nil {
+			view.DevicesUnavailable = true
+		} else if report, err := deviceData.load(request.Context()); err != nil {
+			view.DevicesUnavailable = true
+		} else {
+			view.Devices = insightDeviceViews(report)
+			view.DeviceSummary = insightDeviceSummary(view.Devices)
 		}
-		contribution, err := server.blockListAnalysis.Contribution(request.Context(), server.baseDirectory, lists)
-		if err != nil {
-			server.logger.Warn("compare block lists for insights", "error", err)
+	}
+	if console.CanBlocking {
+		contribution, err := blockingData.Contribution(request.Context())
+		if err != nil || contribution == nil {
 			view.ListsUnavailable = true
 		} else {
-			input.Contribution = &contribution
-			input.Queries = sources
-			view.Contribution = insightsContributionView(contribution, blocking, sources)
-		}
-		status := server.blockLists.Status()
-		health := make(map[string]blockinginsights.ListHealth, len(status.Sources))
-		for _, source := range status.Sources {
-			health[source.URL] = blockinginsights.ListHealth{Health: source}
-		}
-		for _, list := range blocking.Lists {
-			if tracked, found := health[list.URL]; found && list.URL != "" {
-				tracked.Name = list.Name
-				input.Health = append(input.Health, tracked)
-			}
+			queries, _ := blockingData.SourceQueries(request.Context(), insights.Window{})
+			view.Contribution = insightsContributionView(*contribution, blocking, queries)
 		}
 	}
-
-	// A past block needs both halves of the evidence: the allow rule is
-	// blocking configuration and the blocked queries are query history.
-	if reader != nil && console.CanBlocking && !view.ActivityUnavailable {
-		input.PastBlocks = server.pastBlocks(request.Context(), reader, window, blocking)
-	}
-	findings := make([]insights.Finding, 0)
-	if console.CanLogs {
-		if reader, ok := server.queries.(deviceInsightReader); ok {
-			report, err := server.insightDevices(request.Context(), reader, window)
-			if err != nil {
-				server.logger.Warn("build insights devices", "error", err)
-				view.DevicesUnavailable = true
-			} else {
-				view.Devices = insightDeviceViews(report)
-				view.DeviceSummary = insightDeviceSummary(view.Devices)
-				findings = append(findings, server.deviceChanges(request.Context(), reader, report)...)
-			}
-		} else {
-			view.DevicesUnavailable = true
-		}
-	}
-	findings = append(findings, blockinginsights.Findings(input)...)
-	view.Findings = server.insightFindingViews(prioritizeFindings(findings), snapshot.Config)
-	view.CheckedSummary = insightsCheckedSummary(console, window)
 	return view
-}
-
-// prioritizeFindings puts what needs attention first and keeps each area's
-// own order within a tone, then trims the list to a readable length.
-func prioritizeFindings(findings []insights.Finding) []insights.Finding {
-	rank := map[insights.Tone]int{insights.ToneAttention: 0, insights.ToneNotice: 1, insights.TonePositive: 2}
-	ordered := slices.Clone(findings)
-	slices.SortStableFunc(ordered, func(left, right insights.Finding) int { return rank[left.Tone] - rank[right.Tone] })
-	return ordered[:min(len(ordered), maximumOverviewFindings)]
 }
 
 func insightDeviceSummary(views []pages.InsightDeviceView) pages.InsightDeviceSummaryView {
@@ -292,8 +245,8 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 		view := pages.InsightFindingView{
 			ID:   "insight-finding-" + strconv.Itoa(index+1),
 			Kind: finding.Kind, Tone: string(finding.Tone), Icon: insightFindingIcon(finding.Kind),
-			Title: finding.Title, Subject: finding.Subject, SubjectMonospace: finding.SubjectMonospace,
-			Summary: finding.Summary, Method: finding.Method,
+			Title: finding.Title, Subject: finding.Subject.Label, SubjectMonospace: finding.Subject.Monospace,
+			Summary: finding.Summary, Reasons: finding.Reasons, Method: finding.Method,
 			Destination: finding.Destination, DestinationLabel: finding.DestinationLabel,
 		}
 		for _, fact := range finding.Facts {
@@ -302,7 +255,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 		if finding.Query != nil {
 			view.Query = &pages.InsightQueryView{Name: finding.Query.Name, ClientIP: finding.Query.ClientIP, Blocked: finding.Query.Blocked}
 		}
-		view.DeviceKey = finding.Device
+		view.DeviceKey = finding.Subject.Device
 		for _, domain := range finding.Domains {
 			item := pages.InsightDeviceDomainView{Name: domain.Name, FirstSeen: domain.FirstSeen}
 			if domain.Query != nil {

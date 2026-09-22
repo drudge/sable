@@ -167,6 +167,49 @@ mixed, and common Adblock rules compile into the same immutable suffix map as
 inline policy. File changes build a complete candidate before the atomic swap;
 unreadable sources preserve the active policy.
 
+## Insights
+
+Insights turns what Sable already records into a few evidence-backed findings.
+It never runs on the DNS request path. The resolver emits the same bounded
+query events it always has; the query log worker persists them with per-minute
+rollups, per-client sightings, and the block lists behind each blocked answer;
+analysis runs later, on that persisted and derived data, when the console asks.
+
+```
+DNS resolver -> query events -> query log worker -> rollups and sightings
+                                                          |
+                    analyzers (blocking, devices, ...) <--+
+                                   |
+                         findings with evidence -> console
+```
+
+`internal/insights` holds the shared vocabulary. An `Analyzer` examines one
+area over a `Window` and returns `Finding` values. A finding names its kind,
+tone, and a typed `Subject` (a device identity key, a domain, or a block list),
+states one factual summary, lists the individual reasons behind it, and carries
+facts, related clients and domains, and the query log filter that reproduces
+its counts. Its ID follows the kind and the durable subject reference, so the
+same situation analyzed again, or a device renamed, keeps the same identity.
+`Collect` runs every analyzer the operator may read, orders findings by tone,
+and isolates an analyzer that fails.
+
+Each area lives in its own package. `insights/blocking` compares cached block
+lists with the compiler's own reader, recognizes names that were blocked and are
+now allowed, and reports stale list updates. `insights/devices` groups client
+addresses into devices through operator-given names, UniFi inventory, and the
+host neighbor table, then compares each device with its own history. Analyzers
+read through small source interfaces that the console implements over its
+caches and stores, so the analysis never depends on HTTP handling and future
+areas such as service grouping or learned baselines plug in the same way.
+
+Every statement must be supportable from the data shown beside it. Conclusions
+are typed results with evidence, not generated prose, and any future local
+classifier follows the same rule: deterministic knowledge first, a local model
+only for ambiguous cases, and a confidence with the evidence that produced it.
+Operator-given device names are keyed by the same device identity the analyzers
+use, so a correction stays attached to the device it describes and can later
+serve as a local example.
+
 ## Clustering
 
 Sable uses a primary/replica control plane designed for one- and two-server

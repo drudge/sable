@@ -87,10 +87,10 @@ func TestChangesReportNewDevicesHonestly(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	address, device := findings[0], findings[1]
-	if address.Title != "New address on the network" || address.Subject != "10.0.0.99" || !strings.Contains(address.Method, "may be a known device") {
+	if address.Title != "New address on the network" || address.Subject.Label != "10.0.0.99" || !strings.Contains(address.Method, "may be a known device") {
 		t.Fatalf("address finding = %+v", address)
 	}
-	if device.Title != "New device on the network" || device.Summary != "First seen 2 days ago and has sent 1,240 queries since." || device.Device != "mac:da:a1:19:00:00:01" {
+	if device.Title != "New device on the network" || device.Summary != "First seen 2 days ago and has sent 1,240 queries since." || device.Subject.Device != "mac:da:a1:19:00:00:01" {
 		t.Fatalf("device finding = %+v", device)
 	}
 
@@ -141,7 +141,7 @@ func TestChangesCompareDevicesWithTheirOwnWeek(t *testing.T) {
 	if len(findings) != 2 {
 		t.Fatalf("findings = %+v", findings)
 	}
-	if findings[0].Kind != KindWentQuiet || findings[0].Subject != "camera" || findings[0].Summary != "No queries in the last 24 hours. It averaged 1,240 a day over the week before." {
+	if findings[0].Kind != KindWentQuiet || findings[0].Subject.Label != "camera" || findings[0].Summary != "No queries in the last 24 hours. It averaged 1,240 a day over the week before." {
 		t.Fatalf("quiet finding = %+v", findings[0])
 	}
 	if findings[1].Kind != KindTrafficSpike || findings[1].Summary != "Sent 12,480 queries in the last 24 hours, 4.2× its daily average over the week before." {

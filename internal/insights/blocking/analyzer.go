@@ -19,7 +19,7 @@ const analysisTimeout = 2 * time.Minute
 // Analyzer keeps the most recent list comparison and recomputes it only when
 // the configured lists or their cached files change. Concurrent requests for
 // the same lists share one computation.
-type Analyzer struct {
+type ContributionCache struct {
 	mu     sync.Mutex
 	key    string
 	result Contribution
@@ -37,7 +37,7 @@ type analysisFlight struct {
 
 // Contribution returns the comparison for the given lists, reusing the cached
 // result while every list's configuration and cached file are unchanged.
-func (analyzer *Analyzer) Contribution(ctx context.Context, baseDirectory string, lists []List) (Contribution, error) {
+func (analyzer *ContributionCache) Contribution(ctx context.Context, baseDirectory string, lists []List) (Contribution, error) {
 	key := fingerprint(baseDirectory, lists)
 	analyzer.mu.Lock()
 	if analyzer.valid && analyzer.key == key {
@@ -65,7 +65,7 @@ func (analyzer *Analyzer) Contribution(ctx context.Context, baseDirectory string
 	}
 }
 
-func (analyzer *Analyzer) run(flight *analysisFlight, baseDirectory string, lists []List, started time.Time) {
+func (analyzer *ContributionCache) run(flight *analysisFlight, baseDirectory string, lists []List, started time.Time) {
 	ctx, cancel := context.WithTimeout(context.Background(), analysisTimeout)
 	defer cancel()
 	flight.result, flight.err = Analyze(ctx, baseDirectory, lists, started)

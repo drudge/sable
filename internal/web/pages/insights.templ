@@ -127,6 +127,7 @@ type InsightFindingView struct {
 	Subject          string
 	SubjectMonospace bool
 	Summary          string
+	Reasons          []string
 	Facts            []InsightFactView
 	Clients          []RankedStatView
 	Method           string
@@ -418,9 +419,23 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
 		CloseLabel: "Close evidence",
 	}, insightEvidenceFooter(finding, view)) {
-		<div class="query-detail-section-heading insight-evidence-summary">
-			<p>{ finding.Summary }</p>
-		</div>
+		// The checklist states the summary point by point, so the drawer shows
+		// the sentence only when there is no checklist to read instead.
+		if len(finding.Reasons) == 0 {
+			<div class="query-detail-section-heading insight-evidence-summary">
+				<p>{ finding.Summary }</p>
+			</div>
+		}
+		if len(finding.Reasons) > 0 {
+			<section class="insight-reasons" aria-labelledby={ finding.ID + "-reasons" }>
+				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
+				<ul>
+					for _, reason := range finding.Reasons {
+						<li>@Icon("check")<span>{ reason }</span></li>
+					}
+				</ul>
+			</section>
+		}
 		if len(finding.Facts) > 0 {
 			<dl class="query-detail-grid insight-evidence-facts">
 				for index, fact := range finding.Facts {

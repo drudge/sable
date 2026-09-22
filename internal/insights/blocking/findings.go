@@ -2,6 +2,7 @@ package blocking
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -123,13 +124,13 @@ func pastBlockFindings(blocks []PastBlock) []insights.Finding {
 			{Label: "Current policy", Value: "Allowed by " + block.Rule, Monospace: true},
 		}
 		findings = append(findings, insights.Finding{
-			Kind:             KindPastBlock,
-			Tone:             insights.ToneAttention,
-			Title:            "Possible past blocking issue",
-			Subject:          evidence.Name,
-			SubjectMonospace: true,
+			Kind:    KindPastBlock,
+			Tone:    insights.ToneAttention,
+			Title:   "Possible past blocking issue",
+			Subject: insights.Subject{Label: evidence.Name, Monospace: true, Domain: evidence.Name},
 			Summary: fmt.Sprintf("Blocked %s %s during the selected period and %s.",
 				insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times"), allowedBy),
+			Reasons: pastBlockReasons(block),
 			Facts:   facts,
 			Clients: clients,
 			Method: "Sable compares the allowed domains with the blocked queries it retained for this period. " +
@@ -183,8 +184,9 @@ func updateFindings(input FindingsInput) []insights.Finding {
 			Kind:    KindUpdateFailing,
 			Tone:    insights.ToneAttention,
 			Title:   "Block list updates are failing",
-			Subject: list.Name,
+			Subject: insights.Subject{Label: list.Name, BlockList: list.Name},
 			Summary: summary,
+			Reasons: updateReasons(health, input.Now, interval),
 			Facts:   facts,
 			Method: fmt.Sprintf("Sable reports a list here once it has gone at least %d update intervals without a successful download. "+
 				"Until it recovers, blocking keeps using the last copy that downloaded.", staleUpdateIntervals),
@@ -205,8 +207,9 @@ func unreadableFindings(contribution Contribution) []insights.Finding {
 			Kind:             KindListUnreadable,
 			Tone:             insights.ToneNotice,
 			Title:            "Block list left out of the comparison",
-			Subject:          list.Name,
+			Subject:          insights.Subject{Label: list.Name, BlockList: list.Name},
 			Summary:          list.Problem + ", so its coverage could not be compared with the other lists.",
+			Reasons:          []string{list.Problem, "Its domains are left out of every other list's comparison until it can be read"},
 			Method:           "The comparison reads each list's cached copy, the same file blocking is compiled from.",
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -252,8 +255,9 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 			Kind:             KindLowUnique,
 			Tone:             insights.ToneNotice,
 			Title:            "Little unique coverage",
-			Subject:          list.Name,
+			Subject:          insights.Subject{Label: list.Name, BlockList: list.Name},
 			Summary:          summary,
+			Reasons:          coverageReasons(list, queries),
 			Facts:            coverageFacts(list, queries),
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
@@ -272,9 +276,10 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 			Kind:    KindUniqueCoverage,
 			Tone:    insights.TonePositive,
 			Title:   "Meaningful unique coverage",
-			Subject: best.Name,
+			Subject: insights.Subject{Label: best.Name, BlockList: best.Name},
 			Summary: fmt.Sprintf("%s of this list's domains (%s) are not covered by any other enabled list.",
 				insights.FormatCount(uint64(best.Unique)), insights.FormatShare(uint64(best.Unique), uint64(best.Domains))),
+			Reasons:          coverageReasons(best, queries),
 			Facts:            coverageFacts(best, queries),
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
@@ -327,4 +332,80 @@ func rankedCounts(values map[string]uint64, limit int) []insights.Count {
 		return cmp.Compare(left.Name, right.Name)
 	})
 	return counts[:min(len(counts), limit)]
+}
+
+func pastBlockReasons(block PastBlock) []string {
+	evidence := block.Evidence
+	reasons := []string{
+		fmt.Sprintf("Blocked %s %s during the selected period", insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times")),
+		"Now allowed by " + block.Rule,
+	}
+	if evidence.ClientCount > 0 {
+		reasons = append(reasons, fmt.Sprintf("Affected %s %s", insights.FormatCount(evidence.ClientCount), insights.Plural(evidence.ClientCount, "client", "clients")))
+	}
+	return reasons
+}
+
+func updateReasons(health blockcompiler.SourceHealth, now time.Time, interval time.Duration) []string {
+	reasons := []string{fmt.Sprintf("%s %s failed in a row", insights.FormatCount(uint64(health.ConsecutiveFailures)),
+		insights.Plural(health.ConsecutiveFailures, "update", "updates"))}
+	if health.LastSuccess.IsZero() {
+		reasons = append(reasons, "Never downloaded successfully")
+	} else {
+		reasons = append(reasons, "Newest cached copy is "+insights.FormatDuration(now.Sub(health.LastSuccess))+" old",
+			fmt.Sprintf("That is more than %d update intervals of %s", staleUpdateIntervals, insights.FormatDuration(interval)))
+	}
+	return reasons
+}
+
+func coverageReasons(list ListContribution, queries *SourceQueries) []string {
+	reasons := []string{
+		fmt.Sprintf("%s of its %s domains are in no other enabled list",
+			insights.FormatCount(uint64(list.Unique)), insights.FormatCount(uint64(list.Domains))),
+		insights.FormatShare(uint64(list.Covered), uint64(list.Domains)) + " are also covered by other lists",
+	}
+	if list.LargestOverlap.Name != "" {
+		reasons = append(reasons, fmt.Sprintf("Largest overlap is %s, at %s", list.LargestOverlap.Name,
+			insights.FormatShare(uint64(list.LargestOverlap.Domains), uint64(list.Domains))))
+	}
+	if queries != nil && queries.Since.IsZero() {
+		sole := queries.Lists[list.Name].Sole
+		reasons = append(reasons, fmt.Sprintf("Alone blocked %s %s during the selected period",
+			insights.FormatCount(sole), insights.Plural(sole, "query", "queries")))
+	}
+	return reasons
+}
+
+// Sources is what the blocking analyzer reads. The console implements it over
+// its caches and stores, so the analysis never touches HTTP handling or the
+// DNS request path. A method returns nil when the operator may not read what
+// it needs, and the findings that depend on it are skipped.
+type Sources interface {
+	Contribution(context.Context) (*Contribution, error)
+	ListHealth() ([]ListHealth, time.Duration)
+	SourceQueries(context.Context, insights.Window) (*SourceQueries, error)
+	PastBlocks(context.Context, insights.Window) ([]PastBlock, error)
+}
+
+// Analyzer reports what is worth knowing about blocking.
+type Analyzer struct {
+	Sources Sources
+}
+
+// Analyze gathers the blocking evidence for a window and turns it into findings.
+func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([]insights.Finding, error) {
+	input := FindingsInput{Now: window.End}
+	contribution, err := analyzer.Sources.Contribution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	input.Contribution = contribution
+	input.Health, input.UpdateInterval = analyzer.Sources.ListHealth()
+	if input.Queries, err = analyzer.Sources.SourceQueries(ctx, window); err != nil {
+		return nil, err
+	}
+	if input.PastBlocks, err = analyzer.Sources.PastBlocks(ctx, window); err != nil {
+		return nil, err
+	}
+	return Findings(input), nil
 }

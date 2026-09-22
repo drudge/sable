@@ -3739,6 +3739,12 @@ dialog[open]::backdrop {
 .insight-list-mobile-row dd { font-variant-numeric: tabular-nums; }
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
 .query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
+.insight-reasons { display: grid; gap: .5rem; }
+.insight-reasons h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insight-reasons ul { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.insight-reasons li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
+.insight-reasons li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
+.dark .insight-reasons li .nav-icon { color: #22c55e; }
 .insight-evidence-summary p { color: var(--foreground); font-size: .875rem; }
 .insight-list-row { position: relative; display: flex; min-width: 0; min-height: 3rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .5rem .75rem; }
 .insight-list-row:first-child { border-top: 0; }

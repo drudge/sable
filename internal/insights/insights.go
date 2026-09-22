@@ -10,8 +10,10 @@
 package insights
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -65,27 +67,56 @@ type DomainEvidence struct {
 	Query     *QueryFilter
 }
 
+// Subject is what a finding is about. The label is for display; the typed
+// references identify the subject durably, so a later dismissal, correction,
+// or label can attach to the thing itself rather than to its display text.
+// Only the references that apply are set.
+type Subject struct {
+	Label     string
+	Monospace bool
+	// Device is a device identity key such as "mac:3c:22:fb:01:02:03" or
+	// "ip:10.0.0.5".
+	Device    string
+	Domain    string
+	BlockList string
+}
+
+// key is the most specific durable reference to the subject.
+func (subject Subject) key() string {
+	switch {
+	case subject.Device != "":
+		return "device:" + subject.Device
+	case subject.Domain != "":
+		return "domain:" + subject.Domain
+	case subject.BlockList != "":
+		return "blocklist:" + subject.BlockList
+	default:
+		return "label:" + subject.Label
+	}
+}
+
 // Finding is one thing worth knowing, with the evidence that supports it.
 type Finding struct {
-	// Kind identifies the rule that produced the finding.
-	Kind string
-	Tone Tone
-	// Title names the kind of finding in plain words.
-	Title string
-	// Subject is what the finding is about: a domain, a list, a client.
-	Subject          string
-	SubjectMonospace bool
+	// ID is stable for the same kind of finding about the same subject, so
+	// analyzing the same situation again produces the same ID.
+	ID string
+	// Kind identifies the rule that produced the finding, namespaced by the
+	// analyzer that owns it, such as "devices.went-quiet".
+	Kind    string
+	Tone    Tone
+	Title   string
+	Subject Subject
 	// Summary states the evidence in one factual sentence.
 	Summary string
+	// Reasons are the individual observations behind the finding, each one a
+	// short statement the operator can check against the facts below it.
+	Reasons []string
 	Facts   []Fact
 	// Clients lists the clients the evidence involves, busiest first.
 	Clients []Count
 	// Domains lists the names the evidence involves, with the query filter
 	// that reproduces each one's rows.
 	Domains []DomainEvidence
-	// Device is the identity key of the device a finding is about, which the
-	// console uses to open that device's details.
-	Device string
 	// Method explains how Sable arrived at the finding and what it does not
 	// claim.
 	Method string
@@ -94,6 +125,55 @@ type Finding struct {
 	// Destination is a console page where the subject can be managed.
 	Destination      string
 	DestinationLabel string
+	// ObservedAt is the end of the window the finding describes.
+	ObservedAt time.Time
+}
+
+// NewID builds a finding's stable identifier from its kind and subject.
+func NewID(kind string, subject Subject) string {
+	return kind + "/" + subject.key()
+}
+
+// Window is the period an analysis covers.
+type Window struct {
+	Start time.Time
+	End   time.Time
+}
+
+// Analyzer examines one area of the network and reports what is worth
+// knowing about it. Every area produces the same Finding shape, so the
+// console presents blocking, devices, and future areas side by side.
+// Analyzers run outside the DNS request path, on persisted and derived data.
+type Analyzer interface {
+	Analyze(context.Context, Window) ([]Finding, error)
+}
+
+// Collect runs every analyzer over a window and returns their findings, most
+// urgent first, keeping each analyzer's own order within a tone. An analyzer
+// that fails is reported through failed and leaves the others unaffected.
+func Collect(ctx context.Context, window Window, analyzers []Analyzer, failed func(Analyzer, error)) []Finding {
+	findings := make([]Finding, 0)
+	for _, analyzer := range analyzers {
+		produced, err := analyzer.Analyze(ctx, window)
+		if err != nil {
+			if failed != nil {
+				failed(analyzer, err)
+			}
+			continue
+		}
+		for _, finding := range produced {
+			if finding.ID == "" {
+				finding.ID = NewID(finding.Kind, finding.Subject)
+			}
+			if finding.ObservedAt.IsZero() {
+				finding.ObservedAt = window.End
+			}
+			findings = append(findings, finding)
+		}
+	}
+	rank := map[Tone]int{ToneAttention: 0, ToneNotice: 1, TonePositive: 2}
+	slices.SortStableFunc(findings, func(left, right Finding) int { return rank[left.Tone] - rank[right.Tone] })
+	return findings
 }
 
 // FormatCount renders a count with thousands separators.

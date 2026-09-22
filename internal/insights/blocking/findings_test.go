@@ -1,6 +1,7 @@
 package blocking
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -55,7 +56,7 @@ func TestFindingsReportAPastBlockWithItsEvidence(t *testing.T) {
 		t.Fatalf("findings = %+v, want the two names with blocked traffic", findings)
 	}
 	top := findings[0]
-	if top.Kind != KindPastBlock || top.Tone != insights.ToneAttention || top.Subject != "telemetry.example.com" {
+	if top.Kind != KindPastBlock || top.Tone != insights.ToneAttention || top.Subject.Label != "telemetry.example.com" {
 		t.Fatalf("top finding = %+v", top)
 	}
 	if top.Summary != "Blocked 412 times during the selected period and is now explicitly allowed." {
@@ -93,19 +94,19 @@ func TestFindingsDescribeListCoverageWithoutAdvice(t *testing.T) {
 	findings := Findings(FindingsInput{Now: time.Now(), Contribution: &contribution})
 
 	low := findingOfKind(t, findings, KindLowUnique)
-	if low.Subject != "Small List" || low.Summary != "99.2% of this list's domains are also covered by Big List." {
+	if low.Subject.Label != "Small List" || low.Summary != "99.2% of this list's domains are also covered by Big List." {
 		t.Fatalf("low unique finding = %+v", low)
 	}
 	positive := findingOfKind(t, findings, KindUniqueCoverage)
-	if positive.Subject != "Big List" || positive.Summary != "90,000 of this list's domains (45.0%) are not covered by any other enabled list." {
+	if positive.Subject.Label != "Big List" || positive.Summary != "90,000 of this list's domains (45.0%) are not covered by any other enabled list." {
 		t.Fatalf("unique coverage finding = %+v", positive)
 	}
 	unreadable := findingOfKind(t, findings, KindListUnreadable)
-	if unreadable.Subject != "Unreadable" {
+	if unreadable.Subject.Label != "Unreadable" {
 		t.Fatalf("unreadable finding = %+v", unreadable)
 	}
 	for _, finding := range findings {
-		if finding.Subject == "Tiny" {
+		if finding.Subject.Label == "Tiny" {
 			t.Fatal("a list below the comparison minimum produced a finding")
 		}
 		lower := strings.ToLower(finding.Summary + finding.Method)
@@ -153,7 +154,7 @@ func TestFindingsReportOnlyStaleUpdateFailures(t *testing.T) {
 	if len(findings) != 2 {
 		t.Fatalf("findings = %+v, want the stale and never-downloaded lists", findings)
 	}
-	if findings[0].Subject != "Stale" || findings[0].Summary != "The last 4 updates failed. Its newest cached copy is 3 days old." {
+	if findings[0].Subject.Label != "Stale" || findings[0].Summary != "The last 4 updates failed. Its newest cached copy is 3 days old." {
 		t.Fatalf("stale finding = %+v", findings[0])
 	}
 	if fact := findFact(findings[0].Facts, "Next retry"); !fact.Time.Equal(now.Add(time.Hour)) {
@@ -172,7 +173,7 @@ func TestFindingsStaySparse(t *testing.T) {
 		blocks = append(blocks, PastBlock{Rule: name, Evidence: querylog.BlockedNameEvidence{Name: name, Blocked: uint64(index + 1)}})
 	}
 	findings := Findings(FindingsInput{PastBlocks: blocks})
-	if len(findings) != maximumPastBlocks || findings[0].Subject != "aaaaaaaaaa.example" {
+	if len(findings) != maximumPastBlocks || findings[0].Subject.Label != "aaaaaaaaaa.example" {
 		t.Fatalf("findings = %d (%+v), want the %d busiest past blocks", len(findings), findings, maximumPastBlocks)
 	}
 }
@@ -242,5 +243,42 @@ func TestListFindingsIncludeTheQueriesEachListBlocked(t *testing.T) {
 	low = findingOfKind(t, Findings(FindingsInput{Contribution: &contribution, Queries: queries}), KindLowUnique)
 	if strings.Contains(low.Summary, "depended") || !findFact(low.Facts, "Queries counted since").Time.Equal(began) {
 		t.Fatalf("partial coverage finding = %+v", low)
+	}
+}
+
+type fakeSources struct {
+	contribution *Contribution
+	health       []ListHealth
+	queries      *SourceQueries
+	pastBlocks   []PastBlock
+}
+
+func (sources fakeSources) Contribution(context.Context) (*Contribution, error) {
+	return sources.contribution, nil
+}
+func (sources fakeSources) ListHealth() ([]ListHealth, time.Duration) {
+	return sources.health, time.Hour
+}
+func (sources fakeSources) SourceQueries(context.Context, insights.Window) (*SourceQueries, error) {
+	return sources.queries, nil
+}
+func (sources fakeSources) PastBlocks(context.Context, insights.Window) ([]PastBlock, error) {
+	return sources.pastBlocks, nil
+}
+
+func TestAnalyzerSkipsWhatItsSourcesCannotProvide(t *testing.T) {
+	t.Parallel()
+	window := insights.Window{Start: time.Unix(0, 0), End: time.Unix(86_400, 0)}
+	// An operator who may read query history but not blocking settings gets
+	// only the findings history alone supports.
+	onlyHistory := fakeSources{pastBlocks: nil, queries: &SourceQueries{}}
+	findings, err := Analyzer{Sources: onlyHistory}.Analyze(context.Background(), window)
+	if err != nil || len(findings) != 0 {
+		t.Fatalf("findings = %+v, %v", findings, err)
+	}
+	full := fakeSources{pastBlocks: []PastBlock{{Rule: "a.example", Evidence: querylog.BlockedNameEvidence{Name: "a.example", Blocked: 2, ClientCount: 1}}}}
+	findings, err = Analyzer{Sources: full}.Analyze(context.Background(), window)
+	if err != nil || len(findings) != 1 || findings[0].Subject.Domain != "a.example" || len(findings[0].Reasons) != 3 {
+		t.Fatalf("findings = %+v, %v", findings, err)
 	}
 }

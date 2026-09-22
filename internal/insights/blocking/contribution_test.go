@@ -210,7 +210,7 @@ func TestAnalyzerReusesTheComparisonUntilAListChanges(t *testing.T) {
 		writeList(t, directory, "beta", "two.example"),
 	}
 	var calls atomic.Int32
-	analyzer := &Analyzer{now: func() time.Time { calls.Add(1); return time.Unix(int64(calls.Load()), 0) }}
+	analyzer := &ContributionCache{now: func() time.Time { calls.Add(1); return time.Unix(int64(calls.Load()), 0) }}
 
 	var group sync.WaitGroup
 	for range 8 {
