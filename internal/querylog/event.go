@@ -134,6 +134,31 @@ type Insights struct {
 	ResponseCodes map[int]uint64
 }
 
+// BlockingActivity summarizes the blocked queries in a window. The totals are
+// exact counts from the query log; the two rankings keep the busiest entries.
+type BlockingActivity struct {
+	// Queries is every query in the window, blocked or not, so a blocked total
+	// can be read as a share of traffic.
+	Queries        uint64
+	Blocked        uint64
+	BlockedDomains uint64
+	BlockedClients uint64
+	TopDomains     map[string]uint64
+	TopClients     map[string]uint64
+}
+
+// BlockedNameEvidence is what the query log retained about one name that was
+// blocked in a window: how often, when, and for which clients.
+type BlockedNameEvidence struct {
+	Name         string
+	Blocked      uint64
+	FirstBlocked time.Time
+	LastBlocked  time.Time
+	// ClientCount is every distinct client; Clients keeps only the busiest.
+	ClientCount uint64
+	Clients     map[string]uint64
+}
+
 type Page struct {
 	Entries      []Entry `json:"entries"`
 	Page         int     `json:"page"`

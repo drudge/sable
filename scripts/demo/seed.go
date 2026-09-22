@@ -42,6 +42,9 @@ func seedTraffic(ctx context.Context, dsn string) error {
 	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now)); err != nil {
 		return fmt.Errorf("write demo query events: %w", err)
 	}
+	if err := backing.WriteQueryEvents(ctx, seedPastBlocks(random, now)); err != nil {
+		return fmt.Errorf("write demo past blocks: %w", err)
+	}
 	buckets, totals := seedChartHistory(random, now)
 	if err := backing.RecordQueryStats(ctx, buckets, totals); err != nil {
 		return fmt.Errorf("write demo chart history: %w", err)
@@ -70,6 +73,27 @@ func seedQueryEvents(random *rand.Rand, now time.Time) []querylog.Event {
 			domain = resolved.pick(random)
 		}
 		events = append(events, seedQueryEvent(random, at, clients.pick(random), domain))
+	}
+	return events
+}
+
+// seedPastBlocks writes the blocked queries behind each allowed override, spread
+// across the days before somebody allowed the name.
+func seedPastBlocks(random *rand.Rand, now time.Time) []querylog.Event {
+	events := make([]querylog.Event, 0)
+	for _, block := range pastBlocks {
+		clients := newWeightedClients(block.clients)
+		span := time.Duration(block.from-block.to) * 24 * time.Hour
+		start := now.Add(-time.Duration(block.from) * 24 * time.Hour)
+		for range block.count {
+			at := start.Add(time.Duration(random.Int63n(int64(span))))
+			events = append(events, querylog.Event{
+				OccurredAt: at, ClientIP: clients.pick(random).address, Name: block.name + ".",
+				RecordType: seedRecordType(random), Class: 1, ResponseCode: 3,
+				Source: querylog.SourceBlocked, Protocol: seedProtocol(random), Duration: microseconds(random, 120, 400),
+				Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: block.rule, Resolver: querylog.ResolverBlocked},
+			})
+		}
 	}
 	return events
 }

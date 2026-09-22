@@ -13,13 +13,16 @@ import (
 )
 
 const (
-	queryLogRollupClient       = "client"
-	queryLogRollupDomain       = "domain"
-	queryLogRollupBlocked      = "blocked"
-	queryLogRollupRecordType   = "record_type"
-	queryLogRollupSource       = "source"
-	queryLogRollupResponseCode = "response_code"
-	queryLogRollupInsertRows   = 128
+	queryLogRollupClient  = "client"
+	queryLogRollupDomain  = "domain"
+	queryLogRollupBlocked = "blocked"
+	// queryLogRollupBlockedClient counts blocked queries per client so the
+	// Insights page can rank affected clients without scanning raw history.
+	queryLogRollupBlockedClient = "blocked_client"
+	queryLogRollupRecordType    = "record_type"
+	queryLogRollupSource        = "source"
+	queryLogRollupResponseCode  = "response_code"
+	queryLogRollupInsertRows    = 128
 )
 
 type queryLogRollupKey struct {
@@ -77,6 +80,7 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 		}
 		if event.Source == querylog.SourceBlocked {
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlocked, value: domain}]++
+			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedClient, value: client}]++
 		}
 	}
 	rollups := make([]queryLogRollup, 0, len(counts))

@@ -74,11 +74,25 @@ func Compile(baseDirectory string, inlineDomains []string, sources []Source) (Re
 }
 
 func compileSource(baseDirectory string, source Source, domains map[string]struct{}) (SourceStats, error) {
-	path := source.Path
+	return ReadSource(baseDirectory, source, func(domain string) { domains[domain] = struct{}{} })
+}
+
+// SourcePath resolves a configured block-list path the way the compiler opens
+// it, so a caller inspecting the cached file looks at the same file.
+func SourcePath(baseDirectory, path string) string {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(baseDirectory, path)
 	}
-	path = filepath.Clean(path)
+	return filepath.Clean(path)
+}
+
+// ReadSource streams every domain one block list contributes, normalized
+// exactly as the compiled policy stores it. The compiler and anything that
+// analyzes a list's contents share this reader so their notion of a list's
+// domains cannot drift apart. A domain can be visited more than once when the
+// list repeats it.
+func ReadSource(baseDirectory string, source Source, visit func(string)) (SourceStats, error) {
+	path := SourcePath(baseDirectory, source.Path)
 	file, err := os.Open(path)
 	if err != nil {
 		return SourceStats{}, fmt.Errorf("open block list %q: %w", source.Name, err)
@@ -105,7 +119,7 @@ func compileSource(baseDirectory string, source Source, domains map[string]struc
 				stats.Invalid++
 				continue
 			}
-			domains[domain] = struct{}{}
+			visit(domain)
 			accepted++
 		}
 		stats.Accepted += accepted

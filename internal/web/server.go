@@ -27,6 +27,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsserver"
+	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
@@ -87,6 +88,10 @@ type Server struct {
 	setupRequired      atomic.Bool
 	history            *statsHistory
 	insightCache       dashboardInsightCache
+	// blockingActivityCache and blockListAnalysis back the Insights page.
+	blockingActivityCache windowCache[querylog.BlockingActivity]
+	blockListAnalysis     blockinginsights.Analyzer
+	baseDirectory         string
 	historyPrune       chan struct{}
 	runtimeContext     context.Context
 	runtimeCancel      context.CancelFunc
@@ -221,6 +226,7 @@ func New(
 	if located, ok := configuration.(interface{ BaseDirectory() string }); ok {
 		baseDirectory = located.BaseDirectory()
 	}
+	server.baseDirectory = baseDirectory
 	server.sessionCookie = scopedSessionCookieName(configuration.Current().Config.SecuritySecretKeyPath(baseDirectory))
 	server.configureDevDemoAutoLogin()
 	server.blockLists = blockcompiler.NewUpdater(baseDirectory)
@@ -234,6 +240,8 @@ func New(
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
+	mux.HandleFunc("GET /insights", server.insightsPage)
+	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)

@@ -178,13 +178,44 @@ type blockListSource struct {
 	URL    string
 	Count  int
 	Format string
+	// Shared lists entries copied from lists generated before this one. Real
+	// block lists draw on many of the same upstream feeds, and Insights has
+	// nothing to say about overlap unless the demo lists overlap too.
+	Shared []sharedEntries
+}
+
+// sharedEntries is how many of a list's entries also appear in another list.
+type sharedEntries struct {
+	From  string
+	Count int
 }
 
 var blockListSources = []blockListSource{
-	{"OISD Big", "https://big.oisd.nl/", 182_000, "domains"},
-	{"Steven Black Unified", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", 128_000, "hosts"},
-	{"AdGuard DNS Filter", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 54_000, "adblock"},
+	{"OISD Big", "https://big.oisd.nl/", 182_000, "domains", nil},
+	{"Steven Black Unified", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", 128_000, "hosts",
+		[]sharedEntries{{From: "OISD Big", Count: 71_000}}},
+	// Nearly everything in the smallest list is already covered by the other
+	// two, which is the overlap finding the Insights screenshot shows.
+	{"AdGuard DNS Filter", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 54_000, "adblock",
+		[]sharedEntries{{From: "OISD Big", Count: 38_500}, {From: "Steven Black Unified", Count: 15_150}}},
 }
+
+// pastBlock is a name that was blocked before an operator allowed it. Its
+// history is seeded days back so Insights can show the correction as evidence.
+type pastBlock struct {
+	name    string
+	rule    string
+	clients []clientWeight
+	count   int
+	// from and to bound the days ago the blocked queries were spread across.
+	from, to int
+}
+
+var pastBlocks = []pastBlock{{
+	name: "cdn.jpeterman-catalog.com", rule: "cdn.jpeterman-catalog.com",
+	clients: []clientWeight{{"10.20.10.132", 6}, {"10.20.10.145", 3}, {"10.20.20.21", 2}},
+	count:   143, from: 12, to: 9,
+}}
 
 // clusterNode describes one Sable server in the demo deployment.
 type clusterNode struct {

@@ -373,6 +373,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 						<div class="nav-group">
 							<div class="nav-label">Overview</div>
 							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
+							if view.CanBlocking || view.CanLogs {
+								@NavItem("Insights", "/insights", "sparkles", activePage == "insights", false)
+							}
 							if view.CanZones {
 								@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
 							}
@@ -518,6 +521,9 @@ templ CommandPalette(view DashboardView) {
 			<section class="command-palette-group" role="group" aria-labelledby="command-pages-title" data-command-group>
 				<h3 id="command-pages-title">Pages</h3>
 				@CommandOption("command-page-dashboard", "Dashboard", "Overview and query statistics", "dashboard", "Page", "home overview statistics metrics", "/", "", "", "", "")
+				if view.CanBlocking || view.CanLogs {
+					@CommandOption("command-page-insights", "Insights", "What is worth knowing about blocking", "sparkles", "Page", "intelligence findings evidence analysis blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
+				}
 				if view.CanZones {
 					@CommandOption("command-page-zones", "Zones", "Manage DNS zones and records", "globe", "Page", "authoritative primary secondary forwarding records", "/zones", "", "", "", "")
 				}
@@ -1206,24 +1212,10 @@ templ QueryChart(view QueryChartView) {
 			} else {
 				<div class={ ifThen(view.Live, "chart-live active", "chart-live") }><span></span>Live</div>
 			}
-			<div class="range-tabs" role="group" aria-label="Query statistics time range">
-				@RangeButton("Hour", "hour", view.ActiveRange)
-				@RangeButton("Day", "day", view.ActiveRange)
-				@RangeButton("Week", "week", view.ActiveRange)
-				@RangeButton("Month", "month", view.ActiveRange)
-				@RangeButton("Year", "year", view.ActiveRange)
+			@RangeTabs(chartRangeControl(view.ActiveRange)) {
 				<button type="button" id="chart-range-custom" class={ ifThen(view.ActiveRange == "custom", "active", "") } aria-pressed={ fmt.Sprint(view.ActiveRange == "custom") } aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-range-open>Custom</button>
-			</div>
-			<label class="range-select">
-				<span class="sr-only">Query statistics time range</span>
-				<select id="chart-range-select" name="range" data-styled-select aria-label="Query statistics time range" hx-get="/ui/stats/chart?insights=1" hx-trigger="change" hx-target="#query-statistics" hx-swap="outerHTML">
-					@RangeOption("Hour", "hour", view.ActiveRange)
-					@RangeOption("Day", "day", view.ActiveRange)
-					@RangeOption("Week", "week", view.ActiveRange)
-					@RangeOption("Month", "month", view.ActiveRange)
-					@RangeOption("Year", "year", view.ActiveRange)
-				</select>
-			</label>
+			}
+			@RangeSelect(chartRangeControl(view.ActiveRange))
 			<button class="range-custom-mobile" id="chart-range-custom-mobile" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="chart-custom-range" data-range-open>Custom</button>
 		</div>
 		<div class="range-popover chart-range-popover" id="chart-custom-range" role="dialog" aria-label="Custom query range" data-range-popover hidden>
@@ -1299,19 +1291,83 @@ templ RangeCalendar() {
 	<div class="calendar-grid" role="group" aria-label="Choose date range" data-calendar-grid></div>
 }
 
-templ RangeButton(label string, value string, active string) {
+// RangeChoice is one preset window a range control offers.
+type RangeChoice struct {
+	Label string
+	Value string
+}
+
+// RangeControlView describes a segmented time range control and the compact
+// select that replaces it on narrow screens. Every page that recounts a view
+// over a chosen window uses it, so the control looks and behaves the same
+// wherever an operator picks a period.
+type RangeControlView struct {
+	// Label is the accessible name of the control.
+	Label   string
+	Active  string
+	Choices []RangeChoice
+	// IDPrefix names the buttons and select. The identifiers survive a swap,
+	// which is what lets htmx restore focus to the control that was used.
+	IDPrefix string
+	// URL is requested with the chosen range appended; SelectURL is requested
+	// by the select, which submits its own range value.
+	URL       string
+	SelectURL string
+	Target    string
+}
+
+func (control RangeControlView) choiceURL(value string) templ.SafeURL {
+	separator := "?"
+	if strings.Contains(control.URL, "?") {
+		separator = "&"
+	}
+	return templ.SafeURL(control.URL + separator + "range=" + url.QueryEscape(value))
+}
+
+var chartRangeChoices = []RangeChoice{{"Hour", "hour"}, {"Day", "day"}, {"Week", "week"}, {"Month", "month"}, {"Year", "year"}}
+
+func chartRangeControl(active string) RangeControlView {
+	return RangeControlView{
+		Label: "Query statistics time range", Active: active, Choices: chartRangeChoices, IDPrefix: "chart-range",
+		URL: "/ui/stats/chart?insights=1", SelectURL: "/ui/stats/chart?insights=1", Target: "#query-statistics",
+	}
+}
+
+// RangeTabs renders the segmented control. Extra trailing buttons, such as a
+// custom range trigger, are passed as children.
+templ RangeTabs(control RangeControlView) {
+	<div class="range-tabs" role="group" aria-label={ control.Label }>
+		for _, choice := range control.Choices {
+			@RangeButton(control, choice)
+		}
+		{ children... }
+	</div>
+}
+
+templ RangeSelect(control RangeControlView) {
+	<label class="range-select">
+		<span class="sr-only">{ control.Label }</span>
+		<select id={ control.IDPrefix + "-select" } name="range" data-styled-select aria-label={ control.Label } hx-get={ templ.SafeURL(control.SelectURL) } hx-trigger="change" hx-target={ control.Target } hx-swap="outerHTML">
+			for _, choice := range control.Choices {
+				@RangeOption(choice.Label, choice.Value, control.Active)
+			}
+		</select>
+	</label>
+}
+
+templ RangeButton(control RangeControlView, choice RangeChoice) {
 	// The identifier survives the live refresh: htmx only restores focus to a
 	// swapped-in control when it carries the same id as the focused one.
 	<button
 		type="button"
-		id={ "chart-range-" + value }
-		class={ ifThen(value == active, "active", "") }
-		aria-pressed={ fmt.Sprint(value == active) }
-		data-range={ value }
-		hx-get={ templ.SafeURL("/ui/stats/chart?insights=1&range=" + value) }
-		hx-target="#query-statistics"
+		id={ control.IDPrefix + "-" + choice.Value }
+		class={ ifThen(choice.Value == control.Active, "active", "") }
+		aria-pressed={ fmt.Sprint(choice.Value == control.Active) }
+		data-range={ choice.Value }
+		hx-get={ control.choiceURL(choice.Value) }
+		hx-target={ control.Target }
 		hx-swap="outerHTML"
-	>{ label }</button>
+	>{ choice.Label }</button>
 }
 
 templ RangeOption(label string, value string, active string) {

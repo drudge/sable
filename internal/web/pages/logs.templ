@@ -275,46 +275,75 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 }
 
 templ QueryDetailDialog(canBlocking bool) {
-	<dialog class="query-detail-dialog" id="query-detail-dialog" aria-labelledby="query-detail-title">
+	@DetailDrawer(DetailDrawerView{
+		ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "—", CloseLabel: "Close query details",
+		TitleAttributes: templ.Attributes{"data-query-detail-value": "name"},
+	}, queryDetailFooter(canBlocking)) {
+		<div class="query-detail-result" aria-label="Query result">
+			<span class="source-pill" data-query-detail-source>—</span>
+			<span class="rcode" data-query-detail-status>—</span>
+		</div>
+		<dl class="query-detail-grid">
+			<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
+			<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
+			<div><dt>Query type</dt><dd data-query-detail-value="type">—</dd></div>
+			<div><dt>Protocol</dt><dd data-query-detail-value="protocol">—</dd></div>
+			<div><dt>Duration</dt><dd data-query-detail-value="duration">—</dd></div>
+		</dl>
+		<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
+			<h3 id="query-detail-answer-title">Answer</h3>
+			<div data-query-detail-answers><span>—</span></div>
+		</section>
+		<section class="query-detail-explain" aria-labelledby="query-detail-explain-title">
+			<div class="query-detail-section-heading"><h3 id="query-detail-explain-title">Why this answer?</h3><p data-query-detail-explain-summary></p></div>
+			<ol class="query-decision-path" data-query-detail-explain-path>
+				@QueryDecisionStep("policy", "Policy")
+				@QueryDecisionStep("cache", "Cache")
+				@QueryDecisionStep("resolver", "Resolver")
+				@QueryDecisionStep("dnssec", "DNSSEC")
+			</ol>
+			<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden>Decision details were not recorded for this older query.</p>
+		</section>
+	}
+}
+
+templ queryDetailFooter(canBlocking bool) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if canBlocking {
+		<div class="query-detail-policy-actions" data-query-detail-policy-actions>
+			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
+			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+		</div>
+	}
+}
+
+// DetailDrawerView describes the side drawer that explains one record: a query
+// on the Logs page, or the evidence behind an Insights finding. It slides in
+// from the right on wide screens and rises as a sheet on phones.
+type DetailDrawerView struct {
+	ID      string
+	TitleID string
+	// Eyebrow is the small uppercase label naming what kind of record is open.
+	Eyebrow string
+	// Title is the record itself, set in the monospace face used for DNS data.
+	Title           string
+	TitleAttributes templ.Attributes
+	CloseLabel      string
+}
+
+// DetailDrawer renders the drawer shell. The body is passed as children and the
+// footer actions as a component.
+templ DetailDrawer(view DetailDrawerView, footer templ.Component) {
+	<dialog class="query-detail-dialog" id={ view.ID } aria-labelledby={ view.TitleID }>
 		<header class="query-detail-header">
-			<div><span>Query details</span><h2 id="query-detail-title" data-query-detail-value="name">—</h2></div>
-			<button class="dialog-close" type="button" data-dialog-close aria-label="Close query details">@Icon("x")</button>
+			<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
+			<button class="dialog-close" type="button" data-dialog-close aria-label={ view.CloseLabel }>@Icon("x")</button>
 		</header>
 		<div class="query-detail-body">
-			<div class="query-detail-result" aria-label="Query result">
-				<span class="source-pill" data-query-detail-source>—</span>
-				<span class="rcode" data-query-detail-status>—</span>
-			</div>
-			<dl class="query-detail-grid">
-				<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
-				<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
-				<div><dt>Query type</dt><dd data-query-detail-value="type">—</dd></div>
-				<div><dt>Protocol</dt><dd data-query-detail-value="protocol">—</dd></div>
-				<div><dt>Duration</dt><dd data-query-detail-value="duration">—</dd></div>
-			</dl>
-			<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
-				<h3 id="query-detail-answer-title">Answer</h3>
-				<div data-query-detail-answers><span>—</span></div>
-			</section>
-			<section class="query-detail-explain" aria-labelledby="query-detail-explain-title">
-				<div class="query-detail-section-heading"><h3 id="query-detail-explain-title">Why this answer?</h3><p data-query-detail-explain-summary></p></div>
-				<ol class="query-decision-path" data-query-detail-explain-path>
-					@QueryDecisionStep("policy", "Policy")
-					@QueryDecisionStep("cache", "Cache")
-					@QueryDecisionStep("resolver", "Resolver")
-					@QueryDecisionStep("dnssec", "DNSSEC")
-				</ol>
-				<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden>Decision details were not recorded for this older query.</p>
-			</section>
+			{ children... }
 		</div>
 		<footer class="query-detail-footer">
-			<button class="button outline" type="button" data-dialog-close>Close</button>
-			if canBlocking {
-				<div class="query-detail-policy-actions" data-query-detail-policy-actions>
-					<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
-					<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
-				</div>
-			}
+			@footer
 		</footer>
 	</dialog>
 }

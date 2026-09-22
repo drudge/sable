@@ -1,0 +1,556 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/drudge/sable/internal/insights"
+)
+
+type InsightsPageView struct {
+	Console  DashboardView
+	Overview InsightsOverviewView
+}
+
+// InsightsOverviewView is everything the Overview shows for one window. Query
+// activity and list contents come from different permissions, so each section
+// is present only when the operator may read what it is built from.
+type InsightsOverviewView struct {
+	Range          string
+	RangeLabel     string
+	LogWindowQuery string
+	Loading        bool
+	LoadURL        string
+	TimeDisplay    TimeDisplay
+	CanLogs        bool
+	CanBlocking    bool
+	// BlockingEnabled is false when the policy is switched off, in which case
+	// nothing new is blocked however the lists compare.
+	BlockingEnabled     bool
+	QueryLogDisabled    bool
+	RetentionNote       string
+	ActivityUnavailable bool
+	ListsUnavailable    bool
+	Findings            []InsightFindingView
+	CheckedSummary      string
+	Activity            *InsightsActivityView
+	TopClients          []RankedStatView
+	TopDomains          []RankedStatView
+	Contribution        *InsightsContributionView
+}
+
+// InsightsActivityView holds exact counts of blocked queries in the window.
+type InsightsActivityView struct {
+	Queries        uint64
+	Blocked        uint64
+	BlockedDomains uint64
+	BlockedClients uint64
+}
+
+type InsightFindingView struct {
+	ID               string
+	Kind             string
+	Tone             string
+	Icon             string
+	Title            string
+	Subject          string
+	SubjectMonospace bool
+	Summary          string
+	Facts            []InsightFactView
+	Clients          []RankedStatView
+	Method           string
+	Query            *InsightQueryView
+	Destination      string
+	DestinationLabel string
+}
+
+type InsightFactView struct {
+	Label     string
+	Value     string
+	Time      time.Time
+	Monospace bool
+}
+
+// InsightQueryView names the query log rows a finding counted.
+type InsightQueryView struct {
+	Name     string
+	ClientIP string
+	Blocked  bool
+}
+
+type InsightsContributionView struct {
+	Analyzed   int
+	Domains    int
+	Unique     int
+	AnalyzedAt time.Time
+	Lists      []InsightListView
+}
+
+type InsightListView struct {
+	Name                  string
+	Location              string
+	Available             bool
+	Problem               string
+	Domains               int
+	Unique                int
+	Covered               int
+	LargestOverlap        string
+	LargestOverlapDomains int
+}
+
+var insightsRangeChoices = []RangeChoice{{"Day", "day"}, {"Week", "week"}, {"Month", "month"}, {"Year", "year"}}
+
+func insightsRangeControl(active string) RangeControlView {
+	return RangeControlView{
+		Label: "Insights time range", Active: active, Choices: insightsRangeChoices, IDPrefix: "insights-range",
+		URL: "/ui/insights/overview", SelectURL: "/ui/insights/overview", Target: "#insights-content",
+	}
+}
+
+templ InsightsPage(view InsightsPageView) {
+	@AppDocument(view.Console, "Insights", "insights", insightsDocument(view.Overview))
+}
+
+// insightsDocument keeps the update indicator outside the swapped overview, so
+// it reports range changes but not the first load, which has its own skeleton.
+templ insightsDocument(view InsightsOverviewView) {
+	<div id="insights-update-indicator" class="dashboard-update-indicator htmx-indicator" role="status" aria-live="polite">
+		@Icon("refresh")
+		<span>Updating insights…</span>
+	</div>
+	@InsightsContent(view)
+}
+
+// InsightsContent is the whole Overview, including its range control, so one
+// swap updates the control and the numbers it describes together.
+templ InsightsContent(view InsightsOverviewView) {
+	<div
+		class="insights-page page-stack"
+		id="insights-content"
+		if view.Loading {
+			hx-get={ templ.SafeURL(view.LoadURL) }
+			hx-trigger="load"
+			hx-swap="outerHTML"
+		}
+	>
+		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
+			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
+			<div class="insights-range">
+				@RangeTabs(insightsRangeControl(view.Range))
+				@RangeSelect(insightsRangeControl(view.Range))
+			</div>
+		</header>
+		if view.Loading {
+			@insightsSkeleton(view)
+		} else {
+			@insightsNotes(view)
+			@InsightFindings(view)
+			if view.CanLogs {
+				@insightsMetrics(view)
+				if view.Activity != nil {
+					<section class="dashboard-rankings insight-rankings" aria-label="Blocked query rankings">
+						@RankedPanel("Clients With Most Blocks", "blocked-clients", view.TopClients, insightsRankingWindow(view))
+						@RankedPanel("Most Blocked Domains", "blocked", view.TopDomains, insightsRankingWindow(view))
+					</section>
+				}
+			} else if view.CanBlocking {
+				@insightsMetrics(view)
+			}
+			if view.CanBlocking {
+				@InsightContribution(view)
+			}
+		}
+	</div>
+}
+
+templ insightsSkeleton(view InsightsOverviewView) {
+	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Analyzing your network…</span>
+		<section class="card insight-findings insight-findings-skeleton" aria-hidden="true">
+			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span>{ view.RangeLabel }</span></div></header>
+			for range 3 {
+				<div class="insight-finding">
+					<span class="insight-finding-icon insights-skeleton-block"></span>
+					<div class="insight-finding-copy">
+						<span class="insight-skeleton-title insights-skeleton-block"></span>
+						<span class="insight-skeleton-line insights-skeleton-block"></span>
+					</div>
+				</div>
+			}
+		</section>
+		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
+			for range insightsMetricCount(view) {
+				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
+			}
+		</div>
+		if view.CanLogs {
+			<section class="dashboard-rankings insight-rankings" aria-hidden="true">
+				@RankedPanelSkeleton("Clients With Most Blocks", view.RangeLabel)
+				@RankedPanelSkeleton("Most Blocked Domains", view.RangeLabel)
+			</section>
+		}
+	</div>
+}
+
+// insightsNotes explains the limits of what the page can see before it shows
+// any number, so a quiet page is never mistaken for a quiet network.
+templ insightsNotes(view InsightsOverviewView) {
+	if notes := insightsNoteList(view); len(notes) > 0 {
+		<div class="tip-box insight-notes" role="note">
+			for _, note := range notes {
+				<p>{ note }</p>
+			}
+		</div>
+	}
+}
+
+templ InsightFindings(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-findings" aria-labelledby="insight-findings-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-findings-title">Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			if len(view.Findings) > 0 {
+				<span class="count-badge">{ fmt.Sprint(len(view.Findings)) } { insights.Plural(len(view.Findings), "finding", "findings") }</span>
+			}
+		</header>
+		if len(view.Findings) == 0 {
+			<div class="insight-findings-empty">
+				<span>@Icon("check-circle")</span>
+				<strong>Nothing needs your attention</strong>
+				<p>{ view.CheckedSummary }</p>
+			</div>
+		} else {
+			<ol class="insight-finding-list">
+				for _, finding := range view.Findings {
+					<li class={ "insight-finding tone-" + finding.Tone }>
+						<span class="insight-finding-icon" aria-hidden="true">@Icon(finding.Icon)</span>
+						<div class="insight-finding-copy">
+							<span class="insight-finding-title">{ finding.Title }</span>
+							<strong class={ templ.KV("mono", finding.SubjectMonospace) } title={ finding.Subject }>{ finding.Subject }</strong>
+							<p>{ finding.Summary }</p>
+						</div>
+						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View evidence for " + finding.Subject }>
+							<span>Evidence</span>
+							@Icon("chevron-right")
+						</button>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+	for _, finding := range view.Findings {
+		@InsightEvidence(finding, view)
+	}
+}
+
+// InsightEvidence opens the facts behind one finding in the same drawer the
+// query log uses to explain a query.
+templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
+	@DetailDrawer(DetailDrawerView{
+		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
+		CloseLabel: "Close evidence",
+	}, insightEvidenceFooter(finding, view)) {
+		<div class="query-detail-section-heading insight-evidence-summary">
+			<p>{ finding.Summary }</p>
+		</div>
+		if len(finding.Facts) > 0 {
+			<dl class="query-detail-grid insight-evidence-facts">
+				for _, fact := range finding.Facts {
+					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", insightFactFull(fact)) }>
+						<dt>{ fact.Label }</dt>
+						<dd>
+							if fact.Monospace {
+								<code>{ insightFactValue(fact, view.TimeDisplay) }</code>
+							} else {
+								{ insightFactValue(fact, view.TimeDisplay) }
+							}
+						</dd>
+					</div>
+				}
+			</dl>
+		}
+		if len(finding.Clients) > 0 {
+			<section class="query-detail-answer insight-evidence-clients" aria-labelledby={ finding.ID + "-clients" }>
+				<h3 id={ finding.ID + "-clients" }>Affected clients</h3>
+				<div class="insight-client-list">
+					for _, client := range finding.Clients {
+						if view.CanLogs && finding.Query != nil {
+							<a class="insight-client-row" href={ templ.SafeURL(insightQueryURL(InsightQueryView{Name: finding.Query.Name, ClientIP: client.Name, Blocked: finding.Query.Blocked}, view.LogWindowQuery)) }>
+								@insightClientCopy(client)
+							</a>
+						} else {
+							<div class="insight-client-row">
+								@insightClientCopy(client)
+							</div>
+						}
+					}
+				</div>
+			</section>
+		}
+		if finding.Method != "" {
+			<section class="query-detail-explain" aria-labelledby={ finding.ID + "-method" }>
+				<div class="query-detail-section-heading">
+					<h3 id={ finding.ID + "-method" }>How Sable found this</h3>
+					<p>{ finding.Method }</p>
+				</div>
+			</section>
+		}
+	}
+}
+
+templ insightClientCopy(client RankedStatView) {
+	<div>
+		<strong>{ client.Name }</strong>
+		if client.Secondary != "" {
+			<small>{ client.Secondary }</small>
+		}
+	</div>
+	<span>{ formatNumber(client.Value) }</span>
+}
+
+templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	<div class="query-detail-policy-actions">
+		if finding.Destination != "" && view.CanBlocking {
+			<a class="button outline" href={ templ.SafeURL(finding.Destination) }>
+				<span>{ finding.DestinationLabel }</span>
+			</a>
+		}
+		if finding.Query != nil && view.CanLogs {
+			<a class="button" href={ templ.SafeURL(insightQueryURL(*finding.Query, view.LogWindowQuery)) }>
+				@Icon("logs")
+				<span>View Query Logs</span>
+			</a>
+		}
+	</div>
+}
+
+templ insightsMetrics(view InsightsOverviewView) {
+	<div class="operational-metric-grid insight-metrics" data-metric-count={ fmt.Sprint(insightsMetricCount(view)) }>
+		if view.CanLogs {
+			if view.Activity != nil {
+				@OperationalMetricCard("ban", "Blocked Queries", formatNumber(view.Activity.Blocked), blockedQueriesDescription(view), "red")
+				@OperationalMetricCard("shield-x", "Blocked Domains", formatNumber(view.Activity.BlockedDomains), "Distinct domains blocked at least once in this period, from query history", "amber")
+				@OperationalMetricCard("users", "Affected Clients", formatNumber(view.Activity.BlockedClients), "Distinct clients with at least one blocked query in this period, from query history", "purple")
+			} else {
+				@OperationalMetricCard("ban", "Blocked Queries", "—", "Query history could not be counted", "red")
+				@OperationalMetricCard("shield-x", "Blocked Domains", "—", "Query history could not be counted", "amber")
+				@OperationalMetricCard("users", "Affected Clients", "—", "Query history could not be counted", "purple")
+			}
+		}
+		if view.CanBlocking {
+			@OperationalMetricCard("list", "Unique Coverage", uniqueCoverageValue(view.Contribution), uniqueCoverageDescription(view.Contribution), "blue")
+		}
+	</div>
+}
+
+templ InsightContribution(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-contribution" aria-labelledby="insight-contribution-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-contribution-title">Block List Contribution</h2><span class="desktop-only">Compared from cached list contents</span></div>
+			if view.Contribution != nil && len(view.Contribution.Lists) > 0 {
+				<span class="count-badge">{ fmt.Sprint(len(view.Contribution.Lists)) } { insights.Plural(len(view.Contribution.Lists), "list", "lists") }</span>
+			}
+		</header>
+		if view.Contribution == nil {
+			<div class="insight-section-empty">
+				@Icon("alert-triangle")
+				<strong>Block lists could not be compared</strong>
+				<p>Sable could not read the cached list files right now. Try again in a moment.</p>
+			</div>
+		} else if len(view.Contribution.Lists) == 0 {
+			<div class="insight-section-empty">
+				@Icon("list")
+				<strong>No block lists configured</strong>
+				<p>Add a block list to see how much each one contributes.</p>
+				<a class="button outline compact" href="/blocked?tab=lists">Block Lists</a>
+			</div>
+		} else {
+			<div class="admin-mobile-list insight-list-mobile">
+				for _, list := range view.Contribution.Lists {
+					<article class="insight-list-mobile-row data-mobile-row">
+						<div class="data-mobile-heading">
+							<span><strong>{ list.Name }</strong><small>{ list.Location }</small></span>
+							if list.Available {
+								<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
+							}
+						</div>
+						if list.Available {
+							@insightShareBar(list)
+							<dl>
+								<div><dt>Domains</dt><dd>{ formatNumber(uint64(list.Domains)) }</dd></div>
+								<div><dt>Unique</dt><dd>{ formatNumber(uint64(list.Unique)) }</dd></div>
+								<div><dt>Elsewhere</dt><dd>{ formatNumber(uint64(list.Covered)) }</dd></div>
+							</dl>
+							if list.LargestOverlap != "" {
+								<small class="insight-overlap">Largest overlap: { list.LargestOverlap } ({ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) })</small>
+							}
+						} else {
+							<small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small>
+						}
+					</article>
+				}
+			</div>
+			<div class="admin-desktop-table">
+				<table class="isotope-table insight-contribution-table">
+					<caption class="sr-only">Block list contribution</caption>
+					<thead>
+						<tr>
+							<th scope="col">List</th>
+							<th scope="col" class="right-cell">Domains</th>
+							<th scope="col" class="right-cell">Unique</th>
+							<th scope="col" class="right-cell">Also elsewhere</th>
+							<th scope="col">Unique share</th>
+							<th scope="col">Largest overlap</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, list := range view.Contribution.Lists {
+							<tr>
+								<th scope="row"><span class="insight-list-name"><strong>{ list.Name }</strong><code title={ list.Location }>{ list.Location }</code></span></th>
+								if list.Available {
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Domains)) }</td>
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Unique)) }</td>
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Covered)) }</td>
+									<td>
+										<span class="insight-share-cell">
+											@insightShareBar(list)
+											<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
+										</span>
+									</td>
+									<td class="muted-cell">
+										if list.LargestOverlap != "" {
+											{ list.LargestOverlap } <span class="insight-overlap-share">{ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) }</span>
+										} else {
+											None
+										}
+									</td>
+								} else {
+									<td colspan="5"><small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small></td>
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<footer class="insight-card-note">
+				<p><strong>Unique</strong> means no other enabled list contains the domain or one of its parent domains. These counts describe list contents, not which list answered a query.</p>
+			</footer>
+		}
+	</section>
+}
+
+// insightShareBar draws a list's unique share against the part other lists
+// also cover. It is drawn with SVG attributes rather than inline styles, which
+// the console's content security policy does not allow.
+templ insightShareBar(list InsightListView) {
+	<svg class="insight-share-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+		<rect class="insight-share-track" x="0" y="0" width="100" height="6" rx="3"></rect>
+		<rect class="insight-share-fill" x="0" y="0" width={ insightShareWidth(list) } height="6" rx="3"></rect>
+	</svg>
+}
+
+func insightsRankingWindow(view InsightsOverviewView) DashboardInsightsView {
+	return DashboardInsightsView{RangeLabel: view.RangeLabel, LogWindowQuery: view.LogWindowQuery}
+}
+
+func insightsMetricCount(view InsightsOverviewView) int {
+	count := 0
+	if view.CanLogs {
+		count += 3
+	}
+	if view.CanBlocking {
+		count++
+	}
+	return count
+}
+
+func insightsNoteList(view InsightsOverviewView) []string {
+	notes := make([]string, 0, 4)
+	if view.CanBlocking && !view.BlockingEnabled {
+		notes = append(notes, "DNS blocking is turned off, so nothing new is being blocked.")
+	}
+	if view.CanLogs && view.QueryLogDisabled {
+		notes = append(notes, "Query logging is off, so new queries are not recorded and activity below may be incomplete.")
+	}
+	if view.RetentionNote != "" {
+		notes = append(notes, view.RetentionNote)
+	}
+	if !view.CanLogs {
+		notes = append(notes, "Query activity is hidden because your account cannot read logs.")
+	} else if !view.CanBlocking {
+		notes = append(notes, "Block list comparisons are hidden because your account cannot read blocking settings.")
+	}
+	return notes
+}
+
+func blockedQueriesDescription(view InsightsOverviewView) string {
+	if view.Activity == nil || view.Activity.Queries == 0 {
+		return "Queries answered by blocking policy in this period, from query history"
+	}
+	return percent(view.Activity.Blocked, view.Activity.Queries) + " of " + formatNumber(view.Activity.Queries) + " queries in this period, from query history"
+}
+
+func uniqueCoverageValue(contribution *InsightsContributionView) string {
+	if contribution == nil || contribution.Domains == 0 {
+		return "—"
+	}
+	return insights.FormatShare(uint64(contribution.Unique), uint64(contribution.Domains))
+}
+
+func uniqueCoverageDescription(contribution *InsightsContributionView) string {
+	if contribution == nil {
+		return "Block lists could not be compared"
+	}
+	if contribution.Domains == 0 {
+		return "No list domains to compare yet"
+	}
+	return fmt.Sprintf("Share of %s domains across %d %s that only one list provides, from cached list contents",
+		formatNumber(uint64(contribution.Domains)), contribution.Analyzed, insights.Plural(contribution.Analyzed, "list", "lists"))
+}
+
+func insightShareWidth(list InsightListView) string {
+	if list.Domains == 0 {
+		return "0"
+	}
+	width := float64(list.Unique) * 100 / float64(list.Domains)
+	if list.Unique > 0 && width < 1.5 {
+		// Keep a sliver visible so a small non-zero share never looks empty.
+		width = 1.5
+	}
+	return fmt.Sprintf("%.2f", width)
+}
+
+func insightFactValue(fact InsightFactView, display TimeDisplay) string {
+	if fact.Value != "" {
+		return fact.Value
+	}
+	if fact.Time.IsZero() {
+		return "Never"
+	}
+	return FormatShortDateTime(fact.Time, display, false)
+}
+
+func insightFactFull(fact InsightFactView) bool {
+	return len(fact.Value) > 28
+}
+
+// insightQueryURL opens the query log on exactly the rows a finding counted:
+// whole-value matches over the finding's window.
+func insightQueryURL(query InsightQueryView, window string) string {
+	values := url.Values{"tab": []string{"queries"}}
+	if query.Name != "" {
+		values.Set("name", query.Name)
+	}
+	if query.ClientIP != "" {
+		values.Set("client_ip", query.ClientIP)
+	}
+	if query.Blocked {
+		values.Set("source", "blocked")
+	}
+	link := "/logs?" + values.Encode()
+	if window != "" {
+		link += "&" + window
+	}
+	return link
+}

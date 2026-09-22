@@ -1269,28 +1269,32 @@ func rankedTotal(items []RankedStatView) uint64 {
 	return total
 }
 func topStatsNoun(kind string) string {
-	if kind == "clients" {
+	if rankedClients(kind) {
 		return "clients"
 	}
 	return "domains"
 }
 func topStatsPlaceholder(kind string) string {
-	if kind == "clients" {
+	if rankedClients(kind) {
 		return "Filter clients..."
 	}
 	return "Filter domains..."
 }
+
+// rankedClients reports whether a ranking lists client addresses rather than
+// domains. "blocked-clients" ranks clients by their blocked queries only.
+func rankedClients(kind string) bool { return kind == "clients" || kind == "blocked-clients" }
 
 // topStatsEntryURL opens the query log on exactly what the ranking counted:
 // the same entry, over the same window, matched whole rather than as a
 // substring that would also sweep in 10.0.7.168 for 10.0.7.16.
 func topStatsEntryURL(kind string, name string, window string) string {
 	key := "name"
-	if kind == "clients" {
+	if rankedClients(kind) {
 		key = "client_ip"
 	}
 	value := "/logs?tab=queries&" + key + "=" + url.QueryEscape(name)
-	if kind == "blocked" {
+	if kind == "blocked" || kind == "blocked-clients" {
 		value += "&source=blocked"
 	}
 	if window != "" {

@@ -60,6 +60,10 @@ func (server *Server) accessControl(next http.Handler) http.Handler {
 			server.authenticationFailure(writer, request, http.StatusForbidden, "")
 			return
 		}
+		if permissions := requiredAnyPermission(request); len(permissions) > 0 && !hasAnyPermission(principal, permissions) {
+			server.authenticationFailure(writer, request, http.StatusForbidden, "")
+			return
+		}
 		if !safeMethod(request.Method) {
 			csrfToken := request.Header.Get("X-CSRF-Token")
 			if csrfToken == "" && nativeProfileRequest(request) {
@@ -151,6 +155,25 @@ func requiredPermission(request *http.Request) string {
 	default:
 		return ""
 	}
+}
+
+// requiredAnyPermission lists permissions any one of which opens a route. It
+// serves pages that combine several areas and show each section only to an
+// operator who may read it.
+func requiredAnyPermission(request *http.Request) []string {
+	if insightsRoute(request.URL.Path) {
+		return insightsPermissions
+	}
+	return nil
+}
+
+func hasAnyPermission(principal auth.Principal, permissions []string) bool {
+	for _, permission := range permissions {
+		if auth.HasPermission(principal, permission) {
+			return true
+		}
+	}
+	return false
 }
 
 func (server *Server) authenticateRequest(request *http.Request) (auth.Principal, error) {

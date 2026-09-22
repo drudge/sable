@@ -28,6 +28,7 @@ var shots = []shot{
 	{"profile-passkeys.png", "/profile", 1600, 1500},
 	{"dashboard.png", "/", 1600, 1000},
 	{"dashboard-full.png", "/", 1600, 1400},
+	{"insights.png", "/insights", 1600, 1340},
 	{"blocking.png", "/blocked", 1600, 880},
 	{"blocking-domains.png", "/blocked?tab=domains", 1600, 1150},
 	{"blocking-allowed.png", "/blocked?tab=allowed", 1600, 880},

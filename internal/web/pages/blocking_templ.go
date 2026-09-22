@@ -2181,11 +2181,17 @@ func blockListHealthDescription(degraded int) string {
 func blockListHealthColor(degraded int) string { return ifThen(degraded == 0, "purple", "red") }
 
 func blockListLocation(list BlockListSourceView) string {
-	if list.URL != "" {
-		parsed := strings.TrimPrefix(strings.TrimPrefix(list.URL, "https://"), "http://")
+	return BlockListLocation(list.URL, ifThen(list.Path != "", list.Path, list.ConfiguredPath))
+}
+
+// BlockListLocation is how a list's source is shown: its URL without the
+// scheme for a subscription, or its file path for a local list.
+func BlockListLocation(sourceURL, path string) string {
+	if sourceURL != "" {
+		parsed := strings.TrimPrefix(strings.TrimPrefix(sourceURL, "https://"), "http://")
 		return strings.TrimSuffix(parsed, "/")
 	}
-	return ifThen(list.Path != "", list.Path, list.ConfiguredPath)
+	return path
 }
 func blockingStatusDescription(view BlockingPageView) string {
 	if !view.Enabled {
