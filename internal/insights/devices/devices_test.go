@@ -1,7 +1,7 @@
 package devices
 
 import (
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
@@ -87,7 +87,7 @@ func TestChangesReportNewDevicesHonestly(t *testing.T) {
 		t.Fatalf("findings = %+v", findings)
 	}
 	address, device := findings[0], findings[1]
-	if address.Title != "New address on the network" || address.Subject.Label != "10.0.0.99" || !strings.Contains(address.Method, "may be a known device") {
+	if address.Title != "New address on the network" || address.Subject.Label != "10.0.0.99" || !slices.Contains(address.Explanations, "A known device came back at a new address") {
 		t.Fatalf("address finding = %+v", address)
 	}
 	if device.Title != "New device on the network" || device.Summary != "First seen 2 days ago and has sent 1,240 queries since." || device.Subject.Device != "mac:da:a1:19:00:00:01" {

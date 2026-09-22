@@ -117,8 +117,11 @@ type Finding struct {
 	// Domains lists the names the evidence involves, with the query filter
 	// that reproduces each one's rows.
 	Domains []DomainEvidence
-	// Method explains how Sable arrived at the finding and what it does not
-	// claim.
+	// Explanations are plain possibilities for what the finding could mean,
+	// offered as next steps to check rather than conclusions.
+	Explanations []string
+	// Method is the rule that produced the finding, the same for every
+	// finding of its kind, including what the rule does not claim.
 	Method string
 	// Query is set when the finding was counted from the query log.
 	Query *QueryFilter

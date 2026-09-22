@@ -128,6 +128,7 @@ type InsightFindingView struct {
 	SubjectMonospace bool
 	Summary          string
 	Reasons          []string
+	Explanations     []string
 	Facts            []InsightFactView
 	Clients          []RankedStatView
 	Method           string
@@ -436,6 +437,16 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				</ul>
 			</section>
 		}
+		if len(finding.Explanations) > 0 {
+			<section class="insight-reasons insight-explanations" aria-labelledby={ finding.ID + "-explanations" }>
+				<h3 id={ finding.ID + "-explanations" }>What it could mean</h3>
+				<ul>
+					for _, explanation := range finding.Explanations {
+						<li><i aria-hidden="true"></i><span>{ explanation }</span></li>
+					}
+				</ul>
+			</section>
+		}
 		if len(finding.Facts) > 0 {
 			<dl class="query-detail-grid insight-evidence-facts">
 				for index, fact := range finding.Facts {
@@ -474,12 +485,10 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 			</section>
 		}
 		if finding.Method != "" {
-			<section class="query-detail-explain" aria-labelledby={ finding.ID + "-method" }>
-				<div class="query-detail-section-heading">
-					<h3 id={ finding.ID + "-method" }>How Sable found this</h3>
-					<p>{ finding.Method }</p>
-				</div>
-			</section>
+			<details class="insight-method">
+				<summary>How Sable decides</summary>
+				<p>{ finding.Method }</p>
+			</details>
 		}
 	}
 }

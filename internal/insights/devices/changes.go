@@ -89,20 +89,23 @@ func newDeviceFindings(input ChangesInput) []insights.Finding {
 			Subject: subject,
 			Summary: fmt.Sprintf("First seen %s ago and has sent %s %s since.",
 				insights.FormatDuration(input.Now.Sub(device.FirstSeen)), insights.FormatCount(device.Queries), insights.Plural(device.Queries, "query", "queries")),
-			Reasons: newDeviceReasons(device, input),
-			Facts:   deviceFacts(device, true),
-			Method:  newDeviceMethod(device),
+			Reasons:      newDeviceReasons(device, input),
+			Facts:        deviceFacts(device, true),
+			Explanations: newDeviceExplanations(device),
+			Method:       "Sable records when it first sees each client. This one first appeared inside the selected period, while Sable was already watching.",
 		})
 	}
 	return findings
 }
 
-func newDeviceMethod(device Device) string {
-	method := "Sable records when it first sees each client. This one first appeared inside the selected period."
+func newDeviceExplanations(device Device) []string {
 	if !device.Identified() {
-		method += " Nothing ties this address to hardware yet, so it may be a known device that moved to a new address. Naming it, or letting Sable see it in UniFi or the neighbor table, makes that certain."
+		return []string{
+			"A known device came back at a new address",
+			"Someone connected a new device or a guest joined",
+		}
 	}
-	return method
+	return []string{"Someone connected a new device", "A guest joined the network"}
 }
 
 func destinationFindings(input ChangesInput) []insights.Finding {
@@ -127,9 +130,10 @@ func destinationFindings(input ChangesInput) []insights.Finding {
 				fmt.Sprintf("%s %s queried for the first time during the selected period", insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain was", "domains were")),
 				"Seen on the network for " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + ", so these are new to it",
 			},
-			Facts: append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
-			Method: "Sable remembers every domain each client has queried. These are domains this " + noun(device) +
-				" had never queried before the selected period. A software update or a new app often explains a burst like this.",
+			Facts:        append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
+			Explanations: []string{"A software update or a newly installed app", "Someone started using a new service on this device"},
+			Method: "Sable remembers every domain each client has queried and reports a " + noun(device) +
+				" that queried at least 20 it had never queried before the selected period.",
 		}
 		if input.NewDomains != nil {
 			finding.Domains = input.NewDomains(device)
@@ -179,8 +183,13 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 				insights.Fact{Label: "Last 24 hours", Value: insights.FormatCount(device.Recent)},
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
 			),
-			Method: "Sable compares each " + noun(device) + "'s last 24 hours with its own average over the seven days before. " +
-				"It only reports devices that were active the whole week and at least tripled their usual volume.",
+			Explanations: []string{
+				"An app or firmware stuck retrying a lookup",
+				"Software trying to reach a service that is not answering",
+				"Heavier use than usual, such as streaming or a large backup",
+			},
+			Method: "Sable compares each " + noun(device) + "'s last 24 hours with its own average over the seven days before, " +
+				"and reports only devices that were active the whole week and at least tripled their usual volume.",
 		})
 	}
 	return findings
@@ -205,8 +214,8 @@ func quietFindings(input ChangesInput) []insights.Finding {
 			Facts: append(deviceFacts(device, false),
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
 			),
-			Method: "Sable reports a " + noun(device) + " that was steadily active all of the previous week and has sent nothing for a full day. " +
-				"It may be switched off, unplugged, or using a different DNS server.",
+			Explanations: []string{"Switched off or unplugged", "Moved to another network", "Set to use a different DNS server"},
+			Method:       "Sable reports a " + noun(device) + " that was steadily active all of the previous week and has sent nothing for a full day.",
 		})
 	}
 	return findings

@@ -133,8 +133,11 @@ func pastBlockFindings(blocks []PastBlock) []insights.Finding {
 			Reasons: pastBlockReasons(block),
 			Facts:   facts,
 			Clients: clients,
-			Method: "Sable compares the allowed domains with the blocked queries it retained for this period. " +
-				"A name that was blocked and is now allowed usually means somebody ran into a block and corrected it. " +
+			Explanations: []string{
+				"Someone ran into this block and allowed the domain to fix it",
+				"A block list included a domain something on this network needs",
+			},
+			Method: "Sable compares the allowed domains with the blocked queries it retained for the selected period. " +
 				"Repeated or retried queries alone are never treated as evidence of a problem.",
 			Query:            &insights.QueryFilter{Name: evidence.Name, Blocked: true},
 			Destination:      "/blocked?tab=allowed",
@@ -188,7 +191,11 @@ func updateFindings(input FindingsInput) []insights.Finding {
 			Summary: summary,
 			Reasons: updateReasons(health, input.Now, interval),
 			Facts:   facts,
-			Method: fmt.Sprintf("Sable reports a list here once it has gone at least %d update intervals without a successful download. "+
+			Explanations: []string{
+				"The list's server is down or has moved",
+				"Something between Sable and the internet is stopping the download",
+			},
+			Method: fmt.Sprintf("Sable reports a list once it has gone at least %d update intervals without a successful download. "+
 				"Until it recovers, blocking keeps using the last copy that downloaded.", staleUpdateIntervals),
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -210,6 +217,7 @@ func unreadableFindings(contribution Contribution) []insights.Finding {
 			Subject:          insights.Subject{Label: list.Name, BlockList: list.Name},
 			Summary:          list.Problem + ", so its coverage could not be compared with the other lists.",
 			Reasons:          []string{list.Problem, "Its domains are left out of every other list's comparison until it can be read"},
+			Explanations:     []string{"The list has not finished its first download", "Its cached file was removed or damaged"},
 			Method:           "The comparison reads each list's cached copy, the same file blocking is compiled from.",
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -259,6 +267,7 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 			Summary:          summary,
 			Reasons:          coverageReasons(list, queries),
 			Facts:            coverageFacts(list, queries),
+			Explanations:     []string{"The other lists already carry most of what this one blocks", "Several lists draw on the same upstream sources"},
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -281,6 +290,7 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 				insights.FormatCount(uint64(best.Unique)), insights.FormatShare(uint64(best.Unique), uint64(best.Domains))),
 			Reasons:          coverageReasons(best, queries),
 			Facts:            coverageFacts(best, queries),
+			Explanations:     []string{"This list blocks domains the other lists do not know about"},
 			Method:           coverageMethod,
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
@@ -289,9 +299,9 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 	return findings
 }
 
-const coverageMethod = "Sable reads every enabled list's cached copy with the same parser and normalization the blocking policy uses. " +
+const coverageMethod = "Sable reads every enabled list's cached copy with the same parser the blocking policy uses. " +
 	"A domain counts as covered by another list when that list contains the same name or one of its parent domains, " +
-	"because a blocked domain also blocks its subdomains. This describes list contents, not which list answered a query."
+	"because a blocked domain also blocks its subdomains."
 
 func coverageFacts(list ListContribution, queries *SourceQueries) []insights.Fact {
 	facts := []insights.Fact{

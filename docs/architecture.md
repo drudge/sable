@@ -186,9 +186,10 @@ DNS resolver -> query events -> query log worker -> rollups and sightings
 `internal/insights` holds the shared vocabulary. An `Analyzer` examines one
 area over a `Window` and returns `Finding` values. A finding names its kind,
 tone, and a typed `Subject` (a device identity key, a domain, or a block list),
-states one factual summary, lists the individual reasons behind it, and carries
-facts, related clients and domains, and the query log filter that reproduces
-its counts. Its ID follows the kind and the durable subject reference, so the
+states one factual summary, lists the individual reasons behind it, offers
+plain possibilities for what it could mean, keeps the rule that produced it,
+and carries facts, related clients and domains, and the query log filter that
+reproduces its counts. Its ID follows the kind and the durable subject reference, so the
 same situation analyzed again, or a device renamed, keeps the same identity.
 `Collect` runs every analyzer the operator may read, orders findings by tone,
 and isolates an analyzer that fails.
