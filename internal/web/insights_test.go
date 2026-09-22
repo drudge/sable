@@ -382,7 +382,7 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 			t.Errorf("device drawer is missing %q", expected)
 		}
 	}
-	match := regexp.MustCompile(`href="(/logs\?client_ip=10\.0\.0\.5&amp;tab=queries[^"]*)"><div><strong id="insight-device-address-\d+">10\.0\.0\.5</strong><small>(\d+) blocked</small></div><span>(\d+)</span>`).FindStringSubmatch(body)
+	match := regexp.MustCompile(`class="insight-list-link" href="(/logs\?client_ip=10\.0\.0\.5&amp;tab=queries[^"]*)" aria-label="View ([\d,]+) queries for 10\.0\.0\.5 in Query Logs">([\d,]+)</a>`).FindStringSubmatch(body)
 	if match == nil {
 		t.Fatal("device drawer has no query log link for 10.0.0.5")
 	}

@@ -3740,37 +3740,34 @@ dialog[open]::backdrop {
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
 .query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
 .insight-evidence-summary p { color: var(--foreground); font-size: .875rem; }
-.insight-list-row { display: flex; min-width: 0; align-items: stretch; border-top: 1px solid var(--border); }
+.insight-list-row { position: relative; display: flex; min-width: 0; min-height: 3rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .5rem .75rem; }
 .insight-list-row:first-child { border-top: 0; }
-.insight-list-row > .insight-client-row { min-width: 0; flex: 1; border-top: 0; }
-/* The whole row highlights, including the copy button beside the link, so the
-   hover state always fills the row edge to edge. */
-.insight-list-row:has(> a.insight-client-row:hover) { background: color-mix(in oklch, var(--muted) 45%, transparent); }
-.insight-list-row > a.insight-client-row:hover { background: transparent; }
-.insight-list-row > button[data-copy-target] { display: grid; width: 1.75rem; height: 1.75rem; flex: 0 0 1.75rem; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); }
-.insight-list-row > button[data-copy-target] { align-self: center; margin-right: .5rem; }
-.insight-list-row > button[data-copy-target]:hover { background: var(--muted); color: var(--foreground); }
-.insight-list-row > button[data-copy-target]:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.insight-list-row > button .nav-icon { width: .85rem; height: .85rem; }
+.insight-list-row.has-link:has(.insight-list-link:hover) { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.insight-list-row:has(.insight-list-link:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.insight-list-copy { display: grid; min-width: 0; flex: 1; gap: .1rem; }
+/* The drawer mutes every span in its sections; a row's value is the content. */
+.query-detail-answer .insight-row-value { min-width: 0; color: var(--foreground); font-size: inherit; }
+.insight-row-value > strong { min-width: 0; font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+/* The copy button sits above the row-wide link so both stay usable. */
+.insight-row-value > button { position: relative; z-index: 1; }
+.insight-list-copy small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.insight-list-link, .insight-list-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.insight-list-link { display: inline-flex; align-items: center; }
+.insight-list-link::after { position: absolute; inset: 0; content: ""; }
+.insight-list-link:focus-visible { outline: none; }
+.insight-list-link .nav-icon { width: 1rem; height: 1rem; }
 /* A fact tile with a copyable value carries its copy button in the corner,
-   like the Dynamic DNS address cards. */
+   like the Dynamic DNS address cards. The button drops the card's grid
+   placement so it pins to the tile rather than to the label row. */
 .query-detail-grid > .insight-fact-copyable { position: relative; }
 .insight-fact-copyable > dt { padding-right: 1.75rem; }
-.insight-fact-copyable .fact-copy { position: absolute; top: .5rem; right: .5rem; }
+.insight-fact-copyable .fact-copy { position: absolute; top: .5rem; right: .5rem; grid-column: auto; grid-row: auto; }
 .insight-fact-copyable code { overflow-wrap: anywhere; }
 .insight-fact-note { display: block; margin-top: .2rem; color: var(--muted-foreground); font-size: .72rem; font-weight: 400; }
 /* The drawer spaces the children of its sections apart; a list's rows must
    touch so their dividers and hover states meet. */
 .query-detail-answer > .insight-client-list { gap: 0; }
 .insight-client-list { display: grid; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
-.insight-client-row { display: flex; min-height: 3rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .5rem .75rem; }
-.insight-client-row:first-child { border-top: 0; }
-a.insight-client-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
-a.insight-client-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.insight-client-row > div { display: grid; min-width: 0; flex: 1; gap: .1rem; }
-.insight-client-row strong { overflow: hidden; font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.insight-client-row small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
-.insight-client-row > span { color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .insights-tab-list .isotope-tab { min-width: 7.5rem; }
 .insights-tab-list .nav-icon { width: 1rem; height: 1rem; }
