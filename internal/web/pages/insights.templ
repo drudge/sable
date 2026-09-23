@@ -502,7 +502,7 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
-	<div class="query-detail-policy-actions">
+	<div class="query-detail-policy-actions insight-drawer-actions">
 		if finding.DeviceKey != "" && view.CanLogs {
 			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
 				<span>Device Details</span>
@@ -974,7 +974,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 templ insightDeviceFooter(view InsightDeviceDrawerView) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if len(view.Device.Addresses) == 1 {
-		<div class="query-detail-policy-actions">
+		<div class="query-detail-policy-actions insight-drawer-actions">
 			<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
 				@Icon("logs")
 				<span>View Query Logs</span>
