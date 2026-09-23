@@ -467,15 +467,18 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		if len(finding.Reasons) > 0 || finding.Method != "" {
 			<section class="insight-why" aria-labelledby={ finding.ID + "-reasons" }>
 				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
-				if len(finding.Reasons) > 0 {
+				if len(finding.Reasons) > 0 || len(finding.Explanations) > 0 {
 					<ul>
 						for _, reason := range finding.Reasons {
 							<li>@Icon("check")<span>{ reason }</span></li>
 						}
+						// Possible causes sit in the same list, set apart only by a
+						// quieter icon and color, so they read as context rather than
+						// as a second heading.
+						if len(finding.Explanations) > 0 {
+							<li class="insight-cause">@Icon("info")<span>Could be { insightCauses(finding.Explanations) }</span></li>
+						}
 					</ul>
-				}
-				if len(finding.Explanations) > 0 {
-					<p class="insight-causes"><strong>Possible causes:</strong> { insightCauses(finding.Explanations) }</p>
 				}
 				if finding.Method != "" {
 					<details class="insight-method">

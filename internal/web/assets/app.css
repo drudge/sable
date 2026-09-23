@@ -3745,8 +3745,8 @@ dialog[open]::backdrop {
 .insight-why li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
 .insight-why li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
 .dark .insight-why li .nav-icon { color: #22c55e; }
-.insight-causes { margin: 0; color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
-.insight-causes strong { color: var(--foreground); font-weight: 500; }
+.insight-why li.insight-cause { color: var(--muted-foreground); }
+.insight-why li.insight-cause .nav-icon, .dark .insight-why li.insight-cause .nav-icon { color: var(--muted-foreground); }
 .insight-method { margin-top: .1rem; }
 .insight-method > summary { display: flex; width: fit-content; align-items: center; gap: .4rem; border-radius: calc(var(--radius) - 4px); color: var(--muted-foreground); cursor: pointer; font-size: .7rem; font-weight: 600; letter-spacing: .04em; list-style: none; text-transform: uppercase; }
 .insight-method > summary::-webkit-details-marker { display: none; }
