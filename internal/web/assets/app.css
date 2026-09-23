@@ -3884,3 +3884,18 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .query-detail-header .insight-name-source { flex: 0 0 auto; margin-left: .25rem; padding: .1rem .45rem; font-size: .625rem; letter-spacing: normal; text-transform: none; white-space: nowrap; }
 /* App names and other plain words keep the body face. */
 .insight-row-value.plain > strong { font-family: inherit; font-size: .875rem; font-weight: 500; }
+/* What a device is: the guess, its evidence, and the correction. */
+.insight-device-type { display: grid; gap: .6rem; }
+.query-detail-answer.insight-device-type > .insight-type-summary { display: flex; }
+.insight-type-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.query-detail-answer .insight-type-summary strong { color: var(--foreground); font-size: .9375rem; font-weight: 600; }
+.query-detail-answer .insight-type-summary .insight-type-unknown { color: var(--muted-foreground); font-weight: 500; }
+.insight-type-summary .status-badge { padding: .1rem .45rem; font-size: .625rem; }
+.insight-type-reasons { display: grid; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.insight-type-reasons li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
+.query-detail-answer .insight-type-reasons span { color: var(--foreground); font-size: inherit; }
+.insight-type-reasons li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
+.dark .insight-type-reasons li .nav-icon { color: #22c55e; }
+.query-detail-answer .insight-type-reasons li code { border: 0; background: none; padding: 0; font-size: .78rem; overflow-wrap: anywhere; }
+.insight-type-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
+.insight-type-form .field-control { min-width: 12rem; flex: 1; }

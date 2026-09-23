@@ -39,7 +39,12 @@ type deviceInsightReader interface {
 	ClientNewDomainCount(context.Context, []string, time.Time, time.Time) (uint64, error)
 	ClientTopDomains(context.Context, []string, time.Time, time.Time, int) ([]querylog.ClientDomain, error)
 	ClientDomainHistory(context.Context, []string, int) ([]querylog.ClientDomain, error)
+	ClientNamesMatching(context.Context, time.Time, []string) (map[string][]string, error)
 }
+
+// deviceTypeSuffixes are the domains of the services whose use says what a
+// device is.
+var deviceTypeSuffixes = services.Suffixes(devices.ServiceClueIDs())
 
 // deviceReport is the devices for one window, with when first-seen tracking
 // began so "new" is only claimed where it can be.
@@ -76,6 +81,14 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 		}
 		built[index].NewDomains = count
 	}
+	signals, _, err := server.deviceSignalCache.load(ctx, window, func(ctx context.Context, since, _ time.Time) (map[string][]string, error) {
+		return reader.ClientNamesMatching(ctx, since, deviceTypeSuffixes)
+	})
+	if err != nil {
+		// Types then rest on makers and names alone.
+		server.logger.Warn("read device service signals", "error", err)
+	}
+	devices.Identify(built, signals)
 	return deviceReport{devices: built, seenSince: activity.SeenSince, window: counted}, nil
 }
 
@@ -147,6 +160,13 @@ func insightDeviceView(device devices.Device, report deviceReport) pages.Insight
 	for _, address := range device.Addresses {
 		view.Addresses = append(view.Addresses, pages.InsightDeviceAddressView{Address: address.Address, Queries: address.Queries, Blocked: address.Blocked})
 	}
+	view.Vendor = device.Vendor
+	if device.Guess.Type != "" {
+		view.Type, view.TypeLabel, view.TypeConfidence = device.Guess.Type, devices.TypeLabel(device.Guess.Type), string(device.Guess.Confidence)
+		for _, reason := range device.Guess.Reasons {
+			view.TypeReasons = append(view.TypeReasons, pages.InsightReasonView{Text: reason.Text, Code: reason.Code})
+		}
+	}
 	return view
 }
 
@@ -190,6 +210,7 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 		return
 	}
 	view.Device = insightDeviceView(device, report)
+	view.Device.TypeOptions = devices.TypeLabels()
 	addresses := device.ClientAddresses()
 	// One ranking feeds both lists: the apps need the long tail, the domain
 	// list only its head.
@@ -247,19 +268,9 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	}
 	client, err := clientForDeviceKey(key, name)
 	if err == nil {
-		editor, ok := server.config.(settingsEditor)
-		if !ok {
-			err = errors.New("configuration cannot be edited on this server")
-		} else {
-			err = editor.Update(request.Context(), func(configuration *config.Config) error {
-				updated, err := config.SetClientName(configuration.Clients, client)
-				if err != nil {
-					return err
-				}
-				configuration.Clients = updated
-				return nil
-			})
-		}
+		err = server.updateClients(request, func(clients []config.Client) ([]config.Client, error) {
+			return config.SetClientName(clients, client)
+		})
 	}
 	if err != nil {
 		server.logger.Warn("name insights device", "client", requestClientIP(request), "error", err)
@@ -276,6 +287,59 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	// The page behind the drawer shows the old name until it reloads itself.
 	writer.Header().Set("HX-Trigger", "insightsChanged")
 	server.renderDeviceDrawer(writer, request, console, window, key, false, message, "")
+}
+
+// typeInsightsDevice records what kind of device a device is, or returns it
+// to Sable's own guess.
+func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanLogs || !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		writeFragmentStatus(writer, http.StatusBadRequest)
+		return
+	}
+	window := insightsWindow(request.FormValue("range"), time.Now())
+	key, kind := request.FormValue("key"), strings.TrimSpace(request.FormValue("type"))
+	client, err := clientForDeviceKey(key, "")
+	if err == nil {
+		client.Type = kind
+		err = server.updateClients(request, func(clients []config.Client) ([]config.Client, error) {
+			return config.SetClientType(clients, client)
+		})
+	}
+	if err != nil {
+		server.logger.Warn("set insights device type", "client", requestClientIP(request), "error", err)
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		server.renderDeviceDrawer(writer, request, console, window, key, false, "", err.Error())
+		return
+	}
+	message, summary := "Type saved.", "set device "+deviceKeyIdentifier(key)+" type to "+kind
+	if kind == "" {
+		message, summary = "Sable will guess this device's type again.", "cleared the type of device "+deviceKeyIdentifier(key)
+	}
+	server.recordControlPlaneAudit(request, "insights.device.type", summary)
+	writer.Header().Set("HX-Trigger", "insightsChanged")
+	server.renderDeviceDrawer(writer, request, console, window, key, false, message, "")
+}
+
+// updateClients saves a change to the operator's device entries.
+func (server *Server) updateClients(request *http.Request, change func([]config.Client) ([]config.Client, error)) error {
+	editor, ok := server.config.(settingsEditor)
+	if !ok {
+		return errors.New("configuration cannot be edited on this server")
+	}
+	return editor.Update(request.Context(), func(configuration *config.Config) error {
+		updated, err := change(configuration.Clients)
+		if err != nil {
+			return err
+		}
+		configuration.Clients = updated
+		return nil
+	})
 }
 
 // clientForDeviceKey turns a device key into the configuration entry that

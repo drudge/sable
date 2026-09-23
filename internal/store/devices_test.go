@@ -166,3 +166,23 @@ func TestClientDomainHistoryListsEveryNameAcrossAddresses(t *testing.T) {
 		t.Fatalf("history = %+v", history)
 	}
 }
+
+func TestClientNamesMatchingFindsSuffixesPerClient(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(now.Add(-time.Hour), "10.0.0.46", "ws.ring.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.0.46", "ring.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.0.46", "notring.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.0.5", "example.net.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-48*time.Hour), "10.0.0.9", "ring.com.", querylog.SourceUpstream),
+	})
+	matches, err := opened.ClientNamesMatching(context.Background(), now.Add(-24*time.Hour), []string{"ring.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || len(matches["10.0.0.46"]) != 2 {
+		t.Fatalf("matches = %+v", matches)
+	}
+}

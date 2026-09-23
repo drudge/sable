@@ -522,3 +522,46 @@ LIMIT `+store.placeholder(len(arguments)), arguments...)
 	}
 	return domains, rows.Err()
 }
+
+// maximumClientNameMatches bounds one ClientNamesMatching read.
+const maximumClientNameMatches = 50_000
+
+// ClientNamesMatching lists, for each client address seen since a moment,
+// the names it has queried that equal one of the suffixes or end with one.
+// It lets a caller learn which services every device uses in one pass over
+// the sightings instead of one read per device.
+func (store *Store) ClientNamesMatching(ctx context.Context, since time.Time, suffixes []string) (map[string][]string, error) {
+	matches := make(map[string][]string)
+	if len(suffixes) == 0 {
+		return matches, nil
+	}
+	arguments := []any{since.UTC()}
+	exact := make([]string, 0, len(suffixes))
+	conditions := make([]string, 0, len(suffixes)+1)
+	for _, suffix := range suffixes {
+		arguments = append(arguments, strings.ToLower(suffix))
+		exact = append(exact, store.placeholder(len(arguments)))
+	}
+	conditions = append(conditions, "name_key IN ("+strings.Join(exact, ", ")+")")
+	for _, suffix := range suffixes {
+		arguments = append(arguments, "%."+strings.ToLower(suffix))
+		conditions = append(conditions, "name_key LIKE "+store.placeholder(len(arguments)))
+	}
+	arguments = append(arguments, maximumClientNameMatches)
+	rows, err := store.database.QueryContext(ctx, `
+SELECT client_key, name_key FROM sable_client_domain_seen
+WHERE last_seen >= `+store.placeholder(1)+` AND (`+strings.Join(conditions, " OR ")+`)
+LIMIT `+store.placeholder(len(arguments)), arguments...)
+	if err != nil {
+		return nil, fmt.Errorf("read client names matching: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var client, name string
+		if err := rows.Scan(&client, &name); err != nil {
+			return nil, fmt.Errorf("scan client name match: %w", err)
+		}
+		matches[client] = append(matches[client], name)
+	}
+	return matches, rows.Err()
+}

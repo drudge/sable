@@ -105,7 +105,7 @@ var catalog = []catalogEntry{
 	{Service{"blink", "Blink", CategoryCameras}, []string{"immedia-semi.com", "blinkforhome.com"}},
 	{Service{"eufy", "eufy", CategoryCameras}, []string{"eufylife.com", "eufy.com"}},
 	{Service{"simplisafe", "SimpliSafe", CategoryCameras}, []string{"simplisafe.com"}},
-	
+
 	// Cloud storage and backup.
 	{Service{"icloud", "iCloud", CategoryCloud}, []string{"icloud.com", "icloud-content.com", "apple-cloudkit.com", "me.com"}},
 	{Service{"google-drive", "Google Drive", CategoryCloud}, []string{"drive.google.com", "docs.google.com", "drive.usercontent.google.com"}},

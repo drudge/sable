@@ -70,6 +70,16 @@ type InsightDeviceView struct {
 	// New is set when the device was first seen inside the window and
 	// first-seen tracking covered that moment.
 	New bool
+	// Vendor is the maker of the device's network interface.
+	Vendor string
+	// Type is the device type Sable guessed or the operator set, with how
+	// sure the guess is and the evidence behind it.
+	Type           string
+	TypeLabel      string
+	TypeConfidence string
+	TypeReasons    []InsightReasonView
+	// TypeOptions lists the types an operator can choose from.
+	TypeOptions [][2]string
 }
 
 // InsightDeviceAddressView is one client address of a device and its own
@@ -872,6 +882,9 @@ templ InsightDevices(view InsightsOverviewView) {
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 							<small>{ insightDeviceSubtitle(device) }</small>
+							if device.TypeLabel != "" {
+								<small>{ insightTypeText(device) }</small>
+							}
 							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
 						</div>
 						@Icon("chevron-right")
@@ -884,6 +897,7 @@ templ InsightDevices(view InsightsOverviewView) {
 					<thead>
 						<tr>
 							<th scope="col">Device</th>
+							<th scope="col">Type</th>
 							<th scope="col" class="right-cell">Queries</th>
 							<th scope="col" class="right-cell">Blocked</th>
 							<th scope="col" class="right-cell">First-time domains</th>
@@ -901,6 +915,7 @@ templ InsightDevices(view InsightsOverviewView) {
 										<code>{ insightDeviceSubtitle(device) }</code>
 									</span>
 								</th>
+								<td class={ ifThen(device.TypeConfidence == "low" || device.TypeLabel == "", "muted-cell", "") }>{ insightTypeText(device) }</td>
 								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
 								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
 								<td class="right-cell numeric-cell">{ formatNumber(device.NewDomains) }</td>
@@ -974,11 +989,15 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 						</dd>
 					</div>
 				}
+				if view.Device.Vendor != "" {
+					<div class="query-detail-fact-wide insight-fact-full"><dt>Maker</dt><dd>{ view.Device.Vendor }</dd></div>
+				}
 				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.Device.Queries) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.Device.Blocked) } ({ percent(view.Device.Blocked, view.Device.Queries) })</dd></div>
 				<div class="query-detail-fact-wide"><dt>First seen</dt><dd>{ insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Last seen</dt><dd>{ insightDeviceTime(view.Device.LastSeen, view.TimeDisplay) }</dd></div>
 			</dl>
+			@insightDeviceType(view)
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
 				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
 				<div class="insight-client-list">
@@ -1173,6 +1192,85 @@ templ insightDeviceRenameButton(view InsightDeviceDrawerView) {
 
 // insightDeviceNameEditor edits the device's name in place of its title. Enter
 // saves, and Escape or Cancel returns to the title without closing the drawer.
+// insightDeviceType says what Sable thinks the device is and why, and lets an
+// operator who can rename devices correct it. A correction is kept against the
+// device's hardware address, like its name.
+templ insightDeviceType(view InsightDeviceDrawerView) {
+	<section class="query-detail-answer insight-device-type" aria-labelledby="insight-device-type-title">
+		<h3 id="insight-device-type-title">What it is</h3>
+		<div class="insight-type-summary">
+			if view.Device.TypeLabel != "" {
+				<strong>{ view.Device.TypeLabel }</strong>
+				<span class={ "status-badge", templ.KV("active", view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high") }>{ insightConfidenceText(view.Device.TypeConfidence) }</span>
+			} else {
+				<strong class="insight-type-unknown">Sable can't tell yet</strong>
+			}
+		</div>
+		if len(view.Device.TypeReasons) > 0 {
+			<ul class="insight-type-reasons">
+				for _, reason := range view.Device.TypeReasons {
+					<li>
+						@Icon("check")
+						<span>
+							{ reason.Text }
+							if reason.Code != "" {
+								{ " " }
+								<code>{ reason.Code }</code>
+							}
+						</span>
+					</li>
+				}
+			</ul>
+		}
+		if view.CanName {
+			<form class="insight-type-form" hx-post="/ui/insights/devices/type" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-type-form button">
+				<input type="hidden" name="key" value={ view.Device.Key }/>
+				<input type="hidden" name="range" value={ view.Range }/>
+				<label class="field-control">
+					<span>{ ifThen(view.Device.TypeConfidence == "set", "Type", "Not right? Tell Sable") }</span>
+					<select name="type" data-styled-select>
+						<option value="" selected?={ view.Device.TypeConfidence != "set" }>Let Sable decide</option>
+						for _, option := range view.Device.TypeOptions {
+							<option value={ option[0] } selected?={ view.Device.TypeConfidence == "set" && view.Device.Type == option[0] }>{ option[1] }</option>
+						}
+					</select>
+				</label>
+				<button class="button outline compact" type="submit" data-replica-primary-action>Save</button>
+			</form>
+		}
+	</section>
+}
+
+func insightConfidenceText(confidence string) string {
+	switch confidence {
+	case "set":
+		return "Set by you"
+	case "high":
+		return "Confident"
+	case "medium":
+		return "Likely"
+	default:
+		return "Unsure"
+	}
+}
+
+// insightTypeText is a device's type as a list shows it, hedged when Sable is
+// unsure.
+func insightTypeText(device InsightDeviceView) string {
+	switch {
+	case device.TypeLabel == "":
+		return "—"
+	case device.TypeConfidence == "low":
+		article := "a "
+		if strings.ContainsRune("AEIOU", rune(device.TypeLabel[0])) {
+			article = "an "
+		}
+		return "Maybe " + article + strings.ToLower(device.TypeLabel)
+	default:
+		return device.TypeLabel
+	}
+}
+
 templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
 	<form class="insight-name-editor" hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button">
 		<input type="hidden" name="key" value={ view.Device.Key }/>

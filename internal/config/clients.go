@@ -14,15 +14,26 @@ import (
 // tables and drawers.
 const maximumClientNameLength = 64
 
-// Client is a name an operator gave one device on the network. Sable uses it
-// ahead of every name it discovers. A device is identified by its hardware
-// address when Sable has seen one, which survives address changes, or by an
-// address or network otherwise.
+// Client is what an operator told Sable about one device on the network: its
+// name, what kind of device it is, or both. Sable uses these ahead of every
+// name it discovers and every type it guesses. A device is identified by its
+// hardware address when Sable has seen one, which survives address changes,
+// or by an address or network otherwise.
 type Client struct {
-	Name string `toml:"name"`
+	Name string `toml:"name,omitempty"`
 	MAC  string `toml:"mac,omitempty"`
 	// Address is one IP address or a CIDR network such as a guest VLAN.
 	Address string `toml:"address,omitempty"`
+	// Type is one of ClientTypes, set when the operator corrected Sable's guess.
+	Type string `toml:"type,omitempty"`
+}
+
+// ClientTypes are the kinds of device Sable recognizes, as stored in a
+// client's type.
+var ClientTypes = []string{
+	"phone", "tablet", "computer", "server", "tv", "streaming-player", "smart-speaker", "speaker",
+	"camera", "doorbell", "game-console", "printer", "storage", "network", "thermostat", "lighting",
+	"smart-plug", "smart-home", "watch",
 }
 
 // Key is the identifier a client is matched and de-duplicated by.
@@ -35,8 +46,11 @@ func (client Client) Key() string {
 
 func validateClient(field string, client Client) error {
 	name := strings.TrimSpace(client.Name)
-	if name == "" {
-		return fmt.Errorf("%s.name is required", field)
+	if name == "" && client.Type == "" {
+		return fmt.Errorf("%s.name or %s.type is required", field, field)
+	}
+	if client.Type != "" && !slices.Contains(ClientTypes, client.Type) {
+		return fmt.Errorf("%s.type must be one of %s", field, strings.Join(ClientTypes, ", "))
 	}
 	if len([]rune(name)) > maximumClientNameLength {
 		return fmt.Errorf("%s.name must be at most %d characters", field, maximumClientNameLength)
@@ -84,6 +98,7 @@ func validateClients(clients []Client) error {
 // colon-separated hardware address, or a canonical address or masked network.
 func normalizeClient(client Client) Client {
 	client.Name = strings.TrimSpace(client.Name)
+	client.Type = strings.TrimSpace(client.Type)
 	client.MAC = strings.TrimSpace(client.MAC)
 	client.Address = strings.TrimSpace(client.Address)
 	if mac, err := net.ParseMAC(client.MAC); err == nil {
@@ -106,21 +121,40 @@ func (configuration *Config) normalizeClients() {
 	})
 }
 
-// SetClientName names a device, replacing any name it already had. An empty
-// name removes the device's entry.
+// SetClientName names a device, replacing any name it already had and keeping
+// its type. An empty name removes the name, and the entry with it when no type
+// is left.
 func SetClientName(clients []Client, named Client) ([]Client, error) {
-	named = normalizeClient(named)
+	return updateClient(clients, named, func(client *Client) { client.Name = strings.TrimSpace(named.Name) })
+}
+
+// SetClientType records what kind of device a device is, keeping its name. An
+// empty type returns the device to Sable's own guess.
+func SetClientType(clients []Client, typed Client) ([]Client, error) {
+	return updateClient(clients, typed, func(client *Client) { client.Type = strings.TrimSpace(typed.Type) })
+}
+
+// updateClient changes the entry for one device, creating it when needed and
+// dropping it when nothing is left to say about the device.
+func updateClient(clients []Client, target Client, change func(*Client)) ([]Client, error) {
+	target = normalizeClient(target)
+	if target.MAC == "" && target.Address == "" {
+		return nil, errors.New("a device needs a hardware address or an IP address")
+	}
+	entry := Client{MAC: target.MAC, Address: target.Address}
 	updated := slices.DeleteFunc(slices.Clone(clients), func(client Client) bool {
-		return normalizeClient(client).Key() == named.Key()
-	})
-	if named.Name == "" {
-		if named.MAC == "" && named.Address == "" {
-			return nil, errors.New("a device needs a hardware address or an IP address")
+		if normalizeClient(client).Key() != target.Key() {
+			return false
 		}
+		entry = normalizeClient(client)
+		return true
+	})
+	change(&entry)
+	if entry.Name == "" && entry.Type == "" {
 		return updated, nil
 	}
-	if err := validateClient("client", named); err != nil {
+	if err := validateClient("client", entry); err != nil {
 		return nil, err
 	}
-	return append(updated, named), nil
+	return append(updated, entry), nil
 }

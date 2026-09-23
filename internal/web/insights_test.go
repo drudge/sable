@@ -449,3 +449,30 @@ func TestInsightsDeviceNamingFollowsTheHardwareAddress(t *testing.T) {
 		t.Fatalf("an unknown device key = %d", invalid.Code)
 	}
 }
+
+func TestInsightsDeviceTypeCorrectionFollowsTheHardwareAddress(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	form := url.Values{"key": {insightsTestLaptop}, "type": {"computer"}, "range": {"day"}}
+	if response := server.post(t, "logs-reader", "/ui/insights/devices/type", form); response.Code != http.StatusForbidden {
+		t.Fatalf("correcting without settings write = %d", response.Code)
+	}
+	response := server.post(t, "everything", "/ui/insights/devices/type", form)
+	if response.Code != http.StatusOK || response.Header().Get("HX-Trigger") != "insightsChanged" || !strings.Contains(response.Body.String(), "Type saved.") {
+		t.Fatalf("correcting = %d %q %s", response.Code, response.Header().Get("HX-Trigger"), response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "Set by you") {
+		t.Fatal("the drawer does not show the operator's type")
+	}
+	clients := server.config.Current().Config.Clients
+	if len(clients) != 1 || clients[0] != (config.Client{MAC: "3c:22:fb:01:02:03", Type: "computer"}) {
+		t.Fatalf("configured clients = %+v", clients)
+	}
+	cleared := server.post(t, "everything", "/ui/insights/devices/type", url.Values{"key": {insightsTestLaptop}, "type": {""}, "range": {"day"}})
+	if cleared.Code != http.StatusOK || len(server.config.Current().Config.Clients) != 0 {
+		t.Fatalf("clearing = %d, clients %+v", cleared.Code, server.config.Current().Config.Clients)
+	}
+	if invalid := server.post(t, "everything", "/ui/insights/devices/type", url.Values{"key": {insightsTestLaptop}, "type": {"toaster"}}); invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("an unknown type = %d", invalid.Code)
+	}
+}

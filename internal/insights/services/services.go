@@ -132,3 +132,16 @@ var bySuffix = func() map[string]int {
 	}
 	return index
 }()
+
+// Suffixes lists the domains the given services own, so a caller can read
+// just the names that could belong to them.
+func Suffixes(ids []string) []string {
+	suffixes := make([]string, 0)
+	for _, entry := range catalog {
+		if slices.Contains(ids, entry.service.ID) {
+			suffixes = append(suffixes, entry.suffixes...)
+		}
+	}
+	slices.Sort(suffixes)
+	return suffixes
+}

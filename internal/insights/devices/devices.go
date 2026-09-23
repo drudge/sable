@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/insights/vendors"
 	"github.com/drudge/sable/internal/querylog"
 )
 
@@ -45,6 +46,14 @@ type Device struct {
 	PrivateMAC bool
 	// Named is set when the operator named this device in Sable.
 	Named bool
+	// Vendor is the maker of the device's network interface, from its
+	// hardware address.
+	Vendor string
+	// Type is the kind of device the operator said this is, if they did.
+	Type string
+	// Guess is what kind of device this is, filled in by Identify once the
+	// services the device uses are known.
+	Guess Guess
 	// Addresses are the client addresses that sent traffic, busiest first.
 	Addresses []Address
 	Queries   uint64
@@ -144,6 +153,10 @@ func Build(input Input) []Device {
 			return cmp.Compare(left.Address, right.Address)
 		})
 		device.Name, device.NameSource, device.Named = chooseName(*device, named, identities, input.Names)
+		device.Type = named.forDevice(*device, clientType)
+		if device.MAC != "" {
+			device.Vendor, _ = vendors.Lookup(device.MAC)
+		}
 		result = append(result, *device)
 	}
 	slices.SortFunc(result, func(left, right Device) int {
@@ -169,32 +182,33 @@ func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.
 	return latest
 }
 
-// operatorNames resolves the names an operator gave: by hardware address, by
-// exact address, and by the most specific network containing an address.
+// operatorNames resolves what an operator said about devices: by hardware
+// address, by exact address, and by the most specific network containing an
+// address.
 type operatorNames struct {
-	byMAC     map[string]string
-	byAddress map[string]string
+	byMAC     map[string]config.Client
+	byAddress map[string]config.Client
 	networks  []namedNetwork
 }
 
 type namedNetwork struct {
 	prefix netip.Prefix
-	name   string
+	client config.Client
 }
 
 func newOperatorNames(clients []config.Client) operatorNames {
-	names := operatorNames{byMAC: map[string]string{}, byAddress: map[string]string{}}
+	names := operatorNames{byMAC: map[string]config.Client{}, byAddress: map[string]config.Client{}}
 	for _, client := range clients {
 		switch {
 		case client.MAC != "":
-			names.byMAC[strings.ToLower(client.MAC)] = client.Name
+			names.byMAC[strings.ToLower(client.MAC)] = client
 		case strings.Contains(client.Address, "/"):
 			if prefix, err := netip.ParsePrefix(client.Address); err == nil {
-				names.networks = append(names.networks, namedNetwork{prefix: prefix.Masked(), name: client.Name})
+				names.networks = append(names.networks, namedNetwork{prefix: prefix.Masked(), client: client})
 			}
 		default:
 			if address, err := netip.ParseAddr(client.Address); err == nil {
-				names.byAddress[address.Unmap().String()] = client.Name
+				names.byAddress[address.Unmap().String()] = client
 			}
 		}
 	}
@@ -204,15 +218,17 @@ func newOperatorNames(clients []config.Client) operatorNames {
 	return names
 }
 
-func (names operatorNames) forDevice(device Device) string {
+// forDevice returns the most specific value the operator set for a device,
+// read from each matching entry with pick.
+func (names operatorNames) forDevice(device Device, pick func(config.Client) string) string {
 	if device.MAC != "" {
-		if name := names.byMAC[device.MAC]; name != "" {
-			return name
+		if value := pick(names.byMAC[device.MAC]); value != "" {
+			return value
 		}
 	}
 	for _, address := range device.Addresses {
-		if name := names.byAddress[address.Address]; name != "" {
-			return name
+		if value := pick(names.byAddress[address.Address]); value != "" {
+			return value
 		}
 	}
 	for _, address := range device.Addresses {
@@ -221,16 +237,19 @@ func (names operatorNames) forDevice(device Device) string {
 			continue
 		}
 		for _, network := range names.networks {
-			if network.prefix.Contains(parsed.Unmap()) {
-				return network.name
+			if value := pick(network.client); value != "" && network.prefix.Contains(parsed.Unmap()) {
+				return value
 			}
 		}
 	}
 	return ""
 }
 
+func clientName(client config.Client) string { return client.Name }
+func clientType(client config.Client) string { return client.Type }
+
 func chooseName(device Device, named operatorNames, identities map[string]querylog.ClientIdentity, discovered map[string]DiscoveredName) (string, string, bool) {
-	if name := named.forDevice(device); name != "" {
+	if name := named.forDevice(device, clientName); name != "" {
 		return name, SourceOperator, true
 	}
 	for _, address := range device.Addresses {

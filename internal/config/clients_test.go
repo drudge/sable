@@ -29,7 +29,8 @@ func TestClientsValidateAndNormalize(t *testing.T) {
 		client Client
 		want   string
 	}{
-		{Client{MAC: "da:a1:19:00:00:01"}, "name is required"},
+		{Client{MAC: "da:a1:19:00:00:01"}, "name or clients[0].type is required"},
+		{Client{MAC: "da:a1:19:00:00:01", Type: "toaster"}, "type must be one of"},
 		{Client{Name: "Both", MAC: "da:a1:19:00:00:01", Address: "10.0.0.1"}, "not both"},
 		{Client{Name: "Neither"}, "must set mac or address"},
 		{Client{Name: "Bad", MAC: "nope"}, "hardware address"},
@@ -65,5 +66,27 @@ func TestSetClientNameReplacesAndRemoves(t *testing.T) {
 	}
 	if _, err := SetClientName(nil, Client{Name: "Nowhere"}); err == nil {
 		t.Fatal("a name with no device identifier was accepted")
+	}
+}
+
+func TestSetClientTypeKeepsTheName(t *testing.T) {
+	t.Parallel()
+	clients := []Client{{Name: "Front door", MAC: "da:a1:19:00:00:01"}}
+	typed, err := SetClientType(clients, Client{MAC: "DA:A1:19:00:00:01", Type: "doorbell"})
+	if err != nil || len(typed) != 1 || typed[0].Name != "Front door" || typed[0].Type != "doorbell" {
+		t.Fatalf("typed = %+v, %v", typed, err)
+	}
+	// Removing the name keeps the entry for its type.
+	unnamed, err := SetClientName(typed, Client{MAC: "da:a1:19:00:00:01"})
+	if err != nil || len(unnamed) != 1 || unnamed[0].Name != "" || unnamed[0].Type != "doorbell" {
+		t.Fatalf("unnamed = %+v, %v", unnamed, err)
+	}
+	// Clearing the type too leaves nothing to remember.
+	cleared, err := SetClientType(unnamed, Client{MAC: "da:a1:19:00:00:01"})
+	if err != nil || len(cleared) != 0 {
+		t.Fatalf("cleared = %+v, %v", cleared, err)
+	}
+	if _, err := SetClientType(nil, Client{Address: "10.0.0.9", Type: "toaster"}); err == nil {
+		t.Fatal("an unknown type was accepted")
 	}
 }

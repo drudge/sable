@@ -98,7 +98,7 @@ func newDeviceFindings(input ChangesInput) []insights.Finding {
 		findings = append(findings, insights.Finding{
 			Kind: KindNewDevice, Tone: insights.ToneNotice, Title: title,
 			Subject: subject,
-			Summary: fmt.Sprintf("First seen %s ago and has sent %s %s since.",
+			Summary: describeDevice(device) + fmt.Sprintf("First seen %s ago and has sent %s %s since.",
 				insights.FormatDuration(input.Now.Sub(device.FirstSeen)), insights.FormatCount(device.Queries), insights.Plural(device.Queries, "query", "queries")),
 			Reasons:      newDeviceReasons(device, input),
 			Facts:        deviceFacts(device, true),
@@ -255,7 +255,13 @@ func Label(device Device) string {
 }
 
 func deviceFacts(device Device, includeFirstSeen bool) []insights.Fact {
-	facts := make([]insights.Fact, 0, 6)
+	facts := make([]insights.Fact, 0, 8)
+	if device.Guess.Type != "" {
+		facts = append(facts, insights.Fact{Label: "Looks like", Value: GuessText(device.Guess)})
+	}
+	if device.Vendor != "" {
+		facts = append(facts, insights.Fact{Label: "Maker", Value: device.Vendor})
+	}
 	if device.MAC != "" {
 		value := device.MAC
 		if device.PrivateMAC {
