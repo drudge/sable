@@ -15,6 +15,7 @@ import (
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -181,7 +182,9 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		} else {
 			view.Devices = insightDeviceViews(report)
 			view.DeviceSummary = insightDeviceSummary(view.Devices)
+			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.logWindowQuery())
 		}
+		view.TopApps = server.topAppRanking(request, window)
 	}
 	if console.CanBlocking {
 		contribution, err := blockingData.Contribution(request.Context())
@@ -300,6 +303,8 @@ func insightFindingIcon(kind string) string {
 		return "line-chart"
 	case devices.KindWentQuiet:
 		return "power"
+	case devices.KindNewApp:
+		return "apps"
 	default:
 		return "info"
 	}
@@ -352,4 +357,59 @@ func insightsCheckedSummary(console pages.DashboardView, window insightWindow) s
 	default:
 		return "Sable checked block list updates and block list overlap."
 	}
+}
+
+// topAppRanking groups the window's busiest domains into the apps that own
+// them. It reads the same counts as the dashboard's domain ranking, so the two
+// never disagree about the traffic behind an app.
+func (server *Server) topAppRanking(request *http.Request, window insightWindow) []pages.RankedStatView {
+	reader, ok := server.queries.(queryInsightReader)
+	if !ok {
+		return nil
+	}
+	counted, _, err := server.insightCache.load(request.Context(), window, reader.QueryLogInsights)
+	if err != nil {
+		server.logger.Warn("rank insights apps", "error", err)
+		return nil
+	}
+	domains := make([]services.Domain, 0, len(counted.Domains))
+	for name, hits := range counted.Domains {
+		domains = append(domains, services.Domain{Name: name, Queries: hits})
+	}
+	usages := services.Group(domains)
+	ranking := make([]pages.RankedStatView, 0, min(len(usages), insightsRankLimit))
+	for _, usage := range usages {
+		// Operating system check-ins are not apps anyone chose to use.
+		if usage.Service.Category == services.CategoryPlatform {
+			continue
+		}
+		if len(ranking) == insightsRankLimit {
+			break
+		}
+		ranking = append(ranking, pages.RankedStatView{Name: usage.Service.Name, Secondary: usage.Service.Category, Value: usage.Queries})
+	}
+	return ranking
+}
+
+// busiestDeviceRanking ranks devices by their queries. A device with one
+// address links to exactly its queries; one with several has no single query
+// log filter that matches all of them.
+func busiestDeviceRanking(views []pages.InsightDeviceView, logWindow string) []pages.RankedStatView {
+	ranking := make([]pages.RankedStatView, 0, min(len(views), insightsRankLimit))
+	for _, device := range views[:min(len(views), insightsRankLimit)] {
+		item := pages.RankedStatView{Name: device.Label, Value: device.Queries}
+		switch len(device.Addresses) {
+		case 0:
+		case 1:
+			item.Secondary = device.Addresses[0].Address
+			item.Href = "/logs?tab=queries&client_ip=" + url.QueryEscape(device.Addresses[0].Address) + "&" + logWindow
+		default:
+			item.Secondary = fmt.Sprintf("%d addresses", len(device.Addresses))
+		}
+		if device.Label == item.Secondary {
+			item.Secondary = ""
+		}
+		ranking = append(ranking, item)
+	}
+	return ranking
 }

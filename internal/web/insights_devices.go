@@ -10,6 +10,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -17,8 +18,16 @@ import (
 const (
 	// insightsDeviceDomains is how many names the device drawer lists.
 	insightsDeviceDomains = 10
+	// insightsDeviceAppDomains is how many of a device's busiest names are
+	// read to name the apps it used.
+	insightsDeviceAppDomains = 500
+	// insightsDeviceApps is how many apps the device drawer lists.
+	insightsDeviceApps = 8
 	// insightsDeviceLimit bounds the device table.
 	insightsDeviceLimit = 500
+	// insightsDomainHistoryLimit bounds how many names one device's history
+	// read returns. A device with more is not checked for new apps.
+	insightsDomainHistoryLimit = 20_000
 )
 
 // deviceInsightReader is the optional store capability behind Devices and
@@ -29,6 +38,7 @@ type deviceInsightReader interface {
 	ClientNewDomains(context.Context, []string, time.Time, time.Time, int) ([]querylog.ClientDomain, error)
 	ClientNewDomainCount(context.Context, []string, time.Time, time.Time) (uint64, error)
 	ClientTopDomains(context.Context, []string, time.Time, time.Time, int) ([]querylog.ClientDomain, error)
+	ClientDomainHistory(context.Context, []string, int) ([]querylog.ClientDomain, error)
 }
 
 // deviceReport is the devices for one window, with when first-seen tracking
@@ -181,10 +191,14 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 	}
 	view.Device = insightDeviceView(device, report)
 	addresses := device.ClientAddresses()
-	top, err := reader.ClientTopDomains(request.Context(), addresses, report.window.Start, report.window.End, insightsDeviceDomains)
+	// One ranking feeds both lists: the apps need the long tail, the domain
+	// list only its head.
+	top, err := reader.ClientTopDomains(request.Context(), addresses, report.window.Start, report.window.End, insightsDeviceAppDomains)
 	if err != nil {
 		server.logger.Warn("rank device domains", "error", err)
 	}
+	view.Apps = insightAppViews(top)
+	top = top[:min(len(top), insightsDeviceDomains)]
 	fresh, err := reader.ClientNewDomains(request.Context(), addresses, report.window.Start, report.window.End, insightsDeviceDomains)
 	if err != nil {
 		server.logger.Warn("read device first-time domains", "error", err)
@@ -281,4 +295,20 @@ func clientForDeviceKey(key, name string) (config.Client, error) {
 func deviceKeyIdentifier(key string) string {
 	_, identifier, _ := strings.Cut(key, ":")
 	return identifier
+}
+
+// insightAppViews names the apps behind a device's busiest domains.
+func insightAppViews(domains []querylog.ClientDomain) []pages.InsightAppView {
+	named := make([]services.Domain, 0, len(domains))
+	for _, domain := range domains {
+		named = append(named, services.Domain{Name: domain.Name, Queries: domain.Queries})
+	}
+	usages := services.Group(named)
+	views := make([]pages.InsightAppView, 0, min(len(usages), insightsDeviceApps))
+	for _, usage := range usages[:min(len(usages), insightsDeviceApps)] {
+		views = append(views, pages.InsightAppView{
+			Name: usage.Service.Name, Category: usage.Service.Category, Queries: usage.Queries, Domains: len(usage.Domains),
+		})
+	}
+	return views
 }

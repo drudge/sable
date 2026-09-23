@@ -39,6 +39,10 @@ type InsightsOverviewView struct {
 	Activity            *InsightsActivityView
 	TopClients          []RankedStatView
 	TopDomains          []RankedStatView
+	// TopApps and BusiestDevices rank the whole network's traffic on the
+	// Overview, by app and by device rather than by domain and address.
+	TopApps        []RankedStatView
+	BusiestDevices []RankedStatView
 	Contribution        *InsightsContributionView
 	ActiveTab           string
 	CanNameDevices      bool
@@ -108,6 +112,15 @@ type InsightDeviceDrawerView struct {
 	Device         InsightDeviceView
 	TopDomains     []InsightDeviceDomainView
 	NewDomains     []InsightDeviceDomainView
+	Apps           []InsightAppView
+}
+
+// InsightAppView is one app a device used and how much.
+type InsightAppView struct {
+	Name     string
+	Category string
+	Queries  uint64
+	Domains  int
 }
 
 // InsightsActivityView holds exact counts of blocked queries in the window.
@@ -266,6 +279,12 @@ templ InsightsContent(view InsightsOverviewView) {
 				@insightsNotes(view)
 				@insightsOverviewMetrics(view)
 				@InsightFindings(view)
+				if len(view.TopApps) > 0 || len(view.BusiestDevices) > 0 {
+					<section class="dashboard-rankings insight-rankings" aria-label="Network rankings">
+						@RankedPanel("Top Apps", "apps", view.TopApps, insightsRankingWindow(view))
+						@RankedPanel("Busiest Devices", "devices", view.BusiestDevices, insightsRankingWindow(view))
+					</section>
+				}
 			}
 		</div>
 		if view.CanLogs {
@@ -972,6 +991,20 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 					}
 				</div>
 			</section>
+			if len(view.Apps) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-apps">
+					<h3 id="insight-device-apps">Apps</h3>
+					<div class="insight-client-list">
+						for index, app := range view.Apps {
+							@InsightListRow(InsightListRowView{
+								ID: fmt.Sprintf("insight-device-app-%d", index), Value: app.Name, Plain: true,
+								Detail: app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + pluralizeDomain(app.Domains),
+								Count:  formatNumber(app.Queries),
+							})
+						}
+					</div>
+				</section>
+			}
 			if len(view.TopDomains) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-device-top">
 					<h3 id="insight-device-top">Most queried domains</h3>
@@ -1052,7 +1085,10 @@ type InsightListRowView struct {
 	Detail    string
 	Count     string
 	Href      string
+	// CopyLabel names the copy button; a row without one has no button.
 	CopyLabel string
+	// Plain sets the value in the body face, for names that are not DNS data.
+	Plain bool
 }
 
 // InsightListRow puts the copy button right after the value, as zone record
@@ -1061,9 +1097,11 @@ type InsightListRowView struct {
 templ InsightListRow(row InsightListRowView) {
 	<div class={ "insight-list-row", templ.KV("has-link", row.Href != "") }>
 		<div class="insight-list-copy">
-			<span class="copyable-text insight-row-value">
+			<span class={ "copyable-text insight-row-value", templ.KV("plain", row.Plain) }>
 				<strong id={ row.ID }>{ row.Value }</strong>
-				@CopyButton(row.ID, row.CopyLabel)
+				if row.CopyLabel != "" {
+					@CopyButton(row.ID, row.CopyLabel)
+				}
 			</span>
 			if row.Detail != "" {
 				<small>{ row.Detail }</small>

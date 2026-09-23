@@ -146,3 +146,23 @@ func TestClientIdentitiesWidenTheirSpanAndPrune(t *testing.T) {
 		t.Fatalf("identities after prune = %+v, %v", identities, err)
 	}
 }
+
+func TestClientDomainHistoryListsEveryNameAcrossAddresses(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	day := 24 * time.Hour
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(now.Add(-9*day), "10.0.0.5", "mail.example.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-2*day), "fd00::5", "mail.example.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "fd00::5", "discord.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.0.9", "other.example.", querylog.SourceUpstream),
+	})
+	history, err := opened.ClientDomainHistory(context.Background(), []string{"10.0.0.5", "FD00::5"}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].Name != "discord.com" || history[1].Name != "mail.example.com" || !history[1].FirstSeen.Equal(now.Add(-9*day)) {
+		t.Fatalf("history = %+v", history)
+	}
+}

@@ -481,3 +481,44 @@ ORDER BY last_seen DESC, address ASC`, since.UTC())
 	}
 	return identities, rows.Err()
 }
+
+// ClientDomainHistory lists every name the given client addresses have
+// queried, with when each was first queried, newest first. It reads at most
+// limit names, so a caller that gets exactly limit back cannot tell whether
+// older history was cut off.
+func (store *Store) ClientDomainHistory(ctx context.Context, clients []string, limit int) ([]querylog.ClientDomain, error) {
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	arguments := make([]any, 0, len(clients)+1)
+	placeholders := make([]string, 0, len(clients))
+	for _, client := range clients {
+		arguments = append(arguments, queryLogClientKey(client))
+		placeholders = append(placeholders, store.placeholder(len(arguments)))
+	}
+	arguments = append(arguments, max(1, limit))
+	rows, err := store.database.QueryContext(ctx, `
+SELECT name_key, MIN(first_seen) AS first_seen
+FROM sable_client_domain_seen
+WHERE client_key IN (`+strings.Join(placeholders, ", ")+`)
+GROUP BY name_key
+ORDER BY first_seen DESC, name_key ASC
+LIMIT `+store.placeholder(len(arguments)), arguments...)
+	if err != nil {
+		return nil, fmt.Errorf("read client domain history: %w", err)
+	}
+	defer rows.Close()
+	domains := make([]querylog.ClientDomain, 0)
+	for rows.Next() {
+		var domain querylog.ClientDomain
+		var first any
+		if err := rows.Scan(&domain.Name, &first); err != nil {
+			return nil, fmt.Errorf("scan client domain history: %w", err)
+		}
+		if domain.FirstSeen, err = databaseTime(first); err != nil {
+			return nil, fmt.Errorf("read client domain history time: %w", err)
+		}
+		domains = append(domains, domain)
+	}
+	return domains, rows.Err()
+}

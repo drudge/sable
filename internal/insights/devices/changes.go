@@ -50,6 +50,9 @@ type ChangesInput struct {
 	Now         time.Time
 	SeenSince   time.Time
 	NewDomains  func(Device) []insights.DomainEvidence
+	// DomainHistory lists every name a device has queried and whether that
+	// list is complete; new apps are only claimed from a complete history.
+	DomainHistory func(Device) ([]insights.DomainEvidence, bool)
 }
 
 // Changes reports what changed about devices, most important first. Every
@@ -60,7 +63,15 @@ func Changes(input ChangesInput) []insights.Finding {
 	findings = append(findings, quietFindings(input)...)
 	findings = append(findings, spikeFindings(input)...)
 	findings = append(findings, newDeviceFindings(input)...)
-	findings = append(findings, destinationFindings(input)...)
+	apps := newAppFindings(input)
+	findings = append(findings, apps...)
+	// A device whose new apps were named needs no second finding that only
+	// counts the same new domains.
+	named := make(map[string]bool, len(apps))
+	for _, finding := range apps {
+		named[finding.Subject.Device] = true
+	}
+	findings = append(findings, destinationFindings(input, named)...)
 	return findings
 }
 
@@ -108,13 +119,13 @@ func newDeviceExplanations(device Device) []string {
 	return []string{"Someone connected a new device", "A guest joined the network"}
 }
 
-func destinationFindings(input ChangesInput) []insights.Finding {
+func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Finding {
 	if !input.trackedBefore(input.WindowStart) {
 		return nil
 	}
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if device.NewDomains >= minimumNewDomains && device.FirstSeen.Before(input.WindowStart) {
+		if device.NewDomains >= minimumNewDomains && device.FirstSeen.Before(input.WindowStart) && !skip[device.Key] {
 			candidates = append(candidates, device)
 		}
 	}
@@ -307,6 +318,9 @@ type Report struct {
 type Sources interface {
 	Devices(context.Context, insights.Window) (Report, error)
 	NewDomains(context.Context, Device, insights.Window) ([]insights.DomainEvidence, error)
+	// DomainHistory lists every name a device has queried, with whether the
+	// list is complete.
+	DomainHistory(context.Context, Device) ([]insights.DomainEvidence, bool, error)
 }
 
 // Analyzer reports what changed about the network's devices.
@@ -328,6 +342,10 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 				return nil
 			}
 			return domains
+		},
+		DomainHistory: func(device Device) ([]insights.DomainEvidence, bool) {
+			history, complete, err := analyzer.Sources.DomainHistory(ctx, device)
+			return history, complete && err == nil
 		},
 	}), nil
 }

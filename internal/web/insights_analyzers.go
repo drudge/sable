@@ -184,3 +184,12 @@ func (sources *deviceSources) NewDomains(ctx context.Context, device devices.Dev
 	}
 	return domainEvidence(device, found), nil
 }
+
+func (sources *deviceSources) DomainHistory(ctx context.Context, device devices.Device) ([]insights.DomainEvidence, bool, error) {
+	history, err := sources.reader.ClientDomainHistory(ctx, device.ClientAddresses(), insightsDomainHistoryLimit)
+	if err != nil {
+		sources.server.logger.Warn("read device domain history", "error", err)
+		return nil, false, err
+	}
+	return domainEvidence(device, history), len(history) < insightsDomainHistoryLimit, nil
+}

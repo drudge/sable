@@ -262,3 +262,22 @@ func FormatDuration(elapsed time.Duration) string {
 		return fmt.Sprintf("%d %s", days, Plural(days, "day", "days"))
 	}
 }
+
+// JoinAnd lists names in a sentence: "A", "A and B", or "A, B, and C".
+func JoinAnd(names []string) string { return joinList(names, "and") }
+
+// JoinOr lists alternatives in a sentence: "A", "A or B", or "A, B, or C".
+func JoinOr(names []string) string { return joinList(names, "or") }
+
+func joinList(names []string, conjunction string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " " + conjunction + " " + names[1]
+	default:
+		return strings.Join(names[:len(names)-1], ", ") + ", " + conjunction + " " + names[len(names)-1]
+	}
+}

@@ -3882,3 +3882,5 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
    keeps its own spelling, such as UniFi. */
 .query-detail-header .insight-name-source span { color: inherit; font: inherit; letter-spacing: normal; text-transform: none; }
 .query-detail-header .insight-name-source { flex: 0 0 auto; margin-left: .25rem; padding: .1rem .45rem; font-size: .625rem; letter-spacing: normal; text-transform: none; white-space: nowrap; }
+/* App names and other plain words keep the body face. */
+.insight-row-value.plain > strong { font-family: inherit; font-size: .875rem; font-weight: 500; }

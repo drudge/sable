@@ -113,6 +113,9 @@ type RankedStatView struct {
 	Name      string
 	Secondary string
 	Value     uint64
+	// Href replaces the query log link a ranking builds from Name, for
+	// entries that are not a single client or domain.
+	Href string
 }
 
 type DistributionItemView struct {
