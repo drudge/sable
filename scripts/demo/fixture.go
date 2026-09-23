@@ -51,6 +51,8 @@ var unifiHosts = []unifiHost{
 	{"3c:22:fb:11:04:a6", "reception-imac", "10.20.10.16", corporateNetworkID, true},
 	{"00:0b:db:11:04:a7", "payroll-server", "10.20.10.20", corporateNetworkID, true},
 	{"00:11:32:11:04:a8", "backup-nas", "10.20.10.21", corporateNetworkID, true},
+	// Works office hours; last night it woke up at 3 AM.
+	{"00:0b:db:11:04:a9", "file-server", "10.20.10.22", corporateNetworkID, true},
 	{"00:01:e6:22:07:b1", "latex-press-01", "10.20.20.21", warehouseNetworkID, true},
 	{"00:01:e6:22:07:b2", "latex-press-02", "10.20.20.22", warehouseNetworkID, true},
 	{"00:05:12:22:07:b3", "shipping-scanner", "10.20.20.30", warehouseNetworkID, true},
@@ -263,6 +265,12 @@ type deviceStory struct {
 	// established devices share the office's long history, so only their
 	// recent change is news.
 	established bool
+	// officeHours keeps the daily queries between 9 AM and 5 PM local time.
+	officeHours bool
+	// nightBurst queries land between 3 and 4 AM last night.
+	nightBurst int
+	// newDomains are queried for the first time during the last day.
+	newDomains []string
 }
 
 var deviceStories = []deviceStory{
@@ -270,6 +278,13 @@ var deviceStories = []deviceStory{
 	{address: "10.20.30.43", domains: []string{"stream.dockcam-cloud.net", "ntp.ubnt.com"}, perDay: 160, daysFrom: 9, daysTo: 1, established: true},
 	// The breakroom display normally checks in a little; today it is looping.
 	{address: "10.20.30.44", domains: []string{"api.breakroom-signage.io", "cdn.breakroom-signage.io"}, perDay: 110, daysFrom: 9, daysTo: 1, recent: 1_450, established: true},
+	// dock-camera-01 streams every day; since yesterday it also calls a
+	// relay service it never used before.
+	{address: "10.20.30.42", domains: []string{"stream.dockcam-cloud.net", "ntp.ubnt.com"}, perDay: 90, daysFrom: 9, daysTo: 0, established: true,
+		newDomains: []string{"relay.p2p-camlink.net", "api.p2p-camlink.net", "cfg.camlink-cn.com", "update.camlink-cn.com", "stun.camlink-cn.com"}},
+	// The file server keeps office hours and woke up at 3 AM last night.
+	{address: "10.20.10.22", domains: []string{"sync.vandelay.com", "s3.amazonaws.com", "time.apple.com"}, perDay: 80, daysFrom: 16, daysTo: 0,
+		established: true, officeHours: true, nightBurst: 180},
 	// The doorbell was installed two days ago.
 	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
 }

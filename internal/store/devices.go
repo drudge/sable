@@ -217,6 +217,14 @@ func (store *Store) ClientActivity(ctx context.Context, since, until time.Time) 
 	if err != nil {
 		return report, err
 	}
+	recentNew, err := store.countNewClientDomains(ctx, recentStart, until)
+	if err != nil {
+		return report, err
+	}
+	baselineNew, err := store.countNewClientDomains(ctx, recentStart.Add(-deviceBaselineDays*24*time.Hour), recentStart)
+	if err != nil {
+		return report, err
+	}
 	seen, err := store.clientSightings(ctx)
 	if err != nil {
 		return report, err
@@ -252,6 +260,16 @@ func (store *Store) ClientActivity(ctx context.Context, since, until time.Time) 
 	for client, count := range newDomains {
 		if existing, found := clients[client]; found {
 			existing.NewDomains = count
+		}
+	}
+	for client, count := range recentNew {
+		if existing, found := clients[client]; found {
+			existing.RecentNewDomains = count
+		}
+	}
+	for client, count := range baselineNew {
+		if existing, found := clients[client]; found {
+			existing.BaselineNewDomains = count
 		}
 	}
 	report.Clients = make([]querylog.ClientActivity, 0, len(clients))
@@ -564,4 +582,40 @@ LIMIT `+store.placeholder(len(arguments)), arguments...)
 		matches[client] = append(matches[client], name)
 	}
 	return matches, rows.Err()
+}
+
+// ClientHourlyActivity counts each client's queries per hour in [since,
+// until), from the per-minute rollups, keyed by the hour's start in UTC. It
+// lets Insights learn when each device is normally active.
+func (store *Store) ClientHourlyActivity(ctx context.Context, since, until time.Time) (map[string]map[time.Time]uint64, error) {
+	hour := "SUBSTR(bucket_start, 1, 13)"
+	if store.driver == "postgres" {
+		hour = "TO_CHAR(bucket_start, 'YYYY-MM-DD HH24')"
+	}
+	rows, err := store.database.QueryContext(ctx, `
+SELECT value, `+hour+` AS hour, SUM(hits)
+FROM sable_query_log_rollup
+WHERE dimension = `+store.placeholder(1)+` AND bucket_start >= `+store.placeholder(2)+` AND bucket_start < `+store.placeholder(3)+`
+GROUP BY value, `+hour, queryLogRollupClient, since.UTC(), until.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("read client hourly activity: %w", err)
+	}
+	defer rows.Close()
+	activity := make(map[string]map[time.Time]uint64)
+	for rows.Next() {
+		var client, label string
+		var hits uint64
+		if err := rows.Scan(&client, &label, &hits); err != nil {
+			return nil, fmt.Errorf("scan client hourly activity: %w", err)
+		}
+		start, err := time.ParseInLocation("2006-01-02 15", strings.Replace(label, "T", " ", 1), time.UTC)
+		if err != nil {
+			return nil, fmt.Errorf("parse client activity hour %q: %w", label, err)
+		}
+		if activity[client] == nil {
+			activity[client] = make(map[time.Time]uint64)
+		}
+		activity[client][start] += hits
+	}
+	return activity, rows.Err()
 }

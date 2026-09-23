@@ -136,10 +136,35 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 		}
 		for day := story.daysFrom; day > story.daysTo; day-- {
 			start := now.Add(-time.Duration(day) * 24 * time.Hour)
+			span := 24 * time.Hour
+			if story.officeHours {
+				start = time.Date(start.Year(), start.Month(), start.Day(), 9, 0, 0, 0, start.Location())
+				span = 8 * time.Hour
+			}
 			for range story.perDay {
-				at := start.Add(time.Duration(random.Int63n(int64(24 * time.Hour))))
+				at := start.Add(time.Duration(random.Int63n(int64(span))))
+				if at.After(now) {
+					continue
+				}
 				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
 				events = append(events, seedQueryEvent(random, at, client, domain, policy))
+			}
+		}
+		if story.nightBurst > 0 {
+			night := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+			if night.Add(time.Hour).After(now) {
+				night = night.Add(-24 * time.Hour)
+			}
+			for range story.nightBurst {
+				at := night.Add(time.Duration(random.Int63n(int64(time.Hour))))
+				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+				events = append(events, seedQueryEvent(random, at, client, domain, policy))
+			}
+		}
+		for index, name := range story.newDomains {
+			at := now.Add(-20*time.Hour + time.Duration(index)*2*time.Hour)
+			for range 2 + random.Intn(4) {
+				events = append(events, seedQueryEvent(random, at.Add(time.Duration(random.Intn(3600))*time.Second), client, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
 			}
 		}
 		for range story.recent {

@@ -193,3 +193,15 @@ func (sources *deviceSources) DomainHistory(ctx context.Context, device devices.
 	}
 	return domainEvidence(device, history), len(history) < insightsDomainHistoryLimit, nil
 }
+
+func (sources *deviceSources) HourlyActivity(ctx context.Context, since time.Time) (map[string]map[time.Time]uint64, error) {
+	report, err := sources.load(ctx)
+	if err != nil {
+		return nil, err
+	}
+	activity, err := sources.reader.ClientHourlyActivity(ctx, since, report.window.End)
+	if err != nil {
+		sources.server.logger.Warn("read device hourly activity", "error", err)
+	}
+	return activity, err
+}

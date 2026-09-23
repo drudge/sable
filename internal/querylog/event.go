@@ -193,6 +193,10 @@ type ClientActivity struct {
 	// Baseline the queries in the seven days before that.
 	Recent   uint64
 	Baseline uint64
+	// RecentNewDomains counts names first queried in those 24 hours and
+	// BaselineNewDomains the names first queried in the seven days before.
+	RecentNewDomains   uint64
+	BaselineNewDomains uint64
 }
 
 // ClientActivityReport is every client with traffic in a window. SeenSince is

@@ -65,6 +65,10 @@ type Device struct {
 	LastSeen   time.Time
 	Recent     uint64
 	Baseline   uint64
+	// RecentNewDomains and BaselineNewDomains count first-time names in the
+	// last 24 hours and the week before, summed over the device's addresses.
+	RecentNewDomains   uint64
+	BaselineNewDomains uint64
 }
 
 // Address is one client address of a device and its own traffic, which is
@@ -135,6 +139,8 @@ func Build(input Input) []Device {
 		device.NewDomains += activity.NewDomains
 		device.Recent += activity.Recent
 		device.Baseline += activity.Baseline
+		device.RecentNewDomains += activity.RecentNewDomains
+		device.BaselineNewDomains += activity.BaselineNewDomains
 		if !activity.FirstSeen.IsZero() && (device.FirstSeen.IsZero() || activity.FirstSeen.Before(device.FirstSeen)) {
 			device.FirstSeen = activity.FirstSeen
 		}

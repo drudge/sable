@@ -40,6 +40,7 @@ type deviceInsightReader interface {
 	ClientTopDomains(context.Context, []string, time.Time, time.Time, int) ([]querylog.ClientDomain, error)
 	ClientDomainHistory(context.Context, []string, int) ([]querylog.ClientDomain, error)
 	ClientNamesMatching(context.Context, time.Time, []string) (map[string][]string, error)
+	ClientHourlyActivity(context.Context, time.Time, time.Time) (map[string]map[time.Time]uint64, error)
 }
 
 // deviceTypeSuffixes are the domains of the services whose use says what a

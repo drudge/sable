@@ -186,3 +186,22 @@ func TestClientNamesMatchingFindsSuffixesPerClient(t *testing.T) {
 		t.Fatalf("matches = %+v", matches)
 	}
 }
+
+func TestClientHourlyActivityCountsEachHour(t *testing.T) {
+	t.Parallel()
+
+	hour := time.Now().UTC().Truncate(time.Hour).Add(-3 * time.Hour)
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(hour.Add(5*time.Minute), "10.0.0.5", "a.example.", querylog.SourceUpstream),
+		blockingEvent(hour.Add(50*time.Minute), "10.0.0.5", "b.example.", querylog.SourceUpstream),
+		blockingEvent(hour.Add(70*time.Minute), "10.0.0.5", "c.example.", querylog.SourceUpstream),
+		blockingEvent(hour.Add(10*time.Minute), "10.0.0.9", "d.example.", querylog.SourceUpstream),
+	})
+	activity, err := opened.ClientHourlyActivity(context.Background(), hour, hour.Add(3*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activity["10.0.0.5"][hour] != 2 || activity["10.0.0.5"][hour.Add(time.Hour)] != 1 || activity["10.0.0.9"][hour] != 1 {
+		t.Fatalf("activity = %+v", activity)
+	}
+}

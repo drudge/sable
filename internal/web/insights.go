@@ -305,6 +305,10 @@ func insightFindingIcon(kind string) string {
 		return "power"
 	case devices.KindNewApp:
 		return "apps"
+	case devices.KindUnusualHours:
+		return "clock"
+	case devices.KindApplianceDrift:
+		return "globe-lock"
 	default:
 		return "info"
 	}

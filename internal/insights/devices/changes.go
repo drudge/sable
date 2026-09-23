@@ -53,6 +53,13 @@ type ChangesInput struct {
 	// DomainHistory lists every name a device has queried and whether that
 	// list is complete; new apps are only claimed from a complete history.
 	DomainHistory func(Device) ([]insights.DomainEvidence, bool)
+	// Hourly counts a device's queries per hour, keyed by the hour's start,
+	// over at least the last fifteen days.
+	Hourly func(Device) map[time.Time]uint64
+	// RecentDomains lists a device's first-time names from the last 24 hours.
+	RecentDomains func(Device) []insights.DomainEvidence
+	// Location is the time zone hours of the day are read in.
+	Location *time.Location
 }
 
 // Changes reports what changed about devices, most important first. Every
@@ -62,16 +69,21 @@ func Changes(input ChangesInput) []insights.Finding {
 	findings := make([]insights.Finding, 0)
 	findings = append(findings, quietFindings(input)...)
 	findings = append(findings, spikeFindings(input)...)
+	findings = append(findings, unusualHourFindings(input)...)
 	findings = append(findings, newDeviceFindings(input)...)
-	apps := newAppFindings(input)
-	findings = append(findings, apps...)
-	// A device whose new apps were named needs no second finding that only
-	// counts the same new domains.
-	named := make(map[string]bool, len(apps))
-	for _, finding := range apps {
-		named[finding.Subject.Device] = true
+	// A device already reported for its new destinations needs no second
+	// finding that counts the same domains another way.
+	reported := make(map[string]bool)
+	for _, group := range [][]insights.Finding{applianceFindings(input, reported), newAppFindings(input)} {
+		for _, finding := range group {
+			if reported[finding.Subject.Device] {
+				continue
+			}
+			reported[finding.Subject.Device] = true
+			findings = append(findings, finding)
+		}
 	}
-	findings = append(findings, destinationFindings(input, named)...)
+	findings = append(findings, destinationFindings(input, reported)...)
 	return findings
 }
 
@@ -324,6 +336,9 @@ type Report struct {
 type Sources interface {
 	Devices(context.Context, insights.Window) (Report, error)
 	NewDomains(context.Context, Device, insights.Window) ([]insights.DomainEvidence, error)
+	// HourlyActivity counts each client address's queries per hour since a
+	// moment, keyed by the hour's start.
+	HourlyActivity(context.Context, time.Time) (map[string]map[time.Time]uint64, error)
 	// DomainHistory lists every name a device has queried, with whether the
 	// list is complete.
 	DomainHistory(context.Context, Device) ([]insights.DomainEvidence, bool, error)
@@ -340,6 +355,8 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 	if err != nil {
 		return nil, err
 	}
+	// Routines need two weeks before the last day, whatever window is shown.
+	hourly, hourlyErr := analyzer.Sources.HourlyActivity(ctx, report.Window.End.Add(-(routineDays+1)*24*time.Hour))
 	return Changes(ChangesInput{
 		Devices: report.Devices, WindowStart: report.Window.Start, Now: report.Window.End, SeenSince: report.SeenSince,
 		NewDomains: func(device Device) []insights.DomainEvidence {
@@ -352,6 +369,25 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 		DomainHistory: func(device Device) ([]insights.DomainEvidence, bool) {
 			history, complete, err := analyzer.Sources.DomainHistory(ctx, device)
 			return history, complete && err == nil
+		},
+		Hourly: func(device Device) map[time.Time]uint64 {
+			if hourlyErr != nil {
+				return nil
+			}
+			merged := make(map[time.Time]uint64)
+			for _, address := range device.Addresses {
+				for hour, hits := range hourly[address.Address] {
+					merged[hour] += hits
+				}
+			}
+			return merged
+		},
+		RecentDomains: func(device Device) []insights.DomainEvidence {
+			domains, err := analyzer.Sources.NewDomains(ctx, device, insights.Window{Start: report.Window.End.Add(-24 * time.Hour), End: report.Window.End})
+			if err != nil {
+				return nil
+			}
+			return domains
 		},
 	}), nil
 }
