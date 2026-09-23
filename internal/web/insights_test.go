@@ -457,8 +457,12 @@ func TestInsightsDeviceTypeCorrectionFollowsTheHardwareAddress(t *testing.T) {
 	if closed := server.get(t, "everything", drawer, true).Body.String(); strings.Contains(closed, `name="type"`) || !strings.Contains(closed, `title="Change type"`) {
 		t.Fatal("the type picker is not tucked behind its pencil")
 	}
-	if open := server.get(t, "everything", drawer+"&edit=type", true).Body.String(); !strings.Contains(open, `name="type"`) || strings.Contains(open, `title="Change type"`) {
+	open := server.get(t, "everything", drawer+"&edit=type", true).Body.String()
+	if !strings.Contains(open, `name="type"`) || strings.Contains(open, `title="Change type"`) {
 		t.Fatal("the pencil does not open the type picker")
+	}
+	if !strings.Contains(open, "Computer (detected)") {
+		t.Fatal("the picker does not say what Sable detected")
 	}
 	form := url.Values{"key": {insightsTestLaptop}, "type": {"computer"}, "range": {"day"}}
 	if response := server.post(t, "logs-reader", "/ui/insights/devices/type", form); response.Code != http.StatusForbidden {

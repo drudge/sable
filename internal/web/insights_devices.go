@@ -163,6 +163,9 @@ func insightDeviceView(device devices.Device, report deviceReport) pages.Insight
 		view.Addresses = append(view.Addresses, pages.InsightDeviceAddressView{Address: address.Address, Queries: address.Queries, Blocked: address.Blocked})
 	}
 	view.Vendor = device.Vendor
+	if device.Guess.Detected != "" {
+		view.DetectedLabel = devices.TypeLabel(device.Guess.Detected)
+	}
 	if device.Guess.Type != "" {
 		view.Type, view.TypeLabel, view.TypeConfidence = device.Guess.Type, devices.TypeLabel(device.Guess.Type), string(device.Guess.Confidence)
 		for _, reason := range device.Guess.Reasons {

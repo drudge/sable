@@ -29,6 +29,9 @@ type Guess struct {
 	Type       string
 	Confidence Confidence
 	Reasons    []insights.Reason
+	// Detected is the type Sable would guess on its own, which differs from
+	// Type when the operator set one.
+	Detected string
 }
 
 // typeLabels names each device type for people.
@@ -135,7 +138,12 @@ func ServiceClueIDs() []string {
 // why Sable thinks so.
 func Classify(device Device, used []services.Service) Guess {
 	if device.Type != "" {
-		return Guess{Type: device.Type, Confidence: ConfidenceSet, Reasons: []insights.Reason{{Text: "You set this type"}}}
+		detected := device
+		detected.Type = ""
+		return Guess{
+			Type: device.Type, Confidence: ConfidenceSet, Reasons: []insights.Reason{{Text: "You set this type"}},
+			Detected: Classify(detected, used).Type,
+		}
 	}
 	type evidence struct {
 		score   int
@@ -214,7 +222,7 @@ func Classify(device Device, used []services.Service) Guess {
 			return Guess{}
 		}
 	}
-	return Guess{Type: ranked[0], Confidence: confidence, Reasons: best.reasons}
+	return Guess{Type: ranked[0], Confidence: confidence, Reasons: best.reasons, Detected: ranked[0]}
 }
 
 // nameWords splits a device name into lower-case words at every character

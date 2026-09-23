@@ -83,3 +83,11 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 		t.Errorf("GuessText = %q", got)
 	}
 }
+
+func TestClassifyRemembersWhatItDetectedUnderACorrection(t *testing.T) {
+	t.Parallel()
+	guess := Classify(Device{Name: "dock-camera-02", Type: "doorbell"}, nil)
+	if guess.Type != "doorbell" || guess.Detected != "camera" {
+		t.Fatalf("guess = %+v", guess)
+	}
+}

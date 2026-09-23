@@ -87,6 +87,8 @@ type InsightDeviceView struct {
 	TypeReasons    []InsightReasonView
 	// TypeOptions lists the types an operator can choose from.
 	TypeOptions [][2]string
+	// DetectedLabel is the type Sable guesses on its own, if any.
+	DetectedLabel string
 }
 
 // InsightDeviceAddressView is one client address of a device and its own
@@ -1312,7 +1314,7 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 				<label class="field-control">
 					<span class="sr-only">Device type</span>
 					<select name="type" data-styled-select>
-						<option value="" selected?={ view.Device.TypeConfidence != "set" }>Let Sable decide</option>
+						<option value="" selected?={ view.Device.TypeConfidence != "set" }>{ insightDetectedOption(view.Device) }</option>
 						for _, option := range view.Device.TypeOptions {
 							<option value={ option[0] } selected?={ view.Device.TypeConfidence == "set" && view.Device.Type == option[0] }>{ option[1] }</option>
 						}
@@ -1323,6 +1325,15 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 			</form>
 		}
 	</section>
+}
+
+// insightDetectedOption names the choice that leaves the type to Sable by what
+// Sable detects, so choosing it shows what it means.
+func insightDetectedOption(device InsightDeviceView) string {
+	if device.DetectedLabel == "" {
+		return "Let Sable decide"
+	}
+	return device.DetectedLabel + " (detected)"
 }
 
 func insightConfidenceText(confidence string) string {
