@@ -281,3 +281,49 @@ func joinList(names []string, conjunction string) string {
 		return strings.Join(names[:len(names)-1], ", ") + ", " + conjunction + " " + names[len(names)-1]
 	}
 }
+
+// Feedback actions an operator can take on a finding.
+const (
+	// FeedbackSnooze hides a finding until a moment.
+	FeedbackSnooze = "snooze"
+	// FeedbackNormal hides a finding for good: the operator says this is how
+	// the subject normally behaves.
+	FeedbackNormal = "normal"
+)
+
+// Feedback is what an operator said about one finding. It is kept by the
+// finding's stable ID, which names its subject durably, so it survives the
+// subject being renamed and can later teach Sable what is normal here.
+type Feedback struct {
+	FindingID string
+	Action    string
+	// Until ends a snooze; it is zero for a finding marked normal.
+	Until time.Time
+	// Label is how the finding read when the operator acted, for listing.
+	Label     string
+	CreatedBy string
+	CreatedAt time.Time
+}
+
+// Active reports whether feedback still hides its finding at a moment.
+func (feedback Feedback) Active(now time.Time) bool {
+	return feedback.Action == FeedbackNormal || (feedback.Action == FeedbackSnooze && now.Before(feedback.Until))
+}
+
+// Hide splits findings into those to show and those the operator hid.
+func Hide(findings []Finding, feedback []Feedback, now time.Time) (shown, hidden []Finding) {
+	active := make(map[string]bool, len(feedback))
+	for _, entry := range feedback {
+		if entry.Active(now) {
+			active[entry.FindingID] = true
+		}
+	}
+	for _, finding := range findings {
+		if active[finding.ID] {
+			hidden = append(hidden, finding)
+		} else {
+			shown = append(shown, finding)
+		}
+	}
+	return shown, hidden
+}

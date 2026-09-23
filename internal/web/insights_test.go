@@ -476,3 +476,41 @@ func TestInsightsDeviceTypeCorrectionFollowsTheHardwareAddress(t *testing.T) {
 		t.Fatalf("an unknown type = %d", invalid.Code)
 	}
 }
+
+func TestInsightFindingsCanBeHiddenAndShownAgain(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	body := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String()
+	match := regexp.MustCompile(`name="id" value="(blocking\.past-block/[^"]+)"`).FindStringSubmatch(body)
+	if match == nil {
+		t.Fatal("the past-block finding offers no way to hide it")
+	}
+	id := html.UnescapeString(match[1])
+	form := url.Values{"id": {id}, "label": {"Possible past blocking issue: telemetry.example.com"}, "action": {"normal"}}
+	if response := server.post(t, "logs-reader", "/ui/insights/feedback", form); response.Code != http.StatusForbidden {
+		t.Fatalf("hiding without settings write = %d", response.Code)
+	}
+	if strings.Contains(server.get(t, "logs-reader", "/ui/insights/overview?range=day", true).Body.String(), "Seen it?") {
+		t.Fatal("an operator without settings write is offered hiding")
+	}
+	response := server.post(t, "everything", "/ui/insights/feedback", form)
+	if response.Code != http.StatusNoContent || response.Header().Get("HX-Trigger") != "insightsChanged" {
+		t.Fatalf("hiding = %d %q", response.Code, response.Header().Get("HX-Trigger"))
+	}
+	hidden := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String()
+	if strings.Contains(hidden, `<span class="insight-finding-title">Possible past blocking issue</span>`) {
+		t.Fatal("a finding marked normal is still listed")
+	}
+	if !strings.Contains(hidden, "1 hidden finding") || !strings.Contains(hidden, "Marked normal") {
+		t.Fatal("the hidden finding is not listed with its status")
+	}
+	if invalid := server.post(t, "everything", "/ui/insights/feedback", url.Values{"id": {id}, "action": {"forever"}}); invalid.Code != http.StatusBadRequest {
+		t.Fatalf("an unknown action = %d", invalid.Code)
+	}
+	if shown := server.post(t, "everything", "/ui/insights/feedback/remove", url.Values{"id": {id}}); shown.Code != http.StatusNoContent {
+		t.Fatalf("showing again = %d", shown.Code)
+	}
+	if !strings.Contains(server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(), `<span class="insight-finding-title">Possible past blocking issue</span>`) {
+		t.Fatal("a finding shown again is still hidden")
+	}
+}

@@ -46,6 +46,9 @@ type InsightsOverviewView struct {
 	Contribution        *InsightsContributionView
 	ActiveTab           string
 	CanNameDevices      bool
+	// CanHideFindings is set for operators who may hide findings for everyone.
+	CanHideFindings bool
+	HiddenFindings  []InsightHiddenFindingView
 	DevicesUnavailable  bool
 	Devices             []InsightDeviceView
 	DeviceSummary       InsightDeviceSummaryView
@@ -162,6 +165,15 @@ type InsightFindingView struct {
 	DestinationLabel string
 	DeviceKey        string
 	Domains          []InsightDeviceDomainView
+	// FindingID is the finding's stable identifier, which feedback is kept by.
+	FindingID string
+}
+
+// InsightHiddenFindingView is a finding an operator hid, and until when.
+type InsightHiddenFindingView struct {
+	FindingID string
+	Label     string
+	Status    string
 }
 
 type InsightFactView struct {
@@ -438,6 +450,27 @@ templ InsightFindings(view InsightsOverviewView) {
 				}
 			</ol>
 		}
+		if len(view.HiddenFindings) > 0 {
+			<details class="insight-hidden">
+				<summary>{ fmt.Sprint(len(view.HiddenFindings)) } hidden { insights.Plural(len(view.HiddenFindings), "finding", "findings") }</summary>
+				<ul>
+					for _, hidden := range view.HiddenFindings {
+						<li>
+							<div>
+								<strong>{ hidden.Label }</strong>
+								<small>{ hidden.Status }</small>
+							</div>
+							if view.CanHideFindings {
+								<form hx-post="/ui/insights/feedback/remove" hx-swap="none">
+									<input type="hidden" name="id" value={ hidden.FindingID }/>
+									<button class="button outline compact" type="submit" data-replica-primary-action>Show Again</button>
+								</form>
+							}
+						</li>
+					}
+				</ul>
+			</details>
+		}
 	</section>
 	for _, finding := range view.Findings {
 		@InsightEvidence(finding, view)
@@ -525,7 +558,29 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				}
 			</section>
 		}
+		if view.CanHideFindings && finding.FindingID != "" {
+			@insightFeedback(finding)
+		}
 	}
+}
+
+// insightFeedback lets an operator hide a finding for now, for a week, or for
+// good because it is normal here. Hiding is shared by everyone who opens
+// Insights, and the finding comes back on its own when a snooze ends.
+templ insightFeedback(finding InsightFindingView) {
+	<form class="insight-feedback" hx-post="/ui/insights/feedback" hx-swap="none">
+		<input type="hidden" name="id" value={ finding.FindingID }/>
+		<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
+		<div>
+			<h3>Seen it?</h3>
+			<p>Hiding a finding hides it for everyone.</p>
+		</div>
+		<div class="insight-feedback-actions">
+			<button class="button outline compact" type="submit" name="action" value="dismiss" data-dialog-close data-replica-primary-action>Dismiss</button>
+			<button class="button outline compact" type="submit" name="action" value="snooze" data-dialog-close data-replica-primary-action>Snooze a Week</button>
+			<button class="button outline compact" type="submit" name="action" value="normal" data-dialog-close data-replica-primary-action>That's Normal</button>
+		</div>
+	</form>
 }
 
 func insightEvidenceHeader(finding InsightFindingView) DetailDrawerView {
@@ -900,8 +955,8 @@ templ InsightDevices(view InsightsOverviewView) {
 							<th scope="col">Type</th>
 							<th scope="col" class="right-cell">Queries</th>
 							<th scope="col" class="right-cell">Blocked</th>
-							<th scope="col" class="right-cell">First-time domains</th>
-							<th scope="col">First seen</th>
+							<th scope="col" class="right-cell insight-optional-cell">First-time domains</th>
+							<th scope="col" class="insight-optional-cell">First seen</th>
 							<th scope="col">Last seen</th>
 							<th scope="col"><span class="sr-only">Details</span></th>
 						</tr>
@@ -918,8 +973,8 @@ templ InsightDevices(view InsightsOverviewView) {
 								<td class={ ifThen(device.TypeConfidence == "low" || device.TypeLabel == "", "muted-cell", "") }>{ insightTypeText(device) }</td>
 								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
 								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
-								<td class="right-cell numeric-cell">{ formatNumber(device.NewDomains) }</td>
-								<td class="muted-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
+								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
+								<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
 								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
 								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
 							</tr>

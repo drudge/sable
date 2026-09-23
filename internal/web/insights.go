@@ -155,6 +155,17 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		func(analyzer insights.Analyzer, err error) {
 			server.logger.Warn("analyze insights", "analyzer", fmt.Sprintf("%T", analyzer), "error", err)
 		})
+	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
+	view.CanHideFindings = canRemember && console.CanWriteSettings
+	if canRemember {
+		feedback, err := feedbackStore.InsightFeedback(request.Context(), time.Now())
+		if err != nil {
+			server.logger.Warn("read insight feedback", "error", err)
+		}
+		var hidden []insights.Finding
+		findings, hidden = insights.Hide(findings, feedback, time.Now())
+		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
+	}
 	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], snapshot.Config)
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 
@@ -246,7 +257,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 	views := make([]pages.InsightFindingView, 0, len(findings))
 	for index, finding := range findings {
 		view := pages.InsightFindingView{
-			ID:   "insight-finding-" + strconv.Itoa(index+1),
+			ID: "insight-finding-" + strconv.Itoa(index+1), FindingID: finding.ID,
 			Kind: finding.Kind, Tone: string(finding.Tone), Icon: insightFindingIcon(finding.Kind),
 			Title: finding.Title, Subject: finding.Subject.Label, SubjectMonospace: finding.Subject.Monospace,
 			SubjectSource: finding.Subject.LabelSource,

@@ -3807,7 +3807,9 @@ dialog[open]::backdrop {
 .insight-device-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
 .insight-device-table .icon-button:hover { background: var(--accent); }
 .insight-device-table .muted-cell { white-space: nowrap; }
-.insight-device-cell { display: grid; min-width: 0; max-width: 26rem; gap: .2rem; }
+.insight-device-cell { display: grid; min-width: 11rem; max-width: 26rem; gap: .2rem; }
+/* Between phone and desktop widths the name matters more than history. */
+@media (max-width: 1100px) { .insight-device-table .insight-optional-cell { display: none; } }
 .insight-device-cell code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .insight-device-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }
 .insight-device-name strong { min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -3899,3 +3901,16 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .query-detail-answer .insight-type-reasons li code { border: 0; background: none; padding: 0; font-size: .78rem; overflow-wrap: anywhere; }
 .insight-type-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
 .insight-type-form .field-control { min-width: 12rem; flex: 1; }
+/* Hiding a finding: the drawer's last section and the card's hidden list. */
+.insight-feedback { display: grid; gap: .65rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
+.insight-feedback h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insight-feedback p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
+.insight-feedback-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.insight-hidden { border-top: 1px solid var(--border); padding: .75rem 1.25rem; }
+.insight-hidden > summary { width: fit-content; cursor: pointer; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
+.insight-hidden > summary:hover { color: var(--foreground); }
+.insight-hidden ul { display: grid; gap: .5rem; margin: .75rem 0 0; padding: 0; list-style: none; }
+.insight-hidden li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
+.insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
