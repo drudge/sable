@@ -126,10 +126,10 @@ func destinationFindings(input ChangesInput) []insights.Finding {
 			Subject: deviceSubject(device),
 			Summary: fmt.Sprintf("Queried %s %s for the first time during the selected period.",
 				insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain", "domains")),
-			Reasons: []string{
+			Reasons: insights.Reasons(
 				fmt.Sprintf("%s %s queried for the first time during the selected period", insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain was", "domains were")),
-				"Seen on the network for " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + ", so these are new to it",
-			},
+				"Seen on the network for "+insights.FormatDuration(input.Now.Sub(device.FirstSeen))+", so these are new to it",
+			),
 			Facts:        append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
 			Explanations: []string{"A software update or a newly installed app", "Someone started using a new service on this device"},
 			Method: "Sable remembers every domain each client has queried and reports a " + noun(device) +
@@ -174,11 +174,11 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 			Subject: deviceSubject(device),
 			Summary: fmt.Sprintf("Sent %s queries in the last 24 hours, %.1f× its daily average over the week before.",
 				insights.FormatCount(device.Recent), ratio),
-			Reasons: []string{
+			Reasons: insights.Reasons(
 				fmt.Sprintf("%s queries in the last 24 hours", insights.FormatCount(device.Recent)),
 				fmt.Sprintf("%.1f× its daily average of %s over the week before", ratio, insights.FormatCount(uint64(dailyAverage(device)+0.5))),
-				"Seen on the network for " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + ", so its week is a real baseline",
-			},
+				"Seen on the network for "+insights.FormatDuration(input.Now.Sub(device.FirstSeen))+", so its week is a real baseline",
+			),
 			Facts: append(deviceFacts(device, false),
 				insights.Fact{Label: "Last 24 hours", Value: insights.FormatCount(device.Recent)},
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
@@ -271,29 +271,29 @@ func deviceSubject(device Device) insights.Subject {
 	return insights.Subject{Label: Label(device), Monospace: device.Name == "", Device: device.Key}
 }
 
-func newDeviceReasons(device Device, input ChangesInput) []string {
-	reasons := []string{
-		"First seen " + insights.FormatDuration(input.Now.Sub(device.FirstSeen)) + " ago",
-		"Sable has been watching for " + insights.FormatDuration(input.Now.Sub(input.SeenSince)) + ", so it was not here before",
-	}
+func newDeviceReasons(device Device, input ChangesInput) []insights.Reason {
+	reasons := insights.Reasons(
+		"First seen "+insights.FormatDuration(input.Now.Sub(device.FirstSeen))+" ago",
+		"Sable has been watching for "+insights.FormatDuration(input.Now.Sub(input.SeenSince))+", so it was not here before",
+	)
 	switch {
 	case device.Named:
-		reasons = append(reasons, "Identified by the name you gave it")
+		reasons = append(reasons, insights.Reason{Text: "Identified by the name you gave it"})
 	case device.MAC != "":
-		reasons = append(reasons, "Identified by hardware address "+device.MAC)
+		reasons = append(reasons, insights.Reason{Text: "Identified by hardware address", Code: device.MAC})
 	default:
-		reasons = append(reasons, "Not tied to hardware yet, so it may be a known device at a new address")
+		reasons = append(reasons, insights.Reason{Text: "Not tied to hardware yet, so it may be a known device at a new address"})
 	}
 	return reasons
 }
 
-func quietReasons(device Device, now time.Time) []string {
-	reasons := []string{
+func quietReasons(device Device, now time.Time) []insights.Reason {
+	reasons := insights.Reasons(
 		"No queries in the last 24 hours",
 		fmt.Sprintf("Averaged %s a day over the week before", insights.FormatCount(uint64(dailyAverage(device)+0.5))),
-	}
+	)
 	if !device.LastSeen.IsZero() {
-		reasons = append(reasons, "Last query "+insights.FormatDuration(now.Sub(device.LastSeen))+" ago")
+		reasons = append(reasons, insights.Reason{Text: "Last query " + insights.FormatDuration(now.Sub(device.LastSeen)) + " ago"})
 	}
 	return reasons
 }

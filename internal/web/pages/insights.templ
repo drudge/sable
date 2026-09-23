@@ -127,7 +127,7 @@ type InsightFindingView struct {
 	Subject          string
 	SubjectMonospace bool
 	Summary          string
-	Reasons          []string
+	Reasons          []InsightReasonView
 	Explanations     []string
 	Facts            []InsightFactView
 	Clients          []RankedStatView
@@ -470,7 +470,16 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				if len(finding.Reasons) > 0 || len(finding.Explanations) > 0 {
 					<ul>
 						for _, reason := range finding.Reasons {
-							<li>@Icon("check")<span>{ reason }</span></li>
+							<li>
+								@Icon("check")
+								<span>
+									{ reason.Text }
+									if reason.Code != "" {
+										{ " " }
+										<code>{ reason.Code }</code>
+									}
+								</span>
+							</li>
 						}
 						// Possible causes sit in the same list, set apart only by a
 						// quieter icon and color, so they read as context rather than
@@ -1139,4 +1148,10 @@ func lowerFirst(text string) string {
 		return text
 	}
 	return strings.ToLower(text[:1]) + text[1:]
+}
+
+// InsightReasonView is one reason, with DNS or network data set apart as code.
+type InsightReasonView struct {
+	Text string
+	Code string
 }

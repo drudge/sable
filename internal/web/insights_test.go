@@ -252,7 +252,7 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		"Little unique coverage", "100% of this list&#39;s domains are also covered by Alpha.",
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
 		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", `class="insight-cause"`, "Could be ",
-		"Why Sable surfaced this", "Now allowed by telemetry.example.com", "Blocked 3 times during the selected period",
+		"Why Sable surfaced this", "Blocked 3 times during the selected period",
 		"george-laptop.corp.example",
 		`<th scope="col" class="right-cell">Queries blocked</th>`,
 		// Alpha matched both blocked ads.example queries; Beta shared one.
@@ -262,6 +262,10 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		if !strings.Contains(body, expected) {
 			t.Errorf("overview is missing %q", expected)
 		}
+	}
+	// DNS data in a reason is set in monospace after its text.
+	if !regexp.MustCompile(`Now allowed by\s+<code>telemetry\.example\.com</code>`).MatchString(body) {
+		t.Error("the allow rule in a reason is not set as code")
 	}
 	for _, advice := range []string{"remove this list", "Remove list", "should remove"} {
 		if strings.Contains(body, advice) {

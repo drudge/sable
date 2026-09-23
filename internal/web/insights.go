@@ -246,7 +246,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 			ID:   "insight-finding-" + strconv.Itoa(index+1),
 			Kind: finding.Kind, Tone: string(finding.Tone), Icon: insightFindingIcon(finding.Kind),
 			Title: finding.Title, Subject: finding.Subject.Label, SubjectMonospace: finding.Subject.Monospace,
-			Summary: finding.Summary, Reasons: finding.Reasons, Explanations: finding.Explanations, Method: finding.Method,
+			Summary: finding.Summary, Explanations: finding.Explanations, Method: finding.Method,
 			Destination: finding.Destination, DestinationLabel: finding.DestinationLabel,
 		}
 		for _, fact := range finding.Facts {
@@ -254,6 +254,9 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 		}
 		if finding.Query != nil {
 			view.Query = &pages.InsightQueryView{Name: finding.Query.Name, ClientIP: finding.Query.ClientIP, Blocked: finding.Query.Blocked}
+		}
+		for _, reason := range finding.Reasons {
+			view.Reasons = append(view.Reasons, pages.InsightReasonView{Text: reason.Text, Code: reason.Code})
 		}
 		view.DeviceKey = finding.Subject.Device
 		for _, domain := range finding.Domains {

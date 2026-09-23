@@ -216,7 +216,7 @@ func unreadableFindings(contribution Contribution) []insights.Finding {
 			Title:            "Block list left out of the comparison",
 			Subject:          insights.Subject{Label: list.Name, BlockList: list.Name},
 			Summary:          list.Problem + ", so its coverage could not be compared with the other lists.",
-			Reasons:          []string{list.Problem, "Its domains are left out of every other list's comparison until it can be read"},
+			Reasons:          insights.Reasons(list.Problem, "Its domains are left out of every other list's comparison until it can be read"),
 			Explanations:     []string{"The list has not finished its first download", "Its cached file was removed or damaged"},
 			Method:           "The comparison reads each list's cached copy, the same file blocking is compiled from.",
 			Destination:      "/blocked?tab=lists",
@@ -344,44 +344,44 @@ func rankedCounts(values map[string]uint64, limit int) []insights.Count {
 	return counts[:min(len(counts), limit)]
 }
 
-func pastBlockReasons(block PastBlock) []string {
+func pastBlockReasons(block PastBlock) []insights.Reason {
 	evidence := block.Evidence
-	reasons := []string{
-		fmt.Sprintf("Blocked %s %s during the selected period", insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times")),
-		"Now allowed by " + block.Rule,
+	reasons := []insights.Reason{
+		{Text: fmt.Sprintf("Blocked %s %s during the selected period", insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times"))},
+		{Text: "Now allowed by", Code: block.Rule},
 	}
 	if evidence.ClientCount > 0 {
-		reasons = append(reasons, fmt.Sprintf("Affected %s %s", insights.FormatCount(evidence.ClientCount), insights.Plural(evidence.ClientCount, "client", "clients")))
+		reasons = append(reasons, insights.Reason{Text: fmt.Sprintf("Affected %s %s", insights.FormatCount(evidence.ClientCount), insights.Plural(evidence.ClientCount, "client", "clients"))})
 	}
 	return reasons
 }
 
-func updateReasons(health blockcompiler.SourceHealth, now time.Time, interval time.Duration) []string {
-	reasons := []string{fmt.Sprintf("%s %s failed in a row", insights.FormatCount(uint64(health.ConsecutiveFailures)),
-		insights.Plural(health.ConsecutiveFailures, "update", "updates"))}
+func updateReasons(health blockcompiler.SourceHealth, now time.Time, interval time.Duration) []insights.Reason {
+	reasons := insights.Reasons(fmt.Sprintf("%s %s failed in a row", insights.FormatCount(uint64(health.ConsecutiveFailures)),
+		insights.Plural(health.ConsecutiveFailures, "update", "updates")))
 	if health.LastSuccess.IsZero() {
-		reasons = append(reasons, "Never downloaded successfully")
+		reasons = append(reasons, insights.Reasons("Never downloaded successfully")...)
 	} else {
-		reasons = append(reasons, "Newest cached copy is "+insights.FormatDuration(now.Sub(health.LastSuccess))+" old",
-			fmt.Sprintf("That is more than %d update intervals of %s", staleUpdateIntervals, insights.FormatDuration(interval)))
+		reasons = append(reasons, insights.Reasons("Newest cached copy is "+insights.FormatDuration(now.Sub(health.LastSuccess))+" old",
+			fmt.Sprintf("That is more than %d update intervals of %s", staleUpdateIntervals, insights.FormatDuration(interval)))...)
 	}
 	return reasons
 }
 
-func coverageReasons(list ListContribution, queries *SourceQueries) []string {
-	reasons := []string{
+func coverageReasons(list ListContribution, queries *SourceQueries) []insights.Reason {
+	reasons := insights.Reasons(
 		fmt.Sprintf("%s of its %s domains are in no other enabled list",
 			insights.FormatCount(uint64(list.Unique)), insights.FormatCount(uint64(list.Domains))),
-		insights.FormatShare(uint64(list.Covered), uint64(list.Domains)) + " are also covered by other lists",
-	}
+		insights.FormatShare(uint64(list.Covered), uint64(list.Domains))+" are also covered by other lists",
+	)
 	if list.LargestOverlap.Name != "" {
-		reasons = append(reasons, fmt.Sprintf("Largest overlap is %s, at %s", list.LargestOverlap.Name,
-			insights.FormatShare(uint64(list.LargestOverlap.Domains), uint64(list.Domains))))
+		reasons = append(reasons, insights.Reason{Text: fmt.Sprintf("Largest overlap is %s, at %s", list.LargestOverlap.Name,
+			insights.FormatShare(uint64(list.LargestOverlap.Domains), uint64(list.Domains)))})
 	}
 	if queries != nil && queries.Since.IsZero() {
 		sole := queries.Lists[list.Name].Sole
-		reasons = append(reasons, fmt.Sprintf("Alone blocked %s %s during the selected period",
-			insights.FormatCount(sole), insights.Plural(sole, "query", "queries")))
+		reasons = append(reasons, insights.Reason{Text: fmt.Sprintf("Alone blocked %s %s during the selected period",
+			insights.FormatCount(sole), insights.Plural(sole, "query", "queries"))})
 	}
 	return reasons
 }

@@ -3745,6 +3745,7 @@ dialog[open]::backdrop {
 .insight-why li { display: flex; align-items: flex-start; gap: .55rem; font-size: .8125rem; line-height: 1.4; }
 .insight-why li .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
 .dark .insight-why li .nav-icon { color: #22c55e; }
+.insight-why li code { font-size: .78rem; overflow-wrap: anywhere; }
 .insight-why li.insight-cause { color: var(--muted-foreground); }
 .insight-why li.insight-cause .nav-icon, .dark .insight-why li.insight-cause .nav-icon { color: var(--muted-foreground); }
 .insight-method { margin-top: .1rem; }

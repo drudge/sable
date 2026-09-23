@@ -67,6 +67,23 @@ type DomainEvidence struct {
 	Query     *QueryFilter
 }
 
+// Reason is one observation behind a finding. Code holds DNS or network data
+// the reason names, such as a hardware address or a domain, which the console
+// sets in a monospace face after the text.
+type Reason struct {
+	Text string
+	Code string
+}
+
+// Reasons turns plain statements into reasons.
+func Reasons(texts ...string) []Reason {
+	reasons := make([]Reason, 0, len(texts))
+	for _, text := range texts {
+		reasons = append(reasons, Reason{Text: text})
+	}
+	return reasons
+}
+
 // Subject is what a finding is about. The label is for display; the typed
 // references identify the subject durably, so a later dismissal, correction,
 // or label can attach to the thing itself rather than to its display text.
@@ -110,7 +127,7 @@ type Finding struct {
 	Summary string
 	// Reasons are the individual observations behind the finding, each one a
 	// short statement the operator can check against the facts below it.
-	Reasons []string
+	Reasons []Reason
 	Facts   []Fact
 	// Clients lists the clients the evidence involves, busiest first.
 	Clients []Count
