@@ -14,41 +14,44 @@ const (
 	dashboardInsightQueryTimeout = 5 * time.Second
 )
 
-type dashboardInsightCacheEntry struct {
-	insights querylog.Insights
+type windowCacheEntry[T any] struct {
+	insights T
 	window   insightWindow
 	expires  time.Time
 }
 
-type dashboardInsightFlight struct {
+type windowCacheFlight[T any] struct {
 	done     chan struct{}
-	insights querylog.Insights
+	insights T
 	window   insightWindow
 	err      error
 }
 
-// dashboardInsightCache shares one exact aggregation across every console
-// session looking at the same preset range. The gate also keeps different
-// ranges from launching competing GROUP BY scans against the query log.
-type dashboardInsightCache struct {
+// windowCache shares one exact aggregation across every console session
+// looking at the same preset range. The gate also keeps different ranges from
+// launching competing GROUP BY scans against the query log.
+type windowCache[T any] struct {
 	mu      sync.Mutex
-	entries map[string]dashboardInsightCacheEntry
-	flights map[string]*dashboardInsightFlight
+	entries map[string]windowCacheEntry[T]
+	flights map[string]*windowCacheFlight[T]
 	gate    chan struct{}
 }
 
-func (cache *dashboardInsightCache) load(
+// dashboardInsightCache holds the dashboard rankings and distributions.
+type dashboardInsightCache = windowCache[querylog.Insights]
+
+func (cache *windowCache[T]) load(
 	ctx context.Context,
 	window insightWindow,
-	load func(context.Context, time.Time, time.Time) (querylog.Insights, error),
-) (querylog.Insights, insightWindow, error) {
+	load func(context.Context, time.Time, time.Time) (T, error),
+) (T, insightWindow, error) {
 	key, cacheable := dashboardInsightCacheKey(window)
 	now := time.Now()
 
 	cache.mu.Lock()
 	if cache.entries == nil {
-		cache.entries = make(map[string]dashboardInsightCacheEntry)
-		cache.flights = make(map[string]*dashboardInsightFlight)
+		cache.entries = make(map[string]windowCacheEntry[T])
+		cache.flights = make(map[string]*windowCacheFlight[T])
 		cache.gate = make(chan struct{}, 1)
 	}
 	if entry, found := cache.entries[key]; cacheable && found && now.Before(entry.expires) {
@@ -61,10 +64,11 @@ func (cache *dashboardInsightCache) load(
 		case <-flight.done:
 			return flight.insights, flight.window, flight.err
 		case <-ctx.Done():
-			return querylog.Insights{}, insightWindow{}, ctx.Err()
+			var empty T
+			return empty, insightWindow{}, ctx.Err()
 		}
 	}
-	flight := &dashboardInsightFlight{done: make(chan struct{})}
+	flight := &windowCacheFlight[T]{done: make(chan struct{})}
 	cache.flights[key] = flight
 	gate := cache.gate
 	cache.mu.Unlock()
@@ -82,7 +86,7 @@ func (cache *dashboardInsightCache) load(
 
 	cache.mu.Lock()
 	if flight.err == nil && cacheable {
-		cache.entries[key] = dashboardInsightCacheEntry{
+		cache.entries[key] = windowCacheEntry[T]{
 			insights: flight.insights,
 			window:   window,
 			expires:  time.Now().Add(dashboardInsightCacheTTL),

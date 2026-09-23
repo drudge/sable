@@ -15,6 +15,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/zone"
 )
@@ -58,6 +59,9 @@ type unifiSyncer struct {
 	now           func() time.Time
 	// newReader is swapped in tests to avoid contacting a controller.
 	newReader func(unifi.Options) (unifiInventoryReader, error)
+	// identities remembers which hardware address each host address belongs
+	// to, so Insights can follow a device across address changes. Nil skips it.
+	identities func(context.Context, []querylog.ClientIdentity) error
 
 	wake chan struct{}
 
@@ -277,6 +281,11 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	inventory, err := reader.Inventory(ctx)
 	if err != nil {
 		return unifi.Plan{}, 0, err
+	}
+	if !preview && syncer.identities != nil {
+		if err := syncer.identities(ctx, unifiIdentities(inventory, syncer.now())); err != nil {
+			syncer.logger.Warn("record UniFi client identities", "error", err)
+		}
 	}
 	desired, skipped, err := desiredUniFiRecords(settings, inventory)
 	if err != nil {
@@ -600,4 +609,26 @@ func compareUniFiPlanRecords(left, right unifi.PlanRecord) int {
 		return compared
 	}
 	return strings.Compare(left.Value, right.Value)
+}
+
+// unifiIdentitySource labels identities learned from a UniFi controller.
+const unifiIdentitySource = "unifi"
+
+// unifiIdentities ties every address the controller reported to its host's
+// hardware address and name.
+func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.ClientIdentity {
+	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts))
+	for _, host := range inventory.Hosts {
+		addresses := append([]netip.Addr{host.Address}, host.IPv6...)
+		for _, address := range addresses {
+			if !address.IsValid() || host.MAC == "" {
+				continue
+			}
+			identities = append(identities, querylog.ClientIdentity{
+				Address: address.Unmap().WithZone("").String(), MAC: host.MAC,
+				Source: unifiIdentitySource, Hostname: host.Hostname, SeenAt: now,
+			})
+		}
+	}
+	return identities
 }

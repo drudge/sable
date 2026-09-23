@@ -1,6 +1,10 @@
 package main
 
-import "github.com/drudge/sable/internal/querylog"
+import (
+	"time"
+
+	"github.com/drudge/sable/internal/querylog"
+)
 
 // The demo deployment belongs to Vandelay Industries, an importer and exporter
 // of latex. Everything here is invented so the console can be photographed
@@ -43,32 +47,36 @@ type unifiHost struct {
 }
 
 var unifiHosts = []unifiHost{
-	{"74:83:c2:11:04:a1", "art-workstation", "10.20.10.11", corporateNetworkID, true},
-	{"74:83:c2:11:04:a2", "george-laptop", "10.20.10.12", corporateNetworkID, true},
-	{"74:83:c2:11:04:a3", "elaine-macbook", "10.20.10.13", corporateNetworkID, true},
-	{"74:83:c2:11:04:a4", "kramer-imac", "10.20.10.14", corporateNetworkID, true},
-	{"74:83:c2:11:04:a5", "newman-desktop", "10.20.10.15", corporateNetworkID, true},
-	{"74:83:c2:11:04:a6", "reception-imac", "10.20.10.16", corporateNetworkID, true},
-	{"74:83:c2:11:04:a7", "payroll-server", "10.20.10.20", corporateNetworkID, true},
-	{"74:83:c2:11:04:a8", "backup-nas", "10.20.10.21", corporateNetworkID, true},
-	{"9c:8e:cd:22:07:b1", "latex-press-01", "10.20.20.21", warehouseNetworkID, true},
-	{"9c:8e:cd:22:07:b2", "latex-press-02", "10.20.20.22", warehouseNetworkID, true},
-	{"9c:8e:cd:22:07:b3", "shipping-scanner", "10.20.20.30", warehouseNetworkID, true},
-	{"9c:8e:cd:22:07:b4", "loading-dock-pc", "10.20.20.31", warehouseNetworkID, true},
-	{"9c:8e:cd:22:07:b5", "forklift-tablet", "10.20.20.32", warehouseNetworkID, true},
-	{"b8:27:eb:33:0c:c1", "lobby-thermostat", "10.20.30.41", iotNetworkID, true},
-	{"b8:27:eb:33:0c:c2", "dock-camera-01", "10.20.30.42", iotNetworkID, true},
-	{"b8:27:eb:33:0c:c3", "dock-camera-02", "10.20.30.43", iotNetworkID, true},
-	{"b8:27:eb:33:0c:c4", "breakroom-display", "10.20.30.44", iotNetworkID, true},
-	{"b8:27:eb:33:0c:c5", "espresso-machine", "10.20.30.45", iotNetworkID, true},
-	{"3c:22:fb:55:11:d1", "jerry-thinkpad", "10.20.10.132", corporateNetworkID, false},
-	{"3c:22:fb:55:11:d2", "morty-surface", "10.20.10.145", corporateNetworkID, false},
+	{"00:08:74:11:04:a1", "art-workstation", "10.20.10.11", corporateNetworkID, true},
+	{"10:c5:95:11:04:a2", "george-laptop", "10.20.10.12", corporateNetworkID, true},
+	{"3c:22:fb:11:04:a3", "elaine-macbook", "10.20.10.13", corporateNetworkID, true},
+	{"3c:22:fb:11:04:a4", "kramer-imac", "10.20.10.14", corporateNetworkID, true},
+	{"00:08:74:11:04:a5", "newman-desktop", "10.20.10.15", corporateNetworkID, true},
+	{"3c:22:fb:11:04:a6", "reception-imac", "10.20.10.16", corporateNetworkID, true},
+	{"00:0b:db:11:04:a7", "payroll-server", "10.20.10.20", corporateNetworkID, true},
+	{"00:11:32:11:04:a8", "backup-nas", "10.20.10.21", corporateNetworkID, true},
+	// Works office hours; last night it woke up at 3 AM.
+	{"00:0b:db:11:04:a9", "file-server", "10.20.10.22", corporateNetworkID, true},
+	{"00:01:e6:22:07:b1", "latex-press-01", "10.20.20.21", warehouseNetworkID, true},
+	{"00:01:e6:22:07:b2", "latex-press-02", "10.20.20.22", warehouseNetworkID, true},
+	{"00:05:12:22:07:b3", "shipping-scanner", "10.20.20.30", warehouseNetworkID, true},
+	{"00:0d:56:22:07:b4", "loading-dock-pc", "10.20.20.31", warehouseNetworkID, true},
+	{"00:07:4d:22:07:b5", "forklift-tablet", "10.20.20.32", warehouseNetworkID, true},
+	{"44:61:32:33:0c:c1", "lobby-thermostat", "10.20.30.41", iotNetworkID, true},
+	{"9c:8e:cd:33:0c:c2", "dock-camera-01", "10.20.30.42", iotNetworkID, true},
+	{"9c:8e:cd:33:0c:c3", "dock-camera-02", "10.20.30.43", iotNetworkID, true},
+	{"00:07:ab:33:0c:c4", "breakroom-display", "10.20.30.44", iotNetworkID, true},
+	{"a4:cf:12:33:0c:c5", "espresso-machine", "10.20.30.45", iotNetworkID, true},
+	// Installed two days ago; Insights reports it as a new device.
+	{"34:3e:a4:33:0c:c6", "front-door-doorbell", "10.20.30.46", iotNetworkID, false},
+	{"10:c5:95:55:11:d1", "jerry-thinkpad", "10.20.10.132", corporateNetworkID, false},
+	{"00:0d:3a:55:11:d2", "morty-surface", "10.20.10.145", corporateNetworkID, false},
 	{"3c:22:fb:55:11:d3", "helen-ipad", "10.20.10.151", corporateNetworkID, false},
 	{"3c:22:fb:55:11:d4", "susan-laptop", "10.20.10.158", corporateNetworkID, false},
-	{"3c:22:fb:55:11:d5", "puddy-pixel", "10.20.10.164", corporateNetworkID, false},
-	{"f0:9f:c2:66:22:e1", "warehouse-handheld-04", "10.20.20.118", warehouseNetworkID, false},
-	{"f0:9f:c2:66:22:e2", "warehouse-handheld-07", "10.20.20.126", warehouseNetworkID, false},
-	{"f0:9f:c2:66:22:e3", "pallet-printer", "10.20.20.140", warehouseNetworkID, false},
+	{"00:1a:11:55:11:d5", "puddy-pixel", "10.20.10.164", corporateNetworkID, false},
+	{"00:05:12:66:22:e1", "warehouse-handheld-04", "10.20.20.118", warehouseNetworkID, false},
+	{"00:05:12:66:22:e2", "warehouse-handheld-07", "10.20.20.126", warehouseNetworkID, false},
+	{"00:1b:a9:66:22:e3", "pallet-printer", "10.20.20.140", warehouseNetworkID, false},
 	{"dc:a6:32:77:33:f1", "hallway-sensor-03", "10.20.30.112", iotNetworkID, false},
 	{"dc:a6:32:77:33:f2", "roof-weather-station", "10.20.30.119", iotNetworkID, false},
 	{"a4:cf:12:88:44:01", "vendor-laptop", "10.20.40.104", guestNetworkID, false},
@@ -104,7 +112,7 @@ var queryClients = []clientWeight{
 	{"10.20.10.16", 44}, {"10.20.10.145", 40}, {"10.20.10.151", 36}, {"10.20.10.158", 33},
 	{"10.20.10.164", 30}, {"10.20.20.21", 48}, {"10.20.20.22", 45}, {"10.20.20.30", 38},
 	{"10.20.20.31", 30}, {"10.20.20.32", 26}, {"10.20.20.118", 22}, {"10.20.20.126", 20},
-	{"10.20.20.140", 14}, {"10.20.30.41", 26}, {"10.20.30.42", 24}, {"10.20.30.43", 23},
+	{"10.20.20.140", 14}, {"10.20.30.41", 26}, {"10.20.30.42", 24},
 	{"10.20.30.44", 18}, {"10.20.30.45", 16}, {"10.20.30.112", 14}, {"10.20.30.119", 12},
 	{"10.20.40.104", 20}, {"10.20.40.111", 15},
 }
@@ -178,13 +186,49 @@ type blockListSource struct {
 	URL    string
 	Count  int
 	Format string
+	// Shared lists entries copied from lists generated before this one. Real
+	// block lists draw on many of the same upstream feeds, and Insights has
+	// nothing to say about overlap unless the demo lists overlap too.
+	Shared []sharedEntries
+	// Pinned entries are always in the list, so the blocked traffic the demo
+	// seeds is attributed to real list contents rather than invented sources.
+	Pinned []string
+}
+
+// sharedEntries is how many of a list's entries also appear in another list.
+type sharedEntries struct {
+	From  string
+	Count int
 }
 
 var blockListSources = []blockListSource{
-	{"OISD Big", "https://big.oisd.nl/", 182_000, "domains"},
-	{"Steven Black Unified", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", 128_000, "hosts"},
-	{"AdGuard DNS Filter", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 54_000, "adblock"},
+	{"OISD Big", "https://big.oisd.nl/", 182_000, "domains", nil,
+		[]string{"adzone447.clickly.com", "track88.pixelnet.io", "beacon-admetric12.net", "stat.trackr-193.co"}},
+	{"Steven Black Unified", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts", 128_000, "hosts",
+		[]sharedEntries{{From: "OISD Big", Count: 71_000}},
+		[]string{"track88.pixelnet.io", "stat.trackr-193.co", "cdn.jpeterman-catalog.com", "telemetry.jpeterman-catalog.com"}},
+	// Nearly everything in the smallest list is already covered by the other
+	// two, which is the overlap finding the Insights screenshot shows.
+	{"AdGuard DNS Filter", "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt", 54_000, "adblock",
+		[]sharedEntries{{From: "OISD Big", Count: 38_500}, {From: "Steven Black Unified", Count: 15_150}},
+		[]string{"adzone447.clickly.com", "imp2201.bidhub.cloud"}},
 }
+
+// pastBlock is a name that was blocked before an operator allowed it. Its
+// history is seeded days back so Insights can show the correction as evidence.
+type pastBlock struct {
+	name    string
+	clients []clientWeight
+	count   int
+	// from and to bound the days ago the blocked queries were spread across.
+	from, to int
+}
+
+var pastBlocks = []pastBlock{{
+	name:    "cdn.jpeterman-catalog.com",
+	clients: []clientWeight{{"10.20.10.132", 6}, {"10.20.10.145", 3}, {"10.20.20.21", 2}},
+	count:   143, from: 12, to: 9,
+}}
 
 // clusterNode describes one Sable server in the demo deployment.
 type clusterNode struct {
@@ -210,3 +254,55 @@ const (
 	// fixture rather than a secret.
 	operatorPassword = "LatexImporter2026!"
 )
+
+// deviceStory scripts one device's history so Insights has something true to
+// say about it: a device that went quiet, one that got busy, one that is new,
+// and one that started talking to new places.
+type deviceStory struct {
+	address string
+	domains []string
+	// perDay queries are spread across each day from daysFrom to daysTo ago,
+	// and recent more across the last day.
+	perDay           int
+	daysFrom, daysTo int
+	recent           int
+	// established devices share the office's long history, so only their
+	// recent change is news.
+	established bool
+	// officeHours keeps the daily queries between 9 AM and 5 PM local time.
+	officeHours bool
+	// nightBurst queries land between 3 and 4 AM last night.
+	nightBurst int
+	// newDomains are queried for the first time during the last day.
+	newDomains []string
+	// heartbeat is looked up every heartbeatEvery through the last day.
+	heartbeat      string
+	heartbeatEvery time.Duration
+}
+
+var deviceStories = []deviceStory{
+	// dock-camera-02 streamed steadily all week and stopped yesterday.
+	{address: "10.20.30.43", domains: []string{"stream.dockcam-cloud.net", "ntp.ubnt.com"}, perDay: 160, daysFrom: 9, daysTo: 1, established: true},
+	// The breakroom display normally checks in a little; today it is looping.
+	{address: "10.20.30.44", domains: []string{"api.breakroom-signage.io", "cdn.breakroom-signage.io"}, perDay: 110, daysFrom: 9, daysTo: 1, recent: 1_450, established: true},
+	// dock-camera-01 streams every day; since yesterday it also calls a
+	// relay service it never used before.
+	{address: "10.20.30.42", domains: []string{"stream.dockcam-cloud.net", "ntp.ubnt.com"}, perDay: 90, daysFrom: 9, daysTo: 0, established: true,
+		newDomains: []string{"relay.p2p-camlink.net", "api.p2p-camlink.net", "cfg.camlink-cn.com", "update.camlink-cn.com", "stun.camlink-cn.com"}},
+	// The file server keeps office hours and woke up at 3 AM last night.
+	{address: "10.20.10.22", domains: []string{"sync.vandelay.com", "s3.amazonaws.com", "time.apple.com"}, perDay: 80, daysFrom: 16, daysTo: 0,
+		established: true, officeHours: true, nightBurst: 180},
+	// The hallway sensor phones home every ten minutes, day and night.
+	{address: "10.20.30.112", domains: []string{"ntp.ubnt.com"}, established: true,
+		heartbeat: "c2.sensorhub-telemetry.io", heartbeatEvery: 10 * time.Minute},
+	// The doorbell was installed two days ago.
+	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
+}
+
+// georgeNewDomains are the collaboration tools George started using this week.
+var georgeNewDomains = []string{
+	"zoom.us", "us02web.zoom.us", "api.zoom.us", "figma.com", "www.figma.com", "static.figma.com",
+	"api.notion.com", "www.notion.so", "msgstore.www.notion.so", "calendly.com", "assets.calendly.com",
+	"api.loom.com", "cdn.loom.com", "app.asana.com", "api.asana.com", "miro.com", "api.miro.com",
+	"linear.app", "api.linear.app", "cdn.linear.app", "docusign.net", "account.docusign.com",
+}

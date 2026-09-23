@@ -656,6 +656,39 @@ transaction as the raw events. Dashboard rankings therefore count the exact
 selected time range even when it spans far more rows than one log page. Raw
 event retention and rollup retention follow query-log retention together.
 
+## Devices and Insights
+
+```toml
+[[clients]]
+name = "Front door"
+mac = "34:3e:a4:33:0c:c6"
+type = "doorbell"
+
+[insights.webhook]
+url = "https://ntfy.sh/your-topic"
+format = "text"
+```
+
+Each `[[clients]]` entry is what an operator told Sable about one device,
+matched by `mac` when the device has a hardware address or by `address`, which
+takes an IP address or a CIDR network. `name` replaces every name Sable
+discovers, and `type` replaces Sable's guess of what the device is. Either may
+be set alone. The Insights device drawer writes both, so most people never edit
+these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
+`streaming-player`, `smart-speaker`, `speaker`, `camera`, `doorbell`,
+`game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
+`smart-plug`, `smart-home`, and `watch`.
+
+`[insights.webhook]` sends each new Insights finding worth a look to a URL,
+once, and skips anything an operator dismissed, snoozed, or marked normal. The
+`json` format (the default) posts an object with the finding's kind, subject,
+summary, and reasons, plus `text` and `content` fields that Slack and Discord
+show as the message. The `text` format posts the summary as plain text with a
+`Title` header, which suits ntfy. When a webhook is first set, Sable takes stock
+of what it already knows without sending it, so turning alerts on never floods
+the webhook with old news. Only the primary node sends alerts. The Insights
+Overview can set the webhook and send a test.
+
 ## Server logging
 
 ```toml

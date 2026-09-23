@@ -27,6 +27,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsserver"
+	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
@@ -72,45 +73,52 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames       *reverseNameCache
-	reload             func(context.Context) error
-	auth               Authenticator
-	sso                ssoController
-	ssoAdmin           ssoAdministration
-	ssoStateStore      *ssoStateStore
-	preAuthTokens      *preAuthTokenStore
-	passkeyCeremonies  passkeyCeremonyStore
-	crossOrigin        *http.CrossOriginProtection
-	securityEnabled    bool
-	secureCookies      bool
-	sessionCookie      string
-	setupRequired      atomic.Bool
-	history            *statsHistory
-	insightCache       dashboardInsightCache
-	historyPrune       chan struct{}
-	runtimeContext     context.Context
-	runtimeCancel      context.CancelFunc
-	runtimeLifecycleMu sync.Mutex
-	runtimeStarted     bool
-	runtimeClosed      bool
-	runtimeWG          sync.WaitGroup
-	runtimeWaitOnce    sync.Once
-	runtimeDone        chan struct{}
-	blockLists         *blockcompiler.Updater
-	dnssec             dnssecController
-	cluster            clusterController
-	dynamicDNS         dynamicDNSController
-	unifi              unifiController
-	certificates       certificateController
-	tsigKeys           tsigController
-	updates            updateController
-	backups            backupController
-	backupStaging      backupStaging
-	administrator      administrator
-	restart            func()
-	restartRequested   atomic.Bool
-	instanceID         string
-	demoLogin          devDemoAutoLoginState
+	reverseNames      *reverseNameCache
+	reload            func(context.Context) error
+	auth              Authenticator
+	sso               ssoController
+	ssoAdmin          ssoAdministration
+	ssoStateStore     *ssoStateStore
+	preAuthTokens     *preAuthTokenStore
+	passkeyCeremonies passkeyCeremonyStore
+	crossOrigin       *http.CrossOriginProtection
+	securityEnabled   bool
+	secureCookies     bool
+	sessionCookie     string
+	setupRequired     atomic.Bool
+	history           *statsHistory
+	insightCache      dashboardInsightCache
+	// blockingActivityCache and blockListAnalysis back the Insights page.
+	blockingActivityCache windowCache[querylog.BlockingActivity]
+	deviceActivityCache   windowCache[querylog.ClientActivityReport]
+	deviceSignalCache     windowCache[map[string][]string]
+	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
+	blockListAnalysis     blockinginsights.ContributionCache
+	baseDirectory         string
+	historyPrune          chan struct{}
+	runtimeContext        context.Context
+	runtimeCancel         context.CancelFunc
+	runtimeLifecycleMu    sync.Mutex
+	runtimeStarted        bool
+	runtimeClosed         bool
+	runtimeWG             sync.WaitGroup
+	runtimeWaitOnce       sync.Once
+	runtimeDone           chan struct{}
+	blockLists            *blockcompiler.Updater
+	dnssec                dnssecController
+	cluster               clusterController
+	dynamicDNS            dynamicDNSController
+	unifi                 unifiController
+	certificates          certificateController
+	tsigKeys              tsigController
+	updates               updateController
+	backups               backupController
+	backupStaging         backupStaging
+	administrator         administrator
+	restart               func()
+	restartRequested      atomic.Bool
+	instanceID            string
+	demoLogin             devDemoAutoLoginState
 }
 
 type devDemoAutoLoginState struct {
@@ -221,6 +229,7 @@ func New(
 	if located, ok := configuration.(interface{ BaseDirectory() string }); ok {
 		baseDirectory = located.BaseDirectory()
 	}
+	server.baseDirectory = baseDirectory
 	server.sessionCookie = scopedSessionCookieName(configuration.Current().Config.SecuritySecretKeyPath(baseDirectory))
 	server.configureDevDemoAutoLogin()
 	server.blockLists = blockcompiler.NewUpdater(baseDirectory)
@@ -234,6 +243,15 @@ func New(
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
+	mux.HandleFunc("GET /insights", server.insightsPage)
+	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
+	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
+	mux.HandleFunc("POST /ui/insights/devices/name", server.nameInsightsDevice)
+	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
+	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
+	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
+	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
@@ -1640,6 +1658,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.PolicyBlocked:
 		view.Policy = "Blocked by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
+			view.PolicyDetail += " from " + sources
+		}
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
 	}
@@ -1691,6 +1712,21 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		view.DNSSEC = "DNSSEC not validated"
 	}
 	return view
+}
+
+// joinSourceNames lists block sources in a sentence: "A", "A and B", or
+// "A, B, and C".
+func joinSourceNames(sources []string) string {
+	switch len(sources) {
+	case 0:
+		return ""
+	case 1:
+		return sources[0]
+	case 2:
+		return sources[0] + " and " + sources[1]
+	default:
+		return strings.Join(sources[:len(sources)-1], ", ") + ", and " + sources[len(sources)-1]
+	}
 }
 
 func matchedDecisionRule(rule string) string {

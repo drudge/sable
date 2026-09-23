@@ -13,13 +13,21 @@ import (
 )
 
 const (
-	queryLogRollupClient       = "client"
-	queryLogRollupDomain       = "domain"
-	queryLogRollupBlocked      = "blocked"
-	queryLogRollupRecordType   = "record_type"
-	queryLogRollupSource       = "source"
-	queryLogRollupResponseCode = "response_code"
-	queryLogRollupInsertRows   = 128
+	queryLogRollupClient  = "client"
+	queryLogRollupDomain  = "domain"
+	queryLogRollupBlocked = "blocked"
+	// queryLogRollupBlockedClient counts blocked queries per client so the
+	// Insights page can rank affected clients without scanning raw history.
+	queryLogRollupBlockedClient = "blocked_client"
+	// queryLogRollupBlockedSource counts blocked queries per block list that
+	// contained the matching rule, and queryLogRollupBlockedSoleSource counts
+	// the ones no other list would have blocked.
+	queryLogRollupBlockedSource     = "blocked_source"
+	queryLogRollupBlockedSoleSource = "blocked_sole_source"
+	queryLogRollupRecordType        = "record_type"
+	queryLogRollupSource            = "source"
+	queryLogRollupResponseCode      = "response_code"
+	queryLogRollupInsertRows        = 128
 )
 
 type queryLogRollupKey struct {
@@ -77,6 +85,13 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 		}
 		if event.Source == querylog.SourceBlocked {
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlocked, value: domain}]++
+			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedClient, value: client}]++
+			for _, source := range event.Decision.PolicySources {
+				counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedSource, value: source}]++
+			}
+			if len(event.Decision.PolicySources) == 1 {
+				counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedSoleSource, value: event.Decision.PolicySources[0]}]++
+			}
 		}
 	}
 	rollups := make([]queryLogRollup, 0, len(counts))

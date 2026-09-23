@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
 )
@@ -30,7 +34,7 @@ const (
 // seedTraffic fills the query log and the chart history. It runs before the
 // node starts, because the console adopts the stored lifetime totals as its
 // baseline at startup and would otherwise overwrite them on its first flush.
-func seedTraffic(ctx context.Context, dsn string) error {
+func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error {
 	backing, err := store.Open(ctx, "sqlite", dsn)
 	if err != nil {
 		return fmt.Errorf("open demo database: %w", err)
@@ -39,8 +43,17 @@ func seedTraffic(ctx context.Context, dsn string) error {
 
 	random := rand.New(rand.NewSource(20260820))
 	now := time.Now().Truncate(time.Second)
-	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now)); err != nil {
+	if err := backdateSourceRecording(ctx, dsn, now.Add(-deviceHistoryLength-24*time.Hour)); err != nil {
+		return err
+	}
+	if err := backing.WriteQueryEvents(ctx, seedQueryEvents(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo query events: %w", err)
+	}
+	if err := backing.WriteQueryEvents(ctx, seedPastBlocks(random, now, policy)); err != nil {
+		return fmt.Errorf("write demo past blocks: %w", err)
+	}
+	if err := backing.WriteQueryEvents(ctx, seedDeviceHistory(random, now, policy)); err != nil {
+		return fmt.Errorf("write demo device history: %w", err)
 	}
 	buckets, totals := seedChartHistory(random, now)
 	if err := backing.RecordQueryStats(ctx, buckets, totals); err != nil {
@@ -51,7 +64,7 @@ func seedTraffic(ctx context.Context, dsn string) error {
 	return nil
 }
 
-func seedQueryEvents(random *rand.Rand, now time.Time) []querylog.Event {
+func seedQueryEvents(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
 	clients := newWeightedClients(queryClients)
 	resolved := newWeightedDomains(resolvedDomains)
 	local := newWeightedDomains(localDomains)
@@ -69,12 +82,115 @@ func seedQueryEvents(random *rand.Rand, now time.Time) []querylog.Event {
 		default:
 			domain = resolved.pick(random)
 		}
-		events = append(events, seedQueryEvent(random, at, clients.pick(random), domain))
+		events = append(events, seedQueryEvent(random, at, clients.pick(random), domain, policy))
 	}
 	return events
 }
 
-func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain) querylog.Event {
+// seedPastBlocks writes the blocked queries behind each allowed override, spread
+// across the days before somebody allowed the name.
+func seedPastBlocks(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
+	events := make([]querylog.Event, 0)
+	for _, block := range pastBlocks {
+		clients := newWeightedClients(block.clients)
+		span := time.Duration(block.from-block.to) * 24 * time.Hour
+		start := now.Add(-time.Duration(block.from) * 24 * time.Hour)
+		for range block.count {
+			at := start.Add(time.Duration(random.Int63n(int64(span))))
+			events = append(events, querylog.Event{
+				OccurredAt: at, ClientIP: clients.pick(random).address, Name: block.name + ".",
+				RecordType: seedRecordType(random), Class: 1, ResponseCode: 3,
+				Source: querylog.SourceBlocked, Protocol: seedProtocol(random), Duration: microseconds(random, 120, 400),
+				Decision: policy.blockedDecision(block.name),
+			})
+		}
+	}
+	return events
+}
+
+// deviceHistoryLength is how long ago the office's regular devices first
+// appeared, well before the month Insights opens on.
+const deviceHistoryLength = 40 * 24 * time.Hour
+
+// seedDeviceHistory gives every regular device a history older than the
+// Insights window, so only the scripted stories read as new, then plays out
+// each device story.
+func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy) []querylog.Event {
+	events := make([]querylog.Event, 0)
+	known := make([]queryDomain, 0, len(resolvedDomains)+len(localDomains)+len(blockedTraffic))
+	known = append(append(append(known, resolvedDomains...), localDomains...), blockedTraffic...)
+	first := now.Add(-deviceHistoryLength)
+	for _, client := range queryClients {
+		for index, domain := range known {
+			at := first.Add(time.Duration(index) * time.Minute)
+			events = append(events, seedQueryEvent(random, at, client, domain, policy))
+		}
+	}
+	for _, story := range deviceStories {
+		client := clientWeight{address: story.address}
+		if story.established {
+			for index, name := range story.domains {
+				at := first.Add(time.Duration(index) * time.Minute)
+				events = append(events, seedQueryEvent(random, at, client, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
+			}
+		}
+		for day := story.daysFrom; day > story.daysTo; day-- {
+			start := now.Add(-time.Duration(day) * 24 * time.Hour)
+			span := 24 * time.Hour
+			if story.officeHours {
+				start = time.Date(start.Year(), start.Month(), start.Day(), 9, 0, 0, 0, start.Location())
+				span = 8 * time.Hour
+			}
+			for range story.perDay {
+				at := start.Add(time.Duration(random.Int63n(int64(span))))
+				if at.After(now) {
+					continue
+				}
+				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+				events = append(events, seedQueryEvent(random, at, client, domain, policy))
+			}
+		}
+		if story.nightBurst > 0 {
+			night := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+			if night.Add(time.Hour).After(now) {
+				night = night.Add(-24 * time.Hour)
+			}
+			for range story.nightBurst {
+				at := night.Add(time.Duration(random.Int63n(int64(time.Hour))))
+				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+				events = append(events, seedQueryEvent(random, at, client, domain, policy))
+			}
+		}
+		if story.heartbeat != "" {
+			for at := now.Add(-24 * time.Hour); at.Before(now); at = at.Add(story.heartbeatEvery) {
+				jittered := at.Add(time.Duration(random.Intn(10)-5) * time.Second)
+				events = append(events, seedQueryEvent(random, jittered, client, queryDomain{name: story.heartbeat, source: querylog.SourceUpstream}, policy))
+			}
+		}
+		for index, name := range story.newDomains {
+			at := now.Add(-20*time.Hour + time.Duration(index)*2*time.Hour)
+			for range 2 + random.Intn(4) {
+				events = append(events, seedQueryEvent(random, at.Add(time.Duration(random.Intn(3600))*time.Second), client, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
+			}
+		}
+		for range story.recent {
+			at := now.Add(-time.Duration(random.Int63n(int64(24 * time.Hour))))
+			domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+			events = append(events, seedQueryEvent(random, at, client, domain, policy))
+		}
+	}
+	// George's laptop picked up a batch of new tools in the last three days.
+	george := clientWeight{address: "10.20.10.12"}
+	for index, name := range georgeNewDomains {
+		at := now.Add(-72*time.Hour + time.Duration(index)*3*time.Hour)
+		for range 1 + random.Intn(6) {
+			events = append(events, seedQueryEvent(random, at.Add(time.Duration(random.Intn(3600))*time.Second), george, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
+		}
+	}
+	return events
+}
+
+func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain, policy *demoBlockPolicy) querylog.Event {
 	responseCode, answer, duration := 0, "", time.Duration(0)
 	switch domain.source {
 	case querylog.SourceBlocked:
@@ -98,14 +214,14 @@ func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain
 		OccurredAt: at, ClientIP: client.address, Name: domain.name + ".",
 		RecordType: seedRecordType(random), Class: 1, ResponseCode: responseCode,
 		Source: domain.source, Protocol: seedProtocol(random), Answer: answer, Duration: duration,
-		Decision: seedQueryDecision(domain),
+		Decision: seedQueryDecision(domain, policy),
 	}
 }
 
-func seedQueryDecision(domain queryDomain) querylog.Decision {
+func seedQueryDecision(domain queryDomain, policy *demoBlockPolicy) querylog.Decision {
 	switch domain.source {
 	case querylog.SourceBlocked:
-		return querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: domain.name + ".", Resolver: querylog.ResolverBlocked}
+		return policy.blockedDecision(domain.name)
 	case querylog.SourceAuthoritative:
 		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}
 	case querylog.SourceCache:
@@ -270,4 +386,61 @@ func (table *weighted[T]) pick(random *rand.Rand) T {
 		}
 	}
 	return table.items[len(table.items)-1]
+}
+
+// demoBlockPolicy answers which rule and which sources block a name, compiled
+// from the demo's own block list files so seeded decisions match what Sable
+// would record for the same query.
+type demoBlockPolicy struct {
+	owners map[string][]string
+}
+
+func loadDemoBlockPolicy(directory string, blocking config.Blocking) (*demoBlockPolicy, error) {
+	sources := make([]blockcompiler.Source, 0, len(blocking.Lists))
+	for _, list := range blocking.Lists {
+		sources = append(sources, blockcompiler.Source{Name: list.Name, Path: list.Path, Format: blockcompiler.Format(list.Format)})
+	}
+	compiled, err := blockcompiler.Compile(directory, blocking.Domains, sources)
+	if err != nil {
+		return nil, fmt.Errorf("compile demo block lists: %w", err)
+	}
+	policy := &demoBlockPolicy{owners: make(map[string][]string, len(compiled.Domains))}
+	for index, domain := range compiled.Domains {
+		policy.owners[domain] = compiled.OwnerSets[compiled.Owners[index]]
+	}
+	return policy, nil
+}
+
+func (policy *demoBlockPolicy) blockedDecision(name string) querylog.Decision {
+	decision := querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: name, Resolver: querylog.ResolverBlocked}
+	for candidate := name; candidate != ""; {
+		if sources, found := policy.owners[candidate]; found {
+			decision.PolicyRule, decision.PolicySources = candidate, sources
+			break
+		}
+		_, rest, cut := strings.Cut(candidate, ".")
+		if !cut {
+			break
+		}
+		candidate = rest
+	}
+	return decision
+}
+
+// backdateSourceRecording dates the start of block-source recording to the
+// start of the seeded history. The history is written after this database was
+// created, so without it every seeded query would predate the recording.
+func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) error {
+	database, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return fmt.Errorf("open demo database: %w", err)
+	}
+	defer database.Close()
+	if _, err := database.ExecContext(ctx,
+		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since')",
+		since.UTC().Format(time.RFC3339Nano),
+	); err != nil {
+		return fmt.Errorf("backdate demo source recording: %w", err)
+	}
+	return nil
 }

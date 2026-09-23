@@ -1,0 +1,1465 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/drudge/sable/internal/insights"
+	"github.com/drudge/sable/internal/querylog"
+)
+
+type InsightsPageView struct {
+	Console  DashboardView
+	Overview InsightsOverviewView
+}
+
+// InsightsOverviewView is everything the Overview shows for one window. Query
+// activity and list contents come from different permissions, so each section
+// is present only when the operator may read what it is built from.
+type InsightsOverviewView struct {
+	Range          string
+	RangeLabel     string
+	LogWindowQuery string
+	Loading        bool
+	LoadURL        string
+	TimeDisplay    TimeDisplay
+	CanLogs        bool
+	CanBlocking    bool
+	// BlockingEnabled is false when the policy is switched off, in which case
+	// nothing new is blocked however the lists compare.
+	BlockingEnabled     bool
+	QueryLogDisabled    bool
+	RetentionNote       string
+	ActivityUnavailable bool
+	ListsUnavailable    bool
+	Findings            []InsightFindingView
+	CheckedSummary      string
+	Activity            *InsightsActivityView
+	TopClients          []RankedStatView
+	TopDomains          []RankedStatView
+	// TopApps and BusiestDevices rank the whole network's traffic on the
+	// Overview, by app and by device rather than by domain and address.
+	TopApps        []RankedStatView
+	BusiestDevices []RankedStatView
+	Contribution        *InsightsContributionView
+	ActiveTab           string
+	CanNameDevices      bool
+	// Headline says what stands out in one sentence.
+	Headline string
+	// Alerts is the webhook setup, shown to operators who can change it.
+	Alerts *InsightAlertsView
+	// CanHideFindings is set for operators who may hide findings for everyone.
+	CanHideFindings bool
+	HiddenFindings  []InsightHiddenFindingView
+	DevicesUnavailable  bool
+	Devices             []InsightDeviceView
+	DeviceSummary       InsightDeviceSummaryView
+}
+
+// InsightDeviceView is one device with its traffic in the window.
+type InsightDeviceView struct {
+	Key        string
+	Label      string
+	Named      bool
+	NameSource string
+	// OperatorNamed is set when the name is one the operator gave in Sable.
+	OperatorNamed bool
+	MAC           string
+	PrivateMAC    bool
+	Addresses     []InsightDeviceAddressView
+	Queries       uint64
+	Blocked       uint64
+	NewDomains    uint64
+	FirstSeen     time.Time
+	LastSeen      time.Time
+	// New is set when the device was first seen inside the window and
+	// first-seen tracking covered that moment.
+	New bool
+	// Vendor is the maker of the device's network interface.
+	Vendor string
+	// Type is the device type Sable guessed or the operator set, with how
+	// sure the guess is and the evidence behind it.
+	Type           string
+	TypeLabel      string
+	TypeConfidence string
+	TypeReasons    []InsightReasonView
+	// TypeOptions lists the types an operator can choose from.
+	TypeOptions [][2]string
+	// DetectedLabel is the type Sable guesses on its own, if any.
+	DetectedLabel string
+}
+
+// InsightDeviceAddressView is one client address of a device and its own
+// counts, which a query log link for that address reproduces.
+type InsightDeviceAddressView struct {
+	Address string
+	Queries uint64
+	Blocked uint64
+}
+
+type InsightDeviceSummaryView struct {
+	Devices int
+	New     int
+	Named   int
+	Queries uint64
+	Blocked uint64
+}
+
+// InsightDeviceDomainView is one name a device queried. ClientIP is set when a
+// query log link for that single address reproduces the row.
+type InsightDeviceDomainView struct {
+	Name      string
+	ClientIP  string
+	Queries   uint64
+	Blocked   uint64
+	FirstSeen time.Time
+}
+
+// InsightDeviceDrawerView is the device drawer's content.
+type InsightDeviceDrawerView struct {
+	Range          string
+	LogWindowQuery string
+	TimeDisplay    TimeDisplay
+	CanName        bool
+	// Editing shows the name field in place of the drawer's title, and
+	// EditingType the type picker in place of the type.
+	Editing        bool
+	EditingType    bool
+	Message        string
+	Error          string
+	Missing        bool
+	Device         InsightDeviceView
+	TopDomains     []InsightDeviceDomainView
+	NewDomains     []InsightDeviceDomainView
+	Apps           []InsightAppView
+}
+
+// InsightAppView is one app a device used and how much.
+type InsightAppView struct {
+	Name     string
+	Category string
+	Queries  uint64
+	Domains  int
+}
+
+// InsightsActivityView holds exact counts of blocked queries in the window.
+type InsightsActivityView struct {
+	Queries        uint64
+	Blocked        uint64
+	BlockedDomains uint64
+	BlockedClients uint64
+}
+
+type InsightFindingView struct {
+	ID               string
+	Kind             string
+	Tone             string
+	Icon             string
+	Title            string
+	Subject          string
+	SubjectMonospace bool
+	// SubjectSource is where the subject's name came from, shown beside it.
+	SubjectSource string
+	Summary          string
+	Reasons          []InsightReasonView
+	Explanations     []string
+	Facts            []InsightFactView
+	Clients          []RankedStatView
+	Method           string
+	Query            *InsightQueryView
+	Destination      string
+	DestinationLabel string
+	DeviceKey        string
+	Domains          []InsightDeviceDomainView
+	// FindingID is the finding's stable identifier, which feedback is kept by.
+	FindingID string
+}
+
+// InsightHiddenFindingView is a finding an operator hid, and until when.
+type InsightHiddenFindingView struct {
+	FindingID string
+	Label     string
+	Status    string
+}
+
+type InsightFactView struct {
+	Label     string
+	Value     string
+	Time      time.Time
+	Monospace bool
+}
+
+// InsightQueryView names the query log rows a finding counted.
+type InsightQueryView struct {
+	Name     string
+	ClientIP string
+	Blocked  bool
+}
+
+type InsightsContributionView struct {
+	Analyzed   int
+	Domains    int
+	Unique     int
+	AnalyzedAt time.Time
+	Lists      []InsightListView
+	// HasQueries is set when blocked query counts per list are available,
+	// counted from QueriesSince when attribution began inside the window.
+	HasQueries   bool
+	QueriesSince time.Time
+	Custom       *InsightCustomSourceView
+}
+
+// InsightCustomSourceView is the operator's own blocked domains.
+type InsightCustomSourceView struct {
+	Domains int
+	Queries querylog.SourceActivity
+}
+
+type InsightListView struct {
+	Name                  string
+	Location              string
+	Available             bool
+	Problem               string
+	Domains               int
+	Unique                int
+	Covered               int
+	LargestOverlap        string
+	LargestOverlapDomains int
+	Queries               querylog.SourceActivity
+}
+
+var insightsRangeChoices = []RangeChoice{{"Day", "day"}, {"Week", "week"}, {"Month", "month"}, {"Year", "year"}}
+
+func insightsRangeControl(active string) RangeControlView {
+	return RangeControlView{
+		Label: "Insights time range", Active: active, Choices: insightsRangeChoices, IDPrefix: "insights-range",
+		URL: "/ui/insights/overview", SelectURL: "/ui/insights/overview", Target: "#insights-content",
+	}
+}
+
+var insightsTabOptions = []tabOption{
+	{"overview", "Overview", "lightbulb"},
+	{"devices", "Devices", "monitor-smartphone"},
+	{"blocking", "Blocking", "shield"},
+}
+
+templ InsightsPage(view InsightsPageView) {
+	@AppDocument(view.Console, documentTitle(tabLabel(insightsTabOptions, view.Overview.ActiveTab), "Insights"), "insights", insightsDocument(view.Overview))
+}
+
+// insightsDocument keeps the update indicator and the device drawer outside the
+// swapped overview: the indicator reports range changes but not the first load,
+// which has its own skeleton, and the drawer stays open while the page behind
+// it refreshes after a device is renamed.
+templ insightsDocument(view InsightsOverviewView) {
+	<div id="insights-update-indicator" class="dashboard-update-indicator htmx-indicator" role="status" aria-live="polite">
+		@Icon("refresh")
+		<span>Updating insights…</span>
+	</div>
+	@InsightsContent(view)
+	if view.CanLogs {
+		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title">
+			<div class="insight-device-content" id="insight-device-content">
+				@insightDeviceLoading()
+			</div>
+		</dialog>
+	}
+}
+
+// InsightsContent is the whole Insights page below the navigation, including
+// its range control and tabs, so one swap updates the control and the numbers
+// it describes together.
+templ InsightsContent(view InsightsOverviewView) {
+	<div
+		class="insights-page page-stack"
+		id="insights-content"
+		data-isotope-tabs
+		data-active-tab={ view.ActiveTab }
+		data-tab-param="tab"
+		data-title-base="Insights"
+		if view.Loading {
+			hx-get={ templ.SafeURL(view.LoadURL) }
+			hx-trigger="load"
+		} else {
+			hx-get={ templ.SafeURL("/ui/insights/overview?range=" + url.QueryEscape(view.Range)) }
+			hx-trigger="insightsChanged from:body"
+		}
+		hx-swap="outerHTML"
+	>
+		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
+			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
+			<div class="insights-range">
+				@RangeTabs(insightsRangeControl(view.Range))
+				@RangeSelect(insightsRangeControl(view.Range))
+			</div>
+		</header>
+		<div class="isotope-tab-list insights-tab-list" role="tablist" aria-label="Insights sections">
+			for _, tab := range insightsTabOptions {
+				if tab.Value != "devices" || view.CanLogs {
+					<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) } tabindex={ ifThen(view.ActiveTab == tab.Value, "0", "-1") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
+				}
+			}
+		</div>
+		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="overview" hidden?={ view.ActiveTab != "overview" }>
+			if view.Loading {
+				@insightsSkeleton(view)
+			} else {
+				if view.Headline != "" {
+					<p class="insights-headline" aria-live="polite">{ view.Headline }</p>
+				}
+				@insightsNotes(view)
+				@insightsOverviewMetrics(view)
+				@InsightFindings(view)
+				if len(view.TopApps) > 0 || len(view.BusiestDevices) > 0 {
+					<section class="dashboard-rankings insight-rankings" aria-label="Network rankings">
+						@RankedPanel("Top Apps", "apps", view.TopApps, insightsRankingWindow(view))
+						@RankedPanel("Busiest Devices", "devices", view.BusiestDevices, insightsRankingWindow(view))
+					</section>
+				}
+				if view.Alerts != nil {
+					@InsightAlerts(*view.Alerts)
+				}
+			}
+		</div>
+		if view.CanLogs {
+			<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="devices" hidden?={ view.ActiveTab != "devices" }>
+				if view.Loading {
+					@insightDevicesSkeleton()
+				} else {
+					@InsightDevices(view)
+				}
+			</div>
+		}
+		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>
+			if view.Loading {
+				@insightBlockingSkeleton(view)
+			} else {
+				if view.CanLogs || view.CanBlocking {
+					@insightsMetrics(view)
+				}
+				if view.CanLogs && view.Activity != nil {
+					<section class="dashboard-rankings insight-rankings" aria-label="Blocked query rankings">
+						@RankedPanel("Clients With Most Blocks", "blocked-clients", view.TopClients, insightsRankingWindow(view))
+						@RankedPanel("Most Blocked Domains", "blocked", view.TopDomains, insightsRankingWindow(view))
+					</section>
+				}
+				if view.CanBlocking {
+					@InsightContribution(view)
+				}
+			}
+		</div>
+	</div>
+}
+
+templ insightsSkeleton(view InsightsOverviewView) {
+	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Analyzing your network…</span>
+		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
+			for range 4 {
+				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
+			}
+		</div>
+		<section class="card insight-findings insight-findings-skeleton" aria-hidden="true">
+			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div></header>
+			for range 3 {
+				<div class="insight-finding">
+					<span class="insight-finding-icon insights-skeleton-block"></span>
+					<div class="insight-finding-copy">
+						<span class="insight-skeleton-title insights-skeleton-block"></span>
+						<span class="insight-skeleton-line insights-skeleton-block"></span>
+					</div>
+				</div>
+			}
+		</section>
+	</div>
+}
+
+templ insightDevicesSkeleton() {
+	<section class="card isotope-data-card insight-devices" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Loading devices…</span>
+		<header class="isotope-data-header" aria-hidden="true"><div><h2>Devices</h2></div></header>
+		for range 6 {
+			<div class="insight-finding" aria-hidden="true">
+				<span class="insight-finding-icon insights-skeleton-block"></span>
+				<div class="insight-finding-copy">
+					<span class="insight-skeleton-title insights-skeleton-block"></span>
+					<span class="insight-skeleton-line insights-skeleton-block"></span>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ insightBlockingSkeleton(view InsightsOverviewView) {
+	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">Loading blocking insights…</span>
+		<div class="operational-metric-grid insight-metrics" data-metric-count={ fmt.Sprint(insightsMetricCount(view)) } aria-hidden="true">
+			for range insightsMetricCount(view) {
+				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
+			}
+		</div>
+		if view.CanLogs {
+			<section class="dashboard-rankings insight-rankings" aria-hidden="true">
+				@RankedPanelSkeleton("Clients With Most Blocks", view.RangeLabel)
+				@RankedPanelSkeleton("Most Blocked Domains", view.RangeLabel)
+			</section>
+		}
+	</div>
+}
+
+templ insightsOverviewMetrics(view InsightsOverviewView) {
+	if view.CanLogs && !view.DevicesUnavailable {
+		<div class="operational-metric-grid insight-metrics" data-metric-count="4">
+			@OperationalMetricCard("monitor-smartphone", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue")
+			@OperationalMetricCard("plus", "New Devices", formatNumber(uint64(view.DeviceSummary.New)), "First seen during this period, while Sable was already watching", "green")
+			@OperationalMetricCard("line-chart", "Queries", formatNumber(view.DeviceSummary.Queries), "Every query in this period, from query history", "purple")
+			@OperationalMetricCard("ban", "Blocked", percent(view.DeviceSummary.Blocked, view.DeviceSummary.Queries), formatNumber(view.DeviceSummary.Blocked) + " queries answered by blocking policy in this period", "red")
+		</div>
+	}
+}
+
+// insightsNotes explains the limits of what the page can see before it shows
+// any number, so a quiet page is never mistaken for a quiet network.
+templ insightsNotes(view InsightsOverviewView) {
+	if notes := insightsNoteList(view); len(notes) > 0 {
+		<div class="tip-box insight-notes" role="note">
+			for _, note := range notes {
+				<p>{ note }</p>
+			}
+		</div>
+	}
+}
+
+templ InsightFindings(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-findings" aria-labelledby="insight-findings-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-findings-title">Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			if len(view.Findings) > 0 {
+				<span class="count-badge">{ fmt.Sprint(len(view.Findings)) } { insights.Plural(len(view.Findings), "finding", "findings") }</span>
+			}
+		</header>
+		if len(view.Findings) == 0 {
+			<div class="insight-findings-empty">
+				<span>@Icon("check-circle")</span>
+				<strong>Nothing needs your attention</strong>
+				<p>{ view.CheckedSummary }</p>
+			</div>
+		} else {
+			<ol class="insight-finding-list">
+				for _, finding := range view.Findings {
+					<li class={ "insight-finding tone-" + finding.Tone }>
+						<span class="insight-finding-icon" aria-hidden="true">@Icon(finding.Icon)</span>
+						<div class="insight-finding-copy">
+							<span class="insight-finding-title">{ finding.Title }</span>
+							<strong class={ templ.KV("mono", finding.SubjectMonospace) } title={ finding.Subject }>{ finding.Subject }</strong>
+							<p>{ finding.Summary }</p>
+						</div>
+						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }>
+							<span>Details</span>
+							@Icon("chevron-right")
+						</button>
+					</li>
+				}
+			</ol>
+		}
+		if len(view.HiddenFindings) > 0 {
+			<details class="insight-hidden">
+				<summary>{ fmt.Sprint(len(view.HiddenFindings)) } hidden { insights.Plural(len(view.HiddenFindings), "finding", "findings") }</summary>
+				<ul>
+					for _, hidden := range view.HiddenFindings {
+						<li>
+							<div>
+								<strong>{ hidden.Label }</strong>
+								<small>{ hidden.Status }</small>
+							</div>
+							if view.CanHideFindings {
+								<form hx-post="/ui/insights/feedback/remove" hx-swap="none">
+									<input type="hidden" name="id" value={ hidden.FindingID }/>
+									<button class="button outline compact" type="submit" data-replica-primary-action>Show Again</button>
+								</form>
+							}
+						</li>
+					}
+				</ul>
+			</details>
+		}
+	</section>
+	for _, finding := range view.Findings {
+		@InsightEvidence(finding, view)
+	}
+}
+
+// InsightEvidence opens the facts behind one finding in the same drawer the
+// query log uses to explain a query.
+templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
+	@DetailDrawer(insightEvidenceHeader(finding), insightEvidenceFooter(finding, view)) {
+		// The cards come first because they are the evidence itself; the one
+		// block after them says why that evidence matters.
+		if len(finding.Reasons) == 0 {
+			<div class="query-detail-section-heading insight-evidence-summary">
+				<p>{ finding.Summary }</p>
+			</div>
+		}
+		if len(finding.Facts) > 0 {
+			<dl class="query-detail-grid insight-evidence-facts">
+				for index, fact := range finding.Facts {
+					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", insightFactFull(fact)), templ.KV("insight-fact-copyable", fact.Monospace) }>
+						<dt>{ fact.Label }</dt>
+						<dd>
+							if fact.Monospace {
+								<code id={ fmt.Sprintf("%s-fact-%d", finding.ID, index) }>{ insightFactValue(fact, view.TimeDisplay) }</code>
+								@FactCopyButton(fmt.Sprintf("%s-fact-%d", finding.ID, index), "Copy "+strings.ToLower(fact.Label))
+							} else {
+								{ insightFactValue(fact, view.TimeDisplay) }
+							}
+						</dd>
+					</div>
+				}
+			</dl>
+		}
+		if len(finding.Clients) > 0 {
+			<section class="query-detail-answer insight-evidence-clients" aria-labelledby={ finding.ID + "-clients" }>
+				<h3 id={ finding.ID + "-clients" }>Affected clients</h3>
+				<div class="insight-client-list">
+					for index, client := range finding.Clients {
+						@InsightListRow(InsightListRowView{
+							ID: fmt.Sprintf("%s-client-%d", finding.ID, index), Value: client.Name, Detail: client.Secondary,
+							Count: formatNumber(client.Value), CopyLabel: "Copy address",
+							Href: ifThen(view.CanLogs && finding.Query != nil, insightFindingClientURL(finding, client.Name, view.LogWindowQuery), ""),
+						})
+					}
+				</div>
+			</section>
+		}
+		if len(finding.Domains) > 0 {
+			<section class="query-detail-answer insight-evidence-domains" aria-labelledby={ finding.ID + "-domains" }>
+				<h3 id={ finding.ID + "-domains" }>First-time domains</h3>
+				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
+			</section>
+		}
+		if len(finding.Reasons) > 0 || finding.Method != "" {
+			<section class="insight-why" aria-labelledby={ finding.ID + "-reasons" }>
+				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
+				if len(finding.Reasons) > 0 || len(finding.Explanations) > 0 {
+					<ul>
+						for _, reason := range finding.Reasons {
+							<li>
+								@Icon("check")
+								<span>
+									{ reason.Text }
+									if reason.Code != "" {
+										{ " " }
+										<code>{ reason.Code }</code>
+									}
+								</span>
+							</li>
+						}
+						// Possible causes sit in the same list, set apart only by a
+						// quieter icon and color, so they read as context rather than
+						// as a second heading.
+						if len(finding.Explanations) > 0 {
+							<li class="insight-cause">@Icon("info")<span>Could be { insightCauses(finding.Explanations) }</span></li>
+						}
+					</ul>
+				}
+				if finding.Method != "" {
+					<details class="insight-method">
+						<summary>How Sable decides</summary>
+						<p>{ finding.Method }</p>
+					</details>
+				}
+			</section>
+		}
+		if view.CanHideFindings && finding.FindingID != "" {
+			@insightFeedback(finding)
+		}
+	}
+}
+
+// insightFeedback lets an operator hide a finding for now, for a week, or for
+// good because it is normal here. Hiding is shared by everyone who opens
+// Insights, and the finding comes back on its own when a snooze ends.
+templ insightFeedback(finding InsightFindingView) {
+	<form class="insight-feedback" hx-post="/ui/insights/feedback" hx-swap="none">
+		<input type="hidden" name="id" value={ finding.FindingID }/>
+		<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
+		<div>
+			<h3>Seen it?</h3>
+			<p>Hiding a finding hides it for everyone.</p>
+		</div>
+		<div class="insight-feedback-actions">
+			<button class="button outline compact" type="submit" name="action" value="dismiss" data-dialog-close data-replica-primary-action>Dismiss</button>
+			<button class="button outline compact" type="submit" name="action" value="snooze" data-dialog-close data-replica-primary-action>Snooze a Week</button>
+			<button class="button outline compact" type="submit" name="action" value="normal" data-dialog-close data-replica-primary-action>That's Normal</button>
+		</div>
+	</form>
+}
+
+func insightEvidenceHeader(finding InsightFindingView) DetailDrawerView {
+	header := DetailDrawerView{
+		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
+		CloseLabel: "Close details",
+	}
+	if finding.SubjectSource != "" {
+		header.TitleAction = insightNameSource(finding.SubjectSource)
+	}
+	return header
+}
+
+// insightNameSource says where a device's name came from, beside the name.
+templ insightNameSource(source string) {
+	<span class="status-badge insight-name-source" title={ "Name from " + source }><span class="sr-only">Name from </span>{ source }</span>
+}
+
+templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	<div class="query-detail-policy-actions insight-drawer-actions">
+		if finding.DeviceKey != "" && view.CanLogs {
+			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
+				<span>Device Details</span>
+			</button>
+		}
+		if finding.Destination != "" && view.CanBlocking {
+			<a class="button outline" href={ templ.SafeURL(finding.Destination) }>
+				<span>{ finding.DestinationLabel }</span>
+			</a>
+		}
+		if finding.Query != nil && view.CanLogs {
+			<a class="button" href={ templ.SafeURL(insightQueryURL(*finding.Query, view.LogWindowQuery)) }>
+				@Icon("logs")
+				<span>View Query Logs</span>
+			</a>
+		}
+	</div>
+}
+
+templ insightsMetrics(view InsightsOverviewView) {
+	<div class="operational-metric-grid insight-metrics" data-metric-count={ fmt.Sprint(insightsMetricCount(view)) }>
+		if view.CanLogs {
+			if view.Activity != nil {
+				@OperationalMetricCard("ban", "Blocked Queries", formatNumber(view.Activity.Blocked), blockedQueriesDescription(view), "red")
+				@OperationalMetricCard("shield-x", "Blocked Domains", formatNumber(view.Activity.BlockedDomains), "Distinct domains blocked at least once in this period, from query history", "amber")
+				@OperationalMetricCard("monitor-smartphone", "Affected Clients", formatNumber(view.Activity.BlockedClients), "Distinct clients with at least one blocked query in this period, from query history", "purple")
+			} else {
+				@OperationalMetricCard("ban", "Blocked Queries", "—", "Query history could not be counted", "red")
+				@OperationalMetricCard("shield-x", "Blocked Domains", "—", "Query history could not be counted", "amber")
+				@OperationalMetricCard("monitor-smartphone", "Affected Clients", "—", "Query history could not be counted", "purple")
+			}
+		}
+		if view.CanBlocking {
+			@OperationalMetricCard("list", "Unique Coverage", uniqueCoverageValue(view.Contribution), uniqueCoverageDescription(view.Contribution), "blue")
+		}
+	</div>
+}
+
+templ InsightContribution(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-contribution" aria-labelledby="insight-contribution-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-contribution-title">Block List Contribution</h2><span class="desktop-only">Compared from cached list contents</span></div>
+			if view.Contribution != nil && len(view.Contribution.Lists) > 0 {
+				<span class="count-badge">{ fmt.Sprint(len(view.Contribution.Lists)) } { insights.Plural(len(view.Contribution.Lists), "list", "lists") }</span>
+			}
+		</header>
+		if view.Contribution == nil {
+			<div class="insight-section-empty">
+				@Icon("alert-triangle")
+				<strong>Block lists could not be compared</strong>
+				<p>Sable could not read the cached list files right now. Try again in a moment.</p>
+			</div>
+		} else if len(view.Contribution.Lists) == 0 {
+			<div class="insight-section-empty">
+				@Icon("list")
+				<strong>No block lists configured</strong>
+				<p>Add a block list to see how much each one contributes.</p>
+				<a class="button outline compact" href="/blocked?tab=lists">Block Lists</a>
+			</div>
+		} else {
+			<div class="admin-mobile-list insight-list-mobile">
+				for _, list := range view.Contribution.Lists {
+					<article class="insight-list-mobile-row data-mobile-row">
+						<div class="data-mobile-heading">
+							<span><strong>{ list.Name }</strong><small>{ list.Location }</small></span>
+							if list.Available {
+								<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
+							}
+						</div>
+						if list.Available {
+							@insightShareBar(list)
+							<dl>
+								<div><dt>Domains</dt><dd>{ formatNumber(uint64(list.Domains)) }</dd></div>
+								<div><dt>Unique</dt><dd>{ formatNumber(uint64(list.Unique)) }</dd></div>
+								<div><dt>Elsewhere</dt><dd>{ formatNumber(uint64(list.Covered)) }</dd></div>
+								if view.Contribution.HasQueries {
+									<div><dt>Queries blocked</dt><dd>{ formatNumber(list.Queries.Blocked) }</dd></div>
+									<div><dt>This list alone</dt><dd>{ formatNumber(list.Queries.Sole) }</dd></div>
+								}
+							</dl>
+							if list.LargestOverlap != "" {
+								<small class="insight-overlap">Largest overlap: { list.LargestOverlap } ({ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) })</small>
+							}
+						} else {
+							<small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small>
+						}
+					</article>
+				}
+				if custom := view.Contribution.Custom; custom != nil {
+					<article class="insight-list-mobile-row data-mobile-row">
+						<div class="data-mobile-heading">
+							<span><strong>Custom blocked domains</strong><small>Blocked domains you added</small></span>
+						</div>
+						<dl>
+							<div><dt>Domains</dt><dd>{ formatNumber(uint64(custom.Domains)) }</dd></div>
+							if view.Contribution.HasQueries {
+								<div><dt>Queries blocked</dt><dd>{ formatNumber(custom.Queries.Blocked) }</dd></div>
+								<div><dt>Custom alone</dt><dd>{ formatNumber(custom.Queries.Sole) }</dd></div>
+							}
+						</dl>
+					</article>
+				}
+			</div>
+			<div class="admin-desktop-table">
+				<table class="isotope-table insight-contribution-table">
+					<caption class="sr-only">Block list contribution</caption>
+					<thead>
+						<tr>
+							<th scope="col">List</th>
+							<th scope="col" class="right-cell">Domains</th>
+							<th scope="col" class="right-cell">Unique</th>
+							<th scope="col" class="right-cell">Also elsewhere</th>
+							<th scope="col">Unique share</th>
+							<th scope="col">Largest overlap</th>
+							if view.Contribution.HasQueries {
+								<th scope="col" class="right-cell">Queries blocked</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, list := range view.Contribution.Lists {
+							<tr>
+								<th scope="row"><span class="insight-list-name"><strong>{ list.Name }</strong><code title={ list.Location }>{ list.Location }</code></span></th>
+								if list.Available {
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Domains)) }</td>
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Unique)) }</td>
+									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Covered)) }</td>
+									<td>
+										<span class="insight-share-cell">
+											@insightShareBar(list)
+											<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
+										</span>
+									</td>
+									<td class="muted-cell">
+										if list.LargestOverlap != "" {
+											{ list.LargestOverlap } <span class="insight-overlap-share">{ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) }</span>
+										} else {
+											None
+										}
+									</td>
+								} else {
+									<td colspan="5"><small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small></td>
+								}
+								if view.Contribution.HasQueries {
+									@insightQueriesCell(list.Queries)
+								}
+							</tr>
+						}
+						if custom := view.Contribution.Custom; custom != nil {
+							<tr class="insight-custom-row">
+								<th scope="row"><span class="insight-list-name"><strong>Custom blocked domains</strong><code>Blocked domains you added</code></span></th>
+								<td class="right-cell numeric-cell">{ formatNumber(uint64(custom.Domains)) }</td>
+								<td colspan="4" class="muted-cell">Not compared with lists</td>
+								if view.Contribution.HasQueries {
+									@insightQueriesCell(custom.Queries)
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<footer class="insight-card-note">
+				<p><strong>Unique</strong> means no other enabled list contains the domain or one of its parent domains; those columns describe list contents.</p>
+				if view.Contribution.HasQueries {
+					<p><strong>Queries blocked</strong> counts blocked queries whose matching rule the source contains, and <strong>alone</strong> counts the ones no other source would have blocked. A rule in several lists counts for each.
+						if !view.Contribution.QueriesSince.IsZero() {
+							Counted since { FormatShortDateTime(view.Contribution.QueriesSince, view.TimeDisplay, false) }, when Sable began recording which list blocked a query.
+						}
+					</p>
+				}
+			</footer>
+		}
+	</section>
+}
+
+templ insightQueriesCell(queries querylog.SourceActivity) {
+	<td class="right-cell">
+		<span class="insight-queries-cell">
+			<span class="numeric-cell">{ formatNumber(queries.Blocked) }</span>
+			<small>{ formatNumber(queries.Sole) } alone</small>
+		</span>
+	</td>
+}
+
+// insightShareBar draws a list's unique share against the part other lists
+// also cover. A native progress element sizes its fill from attributes, which
+// the console's content security policy allows where inline styles are not.
+// The percentage beside it is what assistive technology reads.
+templ insightShareBar(list InsightListView) {
+	<progress class="insight-share-bar" max="100" value={ insightShareWidth(list) } aria-hidden="true"></progress>
+}
+
+func insightsRankingWindow(view InsightsOverviewView) DashboardInsightsView {
+	return DashboardInsightsView{RangeLabel: view.RangeLabel, LogWindowQuery: view.LogWindowQuery}
+}
+
+func insightsMetricCount(view InsightsOverviewView) int {
+	count := 0
+	if view.CanLogs {
+		count += 3
+	}
+	if view.CanBlocking {
+		count++
+	}
+	return count
+}
+
+func insightsNoteList(view InsightsOverviewView) []string {
+	notes := make([]string, 0, 4)
+	if view.CanBlocking && !view.BlockingEnabled {
+		notes = append(notes, "DNS blocking is turned off, so nothing new is being blocked.")
+	}
+	if view.CanLogs && view.QueryLogDisabled {
+		notes = append(notes, "Query logging is off, so new queries are not recorded and activity below may be incomplete.")
+	}
+	if view.RetentionNote != "" {
+		notes = append(notes, view.RetentionNote)
+	}
+	if !view.CanLogs {
+		notes = append(notes, "Query activity is hidden because your account cannot read logs.")
+	} else if !view.CanBlocking {
+		notes = append(notes, "Block list comparisons are hidden because your account cannot read blocking settings.")
+	}
+	return notes
+}
+
+func blockedQueriesDescription(view InsightsOverviewView) string {
+	if view.Activity == nil || view.Activity.Queries == 0 {
+		return "Queries answered by blocking policy in this period, from query history"
+	}
+	return percent(view.Activity.Blocked, view.Activity.Queries) + " of " + formatNumber(view.Activity.Queries) + " queries in this period, from query history"
+}
+
+func uniqueCoverageValue(contribution *InsightsContributionView) string {
+	if contribution == nil || contribution.Domains == 0 {
+		return "—"
+	}
+	return insights.FormatShare(uint64(contribution.Unique), uint64(contribution.Domains))
+}
+
+func uniqueCoverageDescription(contribution *InsightsContributionView) string {
+	if contribution == nil {
+		return "Block lists could not be compared"
+	}
+	if contribution.Domains == 0 {
+		return "No list domains to compare yet"
+	}
+	return fmt.Sprintf("Share of %s domains across %d %s that only one list provides, from cached list contents",
+		formatNumber(uint64(contribution.Domains)), contribution.Analyzed, insights.Plural(contribution.Analyzed, "list", "lists"))
+}
+
+func insightShareWidth(list InsightListView) string {
+	if list.Domains == 0 {
+		return "0"
+	}
+	width := float64(list.Unique) * 100 / float64(list.Domains)
+	if list.Unique > 0 && width < 1.5 {
+		// Keep a sliver visible so a small non-zero share never looks empty.
+		width = 1.5
+	}
+	return fmt.Sprintf("%.2f", width)
+}
+
+func insightFactValue(fact InsightFactView, display TimeDisplay) string {
+	if fact.Value != "" {
+		return fact.Value
+	}
+	if fact.Time.IsZero() {
+		return "Never"
+	}
+	return FormatShortDateTime(fact.Time, display, false)
+}
+
+func insightFactFull(fact InsightFactView) bool {
+	return len(fact.Value) > 28
+}
+
+// insightQueryURL opens the query log on exactly the rows a finding counted:
+// whole-value matches over the finding's window.
+func insightQueryURL(query InsightQueryView, window string) string {
+	values := url.Values{"tab": []string{"queries"}}
+	if query.Name != "" {
+		values.Set("name", query.Name)
+	}
+	if query.ClientIP != "" {
+		values.Set("client_ip", query.ClientIP)
+	}
+	if query.Blocked {
+		values.Set("source", "blocked")
+	}
+	link := "/logs?" + values.Encode()
+	if window != "" {
+		link += "&" + window
+	}
+	return link
+}
+
+templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool) {
+	<div class="insight-client-list">
+		for index, domain := range domains {
+			@InsightListRow(InsightListRowView{
+				ID: fmt.Sprintf("%s-%d", idPrefix, index), Value: domain.Name, Detail: insightDomainDetail(domain, display),
+				Count: ifThen(domain.Queries > 0, formatNumber(domain.Queries), ""), CopyLabel: "Copy domain",
+				Href: ifThen(canLogs && domain.ClientIP != "", insightQueryURL(InsightQueryView{Name: domain.Name, ClientIP: domain.ClientIP}, window), ""),
+			})
+		}
+	</div>
+}
+templ InsightDevices(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-devices-title">Devices</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			if len(view.Devices) > 0 {
+				<span class="count-badge">{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
+			}
+		</header>
+		if view.DevicesUnavailable {
+			<div class="insight-section-empty">
+				@Icon("alert-triangle")
+				<strong>Devices could not be loaded</strong>
+				<p>Sable could not read device activity from query history right now. Try again in a moment.</p>
+			</div>
+		} else if len(view.Devices) == 0 {
+			<div class="insight-section-empty">
+				@Icon("monitor-smartphone")
+				<strong>No devices in this period</strong>
+				<p>Devices appear here once they send queries that Sable records in query history.</p>
+			</div>
+		} else {
+			<div class="admin-mobile-list insight-device-mobile">
+				for _, device := range view.Devices {
+					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
+						<div class="insight-device-mobile-copy">
+							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+							@insightDeviceSubtitle(device)
+							if device.TypeLabel != "" {
+								<small>{ insightTypeText(device) }</small>
+							}
+							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
+						</div>
+						@Icon("chevron-right")
+					</button>
+				}
+			</div>
+			<div class="admin-desktop-table">
+				<table class="isotope-table insight-device-table">
+					<caption class="sr-only">Devices with queries in this period</caption>
+					<thead>
+						<tr>
+							<th scope="col">Device</th>
+							<th scope="col">Type</th>
+							<th scope="col" class="right-cell">Queries</th>
+							<th scope="col" class="right-cell">Blocked</th>
+							<th scope="col" class="right-cell insight-optional-cell">First-time domains</th>
+							<th scope="col" class="insight-optional-cell">First seen</th>
+							<th scope="col">Last seen</th>
+							<th scope="col"><span class="sr-only">Details</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, device := range view.Devices {
+							<tr>
+								<th scope="row">
+									<span class="insight-device-cell">
+										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+										@insightDeviceSubtitle(device)
+									</span>
+								</th>
+								<td class={ ifThen(device.TypeConfidence == "low" || device.TypeLabel == "", "muted-cell", "") }>{ insightTypeText(device) }</td>
+								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
+								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
+								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
+								<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
+								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
+								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<footer class="insight-card-note">
+				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
+			</footer>
+		}
+	</section>
+}
+
+// insightDeviceBadges marks a device in a list. The drawer shows the name
+// source beside the title instead, so it leaves that badge out.
+templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
+	if device.New {
+		<span class="status-badge active">New</span>
+	}
+	if nameSource && device.NameSource != "" {
+		<span class="status-badge">{ device.NameSource }</span>
+	}
+	if device.PrivateMAC {
+		<span class="status-badge" title="The device uses a randomized hardware address on this network">Private address</span>
+	}
+}
+
+templ insightDeviceLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: "Loading…", CloseLabel: "Close device details"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading device details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+templ insightDeviceCloseFooter() {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+}
+
+// InsightDeviceDrawer is one device's details, loaded into the open drawer.
+templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
+	@DetailDrawerContent(insightDeviceDrawerHeader(view), insightDeviceFooter(view)) {
+		@Toast(view.Message, "success")
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
+		}
+		if view.Missing {
+			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
+		} else if view.Device.Key != "" {
+			if view.Device.New || view.Device.PrivateMAC {
+				<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device, false)</div>
+			}
+			<dl class="query-detail-grid">
+				if view.Device.MAC != "" {
+					<div class="query-detail-fact-wide insight-fact-full insight-fact-copyable">
+						<dt>Hardware address</dt>
+						<dd>
+							<code id="insight-device-mac">{ view.Device.MAC }</code>
+							@FactCopyButton("insight-device-mac", "Copy hardware address")
+							if view.Device.PrivateMAC {
+								<small class="insight-fact-note">Private, randomized by the device</small>
+							}
+						</dd>
+					</div>
+				}
+				if view.Device.Vendor != "" {
+					<div class="query-detail-fact-wide insight-fact-full"><dt>Maker</dt><dd>{ view.Device.Vendor }</dd></div>
+				}
+				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.Device.Queries) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.Device.Blocked) } ({ percent(view.Device.Blocked, view.Device.Queries) })</dd></div>
+				<div class="query-detail-fact-wide"><dt>First seen</dt><dd>{ insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Last seen</dt><dd>{ insightDeviceTime(view.Device.LastSeen, view.TimeDisplay) }</dd></div>
+			</dl>
+			@insightDeviceType(view)
+			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
+				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
+				<div class="insight-client-list">
+					for index, address := range view.Device.Addresses {
+						@InsightListRow(InsightListRowView{
+							ID: fmt.Sprintf("insight-device-address-%d", index), Value: address.Address,
+							Detail: formatNumber(address.Blocked) + " blocked", Count: formatNumber(address.Queries), CopyLabel: "Copy address",
+							Href: insightQueryURL(InsightQueryView{ClientIP: address.Address}, view.LogWindowQuery),
+						})
+					}
+				</div>
+			</section>
+			if len(view.Apps) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-apps">
+					<h3 id="insight-device-apps">Apps</h3>
+					<div class="insight-client-list">
+						for index, app := range view.Apps {
+							@InsightListRow(InsightListRowView{
+								ID: fmt.Sprintf("insight-device-app-%d", index), Value: app.Name, Plain: true,
+								Detail: app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + pluralizeDomain(app.Domains),
+								Count:  formatNumber(app.Queries),
+							})
+						}
+					</div>
+				</section>
+			}
+			if len(view.TopDomains) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-top">
+					<h3 id="insight-device-top">Most queried domains</h3>
+					@insightDomainList("insight-device-top", view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true)
+				</section>
+			}
+			if len(view.NewDomains) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-device-new">
+					<h3 id="insight-device-new">First-time domains</h3>
+					@insightDomainList("insight-device-new", view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
+				</section>
+			}
+		}
+	}
+}
+
+templ insightDeviceFooter(view InsightDeviceDrawerView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if len(view.Device.Addresses) == 1 {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
+				@Icon("logs")
+				<span>View Query Logs</span>
+			</a>
+		</div>
+	}
+}
+
+func insightDeviceURL(key, rangeName string) string {
+	return "/ui/insights/device?" + url.Values{"key": []string{key}, "range": []string{rangeName}}.Encode()
+}
+
+func insightDrawerTitle(view InsightDeviceDrawerView) string {
+	if view.Device.Label != "" {
+		return view.Device.Label
+	}
+	return "Device"
+}
+
+// insightDeviceIdentifiers are the identifying details under a device's name:
+// its hardware address when that is not already the name, and its addresses.
+func insightDeviceIdentifiers(device InsightDeviceView) []string {
+	parts := make([]string, 0, 3)
+	if device.MAC != "" && device.Label != device.MAC {
+		parts = append(parts, device.MAC)
+	}
+	// One address line keeps rows even; the rest are counted, not listed.
+	for index, address := range device.Addresses {
+		if address.Address == device.Label {
+			continue
+		}
+		line := address.Address
+		if others := len(device.Addresses) - index - 1; others > 0 {
+			line += fmt.Sprintf(" +%d more", others)
+		}
+		parts = append(parts, line)
+		break
+	}
+	return parts
+}
+
+// insightDeviceSubtitle stacks the hardware address over the IP address, each
+// on its own line, so neither is ever cut off.
+templ insightDeviceSubtitle(device InsightDeviceView) {
+	<span class="insight-device-ids">
+		for _, part := range insightDeviceIdentifiers(device) {
+			<code>{ part }</code>
+		}
+	</span>
+}
+
+func insightDeviceTime(moment time.Time, display TimeDisplay) string {
+	if moment.IsZero() {
+		return "—"
+	}
+	return FormatShortDateTime(moment, display, false)
+}
+
+func insightNameHelp(device InsightDeviceView) string {
+	if device.MAC != "" {
+		return "Follows the hardware address, so it survives IP changes."
+	}
+	return "Applies to this IP address; Sable has not tied it to hardware."
+}
+
+// InsightListRowView is one row of a drawer list: a value that can be copied,
+// an optional detail line, and a count that opens the matching query log rows.
+type InsightListRowView struct {
+	ID        string
+	Value     string
+	Detail    string
+	Count     string
+	Href      string
+	// CopyLabel names the copy button; a row without one has no button.
+	CopyLabel string
+	// Plain sets the value in the body face, for names that are not DNS data.
+	Plain bool
+}
+
+// InsightListRow puts the copy button right after the value, as zone record
+// details do. The link to the query log covers the whole row, so the row stays
+// one large target while the copy button sits above it.
+templ InsightListRow(row InsightListRowView) {
+	<div class={ "insight-list-row", templ.KV("has-link", row.Href != "") }>
+		<div class="insight-list-copy">
+			<span class={ "copyable-text insight-row-value", templ.KV("plain", row.Plain) }>
+				<strong id={ row.ID }>{ row.Value }</strong>
+				if row.CopyLabel != "" {
+					@CopyButton(row.ID, row.CopyLabel)
+				}
+			</span>
+			if row.Detail != "" {
+				<small>{ row.Detail }</small>
+			}
+		</div>
+		if row.Href != "" {
+			<a class="insight-list-link" href={ templ.SafeURL(row.Href) } aria-label={ insightRowLinkLabel(row) }>
+				if row.Count != "" {
+					{ row.Count }
+				} else {
+					@Icon("chevron-right")
+				}
+			</a>
+		} else if row.Count != "" {
+			<span class="insight-list-count">{ row.Count }</span>
+		}
+	</div>
+}
+
+func insightRowLinkLabel(row InsightListRowView) string {
+	if row.Count != "" {
+		return "View " + row.Count + " queries for " + row.Value + " in Query Logs"
+	}
+	return "View queries for " + row.Value + " in Query Logs"
+}
+
+func insightFindingClientURL(finding InsightFindingView, client, window string) string {
+	return insightQueryURL(InsightQueryView{Name: finding.Query.Name, ClientIP: client, Blocked: finding.Query.Blocked}, window)
+}
+
+func insightDomainDetail(domain InsightDeviceDomainView, display TimeDisplay) string {
+	switch {
+	case !domain.FirstSeen.IsZero():
+		return "First queried " + FormatShortDateTime(domain.FirstSeen, display, false)
+	case domain.Blocked > 0:
+		return formatNumber(domain.Blocked) + " blocked"
+	default:
+		return ""
+	}
+}
+
+func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
+	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
+	if view.Device.Key == "" || view.Missing {
+		return header
+	}
+	if view.CanName && view.Editing {
+		header.TitleEditor = insightDeviceNameEditor(view)
+	} else if view.CanName || view.Device.NameSource != "" {
+		header.TitleAction = insightDeviceTitleActions(view)
+	}
+	return header
+}
+
+// insightDeviceTitleActions follows the name with the rename button, for
+// operators who can rename devices, and then where the name came from.
+templ insightDeviceTitleActions(view InsightDeviceDrawerView) {
+	if view.CanName {
+		@insightDeviceRenameButton(view)
+	}
+	if view.Device.NameSource != "" {
+		@insightNameSource(view.Device.NameSource)
+	}
+}
+
+templ insightDeviceRenameButton(view InsightDeviceDrawerView) {
+	<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=1" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Rename " + view.Device.Label } title="Rename device" data-replica-primary-action>@Icon("pencil")</button>
+}
+
+// insightDeviceNameEditor edits the device's name in place of its title. Enter
+// saves, and Escape or Cancel returns to the title without closing the drawer.
+// insightDeviceType says what Sable thinks the device is and why, and lets an
+// operator who can rename devices correct it. A correction is kept against the
+// device's hardware address, like its name.
+templ insightDeviceType(view InsightDeviceDrawerView) {
+	<section class="query-detail-answer insight-device-type" aria-labelledby="insight-device-type-title">
+		<h3 id="insight-device-type-title">What it is</h3>
+		<div class="insight-type-summary">
+			if view.Device.TypeLabel != "" {
+				<strong>{ view.Device.TypeLabel }</strong>
+				<span class={ "status-badge", templ.KV("active", view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high") }>{ insightConfidenceText(view.Device.TypeConfidence) }</span>
+			} else {
+				<strong class="insight-type-unknown">Sable can't tell yet</strong>
+			}
+			if view.CanName && !view.EditingType {
+				<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=type" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Change the type of " + view.Device.Label } title="Change type" data-replica-primary-action>@Icon("pencil")</button>
+			}
+		</div>
+		if len(view.Device.TypeReasons) > 0 {
+			<ul class="insight-type-reasons">
+				for _, reason := range view.Device.TypeReasons {
+					<li>
+						@Icon("check")
+						<span>
+							{ reason.Text }
+							if reason.Code != "" {
+								{ " " }
+								<code>{ reason.Code }</code>
+							}
+						</span>
+					</li>
+				}
+			</ul>
+		}
+		if view.CanName && view.EditingType {
+			<form class="insight-type-form" hx-post="/ui/insights/devices/type" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-type-form button" data-escape-click="#insight-device-content [data-type-cancel]">
+				<input type="hidden" name="key" value={ view.Device.Key }/>
+				<input type="hidden" name="range" value={ view.Range }/>
+				<label class="field-control">
+					<span class="sr-only">Device type</span>
+					<select name="type" data-styled-select>
+						<option value="" selected?={ view.Device.TypeConfidence != "set" }>{ insightDetectedOption(view.Device) }</option>
+						for _, option := range view.Device.TypeOptions {
+							<option value={ option[0] } selected?={ view.Device.TypeConfidence == "set" && view.Device.Type == option[0] }>{ option[1] }</option>
+						}
+					</select>
+				</label>
+				<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-type-cancel>Cancel</button>
+				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+			</form>
+		}
+	</section>
+}
+
+// insightDetectedOption names the choice that leaves the type to Sable by what
+// Sable detects, so choosing it shows what it means.
+func insightDetectedOption(device InsightDeviceView) string {
+	if device.DetectedLabel == "" {
+		return "Let Sable decide"
+	}
+	return device.DetectedLabel + " (detected)"
+}
+
+func insightConfidenceText(confidence string) string {
+	switch confidence {
+	case "set":
+		return "Set by you"
+	case "high":
+		return "Confident"
+	case "medium":
+		return "Likely"
+	default:
+		return "Unsure"
+	}
+}
+
+// insightTypeText is a device's type as a list shows it, hedged when Sable is
+// unsure.
+func insightTypeText(device InsightDeviceView) string {
+	switch {
+	case device.TypeLabel == "":
+		return "—"
+	case device.TypeConfidence == "low":
+		article := "a "
+		if strings.ContainsRune("AEIOU", rune(device.TypeLabel[0])) {
+			article = "an "
+		}
+		return "Maybe " + article + strings.ToLower(device.TypeLabel)
+	default:
+		return device.TypeLabel
+	}
+}
+
+templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
+	<form class="insight-name-editor" hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button">
+		<input type="hidden" name="key" value={ view.Device.Key }/>
+		<input type="hidden" name="range" value={ view.Range }/>
+		<label class="insight-name-field">
+			<span class="sr-only">Device name</span>
+			<input name="name" maxlength="64" autocomplete="off" placeholder="Name this device" value={ ifThen(view.Device.Named, view.Device.Label, "") } required autofocus data-escape-click="#insight-device-content [data-name-cancel]"/>
+		</label>
+		<small class="insight-name-help">{ insightNameHelp(view.Device) }</small>
+		<div class="insight-name-actions">
+			if view.Device.OperatorNamed {
+				<button class="button outline compact destructive" type="submit" name="remove" value="1" formnovalidate data-replica-primary-action>Remove Name</button>
+			}
+			<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-name-cancel>Cancel</button>
+			<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+		</div>
+	</form>
+}
+
+// insightCauses joins possible causes into one sentence: "a, b, or c."
+func insightCauses(causes []string) string {
+	lowered := make([]string, len(causes))
+	for index, cause := range causes {
+		lowered[index] = lowerFirst(cause)
+	}
+	switch len(lowered) {
+	case 1:
+		return lowered[0] + "."
+	case 2:
+		return lowered[0] + " or " + lowered[1] + "."
+	default:
+		return strings.Join(lowered[:len(lowered)-1], ", ") + ", or " + lowered[len(lowered)-1] + "."
+	}
+}
+
+// lowerFirst lowercases a sentence's first letter unless it starts an acronym
+// or a name such as "DNS" or "UniFi".
+func lowerFirst(text string) string {
+	if len(text) < 2 || (text[1] >= 'A' && text[1] <= 'Z') {
+		return text
+	}
+	return strings.ToLower(text[:1]) + text[1:]
+}
+
+// InsightReasonView is one reason, with DNS or network data set apart as code.
+type InsightReasonView struct {
+	Text string
+	Code string
+}
+
+// InsightAlertsView is the webhook Insights sends new findings to.
+type InsightAlertsView struct {
+	URL     string
+	Format  string
+	Message string
+	Error   string
+}
+
+// InsightAlerts sets up where new findings are sent. It swaps itself in place
+// when saved or tested.
+templ InsightAlerts(view InsightAlertsView) {
+	<section class="card isotope-data-card insight-alerts" id="insight-alerts" aria-labelledby="insight-alerts-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-alerts-title">Alerts</h2></div>
+			<span class={ "status-badge", templ.KV("active", view.URL != "") }>{ ifThen(view.URL != "", "On", "Off") }</span>
+		</header>
+		if view.Message != "" {
+			@Toast(view.Message, "success")
+		}
+		if view.Error != "" {
+			@Toast(view.Error, "error")
+		}
+		<form class="insight-alerts-form" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
+			<p>Sable sends each new finding worth a look to a webhook, once, and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
+			<div class="field-grid two">
+				<label class="field-control">
+					<span>Webhook URL</span>
+					<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+					<small>Leave empty to turn alerts off.</small>
+				</label>
+				<label class="field-control">
+					<span>Format</span>
+					<select name="format" data-styled-select>
+						<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
+						<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
+					</select>
+				</label>
+			</div>
+			<div class="insight-alerts-actions">
+				if view.URL != "" {
+					<button class="button outline compact" type="submit" formaction="/ui/insights/alerts/test" hx-post="/ui/insights/alerts/test" data-replica-primary-action>Send Test</button>
+				}
+				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+			</div>
+		</form>
+	</section>
+}

@@ -21,6 +21,7 @@ import (
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
+	"github.com/drudge/sable/internal/neighbors"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/secrets"
 	"github.com/drudge/sable/internal/serverlog"
@@ -394,7 +395,14 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		},
 		logger,
 	)
+	unifiSync.identities = database.RecordClientIdentities
 	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
+	runRuntimeWorker(func(context.Context) {
+		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)
+	})
+	runRuntimeWorker(func(context.Context) {
+		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
+	})
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
 		dnsProviderCredentials,
@@ -476,6 +484,12 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	}
 	clusterService.StartMonitoring(runtimeContext)
 	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
+	runRuntimeWorker(func(context.Context) {
+		webServer.RunInsightAlerts(runtimeContext, func() bool {
+			state := clusterService.Snapshot()
+			return !state.Initialized || state.LocalRole != cluster.RoleReplica
+		})
+	})
 	runRuntimeWorker(func(context.Context) {
 		runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
 	})
@@ -850,6 +864,8 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		CachePrefetchHitsPerHour:   configuration.Resolver.CachePrefetchHitsPerHour,
 		Blocking:                   configuration.Blocking.Enabled,
 		BlockedDomains:             compiledBlocking.Domains,
+		BlockedDomainOwners:        compiledBlocking.Owners,
+		BlockedDomainOwnerSets:     compiledBlocking.OwnerSets,
 		AllowedDomains:             configuration.Blocking.AllowedDomains,
 		BlockLists:                 blockListStats,
 		BlockingType:               configuration.Blocking.ResponseType,

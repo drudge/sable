@@ -169,19 +169,29 @@ templ RankedPanel(title string, kind string, items []RankedStatView, insights Da
 				<div class="dashboard-empty">No queries in this range</div>
 			}
 			for _, item := range firstRanked(items, 5) {
-				<a class="ranking-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)) }>
-					<div>
-						<strong title={ item.Name }>{ item.Name }</strong>
-						if item.Secondary != "" {
-							<small title={ item.Secondary }>{ item.Secondary }</small>
-						}
+				if link := rankedEntryURL(kind, item, insights.LogWindowQuery); link != "" {
+					<a class="ranking-row" href={ templ.SafeURL(link) }>
+						@rankingRowContent(item)
+					</a>
+				} else {
+					<div class="ranking-row">
+						@rankingRowContent(item)
 					</div>
-					<span>{ compactNumber(item.Value) }</span>
-				</a>
+				}
 			}
 		</div>
 	</article>
 	@TopStatsDialog(title, kind, items, insights)
+}
+
+templ rankingRowContent(item RankedStatView) {
+	<div>
+		<strong title={ item.Name }>{ item.Name }</strong>
+		if item.Secondary != "" {
+			<small title={ item.Secondary }>{ item.Secondary }</small>
+		}
+	</div>
+	<span>{ compactNumber(item.Value) }</span>
 }
 
 templ TopStatsDialog(title string, kind string, items []RankedStatView, insights DashboardInsightsView) {
@@ -202,21 +212,31 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView, insights
 				<div class="top-stats-empty">No data for this period</div>
 			}
 			for index, item := range items {
-				<a class="top-stats-row" href={ templ.SafeURL(topStatsEntryURL(kind, item.Name, insights.LogWindowQuery)) } data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
-					<span class="top-stats-rank">{ fmt.Sprint(index + 1) }</span>
-					<div>
-						<strong title={ item.Name }>{ item.Name }</strong>
-						if item.Secondary != "" {
-							<small title={ item.Secondary }>{ item.Secondary }</small>
-						}
+				if link := rankedEntryURL(kind, item, insights.LogWindowQuery); link != "" {
+					<a class="top-stats-row" href={ templ.SafeURL(link) } data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
+						@topStatsRowContent(index, item)
+					</a>
+				} else {
+					<div class="top-stats-row" data-top-stats-row data-rank={ fmt.Sprint(index + 1) } data-search={ strings.ToLower(item.Name + " " + item.Secondary) } data-hits={ fmt.Sprint(item.Value) }>
+						@topStatsRowContent(index, item)
 					</div>
-					<span class="top-stats-hits">{ formatNumber(item.Value) }</span>
-				</a>
+				}
 			}
 			<div class="top-stats-empty" data-top-stats-empty hidden>No entries match your filter</div>
 		</div>
 		<footer class="top-stats-footer" hidden?={ len(items) == 0 }><span data-top-stats-count>{ fmt.Sprint(min(len(items), 100)) } { topStatsNoun(kind) }</span><span data-top-stats-total>{ formatNumber(rankedTotal(firstRanked(items, 100))) } hits</span></footer>
 	</dialog>
+}
+
+templ topStatsRowContent(index int, item RankedStatView) {
+	<span class="top-stats-rank">{ fmt.Sprint(index + 1) }</span>
+	<div>
+		<strong title={ item.Name }>{ item.Name }</strong>
+		if item.Secondary != "" {
+			<small title={ item.Secondary }>{ item.Secondary }</small>
+		}
+	</div>
+	<span class="top-stats-hits">{ formatNumber(item.Value) }</span>
 }
 
 templ DistributionPanel(title string, items []DistributionItemView) {
@@ -271,16 +291,41 @@ func compactNumber(value uint64) string {
 
 func firstRanked(items []RankedStatView, limit int) []RankedStatView { return items[:min(len(items), limit)] }
 func rankedTotal(items []RankedStatView) uint64 { var total uint64; for _, item := range items { total += item.Value }; return total }
-func topStatsNoun(kind string) string { if kind == "clients" { return "clients" }; return "domains" }
-func topStatsPlaceholder(kind string) string { if kind == "clients" { return "Filter clients..." }; return "Filter domains..." }
+func topStatsNoun(kind string) string {
+	switch {
+	case rankedClients(kind):
+		return "clients"
+	case kind == "apps" || kind == "devices":
+		return kind
+	default:
+		return "domains"
+	}
+}
+func topStatsPlaceholder(kind string) string { return "Filter " + topStatsNoun(kind) + "..." }
+// rankedEntryURL is where a ranking entry leads: its own link when it has one,
+// nowhere for apps, which span many domains the query log cannot match at
+// once, and otherwise the query log filtered to exactly that entry.
+func rankedEntryURL(kind string, item RankedStatView, window string) string {
+	switch {
+	case item.Href != "":
+		return item.Href
+	case kind == "apps" || kind == "devices":
+		return ""
+	default:
+		return topStatsEntryURL(kind, item.Name, window)
+	}
+}
+// rankedClients reports whether a ranking lists client addresses rather than
+// domains. "blocked-clients" ranks clients by their blocked queries only.
+func rankedClients(kind string) bool { return kind == "clients" || kind == "blocked-clients" }
 // topStatsEntryURL opens the query log on exactly what the ranking counted:
 // the same entry, over the same window, matched whole rather than as a
 // substring that would also sweep in 10.0.7.168 for 10.0.7.16.
 func topStatsEntryURL(kind string, name string, window string) string {
 	key := "name"
-	if kind == "clients" { key = "client_ip" }
+	if rankedClients(kind) { key = "client_ip" }
 	value := "/logs?tab=queries&" + key + "=" + url.QueryEscape(name)
-	if kind == "blocked" { value += "&source=blocked" }
+	if kind == "blocked" || kind == "blocked-clients" { value += "&source=blocked" }
 	if window != "" { value += "&" + window }
 	return value
 }

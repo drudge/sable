@@ -16,19 +16,57 @@ import (
 // subscription URLs at their real sizes on a machine with no internet access,
 // and keeps a run from depending on somebody else's uptime.
 func writeBlockListCaches(directory string) error {
+	generated := make(map[string][]string, len(blockListSources))
 	for _, source := range blockListSources {
+		domains := blockListDomains(source, generated)
+		generated[source.Name] = domains
 		path := filepath.Join(directory, blockcompiler.CachePath(source.URL))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("create block list cache directory: %w", err)
 		}
-		if err := writeBlockListCache(path, source); err != nil {
+		if err := writeBlockListCache(path, source, domains); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeBlockListCache(path string, source blockListSource) error {
+// blockListDomains copies the shared entries from lists generated earlier and
+// fills the rest of the list with names of its own.
+func blockListDomains(source blockListSource, generated map[string][]string) []string {
+	random := rand.New(rand.NewSource(int64(len(source.URL)) * 104729))
+	unique := make(map[string]struct{}, source.Count)
+	for _, domain := range source.Pinned {
+		unique[domain] = struct{}{}
+	}
+	for _, shared := range source.Shared {
+		pool := generated[shared.From]
+		for _, index := range random.Perm(len(pool)) {
+			if len(unique) >= source.Count || shared.Count <= 0 {
+				break
+			}
+			if _, taken := unique[pool[index]]; taken {
+				continue
+			}
+			unique[pool[index]] = struct{}{}
+			shared.Count--
+		}
+	}
+	for _, domain := range syntheticDomains(source) {
+		if len(unique) >= source.Count {
+			break
+		}
+		unique[domain] = struct{}{}
+	}
+	domains := make([]string, 0, len(unique))
+	for domain := range unique {
+		domains = append(domains, domain)
+	}
+	sort.Strings(domains)
+	return domains
+}
+
+func writeBlockListCache(path string, source blockListSource, domains []string) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create block list cache %s: %w", source.Name, err)
@@ -43,7 +81,7 @@ func writeBlockListCache(path string, source blockListSource) error {
 	default:
 		fmt.Fprintf(writer, "# %s\n", source.Name)
 	}
-	for _, domain := range syntheticDomains(source) {
+	for _, domain := range domains {
 		switch source.Format {
 		case "hosts":
 			fmt.Fprintf(writer, "0.0.0.0 %s\n", domain)
