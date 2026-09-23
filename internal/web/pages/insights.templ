@@ -946,7 +946,7 @@ templ InsightDevices(view InsightsOverviewView) {
 					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
-							<small>{ insightDeviceSubtitle(device) }</small>
+							@insightDeviceSubtitle(device)
 							if device.TypeLabel != "" {
 								<small>{ insightTypeText(device) }</small>
 							}
@@ -977,7 +977,7 @@ templ InsightDevices(view InsightsOverviewView) {
 								<th scope="row">
 									<span class="insight-device-cell">
 										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
-										<code>{ insightDeviceSubtitle(device) }</code>
+										@insightDeviceSubtitle(device)
 									</span>
 								</th>
 								<td class={ ifThen(device.TypeConfidence == "low" || device.TypeLabel == "", "muted-cell", "") }>{ insightTypeText(device) }</td>
@@ -1128,9 +1128,9 @@ func insightDrawerTitle(view InsightDeviceDrawerView) string {
 	return "Device"
 }
 
-// insightDeviceSubtitle is the identifying detail under a device's name: its
-// addresses, and its hardware address when that is not already the name.
-func insightDeviceSubtitle(device InsightDeviceView) string {
+// insightDeviceIdentifiers are the identifying details under a device's name:
+// its hardware address when that is not already the name, and its addresses.
+func insightDeviceIdentifiers(device InsightDeviceView) []string {
 	parts := make([]string, 0, 3)
 	if device.MAC != "" && device.Label != device.MAC {
 		parts = append(parts, device.MAC)
@@ -1144,7 +1144,17 @@ func insightDeviceSubtitle(device InsightDeviceView) string {
 			parts = append(parts, address.Address)
 		}
 	}
-	return strings.Join(parts, " · ")
+	return parts
+}
+
+// insightDeviceSubtitle sets each identifier whole, so a narrow column moves
+// an address to the next line instead of cutting it off.
+templ insightDeviceSubtitle(device InsightDeviceView) {
+	<span class="insight-device-ids">
+		for _, part := range insightDeviceIdentifiers(device) {
+			<code>{ part }</code>
+		}
+	</span>
 }
 
 func insightDeviceTime(moment time.Time, display TimeDisplay) string {

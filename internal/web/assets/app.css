@@ -3810,7 +3810,9 @@ dialog[open]::backdrop {
 .insight-device-cell { display: grid; min-width: 11rem; max-width: 26rem; gap: .2rem; }
 /* Between phone and desktop widths the name matters more than history. */
 @media (max-width: 1100px) { .insight-device-table .insight-optional-cell { display: none; } }
-.insight-device-cell code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.insight-device-ids { display: flex; min-width: 0; flex-wrap: wrap; gap: 0 .4rem; }
+.insight-device-ids code { color: var(--muted-foreground); font-size: .72rem; white-space: nowrap; }
+.insight-device-ids code + code::before { margin-right: .4rem; content: "·"; }
 .insight-device-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }
 .insight-device-name strong { min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .insight-device-name strong.mono { font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }

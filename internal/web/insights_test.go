@@ -339,7 +339,7 @@ func TestInsightsDevicesGroupAddressesAndReportNewOnes(t *testing.T) {
 		`data-active-tab="devices"`, `id="insight-devices-title"`,
 		// The laptop's IPv4 and IPv6 addresses are one device, named from its
 		// local host entry and tied together by the neighbor table.
-		"george-laptop.corp.example", `<span class="status-badge">Local host</span>`, "3c:22:fb:01:02:03 · 10.0.0.5 · fd00::5",
+		"george-laptop.corp.example", `<span class="status-badge">Local host</span>`, `<span class="insight-device-ids"><code>3c:22:fb:01:02:03</code><code>10.0.0.5</code><code>fd00::5</code></span>`,
 		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
 		// 10.0.0.50 first appeared today while tracking was already running,
 		// and nothing ties it to hardware, so it is a new address.
