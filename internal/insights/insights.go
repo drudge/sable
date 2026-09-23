@@ -89,8 +89,11 @@ func Reasons(texts ...string) []Reason {
 // or label can attach to the thing itself rather than to its display text.
 // Only the references that apply are set.
 type Subject struct {
-	Label     string
-	Monospace bool
+	Label string
+	// LabelSource says where Label came from when it is a name Sable chose,
+	// such as "UniFi" or "Reverse DNS", so the page can show its provenance.
+	LabelSource string
+	Monospace   bool
 	// Device is a device identity key such as "mac:3c:22:fb:01:02:03" or
 	// "ip:10.0.0.5".
 	Device    string

@@ -3872,3 +3872,6 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 @media (max-width: 640px) {
 	.insight-drawer-actions .button { flex: 1 1 auto; white-space: nowrap; }
 }
+/* The drawer header sets every span as an uppercase eyebrow; a name source
+   keeps its own spelling, such as UniFi. */
+.query-detail-header .insight-name-source { flex: 0 0 auto; margin-left: .25rem; padding: .1rem .45rem; font-size: .625rem; letter-spacing: normal; text-transform: none; white-space: nowrap; }

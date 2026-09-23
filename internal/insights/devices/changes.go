@@ -245,9 +245,6 @@ func Label(device Device) string {
 
 func deviceFacts(device Device, includeFirstSeen bool) []insights.Fact {
 	facts := make([]insights.Fact, 0, 6)
-	if device.NameSource != "" {
-		facts = append(facts, insights.Fact{Label: "Name from", Value: device.NameSource})
-	}
 	if device.MAC != "" {
 		value := device.MAC
 		if device.PrivateMAC {
@@ -268,7 +265,7 @@ func deviceFacts(device Device, includeFirstSeen bool) []insights.Fact {
 // deviceSubject identifies a device durably by its identity key, so anything
 // later attached to a finding about it follows the device rather than its name.
 func deviceSubject(device Device) insights.Subject {
-	return insights.Subject{Label: Label(device), Monospace: device.Name == "", Device: device.Key}
+	return insights.Subject{Label: Label(device), LabelSource: device.NameSource, Monospace: device.Name == "", Device: device.Key}
 }
 
 func newDeviceReasons(device Device, input ChangesInput) []insights.Reason {

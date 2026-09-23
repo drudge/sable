@@ -246,6 +246,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 			ID:   "insight-finding-" + strconv.Itoa(index+1),
 			Kind: finding.Kind, Tone: string(finding.Tone), Icon: insightFindingIcon(finding.Kind),
 			Title: finding.Title, Subject: finding.Subject.Label, SubjectMonospace: finding.Subject.Monospace,
+			SubjectSource: finding.Subject.LabelSource,
 			Summary: finding.Summary, Explanations: finding.Explanations, Method: finding.Method,
 			Destination: finding.Destination, DestinationLabel: finding.DestinationLabel,
 		}

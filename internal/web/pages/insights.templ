@@ -126,6 +126,8 @@ type InsightFindingView struct {
 	Title            string
 	Subject          string
 	SubjectMonospace bool
+	// SubjectSource is where the subject's name came from, shown beside it.
+	SubjectSource string
 	Summary          string
 	Reasons          []InsightReasonView
 	Explanations     []string
@@ -416,10 +418,7 @@ templ InsightFindings(view InsightsOverviewView) {
 // InsightEvidence opens the facts behind one finding in the same drawer the
 // query log uses to explain a query.
 templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
-	@DetailDrawer(DetailDrawerView{
-		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
-		CloseLabel: "Close details",
-	}, insightEvidenceFooter(finding, view)) {
+	@DetailDrawer(insightEvidenceHeader(finding), insightEvidenceFooter(finding, view)) {
 		// The cards come first because they are the evidence itself; the one
 		// block after them says why that evidence matters.
 		if len(finding.Reasons) == 0 {
@@ -498,6 +497,22 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 			</section>
 		}
 	}
+}
+
+func insightEvidenceHeader(finding InsightFindingView) DetailDrawerView {
+	header := DetailDrawerView{
+		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
+		CloseLabel: "Close details",
+	}
+	if finding.SubjectSource != "" {
+		header.TitleAction = insightNameSource(finding.SubjectSource)
+	}
+	return header
+}
+
+// insightNameSource says where a device's name came from, beside the name.
+templ insightNameSource(source string) {
+	<span class="status-badge insight-name-source" title={ "Name from " + source }><span class="sr-only">Name from </span>{ source }</span>
 }
 
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {

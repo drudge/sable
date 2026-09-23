@@ -1,6 +1,9 @@
 package pages
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestInsightCausesReadAsOneSentence(t *testing.T) {
 	t.Parallel()
@@ -16,5 +19,17 @@ func TestInsightCausesReadAsOneSentence(t *testing.T) {
 		if got := insightCauses(test.causes); got != test.want {
 			t.Errorf("insightCauses(%q) = %q, want %q", test.causes, got, test.want)
 		}
+	}
+}
+
+func TestInsightEvidenceShowsWhereTheNameCameFromBesideIt(t *testing.T) {
+	t.Parallel()
+	finding := InsightFindingView{ID: "insight-finding-1", Title: "New device on the network", Subject: "front-door-doorbell", SubjectSource: "UniFi"}
+	markup := renderComponent(t, InsightEvidence(finding, InsightsOverviewView{}))
+	if !strings.Contains(markup, `<span class="sr-only">Name from </span>UniFi</span>`) {
+		t.Errorf("drawer header is missing the name source badge:\n%s", markup)
+	}
+	if strings.Contains(markup, "<dt>Name from</dt>") {
+		t.Error("the name source is still a fact card")
 	}
 }
