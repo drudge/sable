@@ -203,7 +203,7 @@ func insightsRangeControl(active string) RangeControlView {
 }
 
 var insightsTabOptions = []tabOption{
-	{"overview", "Overview", "sparkles"},
+	{"overview", "Overview", "lightbulb"},
 	{"devices", "Devices", "users"},
 	{"blocking", "Blocking", "shield"},
 }
