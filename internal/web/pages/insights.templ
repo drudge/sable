@@ -1120,14 +1120,14 @@ func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
 	return header
 }
 
-// insightDeviceTitleActions follows the name with where it came from and, for
-// operators who can rename devices, the rename button.
+// insightDeviceTitleActions follows the name with the rename button, for
+// operators who can rename devices, and then where the name came from.
 templ insightDeviceTitleActions(view InsightDeviceDrawerView) {
-	if view.Device.NameSource != "" {
-		@insightNameSource(view.Device.NameSource)
-	}
 	if view.CanName {
 		@insightDeviceRenameButton(view)
+	}
+	if view.Device.NameSource != "" {
+		@insightNameSource(view.Device.NameSource)
 	}
 }
 

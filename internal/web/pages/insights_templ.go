@@ -3883,8 +3883,8 @@ func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
 	return header
 }
 
-// insightDeviceTitleActions follows the name with where it came from and, for
-// operators who can rename devices, the rename button.
+// insightDeviceTitleActions follows the name with the rename button, for
+// operators who can rename devices, and then where the name came from.
 func insightDeviceTitleActions(view InsightDeviceDrawerView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -3906,14 +3906,14 @@ func insightDeviceTitleActions(view InsightDeviceDrawerView) templ.Component {
 			templ_7745c5c3_Var153 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		if view.Device.NameSource != "" {
-			templ_7745c5c3_Err = insightNameSource(view.Device.NameSource).Render(ctx, templ_7745c5c3_Buffer)
+		if view.CanName {
+			templ_7745c5c3_Err = insightDeviceRenameButton(view).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		if view.CanName {
-			templ_7745c5c3_Err = insightDeviceRenameButton(view).Render(ctx, templ_7745c5c3_Buffer)
+		if view.Device.NameSource != "" {
+			templ_7745c5c3_Err = insightNameSource(view.Device.NameSource).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
