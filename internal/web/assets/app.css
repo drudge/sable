@@ -3766,7 +3766,13 @@ dialog[open]::backdrop {
 .query-detail-answer .insight-row-value { min-width: 0; color: var(--foreground); font-size: inherit; }
 .insight-row-value > strong { min-width: 0; font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
 /* The copy button sits above the row-wide link so both stay usable. */
-.insight-row-value > button { position: relative; z-index: 1; }
+.insight-row-value > button { position: relative; z-index: 1; padding: 0; }
+.insight-row-value > button.is-copied .copy-icon-success { color: #22c55e; }
+/* The icon wrappers are text height by default, which sits the icon high in
+   its hover box. Collapsing them to the icon centers it. */
+.insight-row-value > button > span { align-items: center; justify-content: center; line-height: 0; }
+.insight-row-value > button:not(.is-copied) > .copy-icon-default, .insight-row-value > button.is-copied > .copy-icon-success { display: flex; }
+.insight-row-value > button .nav-icon { flex: 0 0 .8rem; width: .8rem; height: .8rem; }
 .insight-list-copy small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .insight-list-link, .insight-list-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .insight-list-link { display: inline-flex; align-items: center; }
