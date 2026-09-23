@@ -196,7 +196,7 @@ func insightsRangeControl(active string) RangeControlView {
 
 var insightsTabOptions = []tabOption{
 	{"overview", "Overview", "lightbulb"},
-	{"devices", "Devices", "users"},
+	{"devices", "Devices", "monitor-smartphone"},
 	{"blocking", "Blocking", "shield"},
 }
 
@@ -355,7 +355,7 @@ templ insightBlockingSkeleton(view InsightsOverviewView) {
 templ insightsOverviewMetrics(view InsightsOverviewView) {
 	if view.CanLogs && !view.DevicesUnavailable {
 		<div class="operational-metric-grid insight-metrics" data-metric-count="4">
-			@OperationalMetricCard("users", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue")
+			@OperationalMetricCard("monitor-smartphone", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue")
 			@OperationalMetricCard("plus", "New Devices", formatNumber(uint64(view.DeviceSummary.New)), "First seen during this period, while Sable was already watching", "green")
 			@OperationalMetricCard("line-chart", "Queries", formatNumber(view.DeviceSummary.Queries), "Every query in this period, from query history", "purple")
 			@OperationalMetricCard("ban", "Blocked", percent(view.DeviceSummary.Blocked, view.DeviceSummary.Queries), formatNumber(view.DeviceSummary.Blocked) + " queries answered by blocking policy in this period", "red")
@@ -829,7 +829,7 @@ templ InsightDevices(view InsightsOverviewView) {
 			</div>
 		} else if len(view.Devices) == 0 {
 			<div class="insight-section-empty">
-				@Icon("users")
+				@Icon("monitor-smartphone")
 				<strong>No devices in this period</strong>
 				<p>Devices appear here once they send queries that Sable records in query history.</p>
 			</div>

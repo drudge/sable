@@ -204,7 +204,7 @@ func insightsRangeControl(active string) RangeControlView {
 
 var insightsTabOptions = []tabOption{
 	{"overview", "Overview", "lightbulb"},
-	{"devices", "Devices", "users"},
+	{"devices", "Devices", "monitor-smartphone"},
 	{"blocking", "Blocking", "shield"},
 }
 
@@ -833,7 +833,7 @@ func insightsOverviewMetrics(view InsightsOverviewView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = OperationalMetricCard("users", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = OperationalMetricCard("monitor-smartphone", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2769,7 +2769,7 @@ func InsightDevices(view InsightsOverviewView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = Icon("users").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = Icon("monitor-smartphone").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
