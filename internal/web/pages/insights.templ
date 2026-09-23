@@ -703,13 +703,11 @@ templ insightQueriesCell(queries querylog.SourceActivity) {
 }
 
 // insightShareBar draws a list's unique share against the part other lists
-// also cover. It is drawn with SVG attributes rather than inline styles, which
-// the console's content security policy does not allow.
+// also cover. A native progress element sizes its fill from attributes, which
+// the console's content security policy allows where inline styles are not.
+// The percentage beside it is what assistive technology reads.
 templ insightShareBar(list InsightListView) {
-	<svg class="insight-share-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
-		<rect class="insight-share-track" x="0" y="0" width="100" height="6" rx="3"></rect>
-		<rect class="insight-share-fill" x="0" y="0" width={ insightShareWidth(list) } height="6" rx="3"></rect>
-	</svg>
+	<progress class="insight-share-bar" max="100" value={ insightShareWidth(list) } aria-hidden="true"></progress>
 }
 
 func insightsRankingWindow(view InsightsOverviewView) DashboardInsightsView {

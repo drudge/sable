@@ -3726,10 +3726,12 @@ dialog[open]::backdrop {
 .insight-list-name code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .numeric-cell, .insight-share, .insight-overlap-share { font-variant-numeric: tabular-nums; }
 .insight-share-cell { display: flex; min-width: 9.5rem; align-items: center; gap: .625rem; }
-.insight-share-bar { display: block; width: 5rem; height: .375rem; flex: 0 0 5rem; }
-.insight-share-track { fill: var(--muted); }
-.insight-share-fill { fill: #2563eb; }
-.dark .insight-share-fill { fill: #3b82f6; }
+/* Share bars use Sable's gold, the deeper amber on light backgrounds. */
+.insight-share-bar { --insight-share-fill: #d97706; display: block; width: 5rem; height: .375rem; flex: 0 0 5rem; overflow: hidden; border: 0; border-radius: 999px; background: var(--muted); appearance: none; }
+.dark .insight-share-bar { --insight-share-fill: #f1ad47; }
+.insight-share-bar::-webkit-progress-bar { border-radius: 999px; background: var(--muted); }
+.insight-share-bar::-webkit-progress-value { border-radius: 999px; background: var(--insight-share-fill); }
+.insight-share-bar::-moz-progress-bar { border-radius: 999px; background: var(--insight-share-fill); }
 .insight-share { min-width: 3.25rem; font-size: .8125rem; font-weight: 500; }
 .insight-overlap-share { margin-left: .25rem; color: var(--muted-foreground); font-size: .75rem; }
 .insight-contribution .blocklist-health-warning { display: flex; align-items: center; gap: .35rem; color: var(--destructive); font-size: .75rem; }
