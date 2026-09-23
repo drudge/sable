@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 // The analyzers themselves live in internal/insights. The console only
@@ -204,4 +206,36 @@ func (sources *deviceSources) HourlyActivity(ctx context.Context, since time.Tim
 		sources.server.logger.Warn("read device hourly activity", "error", err)
 	}
 	return activity, err
+}
+
+// RepeatedLookups reads the last day's repeated lookups once per window and
+// leaves out names in zones this server answers for, which are the network's
+// own hosts rather than anything a device phones home to.
+func (sources *deviceSources) RepeatedLookups(ctx context.Context, since time.Time) ([]querylog.LookupTimes, error) {
+	lookups, _, err := sources.server.repeatedLookupCache.load(ctx, sources.window, func(ctx context.Context, _, until time.Time) ([]querylog.LookupTimes, error) {
+		return sources.reader.RepeatedLookups(ctx, since, until)
+	})
+	if err != nil {
+		sources.server.logger.Warn("read repeated lookups", "error", err)
+		return nil, err
+	}
+	zones := sources.server.zones.Current().Zones
+	kept := make([]querylog.LookupTimes, 0, len(lookups))
+	for _, lookup := range lookups {
+		if !inLocalZone(lookup.Name, zones) {
+			kept = append(kept, lookup)
+		}
+	}
+	return kept, nil
+}
+
+func inLocalZone(name string, zones []zonemodel.Zone) bool {
+	name = strings.TrimSuffix(strings.ToLower(name), ".")
+	for _, zone := range zones {
+		origin := strings.TrimSuffix(strings.ToLower(zone.Name), ".")
+		if origin != "" && (name == origin || strings.HasSuffix(name, "."+origin)) {
+			return true
+		}
+	}
+	return false
 }

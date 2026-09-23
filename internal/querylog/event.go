@@ -199,6 +199,14 @@ type ClientActivity struct {
 	BaselineNewDomains uint64
 }
 
+// LookupTimes is when one client looked up one name, oldest first, for
+// finding lookups that repeat on a schedule.
+type LookupTimes struct {
+	Client string
+	Name   string
+	Times  []time.Time
+}
+
 // ClientActivityReport is every client with traffic in a window. SeenSince is
 // when first-seen tracking began; a client first seen at that moment may have
 // been around before it.

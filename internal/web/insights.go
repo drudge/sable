@@ -52,7 +52,7 @@ var insightsPermissions = []string{auth.PermissionBlockingRead, auth.PermissionL
 var insightsTabs = []string{"overview", "devices", "blocking"}
 
 // maximumOverviewFindings keeps the Overview to what is worth reading.
-const maximumOverviewFindings = 8
+const maximumOverviewFindings = 10
 
 // insightsTab picks the section to show. A range change arrives without its
 // own tab parameter, so the tab the operator is on is read from the page URL
@@ -307,6 +307,8 @@ func insightFindingIcon(kind string) string {
 		return "apps"
 	case devices.KindUnusualHours:
 		return "clock"
+	case devices.KindCheckIn:
+		return "timer"
 	case devices.KindApplianceDrift:
 		return "globe-lock"
 	default:

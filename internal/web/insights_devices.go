@@ -41,6 +41,7 @@ type deviceInsightReader interface {
 	ClientDomainHistory(context.Context, []string, int) ([]querylog.ClientDomain, error)
 	ClientNamesMatching(context.Context, time.Time, []string) (map[string][]string, error)
 	ClientHourlyActivity(context.Context, time.Time, time.Time) (map[string]map[time.Time]uint64, error)
+	RepeatedLookups(context.Context, time.Time, time.Time) ([]querylog.LookupTimes, error)
 }
 
 // deviceTypeSuffixes are the domains of the services whose use says what a

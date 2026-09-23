@@ -92,6 +92,7 @@ type Server struct {
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	deviceActivityCache   windowCache[querylog.ClientActivityReport]
 	deviceSignalCache     windowCache[map[string][]string]
+	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
 	blockListAnalysis     blockinginsights.ContributionCache
 	baseDirectory         string
 	historyPrune          chan struct{}

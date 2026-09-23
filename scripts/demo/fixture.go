@@ -1,6 +1,10 @@
 package main
 
-import "github.com/drudge/sable/internal/querylog"
+import (
+	"time"
+
+	"github.com/drudge/sable/internal/querylog"
+)
 
 // The demo deployment belongs to Vandelay Industries, an importer and exporter
 // of latex. Everything here is invented so the console can be photographed
@@ -271,6 +275,9 @@ type deviceStory struct {
 	nightBurst int
 	// newDomains are queried for the first time during the last day.
 	newDomains []string
+	// heartbeat is looked up every heartbeatEvery through the last day.
+	heartbeat      string
+	heartbeatEvery time.Duration
 }
 
 var deviceStories = []deviceStory{
@@ -285,6 +292,9 @@ var deviceStories = []deviceStory{
 	// The file server keeps office hours and woke up at 3 AM last night.
 	{address: "10.20.10.22", domains: []string{"sync.vandelay.com", "s3.amazonaws.com", "time.apple.com"}, perDay: 80, daysFrom: 16, daysTo: 0,
 		established: true, officeHours: true, nightBurst: 180},
+	// The hallway sensor phones home every ten minutes, day and night.
+	{address: "10.20.30.112", domains: []string{"ntp.ubnt.com"}, established: true,
+		heartbeat: "c2.sensorhub-telemetry.io", heartbeatEvery: 10 * time.Minute},
 	// The doorbell was installed two days ago.
 	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
 }

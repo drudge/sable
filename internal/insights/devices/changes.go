@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/insights"
+	"github.com/drudge/sable/internal/querylog"
 )
 
 // Finding kinds produced by this package.
@@ -60,6 +61,9 @@ type ChangesInput struct {
 	RecentDomains func(Device) []insights.DomainEvidence
 	// Location is the time zone hours of the day are read in.
 	Location *time.Location
+	// RepeatedLookups are names only one client looked up many times in the
+	// last day, with every lookup's time.
+	RepeatedLookups []querylog.LookupTimes
 }
 
 // Changes reports what changed about devices, most important first. Every
@@ -70,6 +74,7 @@ func Changes(input ChangesInput) []insights.Finding {
 	findings = append(findings, quietFindings(input)...)
 	findings = append(findings, spikeFindings(input)...)
 	findings = append(findings, unusualHourFindings(input)...)
+	findings = append(findings, checkInFindings(input)...)
 	findings = append(findings, newDeviceFindings(input)...)
 	// A device already reported for its new destinations needs no second
 	// finding that counts the same domains another way.
@@ -336,6 +341,9 @@ type Report struct {
 type Sources interface {
 	Devices(context.Context, insights.Window) (Report, error)
 	NewDomains(context.Context, Device, insights.Window) ([]insights.DomainEvidence, error)
+	// RepeatedLookups lists names only one client looked up many times since
+	// a moment, with every lookup's time.
+	RepeatedLookups(context.Context, time.Time) ([]querylog.LookupTimes, error)
 	// HourlyActivity counts each client address's queries per hour since a
 	// moment, keyed by the hour's start.
 	HourlyActivity(context.Context, time.Time) (map[string]map[time.Time]uint64, error)
@@ -357,6 +365,8 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 	}
 	// Routines need two weeks before the last day, whatever window is shown.
 	hourly, hourlyErr := analyzer.Sources.HourlyActivity(ctx, report.Window.End.Add(-(routineDays+1)*24*time.Hour))
+	// A failed read only leaves check-ins out.
+	repeated, _ := analyzer.Sources.RepeatedLookups(ctx, report.Window.End.Add(-24*time.Hour))
 	return Changes(ChangesInput{
 		Devices: report.Devices, WindowStart: report.Window.Start, Now: report.Window.End, SeenSince: report.SeenSince,
 		NewDomains: func(device Device) []insights.DomainEvidence {
@@ -382,6 +392,7 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 			}
 			return merged
 		},
+		RepeatedLookups: repeated,
 		RecentDomains: func(device Device) []insights.DomainEvidence {
 			domains, err := analyzer.Sources.NewDomains(ctx, device, insights.Window{Start: report.Window.End.Add(-24 * time.Hour), End: report.Window.End})
 			if err != nil {
