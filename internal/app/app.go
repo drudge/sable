@@ -400,6 +400,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	runRuntimeWorker(func(context.Context) {
 		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)
 	})
+	runRuntimeWorker(func(context.Context) {
+		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
+	})
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
 		dnsProviderCredentials,
