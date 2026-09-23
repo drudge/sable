@@ -166,6 +166,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
 	}
+	view.Headline = insights.Summarize(findings)
 	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], snapshot.Config)
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 

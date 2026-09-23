@@ -128,6 +128,10 @@ type Finding struct {
 	Subject Subject
 	// Summary states the evidence in one factual sentence.
 	Summary string
+	// Headline is the finding as a short clause for the page's one-sentence
+	// summary, such as "dock-camera-02 went quiet". Findings that are not
+	// news, such as how much two block lists overlap, leave it empty.
+	Headline string
 	// Reasons are the individual observations behind the finding, each one a
 	// short statement the operator can check against the facts below it.
 	Reasons []Reason
@@ -326,4 +330,32 @@ func Hide(findings []Finding, feedback []Feedback, now time.Time) (shown, hidden
 		}
 	}
 	return shown, hidden
+}
+
+// maximumHeadlines is how many findings the one-sentence summary names.
+const maximumHeadlines = 3
+
+// Summarize says what stands out in one sentence, from the headlines of the
+// most important findings, and says so plainly when nothing does.
+func Summarize(findings []Finding) string {
+	headlines := make([]string, 0, maximumHeadlines)
+	more := 0
+	for _, finding := range findings {
+		if finding.Headline == "" {
+			continue
+		}
+		if len(headlines) == maximumHeadlines {
+			more++
+			continue
+		}
+		headlines = append(headlines, finding.Headline)
+	}
+	if len(headlines) == 0 {
+		return "All quiet. Nothing on your network changed in a way that needs a look."
+	}
+	sentence := JoinAnd(headlines) + "."
+	if more > 0 {
+		sentence += fmt.Sprintf(" %d more %s below.", more, Plural(more, "thing", "things"))
+	}
+	return sentence
 }

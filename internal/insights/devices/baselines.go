@@ -143,7 +143,8 @@ func unusualHourFindings(input ChangesInput) []insights.Finding {
 		between := "between " + span.String()
 		findings = append(findings, insights.Finding{
 			Kind: KindUnusualHours, Tone: insights.ToneAttention, Title: "Active at an unusual hour",
-			Subject: deviceSubject(device),
+			Subject:  deviceSubject(device),
+			Headline: Label(device) + " woke up at " + hourLabel(span.start),
 			Summary: fmt.Sprintf("Sent %s %s %s in the last day, a time it had been silent every day for the two weeks before.",
 				insights.FormatCount(span.queries), insights.Plural(span.queries, "query", "queries"), between),
 			Reasons: insights.Reasons(
@@ -185,7 +186,8 @@ func applianceFindings(input ChangesInput, skip map[string]bool) []insights.Find
 		label := TypeLabel(device.Guess.Type)
 		finding := insights.Finding{
 			Kind: KindApplianceDrift, Tone: insights.ToneAttention, Title: label + " talking somewhere new",
-			Subject: deviceSubject(device),
+			Subject:  deviceSubject(device),
+			Headline: Label(device) + " started calling new services",
 			Summary: fmt.Sprintf("Queried %s %s it had never used in the last 24 hours. A %s usually sticks to the same few services.",
 				insights.FormatCount(device.RecentNewDomains), insights.Plural(device.RecentNewDomains, "domain", "domains"), strings.ToLower(label)),
 			Reasons: []insights.Reason{

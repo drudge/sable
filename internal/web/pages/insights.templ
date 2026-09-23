@@ -46,6 +46,8 @@ type InsightsOverviewView struct {
 	Contribution        *InsightsContributionView
 	ActiveTab           string
 	CanNameDevices      bool
+	// Headline says what stands out in one sentence.
+	Headline string
 	// CanHideFindings is set for operators who may hide findings for everyone.
 	CanHideFindings bool
 	HiddenFindings  []InsightHiddenFindingView
@@ -298,6 +300,9 @@ templ InsightsContent(view InsightsOverviewView) {
 			if view.Loading {
 				@insightsSkeleton(view)
 			} else {
+				if view.Headline != "" {
+					<p class="insights-headline" aria-live="polite">{ view.Headline }</p>
+				}
 				@insightsNotes(view)
 				@insightsOverviewMetrics(view)
 				@InsightFindings(view)

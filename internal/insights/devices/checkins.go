@@ -140,8 +140,9 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 		every := everyText(plan.interval)
 		finding := insights.Finding{
 			Kind: KindCheckIn, Tone: insights.ToneNotice, Title: "Checks in on a schedule",
-			Subject: deviceSubject(device),
-			Summary: fmt.Sprintf("Looked up %s %s, %d times in the last day. No other device uses that name.", lookup.Name, every, plan.lookups),
+			Subject:  deviceSubject(device),
+			Headline: Label(device) + " checks in " + every,
+			Summary:  fmt.Sprintf("Looked up %s %s, %d times in the last day. No other device uses that name.", lookup.Name, every, plan.lookups),
 			Reasons: []insights.Reason{
 				{Text: fmt.Sprintf("%d lookups in the last 24 hours, %s like clockwork:", plan.lookups, every), Code: lookup.Name},
 				{Text: "Kept it up for " + insights.FormatDuration(plan.span) + ", through the night"},

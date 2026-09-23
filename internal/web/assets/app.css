@@ -3914,3 +3914,6 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
 .insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
+/* The Overview opens with one plain sentence about what stands out. */
+.insights-headline { max-width: 60rem; margin: 0; color: var(--foreground); font-size: 1.125rem; font-weight: 500; line-height: 1.5; text-wrap: pretty; }
+@media (max-width: 640px) { .insights-headline { font-size: 1rem; } }

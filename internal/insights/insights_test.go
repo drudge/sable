@@ -51,3 +51,23 @@ func TestCollectOrdersFindingsAndGivesThemStableIDs(t *testing.T) {
 		t.Fatal("a domain subject did not key by domain")
 	}
 }
+
+func TestSummarizeNamesWhatStandsOut(t *testing.T) {
+	t.Parallel()
+	findings := []Finding{
+		{Headline: "dock-camera-02 went quiet"},
+		{Headline: ""},
+		{Headline: "front-door-doorbell joined the network"},
+		{Headline: "george-laptop started using Discord"},
+		{Headline: "file-server woke up at 3 AM"},
+	}
+	if got := Summarize(findings); got != "dock-camera-02 went quiet, front-door-doorbell joined the network, and george-laptop started using Discord. 1 more thing below." {
+		t.Errorf("Summarize = %q", got)
+	}
+	if got := Summarize(findings[:1]); got != "dock-camera-02 went quiet." {
+		t.Errorf("Summarize one = %q", got)
+	}
+	if got := Summarize(nil); got != "All quiet. Nothing on your network changed in a way that needs a look." {
+		t.Errorf("Summarize none = %q", got)
+	}
+}

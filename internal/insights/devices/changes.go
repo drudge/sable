@@ -114,7 +114,8 @@ func newDeviceFindings(input ChangesInput) []insights.Finding {
 		}
 		findings = append(findings, insights.Finding{
 			Kind: KindNewDevice, Tone: insights.ToneNotice, Title: title,
-			Subject: subject,
+			Subject:  subject,
+			Headline: Label(device) + " joined the network",
 			Summary: describeDevice(device) + fmt.Sprintf("First seen %s ago and has sent %s %s since.",
 				insights.FormatDuration(input.Now.Sub(device.FirstSeen)), insights.FormatCount(device.Queries), insights.Plural(device.Queries, "query", "queries")),
 			Reasons:      newDeviceReasons(device, input),
@@ -151,7 +152,8 @@ func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Fi
 	for _, device := range candidates[:min(len(candidates), maximumDestinations)] {
 		finding := insights.Finding{
 			Kind: KindNewDestinations, Tone: insights.ToneNotice, Title: "Talking to new places",
-			Subject: deviceSubject(device),
+			Subject:  deviceSubject(device),
+			Headline: fmt.Sprintf("%s queried %s new %s", Label(device), insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain", "domains")),
 			Summary: fmt.Sprintf("Queried %s %s for the first time during the selected period.",
 				insights.FormatCount(device.NewDomains), insights.Plural(device.NewDomains, "domain", "domains")),
 			Reasons: insights.Reasons(
@@ -199,7 +201,8 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 		ratio := float64(device.Recent) / dailyAverage(device)
 		findings = append(findings, insights.Finding{
 			Kind: KindTrafficSpike, Tone: insights.ToneAttention, Title: "Unusually busy",
-			Subject: deviceSubject(device),
+			Subject:  deviceSubject(device),
+			Headline: fmt.Sprintf("%s is %.0f× busier than usual", Label(device), ratio),
 			Summary: fmt.Sprintf("Sent %s queries in the last 24 hours, %.1f× its daily average over the week before.",
 				insights.FormatCount(device.Recent), ratio),
 			Reasons: insights.Reasons(
@@ -235,7 +238,8 @@ func quietFindings(input ChangesInput) []insights.Finding {
 	for _, device := range candidates[:min(len(candidates), maximumQuiet)] {
 		findings = append(findings, insights.Finding{
 			Kind: KindWentQuiet, Tone: insights.ToneAttention, Title: "Went quiet",
-			Subject: deviceSubject(device),
+			Subject:  deviceSubject(device),
+			Headline: Label(device) + " went quiet",
 			Summary: fmt.Sprintf("No queries in the last 24 hours. It averaged %s a day over the week before.",
 				insights.FormatCount(uint64(dailyAverage(device)+0.5))),
 			Reasons: quietReasons(device, input.Now),

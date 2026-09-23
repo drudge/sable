@@ -128,6 +128,8 @@ func pastBlockFindings(blocks []PastBlock) []insights.Finding {
 			Tone:    insights.ToneAttention,
 			Title:   "Possible past blocking issue",
 			Subject: insights.Subject{Label: evidence.Name, Monospace: true, Domain: evidence.Name},
+			Headline: fmt.Sprintf("%s was blocked %s %s before you allowed it", evidence.Name,
+				insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times")),
 			Summary: fmt.Sprintf("Blocked %s %s during the selected period and %s.",
 				insights.FormatCount(evidence.Blocked), insights.Plural(evidence.Blocked, "time", "times"), allowedBy),
 			Reasons: pastBlockReasons(block),
@@ -184,13 +186,14 @@ func updateFindings(input FindingsInput) []insights.Finding {
 			facts = append(facts, insights.Fact{Label: "Last error", Value: health.LastError, Monospace: true})
 		}
 		findings = append(findings, insights.Finding{
-			Kind:    KindUpdateFailing,
-			Tone:    insights.ToneAttention,
-			Title:   "Block list updates are failing",
-			Subject: insights.Subject{Label: list.Name, BlockList: list.Name},
-			Summary: summary,
-			Reasons: updateReasons(health, input.Now, interval),
-			Facts:   facts,
+			Kind:     KindUpdateFailing,
+			Tone:     insights.ToneAttention,
+			Title:    "Block list updates are failing",
+			Subject:  insights.Subject{Label: list.Name, BlockList: list.Name},
+			Headline: list.Name + " stopped updating",
+			Summary:  summary,
+			Reasons:  updateReasons(health, input.Now, interval),
+			Facts:    facts,
 			Explanations: []string{
 				"The list's server is down or has moved",
 				"Something between Sable and the internet is stopping the download",

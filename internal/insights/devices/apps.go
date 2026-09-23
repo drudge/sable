@@ -143,6 +143,7 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 	return insights.Finding{
 		Kind: KindNewApp, Tone: insights.ToneNotice, Title: title,
 		Subject:      deviceSubject(device),
+		Headline:     Label(device) + " started using " + insights.JoinAnd(names),
 		Summary:      fmt.Sprintf("Started using %s during the selected period.", insights.JoinAnd(names)),
 		Reasons:      reasons,
 		Facts:        facts,
