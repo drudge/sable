@@ -48,6 +48,8 @@ type InsightsOverviewView struct {
 	CanNameDevices      bool
 	// Headline says what stands out in one sentence.
 	Headline string
+	// Alerts is the webhook setup, shown to operators who can change it.
+	Alerts *InsightAlertsView
 	// CanHideFindings is set for operators who may hide findings for everyone.
 	CanHideFindings bool
 	HiddenFindings  []InsightHiddenFindingView
@@ -311,6 +313,9 @@ templ InsightsContent(view InsightsOverviewView) {
 						@RankedPanel("Top Apps", "apps", view.TopApps, insightsRankingWindow(view))
 						@RankedPanel("Busiest Devices", "devices", view.BusiestDevices, insightsRankingWindow(view))
 					</section>
+				}
+				if view.Alerts != nil {
+					@InsightAlerts(*view.Alerts)
 				}
 			}
 		</div>
@@ -1379,4 +1384,52 @@ func lowerFirst(text string) string {
 type InsightReasonView struct {
 	Text string
 	Code string
+}
+
+// InsightAlertsView is the webhook Insights sends new findings to.
+type InsightAlertsView struct {
+	URL     string
+	Format  string
+	Message string
+	Error   string
+}
+
+// InsightAlerts sets up where new findings are sent. It swaps itself in place
+// when saved or tested.
+templ InsightAlerts(view InsightAlertsView) {
+	<section class="card isotope-data-card insight-alerts" id="insight-alerts" aria-labelledby="insight-alerts-title">
+		<header class="isotope-data-header">
+			<div><h2 id="insight-alerts-title">Alerts</h2></div>
+			<span class={ "status-badge", templ.KV("active", view.URL != "") }>{ ifThen(view.URL != "", "On", "Off") }</span>
+		</header>
+		if view.Message != "" {
+			@Toast(view.Message, "success")
+		}
+		if view.Error != "" {
+			@Toast(view.Error, "error")
+		}
+		<form class="insight-alerts-form" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
+			<p>Sable sends each new finding worth a look to a webhook, once, and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
+			<div class="field-grid two">
+				<label class="field-control">
+					<span>Webhook URL</span>
+					<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+					<small>Leave empty to turn alerts off.</small>
+				</label>
+				<label class="field-control">
+					<span>Format</span>
+					<select name="format" data-styled-select>
+						<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
+						<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
+					</select>
+				</label>
+			</div>
+			<div class="insight-alerts-actions">
+				if view.URL != "" {
+					<button class="button outline compact" type="submit" formaction="/ui/insights/alerts/test" hx-post="/ui/insights/alerts/test" data-replica-primary-action>Send Test</button>
+				}
+				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+			</div>
+		</form>
+	</section>
 }

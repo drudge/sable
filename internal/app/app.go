@@ -485,6 +485,12 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	clusterService.StartMonitoring(runtimeContext)
 	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
 	runRuntimeWorker(func(context.Context) {
+		webServer.RunInsightAlerts(runtimeContext, func() bool {
+			state := clusterService.Snapshot()
+			return !state.Initialized || state.LocalRole != cluster.RoleReplica
+		})
+	})
+	runRuntimeWorker(func(context.Context) {
 		runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
 	})
 	startupComplete = true

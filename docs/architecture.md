@@ -198,10 +198,28 @@ Each area lives in its own package. `insights/blocking` compares cached block
 lists with the compiler's own reader, recognizes names that were blocked and are
 now allowed, and reports stale list updates. `insights/devices` groups client
 addresses into devices through operator-given names, UniFi inventory, and the
-host neighbor table, then compares each device with its own history. Analyzers
-read through small source interfaces that the console implements over its
-caches and stores, so the analysis never depends on HTTP handling and future
-areas such as service grouping or learned baselines plug in the same way.
+host neighbor table, then compares each device with its own history: its daily
+volume, the hours it is normally active, the first-time names it queries, the
+apps it starts using, and names only it looks up on a steady schedule.
+`insights/services` names the app behind a domain from a fixed local table of
+the domains each service owns, leaving shared infrastructure unnamed rather than
+guessing. `insights/vendors` names a device's maker from the IEEE registry
+embedded in the binary. Device types are guessed from the maker, the device's
+name, and the services it talks to, each clue weighted, and a guess carries its
+confidence and only the reasons that support it. Analyzers read through small
+source interfaces that the console implements over its caches and stores, so
+the analysis never depends on HTTP handling.
+
+When first-seen tracking begins on a database that already holds query history,
+a one-time background task fills device and domain sightings from that history,
+so Insights knows who was already on the network from the first day.
+
+Operators can dismiss a finding for a day, snooze it for a week, or mark it
+normal for good. That feedback is stored by finding ID, which names the subject
+durably, so it survives renames. The Overview joins the headlines of the most
+important findings into one sentence. A background worker on the primary node
+sends each new finding that is news to an optional webhook, once, and records
+what it sent by a hash of the webhook URL rather than the URL itself.
 
 Every statement must be supportable from the data shown beside it. Conclusions
 are typed results with evidence, not generated prose, and any future local

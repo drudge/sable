@@ -3917,3 +3917,8 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 /* The Overview opens with one plain sentence about what stands out. */
 .insights-headline { max-width: 60rem; margin: 0; color: var(--foreground); font-size: 1.125rem; font-weight: 500; line-height: 1.5; text-wrap: pretty; }
 @media (max-width: 640px) { .insights-headline { font-size: 1rem; } }
+/* Alerts: where Insights sends new findings. */
+.insight-alerts-form { display: grid; gap: 1rem; padding: 1rem 1.25rem 1.25rem; }
+.insight-alerts-form > p { max-width: 48rem; margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
+.insight-alerts-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+.insight-alerts .isotope-data-header .status-badge { padding: .1rem .5rem; font-size: .68rem; }

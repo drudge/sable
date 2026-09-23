@@ -120,6 +120,7 @@ type Config struct {
 	TSIGKeys     []TSIGKey    `toml:"tsig_keys"`
 	Blocking     Blocking     `toml:"blocking"`
 	Clients      []Client     `toml:"clients"`
+	Insights     Insights     `toml:"insights"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	ServerLog    ServerLog    `toml:"server_log"`
 	Statistics   Statistics   `toml:"statistics"`
@@ -591,6 +592,7 @@ func Decode(reader io.Reader) (Config, error) {
 func (configuration Config) Validate() error {
 	var validationErrors []error
 	validationErrors = append(validationErrors, validateClients(configuration.Clients))
+	validationErrors = append(validationErrors, validateInsights(configuration.Insights))
 	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
 	if configuration.Server.HTTPSListen != "" {
 		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
@@ -1188,6 +1190,7 @@ func (configuration Config) DedicatedDoHListeners() []string {
 
 func (configuration *Config) normalize() {
 	configuration.normalizeClients()
+	configuration.normalizeInsights()
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
 	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
 	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)

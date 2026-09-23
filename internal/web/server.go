@@ -250,6 +250,8 @@ func New(
 	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
 	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
 	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
+	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
