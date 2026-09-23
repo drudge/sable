@@ -1138,15 +1138,15 @@ func InsightFindings(view InsightsOverviewView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var36 string
-				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue("View evidence for " + finding.Subject)
+				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue("View details for " + finding.Subject)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insights.templ`, Line: 402, Col: 166}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insights.templ`, Line: 402, Col: 165}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "\"><span>Evidence</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "\"><span>Details</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1590,7 +1590,7 @@ func InsightEvidence(finding InsightFindingView, view InsightsOverviewView) temp
 		})
 		templ_7745c5c3_Err = DetailDrawer(DetailDrawerView{
 			ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
-			CloseLabel: "Close evidence",
+			CloseLabel: "Close details",
 		}, insightEvidenceFooter(finding, view)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var38), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err

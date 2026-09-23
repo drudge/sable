@@ -399,8 +399,8 @@ templ InsightFindings(view InsightsOverviewView) {
 							<strong class={ templ.KV("mono", finding.SubjectMonospace) } title={ finding.Subject }>{ finding.Subject }</strong>
 							<p>{ finding.Summary }</p>
 						</div>
-						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View evidence for " + finding.Subject }>
-							<span>Evidence</span>
+						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }>
+							<span>Details</span>
 							@Icon("chevron-right")
 						</button>
 					</li>
@@ -418,7 +418,7 @@ templ InsightFindings(view InsightsOverviewView) {
 templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 	@DetailDrawer(DetailDrawerView{
 		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
-		CloseLabel: "Close evidence",
+		CloseLabel: "Close details",
 	}, insightEvidenceFooter(finding, view)) {
 		// The cards come first because they are the evidence itself; the one
 		// block after them says why that evidence matters.
