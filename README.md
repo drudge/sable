@@ -89,6 +89,11 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - UniFi synchronization with guided setup, per-network zone mapping, and
   integration-owned A, AAAA, and IPv4/IPv6 PTR records that do not disturb
   hand-authored data
+- Insights: evidence-backed findings about what changed on the network,
+  device grouping by hardware address with maker and type detection, app
+  naming, per-device routines, scheduled check-in detection, block list
+  contribution, operator feedback, and webhook alerts, all computed locally
+  and off the DNS request path
 
 Replicas continue serving DNS when the primary is
 unavailable, but control-plane writes require manual promotion; Sable does not

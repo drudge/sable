@@ -8,6 +8,68 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.1] - 2026-09-23
+
+Sable 1.5.0-beta.1 introduces Insights: a local view of what changed on your
+network, what each device is, and what is worth a look. Every finding shows
+the evidence behind it and links to the exact queries it counted. Insights uses
+fixed rules and lookup tables on your own server, with no machine learning or
+cloud service, and none of it runs on the DNS request path.
+
+### Insights
+
+- Add an Insights page with Overview, Devices, and Blocking tabs, reachable
+  from the sidebar and the command palette with either logs or blocking read
+  permission.
+- Open the Overview with one sentence about what stands out, followed by
+  network metrics, the findings behind it, Top Apps, and Busiest Devices.
+- Explain every finding in a drawer with fact cards, the reasons Sable
+  surfaced it, what it could mean, and the rule that produced it, with copy
+  buttons for addresses and names and a link to the matching query log rows.
+- Report new devices, devices that went quiet or became unusually busy,
+  devices active at an hour they never use, appliances such as cameras and
+  doorbells that start calling new services, devices that start using a new
+  app, and names only one device looks up on a steady schedule.
+- Fill device history from the existing query log after upgrading, so
+  Insights knows which devices were already on the network from the first day.
+- Let operators dismiss a finding for a day, snooze it for a week, or mark it
+  normal, with hidden findings listed and restorable. Feedback is kept by the
+  device's hardware address, so it survives renames.
+- Send each new finding worth a look to an optional webhook, once, in JSON
+  for Slack, Discord, and Home Assistant or plain text for ntfy. A new webhook
+  takes stock quietly instead of receiving old news, only the primary node
+  sends, and the webhook URL is never stored in the database.
+
+### Devices
+
+- Group client addresses into devices by hardware address using UniFi, the
+  server's neighbor table on Linux and macOS, and names you give, so a
+  device's IPv4 and changing IPv6 addresses count as one.
+- Name devices from your own names, UniFi, local host entries, and reverse
+  DNS, with a badge showing where each name came from, and rename a device
+  from its drawer.
+- Name each device's maker from the IEEE registry built into Sable, and guess
+  its type from the maker, its name, and the services it talks to, with a
+  confidence level and the clues behind it. Correct a wrong guess from the
+  device drawer; the correction follows the hardware address.
+- Name the apps behind domains from a built-in catalog, and list each
+  device's apps, busiest domains, and first-time domains.
+
+### Blocking
+
+- Record which block list supplied the rule behind every blocked query and
+  show it in the query explanation.
+- Compare enabled block lists by the domains only they cover, their largest
+  overlap, and the blocked queries each one accounted for alone.
+- Find names that were blocked before an operator allowed them, and block
+  lists that stopped updating or could not be read.
+
+### Configuration
+
+- Add `type` to `[[clients]]` entries, and allow an entry to set a name, a
+  type, or both.
+- Add `[insights.webhook]` with `url` and `format` for Insights alerts.
+
 ## [1.4.0] - 2026-09-18
 
 Sable 1.4.0 gives the console a more deliberate visual hierarchy across desktop
