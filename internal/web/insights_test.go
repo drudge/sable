@@ -339,7 +339,7 @@ func TestInsightsDevicesGroupAddressesAndReportNewOnes(t *testing.T) {
 		`data-active-tab="devices"`, `id="insight-devices-title"`,
 		// The laptop's IPv4 and IPv6 addresses are one device, named from its
 		// local host entry and tied together by the neighbor table.
-		"george-laptop.corp.example", `<span class="status-badge">Local host</span>`, `<span class="insight-device-ids"><code>3c:22:fb:01:02:03</code><code>10.0.0.5</code><code>fd00::5</code></span>`,
+		"george-laptop.corp.example", `<span class="status-badge">Local host</span>`, `<span class="insight-device-ids"><code>3c:22:fb:01:02:03</code><code>10.0.0.5 +1 more</code></span>`,
 		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
 		// 10.0.0.50 first appeared today while tracking was already running,
 		// and nothing ties it to hardware, so it is a new address.
@@ -453,6 +453,13 @@ func TestInsightsDeviceNamingFollowsTheHardwareAddress(t *testing.T) {
 func TestInsightsDeviceTypeCorrectionFollowsTheHardwareAddress(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)
+	drawer := "/ui/insights/device?range=day&key=" + url.QueryEscape(insightsTestLaptop)
+	if closed := server.get(t, "everything", drawer, true).Body.String(); strings.Contains(closed, `name="type"`) || !strings.Contains(closed, `title="Change type"`) {
+		t.Fatal("the type picker is not tucked behind its pencil")
+	}
+	if open := server.get(t, "everything", drawer+"&edit=type", true).Body.String(); !strings.Contains(open, `name="type"`) || strings.Contains(open, `title="Change type"`) {
+		t.Fatal("the pencil does not open the type picker")
+	}
 	form := url.Values{"key": {insightsTestLaptop}, "type": {"computer"}, "range": {"day"}}
 	if response := server.post(t, "logs-reader", "/ui/insights/devices/type", form); response.Code != http.StatusForbidden {
 		t.Fatalf("correcting without settings write = %d", response.Code)

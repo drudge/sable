@@ -180,14 +180,16 @@ func (server *Server) insightsDevicePanel(writer http.ResponseWriter, request *h
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
-	editing := request.URL.Query().Get("edit") == "1"
-	server.renderDeviceDrawer(writer, request, console, window, request.URL.Query().Get("key"), editing, "", "")
+	server.renderDeviceDrawer(writer, request, console, window, request.URL.Query().Get("key"), request.URL.Query().Get("edit"), "", "")
 }
 
-func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key string, editing bool, message, errorMessage string) {
+// renderDeviceDrawer shows one device. edit is "1" while its name is being
+// edited and "type" while its type is.
+func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key, edit, message, errorMessage string) {
 	view := pages.InsightDeviceDrawerView{
 		Range: window.Range, TimeDisplay: console.TimeDisplay, CanName: console.CanWriteSettings,
-		Editing: editing && console.CanWriteSettings, Message: message, Error: errorMessage,
+		Editing: edit == "1" && console.CanWriteSettings, EditingType: edit == "type" && console.CanWriteSettings,
+		Message: message, Error: errorMessage,
 	}
 	reader, ok := server.queries.(deviceInsightReader)
 	if !ok {
@@ -277,7 +279,7 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	if err != nil {
 		server.logger.Warn("name insights device", "client", requestClientIP(request), "error", err)
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		server.renderDeviceDrawer(writer, request, console, window, key, true, "", err.Error())
+		server.renderDeviceDrawer(writer, request, console, window, key, "1", "", err.Error())
 		return
 	}
 	message := "Name saved."
@@ -288,7 +290,7 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	server.recordControlPlaneAudit(request, "insights.device.name", summary)
 	// The page behind the drawer shows the old name until it reloads itself.
 	writer.Header().Set("HX-Trigger", "insightsChanged")
-	server.renderDeviceDrawer(writer, request, console, window, key, false, message, "")
+	server.renderDeviceDrawer(writer, request, console, window, key, "", message, "")
 }
 
 // typeInsightsDevice records what kind of device a device is, or returns it
@@ -316,7 +318,7 @@ func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *ht
 	if err != nil {
 		server.logger.Warn("set insights device type", "client", requestClientIP(request), "error", err)
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		server.renderDeviceDrawer(writer, request, console, window, key, false, "", err.Error())
+		server.renderDeviceDrawer(writer, request, console, window, key, "type", "", err.Error())
 		return
 	}
 	message, summary := "Type saved.", "set device "+deviceKeyIdentifier(key)+" type to "+kind
@@ -325,7 +327,7 @@ func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *ht
 	}
 	server.recordControlPlaneAudit(request, "insights.device.type", summary)
 	writer.Header().Set("HX-Trigger", "insightsChanged")
-	server.renderDeviceDrawer(writer, request, console, window, key, false, message, "")
+	server.renderDeviceDrawer(writer, request, console, window, key, "", message, "")
 }
 
 // updateClients saves a change to the operator's device entries.

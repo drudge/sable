@@ -121,8 +121,10 @@ type InsightDeviceDrawerView struct {
 	LogWindowQuery string
 	TimeDisplay    TimeDisplay
 	CanName        bool
-	// Editing shows the name field in place of the drawer's title.
+	// Editing shows the name field in place of the drawer's title, and
+	// EditingType the type picker in place of the type.
 	Editing        bool
+	EditingType    bool
 	Message        string
 	Error          string
 	Missing        bool
@@ -1135,20 +1137,23 @@ func insightDeviceIdentifiers(device InsightDeviceView) []string {
 	if device.MAC != "" && device.Label != device.MAC {
 		parts = append(parts, device.MAC)
 	}
+	// One address line keeps rows even; the rest are counted, not listed.
 	for index, address := range device.Addresses {
-		if index == 2 {
-			parts = append(parts, fmt.Sprintf("+%d more", len(device.Addresses)-2))
-			break
+		if address.Address == device.Label {
+			continue
 		}
-		if address.Address != device.Label {
-			parts = append(parts, address.Address)
+		line := address.Address
+		if others := len(device.Addresses) - index - 1; others > 0 {
+			line += fmt.Sprintf(" +%d more", others)
 		}
+		parts = append(parts, line)
+		break
 	}
 	return parts
 }
 
-// insightDeviceSubtitle sets each identifier whole, so a narrow column moves
-// an address to the next line instead of cutting it off.
+// insightDeviceSubtitle stacks the hardware address over the IP address, each
+// on its own line, so neither is ever cut off.
 templ insightDeviceSubtitle(device InsightDeviceView) {
 	<span class="insight-device-ids">
 		for _, part := range insightDeviceIdentifiers(device) {
@@ -1280,6 +1285,9 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 			} else {
 				<strong class="insight-type-unknown">Sable can't tell yet</strong>
 			}
+			if view.CanName && !view.EditingType {
+				<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=type" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Change the type of " + view.Device.Label } title="Change type" data-replica-primary-action>@Icon("pencil")</button>
+			}
 		</div>
 		if len(view.Device.TypeReasons) > 0 {
 			<ul class="insight-type-reasons">
@@ -1297,12 +1305,12 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 				}
 			</ul>
 		}
-		if view.CanName {
-			<form class="insight-type-form" hx-post="/ui/insights/devices/type" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-type-form button">
+		if view.CanName && view.EditingType {
+			<form class="insight-type-form" hx-post="/ui/insights/devices/type" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-type-form button" data-escape-click="#insight-device-content [data-type-cancel]">
 				<input type="hidden" name="key" value={ view.Device.Key }/>
 				<input type="hidden" name="range" value={ view.Range }/>
 				<label class="field-control">
-					<span>{ ifThen(view.Device.TypeConfidence == "set", "Type", "Not right? Tell Sable") }</span>
+					<span class="sr-only">Device type</span>
 					<select name="type" data-styled-select>
 						<option value="" selected?={ view.Device.TypeConfidence != "set" }>Let Sable decide</option>
 						for _, option := range view.Device.TypeOptions {
@@ -1310,7 +1318,8 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 						}
 					</select>
 				</label>
-				<button class="button outline compact" type="submit" data-replica-primary-action>Save</button>
+				<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-type-cancel>Cancel</button>
+				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
 			</form>
 		}
 	</section>
