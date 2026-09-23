@@ -3,10 +3,10 @@ package web
 import (
 	"bytes"
 	"context"
-	"errors"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -270,7 +270,7 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 	sample := insights.Finding{
 		ID: "sable.test", Kind: "sable.test", Tone: insights.ToneNotice, Title: "Test alert",
 		Subject: insights.Subject{Label: "Sable"}, Headline: "Sable can reach this webhook",
-		Summary: "This is a test from Sable Insights. New findings worth a look will arrive like this.",
+		Summary:    "This is a test from Sable Insights. New findings worth a look will arrive like this.",
 		ObservedAt: time.Now(),
 	}
 	if err := server.postInsightAlert(request.Context(), webhook, snapshot, sample); err != nil {
