@@ -33,3 +33,21 @@ func TestInsightEvidenceShowsWhereTheNameCameFromBesideIt(t *testing.T) {
 		t.Error("the name source is still a fact card")
 	}
 }
+
+func TestInsightDeviceDrawerShowsWhereTheNameCameFromBesideIt(t *testing.T) {
+	t.Parallel()
+	view := InsightDeviceDrawerView{Device: InsightDeviceView{Key: "mac:b8:27:eb:33:0c:c6", Label: "front-door-doorbell", NameSource: "UniFi"}}
+	for _, canName := range []bool{false, true} {
+		view.CanName = canName
+		markup := renderComponent(t, InsightDeviceDrawer(view))
+		if !strings.Contains(markup, `<span class="sr-only">Name from </span>UniFi</span>`) {
+			t.Errorf("CanName=%v: drawer header is missing the name source badge", canName)
+		}
+		if count := strings.Count(markup, ">UniFi</span>"); count != 1 {
+			t.Errorf("CanName=%v: name source shown %d times, want once", canName, count)
+		}
+		if got := strings.Contains(markup, `title="Rename device"`); got != canName {
+			t.Errorf("CanName=%v: rename button shown = %v", canName, got)
+		}
+	}
+}

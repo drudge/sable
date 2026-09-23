@@ -1436,6 +1436,15 @@ dialog[open]::backdrop {
 .zone-copyable .copy-icon-success { display: none; }
 .zone-copyable button.is-copied .copy-icon-default { display: none; }
 .zone-copyable button.is-copied .copy-icon-success { display: inline-grid; color: #22c55e; }
+/* Inline copy buttons center their icon: the browser's button padding and the
+   text-height icon wrappers otherwise push it right and up in its hover box. */
+.zone-copyable button, .copyable-text button { padding: 0; }
+.zone-copyable button > span, .copyable-text button > span { align-items: center; justify-content: center; line-height: 0; }
+.zone-copyable button:not(.is-copied) > .copy-icon-default, .copyable-text button:not(.is-copied) > .copy-icon-default,
+.zone-copyable button.is-copied > .copy-icon-success, .copyable-text button.is-copied > .copy-icon-success { display: flex; }
+/* The base icon's flex size would override these icons' widths inside it. */
+.zone-copyable button .nav-icon { flex-basis: .85rem; }
+.copyable-text button .nav-icon { flex-basis: .8rem; }
 .record-ttl { min-width: 0; padding-right: .3rem; color: var(--muted-foreground); font-size: .72rem; text-align: right; font-variant-numeric: tabular-nums; }
 .record-open-button { display: grid; width: 1.5rem; min-width: 1.5rem; height: 1.5rem; justify-self: end; place-items: center; border: 0; border-radius: .3rem; background: transparent; color: var(--muted-foreground); }
 .record-open-button:hover { background: var(--accent); color: var(--foreground); }
@@ -3766,13 +3775,8 @@ dialog[open]::backdrop {
 .query-detail-answer .insight-row-value { min-width: 0; color: var(--foreground); font-size: inherit; }
 .insight-row-value > strong { min-width: 0; font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
 /* The copy button sits above the row-wide link so both stay usable. */
-.insight-row-value > button { position: relative; z-index: 1; padding: 0; }
+.insight-row-value > button { position: relative; z-index: 1; }
 .insight-row-value > button.is-copied .copy-icon-success { color: #22c55e; }
-/* The icon wrappers are text height by default, which sits the icon high in
-   its hover box. Collapsing them to the icon centers it. */
-.insight-row-value > button > span { align-items: center; justify-content: center; line-height: 0; }
-.insight-row-value > button:not(.is-copied) > .copy-icon-default, .insight-row-value > button.is-copied > .copy-icon-success { display: flex; }
-.insight-row-value > button .nav-icon { flex: 0 0 .8rem; width: .8rem; height: .8rem; }
 .insight-list-copy small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .insight-list-link, .insight-list-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .insight-list-link { display: inline-flex; align-items: center; }
@@ -3874,4 +3878,5 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 }
 /* The drawer header sets every span as an uppercase eyebrow; a name source
    keeps its own spelling, such as UniFi. */
+.query-detail-header .insight-name-source span { color: inherit; font: inherit; letter-spacing: normal; text-transform: none; }
 .query-detail-header .insight-name-source { flex: 0 0 auto; margin-left: .25rem; padding: .1rem .45rem; font-size: .625rem; letter-spacing: normal; text-transform: none; white-space: nowrap; }

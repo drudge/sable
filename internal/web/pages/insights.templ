@@ -543,11 +543,11 @@ templ insightsMetrics(view InsightsOverviewView) {
 			if view.Activity != nil {
 				@OperationalMetricCard("ban", "Blocked Queries", formatNumber(view.Activity.Blocked), blockedQueriesDescription(view), "red")
 				@OperationalMetricCard("shield-x", "Blocked Domains", formatNumber(view.Activity.BlockedDomains), "Distinct domains blocked at least once in this period, from query history", "amber")
-				@OperationalMetricCard("users", "Affected Clients", formatNumber(view.Activity.BlockedClients), "Distinct clients with at least one blocked query in this period, from query history", "purple")
+				@OperationalMetricCard("monitor-smartphone", "Affected Clients", formatNumber(view.Activity.BlockedClients), "Distinct clients with at least one blocked query in this period, from query history", "purple")
 			} else {
 				@OperationalMetricCard("ban", "Blocked Queries", "—", "Query history could not be counted", "red")
 				@OperationalMetricCard("shield-x", "Blocked Domains", "—", "Query history could not be counted", "amber")
-				@OperationalMetricCard("users", "Affected Clients", "—", "Query history could not be counted", "purple")
+				@OperationalMetricCard("monitor-smartphone", "Affected Clients", "—", "Query history could not be counted", "purple")
 			}
 		}
 		if view.CanBlocking {
@@ -853,7 +853,7 @@ templ InsightDevices(view InsightsOverviewView) {
 				for _, device := range view.Devices {
 					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
 						<div class="insight-device-mobile-copy">
-							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device)</span>
+							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 							<small>{ insightDeviceSubtitle(device) }</small>
 							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
 						</div>
@@ -880,7 +880,7 @@ templ InsightDevices(view InsightsOverviewView) {
 							<tr>
 								<th scope="row">
 									<span class="insight-device-cell">
-										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device)</span>
+										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 										<code>{ insightDeviceSubtitle(device) }</code>
 									</span>
 								</th>
@@ -902,11 +902,13 @@ templ InsightDevices(view InsightsOverviewView) {
 	</section>
 }
 
-templ insightDeviceBadges(device InsightDeviceView) {
+// insightDeviceBadges marks a device in a list. The drawer shows the name
+// source beside the title instead, so it leaves that badge out.
+templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 	if device.New {
 		<span class="status-badge active">New</span>
 	}
-	if device.NameSource != "" {
+	if nameSource && device.NameSource != "" {
 		<span class="status-badge">{ device.NameSource }</span>
 	}
 	if device.PrivateMAC {
@@ -939,7 +941,9 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 		if view.Missing {
 			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
 		} else if view.Device.Key != "" {
-			<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device)</div>
+			if view.Device.New || view.Device.PrivateMAC {
+				<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device, false)</div>
+			}
 			<dl class="query-detail-grid">
 				if view.Device.MAC != "" {
 					<div class="query-detail-fact-wide insight-fact-full insight-fact-copyable">
@@ -1105,14 +1109,26 @@ func insightDomainDetail(domain InsightDeviceDomainView, display TimeDisplay) st
 
 func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
 	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
-	if view.CanName && view.Device.Key != "" && !view.Missing {
-		if view.Editing {
-			header.TitleEditor = insightDeviceNameEditor(view)
-		} else {
-			header.TitleAction = insightDeviceRenameButton(view)
-		}
+	if view.Device.Key == "" || view.Missing {
+		return header
+	}
+	if view.CanName && view.Editing {
+		header.TitleEditor = insightDeviceNameEditor(view)
+	} else if view.CanName || view.Device.NameSource != "" {
+		header.TitleAction = insightDeviceTitleActions(view)
 	}
 	return header
+}
+
+// insightDeviceTitleActions follows the name with where it came from and, for
+// operators who can rename devices, the rename button.
+templ insightDeviceTitleActions(view InsightDeviceDrawerView) {
+	if view.Device.NameSource != "" {
+		@insightNameSource(view.Device.NameSource)
+	}
+	if view.CanName {
+		@insightDeviceRenameButton(view)
+	}
 }
 
 templ insightDeviceRenameButton(view InsightDeviceDrawerView) {

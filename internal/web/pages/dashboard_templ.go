@@ -1071,7 +1071,7 @@ func CommandPalette(view DashboardView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if view.CanBlocking || view.CanLogs {
-			templ_7745c5c3_Err = CommandOption("command-page-insights", "Insights", "What is worth knowing about blocking", "lightbulb", "Page", "intelligence findings evidence analysis blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = CommandOption("command-page-insights", "Insights", "Devices, changes, and blocking on your network", "lightbulb", "Page", "intelligence findings evidence analysis devices new device what changed quiet spike hardware address blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -522,7 +522,7 @@ templ CommandPalette(view DashboardView) {
 				<h3 id="command-pages-title">Pages</h3>
 				@CommandOption("command-page-dashboard", "Dashboard", "Overview and query statistics", "dashboard", "Page", "home overview statistics metrics", "/", "", "", "", "")
 				if view.CanBlocking || view.CanLogs {
-					@CommandOption("command-page-insights", "Insights", "What is worth knowing about blocking", "lightbulb", "Page", "intelligence findings evidence analysis blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
+					@CommandOption("command-page-insights", "Insights", "Devices, changes, and blocking on your network", "lightbulb", "Page", "intelligence findings evidence analysis devices new device what changed quiet spike hardware address blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
 				}
 				if view.CanZones {
 					@CommandOption("command-page-zones", "Zones", "Manage DNS zones and records", "globe", "Page", "authoritative primary secondary forwarding records", "/zones", "", "", "", "")
