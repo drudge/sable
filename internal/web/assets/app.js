@@ -2391,6 +2391,32 @@
 		showFailure("Sable has not come back online. Check the Docker or service restart policy, then try again.");
 	  };
 
+	  // An installed update also finishes when Sable is restarted another way,
+	  // such as by its service manager. The page notices the new process and
+	  // reloads to run the new console, unless a rolling update on the page is
+	  // still running and will reload it at the end.
+	  if (root.dataset.updatedVersion) {
+		(async () => {
+		  let loaded = "";
+		  while (root.isConnected && !previousInstance) {
+			try {
+			  const response = await fetchHealth();
+			  const health = response.ok ? await response.json() : {};
+			  if (!loaded) {
+				loaded = health.instance_id || "";
+			  } else if (health.instance_id && health.instance_id !== loaded && !previousInstance &&
+				!document.querySelector('#cluster-updates[data-rollout-active="true"]')) {
+				continueAfterRestart();
+				return;
+			  }
+			} catch {
+			  // Sable is restarting; keep asking until it answers.
+			}
+			await sleep(5000);
+		  }
+		})();
+	  }
+
 	  button?.addEventListener("click", async () => {
 		if (!previousInstance && root.dataset.restartConfirm) {
 		  const accepted = await confirmAction(root.dataset.restartConfirm, {
@@ -2872,7 +2898,35 @@
 	};
 	document.addEventListener("pointerdown", closeInteractivePopovers);
 
+	// A rolling update restarts the server this page talks to, yet the page
+	// keeps running the console it loaded. Once a rollout the page watched is
+	// over, and the server restarted since the page loaded, the page reloads to
+	// run the new console, announcing the update when the rollout completed.
+	let rolloutWatch = null;
+	const followRollout = (panel) => {
+	  const {rolloutId, rolloutActive, rolloutPhase, rolloutVersion, instanceId} = panel.dataset;
+	  if (!instanceId) return;
+	  rolloutWatch ??= {instance: instanceId, watched: ""};
+	  if (!rolloutId) return;
+	  if (rolloutActive === "true") {
+		rolloutWatch.watched = rolloutId;
+		return;
+	  }
+	  if (rolloutWatch.watched !== rolloutId || instanceId === rolloutWatch.instance) return;
+	  rolloutWatch.watched = "";
+	  if (rolloutPhase === "complete" && rolloutVersion) {
+		try {
+		  sessionStorage.setItem(UPDATE_COMPLETED_KEY, rolloutVersion);
+		} catch {
+		  // The confirmation is a courtesy; the reload matters more.
+		}
+	  }
+	  window.location.reload();
+	};
+
 	const initializeSwappedContent = (root) => {
+	  if (root.matches?.("#cluster-updates")) followRollout(root);
+	  root.querySelectorAll?.("#cluster-updates").forEach(followRollout);
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
 	  if (root.matches?.("[data-resolver-combobox]")) setupResolverCombobox(root);

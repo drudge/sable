@@ -107,6 +107,7 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 		Rollout:     rollout,
 		CanApply:    server.canManageClusterUpdate(request),
 		Release:     server.updateView(request, status),
+		InstanceID:  server.instanceID,
 	}
 	if !view.Supported {
 		view.UnavailableReason = "Every cluster member must support automatic updates and restarts."

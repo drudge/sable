@@ -78,6 +78,11 @@ func TestClusterUpdateViewRetainsCurrentRolloutDuringCapabilityNegotiation(t *te
 			if view.Visible() != wantVisible || view.Supported {
 				t.Fatalf("visible=%t supported=%t, want visible=%t without enabling new rollouts", view.Visible(), view.Supported, wantVisible)
 			}
+			// The page reloads after a rollout that restarted its server, which
+			// it tells by the process that rendered each refresh.
+			if view.InstanceID == "" || view.InstanceID != server.instanceID {
+				t.Fatalf("instance = %q, want this server's %q", view.InstanceID, server.instanceID)
+			}
 		})
 	}
 }
