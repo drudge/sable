@@ -104,6 +104,7 @@ func cloneConfig(source Config) Config {
 	cloned.OIDC.Scopes = append([]string(nil), source.OIDC.Scopes...)
 	cloned.OIDC.DefaultRoles = append([]string(nil), source.OIDC.DefaultRoles...)
 	cloned.OIDC.RoleMappings = append([]OIDCRoleMapping(nil), source.OIDC.RoleMappings...)
+	cloned.Insights.Webhook.Headers = append([]InsightsWebhookHeader(nil), source.Insights.Webhook.Headers...)
 	return cloned
 }
 

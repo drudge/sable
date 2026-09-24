@@ -183,10 +183,17 @@ ipv6_url = "https://api6.ipify.org"
 # Assistant; "text" posts plain text with a Title header, which suits ntfy.
 # Leave url empty to turn alerts off, or set paused = true to stop sending but
 # keep the webhook. The Insights Overview can also set this.
+# ntfy_receipt = true only counts a send when ntfy answers with a message ID,
+# which catches a mistyped server. Add [[insights.webhook.headers]] entries to
+# send headers such as an ntfy access token or Priority with every alert.
 [insights.webhook]
 url = ""
 format = "json"
 paused = false
+ntfy_receipt = false
+# [[insights.webhook.headers]]
+# name = "Authorization"
+# value = "Bearer tk_..."
 
 # UniFi host synchronization. Set this up from Apps in the console: the wizard
 # discovers the controller's networks, maps each one to a zone, and previews the

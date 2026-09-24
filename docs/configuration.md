@@ -667,6 +667,11 @@ type = "doorbell"
 [insights.webhook]
 url = "https://ntfy.sh/your-topic"
 format = "text"
+ntfy_receipt = true
+
+[[insights.webhook.headers]]
+name = "Priority"
+value = "high"
 ```
 
 Each `[[clients]]` entry is what an operator told Sable about one device,
@@ -687,7 +692,12 @@ show as the message. The `text` format posts the summary as plain text with a
 `Title` header, which suits ntfy. When a webhook is first set, Sable takes stock
 of what it already knows without sending it, so turning alerts on never floods
 the webhook with old news. `paused = true` stops sending but keeps the webhook;
-findings that turn up while paused are not sent when alerts resume. Only the
+findings that turn up while paused are not sent when alerts resume. Any server
+can answer a request with success, including a parked domain behind a typo, so
+`ntfy_receipt = true` only counts a send when ntfy answers with the ID of the
+message it published. Each `[[insights.webhook.headers]]` entry is sent with
+every alert, such as `Authorization` for a protected ntfy topic; Sable sets
+`Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself. Only the
 primary node sends alerts. The Insights Overview can set the webhook, pause and
 resume it, and send a test.
 

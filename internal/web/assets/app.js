@@ -1593,6 +1593,26 @@
 	  });
 	});
 
+  // Insights alert headers are rows of name and value; the form posts them as
+  // parallel lists, so adding and removing rows needs no bookkeeping.
+  document.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-alert-header-add]");
+    if (add) {
+      const form = add.closest("form");
+      const row = form?.querySelector("[data-alert-header-template]")?.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      form.querySelector("[data-alert-headers]").append(row);
+      row.querySelector("input")?.focus();
+      return;
+    }
+    const remove = event.target.closest("[data-alert-header-remove]");
+    if (remove) {
+      const form = remove.closest("form");
+      remove.closest("[data-alert-header]")?.remove();
+      form?.querySelector("[data-alert-header-add]")?.focus();
+    }
+  });
+
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;

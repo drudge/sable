@@ -4048,6 +4048,11 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .dark .insight-alerts-button.active .nav-icon { color: #22c55e; }
 .insight-alerts-button.paused .nav-icon { color: #d97706; }
 .dark .insight-alerts-button.paused .nav-icon { color: #f59e0b; }
+.insight-alerts-advanced-body { display: grid; gap: .85rem; }
+.insight-alert-headers { display: grid; gap: .5rem; }
+.insight-alert-headers:empty { display: none; }
+.insight-alert-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; gap: .5rem; }
+.insight-alert-header-add { justify-self: start; }
 .insight-alerts { display: grid; gap: 1rem; }
 .insight-alerts-body { padding: 0; }
 .insight-alerts-body > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }

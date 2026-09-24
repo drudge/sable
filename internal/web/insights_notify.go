@@ -110,7 +110,7 @@ func (server *Server) sendInsightAlerts(ctx context.Context, now time.Time) erro
 			continue
 		}
 		if !webhook.Paused {
-			if err := server.postInsightAlert(ctx, webhook, snapshot, finding); err != nil {
+			if _, err := server.postInsightAlert(ctx, webhook, snapshot, finding); err != nil {
 				return err
 			}
 		}
@@ -151,7 +151,15 @@ func (server *Server) insightNews(ctx context.Context, now time.Time) []insights
 	return news
 }
 
-func (server *Server) postInsightAlert(ctx context.Context, webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) error {
+// ntfyReceipt is the part of ntfy's answer that shows it published a message.
+type ntfyReceipt struct {
+	ID    string `json:"id"`
+	Event string `json:"event"`
+}
+
+// postInsightAlert sends one finding. When the webhook asks for an ntfy
+// receipt, it returns the ID ntfy gave the message.
+func (server *Server) postInsightAlert(ctx context.Context, webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) (string, error) {
 	link := strings.TrimRight(snapshot.AdvertisedBaseURL(), "/") + "/insights"
 	message := finding.Title + ": " + finding.Subject.Label + "\n" + finding.Summary
 	alert := insightAlert{
@@ -169,7 +177,7 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 	} else {
 		encoded, err := json.Marshal(alert)
 		if err != nil {
-			return err
+			return "", err
 		}
 		body = encoded
 	}
@@ -177,7 +185,7 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, webhook.URL, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return "", err
 	}
 	request.Header.Set("Content-Type", contentType)
 	request.Header.Set("User-Agent", "Sable/"+version.Current().Release)
@@ -185,16 +193,28 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 		// ntfy shows this as the notification's title.
 		request.Header.Set("Title", finding.Title+": "+finding.Subject.Label)
 	}
+	for _, header := range webhook.Headers {
+		request.Header.Set(header.Name, header.Value)
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("post insight alert: %w", err)
+		return "", fmt.Errorf("post insight alert: %w", err)
 	}
 	defer response.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
+	answer, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return fmt.Errorf("post insight alert: webhook answered %s", response.Status)
+		return "", fmt.Errorf("post insight alert: webhook answered %s", response.Status)
 	}
-	return nil
+	if !webhook.NtfyReceipt {
+		return "", nil
+	}
+	// Any server can answer 200, including a parked domain behind a typo, so
+	// only ntfy's own receipt proves the message was published.
+	var receipt ntfyReceipt
+	if json.Unmarshal(answer, &receipt) != nil || receipt.ID == "" || receipt.Event != "message" {
+		return "", errors.New("the webhook answered, but not with an ntfy receipt; check the URL")
+	}
+	return receipt.ID, nil
 }
 
 // insightAlertTarget names a webhook without keeping its URL, which often
@@ -213,8 +233,16 @@ func (server *Server) insightAlertsView(console pages.DashboardView) *pages.Insi
 	if _, ok := server.queries.(insightNotificationStore); !ok {
 		return nil
 	}
-	webhook := server.config.Current().Config.Insights.Webhook
-	return &pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
+	view := newInsightAlertsView(server.config.Current().Config.Insights.Webhook)
+	return &view
+}
+
+func newInsightAlertsView(webhook config.InsightsWebhook) pages.InsightAlertsView {
+	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused, NtfyReceipt: webhook.NtfyReceipt}
+	for _, header := range webhook.Headers {
+		view.Headers = append(view.Headers, pages.InsightAlertHeader{Name: header.Name, Value: header.Value})
+	}
+	return view
 }
 
 // saveInsightAlerts changes where new findings are sent.
@@ -229,10 +257,22 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return
 	}
-	webhook := config.InsightsWebhook{URL: strings.TrimSpace(request.FormValue("url")), Format: request.FormValue("format")}
-	// Saving changes where alerts go, not whether they are paused.
-	webhook.Paused = webhook.URL != "" && server.config.Current().Config.Insights.Webhook.Paused
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
+	webhook := config.InsightsWebhook{
+		URL: request.FormValue("url"), Format: request.FormValue("format"),
+		// Saving changes where alerts go, not whether they are paused.
+		Paused:      server.config.Current().Config.Insights.Webhook.Paused,
+		NtfyReceipt: request.FormValue("ntfy_receipt") == "true",
+	}
+	names, values := request.Form["header_name"], request.Form["header_value"]
+	for index, name := range names {
+		header := config.InsightsWebhookHeader{Name: name}
+		if index < len(values) {
+			header.Value = values[index]
+		}
+		webhook.Headers = append(webhook.Headers, header)
+	}
+	webhook.Normalize()
+	view := newInsightAlertsView(webhook)
 	editor, ok := server.config.(settingsEditor)
 	err := webhook.Validate()
 	if err == nil && !ok {
@@ -279,7 +319,7 @@ func (server *Server) setInsightAlertsEnabled(writer http.ResponseWriter, reques
 	}
 	paused := request.FormValue("enabled") != "true"
 	webhook := server.config.Current().Config.Insights.Webhook
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
+	view := newInsightAlertsView(webhook)
 	if webhook.URL == "" {
 		view.Error = "Save a webhook URL first."
 		server.renderInsightAlerts(writer, request, view)
@@ -315,7 +355,7 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 	}
 	snapshot := server.config.Current().Config
 	webhook := snapshot.Insights.Webhook
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
+	view := newInsightAlertsView(webhook)
 	if webhook.URL == "" {
 		view.Error = "Save a webhook URL first."
 		server.renderInsightAlerts(writer, request, view)
@@ -327,8 +367,10 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 		Summary:    "This is a test from Sable Insights. New findings worth a look will arrive like this.",
 		ObservedAt: time.Now(),
 	}
-	if err := server.postInsightAlert(request.Context(), webhook, snapshot, sample); err != nil {
+	if receipt, err := server.postInsightAlert(request.Context(), webhook, snapshot, sample); err != nil {
 		view.Error = err.Error()
+	} else if receipt != "" {
+		view.Message = "Test sent. ntfy published it as message " + receipt + "."
 	} else {
 		view.Message = "Test sent."
 	}

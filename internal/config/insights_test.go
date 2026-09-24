@@ -13,7 +13,7 @@ func TestInsightsWebhookValidatesAndNormalizes(t *testing.T) {
 	if err := configuration.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if configuration.Insights.Webhook != (InsightsWebhook{URL: "https://ntfy.sh/sable-alerts", Format: "text"}) {
+	if webhook := configuration.Insights.Webhook; webhook.URL != "https://ntfy.sh/sable-alerts" || webhook.Format != "text" {
 		t.Fatalf("webhook = %+v", configuration.Insights.Webhook)
 	}
 	// A webhook with no URL cannot be paused; alerts are simply off.
@@ -30,6 +30,10 @@ func TestInsightsWebhookValidatesAndNormalizes(t *testing.T) {
 		{InsightsWebhook{URL: "ftp://example.com/hook"}, "http or https"},
 		{InsightsWebhook{URL: "https://"}, "http or https"},
 		{InsightsWebhook{URL: "https://example.com", Format: "xml"}, "format must be"},
+		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Value: "orphan"}}}, "needs a name"},
+		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Name: "Bad Name", Value: "x"}}}, "not a valid header name"},
+		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Name: "content-length", Value: "1"}}}, "Sable sets Content-Length"},
+		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Name: "X-Test", Value: "a\r\nb"}}}, "line breaks"},
 	} {
 		invalid := Defaults()
 		invalid.Insights.Webhook = test.webhook

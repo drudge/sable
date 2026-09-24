@@ -75,6 +75,11 @@ Use **Send Test** to check the webhook. Each finding is sent once, and anything 
 
 Use **Pause** to stop alerts without losing the webhook, and **Resume** to start them again. Findings that turn up while alerts are paused are not sent when you resume. **Send Test** still works while paused.
 
+Open **Advanced** for two more options:
+
+- **Check for an ntfy Receipt** only counts a send when ntfy answers with a message ID. Without it, any server that answers counts, so a typo like `nfty.sh` can look like it worked.
+- **Headers** are sent with every alert. Use `Authorization` to reach a protected ntfy topic, or `Priority` and `Tags` to change how the notification looks.
+
 You can also set alerts in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
 
 ## Blocking

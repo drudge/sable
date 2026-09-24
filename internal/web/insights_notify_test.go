@@ -114,7 +114,7 @@ func TestInsightAlertsCanBeSetUpAndTestedFromTheOverview(t *testing.T) {
 	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `aria-label="Alerts on"`) {
 		t.Fatal("the bell does not say alerts are on")
 	}
-	if webhook := server.config.Current().Config.Insights.Webhook; webhook != (config.InsightsWebhook{URL: hook.URL, Format: "text"}) {
+	if webhook := server.config.Current().Config.Insights.Webhook; webhook.URL != hook.URL || webhook.Format != "text" || webhook.Paused || webhook.NtfyReceipt || len(webhook.Headers) != 0 {
 		t.Fatalf("webhook = %+v", webhook)
 	}
 	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "Test sent.") {
@@ -189,5 +189,68 @@ func TestPausedInsightAlertsSendNothingAndResumeWithoutTheBacklog(t *testing.T) 
 	defer mu.Unlock()
 	if sent != 0 {
 		t.Fatalf("sent %d alerts for findings from while alerts were paused", sent)
+	}
+}
+
+func TestInsightAlertsSendHeadersAndCanRequireAnNtfyReceipt(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	var authorization, priority string
+	// ntfy answers with a receipt for what it published.
+	ntfy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		mu.Lock()
+		authorization, priority = request.Header.Get("Authorization"), request.Header.Get("Priority")
+		mu.Unlock()
+		_, _ = io.WriteString(writer, `{"id":"kqsbW5IVYYUc","time":1790289679,"event":"message","topic":"sable","message":"hi"}`)
+	}))
+	t.Cleanup(ntfy.Close)
+	// A parked domain answers anything with a page.
+	parked := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = io.WriteString(writer, "<html>This domain is for sale</html>")
+	}))
+	t.Cleanup(parked.Close)
+	server := newInsightsTestServer(t)
+
+	form := url.Values{
+		"url": {ntfy.URL}, "format": {"text"}, "ntfy_receipt": {"true"},
+		"header_name":  {"Authorization", " ", "Priority"},
+		"header_value": {"Bearer tk_secret", "", "high"},
+	}
+	saved := server.post(t, "everything", "/ui/insights/alerts", form)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("saving = %d %s", saved.Code, saved.Body.String())
+	}
+	webhook := server.config.Current().Config.Insights.Webhook
+	if !webhook.NtfyReceipt || len(webhook.Headers) != 2 || webhook.Headers[0] != (config.InsightsWebhookHeader{Name: "Authorization", Value: "Bearer tk_secret"}) || webhook.Headers[1].Name != "Priority" {
+		t.Fatalf("webhook = %+v", webhook)
+	}
+	if body := saved.Body.String(); !strings.Contains(body, `value="Bearer tk_secret"`) || !strings.Contains(body, "<details class=\"settings-advanced insight-alerts-advanced\" open") {
+		t.Fatal("the saved setup does not show its headers in an open Advanced section")
+	}
+	tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{})
+	if !strings.Contains(tested.Body.String(), "ntfy published it as message kqsbW5IVYYUc") {
+		t.Fatalf("testing ntfy = %s", tested.Body.String())
+	}
+	mu.Lock()
+	if authorization != "Bearer tk_secret" || priority != "high" {
+		t.Fatalf("headers sent: Authorization %q, Priority %q", authorization, priority)
+	}
+	mu.Unlock()
+
+	form.Set("url", parked.URL)
+	server.post(t, "everything", "/ui/insights/alerts", form)
+	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "not with an ntfy receipt") {
+		t.Fatalf("testing a parked domain = %s", tested.Body.String())
+	}
+	// Without the check, any 200 counts.
+	form.Del("ntfy_receipt")
+	server.post(t, "everything", "/ui/insights/alerts", form)
+	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "Test sent.") {
+		t.Fatalf("testing without the check = %s", tested.Body.String())
+	}
+
+	bad := url.Values{"url": {ntfy.URL}, "header_name": {"Host"}, "header_value": {"example.com"}}
+	if response := server.post(t, "everything", "/ui/insights/alerts", bad); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "Sable sets Host itself") {
+		t.Fatalf("saving a Host header = %d", response.Code)
 	}
 }

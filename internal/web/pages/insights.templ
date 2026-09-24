@@ -1772,11 +1772,19 @@ type InsightReasonView struct {
 
 // InsightAlertsView is the webhook Insights sends new findings to.
 type InsightAlertsView struct {
-	URL     string
-	Format  string
-	Paused  bool
-	Message string
-	Error   string
+	URL         string
+	Format      string
+	Paused      bool
+	NtfyReceipt bool
+	Headers     []InsightAlertHeader
+	Message     string
+	Error       string
+}
+
+// InsightAlertHeader is one extra header sent with each alert.
+type InsightAlertHeader struct {
+	Name  string
+	Value string
 }
 
 // insightAlertsState is what the bell says: on, paused, or off.
@@ -1826,6 +1834,15 @@ templ InsightAlertsDialog(view InsightAlertsView) {
 	</dialog>
 }
 
+// insightAlertHeaderRow is one header's name and value, removable on its own.
+templ insightAlertHeaderRow(header InsightAlertHeader) {
+	<div class="insight-alert-header" data-alert-header>
+		<input name="header_name" value={ header.Name } placeholder="Name" aria-label="Header name" autocomplete="off" spellcheck="false"/>
+		<input name="header_value" value={ header.Value } placeholder="Value" aria-label="Header value" autocomplete="off" spellcheck="false"/>
+		<button class="icon-button" type="button" data-alert-header-remove aria-label="Remove header" title="Remove header">@Icon("x")</button>
+	</div>
+}
+
 // InsightAlerts is the alert setup form. Save is its only submit button, so
 // Enter in the URL saves; Pause, Resume, and Send Test send requests of their
 // own. The buttons keep the order the Integrations cards use.
@@ -1851,6 +1868,23 @@ templ InsightAlerts(view InsightAlertsView) {
 					<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
 				</select>
 			</label>
+			<details class="settings-advanced insight-alerts-advanced" open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
+				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
+				<div class="insight-alerts-advanced-body">
+					<label class="field-control switch-row setting-switch-row"><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID. Catches a mistyped server that answers anything.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
+					<div class="field-control">
+						<span>Headers</span>
+						<div class="insight-alert-headers" data-alert-headers>
+							for _, header := range view.Headers {
+								@insightAlertHeaderRow(header)
+							}
+						</div>
+						<button class="button outline compact insight-alert-header-add" type="button" data-alert-header-add>@Icon("plus")<span>Add Header</span></button>
+						<small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small>
+						<template data-alert-header-template>@insightAlertHeaderRow(InsightAlertHeader{})</template>
+					</div>
+				</div>
+			</details>
 		</div>
 		<div class="dialog-footer">
 			if view.URL != "" {
