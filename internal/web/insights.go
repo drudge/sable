@@ -95,6 +95,8 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
 	tab := insightsTab(request, console)
+	// The page loads its analysis next; start the reads behind it now.
+	server.warmInsights(console, window)
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
@@ -102,6 +104,37 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights page", "error", err)
+	}
+}
+
+// warmInsights starts every slow read Insights needs for a window at once, so
+// a page with nothing cached waits for its slowest read rather than for each
+// in turn. The reads land in the caches the page itself reads through, where
+// its own requests join them; reads already cached or running are left alone.
+func (server *Server) warmInsights(console pages.DashboardView, window insightWindow) {
+	warm := func(read func(context.Context)) { go read(context.Background()) }
+	if console.CanLogs {
+		if reader, ok := server.queries.(deviceInsightReader); ok {
+			warm(func(ctx context.Context) { server.deviceActivityCache.load(ctx, window, reader.ClientActivity) })
+			warm(func(ctx context.Context) { server.deviceSignalCache.load(ctx, window, deviceSignals(reader)) })
+			warm(func(ctx context.Context) {
+				server.repeatedLookupCache.load(ctx, window, repeatedLookups(reader, window.End.Add(-24*time.Hour)))
+			})
+		}
+		if reader, ok := server.queries.(blockingInsightReader); ok {
+			warm(func(ctx context.Context) { server.blockingActivityCache.load(ctx, window, reader.BlockingActivity) })
+		}
+		if reader, ok := server.queries.(queryInsightReader); ok {
+			warm(func(ctx context.Context) { server.appCache.load(ctx, window, reader.QueryLogInsights) })
+		}
+	}
+	if console.CanBlocking {
+		lists := server.config.Current().Config.Blocking.Lists
+		analyzed := make([]blockinginsights.List, 0, len(lists))
+		for _, list := range lists {
+			analyzed = append(analyzed, blockinginsights.List{Name: list.Name, Path: list.Path, URL: list.URL, Format: list.Format})
+		}
+		warm(func(ctx context.Context) { server.blockListAnalysis.Contribution(ctx, server.baseDirectory, analyzed) })
 	}
 }
 
@@ -115,6 +148,7 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	server.warmInsights(console, window)
 	view := server.insightsOverview(request, console, window)
 	view.ActiveTab = insightsTab(request, console)
 	if request.Header.Get("HX-Request") == "true" {
@@ -386,7 +420,7 @@ func (server *Server) topAppRanking(request *http.Request, window insightWindow)
 	if !ok {
 		return nil
 	}
-	counted, _, err := server.insightCache.load(request.Context(), window, reader.QueryLogInsights)
+	counted, _, err := server.appCache.load(request.Context(), window, reader.QueryLogInsights)
 	if err != nil {
 		server.logger.Warn("rank insights apps", "error", err)
 		return nil

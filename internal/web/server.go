@@ -88,11 +88,15 @@ type Server struct {
 	setupRequired     atomic.Bool
 	history           *statsHistory
 	insightCache      dashboardInsightCache
-	// blockingActivityCache and blockListAnalysis back the Insights page.
+	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
+	// page. appCache counts what the app ranking reads apart from the
+	// dashboard's insightCache, because Insights answers from a recent count
+	// while it refreshes.
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	deviceActivityCache   windowCache[querylog.ClientActivityReport]
 	deviceSignalCache     windowCache[map[string][]string]
 	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
+	appCache              dashboardInsightCache
 	blockListAnalysis     blockinginsights.ContributionCache
 	baseDirectory         string
 	historyPrune          chan struct{}
@@ -219,6 +223,11 @@ func New(
 		instanceID:     strconv.FormatInt(time.Now().UnixNano(), 36),
 		runtimeContext: runtimeContext, runtimeCancel: runtimeCancel, runtimeDone: make(chan struct{}),
 	}
+	server.blockingActivityCache.serveStale()
+	server.deviceActivityCache.serveStale()
+	server.deviceSignalCache.serveStale()
+	server.repeatedLookupCache.serveStale()
+	server.appCache.serveStale()
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
 	}
