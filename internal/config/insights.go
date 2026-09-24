@@ -17,6 +17,11 @@ const (
 	// InsightsWebhookText posts the finding as plain text with a Title
 	// header, which ntfy and most chat bridges show as-is.
 	InsightsWebhookText = "text"
+	// InsightsWebhookSlack posts a Slack incoming-webhook message: a card with
+	// a colored bar, the finding's reasons, and a button to Insights.
+	InsightsWebhookSlack = "slack"
+	// InsightsWebhookDiscord posts a Discord webhook embed colored by tone.
+	InsightsWebhookDiscord = "discord"
 	// InsightsWebhookPushover posts the form Pushover's message API takes,
 	// with the application token and user key it needs.
 	InsightsWebhookPushover = "pushover"
@@ -71,13 +76,14 @@ func (webhook InsightsWebhook) Validate() error {
 		}
 	}
 	switch webhook.Format {
-	case "", InsightsWebhookJSON, InsightsWebhookText:
+	case "", InsightsWebhookJSON, InsightsWebhookText, InsightsWebhookSlack, InsightsWebhookDiscord:
 	case InsightsWebhookPushover:
 		if webhook.URL != "" && (webhook.PushoverToken == "" || webhook.PushoverUser == "") {
 			return fmt.Errorf("insights.webhook: Pushover needs an application token and a user key")
 		}
 	default:
-		return fmt.Errorf("insights.webhook.format must be %q, %q, or %q", InsightsWebhookJSON, InsightsWebhookText, InsightsWebhookPushover)
+		return fmt.Errorf("insights.webhook.format must be %q, %q, %q, %q, or %q",
+			InsightsWebhookJSON, InsightsWebhookSlack, InsightsWebhookDiscord, InsightsWebhookText, InsightsWebhookPushover)
 	}
 	for _, header := range webhook.Headers {
 		switch {
@@ -115,16 +121,20 @@ func (webhook *InsightsWebhook) Normalize() {
 	webhook.Headers = headers
 	if webhook.Format == InsightsWebhookPushover {
 		// Pushover posts to its own API unless the file names another, so its
-		// keys, not a URL, say whether alerts are on. It reads no headers.
+		// keys, not a URL, say whether alerts are on.
 		switch {
 		case webhook.PushoverToken == "" && webhook.PushoverUser == "":
 			webhook.URL = ""
 		case webhook.URL == "":
 			webhook.URL = PushoverMessagesURL
 		}
-		webhook.Headers = nil
 	} else {
 		webhook.PushoverToken, webhook.PushoverUser = "", ""
+	}
+	// Only a plain webhook and ntfy can use extra headers; Slack, Discord, and
+	// Pushover carry their secrets in the URL or the body.
+	if webhook.Format != "" && webhook.Format != InsightsWebhookText {
+		webhook.Headers = nil
 	}
 	// ntfy takes plain text, so only that format can expect its receipt.
 	if webhook.Format != InsightsWebhookText {

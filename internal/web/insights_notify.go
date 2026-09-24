@@ -165,6 +165,98 @@ type pushoverAnswer struct {
 	Errors  []string `json:"errors"`
 }
 
+// insightToneColors are the colors the console gives each tone, for the
+// bar Slack draws beside a card and the edge of a Discord embed.
+var insightToneColors = map[insights.Tone]int{
+	insights.ToneAttention: 0xd97706,
+	insights.ToneNotice:    0x2563eb,
+	insights.TonePositive:  0x16a34a,
+}
+
+// slackMessage is a Slack incoming-webhook message. Text is what
+// notifications show; the attachment carries the card and its colored bar.
+type slackMessage struct {
+	Text        string            `json:"text"`
+	Attachments []slackAttachment `json:"attachments"`
+}
+
+type slackAttachment struct {
+	Color  string       `json:"color"`
+	Blocks []slackBlock `json:"blocks"`
+}
+
+type slackBlock struct {
+	Type     string         `json:"type"`
+	Text     *slackText     `json:"text,omitempty"`
+	Elements []slackElement `json:"elements,omitempty"`
+}
+
+type slackText struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// slackElement is a context block's text or an actions block's button.
+type slackElement struct {
+	Type string `json:"type"`
+	Text any    `json:"text,omitempty"`
+	URL  string `json:"url,omitempty"`
+}
+
+// discordMessage is a Discord webhook message with one embed. It mentions no
+// one, whatever a device happens to be called.
+type discordMessage struct {
+	Username        string          `json:"username"`
+	Embeds          []discordEmbed  `json:"embeds"`
+	AllowedMentions discordMentions `json:"allowed_mentions"`
+}
+
+type discordEmbed struct {
+	Title       string         `json:"title"`
+	Description string         `json:"description"`
+	URL         string         `json:"url"`
+	Color       int            `json:"color"`
+	Timestamp   string         `json:"timestamp"`
+	Fields      []discordField `json:"fields,omitempty"`
+	Footer      discordFooter  `json:"footer"`
+}
+
+type discordField struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type discordFooter struct {
+	Text string `json:"text"`
+}
+
+type discordMentions struct {
+	Parse []string `json:"parse"`
+}
+
+// slackEscape keeps Slack from reading a device name as a link or mention.
+var slackEscape = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
+// truncateAlertText keeps text within a service's limit for a field.
+func truncateAlertText(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit-1]) + "…"
+}
+
+// insightReasonTexts lists a finding's reasons as people read them.
+func insightReasonTexts(finding insights.Finding) []string {
+	texts := make([]string, 0, len(finding.Reasons))
+	for _, reason := range finding.Reasons {
+		if text := strings.TrimSpace(reason.Text + " " + reason.Code); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return texts
+}
+
 // insightAlertHeader is one header an alert request carries.
 type insightAlertHeader struct{ Name, Value string }
 
@@ -187,6 +279,41 @@ func buildInsightAlert(webhook config.InsightsWebhook, snapshot config.Config, f
 		built.ContentType, built.Body = "text/plain; charset=utf-8", []byte(finding.Summary+"\n"+link)
 		// ntfy shows this as the notification's title.
 		built.Headers = append(built.Headers, insightAlertHeader{"Title", title})
+	case config.InsightsWebhookSlack:
+		blocks := []slackBlock{
+			{Type: "header", Text: &slackText{"plain_text", truncateAlertText(title, 150)}},
+			{Type: "section", Text: &slackText{"mrkdwn", truncateAlertText(slackEscape.Replace(finding.Summary), 3000)}},
+		}
+		if reasons := insightReasonTexts(finding); len(reasons) > 0 {
+			blocks = append(blocks, slackBlock{Type: "context", Elements: []slackElement{
+				{Type: "mrkdwn", Text: truncateAlertText(slackEscape.Replace(strings.Join(reasons, " · ")), 2000)},
+			}})
+		}
+		blocks = append(blocks, slackBlock{Type: "actions", Elements: []slackElement{
+			{Type: "button", Text: slackText{"plain_text", "Open Insights"}, URL: link},
+		}})
+		encoded, err := json.Marshal(slackMessage{
+			Text:        slackEscape.Replace(title + ": " + finding.Summary),
+			Attachments: []slackAttachment{{Color: fmt.Sprintf("#%06x", insightToneColors[finding.Tone]), Blocks: blocks}},
+		})
+		if err != nil {
+			return built, err
+		}
+		built.ContentType, built.Body = "application/json", encoded
+	case config.InsightsWebhookDiscord:
+		embed := discordEmbed{
+			Title: truncateAlertText(title, 256), Description: truncateAlertText(finding.Summary, 4096), URL: link,
+			Color: insightToneColors[finding.Tone], Timestamp: finding.ObservedAt.UTC().Format(time.RFC3339),
+			Footer: discordFooter{Text: "Sable Insights"},
+		}
+		if reasons := insightReasonTexts(finding); len(reasons) > 0 {
+			embed.Fields = []discordField{{Name: "Why", Value: truncateAlertText("• "+strings.Join(reasons, "\n• "), 1024)}}
+		}
+		encoded, err := json.Marshal(discordMessage{Username: "Sable", Embeds: []discordEmbed{embed}, AllowedMentions: discordMentions{Parse: []string{}}})
+		if err != nil {
+			return built, err
+		}
+		built.ContentType, built.Body = "application/json", encoded
 	case config.InsightsWebhookPushover:
 		form := url.Values{
 			"token": {webhook.PushoverToken}, "user": {webhook.PushoverUser},
@@ -238,7 +365,34 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 	}
 	defer response.Body.Close()
 	answer, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-	if webhook.Format == config.InsightsWebhookPushover {
+	switch webhook.Format {
+	case config.InsightsWebhookSlack:
+		// Slack answers "ok", or says what was wrong in plain words.
+		said := strings.TrimSpace(string(answer))
+		if response.StatusCode >= 400 && said != "" && !strings.HasPrefix(said, "<") {
+			return "", fmt.Errorf("Slack did not post it: %s", truncateAlertText(said, 200))
+		}
+		if response.StatusCode < 200 || response.StatusCode > 299 || said != "ok" {
+			return "", fmt.Errorf("the webhook answered %s, but not like Slack; check the URL", response.Status)
+		}
+		return "", nil
+	case config.InsightsWebhookDiscord:
+		// Discord answers 204 with nothing, or the message it posted when
+		// asked to wait, and explains a refusal in JSON.
+		var discord struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+		}
+		_ = json.Unmarshal(answer, &discord)
+		switch {
+		case response.StatusCode >= 400 && discord.Message != "":
+			return "", fmt.Errorf("Discord did not post it: %s", discord.Message)
+		case response.StatusCode == http.StatusNoContent || (response.StatusCode >= 200 && response.StatusCode <= 299 && discord.ID != ""):
+			return "", nil
+		default:
+			return "", fmt.Errorf("the webhook answered %s, but not like Discord; check the URL", response.Status)
+		}
+	case config.InsightsWebhookPushover:
 		// Pushover always answers with a status, and says what was wrong.
 		var pushover pushoverAnswer
 		if json.Unmarshal(answer, &pushover) != nil {
@@ -381,7 +535,7 @@ func (server *Server) previewInsightAlerts(writer http.ResponseWriter, request *
 	snapshot := server.config.Current().Config
 	webhook := insightWebhookFromForm(request, snapshot.Insights.Webhook)
 	built, err := buildInsightAlert(webhook, snapshot, sampleInsightFinding(time.Now()))
-	preview := pages.InsightAlertPreview{Method: "POST", URL: webhook.URL, ContentType: built.ContentType}
+	preview := pages.InsightAlertPreview{Method: "POST", URL: maskInsightWebhookURL(webhook), ContentType: built.ContentType}
 	if err != nil {
 		preview.Error = err.Error()
 	}
@@ -425,6 +579,21 @@ func previewInsightAlertBody(built insightAlertRequest) string {
 	return string(built.Body)
 }
 
+// maskInsightWebhookURL cuts short the token that ends a Slack or Discord
+// webhook URL, which is all it takes to post to the channel.
+func maskInsightWebhookURL(webhook config.InsightsWebhook) string {
+	if webhook.Format != config.InsightsWebhookSlack && webhook.Format != config.InsightsWebhookDiscord {
+		return webhook.URL
+	}
+	address, _, _ := strings.Cut(webhook.URL, "?")
+	address = strings.TrimRight(address, "/")
+	cut := strings.LastIndex(address, "/")
+	if cut < 0 || strings.HasSuffix(address[:cut], "/") {
+		return webhook.URL
+	}
+	return address[:cut+1] + maskInsightSecret(address[cut+1:])
+}
+
 // maskInsightSecret keeps only enough of a secret to tell which one it is.
 func maskInsightSecret(secret string) string {
 	if len(secret) <= 4 {
@@ -439,6 +608,7 @@ func sampleInsightFinding(now time.Time) insights.Finding {
 		ID: "sable.test", Kind: "sable.test", Tone: insights.ToneNotice, Title: "Test alert",
 		Subject: insights.Subject{Label: "Sable"}, Headline: "Sable can reach this webhook",
 		Summary:    "This is a test from Sable Insights. New findings worth a look will arrive like this.",
+		Reasons:    insights.Reasons("Sent from the Alerts setup to show how findings arrive."),
 		ObservedAt: now,
 	}
 }
@@ -502,6 +672,8 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 	}
 	if receipt, err := server.postInsightAlert(request.Context(), webhook, snapshot, sampleInsightFinding(time.Now())); err != nil {
 		view.Error = err.Error()
+	} else if webhook.Format == config.InsightsWebhookSlack || webhook.Format == config.InsightsWebhookDiscord {
+		view.Message = "Test sent. " + ifThenString(webhook.Format == config.InsightsWebhookSlack, "Slack", "Discord") + " posted it."
 	} else if receipt != "" && webhook.Format == config.InsightsWebhookPushover {
 		view.Message = "Test sent. Pushover accepted it as request " + receipt + "."
 	} else if receipt != "" {

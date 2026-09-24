@@ -350,6 +350,10 @@ func TestInsightAlertPreviewShowsEachFormatWithoutSecrets(t *testing.T) {
 	if strings.Contains(json, "secret-token") {
 		t.Error("the JSON preview shows the whole Authorization header")
 	}
+	discord := preview(url.Values{"url": {"https://discord.com/api/webhooks/123/secret-token"}, "format": {"discord"}})
+	if !strings.Contains(discord, "POST https://discord.com/api/webhooks/123/••••oken") || strings.Contains(discord, "secret-token") {
+		t.Errorf("the Discord preview shows its token:\n%s", discord)
+	}
 	text := preview(url.Values{"format": {"text"}})
 	if !strings.Contains(text, "(no URL yet)") || !strings.Contains(text, "Title: Test alert: Sable") || !strings.Contains(text, "text/plain") {
 		t.Errorf("the text preview:\n%s", text)
@@ -359,5 +363,112 @@ func TestInsightAlertPreviewShowsEachFormatWithoutSecrets(t *testing.T) {
 		if !strings.Contains(pushover, want) {
 			t.Errorf("the Pushover preview lacks %q:\n%s", want, pushover)
 		}
+	}
+}
+
+func TestInsightAlertsPostRichSlackAndDiscordMessages(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	bodies := map[string][]byte{}
+	// Each fake answers the way the real service does, or refuses when the
+	// path carries a bad token.
+	slack := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		mu.Lock()
+		bodies["slack"] = body
+		mu.Unlock()
+		if strings.HasSuffix(request.URL.Path, "/bad") {
+			writer.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(writer, "invalid_token")
+			return
+		}
+		_, _ = io.WriteString(writer, "ok")
+	}))
+	t.Cleanup(slack.Close)
+	discord := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		mu.Lock()
+		bodies["discord"] = body
+		mu.Unlock()
+		if strings.HasSuffix(request.URL.Path, "/bad") {
+			writer.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(writer, `{"message": "Invalid Webhook Token", "code": 50027}`)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(discord.Close)
+	parked := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = io.WriteString(writer, "<html>This domain is for sale</html>")
+	}))
+	t.Cleanup(parked.Close)
+	server := newInsightsTestServer(t)
+	test := func(format, hook string) string {
+		t.Helper()
+		// Headers are only for a plain webhook and ntfy, so these are dropped.
+		form := url.Values{"url": {hook}, "format": {format}, "header_name": {"X-Extra"}, "header_value": {"1"}}
+		if saved := server.post(t, "everything", "/ui/insights/alerts", form); saved.Code != http.StatusOK {
+			t.Fatalf("saving %s = %d %s", format, saved.Code, saved.Body.String())
+		}
+		if headers := server.config.Current().Config.Insights.Webhook.Headers; len(headers) != 0 {
+			t.Fatalf("%s kept headers %v", format, headers)
+		}
+		return server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}).Body.String()
+	}
+
+	if body := test("slack", slack.URL+"/services/good"); !strings.Contains(body, "Slack posted it.") {
+		t.Fatalf("testing Slack = %s", body)
+	}
+	var message slackMessage
+	if err := json.Unmarshal(bodies["slack"], &message); err != nil {
+		t.Fatal(err)
+	}
+	blocks := message.Attachments[0].Blocks
+	if message.Text == "" || message.Attachments[0].Color != "#2563eb" || blocks[0].Type != "header" || blocks[0].Text.Text != "Test alert: Sable" ||
+		blocks[2].Type != "context" || blocks[3].Type != "actions" || !strings.HasSuffix(blocks[3].Elements[0].URL, "/insights") {
+		t.Fatalf("Slack message = %s", bodies["slack"])
+	}
+	if body := test("slack", slack.URL+"/services/bad"); !strings.Contains(body, "Slack did not post it: invalid_token") {
+		t.Fatalf("testing a bad Slack token = %s", body)
+	}
+	if body := test("slack", parked.URL); !strings.Contains(body, "not like Slack") {
+		t.Fatalf("testing Slack at a parked domain = %s", body)
+	}
+
+	if body := test("discord", discord.URL+"/api/webhooks/good"); !strings.Contains(body, "Discord posted it.") {
+		t.Fatalf("testing Discord = %s", body)
+	}
+	var posted map[string]any
+	if err := json.Unmarshal(bodies["discord"], &posted); err != nil {
+		t.Fatal(err)
+	}
+	embed := posted["embeds"].([]any)[0].(map[string]any)
+	mentions := posted["allowed_mentions"].(map[string]any)["parse"].([]any)
+	if embed["title"] != "Test alert: Sable" || embed["color"] != float64(0x2563eb) || !strings.HasSuffix(embed["url"].(string), "/insights") ||
+		embed["fields"].([]any)[0].(map[string]any)["name"] != "Why" || len(mentions) != 0 {
+		t.Fatalf("Discord message = %s", bodies["discord"])
+	}
+	if body := test("discord", discord.URL+"/api/webhooks/bad"); !strings.Contains(body, "Discord did not post it: Invalid Webhook Token") {
+		t.Fatalf("testing a bad Discord token = %s", body)
+	}
+	if body := test("discord", parked.URL); !strings.Contains(body, "not like Discord") {
+		t.Fatalf("testing Discord at a parked domain = %s", body)
+	}
+}
+
+func TestSlackAlertsDoNotReadDeviceNamesAsMarkup(t *testing.T) {
+	t.Parallel()
+	finding := sampleInsightFinding(time.Now())
+	finding.Summary = "<!channel> & <https://evil.example|click>"
+	built, err := buildInsightAlert(config.InsightsWebhook{Format: "slack"}, config.Defaults(), finding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var message slackMessage
+	if err := json.Unmarshal(built.Body, &message); err != nil {
+		t.Fatal(err)
+	}
+	if section := message.Attachments[0].Blocks[1].Text.Text; section != "&lt;!channel&gt; &amp; &lt;https://evil.example|click&gt;" {
+		t.Fatalf("Slack section = %q", section)
 	}
 }

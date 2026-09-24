@@ -1854,7 +1854,7 @@ templ insightAlertsButton(alerts *InsightAlertsView) {
 // InsightAlertsDialog holds the alert setup, which saving replaces in place.
 templ InsightAlertsDialog(view InsightAlertsView) {
 	<dialog class="custom-server-dialog isotope-form-dialog insight-alerts-dialog" id="insight-alerts-dialog" aria-labelledby="insight-alerts-title">
-		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send each new finding worth a look to a webhook, ntfy, or Pushover</p></div>
+		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send new findings worth a look where you will see them</p></div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		@InsightAlerts(view)
 	</dialog>
@@ -1866,6 +1866,20 @@ func insightAlertKind(view InsightAlertsView) string {
 		return "json"
 	}
 	return view.Format
+}
+
+// insightAlertPlaceholder is an example URL for the view's kind.
+func insightAlertPlaceholder(view InsightAlertsView) string {
+	switch insightAlertKind(view) {
+	case "slack":
+		return "https://hooks.slack.com/services/…"
+	case "discord":
+		return "https://discord.com/api/webhooks/…"
+	case "text":
+		return "https://ntfy.sh/your-topic"
+	default:
+		return "https://example.com/hooks/sable"
+	}
 }
 
 // insightAlertFor reports whether a part of the setup that belongs to the
@@ -1920,15 +1934,19 @@ templ InsightAlerts(view InsightAlertsView) {
 				<legend>Send To</legend>
 				<div class="insight-alert-kind-tabs">
 					@insightAlertKindOption(view, "json", "Webhook")
+					@insightAlertKindOption(view, "slack", "Slack")
+					@insightAlertKindOption(view, "discord", "Discord")
 					@insightAlertKindOption(view, "text", "ntfy")
 					@insightAlertKindOption(view, "pushover", "Pushover")
 				</div>
 			</fieldset>
-			<label class="field-control" data-alert-for="json text" hidden?={ !insightAlertFor(view, "json text") }>
-				<span data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Webhook URL</span>
+			<label class="field-control" data-alert-for="json slack discord text" hidden?={ !insightAlertFor(view, "json slack discord text") }>
+				<span data-alert-for="json slack discord" hidden?={ !insightAlertFor(view, "json slack discord") }>Webhook URL</span>
 				<span data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Topic URL</span>
-				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ ifThen(view.Format == "text", "https://ntfy.sh/your-topic", "https://hooks.slack.com/services/…") } data-placeholder-json="https://hooks.slack.com/services/…" data-placeholder-text="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
-				<small data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Slack, Discord, Home Assistant, or anything else that takes a JSON POST.</small>
+				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ insightAlertPlaceholder(view) } data-placeholder-json="https://example.com/hooks/sable" data-placeholder-slack="https://hooks.slack.com/services/…" data-placeholder-discord="https://discord.com/api/webhooks/…" data-placeholder-text="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+				<small data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Home Assistant, or anything else that takes a JSON POST.</small>
+				<small data-alert-for="slack" hidden?={ !insightAlertFor(view, "slack") }>An incoming webhook from your Slack app. Findings arrive as a card with a button to Insights.</small>
+				<small data-alert-for="discord" hidden?={ !insightAlertFor(view, "discord") }>From a channel's Integrations settings. Findings arrive as an embed colored by how much they matter.</small>
 				<small data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Sent as plain text with a title, which ntfy shows as a notification.</small>
 			</label>
 			<div class="field-grid two" data-alert-for="pushover" hidden?={ !insightAlertFor(view, "pushover") }>
