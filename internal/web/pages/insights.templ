@@ -1859,7 +1859,6 @@ templ InsightAlerts(view InsightAlertsView) {
 			<label class="field-control">
 				<span>Webhook URL</span>
 				<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
-				<small>Leave empty to turn alerts off.</small>
 			</label>
 			<label class="field-control">
 				<span>Format</span>
@@ -1871,7 +1870,7 @@ templ InsightAlerts(view InsightAlertsView) {
 			<details class="settings-advanced insight-alerts-advanced" open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
 				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
 				<div class="insight-alerts-advanced-body">
-					<label class="field-control switch-row setting-switch-row"><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID. Catches a mistyped server that answers anything.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
+					<label class="field-control switch-row setting-switch-row" data-ntfy-receipt hidden?={ view.Format != "text" }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
 					<div class="field-control">
 						<span>Headers</span>
 						<div class="insight-alert-headers" data-alert-headers>

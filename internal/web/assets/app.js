@@ -1613,6 +1613,13 @@
     }
   });
 
+  // The ntfy receipt check only means something for plain text, ntfy's format.
+  document.addEventListener("change", (event) => {
+    if (!event.target.matches?.('#insight-alerts select[name="format"]')) return;
+    const receipt = event.target.form?.querySelector("[data-ntfy-receipt]");
+    if (receipt) receipt.hidden = event.target.value !== "text";
+  });
+
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;

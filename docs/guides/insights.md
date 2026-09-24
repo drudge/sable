@@ -77,7 +77,7 @@ Use **Pause** to stop alerts without losing the webhook, and **Resume** to start
 
 Open **Advanced** for two more options:
 
-- **Check for an ntfy Receipt** only counts a send when ntfy answers with a message ID. Without it, any server that answers counts, so a typo like `nfty.sh` can look like it worked.
+- **Check for an ntfy Receipt** only counts a send when ntfy answers with a message ID. It shows when the format is **Plain text**, which is what ntfy takes. Without it, any server that answers counts, so a typo like `nfty.sh` can look like it worked.
 - **Headers** are sent with every alert. Use `Authorization` to reach a protected ntfy topic, or `Priority` and `Tags` to change how the notification looks.
 
 You can also set alerts in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).

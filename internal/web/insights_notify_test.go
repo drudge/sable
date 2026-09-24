@@ -249,6 +249,12 @@ func TestInsightAlertsSendHeadersAndCanRequireAnNtfyReceipt(t *testing.T) {
 		t.Fatalf("testing without the check = %s", tested.Body.String())
 	}
 
+	// JSON is not what ntfy takes, so it hides and drops the receipt check.
+	json := server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {ntfy.URL}, "format": {"json"}, "ntfy_receipt": {"true"}})
+	if server.config.Current().Config.Insights.Webhook.NtfyReceipt || !strings.Contains(json.Body.String(), "data-ntfy-receipt hidden") {
+		t.Fatal("a JSON webhook kept or showed the ntfy receipt check")
+	}
+
 	bad := url.Values{"url": {ntfy.URL}, "header_name": {"Host"}, "header_value": {"example.com"}}
 	if response := server.post(t, "everything", "/ui/insights/alerts", bad); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "Sable sets Host itself") {
 		t.Fatalf("saving a Host header = %d", response.Code)

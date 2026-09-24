@@ -32,6 +32,7 @@ type InsightsWebhook struct {
 	Paused bool   `toml:"paused,omitempty"`
 	// NtfyReceipt fails a send unless the answer is ntfy's receipt for a
 	// published message, so a mistyped server that answers anything is caught.
+	// It applies only to the text format, which is what ntfy takes.
 	NtfyReceipt bool `toml:"ntfy_receipt,omitempty"`
 	// Headers are sent with every request, such as an ntfy access token or
 	// priority.
@@ -90,6 +91,10 @@ func (webhook *InsightsWebhook) Normalize() {
 	}
 	if webhook.URL == "" {
 		webhook.Paused = false
+	}
+	// ntfy takes plain text, so only that format can expect its receipt.
+	if webhook.Format != InsightsWebhookText {
+		webhook.NtfyReceipt = false
 	}
 	// Rows left blank in the console are not headers.
 	var headers []InsightsWebhookHeader

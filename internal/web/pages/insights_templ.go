@@ -6169,7 +6169,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "\" placeholder=\"https://ntfy.sh/your-topic\" autocomplete=\"off\" spellcheck=\"false\"> <small>Leave empty to turn alerts off.</small></label> <label class=\"field-control\"><span>Format</span> <select name=\"format\" data-styled-select><option value=\"json\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "\" placeholder=\"https://ntfy.sh/your-topic\" autocomplete=\"off\" spellcheck=\"false\"></label> <label class=\"field-control\"><span>Format</span> <select name=\"format\" data-styled-select><option value=\"json\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6215,17 +6215,27 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "</summary><div class=\"insight-alerts-advanced-body\"><label class=\"field-control switch-row setting-switch-row\"><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID. Catches a mistyped server that answers anything.</small></span><input type=\"checkbox\" role=\"switch\" name=\"ntfy_receipt\" value=\"true\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "</summary><div class=\"insight-alerts-advanced-body\"><label class=\"field-control switch-row setting-switch-row\" data-ntfy-receipt")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if view.NtfyReceipt {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " checked")
+		if view.Format != "text" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " hidden")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "></label><div class=\"field-control\"><span>Headers</span><div class=\"insight-alert-headers\" data-alert-headers>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type=\"checkbox\" role=\"switch\" name=\"ntfy_receipt\" value=\"true\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.NtfyReceipt {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, " checked")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "></label><div class=\"field-control\"><span>Headers</span><div class=\"insight-alert-headers\" data-alert-headers>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6235,7 +6245,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, "</div><button class=\"button outline compact insight-alert-header-add\" type=\"button\" data-alert-header-add>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "</div><button class=\"button outline compact insight-alert-header-add\" type=\"button\" data-alert-header-add>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6243,7 +6253,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "<span>Add Header</span></button> <small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small><template data-alert-header-template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "<span>Add Header</span></button> <small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small><template data-alert-header-template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6251,13 +6261,13 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "</template></div></div></details></div><div class=\"dialog-footer\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "</template></div></div></details></div><div class=\"dialog-footer\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.URL != "" {
 			if view.Paused {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"true\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"true\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6265,12 +6275,12 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "<span>Resume</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "<span>Resume</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"false\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"false\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6278,17 +6288,17 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "<span>Pause</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "<span>Pause</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, " <button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/test\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>Send Test</button> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, " <button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/test\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>Send Test</button> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "<button class=\"button\" type=\"submit\" data-replica-primary-action>Save</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "<button class=\"button\" type=\"submit\" data-replica-primary-action>Save</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

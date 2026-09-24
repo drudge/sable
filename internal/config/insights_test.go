@@ -16,6 +16,13 @@ func TestInsightsWebhookValidatesAndNormalizes(t *testing.T) {
 	if webhook := configuration.Insights.Webhook; webhook.URL != "https://ntfy.sh/sable-alerts" || webhook.Format != "text" {
 		t.Fatalf("webhook = %+v", configuration.Insights.Webhook)
 	}
+	// Only plain text, ntfy's format, can expect an ntfy receipt.
+	json := Defaults()
+	json.Insights.Webhook = InsightsWebhook{URL: "https://example.com/hook", NtfyReceipt: true}
+	json.normalize()
+	if json.Insights.Webhook.NtfyReceipt {
+		t.Fatal("a JSON webhook kept the ntfy receipt check")
+	}
 	// A webhook with no URL cannot be paused; alerts are simply off.
 	off := Defaults()
 	off.Insights.Webhook = InsightsWebhook{Paused: true}

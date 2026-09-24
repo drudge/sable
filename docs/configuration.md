@@ -695,7 +695,7 @@ the webhook with old news. `paused = true` stops sending but keeps the webhook;
 findings that turn up while paused are not sent when alerts resume. Any server
 can answer a request with success, including a parked domain behind a typo, so
 `ntfy_receipt = true` only counts a send when ntfy answers with the ID of the
-message it published. Each `[[insights.webhook.headers]]` entry is sent with
+message it published; it applies only with `format = "text"`. Each `[[insights.webhook.headers]]` entry is sent with
 every alert, such as `Authorization` for a protected ntfy topic; Sable sets
 `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself. Only the
 primary node sends alerts. The Insights Overview can set the webhook, pause and
