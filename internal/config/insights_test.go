@@ -16,6 +16,13 @@ func TestInsightsWebhookValidatesAndNormalizes(t *testing.T) {
 	if configuration.Insights.Webhook != (InsightsWebhook{URL: "https://ntfy.sh/sable-alerts", Format: "text"}) {
 		t.Fatalf("webhook = %+v", configuration.Insights.Webhook)
 	}
+	// A webhook with no URL cannot be paused; alerts are simply off.
+	off := Defaults()
+	off.Insights.Webhook = InsightsWebhook{Paused: true}
+	off.normalize()
+	if off.Insights.Webhook.Paused {
+		t.Fatal("an empty webhook stayed paused")
+	}
 	for _, test := range []struct {
 		webhook InsightsWebhook
 		want    string

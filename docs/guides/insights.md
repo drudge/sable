@@ -66,12 +66,14 @@ Hiding applies to everyone who uses Insights. Hidden findings are listed under t
 
 ## Get alerts
 
-Insights can send each new finding worth a look to a webhook. Use the bell beside the range control at the top of Insights, which also shows whether alerts are on, then enter the webhook URL and choose a format:
+Insights can send each new finding worth a look to a webhook. Use the bell beside the range control at the top of Insights, which also shows whether alerts are on, paused, or off, then enter the webhook URL and choose a format:
 
 - **JSON** works with Slack, Discord, Home Assistant, and anything else that takes a JSON POST.
 - **Plain text** works with ntfy, which shows the finding's title and summary as a notification.
 
 Use **Send Test** to check the webhook. Each finding is sent once, and anything you hid is skipped. When you first set a webhook, Sable takes stock of what it already knows without sending it, so you are not flooded with old news. On a cluster, only the primary sends alerts.
+
+Use **Pause** to stop alerts without losing the webhook, and **Resume** to start them again. Findings that turn up while alerts are paused are not sent when you resume. **Send Test** still works while paused.
 
 You can also set alerts in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
 

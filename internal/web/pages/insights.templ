@@ -1774,8 +1774,21 @@ type InsightReasonView struct {
 type InsightAlertsView struct {
 	URL     string
 	Format  string
+	Paused  bool
 	Message string
 	Error   string
+}
+
+// insightAlertsState is what the bell says: on, paused, or off.
+func insightAlertsState(alerts *InsightAlertsView) string {
+	switch {
+	case alerts.URL == "":
+		return "off"
+	case alerts.Paused:
+		return "paused"
+	default:
+		return "on"
+	}
 }
 
 // InsightAlerts sets up where new findings are sent. It swaps itself in place
@@ -1784,10 +1797,23 @@ type InsightAlertsView struct {
 // says whether alerts are on. Only operators who can change settings see it.
 templ insightAlertsButton(alerts *InsightAlertsView) {
 	if alerts != nil {
-		<button class={ "button outline compact insight-alerts-button", templ.KV("active", alerts.URL != "") } type="button" data-dialog-open="insight-alerts-dialog" aria-label={ ifThen(alerts.URL != "", "Alerts on", "Alerts off") } title={ ifThen(alerts.URL != "", "Alerts are on", "Alerts are off") }>
-			@Icon(ifThen(alerts.URL != "", "bell", "bell-off"))
-			<span>{ ifThen(alerts.URL != "", "On", "Off") }</span>
-		</button>
+		switch insightAlertsState(alerts) {
+			case "on":
+				<button class="button outline compact insight-alerts-button active" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts on" title="Alerts are on">
+					@Icon("bell")
+					<span>On</span>
+				</button>
+			case "paused":
+				<button class="button outline compact insight-alerts-button paused" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts paused" title="Alerts are paused">
+					@Icon("pause")
+					<span>Paused</span>
+				</button>
+			default:
+				<button class="button outline compact insight-alerts-button" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts off" title="Alerts are off">
+					@Icon("bell-off")
+					<span>Off</span>
+				</button>
+		}
 	}
 }
 
@@ -1801,7 +1827,8 @@ templ InsightAlertsDialog(view InsightAlertsView) {
 }
 
 // InsightAlerts is the alert setup form. Save is its only submit button, so
-// Enter in the URL saves; Send Test sends a request of its own.
+// Enter in the URL saves; Pause, Resume, and Send Test send requests of their
+// own. The buttons keep the order the Integrations cards use.
 templ InsightAlerts(view InsightAlertsView) {
 	<form class="insight-alerts" id="insight-alerts" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
 		if view.Message != "" {
@@ -1827,6 +1854,11 @@ templ InsightAlerts(view InsightAlertsView) {
 		</div>
 		<div class="dialog-footer">
 			if view.URL != "" {
+				if view.Paused {
+					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
+				} else {
+					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"false"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("pause")<span>Pause</span></button>
+				}
 				<button class="button outline" type="button" hx-post="/ui/insights/alerts/test" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>Send Test</button>
 			}
 			<button class="button" type="submit" data-replica-primary-action>Save</button>

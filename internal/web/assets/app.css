@@ -4046,6 +4046,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .insight-alerts-button .nav-icon { width: 1rem; height: 1rem; }
 .insight-alerts-button.active .nav-icon { color: #16a34a; }
 .dark .insight-alerts-button.active .nav-icon { color: #22c55e; }
+.insight-alerts-button.paused .nav-icon { color: #d97706; }
+.dark .insight-alerts-button.paused .nav-icon { color: #f59e0b; }
 .insight-alerts { display: grid; gap: 1rem; }
 .insight-alerts-body { padding: 0; }
 .insight-alerts-body > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }

@@ -686,8 +686,10 @@ summary, and reasons, plus `text` and `content` fields that Slack and Discord
 show as the message. The `text` format posts the summary as plain text with a
 `Title` header, which suits ntfy. When a webhook is first set, Sable takes stock
 of what it already knows without sending it, so turning alerts on never floods
-the webhook with old news. Only the primary node sends alerts. The Insights
-Overview can set the webhook and send a test.
+the webhook with old news. `paused = true` stops sending but keeps the webhook;
+findings that turn up while paused are not sent when alerts resume. Only the
+primary node sends alerts. The Insights Overview can set the webhook, pause and
+resume it, and send a test.
 
 ## Server logging
 

@@ -128,3 +128,66 @@ func TestInsightAlertsCanBeSetUpAndTestedFromTheOverview(t *testing.T) {
 		t.Fatalf("an invalid URL = %d", invalid.Code)
 	}
 }
+
+func TestPausedInsightAlertsSendNothingAndResumeWithoutTheBacklog(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	sent := 0
+	hook := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		mu.Lock()
+		sent++
+		mu.Unlock()
+	}))
+	t.Cleanup(hook.Close)
+	server := newInsightsTestServer(t)
+	ctx := context.Background()
+	saved := server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {hook.URL}, "format": {"text"}})
+	if saved.Code != http.StatusOK {
+		t.Fatalf("saving = %d", saved.Code)
+	}
+	now := time.Now()
+	if err := server.sendInsightAlerts(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	news := server.insightNews(ctx, now)
+	if len(news) == 0 {
+		t.Fatal("the test network has no news to alert about")
+	}
+
+	if response := server.post(t, "logs-reader", "/ui/insights/alerts/enabled", url.Values{"enabled": {"false"}}); response.Code != http.StatusForbidden {
+		t.Fatalf("pausing without settings write = %d", response.Code)
+	}
+	paused := server.post(t, "everything", "/ui/insights/alerts/enabled", url.Values{"enabled": {"false"}})
+	if !strings.Contains(paused.Body.String(), "Alerts paused.") || !strings.Contains(paused.Body.String(), "Resume") || paused.Header().Get("HX-Trigger") != "insightsChanged" {
+		t.Fatalf("pausing = %s", paused.Body.String())
+	}
+	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `aria-label="Alerts paused"`) {
+		t.Fatal("the bell does not say alerts are paused")
+	}
+	// Saving the setup again leaves alerts paused.
+	server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {hook.URL}, "format": {"text"}})
+	if webhook := server.config.Current().Config.Insights.Webhook; !webhook.Paused || webhook.URL != hook.URL {
+		t.Fatalf("webhook after saving while paused = %+v", webhook)
+	}
+
+	// A finding that turns up while paused is noted, not sent.
+	target := insightAlertTarget(hook.URL)
+	if err := server.store.ForgetInsightsNotified(ctx, target, []string{news[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.sendInsightAlerts(ctx, now.Add(insightAlertInterval)); err != nil {
+		t.Fatal(err)
+	}
+	resumed := server.post(t, "everything", "/ui/insights/alerts/enabled", url.Values{"enabled": {"true"}})
+	if !strings.Contains(resumed.Body.String(), "Alerts resumed.") || !strings.Contains(resumed.Body.String(), "Pause") {
+		t.Fatalf("resuming = %s", resumed.Body.String())
+	}
+	if err := server.sendInsightAlerts(ctx, now.Add(2*insightAlertInterval)); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if sent != 0 {
+		t.Fatalf("sent %d alerts for findings from while alerts were paused", sent)
+	}
+}

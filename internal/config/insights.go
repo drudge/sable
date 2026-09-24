@@ -22,10 +22,11 @@ type Insights struct {
 }
 
 // InsightsWebhook is where Insights sends each new finding worth a look. An
-// empty URL turns alerts off.
+// empty URL turns alerts off; Paused keeps the URL but sends nothing.
 type InsightsWebhook struct {
 	URL    string `toml:"url,omitempty"`
 	Format string `toml:"format,omitempty"`
+	Paused bool   `toml:"paused,omitempty"`
 }
 
 func validateInsights(insights Insights) error { return insights.Webhook.Validate() }
@@ -52,5 +53,8 @@ func (configuration *Config) normalizeInsights() {
 	webhook.Format = strings.ToLower(strings.TrimSpace(webhook.Format))
 	if webhook.Format == InsightsWebhookJSON {
 		webhook.Format = ""
+	}
+	if webhook.URL == "" {
+		webhook.Paused = false
 	}
 }

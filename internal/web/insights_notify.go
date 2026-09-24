@@ -81,7 +81,8 @@ func (server *Server) RunInsightAlerts(ctx context.Context, leading func() bool)
 
 // sendInsightAlerts compares what Insights finds now with what the webhook was
 // already told. A webhook it has never told anything first takes stock
-// quietly, so turning alerts on never floods it with old news.
+// quietly, so turning alerts on never floods it with old news. A paused
+// webhook keeps taking stock, so resuming never sends what happened meanwhile.
 func (server *Server) sendInsightAlerts(ctx context.Context, now time.Time) error {
 	snapshot := server.config.Current().Config
 	webhook := snapshot.Insights.Webhook
@@ -108,8 +109,10 @@ func (server *Server) sendInsightAlerts(ctx context.Context, now time.Time) erro
 		if _, sent := notified[finding.ID]; sent {
 			continue
 		}
-		if err := server.postInsightAlert(ctx, webhook, snapshot, finding); err != nil {
-			return err
+		if !webhook.Paused {
+			if err := server.postInsightAlert(ctx, webhook, snapshot, finding); err != nil {
+				return err
+			}
 		}
 		if err := notifications.MarkInsightsNotified(ctx, target, []string{finding.ID}, now); err != nil {
 			return err
@@ -211,7 +214,7 @@ func (server *Server) insightAlertsView(console pages.DashboardView) *pages.Insi
 		return nil
 	}
 	webhook := server.config.Current().Config.Insights.Webhook
-	return &pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format}
+	return &pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
 }
 
 // saveInsightAlerts changes where new findings are sent.
@@ -227,7 +230,9 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		return
 	}
 	webhook := config.InsightsWebhook{URL: strings.TrimSpace(request.FormValue("url")), Format: request.FormValue("format")}
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format}
+	// Saving changes where alerts go, not whether they are paused.
+	webhook.Paused = webhook.URL != "" && server.config.Current().Config.Insights.Webhook.Paused
+	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
 	editor, ok := server.config.(settingsEditor)
 	err := webhook.Validate()
 	if err == nil && !ok {
@@ -243,8 +248,12 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
 		view.Error = err.Error()
 	} else {
-		view.Message = "Alerts turned off."
-		if webhook.URL != "" {
+		switch {
+		case webhook.URL == "":
+			view.Message = "Alerts turned off."
+		case webhook.Paused:
+			view.Message = "Saved. Alerts are paused."
+		default:
 			view.Message = "Saved. New findings will be sent to this webhook."
 		}
 		server.recordControlPlaneAudit(request, "insights.alerts", ifThenString(webhook.URL != "", "set the Insights alert webhook", "turned Insights alerts off"))
@@ -255,7 +264,49 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 	server.renderInsightAlerts(writer, request, view)
 }
 
-// testInsightAlerts sends a sample alert to the saved webhook.
+// setInsightAlertsEnabled pauses or resumes alerts without forgetting the
+// webhook.
+func (server *Server) setInsightAlertsEnabled(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		writeFragmentStatus(writer, http.StatusBadRequest)
+		return
+	}
+	paused := request.FormValue("enabled") != "true"
+	webhook := server.config.Current().Config.Insights.Webhook
+	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
+	if webhook.URL == "" {
+		view.Error = "Save a webhook URL first."
+		server.renderInsightAlerts(writer, request, view)
+		return
+	}
+	editor, ok := server.config.(settingsEditor)
+	err := errors.New("configuration cannot be edited on this server")
+	if ok {
+		err = editor.Update(request.Context(), func(configuration *config.Config) error {
+			configuration.Insights.Webhook.Paused = paused
+			return nil
+		})
+	}
+	if err != nil {
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		view.Error = err.Error()
+	} else {
+		view.Paused = paused
+		view.Message = ifThenString(paused, "Alerts paused.", "Alerts resumed. Only findings from now on will be sent.")
+		server.recordControlPlaneAudit(request, "insights.alerts", ifThenString(paused, "paused Insights alerts", "resumed Insights alerts"))
+		writer.Header().Set("HX-Trigger", "insightsChanged")
+	}
+	server.renderInsightAlerts(writer, request, view)
+}
+
+// testInsightAlerts sends a sample alert to the saved webhook, even while
+// alerts are paused.
 func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *http.Request) {
 	console := server.consoleView(request)
 	if !console.CanWriteSettings {
@@ -264,7 +315,7 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 	}
 	snapshot := server.config.Current().Config
 	webhook := snapshot.Insights.Webhook
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format}
+	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused}
 	if webhook.URL == "" {
 		view.Error = "Save a webhook URL first."
 		server.renderInsightAlerts(writer, request, view)
