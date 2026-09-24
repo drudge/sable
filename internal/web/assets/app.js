@@ -1613,23 +1613,19 @@
     }
   });
 
-  // Each alert format shows only its own options. The ntfy receipt check
-  // means something only for plain text, ntfy's format, and Pushover needs its
-  // keys and always posts to the same URL.
+  // Each kind of alert shows only its own setup: parts marked
+  // data-alert-for list the kinds they belong to. Pushover always posts to
+  // its own API, so it has no URL to ask for.
   document.addEventListener("change", (event) => {
-    if (!event.target.matches?.('#insight-alerts select[name="format"]')) return;
+    if (!event.target.matches?.('#insight-alerts input[name="format"]')) return;
     const form = event.target.form;
-    const format = event.target.value;
-    const receipt = form?.querySelector("[data-ntfy-receipt]");
-    if (receipt) receipt.hidden = format !== "text";
-    const pushover = form?.querySelector("[data-pushover-fields]");
+    const kind = event.target.value;
+    form?.querySelectorAll("[data-alert-for]").forEach((part) => {
+      part.hidden = !part.dataset.alertFor.split(" ").includes(kind);
+    });
     const url = form?.querySelector('input[name="url"]');
-    if (pushover) {
-      pushover.hidden = format !== "pushover";
-      const pushoverURL = pushover.dataset.pushoverUrl;
-      if (format === "pushover" && url && !url.value.trim()) url.value = pushoverURL;
-      if (format !== "pushover" && url?.value.trim() === pushoverURL) url.value = "";
-    }
+    const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
+    if (placeholder) url.placeholder = placeholder;
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });

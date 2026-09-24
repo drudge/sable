@@ -224,7 +224,7 @@ func TestInsightAlertsSendHeadersAndCanRequireAnNtfyReceipt(t *testing.T) {
 	if !webhook.NtfyReceipt || len(webhook.Headers) != 2 || webhook.Headers[0] != (config.InsightsWebhookHeader{Name: "Authorization", Value: "Bearer tk_secret"}) || webhook.Headers[1].Name != "Priority" {
 		t.Fatalf("webhook = %+v", webhook)
 	}
-	if body := saved.Body.String(); !strings.Contains(body, `value="Bearer tk_secret"`) || !strings.Contains(body, "<details class=\"settings-advanced insight-alerts-advanced\" open") {
+	if body := saved.Body.String(); !strings.Contains(body, `value="Bearer tk_secret"`) || !strings.Contains(body, `insight-alerts-advanced" data-alert-for="json text" open`) {
 		t.Fatal("the saved setup does not show its headers in an open Advanced section")
 	}
 	tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{})
@@ -251,7 +251,7 @@ func TestInsightAlertsSendHeadersAndCanRequireAnNtfyReceipt(t *testing.T) {
 
 	// JSON is not what ntfy takes, so it hides and drops the receipt check.
 	json := server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {ntfy.URL}, "format": {"json"}, "ntfy_receipt": {"true"}})
-	if server.config.Current().Config.Insights.Webhook.NtfyReceipt || !strings.Contains(json.Body.String(), "data-ntfy-receipt hidden") {
+	if server.config.Current().Config.Insights.Webhook.NtfyReceipt || !strings.Contains(json.Body.String(), `setting-switch-row" data-alert-for="text" hidden`) {
 		t.Fatal("a JSON webhook kept or showed the ntfy receipt check")
 	}
 
@@ -280,13 +280,33 @@ func TestInsightAlertsSendToPushoverAndSayWhatItRejected(t *testing.T) {
 	t.Cleanup(pushover.Close)
 	server := newInsightsTestServer(t)
 
-	if missing := server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {pushover.URL}, "format": {"pushover"}}); missing.Code != http.StatusUnprocessableEntity || !strings.Contains(missing.Body.String(), "application token and a user key") {
-		t.Fatalf("saving Pushover without keys = %d", missing.Code)
+	if missing := server.post(t, "everything", "/ui/insights/alerts", url.Values{"format": {"pushover"}, "pushover_token": {"app-token"}}); missing.Code != http.StatusUnprocessableEntity || !strings.Contains(missing.Body.String(), "application token and a user key") {
+		t.Fatalf("saving Pushover with only a token = %d", missing.Code)
 	}
-	setup := url.Values{"url": {pushover.URL}, "format": {"pushover"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}}
+	// The dialog asks for no URL: Pushover's own API is used, whatever the
+	// form still carries from another kind.
+	setup := url.Values{"url": {"https://ntfy.sh/left-over"}, "format": {"pushover"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}}
 	if saved := server.post(t, "everything", "/ui/insights/alerts", setup); saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), `value="user-key"`) {
 		t.Fatalf("saving Pushover = %d", saved.Code)
 	}
+	if webhook := server.config.Current().Config.Insights.Webhook; webhook.URL != config.PushoverMessagesURL {
+		t.Fatalf("Pushover URL = %q", webhook.URL)
+	}
+	// Blank keys turn Pushover alerts off.
+	if off := server.post(t, "everything", "/ui/insights/alerts", url.Values{"format": {"pushover"}}); off.Code != http.StatusOK || server.config.Current().Config.Insights.Webhook.URL != "" {
+		t.Fatalf("clearing Pushover keys = %d", off.Code)
+	}
+	// Point Pushover at the fake API the way a config file could.
+	usePushover := func(token string) {
+		t.Helper()
+		if err := server.config.(settingsEditor).Update(context.Background(), func(configuration *config.Config) error {
+			configuration.Insights.Webhook = config.InsightsWebhook{URL: pushover.URL, Format: "pushover", PushoverToken: token, PushoverUser: "user-key"}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	usePushover("app-token")
 	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "Pushover accepted it as request r-good") {
 		t.Fatalf("testing Pushover = %s", tested.Body.String())
 	}
@@ -296,13 +316,12 @@ func TestInsightAlertsSendToPushoverAndSayWhatItRejected(t *testing.T) {
 	}
 	mu.Unlock()
 
-	setup.Set("pushover_token", "wrong")
-	server.post(t, "everything", "/ui/insights/alerts", setup)
+	usePushover("wrong")
 	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "application token is invalid") {
 		t.Fatalf("testing a wrong token = %s", tested.Body.String())
 	}
 	// Leaving Pushover drops its keys.
-	server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {pushover.URL}, "format": {"json"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}})
+	server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {"https://hooks.example.com/x"}, "format": {"json"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}})
 	if webhook := server.config.Current().Config.Insights.Webhook; webhook.PushoverToken != "" || webhook.PushoverUser != "" {
 		t.Fatalf("a JSON webhook kept Pushover keys: %+v", webhook)
 	}

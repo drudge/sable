@@ -349,6 +349,10 @@ func insightWebhookFromForm(request *http.Request, current config.InsightsWebhoo
 		NtfyReceipt:   request.FormValue("ntfy_receipt") == "true",
 		PushoverToken: request.FormValue("pushover_token"), PushoverUser: request.FormValue("pushover_user"),
 	}
+	// The dialog asks Pushover for no URL; its own API is the one to use.
+	if webhook.Format == config.InsightsWebhookPushover {
+		webhook.URL = ""
+	}
 	names, values := request.Form["header_name"], request.Form["header_value"]
 	for index, name := range names {
 		header := config.InsightsWebhookHeader{Name: name}

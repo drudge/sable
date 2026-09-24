@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -1853,14 +1854,34 @@ templ insightAlertsButton(alerts *InsightAlertsView) {
 // InsightAlertsDialog holds the alert setup, which saving replaces in place.
 templ InsightAlertsDialog(view InsightAlertsView) {
 	<dialog class="custom-server-dialog isotope-form-dialog insight-alerts-dialog" id="insight-alerts-dialog" aria-labelledby="insight-alerts-title">
-		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send each new finding worth a look to a webhook</p></div>
+		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send each new finding worth a look to a webhook, ntfy, or Pushover</p></div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		@InsightAlerts(view)
 	</dialog>
 }
 
-// pushoverMessagesURL fills the webhook URL when Pushover is picked.
-const pushoverMessagesURL = "https://api.pushover.net/1/messages.json"
+// insightAlertKind is the format a view sends, with JSON as the default.
+func insightAlertKind(view InsightAlertsView) string {
+	if view.Format == "" {
+		return "json"
+	}
+	return view.Format
+}
+
+// insightAlertFor reports whether a part of the setup that belongs to the
+// space-separated kinds shows for the view's kind.
+func insightAlertFor(view InsightAlertsView, kinds string) bool {
+	return slices.Contains(strings.Fields(kinds), insightAlertKind(view))
+}
+
+// insightAlertKindOption is one choice in the Send To control. The choices
+// are radio buttons, so the form posts the one picked as its format.
+templ insightAlertKindOption(view InsightAlertsView, kind, label string) {
+	<label class="insight-alert-kind">
+		<input class="sr-only" type="radio" name="format" value={ kind } checked?={ insightAlertKind(view) == kind }/>
+		<span>{ label }</span>
+	</label>
+}
 
 // InsightAlertPreviewPanel shows a sample alert as the request Sable would
 // send. It fills a menu that drops from the Preview button, so looking never
@@ -1869,7 +1890,8 @@ templ InsightAlertPreviewPanel(preview InsightAlertPreview) {
 	if preview.Error != "" {
 		<p class="insight-alert-preview-error">{ preview.Error }</p>
 	}
-	<pre><code>{ preview.Text() }</code></pre>
+	<button class="about-copy-button insight-alert-preview-copy" type="button" data-copy-target="insight-alerts-preview-text" aria-label="Copy preview" title="Copy preview">@CopyIcons()</button>
+	<pre><code id="insight-alerts-preview-text">{ preview.Text() }</code></pre>
 }
 
 // insightAlertHeaderRow is one header's name and value, removable on its own.
@@ -1893,27 +1915,30 @@ templ InsightAlerts(view InsightAlertsView) {
 			@Toast(view.Error, "error")
 		}
 		<div class="isotope-dialog-body insight-alerts-body">
-			<p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Pushover, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
-			<label class="field-control">
-				<span>Webhook URL</span>
-				<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+			<p>Sable sends each new finding once and skips anything you hide.</p>
+			<fieldset class="field-control insight-alert-kinds">
+				<legend>Send To</legend>
+				<div class="insight-alert-kind-tabs">
+					@insightAlertKindOption(view, "json", "Webhook")
+					@insightAlertKindOption(view, "text", "ntfy")
+					@insightAlertKindOption(view, "pushover", "Pushover")
+				</div>
+			</fieldset>
+			<label class="field-control" data-alert-for="json text" hidden?={ !insightAlertFor(view, "json text") }>
+				<span data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Webhook URL</span>
+				<span data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Topic URL</span>
+				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ ifThen(view.Format == "text", "https://ntfy.sh/your-topic", "https://hooks.slack.com/services/…") } data-placeholder-json="https://hooks.slack.com/services/…" data-placeholder-text="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+				<small data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Slack, Discord, Home Assistant, or anything else that takes a JSON POST.</small>
+				<small data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Sent as plain text with a title, which ntfy shows as a notification.</small>
 			</label>
-			<label class="field-control">
-				<span>Format</span>
-				<select name="format" data-styled-select>
-					<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
-					<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
-					<option value="pushover" selected?={ view.Format == "pushover" }>Pushover</option>
-				</select>
-			</label>
-			<div class="field-grid two" data-pushover-fields data-pushover-url={ pushoverMessagesURL } hidden?={ view.Format != "pushover" }>
+			<div class="field-grid two" data-alert-for="pushover" hidden?={ !insightAlertFor(view, "pushover") }>
 				<label class="field-control"><span>Application Token</span><input name="pushover_token" value={ view.PushoverToken } autocomplete="off" spellcheck="false"/><small>From the application you made for Sable.</small></label>
 				<label class="field-control"><span>User Key</span><input name="pushover_user" value={ view.PushoverUser } autocomplete="off" spellcheck="false"/><small>Your user key, or a group key.</small></label>
 			</div>
-			<details class="settings-advanced insight-alerts-advanced" open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
+			<details class="settings-advanced insight-alerts-advanced" data-alert-for="json text" hidden?={ !insightAlertFor(view, "json text") } open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
 				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
 				<div class="insight-alerts-advanced-body">
-					<label class="field-control switch-row setting-switch-row" data-ntfy-receipt hidden?={ view.Format != "text" }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
+					<label class="field-control switch-row setting-switch-row" data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
 					<div class="field-control">
 						<span>Headers</span>
 						<div class="insight-alert-headers" data-alert-headers>
@@ -1930,7 +1955,7 @@ templ InsightAlerts(view InsightAlertsView) {
 		</div>
 		<div id="insight-alerts-preview" class="insight-alert-preview" popover role="dialog" aria-label="Preview of a sample alert" data-alert-preview-popover></div>
 		<div class="dialog-footer">
-			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="insight-alerts-preview" data-alert-preview>@Icon("code")<span>Preview</span><span class="styled-select-chevron" aria-hidden="true"></span></button>
+			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="insight-alerts-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
 			if view.URL != "" {
 				if view.Paused {
 					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>

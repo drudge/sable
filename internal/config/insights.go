@@ -103,17 +103,7 @@ func (webhook *InsightsWebhook) Normalize() {
 	if webhook.Format == InsightsWebhookJSON {
 		webhook.Format = ""
 	}
-	if webhook.URL == "" {
-		webhook.Paused = false
-	}
-	// ntfy takes plain text, so only that format can expect its receipt.
-	if webhook.Format != InsightsWebhookText {
-		webhook.NtfyReceipt = false
-	}
 	webhook.PushoverToken, webhook.PushoverUser = strings.TrimSpace(webhook.PushoverToken), strings.TrimSpace(webhook.PushoverUser)
-	if webhook.Format != InsightsWebhookPushover {
-		webhook.PushoverToken, webhook.PushoverUser = "", ""
-	}
 	// Rows left blank in the console are not headers.
 	var headers []InsightsWebhookHeader
 	for _, header := range webhook.Headers {
@@ -123,4 +113,24 @@ func (webhook *InsightsWebhook) Normalize() {
 		}
 	}
 	webhook.Headers = headers
+	if webhook.Format == InsightsWebhookPushover {
+		// Pushover posts to its own API unless the file names another, so its
+		// keys, not a URL, say whether alerts are on. It reads no headers.
+		switch {
+		case webhook.PushoverToken == "" && webhook.PushoverUser == "":
+			webhook.URL = ""
+		case webhook.URL == "":
+			webhook.URL = PushoverMessagesURL
+		}
+		webhook.Headers = nil
+	} else {
+		webhook.PushoverToken, webhook.PushoverUser = "", ""
+	}
+	// ntfy takes plain text, so only that format can expect its receipt.
+	if webhook.Format != InsightsWebhookText {
+		webhook.NtfyReceipt = false
+	}
+	if webhook.URL == "" {
+		webhook.Paused = false
+	}
 }
