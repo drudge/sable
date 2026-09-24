@@ -5911,9 +5911,34 @@ type InsightAlertsView struct {
 	Format      string
 	Paused      bool
 	NtfyReceipt bool
+	// PushoverToken and PushoverUser are only sent with the pushover format.
+	PushoverToken string
+	PushoverUser  string
+	Headers       []InsightAlertHeader
+	Message       string
+	Error         string
+}
+
+// InsightAlertPreview is a sample alert laid out the way it would be sent.
+type InsightAlertPreview struct {
+	Method      string
+	URL         string
+	ContentType string
 	Headers     []InsightAlertHeader
-	Message     string
+	Body        string
 	Error       string
+}
+
+// Text is the request as it would go over the wire, headers then body.
+func (preview InsightAlertPreview) Text() string {
+	var text strings.Builder
+	text.WriteString(preview.Method + " " + ifThen(preview.URL != "", preview.URL, "(no URL yet)") + "\n")
+	text.WriteString("Content-Type: " + preview.ContentType + "\n")
+	for _, header := range preview.Headers {
+		text.WriteString(header.Name + ": " + header.Value + "\n")
+	}
+	text.WriteString("\n" + preview.Body)
+	return text.String()
 }
 
 // InsightAlertHeader is one extra header sent with each alert.
@@ -6052,8 +6077,12 @@ func InsightAlertsDialog(view InsightAlertsView) templ.Component {
 	})
 }
 
-// insightAlertHeaderRow is one header's name and value, removable on its own.
-func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
+// pushoverMessagesURL fills the webhook URL when Pushover is picked.
+const pushoverMessagesURL = "https://api.pushover.net/1/messages.json"
+
+// InsightAlertPreviewPanel shows a sample alert as the request Sable would
+// send, above the dialog's buttons. Closing it leaves the empty slot behind.
+func InsightAlertPreviewPanel(preview InsightAlertPreview) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -6074,33 +6103,7 @@ func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
 			templ_7745c5c3_Var231 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div class=\"insight-alert-header\" data-alert-header><input name=\"header_name\" value=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var232 string
-		templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Name)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1840, Col: 47}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var232)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "\" placeholder=\"Name\" aria-label=\"Header name\" autocomplete=\"off\" spellcheck=\"false\"> <input name=\"header_value\" value=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var233 string
-		templ_7745c5c3_Var233, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Value)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1841, Col: 49}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var233)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "\" placeholder=\"Value\" aria-label=\"Header value\" autocomplete=\"off\" spellcheck=\"false\"> <button class=\"icon-button\" type=\"button\" data-alert-header-remove aria-label=\"Remove header\" title=\"Remove header\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div id=\"insight-alerts-preview\" class=\"insight-alert-preview\" data-alert-preview-panel><div class=\"insight-alert-preview-heading\"><div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div><button class=\"icon-button\" type=\"button\" data-alert-preview-close aria-label=\"Close preview\" title=\"Close preview\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6108,7 +6111,107 @@ func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "</button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "</button></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if preview.Error != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "<p class=\"insight-alert-preview-error\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var232 string
+			templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Error)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1874, Col: 57}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var232))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "<pre><code>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var233 string
+		templ_7745c5c3_Var233, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Text())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1876, Col: 29}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var233))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "</code></pre></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// insightAlertHeaderRow is one header's name and value, removable on its own.
+func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var234 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var234 == nil {
+			templ_7745c5c3_Var234 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "<div class=\"insight-alert-header\" data-alert-header><input name=\"header_name\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var235 string
+		templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Name)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1883, Col: 47}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var235)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, "\" placeholder=\"Name\" aria-label=\"Header name\" autocomplete=\"off\" spellcheck=\"false\"> <input name=\"header_value\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var236 string
+		templ_7745c5c3_Var236, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Value)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1884, Col: 49}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var236)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, "\" placeholder=\"Value\" aria-label=\"Header value\" autocomplete=\"off\" spellcheck=\"false\"> <button class=\"icon-button\" type=\"button\" data-alert-header-remove aria-label=\"Remove header\" title=\"Remove header\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Icon("x").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, "</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6135,12 +6238,12 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var234 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var234 == nil {
-			templ_7745c5c3_Var234 = templ.NopComponent
+		templ_7745c5c3_Var237 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var237 == nil {
+			templ_7745c5c3_Var237 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "<form class=\"insight-alerts\" id=\"insight-alerts\" hx-post=\"/ui/insights/alerts\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, "<form class=\"insight-alerts\" id=\"insight-alerts\" hx-post=\"/ui/insights/alerts\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6156,50 +6259,109 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "<div class=\"isotope-dialog-body insight-alerts-body\"><p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p><label class=\"field-control\"><span>Webhook URL</span> <input type=\"url\" name=\"url\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, "<div class=\"isotope-dialog-body insight-alerts-body\"><p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Pushover, Home Assistant, Slack, Discord, and anything else that takes a POST.</p><label class=\"field-control\"><span>Webhook URL</span> <input type=\"url\" name=\"url\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var235 string
-		templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.URL)
+		var templ_7745c5c3_Var238 string
+		templ_7745c5c3_Var238, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.URL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1861, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1904, Col: 49}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var235)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var238)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "\" placeholder=\"https://ntfy.sh/your-topic\" autocomplete=\"off\" spellcheck=\"false\"></label> <label class=\"field-control\"><span>Format</span> <select name=\"format\" data-styled-select><option value=\"json\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, "\" placeholder=\"https://ntfy.sh/your-topic\" autocomplete=\"off\" spellcheck=\"false\"></label> <label class=\"field-control\"><span>Format</span> <select name=\"format\" data-styled-select><option value=\"json\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.Format != "text" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, " selected")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, " selected")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, ">JSON (Slack, Discord, Home Assistant)</option> <option value=\"text\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, ">JSON (Slack, Discord, Home Assistant)</option> <option value=\"text\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.Format == "text" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, " selected")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " selected")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, ">Plain text (ntfy)</option></select></label> <details class=\"settings-advanced insight-alerts-advanced\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, ">Plain text (ntfy)</option> <option value=\"pushover\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.Format == "pushover" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, " selected")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, ">Pushover</option></select></label><div class=\"field-grid two\" data-pushover-fields data-pushover-url=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var239 string
+		templ_7745c5c3_Var239, templ_7745c5c3_Err = templ.ResolveAttributeValue(pushoverMessagesURL)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1914, Col: 91}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var239)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.Format != "pushover" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, " hidden")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "><label class=\"field-control\"><span>Application Token</span><input name=\"pushover_token\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var240 string
+		templ_7745c5c3_Var240, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.PushoverToken)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1915, Col: 118}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var240)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "\" autocomplete=\"off\" spellcheck=\"false\"><small>From the application you made for Sable.</small></label> <label class=\"field-control\"><span>User Key</span><input name=\"pushover_user\" value=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var241 string
+		templ_7745c5c3_Var241, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.PushoverUser)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1916, Col: 107}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var241)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "\" autocomplete=\"off\" spellcheck=\"false\"><small>Your user key, or a group key.</small></label></div><details class=\"settings-advanced insight-alerts-advanced\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.NtfyReceipt || len(view.Headers) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, " open")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, " open")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, "><summary>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "><summary>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6207,7 +6369,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, "<span>Advanced</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, "<span>Advanced</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6215,27 +6377,27 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "</summary><div class=\"insight-alerts-advanced-body\"><label class=\"field-control switch-row setting-switch-row\" data-ntfy-receipt")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "</summary><div class=\"insight-alerts-advanced-body\"><label class=\"field-control switch-row setting-switch-row\" data-ntfy-receipt")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.Format != "text" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " hidden")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 487, " hidden")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type=\"checkbox\" role=\"switch\" name=\"ntfy_receipt\" value=\"true\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 488, "><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type=\"checkbox\" role=\"switch\" name=\"ntfy_receipt\" value=\"true\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.NtfyReceipt {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, " checked")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 489, " checked")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "></label><div class=\"field-control\"><span>Headers</span><div class=\"insight-alert-headers\" data-alert-headers>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 490, "></label><div class=\"field-control\"><span>Headers</span><div class=\"insight-alert-headers\" data-alert-headers>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6245,7 +6407,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "</div><button class=\"button outline compact insight-alert-header-add\" type=\"button\" data-alert-header-add>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 491, "</div><button class=\"button outline compact insight-alert-header-add\" type=\"button\" data-alert-header-add>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6253,7 +6415,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "<span>Add Header</span></button> <small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small><template data-alert-header-template>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 492, "<span>Add Header</span></button> <small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small><template data-alert-header-template>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6261,13 +6423,21 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "</template></div></div></details></div><div class=\"dialog-footer\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "</template></div></div></details><div id=\"insight-alerts-preview\" hidden></div></div><div class=\"dialog-footer\"><button class=\"button outline insight-alert-preview-button\" type=\"button\" hx-post=\"/ui/insights/alerts/preview\" hx-target=\"#insight-alerts-preview\" hx-swap=\"outerHTML\" data-alert-preview>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Icon("code").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 494, "<span>Preview</span></button> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.URL != "" {
 			if view.Paused {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"true\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 495, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"true\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6275,12 +6445,12 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "<span>Resume</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 496, "<span>Resume</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"false\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 497, "<button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/enabled\" hx-vals='{\"enabled\":\"false\"}' hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -6288,17 +6458,17 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "<span>Pause</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 498, "<span>Pause</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, " <button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/test\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>Send Test</button> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 499, " <button class=\"button outline\" type=\"button\" hx-post=\"/ui/insights/alerts/test\" hx-target=\"#insight-alerts\" hx-swap=\"outerHTML\" hx-disable=\"#insight-alerts button\" data-replica-primary-action>Send Test</button> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "<button class=\"button\" type=\"submit\" data-replica-primary-action>Save</button></div></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 500, "<button class=\"button\" type=\"submit\" data-replica-primary-action>Save</button></div></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

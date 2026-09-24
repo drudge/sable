@@ -180,7 +180,9 @@ ipv6_url = "https://api6.ipify.org"
 
 # Insights alerts. Each new finding worth a look is sent to this webhook once;
 # findings an operator hid are skipped. "json" suits Slack, Discord, and Home
-# Assistant; "text" posts plain text with a Title header, which suits ntfy.
+# Assistant; "text" posts plain text with a Title header, which suits ntfy;
+# "pushover" posts to Pushover with pushover_token and pushover_user, using
+# url = "https://api.pushover.net/1/messages.json".
 # Leave url empty to turn alerts off, or set paused = true to stop sending but
 # keep the webhook. The Insights Overview can also set this.
 # ntfy_receipt = true only counts a send when ntfy answers with a message ID,

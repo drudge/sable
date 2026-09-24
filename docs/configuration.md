@@ -689,7 +689,10 @@ once, and skips anything an operator dismissed, snoozed, or marked normal. The
 `json` format (the default) posts an object with the finding's kind, subject,
 summary, and reasons, plus `text` and `content` fields that Slack and Discord
 show as the message. The `text` format posts the summary as plain text with a
-`Title` header, which suits ntfy. When a webhook is first set, Sable takes stock
+`Title` header, which suits ntfy. The `pushover` format posts Pushover's
+message form to `https://api.pushover.net/1/messages.json`, with the
+application token in `pushover_token` and the user or group key in
+`pushover_user`, and fails when Pushover does not accept it. When a webhook is first set, Sable takes stock
 of what it already knows without sending it, so turning alerts on never floods
 the webhook with old news. `paused = true` stops sending but keeps the webhook;
 findings that turn up while paused are not sent when alerts resume. Any server

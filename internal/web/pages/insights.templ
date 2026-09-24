@@ -1776,9 +1776,34 @@ type InsightAlertsView struct {
 	Format      string
 	Paused      bool
 	NtfyReceipt bool
-	Headers     []InsightAlertHeader
+	// PushoverToken and PushoverUser are only sent with the pushover format.
+	PushoverToken string
+	PushoverUser  string
+	Headers       []InsightAlertHeader
 	Message     string
 	Error       string
+}
+
+// InsightAlertPreview is a sample alert laid out the way it would be sent.
+type InsightAlertPreview struct {
+	Method      string
+	URL         string
+	ContentType string
+	Headers     []InsightAlertHeader
+	Body        string
+	Error       string
+}
+
+// Text is the request as it would go over the wire, headers then body.
+func (preview InsightAlertPreview) Text() string {
+	var text strings.Builder
+	text.WriteString(preview.Method + " " + ifThen(preview.URL != "", preview.URL, "(no URL yet)") + "\n")
+	text.WriteString("Content-Type: " + preview.ContentType + "\n")
+	for _, header := range preview.Headers {
+		text.WriteString(header.Name + ": " + header.Value + "\n")
+	}
+	text.WriteString("\n" + preview.Body)
+	return text.String()
 }
 
 // InsightAlertHeader is one extra header sent with each alert.
@@ -1834,6 +1859,24 @@ templ InsightAlertsDialog(view InsightAlertsView) {
 	</dialog>
 }
 
+// pushoverMessagesURL fills the webhook URL when Pushover is picked.
+const pushoverMessagesURL = "https://api.pushover.net/1/messages.json"
+
+// InsightAlertPreviewPanel shows a sample alert as the request Sable would
+// send, above the dialog's buttons. Closing it leaves the empty slot behind.
+templ InsightAlertPreviewPanel(preview InsightAlertPreview) {
+	<div id="insight-alerts-preview" class="insight-alert-preview" data-alert-preview-panel>
+		<div class="insight-alert-preview-heading">
+			<div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div>
+			<button class="icon-button" type="button" data-alert-preview-close aria-label="Close preview" title="Close preview">@Icon("x")</button>
+		</div>
+		if preview.Error != "" {
+			<p class="insight-alert-preview-error">{ preview.Error }</p>
+		}
+		<pre><code>{ preview.Text() }</code></pre>
+	</div>
+}
+
 // insightAlertHeaderRow is one header's name and value, removable on its own.
 templ insightAlertHeaderRow(header InsightAlertHeader) {
 	<div class="insight-alert-header" data-alert-header>
@@ -1855,7 +1898,7 @@ templ InsightAlerts(view InsightAlertsView) {
 			@Toast(view.Error, "error")
 		}
 		<div class="isotope-dialog-body insight-alerts-body">
-			<p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
+			<p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Pushover, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
 			<label class="field-control">
 				<span>Webhook URL</span>
 				<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
@@ -1865,8 +1908,13 @@ templ InsightAlerts(view InsightAlertsView) {
 				<select name="format" data-styled-select>
 					<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
 					<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
+					<option value="pushover" selected?={ view.Format == "pushover" }>Pushover</option>
 				</select>
 			</label>
+			<div class="field-grid two" data-pushover-fields data-pushover-url={ pushoverMessagesURL } hidden?={ view.Format != "pushover" }>
+				<label class="field-control"><span>Application Token</span><input name="pushover_token" value={ view.PushoverToken } autocomplete="off" spellcheck="false"/><small>From the application you made for Sable.</small></label>
+				<label class="field-control"><span>User Key</span><input name="pushover_user" value={ view.PushoverUser } autocomplete="off" spellcheck="false"/><small>Your user key, or a group key.</small></label>
+			</div>
 			<details class="settings-advanced insight-alerts-advanced" open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
 				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
 				<div class="insight-alerts-advanced-body">
@@ -1884,8 +1932,10 @@ templ InsightAlerts(view InsightAlertsView) {
 					</div>
 				</div>
 			</details>
+			<div id="insight-alerts-preview" hidden></div>
 		</div>
 		<div class="dialog-footer">
+			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="outerHTML" data-alert-preview>@Icon("code")<span>Preview</span></button>
 			if view.URL != "" {
 				if view.Paused {
 					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>

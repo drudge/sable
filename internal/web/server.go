@@ -271,6 +271,7 @@ func New(
 	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
 	mux.HandleFunc("POST /ui/insights/alerts/enabled", server.setInsightAlertsEnabled)
 	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/preview", server.previewInsightAlerts)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)

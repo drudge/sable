@@ -1613,11 +1613,36 @@
     }
   });
 
-  // The ntfy receipt check only means something for plain text, ntfy's format.
+  // Each alert format shows only its own options. The ntfy receipt check
+  // means something only for plain text, ntfy's format, and Pushover needs its
+  // keys and always posts to the same URL.
   document.addEventListener("change", (event) => {
     if (!event.target.matches?.('#insight-alerts select[name="format"]')) return;
-    const receipt = event.target.form?.querySelector("[data-ntfy-receipt]");
-    if (receipt) receipt.hidden = event.target.value !== "text";
+    const form = event.target.form;
+    const format = event.target.value;
+    const receipt = form?.querySelector("[data-ntfy-receipt]");
+    if (receipt) receipt.hidden = format !== "text";
+    const pushover = form?.querySelector("[data-pushover-fields]");
+    const url = form?.querySelector('input[name="url"]');
+    if (pushover) {
+      pushover.hidden = format !== "pushover";
+      const pushoverURL = pushover.dataset.pushoverUrl;
+      if (format === "pushover" && url && !url.value.trim()) url.value = pushoverURL;
+      if (format !== "pushover" && url?.value.trim() === pushoverURL) url.value = "";
+    }
+    // An open preview follows the format.
+    if (form?.querySelector("[data-alert-preview-panel]")) form.querySelector("[data-alert-preview]")?.click();
+  });
+  document.addEventListener("click", (event) => {
+    const close = event.target.closest("[data-alert-preview-close]");
+    if (!close) return;
+    const panel = close.closest("[data-alert-preview-panel]");
+    const form = panel?.closest("form");
+    const slot = document.createElement("div");
+    slot.id = "insight-alerts-preview";
+    slot.hidden = true;
+    panel?.replaceWith(slot);
+    form?.querySelector("[data-alert-preview]")?.focus();
   });
 
   const UPDATE_CHECK_RETRY_MS = 2000;

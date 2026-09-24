@@ -260,3 +260,85 @@ func TestInsightAlertsSendHeadersAndCanRequireAnNtfyReceipt(t *testing.T) {
 		t.Fatalf("saving a Host header = %d", response.Code)
 	}
 }
+
+func TestInsightAlertsSendToPushoverAndSayWhatItRejected(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	var form url.Values
+	pushover := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_ = request.ParseForm()
+		mu.Lock()
+		form = request.PostForm
+		mu.Unlock()
+		if request.PostForm.Get("token") != "app-token" {
+			writer.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(writer, `{"token":"invalid","errors":["application token is invalid"],"status":0,"request":"r-bad"}`)
+			return
+		}
+		_, _ = io.WriteString(writer, `{"status":1,"request":"r-good"}`)
+	}))
+	t.Cleanup(pushover.Close)
+	server := newInsightsTestServer(t)
+
+	if missing := server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {pushover.URL}, "format": {"pushover"}}); missing.Code != http.StatusUnprocessableEntity || !strings.Contains(missing.Body.String(), "application token and a user key") {
+		t.Fatalf("saving Pushover without keys = %d", missing.Code)
+	}
+	setup := url.Values{"url": {pushover.URL}, "format": {"pushover"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}}
+	if saved := server.post(t, "everything", "/ui/insights/alerts", setup); saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), `value="user-key"`) {
+		t.Fatalf("saving Pushover = %d", saved.Code)
+	}
+	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "Pushover accepted it as request r-good") {
+		t.Fatalf("testing Pushover = %s", tested.Body.String())
+	}
+	mu.Lock()
+	if form.Get("user") != "user-key" || form.Get("title") != "Test alert: Sable" || form.Get("message") == "" || !strings.HasSuffix(form.Get("url"), "/insights") {
+		t.Fatalf("Pushover got %v", form)
+	}
+	mu.Unlock()
+
+	setup.Set("pushover_token", "wrong")
+	server.post(t, "everything", "/ui/insights/alerts", setup)
+	if tested := server.post(t, "everything", "/ui/insights/alerts/test", url.Values{}); !strings.Contains(tested.Body.String(), "application token is invalid") {
+		t.Fatalf("testing a wrong token = %s", tested.Body.String())
+	}
+	// Leaving Pushover drops its keys.
+	server.post(t, "everything", "/ui/insights/alerts", url.Values{"url": {pushover.URL}, "format": {"json"}, "pushover_token": {"app-token"}, "pushover_user": {"user-key"}})
+	if webhook := server.config.Current().Config.Insights.Webhook; webhook.PushoverToken != "" || webhook.PushoverUser != "" {
+		t.Fatalf("a JSON webhook kept Pushover keys: %+v", webhook)
+	}
+}
+
+func TestInsightAlertPreviewShowsEachFormatWithoutSecrets(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	preview := func(form url.Values) string {
+		t.Helper()
+		response := server.post(t, "everything", "/ui/insights/alerts/preview", form)
+		if response.Code != http.StatusOK {
+			t.Fatalf("preview %v = %d", form, response.Code)
+		}
+		return response.Body.String()
+	}
+	if response := server.post(t, "logs-reader", "/ui/insights/alerts/preview", url.Values{}); response.Code != http.StatusForbidden {
+		t.Fatalf("previewing without settings write = %d", response.Code)
+	}
+	json := preview(url.Values{"url": {"https://hooks.example.com/x"}, "format": {"json"}, "header_name": {"Authorization"}, "header_value": {"Bearer secret-token"}})
+	for _, want := range []string{"POST https://hooks.example.com/x", "Content-Type: application/json", "Authorization: ••••oken", "\n  &#34;source&#34;: &#34;sable&#34;"} {
+		if !strings.Contains(json, want) {
+			t.Errorf("the JSON preview lacks %q:\n%s", want, json)
+		}
+	}
+	if strings.Contains(json, "secret-token") {
+		t.Error("the JSON preview shows the whole Authorization header")
+	}
+	text := preview(url.Values{"format": {"text"}})
+	if !strings.Contains(text, "(no URL yet)") || !strings.Contains(text, "Title: Test alert: Sable") || !strings.Contains(text, "text/plain") {
+		t.Errorf("the text preview:\n%s", text)
+	}
+	pushover := preview(url.Values{"url": {config.PushoverMessagesURL}, "format": {"pushover"}, "pushover_token": {"azGDORePK8gMaC0QOYAM"}, "pushover_user": {"uQiRzpo4DXghDmr9QzzfQu27"}})
+	for _, want := range []string{"token=••••OYAM", "user=••••Qu27", "title=Test alert: Sable", "url_title=Open Insights", "application/x-www-form-urlencoded"} {
+		if !strings.Contains(pushover, want) {
+			t.Errorf("the Pushover preview lacks %q:\n%s", want, pushover)
+		}
+	}
+}

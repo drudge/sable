@@ -37,6 +37,7 @@ func TestInsightsWebhookValidatesAndNormalizes(t *testing.T) {
 		{InsightsWebhook{URL: "ftp://example.com/hook"}, "http or https"},
 		{InsightsWebhook{URL: "https://"}, "http or https"},
 		{InsightsWebhook{URL: "https://example.com", Format: "xml"}, "format must be"},
+		{InsightsWebhook{URL: "https://api.pushover.net/1/messages.json", Format: "pushover", PushoverToken: "app"}, "application token and a user key"},
 		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Value: "orphan"}}}, "needs a name"},
 		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Name: "Bad Name", Value: "x"}}}, "not a valid header name"},
 		{InsightsWebhook{URL: "https://example.com", Headers: []InsightsWebhookHeader{{Name: "content-length", Value: "1"}}}, "Sable sets Content-Length"},

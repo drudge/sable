@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -157,43 +158,78 @@ type ntfyReceipt struct {
 	Event string `json:"event"`
 }
 
-// postInsightAlert sends one finding. When the webhook asks for an ntfy
-// receipt, it returns the ID ntfy gave the message.
-func (server *Server) postInsightAlert(ctx context.Context, webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) (string, error) {
+// pushoverAnswer is what Pushover's message API says about a send.
+type pushoverAnswer struct {
+	Status  int      `json:"status"`
+	Request string   `json:"request"`
+	Errors  []string `json:"errors"`
+}
+
+// insightAlertHeader is one header an alert request carries.
+type insightAlertHeader struct{ Name, Value string }
+
+// insightAlertRequest is everything an alert sends, so the console can
+// preview a request before it is sent.
+type insightAlertRequest struct {
+	ContentType string
+	Headers     []insightAlertHeader
+	Body        []byte
+}
+
+// buildInsightAlert lays out one finding in the webhook's format.
+func buildInsightAlert(webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) (insightAlertRequest, error) {
 	link := strings.TrimRight(snapshot.AdvertisedBaseURL(), "/") + "/insights"
-	message := finding.Title + ": " + finding.Subject.Label + "\n" + finding.Summary
-	alert := insightAlert{
-		Source: "sable", Event: "insight", ID: finding.ID, Kind: finding.Kind, Tone: string(finding.Tone),
-		Title: finding.Title, Subject: finding.Subject.Label, Headline: finding.Headline, Summary: finding.Summary,
-		ObservedAt: finding.ObservedAt.UTC(), URL: link, Text: message, Content: message,
-	}
-	for _, reason := range finding.Reasons {
-		alert.Reasons = append(alert.Reasons, strings.TrimSpace(reason.Text+" "+reason.Code))
-	}
-	var body []byte
-	contentType := "application/json"
-	if webhook.Format == config.InsightsWebhookText {
-		body, contentType = []byte(finding.Summary+"\n"+link), "text/plain; charset=utf-8"
-	} else {
+	title := finding.Title + ": " + finding.Subject.Label
+	message := title + "\n" + finding.Summary
+	var built insightAlertRequest
+	switch webhook.Format {
+	case config.InsightsWebhookText:
+		built.ContentType, built.Body = "text/plain; charset=utf-8", []byte(finding.Summary+"\n"+link)
+		// ntfy shows this as the notification's title.
+		built.Headers = append(built.Headers, insightAlertHeader{"Title", title})
+	case config.InsightsWebhookPushover:
+		form := url.Values{
+			"token": {webhook.PushoverToken}, "user": {webhook.PushoverUser},
+			"title": {title}, "message": {finding.Summary}, "url": {link}, "url_title": {"Open Insights"},
+		}
+		built.ContentType, built.Body = "application/x-www-form-urlencoded", []byte(form.Encode())
+	default:
+		alert := insightAlert{
+			Source: "sable", Event: "insight", ID: finding.ID, Kind: finding.Kind, Tone: string(finding.Tone),
+			Title: finding.Title, Subject: finding.Subject.Label, Headline: finding.Headline, Summary: finding.Summary,
+			ObservedAt: finding.ObservedAt.UTC(), URL: link, Text: message, Content: message,
+		}
+		for _, reason := range finding.Reasons {
+			alert.Reasons = append(alert.Reasons, strings.TrimSpace(reason.Text+" "+reason.Code))
+		}
 		encoded, err := json.Marshal(alert)
 		if err != nil {
-			return "", err
+			return built, err
 		}
-		body = encoded
+		built.ContentType, built.Body = "application/json", encoded
 	}
-	requestContext, cancel := context.WithTimeout(ctx, insightAlertTimeout)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, webhook.URL, bytes.NewReader(body))
+	for _, header := range webhook.Headers {
+		built.Headers = append(built.Headers, insightAlertHeader{header.Name, header.Value})
+	}
+	return built, nil
+}
+
+// postInsightAlert sends one finding. When the answer carries a receipt,
+// from ntfy or Pushover, it returns the ID it gave the message.
+func (server *Server) postInsightAlert(ctx context.Context, webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) (string, error) {
+	built, err := buildInsightAlert(webhook, snapshot, finding)
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("Content-Type", contentType)
-	request.Header.Set("User-Agent", "Sable/"+version.Current().Release)
-	if webhook.Format == config.InsightsWebhookText {
-		// ntfy shows this as the notification's title.
-		request.Header.Set("Title", finding.Title+": "+finding.Subject.Label)
+	requestContext, cancel := context.WithTimeout(ctx, insightAlertTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, webhook.URL, bytes.NewReader(built.Body))
+	if err != nil {
+		return "", err
 	}
-	for _, header := range webhook.Headers {
+	request.Header.Set("Content-Type", built.ContentType)
+	request.Header.Set("User-Agent", "Sable/"+version.Current().Release)
+	for _, header := range built.Headers {
 		request.Header.Set(header.Name, header.Value)
 	}
 	response, err := http.DefaultClient.Do(request)
@@ -202,6 +238,17 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 	}
 	defer response.Body.Close()
 	answer, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	if webhook.Format == config.InsightsWebhookPushover {
+		// Pushover always answers with a status, and says what was wrong.
+		var pushover pushoverAnswer
+		if json.Unmarshal(answer, &pushover) != nil {
+			return "", fmt.Errorf("the webhook answered %s, but not like Pushover; check the URL", response.Status)
+		}
+		if pushover.Status != 1 {
+			return "", fmt.Errorf("Pushover did not send it: %s", strings.Join(pushover.Errors, "; "))
+		}
+		return pushover.Request, nil
+	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		return "", fmt.Errorf("post insight alert: webhook answered %s", response.Status)
 	}
@@ -238,7 +285,10 @@ func (server *Server) insightAlertsView(console pages.DashboardView) *pages.Insi
 }
 
 func newInsightAlertsView(webhook config.InsightsWebhook) pages.InsightAlertsView {
-	view := pages.InsightAlertsView{URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused, NtfyReceipt: webhook.NtfyReceipt}
+	view := pages.InsightAlertsView{
+		URL: webhook.URL, Format: webhook.Format, Paused: webhook.Paused, NtfyReceipt: webhook.NtfyReceipt,
+		PushoverToken: webhook.PushoverToken, PushoverUser: webhook.PushoverUser,
+	}
 	for _, header := range webhook.Headers {
 		view.Headers = append(view.Headers, pages.InsightAlertHeader{Name: header.Name, Value: header.Value})
 	}
@@ -257,21 +307,7 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return
 	}
-	webhook := config.InsightsWebhook{
-		URL: request.FormValue("url"), Format: request.FormValue("format"),
-		// Saving changes where alerts go, not whether they are paused.
-		Paused:      server.config.Current().Config.Insights.Webhook.Paused,
-		NtfyReceipt: request.FormValue("ntfy_receipt") == "true",
-	}
-	names, values := request.Form["header_name"], request.Form["header_value"]
-	for index, name := range names {
-		header := config.InsightsWebhookHeader{Name: name}
-		if index < len(values) {
-			header.Value = values[index]
-		}
-		webhook.Headers = append(webhook.Headers, header)
-	}
-	webhook.Normalize()
+	webhook := insightWebhookFromForm(request, server.config.Current().Config.Insights.Webhook)
 	view := newInsightAlertsView(webhook)
 	editor, ok := server.config.(settingsEditor)
 	err := webhook.Validate()
@@ -302,6 +338,105 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		writer.Header().Set("HX-Trigger", "insightsChanged")
 	}
 	server.renderInsightAlerts(writer, request, view)
+}
+
+// insightWebhookFromForm reads the alert setup as the dialog posts it. Saving
+// changes where alerts go, not whether they are paused, so that comes from
+// the current setup.
+func insightWebhookFromForm(request *http.Request, current config.InsightsWebhook) config.InsightsWebhook {
+	webhook := config.InsightsWebhook{
+		URL: request.FormValue("url"), Format: request.FormValue("format"), Paused: current.Paused,
+		NtfyReceipt:   request.FormValue("ntfy_receipt") == "true",
+		PushoverToken: request.FormValue("pushover_token"), PushoverUser: request.FormValue("pushover_user"),
+	}
+	names, values := request.Form["header_name"], request.Form["header_value"]
+	for index, name := range names {
+		header := config.InsightsWebhookHeader{Name: name}
+		if index < len(values) {
+			header.Value = values[index]
+		}
+		webhook.Headers = append(webhook.Headers, header)
+	}
+	webhook.Normalize()
+	return webhook
+}
+
+// previewInsightAlerts shows what a sample alert would send in the format
+// the dialog has picked, saved or not, with secrets cut short.
+func (server *Server) previewInsightAlerts(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		writeFragmentStatus(writer, http.StatusBadRequest)
+		return
+	}
+	snapshot := server.config.Current().Config
+	webhook := insightWebhookFromForm(request, snapshot.Insights.Webhook)
+	built, err := buildInsightAlert(webhook, snapshot, sampleInsightFinding(time.Now()))
+	preview := pages.InsightAlertPreview{Method: "POST", URL: webhook.URL, ContentType: built.ContentType}
+	if err != nil {
+		preview.Error = err.Error()
+	}
+	for _, header := range built.Headers {
+		value := header.Value
+		if strings.EqualFold(header.Name, "Authorization") {
+			value = maskInsightSecret(value)
+		}
+		preview.Headers = append(preview.Headers, pages.InsightAlertHeader{Name: header.Name, Value: value})
+	}
+	preview.Body = previewInsightAlertBody(built)
+	if err := pages.InsightAlertPreviewPanel(preview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render insight alert preview", "error", err)
+	}
+}
+
+// previewInsightAlertBody lays a body out to be read: JSON indented, and a
+// form one field per line.
+func previewInsightAlertBody(built insightAlertRequest) string {
+	switch built.ContentType {
+	case "application/json":
+		var indented bytes.Buffer
+		if json.Indent(&indented, built.Body, "", "  ") == nil {
+			return indented.String()
+		}
+	case "application/x-www-form-urlencoded":
+		form, err := url.ParseQuery(string(built.Body))
+		if err != nil {
+			break
+		}
+		lines := make([]string, 0, len(form))
+		for _, name := range []string{"token", "user", "title", "message", "url", "url_title"} {
+			value := form.Get(name)
+			if name == "token" || name == "user" {
+				value = maskInsightSecret(value)
+			}
+			lines = append(lines, name+"="+value)
+		}
+		return strings.Join(lines, "\n")
+	}
+	return string(built.Body)
+}
+
+// maskInsightSecret keeps only enough of a secret to tell which one it is.
+func maskInsightSecret(secret string) string {
+	if len(secret) <= 4 {
+		return strings.Repeat("•", len(secret))
+	}
+	return "••••" + secret[len(secret)-4:]
+}
+
+// sampleInsightFinding stands in for a real finding in tests and previews.
+func sampleInsightFinding(now time.Time) insights.Finding {
+	return insights.Finding{
+		ID: "sable.test", Kind: "sable.test", Tone: insights.ToneNotice, Title: "Test alert",
+		Subject: insights.Subject{Label: "Sable"}, Headline: "Sable can reach this webhook",
+		Summary:    "This is a test from Sable Insights. New findings worth a look will arrive like this.",
+		ObservedAt: now,
+	}
 }
 
 // setInsightAlertsEnabled pauses or resumes alerts without forgetting the
@@ -361,14 +496,10 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 		server.renderInsightAlerts(writer, request, view)
 		return
 	}
-	sample := insights.Finding{
-		ID: "sable.test", Kind: "sable.test", Tone: insights.ToneNotice, Title: "Test alert",
-		Subject: insights.Subject{Label: "Sable"}, Headline: "Sable can reach this webhook",
-		Summary:    "This is a test from Sable Insights. New findings worth a look will arrive like this.",
-		ObservedAt: time.Now(),
-	}
-	if receipt, err := server.postInsightAlert(request.Context(), webhook, snapshot, sample); err != nil {
+	if receipt, err := server.postInsightAlert(request.Context(), webhook, snapshot, sampleInsightFinding(time.Now())); err != nil {
 		view.Error = err.Error()
+	} else if receipt != "" && webhook.Format == config.InsightsWebhookPushover {
+		view.Message = "Test sent. Pushover accepted it as request " + receipt + "."
 	} else if receipt != "" {
 		view.Message = "Test sent. ntfy published it as message " + receipt + "."
 	} else {

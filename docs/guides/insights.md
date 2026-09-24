@@ -70,6 +70,9 @@ Insights can send each new finding worth a look to a webhook. Use the bell besid
 
 - **JSON** works with Slack, Discord, Home Assistant, and anything else that takes a JSON POST.
 - **Plain text** works with ntfy, which shows the finding's title and summary as a notification.
+- **Pushover** asks for your application token and user key and fills in Pushover's URL. Send Test says what Pushover rejected, such as a wrong token.
+
+Use **Preview** to see exactly what Sable would send in the format you picked, before you save. Tokens and `Authorization` values are cut short.
 
 Use **Send Test** to check the webhook. Each finding is sent once, and anything you hid is skipped. When you first set a webhook, Sable takes stock of what it already knows without sending it, so you are not flooded with old news. On a cluster, only the primary sends alerts.
 

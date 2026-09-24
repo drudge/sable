@@ -17,7 +17,13 @@ const (
 	// InsightsWebhookText posts the finding as plain text with a Title
 	// header, which ntfy and most chat bridges show as-is.
 	InsightsWebhookText = "text"
+	// InsightsWebhookPushover posts the form Pushover's message API takes,
+	// with the application token and user key it needs.
+	InsightsWebhookPushover = "pushover"
 )
+
+// PushoverMessagesURL is Pushover's message API.
+const PushoverMessagesURL = "https://api.pushover.net/1/messages.json"
 
 // Insights configures what Insights does beyond the console.
 type Insights struct {
@@ -34,6 +40,10 @@ type InsightsWebhook struct {
 	// published message, so a mistyped server that answers anything is caught.
 	// It applies only to the text format, which is what ntfy takes.
 	NtfyReceipt bool `toml:"ntfy_receipt,omitempty"`
+	// PushoverToken and PushoverUser are the application token and user or
+	// group key the pushover format sends.
+	PushoverToken string `toml:"pushover_token,omitempty"`
+	PushoverUser  string `toml:"pushover_user,omitempty"`
 	// Headers are sent with every request, such as an ntfy access token or
 	// priority.
 	Headers []InsightsWebhookHeader `toml:"headers,omitempty"`
@@ -62,8 +72,12 @@ func (webhook InsightsWebhook) Validate() error {
 	}
 	switch webhook.Format {
 	case "", InsightsWebhookJSON, InsightsWebhookText:
+	case InsightsWebhookPushover:
+		if webhook.URL != "" && (webhook.PushoverToken == "" || webhook.PushoverUser == "") {
+			return fmt.Errorf("insights.webhook: Pushover needs an application token and a user key")
+		}
 	default:
-		return fmt.Errorf("insights.webhook.format must be %q or %q", InsightsWebhookJSON, InsightsWebhookText)
+		return fmt.Errorf("insights.webhook.format must be %q, %q, or %q", InsightsWebhookJSON, InsightsWebhookText, InsightsWebhookPushover)
 	}
 	for _, header := range webhook.Headers {
 		switch {
@@ -95,6 +109,10 @@ func (webhook *InsightsWebhook) Normalize() {
 	// ntfy takes plain text, so only that format can expect its receipt.
 	if webhook.Format != InsightsWebhookText {
 		webhook.NtfyReceipt = false
+	}
+	webhook.PushoverToken, webhook.PushoverUser = strings.TrimSpace(webhook.PushoverToken), strings.TrimSpace(webhook.PushoverUser)
+	if webhook.Format != InsightsWebhookPushover {
+		webhook.PushoverToken, webhook.PushoverUser = "", ""
 	}
 	// Rows left blank in the console are not headers.
 	var headers []InsightsWebhookHeader
