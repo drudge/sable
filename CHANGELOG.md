@@ -8,6 +8,50 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.4] - 2026-09-24
+
+Sable 1.5.0-beta.4 lets Insights show its evidence instead of only listing it.
+Findings chart what changed, devices and apps are recognizable at a glance,
+and the Overview opens with one sentence you can act on. The console also
+reloads itself once an update finishes, so it runs the new release right away.
+
+### Insights
+
+- Chart the evidence in a finding's details: a device that went quiet or got
+  busy against each day of its week before, one active at an unusual hour
+  against its usual day, and a check-in as one mark per lookup across the
+  last day. Point at or tap a bar to read its count, or drag across the bars
+  on a phone.
+- Open the Overview with one sentence about what stands out. Each device it
+  names opens its finding, and the list below it is now **Worth a Look**.
+- Open Top Apps and Busiest Devices entries in drawers. An app's drawer lists
+  the domains it used, each linked to its queries, and the devices that used
+  it. Apps and devices open each other's drawers.
+- Show app logos in each brand's color for most of the apps Insights
+  recognizes, and a category icon for the rest.
+- Show what each device is as an icon at the start of its row and beside its
+  name, in place of the Type column, and in the type picker. Hover the icon
+  to read the type.
+- Move alert setup behind a bell beside the range control, which shows
+  whether alerts are on.
+- Show a spinner while a device's name saves or is removed, and stop Enter in
+  the name field from removing the name.
+- Keep a finding's fact cards in pairs without gaps, and give a long DNS name
+  a row of its own instead of wrapping it mid-name.
+- Write TV in capitals when describing a device's type.
+
+### Updates
+
+- Reload the console once an update finishes, so it runs the new release: at
+  the end of a rolling update watched from the Cluster page, and when an
+  installed update finishes because Sable was restarted outside the console,
+  such as by its service manager.
+
+### Console
+
+- Make every View all an ordinary button with a chevron, centered in its
+  card's header, and count apps and devices, not domains, in their full lists.
+
 ## [1.5.0-beta.3] - 2026-09-23
 
 Sable 1.5.0-beta.3 settles how devices are named and teaches Insights to
