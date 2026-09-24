@@ -272,9 +272,9 @@ button { cursor: pointer; }
 .mobile-header { display: none; }
 .content { width: 100%; padding: 1.5rem; }
 .dashboard-page { display: grid; gap: 1rem; }
-.dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: .5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
+.dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: .5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
 .dashboard-update-indicator.htmx-request { transform: translate(-50%, 0); }
-.dashboard-update-indicator .nav-icon { width: .9rem; height: .9rem; animation: dashboard-update-spin .8s linear infinite; }
+.dashboard-update-indicator .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; animation: dashboard-update-spin .8s linear infinite; }
 @keyframes dashboard-update-spin { to { transform: rotate(360deg); } }
 .stats-overview { display: grid; gap: .625rem; }
 .stats-overview-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
@@ -2452,7 +2452,7 @@ dialog[open]::backdrop {
 .admin-desktop-table .isotope-table thead { background: color-mix(in oklch, var(--muted) 82%, transparent); }
 .isotope-table th { height: 2.75rem; padding: 0 1rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; }
 .isotope-table td { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; vertical-align: middle; }
-.isotope-table tbody tr[data-dialog-open] { cursor: pointer; }
+.isotope-table tbody tr[data-dialog-open], .isotope-table tbody tr[data-row-opener] { cursor: pointer; }
 .isotope-table tbody tr:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
 .isotope-table td:last-child { width: 3rem; }
 .isotope-table td:last-child > .nav-icon { width: 1rem; height: 1rem; color: var(--muted-foreground); }
@@ -3808,8 +3808,17 @@ dialog[open]::backdrop {
 .insight-device-table .icon-button:hover { background: var(--accent); }
 .insight-device-table .muted-cell { white-space: nowrap; }
 .insight-device-cell { display: grid; min-width: 11rem; max-width: 26rem; gap: .2rem; }
-/* Between phone and desktop widths the name matters more than history. */
-@media (max-width: 1100px) { .insight-device-table .insight-optional-cell { display: none; } }
+/* When the card is too narrow for every column the name matters more than
+   history. The card's own width decides, since the sidebar can take a third of
+   the window, and a row that ran off the edge would hide its details button. */
+.insight-devices { container-type: inline-size; }
+@container (max-width: 68rem) { .insight-device-table .insight-optional-cell { display: none; } }
+/* Narrower still, as on a tablet with the sidebar open, the card lists its
+   devices the way a phone does. */
+@container (max-width: 50rem) {
+  .insight-devices .admin-desktop-table { display: none; }
+  .insight-devices .admin-mobile-list { display: block; }
+}
 .insight-device-ids { display: grid; min-width: 0; gap: .1rem; }
 .insight-device-ids code { color: var(--muted-foreground); font-size: .72rem; white-space: nowrap; }
 .insight-device-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }

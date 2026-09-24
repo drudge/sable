@@ -3986,6 +3986,15 @@
 	  if (event.detail?.ctx?.sourceElement?.id !== "dashboard-insights") return;
 	  if (document.querySelector("#dashboard-insights dialog[open]")) event.preventDefault();
 	});
+	// A drawer that loads one record at a time starts from its loading state
+	// when another record is opened, rather than showing the last one dimmed
+	// until the new one arrives.
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const loading = document.getElementById(ctx?.sourceElement?.dataset?.drawerLoading || "");
+	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
+	  ctx.target.replaceChildren(loading.content.cloneNode(true));
+	});
 	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
 	syncRoutedDialogs();
 	openAutomaticDialogs();
@@ -4036,6 +4045,14 @@
 	  if (recordOpener && !recordInteractive && !window.getSelection()?.toString()) {
 		const dialog = document.getElementById(recordOpener.dataset.dialogOpen);
 		showRoutedDialog(dialog, Boolean(recordOpener.dataset.dialogUrl), recordOpener);
+		return;
+	  }
+	  // A row whose record loads on demand opens through its own button, so a
+	  // click anywhere in the row does exactly what the button does.
+	  const openerRow = event.target.closest?.("tr[data-row-opener]");
+	  const openerInteractive = event.target.closest?.("button, a, input, select, textarea, label, summary");
+	  if (openerRow && !openerInteractive && !window.getSelection()?.toString()) {
+		openerRow.querySelector("[data-dialog-open]")?.click();
 		return;
 	  }
 	  const dialogRow = event.target.closest("[data-dialog-open]");
