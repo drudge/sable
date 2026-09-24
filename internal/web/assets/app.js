@@ -4149,10 +4149,28 @@
 		  return route.pathname === current.pathname && [...route.searchParams].every(([name, value]) => current.searchParams.get(name) === value);
 		};
 		window.requestAnimationFrame(() => {
-		  if (!pendingRouteMatches() || !localCommandTarget(pending)) {
+		  if (pendingRouteMatches() && localCommandTarget(pending)) return;
+		  const unavailable = () => {
 			document.getElementById("main-content")?.focus();
 			announce(`${pending?.label || "Command"} is unavailable`);
+		  };
+		  if (!pendingRouteMatches()) {
+			unavailable();
+			return;
 		  }
+		  // Part of a page can load after the page itself, as Insights loads its
+		  // analysis, so give the command's target a few seconds to arrive.
+		  let timer = 0;
+		  const retry = () => {
+			if (!localCommandTarget(pending)) return;
+			window.clearTimeout(timer);
+			document.body.removeEventListener("htmx:after:swap", retry);
+		  };
+		  timer = window.setTimeout(() => {
+			document.body.removeEventListener("htmx:after:swap", retry);
+			unavailable();
+		  }, 10000);
+		  document.body.addEventListener("htmx:after:swap", retry);
 		});
 	  }
 	};

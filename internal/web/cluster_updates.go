@@ -8,6 +8,7 @@ import (
 
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/web/pages"
 	"golang.org/x/mod/semver"
 )
@@ -119,12 +120,51 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 		view.UnavailableReason = "Start rolling updates from the cluster primary."
 		view.CanApply = false
 	}
-	if status.Checked() && !status.Busy() && status.Error == "" && slices.ContainsFunc(state.Nodes, func(node cluster.Node) bool {
+	view.Version = clusterReleaseTarget(status, state.Nodes)
+	return view
+}
+
+// clusterReleaseTarget is the checked release a rolling update would install,
+// when some node runs an older one, and empty otherwise.
+func clusterReleaseTarget(status update.Status, nodes []cluster.Node) string {
+	if !status.Checked() || status.Busy() || status.Error != "" {
+		return ""
+	}
+	latest := "v" + strings.TrimPrefix(status.LatestVersion, "v")
+	if !slices.ContainsFunc(nodes, func(node cluster.Node) bool {
 		current := "v" + strings.TrimPrefix(node.Version, "v")
-		latest := "v" + strings.TrimPrefix(status.LatestVersion, "v")
 		return semver.IsValid(current) && semver.Compare(latest, current) > 0
 	}) {
-		view.Version = status.LatestVersion
+		return ""
 	}
-	return view
+	return status.LatestVersion
+}
+
+// clusterUpdateCommand offers a rolling update from the command palette on a
+// primary that can run one. It lands on the Update all button when a newer
+// release is ready, which still asks before starting, and otherwise on the
+// rollout's progress or the Rolling Updates card. Every page builds the
+// palette, so it reads only what it needs rather than the whole update panel.
+func (server *Server) clusterUpdateCommand(request *http.Request) (pages.CommandEntityView, bool) {
+	controller, ok := server.cluster.(clusterUpdateController)
+	if !ok || !server.canManageClusterUpdate(request) {
+		return pages.CommandEntityView{}, false
+	}
+	state := server.cluster.Snapshot()
+	rollout := controller.RolloutStatus()
+	running := rollout.Active() && rollout.ClusterID == state.ClusterID && rollout.PrimaryID == state.PrimaryID
+	if !state.Initialized || state.LocalRole != cluster.RolePrimary || (!running && !controller.RollingUpdatesSupported()) {
+		return pages.CommandEntityView{}, false
+	}
+	command := pages.CommandEntityView{
+		ID: "command-action-update-cluster", Label: "Update Cluster", Description: "Roll out a new release one node at a time", Icon: "cluster", Kind: "Action",
+		Keywords: "rolling update upgrade release rollout nodes replicas primary", Route: "/cluster", Focus: "#cluster-updates",
+	}
+	if running {
+		command.Description = "Follow the rolling update in progress"
+	} else if target := clusterReleaseTarget(server.updateStatus(), state.Nodes); target != "" {
+		command.Description = "Roll out v" + strings.TrimPrefix(target, "v") + " one node at a time"
+		command.Focus = "#cluster-update-start"
+	}
+	return command, true
 }

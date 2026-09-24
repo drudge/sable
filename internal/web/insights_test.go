@@ -285,6 +285,7 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		for command, shown := range map[string]bool{
 			`id="command-page-insights-blocking"`: want,
 			`id="command-page-insights-devices"`:  want && session != "blocking-only",
+			`id="command-page-insights-apps"`:     want && session != "blocking-only",
 			`id="command-action-insights-alerts"`: session == "everything",
 		} {
 			if strings.Contains(body, command) != shown {
@@ -297,6 +298,7 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Insight Alerts"`,
 		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
 		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
+		`data-command-label="App Insights"`, `data-command-route="/insights" data-command-dialog="top-stats-apps-dialog"`,
 	} {
 		if !strings.Contains(palette, expected) {
 			t.Errorf("palette is missing %s", expected)

@@ -87,6 +87,46 @@ func TestClusterUpdateViewRetainsCurrentRolloutDuringCapabilityNegotiation(t *te
 	}
 }
 
+// The command palette offers a rolling update on a primary that can run one:
+// it lands on Update all when a replica needs the newest release, on the
+// progress while a rollout runs, and on the Rolling Updates card otherwise.
+func TestCommandPaletteOffersRollingUpdates(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		supported   bool
+		role        string
+		versions    []string
+		rollout     string
+		wantFocus   string
+		wantSummary string
+	}{
+		{"release ready", true, cluster.RolePrimary, []string{"1.2.0", "1.1.0"}, "", "#cluster-update-start", "Roll out v1.2.0 one node at a time"},
+		{"up to date", true, cluster.RolePrimary, []string{"1.2.0", "1.2.0"}, "", "#cluster-updates", "Roll out a new release one node at a time"},
+		{"rollout running", true, cluster.RolePrimary, []string{"1.2.0", "1.1.0"}, "updating", "#cluster-updates", "Follow the rolling update in progress"},
+		{"unsupported", false, cluster.RolePrimary, []string{"1.2.0", "1.1.0"}, "", "", ""},
+		{"replica", true, cluster.RoleReplica, []string{"1.2.0", "1.1.0"}, "", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{status: update.Status{LatestVersion: "1.2.0", CheckedAt: time.Now()}})
+			controller := &testRollingUpdateController{supported: test.supported, state: cluster.State{Initialized: true, ClusterID: "cluster", PrimaryID: "ns1", LocalRole: test.role}}
+			for _, version := range test.versions {
+				controller.state.Nodes = append(controller.state.Nodes, cluster.Node{Version: version})
+			}
+			if test.rollout != "" {
+				controller.rollout = cluster.RolloutStatus{ID: "rollout", ClusterID: "cluster", PrimaryID: "ns1", Version: "v1.2.0", Phase: test.rollout}
+			}
+			server.SetClusterController(controller)
+			command, offered := server.clusterUpdateCommand(httptest.NewRequest(http.MethodGet, "/", nil))
+			if offered != (test.wantFocus != "") {
+				t.Fatalf("offered = %t, want %t", offered, test.wantFocus != "")
+			}
+			if offered && (command.Route != "/cluster" || command.Focus != test.wantFocus || command.Description != test.wantSummary || command.Label != "Update Cluster") {
+				t.Fatalf("command = %+v", command)
+			}
+		})
+	}
+}
+
 func TestClusterUpdateOfferedOnlyWhenANodeNeedsNewerRelease(t *testing.T) {
 	for _, test := range []struct {
 		name     string

@@ -34,7 +34,7 @@ reloads itself once an update finishes, so it runs the new release right away.
   to read the type.
 - Move alert setup behind a bell beside the range control, which shows
   whether alerts are on.
-- Jump to Insights' Devices and Blocking tabs, or straight to alert setup,
+- Jump to App, Device, and Blocking Insights, or straight to alert setup,
   from the command palette.
 - Show a spinner while a device's name saves or is removed, and stop Enter in
   the name field from removing the name.
@@ -48,6 +48,8 @@ reloads itself once an update finishes, so it runs the new release right away.
   the end of a rolling update watched from the Cluster page, and when an
   installed update finishes because Sable was restarted outside the console,
   such as by its service manager.
+- Start or follow a rolling update from the command palette with **Update
+  Cluster**.
 
 ### Console
 

@@ -964,6 +964,9 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 					Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
 				})
 			}
+			if command, ok := server.clusterUpdateCommand(request); ok {
+				add(command)
+			}
 		}
 	}
 
