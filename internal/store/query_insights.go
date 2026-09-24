@@ -16,6 +16,12 @@ import (
 // then thrown away.
 const maximumInsightRanks = 1_000
 
+// dashboardRollupDimensions are the dimensions the dashboard ranks and plots.
+var dashboardRollupDimensions = []string{
+	queryLogRollupClient, queryLogRollupDomain, queryLogRollupBlocked,
+	queryLogRollupRecordType, queryLogRollupSource, queryLogRollupResponseCode,
+}
+
 // queryLogDomainExpression folds a logged name into the key the rankings and
 // the query log filter both use. Names arrive fully qualified and in whatever
 // case the client sent, so "Example.COM." and "example.com" have to land on
@@ -193,27 +199,39 @@ func (store *Store) queryMixedLogInsights(
 	since, fullStart, fullEnd, until time.Time,
 	insights *querylog.Insights,
 ) error {
-	arguments := []any{
-		since.UTC(), fullStart.UTC(), fullEnd.UTC(), until.UTC(),
-		fullStart.UTC(), fullEnd.UTC(), string(querylog.SourceBlocked), maximumInsightRanks,
+	spans, err := store.rollupSpans(ctx, fullStart.UTC(), fullEnd.UTC(), dayRollupTier.size)
+	if err != nil {
+		return err
 	}
-	rows, err := store.database.QueryContext(ctx, `
+	var arguments []any
+	bind := func(value any) string {
+		arguments = append(arguments, value)
+		return store.placeholder(len(arguments))
+	}
+	boundary := `
 WITH boundary AS (
     SELECT client_ip_key, name_key, record_type, source, response_code
     FROM sable_query_log
-    WHERE (occurred_at >= `+store.placeholder(1)+` AND occurred_at < `+store.placeholder(2)+`)
-       OR (occurred_at >= `+store.placeholder(3)+` AND occurred_at <= `+store.placeholder(4)+`)
-), combined (dimension, value, hits) AS (
+    WHERE (occurred_at >= ` + bind(since.UTC()) + ` AND occurred_at < ` + bind(fullStart.UTC()) + `)
+       OR (occurred_at >= ` + bind(fullEnd.UTC()) + ` AND occurred_at <= ` + bind(until.UTC()) + `)
+), combined (dimension, value, hits) AS (`
+	var rolled strings.Builder
+	for _, span := range spans {
+		rolled.WriteString(`
     SELECT dimension, value, hits
-    FROM sable_query_log_rollup
-    WHERE bucket_start >= `+store.placeholder(5)+` AND bucket_start < `+store.placeholder(6)+`
-    UNION ALL
+    FROM ` + span.table + `
+    WHERE ` + store.dimensionCondition(dashboardRollupDimensions, bind) + `
+      AND bucket_start >= ` + bind(span.start) + ` AND bucket_start < ` + bind(span.end) + `
+    UNION ALL`)
+	}
+	blocked, limit := bind(string(querylog.SourceBlocked)), bind(maximumInsightRanks)
+	rows, err := store.database.QueryContext(ctx, boundary+rolled.String()+`
     SELECT '`+queryLogRollupClient+`', client_ip_key, COUNT(*) FROM boundary GROUP BY client_ip_key
     UNION ALL
     SELECT '`+queryLogRollupDomain+`', name_key, COUNT(*) FROM boundary GROUP BY name_key
     UNION ALL
     SELECT '`+queryLogRollupBlocked+`', name_key, COUNT(*) FROM boundary
-        WHERE source = `+store.placeholder(7)+` GROUP BY name_key
+        WHERE source = `+blocked+` GROUP BY name_key
     UNION ALL
     SELECT '`+queryLogRollupRecordType+`', CAST(record_type AS TEXT), COUNT(*) FROM boundary GROUP BY record_type
     UNION ALL
@@ -233,7 +251,7 @@ WITH boundary AS (
 )
 SELECT dimension, value, hits
 FROM ranked
-WHERE position <= `+store.placeholder(8), arguments...)
+WHERE position <= `+limit, arguments...)
 	if err != nil {
 		return fmt.Errorf("read query log rollups: %w", err)
 	}

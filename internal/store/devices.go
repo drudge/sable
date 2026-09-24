@@ -418,6 +418,10 @@ func (store *Store) ClientTopDomains(ctx context.Context, clients []string, sinc
 	if len(clients) == 0 {
 		return nil, nil
 	}
+	index, err := store.clientWindowIndex(ctx, clients, since, until)
+	if err != nil {
+		return nil, err
+	}
 	arguments := []any{string(querylog.SourceBlocked)}
 	placeholders := make([]string, 0, len(clients))
 	for _, client := range clients {
@@ -428,7 +432,7 @@ func (store *Store) ClientTopDomains(ctx context.Context, clients []string, sinc
 	count := len(arguments)
 	rows, err := store.database.QueryContext(ctx, `
 SELECT name_key, COUNT(*) AS hits, SUM(CASE WHEN source = `+store.placeholder(1)+` THEN 1 ELSE 0 END) AS blocked
-FROM sable_query_log
+FROM sable_query_log`+index+`
 WHERE client_ip_key IN (`+strings.Join(placeholders, ", ")+`)
   AND occurred_at >= `+store.placeholder(count-2)+` AND occurred_at <= `+store.placeholder(count-1)+`
 GROUP BY name_key
@@ -447,6 +451,38 @@ LIMIT `+store.placeholder(count), arguments...)
 		domains = append(domains, domain)
 	}
 	return domains, rows.Err()
+}
+
+// clientWindowIndex picks how SQLite reads a few clients' rows in a window.
+// The client index walks those clients' whole history, and the time index
+// walks every client's rows in the window; for a busy device and a short
+// window the second is far shorter, for a quiet one the first. The rollups
+// count both cheaply. PostgreSQL keeps statistics and chooses well on its own.
+func (store *Store) clientWindowIndex(ctx context.Context, clients []string, since, until time.Time) (string, error) {
+	if store.driver == "postgres" {
+		return "", nil
+	}
+	start, found, err := store.queryLogRollupStart(ctx)
+	if err != nil || !found || !start.Before(until) {
+		return "", err
+	}
+	window, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{name: queryLogRollupSource, column: "source"}, 1, nil)
+	if err != nil {
+		return "", err
+	}
+	keys := make([]string, 0, len(clients))
+	for _, client := range clients {
+		keys = append(keys, queryLogClientKey(client))
+	}
+	history, err := store.summarizeRollupDimension(ctx, start, time.Now(), rollupDimension{name: queryLogRollupClient, column: "client_ip_key"},
+		len(keys), &rollupValueFilter{exact: keys})
+	if err != nil {
+		return "", err
+	}
+	if window.total < history.total {
+		return store.queryLogTimeIndex(), nil
+	}
+	return " INDEXED BY sable_query_log_client_key_idx", nil
 }
 
 // RecordClientIdentities remembers which hardware address each client address
@@ -585,23 +621,39 @@ LIMIT `+store.placeholder(len(arguments)), arguments...)
 }
 
 // ClientHourlyActivity counts each client's queries per hour in [since,
-// until), from the per-minute rollups, keyed by the hour's start in UTC. It
-// lets Insights learn when each device is normally active.
+// until), from the hourly rollups and the minutes around them, keyed by the
+// hour's start in UTC. It lets Insights learn when each device is normally
+// active.
 func (store *Store) ClientHourlyActivity(ctx context.Context, since, until time.Time) (map[string]map[time.Time]uint64, error) {
+	activity := make(map[string]map[time.Time]uint64)
+	// Every minute bucket starting in the window counts, as before the hourly
+	// tier existed, so whole hours can come from it unchanged.
+	spans, err := store.rollupSpans(ctx, ceilMinute(since.UTC()), ceilMinute(until.UTC()), hourRollupTier.size)
+	if err != nil || len(spans) == 0 {
+		return activity, err
+	}
 	hour := "SUBSTR(bucket_start, 1, 13)"
 	if store.driver == "postgres" {
 		hour = "TO_CHAR(bucket_start, 'YYYY-MM-DD HH24')"
 	}
+	var arguments []any
+	bind := func(value any) string {
+		arguments = append(arguments, value)
+		return store.placeholder(len(arguments))
+	}
+	arms := make([]string, 0, len(spans))
+	for _, span := range spans {
+		arms = append(arms, "SELECT value, "+hour+" AS hour, hits FROM "+span.table+
+			" WHERE dimension = "+bind(queryLogRollupClient)+" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+	}
 	rows, err := store.database.QueryContext(ctx, `
-SELECT value, `+hour+` AS hour, SUM(hits)
-FROM sable_query_log_rollup
-WHERE dimension = `+store.placeholder(1)+` AND bucket_start >= `+store.placeholder(2)+` AND bucket_start < `+store.placeholder(3)+`
-GROUP BY value, `+hour, queryLogRollupClient, since.UTC(), until.UTC())
+SELECT value, hour, CAST(SUM(hits) AS BIGINT)
+FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS hourly
+GROUP BY value, hour`, arguments...)
 	if err != nil {
 		return nil, fmt.Errorf("read client hourly activity: %w", err)
 	}
 	defer rows.Close()
-	activity := make(map[string]map[time.Time]uint64)
 	for rows.Next() {
 		var client, label string
 		var hits uint64
