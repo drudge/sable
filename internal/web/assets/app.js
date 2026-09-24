@@ -1631,18 +1631,41 @@
       if (format !== "pushover" && url?.value.trim() === pushoverURL) url.value = "";
     }
     // An open preview follows the format.
-    if (form?.querySelector("[data-alert-preview-panel]")) form.querySelector("[data-alert-preview]")?.click();
+    if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
+  });
+  // The preview floats beside its button, above it when there is room, so
+  // looking at it never changes the dialog's size.
+  const positionAlertPreview = (popover) => {
+    const trigger = popover.closest("form")?.querySelector("[data-alert-preview]");
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const inset = 8;
+    const gap = 6;
+    const width = Math.min(34 * 16, window.innerWidth - inset * 2);
+    const above = rect.top - inset - gap;
+    const below = window.innerHeight - rect.bottom - inset - gap;
+    const onTop = above >= Math.min(320, below) || above > below;
+    popover.style.width = `${width}px`;
+    popover.style.maxHeight = `${Math.max(160, onTop ? above : below)}px`;
+    popover.style.left = `${Math.min(Math.max(rect.left, inset), window.innerWidth - inset - width)}px`;
+    const height = popover.getBoundingClientRect().height;
+    popover.style.top = `${onTop ? rect.top - gap - height : rect.bottom + gap}px`;
+  };
+  document.body.addEventListener("htmx:after:swap", (event) => {
+    const popover = event.detail?.ctx?.target;
+    if (!popover?.matches?.("[data-alert-preview-popover]")) return;
+    if (!popover.matches(":popover-open")) popover.showPopover();
+    positionAlertPreview(popover);
+  });
+  window.addEventListener("resize", () => {
+    document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
   });
   document.addEventListener("click", (event) => {
     const close = event.target.closest("[data-alert-preview-close]");
     if (!close) return;
-    const panel = close.closest("[data-alert-preview-panel]");
-    const form = panel?.closest("form");
-    const slot = document.createElement("div");
-    slot.id = "insight-alerts-preview";
-    slot.hidden = true;
-    panel?.replaceWith(slot);
-    form?.querySelector("[data-alert-preview]")?.focus();
+    const popover = close.closest("[data-alert-preview-popover]");
+    popover?.hidePopover();
+    popover?.closest("form")?.querySelector("[data-alert-preview]")?.focus();
   });
 
   const UPDATE_CHECK_RETRY_MS = 2000;

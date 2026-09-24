@@ -1863,18 +1863,16 @@ templ InsightAlertsDialog(view InsightAlertsView) {
 const pushoverMessagesURL = "https://api.pushover.net/1/messages.json"
 
 // InsightAlertPreviewPanel shows a sample alert as the request Sable would
-// send, above the dialog's buttons. Closing it leaves the empty slot behind.
+// send. It fills a popover over the dialog, so looking never resizes it.
 templ InsightAlertPreviewPanel(preview InsightAlertPreview) {
-	<div id="insight-alerts-preview" class="insight-alert-preview" data-alert-preview-panel>
-		<div class="insight-alert-preview-heading">
-			<div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div>
-			<button class="icon-button" type="button" data-alert-preview-close aria-label="Close preview" title="Close preview">@Icon("x")</button>
-		</div>
-		if preview.Error != "" {
-			<p class="insight-alert-preview-error">{ preview.Error }</p>
-		}
-		<pre><code>{ preview.Text() }</code></pre>
+	<div class="insight-alert-preview-heading">
+		<div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div>
+		<button class="icon-button" type="button" data-alert-preview-close aria-label="Close preview" title="Close preview">@Icon("x")</button>
 	</div>
+	if preview.Error != "" {
+		<p class="insight-alert-preview-error">{ preview.Error }</p>
+	}
+	<pre><code>{ preview.Text() }</code></pre>
 }
 
 // insightAlertHeaderRow is one header's name and value, removable on its own.
@@ -1932,10 +1930,10 @@ templ InsightAlerts(view InsightAlertsView) {
 					</div>
 				</div>
 			</details>
-			<div id="insight-alerts-preview" hidden></div>
 		</div>
+		<div id="insight-alerts-preview" class="insight-alert-preview" popover data-alert-preview-popover></div>
 		<div class="dialog-footer">
-			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="outerHTML" data-alert-preview>@Icon("code")<span>Preview</span></button>
+			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" data-alert-preview>@Icon("code")<span>Preview</span></button>
 			if view.URL != "" {
 				if view.Paused {
 					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>

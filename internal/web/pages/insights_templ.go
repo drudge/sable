@@ -6081,7 +6081,7 @@ func InsightAlertsDialog(view InsightAlertsView) templ.Component {
 const pushoverMessagesURL = "https://api.pushover.net/1/messages.json"
 
 // InsightAlertPreviewPanel shows a sample alert as the request Sable would
-// send, above the dialog's buttons. Closing it leaves the empty slot behind.
+// send. It fills a popover over the dialog, so looking never resizes it.
 func InsightAlertPreviewPanel(preview InsightAlertPreview) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -6103,7 +6103,7 @@ func InsightAlertPreviewPanel(preview InsightAlertPreview) templ.Component {
 			templ_7745c5c3_Var231 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div id=\"insight-alerts-preview\" class=\"insight-alert-preview\" data-alert-preview-panel><div class=\"insight-alert-preview-heading\"><div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div><button class=\"icon-button\" type=\"button\" data-alert-preview-close aria-label=\"Close preview\" title=\"Close preview\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div class=\"insight-alert-preview-heading\"><div><strong>Preview</strong><small>A sample alert as Sable would send it</small></div><button class=\"icon-button\" type=\"button\" data-alert-preview-close aria-label=\"Close preview\" title=\"Close preview\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6123,7 +6123,7 @@ func InsightAlertPreviewPanel(preview InsightAlertPreview) templ.Component {
 			var templ_7745c5c3_Var232 string
 			templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1874, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1873, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var232))
 			if templ_7745c5c3_Err != nil {
@@ -6141,13 +6141,13 @@ func InsightAlertPreviewPanel(preview InsightAlertPreview) templ.Component {
 		var templ_7745c5c3_Var233 string
 		templ_7745c5c3_Var233, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Text())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1876, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1875, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var233))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "</code></pre></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "</code></pre>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6184,7 +6184,7 @@ func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
 		var templ_7745c5c3_Var235 string
 		templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1883, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1881, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var235)
 		if templ_7745c5c3_Err != nil {
@@ -6197,7 +6197,7 @@ func insightAlertHeaderRow(header InsightAlertHeader) templ.Component {
 		var templ_7745c5c3_Var236 string
 		templ_7745c5c3_Var236, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1884, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1882, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var236)
 		if templ_7745c5c3_Err != nil {
@@ -6266,7 +6266,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		var templ_7745c5c3_Var238 string
 		templ_7745c5c3_Var238, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.URL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1904, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1902, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var238)
 		if templ_7745c5c3_Err != nil {
@@ -6309,7 +6309,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		var templ_7745c5c3_Var239 string
 		templ_7745c5c3_Var239, templ_7745c5c3_Err = templ.ResolveAttributeValue(pushoverMessagesURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1914, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1912, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var239)
 		if templ_7745c5c3_Err != nil {
@@ -6332,7 +6332,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		var templ_7745c5c3_Var240 string
 		templ_7745c5c3_Var240, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.PushoverToken)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1915, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1913, Col: 118}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var240)
 		if templ_7745c5c3_Err != nil {
@@ -6345,7 +6345,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		var templ_7745c5c3_Var241 string
 		templ_7745c5c3_Var241, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.PushoverUser)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1916, Col: 107}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/pages/insights.templ`, Line: 1914, Col: 107}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var241)
 		if templ_7745c5c3_Err != nil {
@@ -6423,7 +6423,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "</template></div></div></details><div id=\"insight-alerts-preview\" hidden></div></div><div class=\"dialog-footer\"><button class=\"button outline insight-alert-preview-button\" type=\"button\" hx-post=\"/ui/insights/alerts/preview\" hx-target=\"#insight-alerts-preview\" hx-swap=\"outerHTML\" data-alert-preview>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "</template></div></div></details></div><div id=\"insight-alerts-preview\" class=\"insight-alert-preview\" popover data-alert-preview-popover></div><div class=\"dialog-footer\"><button class=\"button outline insight-alert-preview-button\" type=\"button\" hx-post=\"/ui/insights/alerts/preview\" hx-target=\"#insight-alerts-preview\" hx-swap=\"innerHTML\" data-alert-preview>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
