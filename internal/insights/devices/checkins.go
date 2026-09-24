@@ -34,11 +34,13 @@ const (
 	maximumCheckIns = 2
 )
 
-// schedule is how regularly a device repeated a lookup.
+// schedule is how regularly a device repeated a lookup, and when: times holds
+// one moment per lookup, with the A and AAAA queries of one resolution merged.
 type schedule struct {
 	interval time.Duration
 	lookups  int
 	span     time.Duration
+	times    []time.Time
 }
 
 // steadySchedule reports whether lookup times follow a steady clock, and at
@@ -78,7 +80,7 @@ func steadySchedule(times []time.Time) (schedule, bool) {
 	if float64(steady) < checkInRegularity*float64(len(intervals)) || span < minimumCheckInSpan {
 		return schedule{}, false
 	}
-	return schedule{interval: typical, lookups: len(merged), span: span}, true
+	return schedule{interval: typical, lookups: len(merged), span: span, times: merged}, true
 }
 
 // checkInCandidate reports whether a name could be a check-in worth showing:
@@ -160,6 +162,7 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 			},
 			Method: "Sable looks for names only one device looks up, again and again, at a steady interval for at least 12 hours. " +
 				"Services it recognizes, reverse lookups, and Sable's own lookups, such as its dynamic DNS updates, are left out.",
+			Chart: &insights.Chart{Schedule: &insights.ScheduleChart{Start: input.Now.Add(-24 * time.Hour), End: input.Now, Times: plan.times}},
 		}
 		if len(device.Addresses) == 1 {
 			finding.Query = &insights.QueryFilter{Name: lookup.Name, ClientIP: lookup.Client}

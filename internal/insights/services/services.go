@@ -58,6 +58,15 @@ func Lookup(name string) (Service, bool) {
 	return Service{}, false
 }
 
+// All lists every service Sable recognizes, in catalog order.
+func All() []Service {
+	all := make([]Service, 0, len(catalog))
+	for _, entry := range catalog {
+		all = append(all, entry.service)
+	}
+	return all
+}
+
 // Find returns a service by its ID.
 func Find(id string) (Service, bool) {
 	for _, entry := range catalog {

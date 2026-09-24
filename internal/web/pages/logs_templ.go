@@ -2356,6 +2356,8 @@ type DetailDrawerView struct {
 	// TitleEditor replaces the visible title while it is being edited.
 	TitleAction templ.Component
 	TitleEditor templ.Component
+	// Leading sits before the title, such as an icon for what the record is.
+	Leading templ.Component
 }
 
 // DetailDrawer renders the drawer shell. The body is passed as children and the
@@ -2388,7 +2390,7 @@ func DetailDrawer(view DetailDrawerView, footer templ.Component) templ.Component
 		var templ_7745c5c3_Var108 string
 		templ_7745c5c3_Var108, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 341, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 343, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var108)
 		if templ_7745c5c3_Err != nil {
@@ -2401,7 +2403,7 @@ func DetailDrawer(view DetailDrawerView, footer templ.Component) templ.Component
 		var templ_7745c5c3_Var109 string
 		templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.TitleID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 341, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 343, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var109)
 		if templ_7745c5c3_Err != nil {
@@ -2468,6 +2470,12 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		if view.Leading != nil {
+			templ_7745c5c3_Err = view.Leading.Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
 		if view.TitleEditor != nil {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 222, "<div class=\"query-detail-title-editor\"><span>")
 			if templ_7745c5c3_Err != nil {
@@ -2476,7 +2484,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var112 string
 			templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.JoinStringErrs(view.Eyebrow)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 353, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 358, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var112))
 			if templ_7745c5c3_Err != nil {
@@ -2489,7 +2497,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var113 string
 			templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.TitleID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 353, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 358, Col: 108}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 			if templ_7745c5c3_Err != nil {
@@ -2510,7 +2518,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var114 string
 			templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.JoinStringErrs(view.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 353, Col: 151}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 358, Col: 151}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var114))
 			if templ_7745c5c3_Err != nil {
@@ -2536,7 +2544,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var115 string
 			templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(view.Eyebrow)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 355, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 360, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 			if templ_7745c5c3_Err != nil {
@@ -2549,7 +2557,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var116 string
 			templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.TitleID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 355, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 360, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var116)
 			if templ_7745c5c3_Err != nil {
@@ -2570,7 +2578,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var117 string
 			templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinStringErrs(view.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 355, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 360, Col: 137}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
 			if templ_7745c5c3_Err != nil {
@@ -2596,7 +2604,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var118 string
 			templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.JoinStringErrs(view.Eyebrow)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 357, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 362, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var118))
 			if templ_7745c5c3_Err != nil {
@@ -2609,7 +2617,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var119 string
 			templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.TitleID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 357, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 362, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var119)
 			if templ_7745c5c3_Err != nil {
@@ -2630,7 +2638,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 			var templ_7745c5c3_Var120 string
 			templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(view.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 357, Col: 101}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 362, Col: 101}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 			if templ_7745c5c3_Err != nil {
@@ -2648,7 +2656,7 @@ func DetailDrawerContent(view DetailDrawerView, footer templ.Component) templ.Co
 		var templ_7745c5c3_Var121 string
 		templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.CloseLabel)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 359, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 364, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var121)
 		if templ_7745c5c3_Err != nil {
@@ -2714,7 +2722,7 @@ func QueryDecisionStep(name, title string) templ.Component {
 		var templ_7745c5c3_Var123 string
 		templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 370, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 375, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var123)
 		if templ_7745c5c3_Err != nil {
@@ -2727,7 +2735,7 @@ func QueryDecisionStep(name, title string) templ.Component {
 		var templ_7745c5c3_Var124 string
 		templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 370, Col: 147}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 375, Col: 147}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 		if templ_7745c5c3_Err != nil {
@@ -2769,7 +2777,7 @@ func QueryPolicyAction(domain, action, icon, label string) templ.Component {
 		var templ_7745c5c3_Var126 string
 		templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.ResolveAttributeValue(domain)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 374, Col: 129}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 129}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var126)
 		if templ_7745c5c3_Err != nil {
@@ -2782,7 +2790,7 @@ func QueryPolicyAction(domain, action, icon, label string) templ.Component {
 		var templ_7745c5c3_Var127 string
 		templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.ResolveAttributeValue(action)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 374, Col: 182}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 182}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var127)
 		if templ_7745c5c3_Err != nil {
@@ -2817,7 +2825,7 @@ func QueryPolicyAction(domain, action, icon, label string) templ.Component {
 		var templ_7745c5c3_Var130 string
 		templ_7745c5c3_Var130, templ_7745c5c3_Err = templ.ResolveAttributeValue(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 374, Col: 268}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 268}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var130)
 		if templ_7745c5c3_Err != nil {
@@ -2830,7 +2838,7 @@ func QueryPolicyAction(domain, action, icon, label string) templ.Component {
 		var templ_7745c5c3_Var131 string
 		templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.ResolveAttributeValue(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 374, Col: 284}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 284}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var131)
 		if templ_7745c5c3_Err != nil {
@@ -2898,7 +2906,7 @@ func LogLiveButton(live bool) templ.Component {
 		var templ_7745c5c3_Var135 string
 		templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(live))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 151}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 384, Col: 151}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var135)
 		if templ_7745c5c3_Err != nil {
@@ -2927,7 +2935,7 @@ func LogLiveButton(live bool) templ.Component {
 		var templ_7745c5c3_Var136 string
 		templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(live, "Pause", "Live"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 379, Col: 311}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 384, Col: 311}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 		if templ_7745c5c3_Err != nil {
@@ -2969,7 +2977,7 @@ func LogOption(value, label, selected string) templ.Component {
 		var templ_7745c5c3_Var138 string
 		templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 382, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 387, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var138)
 		if templ_7745c5c3_Err != nil {
@@ -2992,7 +3000,7 @@ func LogOption(value, label, selected string) templ.Component {
 		var templ_7745c5c3_Var139 string
 		templ_7745c5c3_Var139, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 382, Col: 129}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 387, Col: 129}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var139))
 		if templ_7745c5c3_Err != nil {

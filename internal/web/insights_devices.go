@@ -171,11 +171,11 @@ func insightDeviceView(device devices.Device, report deviceReport) pages.Insight
 		view.Addresses = append(view.Addresses, pages.InsightDeviceAddressView{Address: address.Address, Queries: address.Queries, Blocked: address.Blocked})
 	}
 	view.Vendor = device.Vendor
-	if device.NetworkType != "" {
-		view.NetworkTypeLabel, view.TypeNetwork = devices.TypeLabel(device.NetworkType), device.TypeNetwork
-	}
 	if device.Guess.Detected != "" {
-		view.DetectedLabel = devices.TypeLabel(device.Guess.Detected)
+		view.DetectedLabel, view.DefaultType = devices.TypeLabel(device.Guess.Detected), device.Guess.Detected
+	}
+	if device.NetworkType != "" {
+		view.NetworkTypeLabel, view.TypeNetwork, view.DefaultType = devices.TypeLabel(device.NetworkType), device.TypeNetwork, device.NetworkType
 	}
 	if device.Guess.Type != "" {
 		view.Type, view.TypeLabel, view.TypeConfidence = device.Guess.Type, devices.TypeLabel(device.Guess.Type), string(device.Guess.Confidence)
@@ -422,7 +422,7 @@ func insightAppViews(domains []querylog.ClientDomain) []pages.InsightAppView {
 	views := make([]pages.InsightAppView, 0, min(len(usages), insightsDeviceApps))
 	for _, usage := range usages[:min(len(usages), insightsDeviceApps)] {
 		views = append(views, pages.InsightAppView{
-			Name: usage.Service.Name, Category: usage.Service.Category, Queries: usage.Queries, Domains: len(usage.Domains),
+			ID: usage.Service.ID, Name: usage.Service.Name, Category: usage.Service.Category, Queries: usage.Queries, Domains: len(usage.Domains),
 		})
 	}
 	return views

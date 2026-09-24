@@ -439,12 +439,15 @@ button { cursor: pointer; }
 .ranking-card > header, .distribution-card > header { display: flex; min-height: 4.25rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem .75rem; }
 .ranking-card h2, .distribution-card h2 { margin: 0; font-size: 1rem; font-weight: 600; }
 .ranking-heading { display: grid; min-width: 0; gap: .15rem; }
-.ranking-card > header { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+/* Insights' Findings and Devices cards share the ranking cards' header band. */
+.ranking-card > header, :is(.insight-findings, .insight-devices) > .isotope-data-header { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+/* A ranking header is a band, so its title and View all button center in it. */
+.ranking-card > header { padding-block: 1rem; }
 .ranking-heading small { color: var(--muted-foreground); font-size: .75rem; }
-.ranking-view-all { display: inline-flex; height: 1.75rem; margin-block: -.25rem; flex: 0 0 auto; align-items: center; gap: .125rem; border: 0; border-radius: .375rem; background: transparent; padding: 0 .5rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; }
-.ranking-view-all:hover { background: var(--muted); color: var(--foreground); }
-.ranking-view-all:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.ranking-view-all .nav-icon { width: .75rem; height: .75rem; flex: 0 0 .75rem; }
+/* View all is an ordinary button with a disclosure chevron, like a finding's
+   Details button. */
+.ranking-view-all { flex: 0 0 auto; gap: .25rem; white-space: nowrap; }
+.ranking-view-all .nav-icon { width: .875rem; height: .875rem; }
 .ranking-list { display: flex; min-height: 17.5rem; flex: 1; flex-direction: column; }
 .ranking-row { display: flex; height: 3.5rem; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: .625rem 1.5rem; }
 .ranking-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
@@ -452,6 +455,8 @@ button { cursor: pointer; }
 .ranking-row strong { overflow: hidden; font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .ranking-row small { overflow: hidden; color: var(--muted-foreground); font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
 .ranking-row > span { color: var(--muted-foreground); font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A row that opens a drawer is a button that looks like the linked rows. */
+button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ranking-card-skeleton { pointer-events: none; }
 .insights-skeleton-block { position: relative; display: block; overflow: hidden; border-radius: .25rem; background: var(--muted); }
 .insights-skeleton-block::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--foreground) 16%, transparent), transparent); content: ""; translate: -100% 0; animation: dashboard-skeleton-shimmer 1.35s ease-in-out infinite; }
@@ -884,6 +889,11 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .styled-select-option:hover, .styled-select-option:focus-visible { background: var(--accent); color: var(--accent-foreground); outline: 0; }
 .styled-select-option[aria-selected="true"] { background: color-mix(in oklch, var(--accent) 72%, transparent); }
 .styled-select-option:disabled { cursor: not-allowed; opacity: .45; }
+/* A select whose choices have icons shows each one before its label. */
+.styled-select-icon { display: inline-grid; flex: none; margin-right: .55rem; color: var(--muted-foreground); }
+.styled-select-icon .nav-icon { width: 1rem; height: 1rem; }
+.styled-select-trigger > .styled-select-icon { margin-right: -.2rem; }
+.styled-select-trigger > .styled-select-icon + .styled-select-value { flex: 1; }
 .styled-time { position: relative; width: 100%; min-width: 0; }
 .styled-time-native { display: none; }
 .styled-time-trigger { display: flex; box-sizing: border-box; width: 100%; height: 2.25rem; min-width: 0; align-items: center; border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px); background: transparent; color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
@@ -968,6 +978,7 @@ dialog[open]::backdrop {
 .top-stats-list { min-height: 8rem; max-height: calc(85vh - 9rem); overflow-y: auto; }
 .top-stats-row { display: flex; min-height: 2.75rem; align-items: center; gap: .75rem; border-bottom: 1px solid var(--border); padding: .4rem 1.25rem; transition: background-color .15s ease; }
 .top-stats-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
+button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .top-stats-rank { width: 2rem; flex: 0 0 2rem; color: var(--muted-foreground); font-size: .75rem; text-align: right; font-variant-numeric: tabular-nums; }
 .top-stats-row > div { display: grid; min-width: 0; flex: 1; gap: .1rem; }
 .top-stats-row strong { overflow: hidden; font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -3684,6 +3695,10 @@ dialog[open]::backdrop {
 .insight-notes { display: grid; gap: .25rem; }
 .insight-notes p { margin: 0; }
 .insight-findings .isotope-data-header .count-badge { flex: 0 0 auto; }
+/* Findings and Devices say which range they count under their title, as the
+   ranking cards beside them do, so the range stays visible on phones. Their
+   header band comes from the ranking cards' rule. */
+.isotope-data-header > .ranking-heading { display: grid; align-items: initial; gap: .15rem; }
 .insight-finding-list { margin: 0; padding: 0; list-style: none; }
 .insight-finding { display: grid; min-height: 4.5rem; grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; border-top: 1px solid var(--border); padding: 1rem; }
 .insight-finding:first-child, .insight-findings-skeleton .isotope-data-header + .insight-finding { border-top: 0; }
@@ -3750,6 +3765,44 @@ dialog[open]::backdrop {
 .insight-list-mobile-row dd { font-variant-numeric: tabular-nums; }
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
 .query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
+/* Evidence charts: gray for the context, the finding's own color for what it
+   is about, and HTML labels at fixed shares of the width. */
+.insight-chart { --insight-chart-emphasis: #2563eb; }
+.insight-chart.tone-attention { --insight-chart-emphasis: #d97706; }
+.insight-chart.tone-positive { --insight-chart-emphasis: #16a34a; }
+.dark .insight-chart { --insight-chart-emphasis: #60a5fa; }
+.dark .insight-chart.tone-attention { --insight-chart-emphasis: #f1ad47; }
+.dark .insight-chart.tone-positive { --insight-chart-emphasis: #22c55e; }
+.insight-chart-plot { display: block; width: 100%; height: auto; overflow: visible; }
+/* A bar chart reads out the slot under the pointer or finger: the bar lifts,
+   the rest fade back, and the reading sits beside it at the chart's top. A
+   sideways drag scrubs across the bars; an upward one still scrolls. */
+.insight-chart-frame { position: relative; border-radius: .25rem; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.insight-chart-frame:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.insight-chart-frame [data-chart-slot] { transition: opacity 120ms ease; }
+.insight-chart-frame.is-reading [data-chart-slot]:not(.is-active) { opacity: .4; }
+.insight-chart-tooltip { top: 0; min-width: 9rem; }
+/* The drawer sizes and mutes every span in its sections; a chart's labels keep
+   the chart's own type. */
+.insight-chart :is(.chart-tooltip-row, .insight-chart-axis) span { color: inherit; font-size: inherit; }
+.insight-chart-tooltip .chart-tooltip-row .insight-chart-swatch.average { width: .7rem; }
+.insight-chart-muted { fill: color-mix(in oklch, var(--muted-foreground) 45%, transparent); }
+.insight-chart-emphasis { fill: var(--insight-chart-emphasis); }
+.insight-chart-expected { fill: color-mix(in oklch, var(--insight-chart-emphasis) 10%, transparent); stroke: var(--insight-chart-emphasis); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.insight-chart-average { stroke: color-mix(in oklch, var(--foreground) 60%, transparent); stroke-width: 1.25; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.insight-chart-baseline { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.insight-chart-ticks { stroke: var(--insight-chart-emphasis); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.insight-chart-axis { display: grid; margin-top: .35rem; color: var(--muted-foreground); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.insight-chart-axis.quarters { grid-template-columns: repeat(4, 1fr); }
+.insight-chart-axis.ends { grid-template-columns: 1fr auto 1fr; }
+.insight-chart-axis.ends span:last-child { justify-self: end; }
+.insight-chart-legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin: .6rem 0 0; padding: 0; color: var(--muted-foreground); font-size: .75rem; list-style: none; }
+.insight-chart-legend li { display: inline-flex; align-items: center; gap: .4rem; }
+.insight-chart-swatch { width: .65rem; height: .65rem; border-radius: 2px; }
+.insight-chart-swatch.muted { background: color-mix(in oklch, var(--muted-foreground) 45%, transparent); }
+.insight-chart-swatch.emphasis { background: var(--insight-chart-emphasis); }
+.insight-chart-swatch.average { height: 0; border-top: 1.5px dashed color-mix(in oklch, var(--foreground) 60%, transparent); border-radius: 0; }
+.insight-chart-swatch.tick { width: 2px; height: .8rem; border-radius: 0; background: var(--insight-chart-emphasis); }
 .insight-why { display: grid; gap: .65rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
 .insight-why h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .insight-why ul { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
@@ -3785,6 +3838,7 @@ dialog[open]::backdrop {
 .insight-list-link::after { position: absolute; inset: 0; content: ""; }
 .insight-list-link:focus-visible { outline: none; }
 .insight-list-link .nav-icon { width: 1rem; height: 1rem; }
+button.insight-list-link { border: 0; background: none; padding: 0; cursor: pointer; }
 /* A fact tile with a copyable value carries its copy button in the corner,
    like the Dynamic DNS address cards. The button drops the card's grid
    placement so it pins to the tile rather than to the label row. */
@@ -3827,7 +3881,27 @@ dialog[open]::backdrop {
 .insight-device-name .status-badge, .insight-device-badges .status-badge { padding: .1rem .45rem; font-size: .625rem; }
 .insight-device-mobile-row .insight-device-name strong:not(.mono) { font-family: inherit; font-weight: 600; }
 .insight-device-mobile-row .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
-.admin-mobile-row > div.insight-device-mobile-copy { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+.admin-mobile-row > div.insight-device-mobile-copy { display: grid; min-width: 0; flex: 1; grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+/* A device's row starts with a gray tile for what it is; the drawer sets the
+   same icon before its type. */
+.insight-type-tile { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.insight-type-tile .nav-icon, .insight-device-mobile-row .insight-type-tile .nav-icon { width: 1rem; height: 1rem; flex: none; color: inherit; }
+.insight-device-heading { display: flex; align-items: center; gap: .75rem; }
+.insight-list-row > .insight-type-tile { margin-right: -.25rem; }
+/* An app's logo is a small app tile in the brand's color, ringed in dark mode
+   so a black tile keeps its edge; an app without a logo shows its category's
+   icon on a gray tile. The app's name always sits beside it. */
+.app-icon { width: 2rem; height: 2rem; flex: 0 0 2rem; }
+svg.app-icon { display: block; border-radius: .5rem; }
+.dark svg.app-icon { box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent); }
+.app-icon-category { display: grid; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.app-icon-category .nav-icon { width: 1rem; height: 1rem; }
+.top-stats-row > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }
+.insight-list-row > .app-icon { margin-right: -.25rem; }
+.query-detail-header > .app-icon { width: 2.5rem; height: 2.5rem; flex-basis: 2.5rem; margin-right: .85rem; border-radius: .6rem; }
+.query-detail-header > .app-icon-category .nav-icon { width: 1.25rem; height: 1.25rem; }
+.query-detail-header > .insight-type-tile { width: 2.5rem; height: 2.5rem; flex-basis: 2.5rem; margin-right: .85rem; border-radius: .6rem; }
+.query-detail-header > .insight-type-tile .nav-icon { width: 1.25rem; height: 1.25rem; }
 .insight-device-mobile-copy small { font-variant-numeric: tabular-nums; }
 .insight-device-content { display: contents; }
 /* Visually hidden labels are absolutely positioned; anchoring them to the
@@ -3851,6 +3925,21 @@ dialog[open]::backdrop {
 .insight-name-editor input[name="name"] { font: 500 .9375rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .insight-name-help { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
 .insight-name-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+/* A drawer action keeps its width while it runs, with a spinner in place of
+   its label: on the button that sent the request, or on the submit button of
+   the form that did. */
+.insight-action { position: relative; }
+/* The drawer header sets its own spans as eyebrows; a label is not one. */
+.insight-action > :is(.insight-action-idle, .insight-action-pending) { align-items: center; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; white-space: nowrap; }
+.insight-action > .insight-action-idle { display: inline-flex; }
+.insight-action > .insight-action-pending { position: absolute; inset: 0; display: none; justify-content: center; }
+:is(.insight-action.htmx-request, form.htmx-request .insight-action[type="submit"]) .insight-action-idle { visibility: hidden; }
+:is(.insight-action.htmx-request, form.htmx-request .insight-action[type="submit"]) .insight-action-pending { display: inline-flex; }
+:is(.insight-action.htmx-request, form.htmx-request .insight-action[type="submit"]) .icon-loader-circle { animation: blocking-refresh-spin .8s linear infinite; }
+:is(.insight-name-editor, .insight-type-form) button:disabled { cursor: wait; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.insight-action.htmx-request, form.htmx-request .insight-action[type="submit"]) .icon-loader-circle { animation-duration: 1.6s; }
+}
 
 @media (max-width: 1279px) {
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3924,11 +4013,39 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
 .insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
-/* The Overview opens with one plain sentence about what stands out. */
-.insights-headline { max-width: 60rem; margin: 0; color: var(--foreground); font-size: 1.125rem; font-weight: 500; line-height: 1.5; text-wrap: pretty; }
-@media (max-width: 640px) { .insights-headline { font-size: 1rem; } }
+/* The Overview opens with one sentence about what stands out, led by an icon
+   in the tone of the most important finding. Each subject it names is
+   underlined in its own finding's tone and opens that finding. */
+.insights-headline { --headline-tone: #2563eb; display: flex; align-items: flex-start; gap: .85rem; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .9rem 1.1rem; }
+.insights-headline.tone-attention, .insights-headline-subject.tone-attention { --headline-tone: #d97706; }
+.insights-headline.tone-positive, .insights-headline-subject.tone-positive { --headline-tone: #16a34a; }
+.insights-headline-subject.tone-notice { --headline-tone: #2563eb; }
+.dark .insights-headline, .dark .insights-headline-subject.tone-notice { --headline-tone: #60a5fa; }
+.dark .insights-headline.tone-attention, .dark .insights-headline-subject.tone-attention { --headline-tone: #f1ad47; }
+.dark .insights-headline.tone-positive, .dark .insights-headline-subject.tone-positive { --headline-tone: #22c55e; }
+.insights-headline-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .55rem; background: color-mix(in oklch, var(--headline-tone) 14%, transparent); color: var(--headline-tone); }
+.insights-headline-icon .nav-icon { width: 1.05rem; height: 1.05rem; }
+.insights-headline > p { min-width: 0; margin: 0; padding-top: .2rem; color: var(--foreground); font-size: 1.0625rem; font-weight: 500; line-height: 1.5; text-wrap: pretty; }
+.insights-headline-subject { max-width: 100%; color: inherit; font: inherit; font-weight: 650; overflow-wrap: anywhere; text-align: start; text-decoration: underline 2px color-mix(in oklch, var(--headline-tone) 55%, transparent); text-underline-offset: .25em; }
+.insights-headline-subject.mono { font-family: var(--font-mono, monospace); font-size: .92em; }
+button.insights-headline-subject { display: inline; border: 0; border-radius: .2rem; background: none; padding: 0; cursor: pointer; transition: text-decoration-color 120ms ease; }
+button.insights-headline-subject:hover { text-decoration-color: var(--headline-tone); }
+button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.insights-headline-more { color: var(--muted-foreground); text-decoration: none; white-space: nowrap; }
+.insights-headline-more:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: .2em; }
+.insights-headline-skeleton .insight-skeleton-line { flex: 1; max-width: 32rem; margin-top: .65rem; }
+.insight-findings { scroll-margin-top: 1rem; }
+@media (max-width: 640px) {
+	.insights-headline { gap: .7rem; padding: .8rem .9rem; }
+	.insights-headline > p { font-size: 1rem; }
+	.insight-findings { scroll-margin-top: 4.5rem; }
+}
 /* Alerts: where Insights sends new findings. */
-.insight-alerts-form { display: grid; gap: 1rem; padding: 1rem 1.25rem 1.25rem; }
-.insight-alerts-form > p { max-width: 48rem; margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
-.insight-alerts-actions { display: flex; justify-content: flex-end; gap: .5rem; }
-.insight-alerts .isotope-data-header .status-badge { padding: .1rem .5rem; font-size: .68rem; }
+/* The alert setup opens from a bell beside the range control, green when on. */
+.insight-alerts-button { flex: 0 0 auto; gap: .35rem; }
+.insight-alerts-button .nav-icon { width: 1rem; height: 1rem; }
+.insight-alerts-button.active .nav-icon { color: #16a34a; }
+.dark .insight-alerts-button.active .nav-icon { color: #22c55e; }
+.insight-alerts { display: grid; gap: 1rem; }
+.insight-alerts-body { padding: 0; }
+.insight-alerts-body > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }

@@ -409,6 +409,21 @@
 	  if (!select || select.dataset.styledSelectReady === "true") return;
 	  select.dataset.styledSelectReady = "true";
 
+	  // A select can give its choices icons: a template beside it for each
+	  // choice's value holds the icon, which the list and the trigger show
+	  // before the choice's label.
+	  const optionIcons = new Map([...(select.parentElement?.querySelectorAll(":scope > template[data-option-icon]") ?? [])]
+		.map((template) => [template.dataset.optionIcon, template]));
+	  const optionIcon = (value) => {
+		const template = optionIcons.get(value);
+		if (!template) return null;
+		const icon = document.createElement("span");
+		icon.className = "styled-select-icon";
+		icon.setAttribute("aria-hidden", "true");
+		icon.append(template.content.cloneNode(true));
+		return icon;
+	  };
+
 	  const root = document.createElement("div");
 	  root.className = "styled-select";
 	  select.classList.forEach((className) => root.classList.add(className));
@@ -452,6 +467,8 @@
 		button.className = "styled-select-option";
 		button.dataset.value = option.value;
 		button.textContent = option.textContent.trim();
+		const icon = optionIcon(option.value);
+		if (icon) button.prepend(icon);
 		button.classList.toggle("placeholder", option.hasAttribute("data-placeholder"));
 		button.disabled = option.disabled;
 		button.tabIndex = -1;
@@ -504,6 +521,9 @@
 	  const syncSelection = () => {
 		const selected = select.selectedOptions[0];
 		selectedLabel.textContent = selected?.textContent?.trim() || "Choose an option";
+		trigger.querySelector(":scope > .styled-select-icon")?.remove();
+		const icon = selected && optionIcon(selected.value);
+		if (icon) trigger.prepend(icon);
 		trigger.classList.toggle("placeholder", selected?.hasAttribute("data-placeholder") === true);
 		trigger.removeAttribute("aria-invalid");
 		optionButtons.forEach((button) => button.setAttribute("aria-selected", String(button.dataset.value === select.value)));
@@ -1469,6 +1489,110 @@
 	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
 	};
 
+	// Insights' evidence charts split their width into one slot per bar. The
+	// slot under the pointer, the one a finger taps or drags across, or the one
+	// the arrow keys step to shows its reading in a tooltip at the top of the
+	// chart while the other bars fade back. A tap's reading stays up, since a
+	// finger has nothing to hover with, until a tap lands outside the chart.
+	const setupInsightChart = (frame) => {
+	  if (!frame || frame.dataset.insightChartReady === "true") return;
+	  frame.dataset.insightChartReady = "true";
+
+	  const tooltip = frame.querySelector("[data-chart-tooltip]");
+	  const status = frame.querySelector("[data-chart-keyboard-status]");
+	  const svg = frame.querySelector("svg");
+	  let readings;
+	  try {
+		readings = JSON.parse(frame.dataset.chartReadings || "null");
+	  } catch (_) {
+		return;
+	  }
+	  if (!tooltip || !svg || !readings?.length) return;
+	  const marks = [...svg.querySelectorAll("[data-chart-slot]")];
+	  const focusSlot = Math.max(0, Math.min(Number.parseInt(frame.dataset.chartFocus, 10) || 0, readings.length - 1));
+	  let current = -1;
+
+	  const show = (slot, announce = false) => {
+		const reading = readings[slot];
+		if (!reading) return;
+		current = slot;
+		frame.classList.add("is-reading");
+		marks.forEach((mark) => mark.classList.toggle("is-active", mark.dataset.chartSlot === String(slot)));
+		const label = document.createElement("div");
+		label.className = "chart-tooltip-time";
+		label.textContent = reading.label;
+		const rows = (reading.rows || []).map((entry) => {
+		  const row = document.createElement("div");
+		  row.className = "chart-tooltip-row";
+		  const swatch = document.createElement("i");
+		  swatch.className = `insight-chart-swatch ${entry.key}`;
+		  const name = document.createElement("span");
+		  name.textContent = entry.series;
+		  const value = document.createElement("b");
+		  value.textContent = entry.value;
+		  row.append(swatch, name, value);
+		  return row;
+		});
+		tooltip.replaceChildren(label, ...rows);
+		tooltip.hidden = false;
+		// Beside the bar rather than over it, and on its left near the edge.
+		const box = frame.getBoundingClientRect();
+		const plot = svg.getBoundingClientRect();
+		const center = plot.left - box.left + ((slot + .5) / readings.length) * plot.width;
+		const width = tooltip.offsetWidth;
+		const left = center + 12 + width > box.width ? center - 12 - width : center + 12;
+		tooltip.style.left = `${Math.max(0, Math.min(left, box.width - width))}px`;
+		if (announce && status) {
+		  status.textContent = [reading.label, ...(reading.rows || []).map((entry) => `${entry.series}: ${entry.value}`)].join(". ");
+		}
+	  };
+
+	  const hide = () => {
+		current = -1;
+		frame.classList.remove("is-reading");
+		marks.forEach((mark) => mark.classList.remove("is-active"));
+		tooltip.hidden = true;
+	  };
+	  frame.sableHideReading = hide;
+
+	  const track = (event) => {
+		const plot = svg.getBoundingClientRect();
+		if (!plot.width) return;
+		const slot = Math.floor(((event.clientX - plot.left) / plot.width) * readings.length);
+		const clamped = Math.max(0, Math.min(slot, readings.length - 1));
+		if (clamped !== current) show(clamped);
+	  };
+
+	  frame.addEventListener("pointerdown", track);
+	  frame.addEventListener("pointermove", (event) => {
+		if (event.pointerType === "mouse" || event.buttons) track(event);
+	  });
+	  frame.addEventListener("pointerleave", (event) => {
+		if (event.pointerType === "mouse" && !frame.matches(":focus-visible")) hide();
+	  });
+	  // A tap focuses the chart too; only a keyboard arrival starts a reading.
+	  frame.addEventListener("focus", () => {
+		if (frame.matches(":focus-visible")) show(current >= 0 ? current : focusSlot, true);
+	  });
+	  frame.addEventListener("blur", hide);
+	  frame.addEventListener("keydown", (event) => {
+		let next = current >= 0 ? current : focusSlot;
+		if (event.key === "ArrowLeft") next--;
+		else if (event.key === "ArrowRight") next++;
+		else if (event.key === "Home") next = 0;
+		else if (event.key === "End") next = readings.length - 1;
+		else if (event.key === "Escape") { hide(); return; }
+		else return;
+		event.preventDefault();
+		show(Math.max(0, Math.min(next, readings.length - 1)), true);
+	  });
+	};
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll("[data-insight-chart].is-reading").forEach((frame) => {
+		if (!frame.contains(event.target)) frame.sableHideReading?.();
+	  });
+	});
+
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;
@@ -2267,6 +2391,32 @@
 		showFailure("Sable has not come back online. Check the Docker or service restart policy, then try again.");
 	  };
 
+	  // An installed update also finishes when Sable is restarted another way,
+	  // such as by its service manager. The page notices the new process and
+	  // reloads to run the new console, unless a rolling update on the page is
+	  // still running and will reload it at the end.
+	  if (root.dataset.updatedVersion) {
+		(async () => {
+		  let loaded = "";
+		  while (root.isConnected && !previousInstance) {
+			try {
+			  const response = await fetchHealth();
+			  const health = response.ok ? await response.json() : {};
+			  if (!loaded) {
+				loaded = health.instance_id || "";
+			  } else if (health.instance_id && health.instance_id !== loaded && !previousInstance &&
+				!document.querySelector('#cluster-updates[data-rollout-active="true"]')) {
+				continueAfterRestart();
+				return;
+			  }
+			} catch {
+			  // Sable is restarting; keep asking until it answers.
+			}
+			await sleep(5000);
+		  }
+		})();
+	  }
+
 	  button?.addEventListener("click", async () => {
 		if (!previousInstance && root.dataset.restartConfirm) {
 		  const accepted = await confirmAction(root.dataset.restartConfirm, {
@@ -2678,7 +2828,7 @@
 	  if (empty) empty.hidden = visible !== 0 || rows.length === 0;
 	  const count = dialog.querySelector("[data-top-stats-count]");
 	  if (count) {
-		const noun = dialog.id.includes("clients") ? "clients" : "domains";
+		const noun = count.dataset.topStatsNoun || (dialog.id.includes("clients") ? "clients" : "domains");
 		count.textContent = `${visible.toLocaleString()}${query ? ` of ${Math.min(rows.length, limit).toLocaleString()}` : ""} ${noun}`;
 	  }
 	  const total = dialog.querySelector("[data-top-stats-total]");
@@ -2748,7 +2898,35 @@
 	};
 	document.addEventListener("pointerdown", closeInteractivePopovers);
 
+	// A rolling update restarts the server this page talks to, yet the page
+	// keeps running the console it loaded. Once a rollout the page watched is
+	// over, and the server restarted since the page loaded, the page reloads to
+	// run the new console, announcing the update when the rollout completed.
+	let rolloutWatch = null;
+	const followRollout = (panel) => {
+	  const {rolloutId, rolloutActive, rolloutPhase, rolloutVersion, instanceId} = panel.dataset;
+	  if (!instanceId) return;
+	  rolloutWatch ??= {instance: instanceId, watched: ""};
+	  if (!rolloutId) return;
+	  if (rolloutActive === "true") {
+		rolloutWatch.watched = rolloutId;
+		return;
+	  }
+	  if (rolloutWatch.watched !== rolloutId || instanceId === rolloutWatch.instance) return;
+	  rolloutWatch.watched = "";
+	  if (rolloutPhase === "complete" && rolloutVersion) {
+		try {
+		  sessionStorage.setItem(UPDATE_COMPLETED_KEY, rolloutVersion);
+		} catch {
+		  // The confirmation is a courtesy; the reload matters more.
+		}
+	  }
+	  window.location.reload();
+	};
+
 	const initializeSwappedContent = (root) => {
+	  if (root.matches?.("#cluster-updates")) followRollout(root);
+	  root.querySelectorAll?.("#cluster-updates").forEach(followRollout);
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
 	  if (root.matches?.("[data-resolver-combobox]")) setupResolverCombobox(root);
@@ -2771,6 +2949,8 @@
 	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
 	  if (root.matches?.("[data-donut]")) setupDonutChart(root);
 	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
+	  if (root.matches?.("[data-insight-chart]")) setupInsightChart(root);
+	  root.querySelectorAll?.("[data-insight-chart]").forEach(setupInsightChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
 	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
@@ -3969,10 +4149,28 @@
 		  return route.pathname === current.pathname && [...route.searchParams].every(([name, value]) => current.searchParams.get(name) === value);
 		};
 		window.requestAnimationFrame(() => {
-		  if (!pendingRouteMatches() || !localCommandTarget(pending)) {
+		  if (pendingRouteMatches() && localCommandTarget(pending)) return;
+		  const unavailable = () => {
 			document.getElementById("main-content")?.focus();
 			announce(`${pending?.label || "Command"} is unavailable`);
+		  };
+		  if (!pendingRouteMatches()) {
+			unavailable();
+			return;
 		  }
+		  // Part of a page can load after the page itself, as Insights loads its
+		  // analysis, so give the command's target a few seconds to arrive.
+		  let timer = 0;
+		  const retry = () => {
+			if (!localCommandTarget(pending)) return;
+			window.clearTimeout(timer);
+			document.body.removeEventListener("htmx:after:swap", retry);
+		  };
+		  timer = window.setTimeout(() => {
+			document.body.removeEventListener("htmx:after:swap", retry);
+			unavailable();
+		  }, 10000);
+		  document.body.addEventListener("htmx:after:swap", retry);
 		});
 	  }
 	};
@@ -4109,7 +4307,14 @@
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
 		dialogOpen.closest(".zone-action-menu")?.removeAttribute("open");
-		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), dialogOpen);
+		// A drawer opened from another stacks on top of it, so closing it goes
+		// back. One already open underneath, such as the app drawer a device
+		// drawer was opened from, comes back by closing the drawer on top, and
+		// keeps where it returns focus to.
+		const from = dialogOpen.closest("dialog[open]");
+		const reopening = Boolean(dialog?.open && from && from !== dialog);
+		if (reopening) from.close();
+		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), reopening ? null : dialogOpen);
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
 		return;
 	  }

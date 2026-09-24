@@ -100,7 +100,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
-		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
+		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking, Alerts: server.insightAlertsView(console),
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights page", "error", err)
@@ -111,8 +111,10 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 // a page with nothing cached waits for its slowest read rather than for each
 // in turn. The reads land in the caches the page itself reads through, where
 // its own requests join them; reads already cached or running are left alone.
+// They run in the background for as long as the server does and never hold up
+// the page that started them.
 func (server *Server) warmInsights(console pages.DashboardView, window insightWindow) {
-	warm := func(read func(context.Context)) { go read(context.Background()) }
+	warm := server.goBackground
 	if console.CanLogs {
 		if reader, ok := server.queries.(deviceInsightReader); ok {
 			warm(func(ctx context.Context) { server.deviceActivityCache.load(ctx, window, reader.ClientActivity) })
@@ -200,7 +202,6 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
 	}
-	view.Headline = insights.Summarize(findings)
 	view.Alerts = server.insightAlertsView(console)
 	// Client addresses, and so the names of their devices, are shown only to
 	// operators who can read the query log.
@@ -209,6 +210,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		given = server.givenClientNames(request.Context(), window.Start)
 	}
 	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config)
+	view.Headline = insightHeadline(findings, view.Findings)
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 
 	// The page's own sections show the material the analyzers examined; the
@@ -235,7 +237,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		} else {
 			view.Devices = insightDeviceViews(report)
 			view.DeviceSummary = insightDeviceSummary(view.Devices)
-			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.logWindowQuery())
+			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 		}
 		view.TopApps = server.topAppRanking(request, window)
 	}
@@ -249,6 +251,27 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		}
 	}
 	return view
+}
+
+// insightHeadline says what stands out, one clause per finding with news. A
+// clause that starts with its finding's subject is split after it, so the
+// page can set the subject apart, and a finding the page shows opens from it.
+func insightHeadline(findings []insights.Finding, views []pages.InsightFindingView) *pages.InsightHeadlineView {
+	named, more := insights.Headlines(findings)
+	headline := &pages.InsightHeadlineView{More: more}
+	for _, finding := range named {
+		clause := pages.InsightHeadlineClause{Rest: finding.Headline, Tone: string(finding.Tone)}
+		if label := finding.Subject.Label; label != "" && strings.HasPrefix(finding.Headline, label) {
+			clause.Subject, clause.Rest, clause.Monospace = label, strings.TrimPrefix(finding.Headline, label), finding.Subject.Monospace
+		}
+		for _, view := range views {
+			if view.FindingID == finding.ID {
+				clause.Dialog = view.ID
+			}
+		}
+		headline.Clauses = append(headline.Clauses, clause)
+	}
+	return headline
 }
 
 func insightDeviceSummary(views []pages.InsightDeviceView) pages.InsightDeviceSummaryView {
@@ -305,6 +328,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, given dev
 			SubjectSource: finding.Subject.LabelSource,
 			Summary:       finding.Summary, Explanations: finding.Explanations, Method: finding.Method,
 			Destination: finding.Destination, DestinationLabel: finding.DestinationLabel,
+			Chart: finding.Chart,
 		}
 		for _, fact := range finding.Facts {
 			view.Facts = append(view.Facts, pages.InsightFactView{Label: fact.Label, Value: fact.Value, Time: fact.Time, Monospace: fact.Monospace})
@@ -349,7 +373,7 @@ func insightFindingIcon(kind string) string {
 	case blockinginsights.KindUniqueCoverage:
 		return "check-circle"
 	case devices.KindNewDevice:
-		return "plus"
+		return "circle-plus"
 	case devices.KindNewDestinations:
 		return "globe"
 	case devices.KindTrafficSpike:
@@ -357,9 +381,9 @@ func insightFindingIcon(kind string) string {
 	case devices.KindWentQuiet:
 		return "power"
 	case devices.KindNewApp:
-		return "apps"
+		return "grid-2x2-plus"
 	case devices.KindUnusualHours:
-		return "clock"
+		return "clock-alert"
 	case devices.KindCheckIn:
 		return "timer"
 	case devices.KindApplianceDrift:
@@ -445,30 +469,29 @@ func (server *Server) topAppRanking(request *http.Request, window insightWindow)
 		if len(ranking) == insightsRankLimit {
 			break
 		}
-		ranking = append(ranking, pages.RankedStatView{Name: usage.Service.Name, Secondary: usage.Service.Category, Value: usage.Queries})
+		ranking = append(ranking, pages.RankedStatView{
+			Name: usage.Service.Name, Secondary: usage.Service.Category, Value: usage.Queries,
+			Drawer: pages.AppDrawerLink(usage.Service.ID, window.Range),
+			Icon:   pages.AppIcon(usage.Service.ID, usage.Service.Category),
+		})
 	}
 	return ranking
 }
 
-// busiestDeviceRanking ranks devices by their queries. A device with one
-// address links to exactly its queries; one with several has no single query
-// log filter that matches all of them.
-func busiestDeviceRanking(views []pages.InsightDeviceView, logWindow string) []pages.RankedStatView {
+// busiestDeviceRanking ranks devices by their queries. Each opens the
+// device's drawer, whose addresses link to exactly the queries each made: a
+// device with several has no single query log filter that matches them all.
+func busiestDeviceRanking(views []pages.InsightDeviceView, rangeName string) []pages.RankedStatView {
 	ranking := make([]pages.RankedStatView, 0, min(len(views), insightsRankLimit))
 	for _, device := range views[:min(len(views), insightsRankLimit)] {
-		item := pages.RankedStatView{Name: device.Label, Value: device.Queries}
-		switch len(device.Addresses) {
-		case 0:
-		case 1:
-			item.Secondary = device.Addresses[0].Address
-			item.Href = "/logs?tab=queries&client_ip=" + url.QueryEscape(device.Addresses[0].Address) + "&" + logWindow
-		default:
-			item.Secondary = fmt.Sprintf("%d addresses", len(device.Addresses))
+		addresses := make([]string, 0, len(device.Addresses))
+		for _, address := range device.Addresses {
+			addresses = append(addresses, address.Address)
 		}
-		if device.Label == item.Secondary {
-			item.Secondary = ""
-		}
-		ranking = append(ranking, item)
+		ranking = append(ranking, pages.RankedStatView{
+			Name: device.Label, Secondary: deviceAddressDetail(device.Label, addresses), Value: device.Queries,
+			Drawer: pages.DeviceDrawerLink(device.Key, rangeName),
+		})
 	}
 	return ranking
 }

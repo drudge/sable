@@ -154,6 +154,43 @@ type Finding struct {
 	DestinationLabel string
 	// ObservedAt is the end of the window the finding describes.
 	ObservedAt time.Time
+	// Chart pictures the evidence, for a finding whose shape says more than
+	// its numbers.
+	Chart *Chart
+}
+
+// Chart is a picture of a finding's evidence. One of its parts is set.
+type Chart struct {
+	Days     *DayChart
+	Hours    *HourChart
+	Schedule *ScheduleChart
+}
+
+// DayChart compares a subject's last 24 hours with each day of the week
+// before it.
+type DayChart struct {
+	// Before is the count for each 24 hours of the week before, oldest first,
+	// and Average their daily average.
+	Before  []uint64
+	Average float64
+	Last    uint64
+}
+
+// HourChart compares the hours of a subject's last day with its usual day, by
+// local hour of the day.
+type HourChart struct {
+	// Usual is the average count for each hour over the days before. Unusual
+	// is the count in the last 24 hours for each hour the finding is about,
+	// and zero for the others.
+	Usual   [24]float64
+	Unusual [24]uint64
+}
+
+// ScheduleChart places each time something happened on a timeline, so a
+// steady rhythm shows as evenly spaced marks.
+type ScheduleChart struct {
+	Start, End time.Time
+	Times      []time.Time
 }
 
 // NewID builds a finding's stable identifier from its kind and subject.
@@ -335,27 +372,19 @@ func Hide(findings []Finding, feedback []Feedback, now time.Time) (shown, hidden
 // maximumHeadlines is how many findings the one-sentence summary names.
 const maximumHeadlines = 3
 
-// Summarize says what stands out in one sentence, from the headlines of the
-// most important findings, and says so plainly when nothing does.
-func Summarize(findings []Finding) string {
-	headlines := make([]string, 0, maximumHeadlines)
-	more := 0
+// Headlines picks the findings the one-sentence summary of what stands out
+// names, most important first, and counts the other findings with news the
+// sentence leaves to the list below it.
+func Headlines(findings []Finding) (named []Finding, more int) {
+	named = make([]Finding, 0, maximumHeadlines)
 	for _, finding := range findings {
-		if finding.Headline == "" {
-			continue
-		}
-		if len(headlines) == maximumHeadlines {
+		switch {
+		case finding.Headline == "":
+		case len(named) == maximumHeadlines:
 			more++
-			continue
+		default:
+			named = append(named, finding)
 		}
-		headlines = append(headlines, finding.Headline)
 	}
-	if len(headlines) == 0 {
-		return "All quiet. Nothing on your network changed in a way that needs a look."
-	}
-	sentence := JoinAnd(headlines) + "."
-	if more > 0 {
-		sentence += fmt.Sprintf(" %d more %s below.", more, Plural(more, "thing", "things"))
-	}
-	return sentence
+	return named, more
 }

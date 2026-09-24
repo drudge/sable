@@ -14,9 +14,9 @@ Right after an upgrade, Sable fills in device history from the query log it alre
 
 ## The Overview
 
-The Overview opens with one sentence about what stands out, such as "dock-camera-02 went quiet, breakroom-display is 13× busier than usual, and file-server woke up at 3 AM." Below it are the numbers for the selected range and **Things Worth Your Attention**.
+The Overview opens with one sentence about what stands out, such as "dock-camera-02 went quiet, breakroom-display is 13× busier than usual, and file-server woke up at 3 AM." Select a name in it to open that finding. Below it are the numbers for the selected range and **Worth a Look**.
 
-Each finding opens a drawer with fact cards, **Why Sable surfaced this**, what it could mean, and **How Sable decides**. Use **View Query Logs** to see the exact queries it counted.
+Each finding opens a drawer with fact cards, **Why Sable surfaced this**, what it could mean, and **How Sable decides**. Findings with a shape to them also draw it: a device that went quiet or got busy is shown beside each day of its week before, one active at an unusual hour beside its usual day, and a check-in as one mark per lookup across the last day. Point at or tap a bar to see its count, or drag across the bars to read each in turn. Use **View Query Logs** to see the exact queries it counted.
 
 Insights reports:
 
@@ -28,7 +28,7 @@ Insights reports:
 - **Checks in on a schedule.** A name only one device looks up, again and again, at a steady interval through the night. This is how a smart device's heartbeat looks, and also how software phoning home looks.
 - **Blocking findings.** Names that were blocked before you allowed them, block lists that stopped updating, and lists that add little of their own.
 
-**Top Apps** and **Busiest Devices** rank the whole network for the selected range.
+**Top Apps** and **Busiest Devices** rank the whole network for the selected range. Open an app to see the domains it used, each linked to its queries, and the devices that used it. Open a device to see its details.
 
 ## Devices
 
@@ -66,7 +66,7 @@ Hiding applies to everyone who uses Insights. Hidden findings are listed under t
 
 ## Get alerts
 
-Insights can send each new finding worth a look to a webhook. Open the **Alerts** card at the bottom of the Overview, enter the webhook URL, and choose a format:
+Insights can send each new finding worth a look to a webhook. Use the bell beside the range control at the top of Insights, which also shows whether alerts are on, then enter the webhook URL and choose a format:
 
 - **JSON** works with Slack, Discord, Home Assistant, and anything else that takes a JSON POST.
 - **Plain text** works with ntfy, which shows the finding's title and summary as a notification.

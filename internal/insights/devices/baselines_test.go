@@ -35,6 +35,11 @@ func TestChangesReportActivityAtAnHourADeviceNeverUses(t *testing.T) {
 	if findings[0].Summary != "Sent 210 queries between 2 AM and 4 AM in the last day, a time it had been silent every day for the two weeks before." {
 		t.Fatalf("summary = %q", findings[0].Summary)
 	}
+	// The chart sets the usual day beside the unusual hours alone.
+	if chart := findings[0].Chart; chart == nil || chart.Hours == nil || chart.Hours.Usual[9] != 40 || chart.Hours.Usual[2] != 0 ||
+		chart.Hours.Unusual[2] != 120 || chart.Hours.Unusual[3] != 90 || chart.Hours.Unusual[10] != 0 {
+		t.Fatalf("chart = %+v", chart)
+	}
 
 	// A device watched for only ten days has no routine to break yet.
 	server.FirstSeen = now.Add(-10 * day)

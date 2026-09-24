@@ -82,6 +82,13 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 	if got := GuessText(Guess{Type: "thermostat", Confidence: ConfidenceLow}); got != "Maybe a thermostat" {
 		t.Errorf("GuessText = %q", got)
 	}
+	// An acronym keeps its capitals in the middle of a sentence.
+	if got := GuessText(Guess{Type: "tv", Confidence: ConfidenceMedium}); got != "Probably a TV" {
+		t.Errorf("GuessText = %q", got)
+	}
+	if got := describeDevice(Device{Guess: Guess{Type: "tv", Confidence: ConfidenceHigh}, Vendor: "Samsung"}); got != "A TV made by Samsung. " {
+		t.Errorf("describeDevice = %q", got)
+	}
 }
 
 func TestClassifyRemembersWhatItDetectedUnderACorrection(t *testing.T) {

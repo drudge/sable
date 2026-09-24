@@ -298,8 +298,41 @@ async function assertDismissAlignment(regions, viewport) {
     await installPage.reload();
     assert.equal(await installPage.locator('.toast-success').count(), 0, 'completion toast is shown only once');
     await installPage.close();
+
+    // A rolling update the page watched reloads it once the rollout is over,
+    // so the new release's console takes over, and says what it updated to.
+    const rolloutPage = await browser.newPage({viewport: {width: 1280, height: 900}});
+    rolloutPage.on('pageerror', error => errors.push(error.message));
+    await rolloutPage.goto(`${process.argv[2]}/cluster?disabled&finishing`);
+    assert.equal(await rolloutPage.locator('#cluster-updates').getAttribute('data-rollout-active'), 'true');
+    const rolloutToast = rolloutPage.locator('.toast-success');
+    await rolloutToast.waitFor({state: 'visible', timeout: 20000});
+    assert.match(await rolloutToast.innerText(), /Sable was updated to v1\.1\.0\./);
+    assert.equal(await rolloutPage.evaluate(() => performance.getEntriesByType('navigation')[0].type), 'reload', 'the page reloads itself at the end of the rollout');
+    assert.equal(await rolloutPage.locator('#cluster-updates').getAttribute('data-rollout-phase'), 'complete');
+    await rolloutPage.waitForResponse(response => response.url().endsWith('/ui/cluster/status'));
+    assert.equal(await rolloutPage.evaluate(() => performance.getEntriesByType('navigation')[0].type), 'reload', 'a completed rollout reloads the page only once');
+    await rolloutPage.close();
+
+    // An installed update finished by restarting Sable another way, such as
+    // with its service manager, reloads the page too.
+    const externalPage = await browser.newPage();
+    externalPage.on('pageerror', error => errors.push(error.message));
+    await Promise.all([
+      externalPage.waitForResponse(response => response.url().endsWith('/api/v1/health')),
+      externalPage.goto(`${process.argv[2]}/about?disabled&installed`),
+    ]);
+    await Promise.all([
+      externalPage.waitForEvent('load', {timeout: 20000}),
+      page.request.post(`${process.argv[2]}/test/restart`),
+    ]);
+    const externalToast = externalPage.locator('.toast-success');
+    await externalToast.waitFor({state: 'visible'});
+    assert.match(await externalToast.innerText(), /Sable was updated to v1\.1\.0\./);
+    await externalPage.close();
+
     assert.deepEqual(errors, []);
-    console.log('PASS login notice, release notes, escaping, release links, mobile layout, dismissal, opt-out, and cluster progress');
+    console.log('PASS login notice, release notes, escaping, release links, mobile layout, dismissal, opt-out, cluster progress, and reloads after updates');
   } finally {
     await browser.close();
   }

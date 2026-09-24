@@ -21,6 +21,11 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	var polls atomic.Int32
 	var restarts atomic.Int32
 	var rollouts atomic.Int32
+	// externalRestarts counts restarts made outside the console, such as by a
+	// service manager, and rolloutPolls the live refreshes of a rollout that
+	// finishes after its second one.
+	var externalRestarts atomic.Int32
+	var rolloutPolls atomic.Int32
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", webassets.Handler())
 	update := pages.UpdateView{Supported: true, Available: true, Checked: true, CanCheck: true, CanApply: true, CheckOnLogin: true,
@@ -95,7 +100,14 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		if restarts.Load() > 0 {
 			instance = "after-restart"
 		}
+		if externalRestarts.Load() > 0 {
+			instance = "after-external-restart"
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"instance_id": instance})
+	})
+	mux.HandleFunc("POST /test/restart", func(w http.ResponseWriter, r *http.Request) {
+		externalRestarts.Add(1)
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /ui/updates/restart", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-CSRF-Token") != "fixture-csrf" {
@@ -108,7 +120,24 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 	clusterUpdate := pages.ClusterUpdateView{Supported: true, CanApply: true, Release: update,
 		Rollout: cluster.RolloutStatus{ID: "fixture", Version: "v1.1.0", Phase: "updating", Nodes: []cluster.RolloutNode{{Name: "ns2-queens", Phase: "complete"}, {Name: "ns3-latham", Phase: "install"}, {Name: "ns1-queens", Phase: "queued"}}},
 	}
+	// A rollout that completes on its second refresh, after the primary the
+	// page talks to restarted into the new release.
+	finishingRollout := func() pages.ClusterUpdateView {
+		view := clusterUpdate
+		view.InstanceID = "primary-before"
+		if rolloutPolls.Load() >= 2 {
+			view.InstanceID = "primary-after"
+			view.Rollout.Phase = "complete"
+			view.Rollout.Nodes = []cluster.RolloutNode{{Name: "ns2-queens", Phase: "complete"}, {Name: "ns3-latham", Phase: "complete"}, {Name: "ns1-queens", Phase: "complete"}}
+		}
+		return view
+	}
 	mux.HandleFunc("GET /ui/cluster/status", func(w http.ResponseWriter, r *http.Request) {
+		if cookie, err := r.Cookie("fixture-rollout"); err == nil && cookie.Value == "finishing" {
+			rolloutPolls.Add(1)
+			_ = pages.ClusterLiveStatusUpdate(pages.ClusterPageView{Initialized: true, LocalRole: "Primary", Update: finishingRollout()}).Render(r.Context(), w)
+			return
+		}
 		// A restarting replica's first heartbeat renegotiates update support.
 		refresh := clusterUpdate
 		refresh.Supported = false
@@ -124,15 +153,24 @@ func TestBrowserUpdateNotifications(t *testing.T) {
 		http.SetCookie(w, &http.Cookie{Name: "fixture-update-scope", Value: scope, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		view := pages.DashboardView{Version: "1.0.0", CSRFToken: "fixture-csrf", CanCheckUpdates: true, CheckUpdatesOnLogin: !r.URL.Query().Has("disabled")}
 		view.Username = r.URL.Query().Get("user")
-		if restarts.Load() > 0 {
+		if restarts.Load() > 0 || externalRestarts.Load() > 0 {
 			view.Version = "1.1.0"
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if r.URL.Path == "/cluster" {
-			_ = pages.ClusterPage(pages.ClusterPageView{Console: view, Initialized: true, LocalRole: "Primary", Update: clusterUpdate}).Render(r.Context(), w)
+			rollout := clusterUpdate
+			if r.URL.Query().Has("finishing") {
+				http.SetCookie(w, &http.Cookie{Name: "fixture-rollout", Value: "finishing", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+				rollout = finishingRollout()
+			}
+			_ = pages.ClusterPage(pages.ClusterPageView{Console: view, Initialized: true, LocalRole: "Primary", Update: rollout}).Render(r.Context(), w)
 			return
 		}
-		_ = pages.AboutPage(pages.AboutPageView{Console: view, Update: update, Commit: "abcdef0", BuiltAt: "2026-09-10T12:00:00Z"}).Render(r.Context(), w)
+		about := update
+		if r.URL.Query().Has("installed") {
+			about.Available, about.Installed, about.Phase = false, true, "installed"
+		}
+		_ = pages.AboutPage(pages.AboutPageView{Console: view, Update: about, Commit: "abcdef0", BuiltAt: "2026-09-10T12:00:00Z"}).Render(r.Context(), w)
 	})
 	server := httptest.NewServer(secureHeaders(mux, false))
 	defer server.Close()

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/insights"
@@ -70,13 +69,13 @@ func (input ChangesInput) routineReady(device Device) bool {
 	return !device.FirstSeen.IsZero() && !device.FirstSeen.After(start) && input.trackedBefore(start)
 }
 
-// unusualSpan finds the busiest run of hours in the last day during which the
-// device had been silent every day of the two weeks before.
-func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Location) (hourSpan, bool) {
+// hourProfiles adds up a device's queries by local hour of the day, over the
+// last 24 hours and over the two weeks before them, and counts the days of
+// those two weeks the device was active.
+func hourProfiles(hourly map[time.Time]uint64, now time.Time, location *time.Location) (recent, routine [24]uint64, activeDays int) {
 	recentStart := now.Add(-24 * time.Hour)
 	routineStart := recentStart.Add(-routineDays * 24 * time.Hour)
-	var recent, routine [24]uint64
-	activeDays := make(map[string]bool)
+	active := make(map[string]bool)
 	for hour, hits := range hourly {
 		local := hour.In(location).Hour()
 		switch {
@@ -85,11 +84,33 @@ func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Loca
 		case !hour.Before(routineStart) && hour.Before(recentStart):
 			routine[local] += hits
 			if hits > 0 {
-				activeDays[hour.In(location).Format(time.DateOnly)] = true
+				active[hour.In(location).Format(time.DateOnly)] = true
 			}
 		}
 	}
-	if len(activeDays) < minimumRoutineDays {
+	return recent, routine, len(active)
+}
+
+// hourChart pictures a device's usual day beside the unusual hours of its
+// last one.
+func hourChart(hourly map[time.Time]uint64, now time.Time, location *time.Location, span hourSpan) *insights.Chart {
+	recent, routine, _ := hourProfiles(hourly, now, location)
+	chart := insights.HourChart{}
+	for hour := range 24 {
+		chart.Usual[hour] = float64(routine[hour]) / routineDays
+	}
+	for offset := range span.length {
+		hour := (span.start + offset) % 24
+		chart.Unusual[hour] = recent[hour]
+	}
+	return &insights.Chart{Hours: &chart}
+}
+
+// unusualSpan finds the busiest run of hours in the last day during which the
+// device had been silent every day of the two weeks before.
+func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Location) (hourSpan, bool) {
+	recent, routine, activeDays := hourProfiles(hourly, now, location)
+	if activeDays < minimumRoutineDays {
 		// A device that was mostly away has no routine to break.
 		return hourSpan{}, false
 	}
@@ -126,14 +147,16 @@ func unusualHourFindings(input ChangesInput) []insights.Finding {
 	type candidate struct {
 		device Device
 		span   hourSpan
+		hourly map[time.Time]uint64
 	}
 	candidates := make([]candidate, 0)
 	for _, device := range input.Devices {
 		if device.Recent == 0 || !input.routineReady(device) {
 			continue
 		}
-		if span, found := unusualSpan(input.Hourly(device), input.Now, location); found {
-			candidates = append(candidates, candidate{device: device, span: span})
+		hourly := input.Hourly(device)
+		if span, found := unusualSpan(hourly, input.Now, location); found {
+			candidates = append(candidates, candidate{device: device, span: span, hourly: hourly})
 		}
 	}
 	slices.SortFunc(candidates, func(left, right candidate) int { return cmp.Compare(right.span.queries, left.span.queries) })
@@ -163,6 +186,7 @@ func unusualHourFindings(input ChangesInput) []insights.Finding {
 			},
 			Method: "Sable learns the hours each " + noun(device) + " is active. It reports one that was active on most of the previous 14 days " +
 				"and then sent at least 30 queries in an hour of the day it had not used at all in that time.",
+			Chart: hourChart(entry.hourly, input.Now, location, span),
 		})
 	}
 	return findings
@@ -189,7 +213,7 @@ func applianceFindings(input ChangesInput, skip map[string]bool) []insights.Find
 			Subject:  deviceSubject(device),
 			Headline: Label(device) + " started calling new services",
 			Summary: fmt.Sprintf("Queried %s %s it had never used in the last 24 hours. A %s usually sticks to the same few services.",
-				insights.FormatCount(device.RecentNewDomains), insights.Plural(device.RecentNewDomains, "domain", "domains"), strings.ToLower(label)),
+				insights.FormatCount(device.RecentNewDomains), insights.Plural(device.RecentNewDomains, "domain", "domains"), inSentence(label)),
 			Reasons: []insights.Reason{
 				{Text: fmt.Sprintf("%s first-time %s in the last 24 hours", insights.FormatCount(device.RecentNewDomains), insights.Plural(device.RecentNewDomains, "domain", "domains"))},
 				{Text: fmt.Sprintf("%s in the whole week before", insights.FormatCount(device.BaselineNewDomains))},

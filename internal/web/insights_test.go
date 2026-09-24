@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -150,7 +151,77 @@ func newInsightsTestServer(t *testing.T) insightsTestServer {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Rendering Insights starts background reads of the store. Cleanups run
+	// last registered first, so closing the server here waits for those reads
+	// before the store closes and its directory is removed.
+	t.Cleanup(func() { closeTestServer(t, server) })
 	return insightsTestServer{Server: server, store: opened, now: now}
+}
+
+func closeTestServer(t *testing.T, server *Server) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Close(ctx); err != nil {
+		t.Errorf("close server: %v", err)
+	}
+}
+
+// slowAppCounts counts apps only once its context ends, like a long count
+// still running when the console shuts down.
+type slowAppCounts struct {
+	started  chan struct{}
+	finished atomic.Bool
+}
+
+func (*slowAppCounts) RecentQueryEvents(context.Context, int) ([]querylog.Entry, error) {
+	return nil, nil
+}
+
+func (counts *slowAppCounts) QueryLogInsights(ctx context.Context, _, _ time.Time) (querylog.Insights, error) {
+	counts.started <- struct{}{}
+	<-ctx.Done()
+	// A read takes a moment to wind down after it is canceled.
+	time.Sleep(20 * time.Millisecond)
+	counts.finished.Store(true)
+	return querylog.Insights{}, ctx.Err()
+}
+
+// Opening Insights starts reads that fill its caches without holding up the
+// page. Closing the server cancels them and waits for them to finish, so none
+// is still using the store once the server has closed.
+func TestClosingTheServerWaitsForInsightsBackgroundReads(t *testing.T) {
+	t.Parallel()
+	counts := &slowAppCounts{started: make(chan struct{}, 8)}
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{},
+		&editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}, baseDirectory: t.TempDir()},
+		testZones{},
+		"sqlite",
+		testQueryLog{},
+		counts,
+		func(context.Context) error { return nil },
+		permissionAuthenticator{sessions: insightsTestSessions},
+		true,
+		false,
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := (insightsTestServer{Server: server}).get(t, "logs-only", "/insights?range=week", false); response.Code != http.StatusOK {
+		t.Fatalf("Insights = %d", response.Code)
+	}
+	select {
+	case <-counts.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("opening Insights started no background read")
+	}
+	closeTestServer(t, server)
+	if !counts.finished.Load() {
+		t.Fatal("the server closed while a background read was still running")
+	}
 }
 
 func (server insightsTestServer) get(t *testing.T, session, target string, htmx bool) *httptest.ResponseRecorder {
@@ -208,6 +279,30 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		if strings.Contains(body, `href="/insights"`) != want || strings.Contains(body, `id="command-page-insights"`) != want {
 			t.Errorf("%s: Insights navigation present = %t, want %t", session, strings.Contains(body, `href="/insights"`), want)
 		}
+		// The palette also jumps to Insights' tabs and alert setup, each for
+		// the operators who can use it: Devices needs the query log, and
+		// alerts need permission to change settings.
+		for command, shown := range map[string]bool{
+			`id="command-page-insights-blocking"`: want,
+			`id="command-page-insights-devices"`:  want && session != "blocking-only",
+			`id="command-page-insights-apps"`:     want && session != "blocking-only",
+			`id="command-action-insights-alerts"`: session == "everything",
+		} {
+			if strings.Contains(body, command) != shown {
+				t.Errorf("%s: palette shows %s = %t, want %t", session, command, !shown, shown)
+			}
+		}
+	}
+	palette := server.get(t, "everything", "/", false).Body.String()
+	for _, expected := range []string{
+		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Insight Alerts"`,
+		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
+		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
+		`data-command-label="App Insights"`, `data-command-route="/insights" data-command-dialog="top-stats-apps-dialog"`,
+	} {
+		if !strings.Contains(palette, expected) {
+			t.Errorf("palette is missing %s", expected)
+		}
 	}
 	body := server.get(t, "everything", "/", false).Body.String()
 	dashboard := strings.Index(body, `data-tooltip="Dashboard"`)
@@ -252,6 +347,8 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		"Little unique coverage", "100% of this list&#39;s domains are also covered by Alpha.",
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
 		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", `class="insight-cause"`, "Could be ",
+		// The opening sentence names the finding's subject and opens it.
+		`class="insights-headline tone-attention"`, `data-dialog-open="insight-finding-1">telemetry.example.com</button>`,
 		"Why Sable surfaced this", "Blocked 3 times during the selected period",
 		"george-laptop.corp.example",
 		`<th scope="col" class="right-cell">Queries blocked</th>`,
@@ -554,6 +651,32 @@ func TestOwnLookupsFollowTheFeaturesThatRun(t *testing.T) {
 	}
 }
 
+// Enter in a field presses its form's first submit button, so Save has to be
+// the name editor's only one: Remove Name sends a request of its own, and each
+// shows a spinner in place of its label while it runs.
+func TestInsightsNameEditorSavesOnEnter(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	if response := server.post(t, "everything", "/ui/insights/devices/name", url.Values{"key": {insightsTestLaptop}, "name": {"Work Laptop"}, "range": {"day"}}); response.Code != http.StatusOK {
+		t.Fatalf("naming = %d", response.Code)
+	}
+	editor := server.get(t, "everything", "/ui/insights/device?range=day&edit=1&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+	start := strings.Index(editor, `<form class="insight-name-editor"`)
+	if start < 0 {
+		t.Fatal("the name editor did not open")
+	}
+	form := editor[start : start+strings.Index(editor[start:], "</form>")]
+	submits := regexp.MustCompile(`<button [^>]*type="submit"[^>]*>(.*?)</button>`).FindAllStringSubmatch(form, -1)
+	if len(submits) != 1 || !strings.Contains(submits[0][1], `<span class="insight-action-idle">Save</span>`) {
+		t.Fatalf("the name editor's submit buttons = %q", submits)
+	}
+	remove := regexp.MustCompile(`<button [^>]*type="button"[^>]*hx-post="/ui/insights/devices/name"[^>]*>(.*?)</button>`).FindStringSubmatch(form)
+	if remove == nil || !strings.Contains(remove[0], `hx-vals="{&#34;remove&#34;:&#34;1&#34;}"`) || !strings.Contains(remove[1], "Remove Name") ||
+		!strings.Contains(remove[1], `class="insight-action-pending"`) {
+		t.Fatalf("Remove Name does not send its own request: %s", form)
+	}
+}
+
 // A device named or typed while Sable only knew its address keeps that entry
 // after Sable ties the address to hardware. Removing the name or type by
 // hardware address has to clear it too, or the drawer says it is gone while
@@ -651,6 +774,76 @@ func TestInsightsNetworkNamesAreNotTheDrawersToRemove(t *testing.T) {
 	setting("/ui/insights/devices/type", url.Values{"type": {"printer"}})
 	if cleared := setting("/ui/insights/devices/type", url.Values{"type": {""}}); !strings.Contains(cleared, "It takes the type you set for 10.0.0.0/24 again.") {
 		t.Fatal("handing the type back claimed Sable would guess it")
+	}
+}
+
+// Top Apps and Busiest Devices open drawers. An app's drawer lists the domains
+// it was reached at, each linking to exactly the queries it counts, and the
+// devices that used it, each opening its own drawer.
+func TestInsightsRankingsOpenAppsAndDevices(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	var events []querylog.Event
+	for client, lookups := range map[string][]string{
+		"10.0.0.5": {"api-global.netflix.com.", "api-global.netflix.com.", "api-global.netflix.com.", "ipv4-c001.nflxvideo.net."},
+		"10.0.0.9": {"www.netflix.com.", "www.netflix.com."},
+	} {
+		for index, name := range lookups {
+			events = append(events, querylog.Event{
+				OccurredAt: server.now.Add(-time.Duration(30+index) * time.Minute), ClientIP: client, Name: name, RecordType: dns.TypeA,
+				Class: dns.ClassINET, ResponseCode: dns.RcodeSuccess, Source: querylog.SourceUpstream, Protocol: "UDP",
+			})
+		}
+	}
+	if err := server.store.WriteQueryEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+
+	overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String()
+	for _, expected := range []string{
+		`data-dialog-open="insight-app-dialog"`, `hx-get="/ui/insights/app?id=netflix&amp;range=day"`,
+		// Each app leads with its logo.
+		`<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#E50914">`,
+		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
+	} {
+		if !strings.Contains(overview, expected) {
+			t.Errorf("the rankings are missing %q", expected)
+		}
+	}
+
+	if response := server.get(t, "blocking-only", "/ui/insights/app?id=netflix&range=day", true); response.Code != http.StatusForbidden {
+		t.Fatalf("app drawer without logs access = %d", response.Code)
+	}
+	drawer := server.get(t, "everything", "/ui/insights/app?id=netflix&range=day", true).Body.String()
+	for _, expected := range []string{
+		"Netflix", "Streaming", "Devices that used it", "george-laptop.corp.example", "10.0.0.9",
+		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
+	} {
+		if !strings.Contains(drawer, expected) {
+			t.Errorf("the app drawer is missing %q", expected)
+		}
+	}
+	if !strings.Contains(drawer, `<header class="query-detail-header"><svg class="app-icon"`) {
+		t.Error("the app drawer does not lead with the app's logo")
+	}
+	// Each device starts with the icon for what it is, as on the Devices tab.
+	if tiles := strings.Count(drawer, `<span class="insight-type-tile" role="img"`); tiles != 2 {
+		t.Errorf("the app drawer shows %d device icons, want one per device", tiles)
+	}
+	match := regexp.MustCompile(`href="(/logs\?name=api-global\.netflix\.com&amp;tab=queries[^"]*)" aria-label="View (\d+) queries`).FindStringSubmatch(drawer)
+	if match == nil {
+		t.Fatal("the app drawer has no query log link for api-global.netflix.com")
+	}
+	filter, _ := queryLogFilter(httptest.NewRequest(http.MethodGet, html.UnescapeString(match[1]), nil))
+	page, err := server.store.QueryEvents(context.Background(), filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strconv.Itoa(page.TotalEntries) != match[2] || match[2] != "3" {
+		t.Fatalf("the link reports %d queries, the drawer %s", page.TotalEntries, match[2])
+	}
+	if unused := server.get(t, "everything", "/ui/insights/app?id=spotify&range=day", true).Body.String(); !strings.Contains(unused, "Nothing on the network used this app") {
+		t.Fatal("an app nobody used did not explain itself")
 	}
 }
 
