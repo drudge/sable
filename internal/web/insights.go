@@ -202,7 +202,13 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	}
 	view.Headline = insights.Summarize(findings)
 	view.Alerts = server.insightAlertsView(console)
-	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], snapshot.Config)
+	// Client addresses, and so the names of their devices, are shown only to
+	// operators who can read the query log.
+	var given devices.GivenNames
+	if console.CanLogs {
+		given = server.givenClientNames(request.Context(), window.Start)
+	}
+	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config)
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 
 	// The page's own sections show the material the analyzers examined; the
@@ -218,7 +224,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 				BlockedDomains: activity.BlockedDomains, BlockedClients: activity.BlockedClients,
 			}
 			hosts, zones := snapshot.Config.Resolver.Hosts, server.zones.Current().Zones
-			view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, hosts, zones), insightsRankLimit)
+			view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, given, hosts, zones), insightsRankLimit)
 			view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
 			server.nameRankedClients(view.TopClients)
 		}
@@ -289,7 +295,7 @@ func (server *Server) pastBlocks(ctx context.Context, reader blockingInsightRead
 	return blocks
 }
 
-func (server *Server) insightFindingViews(findings []insights.Finding, configuration config.Config) []pages.InsightFindingView {
+func (server *Server) insightFindingViews(findings []insights.Finding, given devices.GivenNames, configuration config.Config) []pages.InsightFindingView {
 	views := make([]pages.InsightFindingView, 0, len(findings))
 	for index, finding := range findings {
 		view := pages.InsightFindingView{
@@ -322,7 +328,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, configura
 			for _, client := range finding.Clients {
 				counts[client.Name] = client.Hits
 			}
-			view.Clients = rankedStats(counts, dashboardClientNames(counts, configuration.Resolver.Hosts, server.zones.Current().Zones), len(counts))
+			view.Clients = rankedStats(counts, dashboardClientNames(counts, given, configuration.Resolver.Hosts, server.zones.Current().Zones), len(counts))
 			server.nameRankedClients(view.Clients)
 		}
 		views = append(views, view)

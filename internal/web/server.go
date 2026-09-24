@@ -643,12 +643,13 @@ func (server *Server) dashboardInsightsView(request *http.Request, window insigh
 	view := dashboardInsights(
 		insights,
 		countedWindow,
+		server.givenClientNames(request.Context(), countedWindow.Start),
 		server.config.Current().Config.Resolver.Hosts,
 		server.zones.Current().Zones,
 	)
-	// Whatever the host overrides and the local zones could not name is asked
-	// of the resolver, which is the only path that sees a reverse zone this
-	// server merely forwards.
+	// Whatever the given names, host overrides, and local zones could not name
+	// is asked of the resolver, which is the only path that sees a reverse
+	// zone this server merely forwards.
 	server.nameRankedClients(view.TopClients)
 	return view
 }

@@ -8,6 +8,38 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.3] - 2026-09-23
+
+Sable 1.5.0-beta.3 settles how devices are named and teaches Insights to
+recognize Sable itself. A device keeps the same name from one visit to the
+next, and Sable's own scheduled lookups are no longer reported as a device
+phoning home.
+
+### Insights
+
+- Name every device in one order: the name you gave it, then UniFi's, then a
+  local host override, then reverse DNS. A UniFi name no longer gives way to
+  reverse DNS whenever the server's neighbor table saw the device more
+  recently than the controller did.
+- Mark the machine Sable runs on as **This server** and the rest of its
+  cluster as **Sable node**, and count running Sable as a clue that a device
+  is a server.
+- Leave out what Sable looks up for itself on a timer, such as dynamic DNS
+  updates, UniFi sync, and block list downloads, when looking for check-ins,
+  so a server with dynamic DNS is no longer reported for calling its DNS
+  provider every five minutes.
+- Remove a device's name or type completely. One given while Sable only knew
+  the device's IP address stayed behind once Sable learned its hardware
+  address, so removing it said it worked while the device kept it.
+- Say when a device's name or type comes from an entry for its whole network,
+  and stop offering to remove that name from one device. Handing a device's
+  type back names the network's type it will take.
+
+### Dashboard
+
+- Name top clients the way Insights names devices, so your names and UniFi
+  names show there too, ahead of host overrides and reverse DNS.
+
 ## [1.5.0-beta.2] - 2026-09-23
 
 Sable 1.5.0-beta.2 makes Insights fast on a real month of history. Tested with

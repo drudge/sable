@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -66,6 +67,45 @@ func TestSetClientNameReplacesAndRemoves(t *testing.T) {
 	}
 	if _, err := SetClientName(nil, Client{Name: "Nowhere"}); err == nil {
 		t.Fatal("a name with no device identifier was accepted")
+	}
+}
+
+// A name or type set by hardware address takes over what Sable kept on the
+// device's addresses before it knew the hardware, so removing it later leaves
+// nothing behind. Other addresses and networks keep theirs.
+func TestHardwareAddressTakesOverItsAddresses(t *testing.T) {
+	t.Parallel()
+	clients := []Client{
+		{Name: "Old Name", Address: "10.0.0.5"},
+		{Name: "Laptop v6", Address: "fd00::5", Type: "computer"},
+		{Name: "Printer", Address: "10.0.0.9", Type: "printer"},
+		{Name: "Guest Wi-Fi", Address: "10.20.40.0/24", Type: "phone"},
+	}
+	addresses := []string{"10.0.0.5", "fd00::5", "10.20.40.0/24"}
+	renamed, err := SetClientName(clients, Client{Name: "Work Laptop", MAC: "3c:22:fb:01:02:03"}, addresses...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Client{
+		{Name: "Printer", Address: "10.0.0.9", Type: "printer"},
+		{Name: "Guest Wi-Fi", Address: "10.20.40.0/24", Type: "phone"},
+		{Address: "fd00::5", Type: "computer"},
+		{Name: "Work Laptop", MAC: "3c:22:fb:01:02:03"},
+	}
+	if !slices.Equal(renamed, want) {
+		t.Fatalf("renamed = %+v, want %+v", renamed, want)
+	}
+	typed, err := SetClientType(renamed, Client{MAC: "3c:22:fb:01:02:03"}, addresses...)
+	if err != nil || len(typed) != 3 || slices.ContainsFunc(typed, func(client Client) bool { return client.Address == "fd00::5" }) {
+		t.Fatalf("returning the type to Sable left %+v, %v", typed, err)
+	}
+	removed, err := SetClientName(typed, Client{MAC: "3c:22:fb:01:02:03"}, addresses...)
+	if err != nil || !slices.Equal(removed, want[:2]) {
+		t.Fatalf("removed = %+v, %v", removed, err)
+	}
+	// A device known only by its address has nothing to take over.
+	if byAddress, err := SetClientName(clients, Client{Name: "NAS", Address: "10.0.0.9"}, addresses...); err != nil || byAddress[0].Name != "Old Name" {
+		t.Fatalf("naming by address = %+v, %v", byAddress, err)
 	}
 }
 

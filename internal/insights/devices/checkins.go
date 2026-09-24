@@ -159,7 +159,7 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 				"Software phoning home that should not be there",
 			},
 			Method: "Sable looks for names only one device looks up, again and again, at a steady interval for at least 12 hours. " +
-				"Services it recognizes and reverse lookups are left out.",
+				"Services it recognizes, reverse lookups, and Sable's own lookups, such as its dynamic DNS updates, are left out.",
 		}
 		if len(device.Addresses) == 1 {
 			finding.Query = &insights.QueryFilter{Name: lookup.Name, ClientIP: lookup.Client}

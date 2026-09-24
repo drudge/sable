@@ -137,11 +137,15 @@ func ServiceClueIDs() []string {
 // keeps only the reasons that support it, so the console can show exactly
 // why Sable thinks so.
 func Classify(device Device, used []services.Service) Guess {
-	if device.Type != "" {
+	if kind := cmp.Or(device.Type, device.NetworkType); kind != "" {
+		reason := insights.Reason{Text: "You set this type"}
+		if device.Type == "" {
+			reason = insights.Reason{Text: "You set this type for", Code: device.TypeNetwork}
+		}
 		detected := device
-		detected.Type = ""
+		detected.Type, detected.NetworkType = "", ""
 		return Guess{
-			Type: device.Type, Confidence: ConfidenceSet, Reasons: []insights.Reason{{Text: "You set this type"}},
+			Type: kind, Confidence: ConfidenceSet, Reasons: []insights.Reason{reason},
 			Detected: Classify(detected, used).Type,
 		}
 	}
@@ -164,6 +168,10 @@ func Classify(device Device, used []services.Service) Guess {
 				entry.reasons = append(entry.reasons, reason)
 			}
 		}
+	}
+	// Sable knows the machines it runs on, though one may be a laptop as well.
+	if device.Server != "" {
+		add("sable", []clue{{"server", 5}}, insights.Reason{Text: "Runs Sable"})
 	}
 	if device.Vendor != "" {
 		add("maker", makerClues[device.Vendor], insights.Reason{Text: "Made by " + device.Vendor})

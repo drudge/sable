@@ -64,16 +64,19 @@ type InsightDeviceView struct {
 	Label      string
 	Named      bool
 	NameSource string
-	// OperatorNamed is set when the name is one the operator gave in Sable.
+	// OperatorNamed is set when the name is one the operator gave this device
+	// in Sable, which the drawer can remove.
 	OperatorNamed bool
 	MAC           string
 	PrivateMAC    bool
-	Addresses     []InsightDeviceAddressView
-	Queries       uint64
-	Blocked       uint64
-	NewDomains    uint64
-	FirstSeen     time.Time
-	LastSeen      time.Time
+	// Server says the device runs Sable: "This server" or "Sable node".
+	Server     string
+	Addresses  []InsightDeviceAddressView
+	Queries    uint64
+	Blocked    uint64
+	NewDomains uint64
+	FirstSeen  time.Time
+	LastSeen   time.Time
 	// New is set when the device was first seen inside the window and
 	// first-seen tracking covered that moment.
 	New bool
@@ -89,6 +92,15 @@ type InsightDeviceView struct {
 	TypeOptions [][2]string
 	// DetectedLabel is the type Sable guesses on its own, if any.
 	DetectedLabel string
+	// OwnType is set when the operator typed this device itself.
+	// NetworkTypeLabel is the type they gave TypeNetwork, which the device
+	// takes when it has no type of its own.
+	OwnType          bool
+	NetworkTypeLabel string
+	TypeNetwork      string
+	// NameNetwork is the network the operator's name was given to, when it
+	// names a whole network rather than this device.
+	NameNetwork string
 }
 
 // InsightDeviceAddressView is one client address of a device and its own
@@ -1014,6 +1026,12 @@ templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 	if nameSource && device.NameSource != "" {
 		<span class="status-badge">{ device.NameSource }</span>
 	}
+	if device.Server != "" {
+		<span class="status-badge">{ device.Server }</span>
+	}
+	if !nameSource && device.NameNetwork != "" {
+		<span class="status-badge">Named for { device.NameNetwork }</span>
+	}
 	if device.PrivateMAC {
 		<span class="status-badge" title="The device uses a randomized hardware address on this network">Private address</span>
 	}
@@ -1044,7 +1062,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 		if view.Missing {
 			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
 		} else if view.Device.Key != "" {
-			if view.Device.New || view.Device.PrivateMAC {
+			if view.Device.New || view.Device.PrivateMAC || view.Device.Server != "" || view.Device.NameNetwork != "" {
 				<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device, false)</div>
 			}
 			<dl class="query-detail-grid">
@@ -1174,10 +1192,14 @@ func insightDeviceTime(moment time.Time, display TimeDisplay) string {
 }
 
 func insightNameHelp(device InsightDeviceView) string {
-	if device.MAC != "" {
+	switch {
+	case device.NameNetwork != "":
+		return "Its name comes from " + device.NameNetwork + ". A name here is for this device alone."
+	case device.MAC != "":
 		return "Follows the hardware address, so it survives IP changes."
+	default:
+		return "Applies to this IP address; Sable has not tied it to hardware."
 	}
-	return "Applies to this IP address; Sable has not tied it to hardware."
 }
 
 // InsightListRowView is one row of a drawer list: a value that can be copied,
@@ -1316,9 +1338,9 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 				<label class="field-control">
 					<span class="sr-only">Device type</span>
 					<select name="type" data-styled-select>
-						<option value="" selected?={ view.Device.TypeConfidence != "set" }>{ insightDetectedOption(view.Device) }</option>
+						<option value="" selected?={ !view.Device.OwnType }>{ insightDetectedOption(view.Device) }</option>
 						for _, option := range view.Device.TypeOptions {
-							<option value={ option[0] } selected?={ view.Device.TypeConfidence == "set" && view.Device.Type == option[0] }>{ option[1] }</option>
+							<option value={ option[0] } selected?={ view.Device.OwnType && view.Device.Type == option[0] }>{ option[1] }</option>
 						}
 					</select>
 				</label>
@@ -1329,13 +1351,17 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 	</section>
 }
 
-// insightDetectedOption names the choice that leaves the type to Sable by what
-// Sable detects, so choosing it shows what it means.
+// insightDetectedOption names the choice that leaves the device without a type
+// of its own by the type it then takes: its network's, or what Sable detects.
 func insightDetectedOption(device InsightDeviceView) string {
-	if device.DetectedLabel == "" {
+	switch {
+	case device.NetworkTypeLabel != "":
+		return device.NetworkTypeLabel + " (set for " + device.TypeNetwork + ")"
+	case device.DetectedLabel == "":
 		return "Let Sable decide"
+	default:
+		return device.DetectedLabel + " (detected)"
 	}
-	return device.DetectedLabel + " (detected)"
 }
 
 func insightConfidenceText(confidence string) string {
