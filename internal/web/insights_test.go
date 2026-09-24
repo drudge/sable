@@ -279,6 +279,27 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		if strings.Contains(body, `href="/insights"`) != want || strings.Contains(body, `id="command-page-insights"`) != want {
 			t.Errorf("%s: Insights navigation present = %t, want %t", session, strings.Contains(body, `href="/insights"`), want)
 		}
+		// The palette also jumps to Insights' tabs and alert setup, each for
+		// the operators who can use it: Devices needs the query log, and
+		// alerts need permission to change settings.
+		for command, shown := range map[string]bool{
+			`id="command-page-insights-blocking"`: want,
+			`id="command-page-insights-devices"`:  want && session != "blocking-only",
+			`id="command-action-insights-alerts"`: session == "everything",
+		} {
+			if strings.Contains(body, command) != shown {
+				t.Errorf("%s: palette shows %s = %t, want %t", session, command, !shown, shown)
+			}
+		}
+	}
+	palette := server.get(t, "everything", "/", false).Body.String()
+	for _, expected := range []string{
+		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
+		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
+	} {
+		if !strings.Contains(palette, expected) {
+			t.Errorf("palette is missing %s", expected)
+		}
 	}
 	body := server.get(t, "everything", "/", false).Body.String()
 	dashboard := strings.Index(body, `data-tooltip="Dashboard"`)

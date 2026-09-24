@@ -34,6 +34,8 @@ reloads itself once an update finishes, so it runs the new release right away.
   to read the type.
 - Move alert setup behind a bell beside the range control, which shows
   whether alerts are on.
+- Jump to Insights' Devices and Blocking tabs, or straight to alert setup,
+  from the command palette.
 - Show a spinner while a device's name saves or is removed, and stop Enter in
   the name field from removing the name.
 - Keep a finding's fact cards in pairs without gaps, and give a long DNS name
