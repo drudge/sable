@@ -4055,7 +4055,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .insight-alert-header-add { justify-self: start; }
 .insight-alerts .dialog-footer .insight-alert-preview-button { margin-right: auto; }
 .insight-alert-preview { position: fixed; inset: auto; z-index: 100; box-sizing: border-box; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .85rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); }
-.insight-alert-preview:popover-open { display: flex; flex-direction: column; gap: .6rem; animation: resolver-popover-in 120ms ease-out; }
+.insight-alert-preview:popover-open { display: flex; flex-direction: column; gap: .6rem; transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
+.insight-alert-preview[data-side="top"] { transform-origin: bottom left; }
 .insight-alert-preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .insight-alert-preview-heading > div { display: grid; gap: .15rem; }
 .insight-alert-preview-heading small { color: var(--muted-foreground); font-size: .75rem; }

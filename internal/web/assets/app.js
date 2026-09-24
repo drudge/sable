@@ -1633,10 +1633,12 @@
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });
-  // The preview floats beside its button, above it when there is room, so
-  // looking at it never changes the dialog's size.
+  // The preview drops out of its button like Sable's other menus, flipping
+  // above only when there is no room below, so looking at it never changes
+  // the dialog's size.
+  const alertPreviewTrigger = (popover) => popover.closest("form")?.querySelector("[data-alert-preview]");
   const positionAlertPreview = (popover) => {
-    const trigger = popover.closest("form")?.querySelector("[data-alert-preview]");
+    const trigger = alertPreviewTrigger(popover);
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
     const inset = 8;
@@ -1644,12 +1646,15 @@
     const width = Math.min(34 * 16, window.innerWidth - inset * 2);
     const above = rect.top - inset - gap;
     const below = window.innerHeight - rect.bottom - inset - gap;
-    const onTop = above >= Math.min(320, below) || above > below;
     popover.style.width = `${width}px`;
-    popover.style.maxHeight = `${Math.max(160, onTop ? above : below)}px`;
+    popover.style.maxHeight = "";
+    const wanted = Math.min(popover.scrollHeight, 28 * 16);
+    const side = below >= wanted || below >= above ? "bottom" : "top";
+    popover.dataset.side = side;
+    popover.style.maxHeight = `${Math.max(160, Math.min(28 * 16, side === "bottom" ? below : above))}px`;
     popover.style.left = `${Math.min(Math.max(rect.left, inset), window.innerWidth - inset - width)}px`;
     const height = popover.getBoundingClientRect().height;
-    popover.style.top = `${onTop ? rect.top - gap - height : rect.bottom + gap}px`;
+    popover.style.top = `${side === "top" ? rect.top - gap - height : rect.bottom + gap}px`;
   };
   document.body.addEventListener("htmx:after:swap", (event) => {
     const popover = event.detail?.ctx?.target;
@@ -1657,6 +1662,29 @@
     if (!popover.matches(":popover-open")) popover.showPopover();
     positionAlertPreview(popover);
   });
+  document.addEventListener("toggle", (event) => {
+    if (!event.target.matches?.("[data-alert-preview-popover]")) return;
+    alertPreviewTrigger(event.target)?.setAttribute("aria-expanded", String(event.newState === "open"));
+  }, true);
+  // Pressing Preview again closes it. A pointer press outside the popover
+  // light-dismisses it before the click lands, so remember it was open.
+  document.addEventListener("pointerdown", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    trigger.dataset.previewWasOpen = String(!!trigger.form?.querySelector("[data-alert-preview-popover]:popover-open"));
+  }, true);
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    const popover = trigger.form?.querySelector("[data-alert-preview-popover]");
+    const wasOpen = trigger.dataset.previewWasOpen === "true" || popover?.matches(":popover-open");
+    delete trigger.dataset.previewWasOpen;
+    // A click the format change sends only refreshes an open preview.
+    if (!wasOpen || !event.isTrusted) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (popover?.matches(":popover-open")) popover.hidePopover();
+  }, true);
   window.addEventListener("resize", () => {
     document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
   });

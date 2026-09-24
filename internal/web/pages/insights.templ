@@ -1933,7 +1933,7 @@ templ InsightAlerts(view InsightAlertsView) {
 		</div>
 		<div id="insight-alerts-preview" class="insight-alert-preview" popover data-alert-preview-popover></div>
 		<div class="dialog-footer">
-			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" data-alert-preview>@Icon("code")<span>Preview</span></button>
+			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="insight-alerts-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
 			if view.URL != "" {
 				if view.Paused {
 					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
