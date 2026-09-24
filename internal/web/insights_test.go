@@ -294,6 +294,7 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 	}
 	palette := server.get(t, "everything", "/", false).Body.String()
 	for _, expected := range []string{
+		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Insight Alerts"`,
 		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
 		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
 	} {

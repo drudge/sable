@@ -551,9 +551,9 @@ templ CommandPalette(view DashboardView) {
 				if view.CanBlocking || view.CanLogs {
 					@CommandOption("command-page-insights", "Insights", "Devices, changes, and blocking on your network", "lightbulb", "Page", "intelligence findings evidence analysis devices new device what changed quiet spike hardware address blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
 					if view.CanLogs {
-						@CommandOption("command-page-insights-devices", "Insights Devices", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "")
+						@CommandOption("command-page-insights-devices", "Device Insights", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "")
 					}
-					@CommandOption("command-page-insights-blocking", "Insights Blocking", "What blocking catches and how much each list adds", "shield", "Page", "blocking blocked queries clients block lists overlap unique coverage false positives", "/insights?tab=blocking", "", "", "", "")
+					@CommandOption("command-page-insights-blocking", "Blocking Insights", "What blocking catches and how much each list adds", "shield", "Page", "blocking blocked queries clients block lists overlap unique coverage false positives", "/insights?tab=blocking", "", "", "", "")
 				}
 				if view.CanZones {
 					@CommandOption("command-page-zones", "Zones", "Manage DNS zones and records", "globe", "Page", "authoritative primary secondary forwarding records", "/zones", "", "", "", "")
@@ -637,7 +637,7 @@ templ CommandPalette(view DashboardView) {
 					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`, "")
 				}
 				if view.CanWriteSettings && (view.CanBlocking || view.CanLogs) {
-					@CommandOption("command-action-insights-alerts", "Insights Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "")
+					@CommandOption("command-action-insights-alerts", "Insight Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "")
 				}
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")

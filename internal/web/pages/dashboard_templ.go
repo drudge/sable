@@ -1107,7 +1107,7 @@ func CommandPalette(view DashboardView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.CanLogs {
-				templ_7745c5c3_Err = CommandOption("command-page-insights-devices", "Insights Devices", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = CommandOption("command-page-insights-devices", "Device Insights", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1116,7 +1116,7 @@ func CommandPalette(view DashboardView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = CommandOption("command-page-insights-blocking", "Insights Blocking", "What blocking catches and how much each list adds", "shield", "Page", "blocking blocked queries clients block lists overlap unique coverage false positives", "/insights?tab=blocking", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = CommandOption("command-page-insights-blocking", "Blocking Insights", "What blocking catches and how much each list adds", "shield", "Page", "blocking blocked queries clients block lists overlap unique coverage false positives", "/insights?tab=blocking", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1330,7 +1330,7 @@ func CommandPalette(view DashboardView) templ.Component {
 			}
 		}
 		if view.CanWriteSettings && (view.CanBlocking || view.CanLogs) {
-			templ_7745c5c3_Err = CommandOption("command-action-insights-alerts", "Insights Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = CommandOption("command-action-insights-alerts", "Insight Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
