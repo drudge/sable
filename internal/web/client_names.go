@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -233,8 +235,28 @@ func (cache *reverseNameCache) resolve(ctx context.Context, cancel context.Cance
 	}
 }
 
-// nameRankedClients fills in the hostname beside every client the local zones
-// and host overrides could not already account for.
+// clientIdentityReader is the optional store capability that ties client
+// addresses to hardware, which is how a given name follows its device.
+type clientIdentityReader interface {
+	ClientIdentities(context.Context, time.Time) ([]querylog.ClientIdentity, error)
+}
+
+// givenClientNames reads the names the operator and UniFi gave the devices seen
+// since a moment. Without hardware sightings, only the names the operator gave
+// an address or network apply.
+func (server *Server) givenClientNames(ctx context.Context, since time.Time) devices.GivenNames {
+	var identities []querylog.ClientIdentity
+	if reader, ok := server.queries.(clientIdentityReader); ok {
+		var err error
+		if identities, err = reader.ClientIdentities(ctx, since); err != nil {
+			server.logger.Warn("read client identities", "error", err)
+		}
+	}
+	return devices.NewGivenNames(identities, server.config.Current().Config.Clients)
+}
+
+// nameRankedClients fills in the hostname beside every client the given names,
+// local zones, and host overrides could not already account for.
 func (server *Server) nameRankedClients(clients []pages.RankedStatView) {
 	if server.reverseNames == nil {
 		return

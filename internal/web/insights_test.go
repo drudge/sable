@@ -450,6 +450,210 @@ func TestInsightsDeviceNamingFollowsTheHardwareAddress(t *testing.T) {
 	}
 }
 
+// The neighbor table is sampled more often than UniFi, so the newest sighting
+// of the laptop carries no name. Its UniFi name has to hold anyway, ahead of
+// its host override, on the devices tab and in every client ranking; the
+// operator's own name then outranks it everywhere.
+func TestInsightsNamesHoldWhateverSightingIsNewest(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	if err := server.store.RecordClientIdentities(context.Background(), []querylog.ClientIdentity{
+		{Address: "10.0.0.5", MAC: "3c:22:fb:01:02:03", Source: "unifi", Hostname: "George's MacBook", SeenAt: server.now.Add(-3 * time.Minute)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pages := map[string]string{
+		"devices tab": "/ui/insights/overview?range=day&tab=devices",
+		"dashboard":   "/ui/stats/insights?range=day",
+	}
+	for page, target := range pages {
+		body := server.get(t, "everything", target, true).Body.String()
+		if !strings.Contains(body, "George&#39;s MacBook") || strings.Contains(body, "george-laptop.corp.example") {
+			t.Errorf("the %s did not name the laptop from UniFi", page)
+		}
+	}
+	if body := server.get(t, "everything", pages["devices tab"], true).Body.String(); !strings.Contains(body, `<span class="status-badge">UniFi</span>`) {
+		t.Error("the devices tab did not credit UniFi for the name")
+	}
+
+	form := url.Values{"key": {insightsTestLaptop}, "name": {"Work Laptop"}, "range": {"day"}}
+	if response := server.post(t, "everything", "/ui/insights/devices/name", form); response.Code != http.StatusOK {
+		t.Fatalf("naming = %d", response.Code)
+	}
+	for page, target := range pages {
+		body := server.get(t, "everything", target, true).Body.String()
+		if !strings.Contains(body, "Work Laptop") || strings.Contains(body, "George&#39;s MacBook") {
+			t.Errorf("the %s did not put the operator's name first", page)
+		}
+	}
+}
+
+// Sable's own dynamic DNS updates look like a check-in, so the server leaves
+// the lookups it makes itself out and marks itself in the device list, while a
+// device's real heartbeat is still reported.
+func TestInsightsKnowsTheLookupsSableMakesItself(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	if err := server.config.(settingsEditor).Update(context.Background(), func(configuration *config.Config) error {
+		configuration.DynamicDNS.Enabled = true
+		configuration.DynamicDNS.Publishers = []config.DynamicDNSPublisher{{
+			Provider: "cloudflare", Records: []config.DynamicDNSRecord{{Zone: "example.net", Name: "home.example.net", IPv4: true, TTL: 300}},
+		}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var events []querylog.Event
+	for index := range 280 {
+		at := server.now.Add(-23*time.Hour + time.Duration(index)*5*time.Minute)
+		for client, name := range map[string]string{"127.0.0.1": "api.cloudflare.com.", "10.0.0.9": "heartbeat.vendor.example."} {
+			events = append(events, querylog.Event{
+				OccurredAt: at, ClientIP: client, Name: name, RecordType: dns.TypeA, Class: dns.ClassINET,
+				ResponseCode: dns.RcodeSuccess, Source: querylog.SourceUpstream, Protocol: "UDP",
+			})
+		}
+	}
+	if err := server.store.WriteQueryEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+
+	body := server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true).Body.String()
+	if !strings.Contains(body, "Looked up heartbeat.vendor.example every 5 minutes") {
+		t.Error("a device's own heartbeat was not reported")
+	}
+	if strings.Contains(body, "Looked up api.cloudflare.com") {
+		t.Error("Sable's own dynamic DNS updates were reported as a check-in")
+	}
+	if !strings.Contains(body, `<span class="status-badge">This server</span>`) {
+		t.Error("the devices tab did not mark this server")
+	}
+	drawer := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape("ip:127.0.0.1"), true).Body.String()
+	if !strings.Contains(drawer, `<span class="status-badge">This server</span>`) || !strings.Contains(drawer, "Runs Sable") {
+		t.Error("the device drawer did not say this server runs Sable")
+	}
+}
+
+func TestOwnLookupsFollowTheFeaturesThatRun(t *testing.T) {
+	t.Parallel()
+	configuration := config.Defaults()
+	configuration.Blocking.Lists = []config.BlockList{{Name: "Hosts", URL: "https://lists.example.net/hosts.txt"}}
+	if names := ownLookups(configuration); !names["lists.example.net"] || names["api.ipify.org"] || names["api.cloudflare.com"] {
+		t.Fatalf("lookups with only a block list = %v", names)
+	}
+	configuration.DynamicDNS.Enabled = true
+	configuration.DynamicDNS.Publishers = []config.DynamicDNSPublisher{{
+		Provider: "cloudflare", Records: []config.DynamicDNSRecord{{Zone: "example.net", Name: "home.example.net", IPv4: true}},
+	}}
+	configuration.UniFi.Enabled = true
+	configuration.UniFi.ControllerURL = "https://UniFi.home.arpa:8443"
+	names := ownLookups(configuration)
+	for _, name := range []string{"api.ipify.org", "api6.ipify.org", "api.cloudflare.com", "unifi.home.arpa", "lists.example.net"} {
+		if !names[name] {
+			t.Errorf("own lookups are missing %s: %v", name, names)
+		}
+	}
+}
+
+// A device named or typed while Sable only knew its address keeps that entry
+// after Sable ties the address to hardware. Removing the name or type by
+// hardware address has to clear it too, or the drawer says it is gone while
+// the device keeps it.
+func TestInsightsRemovingANameClearsWhatWasKeptOnTheAddress(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	setting := func(path string, values url.Values) string {
+		t.Helper()
+		values.Set("range", "day")
+		response := server.post(t, "everything", path, values)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s %v = %d %s", path, values, response.Code, response.Body.String())
+		}
+		return response.Body.String()
+	}
+	devicesTab := func() string {
+		return server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true).Body.String()
+	}
+
+	setting("/ui/insights/devices/name", url.Values{"key": {"ip:10.0.0.5"}, "name": {"Old Name"}})
+	if drawer := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String(); !strings.Contains(drawer, "Old Name") {
+		t.Fatal("the laptop did not take the name kept on its address")
+	}
+	if removed := setting("/ui/insights/devices/name", url.Values{"key": {insightsTestLaptop}, "remove": {"1"}}); !strings.Contains(removed, "Name removed.") {
+		t.Fatal("removing the name was not confirmed")
+	}
+	if clients := server.config.Current().Config.Clients; len(clients) != 0 || strings.Contains(devicesTab(), "Old Name") {
+		t.Fatalf("the name kept on the address survived its removal: %+v", clients)
+	}
+
+	// Renaming moves the name onto the hardware address, so removing the new
+	// name does not bring the old one back.
+	setting("/ui/insights/devices/name", url.Values{"key": {"ip:10.0.0.5"}, "name": {"Old Name"}})
+	setting("/ui/insights/devices/name", url.Values{"key": {insightsTestLaptop}, "name": {"Work Laptop"}})
+	if clients := server.config.Current().Config.Clients; len(clients) != 1 || clients[0] != (config.Client{Name: "Work Laptop", MAC: "3c:22:fb:01:02:03"}) {
+		t.Fatalf("renaming left %+v", clients)
+	}
+	setting("/ui/insights/devices/name", url.Values{"key": {insightsTestLaptop}, "remove": {"1"}})
+	if body := devicesTab(); strings.Contains(body, "Old Name") || strings.Contains(body, "Work Laptop") {
+		t.Fatal("an old name came back after the new one was removed")
+	}
+
+	// A type works the same way.
+	setting("/ui/insights/devices/type", url.Values{"key": {"ip:10.0.0.5"}, "type": {"printer"}})
+	if cleared := setting("/ui/insights/devices/type", url.Values{"key": {insightsTestLaptop}, "type": {""}}); !strings.Contains(cleared, "Sable will guess this device&#39;s type again.") || strings.Contains(cleared, "You set this type") {
+		t.Fatalf("the type kept on the address survived: %+v", server.config.Current().Config.Clients)
+	}
+}
+
+// A name or type the operator set for a whole network covers every device on
+// it, so the drawer cannot remove it from one device. The drawer says where it
+// comes from instead of offering to remove it, and a type handed back from a
+// device goes to the network's rather than to Sable's guess.
+func TestInsightsNetworkNamesAreNotTheDrawersToRemove(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	if err := server.config.(settingsEditor).Update(context.Background(), func(configuration *config.Config) error {
+		configuration.Clients = []config.Client{{Name: "Office", Address: "10.0.0.0/24", Type: "computer"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	drawer := "/ui/insights/device?range=day&key=" + url.QueryEscape("ip:10.0.0.50")
+	setting := func(path string, values url.Values) string {
+		t.Helper()
+		values.Set("key", "ip:10.0.0.50")
+		values.Set("range", "day")
+		response := server.post(t, "everything", path, values)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s %v = %d", path, values, response.Code)
+		}
+		return response.Body.String()
+	}
+
+	if editor := server.get(t, "everything", drawer+"&edit=1", true).Body.String(); strings.Contains(editor, "Remove Name") || !strings.Contains(editor, "Its name comes from 10.0.0.0/24.") {
+		t.Fatal("the drawer offered to remove the name set for the whole network")
+	}
+	if body := server.get(t, "everything", drawer, true).Body.String(); !strings.Contains(body, "Named for 10.0.0.0/24") || !strings.Contains(body, "You set this type for") {
+		t.Fatal("the drawer did not say the name and type come from the network")
+	}
+	if picker := server.get(t, "everything", drawer+"&edit=type", true).Body.String(); !strings.Contains(picker, `<option value="" selected>Computer (set for 10.0.0.0/24)</option>`) {
+		t.Fatal("the type picker did not offer the network's type as the device's own default")
+	}
+
+	// A name of the device's own takes the network's place until it is removed.
+	setting("/ui/insights/devices/name", url.Values{"name": {"Front Desk"}})
+	if editor := server.get(t, "everything", drawer+"&edit=1", true).Body.String(); !strings.Contains(editor, "Remove Name") {
+		t.Fatal("the device's own name could not be removed")
+	}
+	if removed := setting("/ui/insights/devices/name", url.Values{"remove": {"1"}}); !strings.Contains(removed, "Name removed.") || !strings.Contains(removed, "Office") {
+		t.Fatal("removing the device's own name did not return it to the network's")
+	}
+
+	setting("/ui/insights/devices/type", url.Values{"type": {"printer"}})
+	if cleared := setting("/ui/insights/devices/type", url.Values{"type": {""}}); !strings.Contains(cleared, "It takes the type you set for 10.0.0.0/24 again.") {
+		t.Fatal("handing the type back claimed Sable would guess it")
+	}
+}
+
 func TestInsightsDeviceTypeCorrectionFollowsTheHardwareAddress(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)

@@ -72,6 +72,145 @@ func TestBuildMergesAddressesOfOneDeviceAndChoosesTheBestName(t *testing.T) {
 	}
 }
 
+// The neighbor table is sampled more often than the UniFi controller and
+// carries no name, so an address's newest sighting is usually a nameless one.
+// A given name must hold anyway, and reverse DNS names only what nothing else
+// does.
+func TestGivenNamesOutrankReverseDNSWhicheverSightingIsNewest(t *testing.T) {
+	t.Parallel()
+	identities := []querylog.ClientIdentity{
+		{Address: "10.0.0.5", MAC: "3c:22:fb:01:02:03", Source: "unifi", Hostname: "George's MacBook", LastSeen: testNow.Add(-2 * time.Minute)},
+		{Address: "10.0.0.5", MAC: "3c:22:fb:01:02:03", Source: "neighbor", LastSeen: testNow},
+		{Address: "10.0.0.6", MAC: "da:a1:19:00:00:01", Source: "unifi", Hostname: "iPad", LastSeen: testNow.Add(-2 * time.Minute)},
+		{Address: "10.0.0.6", MAC: "da:a1:19:00:00:01", Source: "neighbor", LastSeen: testNow},
+		// A device renamed in UniFi goes by its newest name, whichever
+		// address it was reported at.
+		{Address: "10.0.0.7", MAC: "aa:00:00:00:00:07", Source: "unifi", Hostname: "old-name", LastSeen: testNow.Add(-time.Hour)},
+		{Address: "fd00::7", MAC: "aa:00:00:00:00:07", Source: "unifi", Hostname: "new-name", LastSeen: testNow},
+		// UniFi's name for an address's previous owner is not this device's.
+		{Address: "10.0.0.9", MAC: "aa:00:00:00:00:08", Source: "unifi", Hostname: "previous-owner", LastSeen: testNow.Add(-time.Hour)},
+		{Address: "10.0.0.9", MAC: "aa:00:00:00:00:09", Source: "neighbor", LastSeen: testNow},
+	}
+	clients := []config.Client{{Name: "Kids iPad", MAC: "da:a1:19:00:00:01"}}
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "10.0.0.5", Queries: 50}, {Client: "10.0.0.6", Queries: 40}, {Client: "10.0.0.7", Queries: 30},
+			{Client: "10.0.0.8", Queries: 20}, {Client: "10.0.0.9", Queries: 10},
+		}},
+		Identities: identities,
+		Clients:    clients,
+		Names: map[string]DiscoveredName{
+			"10.0.0.5": {Name: "georges-macbook.default.home.arpa", Source: SourceReverse},
+			"10.0.0.6": {Name: "ipad.default.home.arpa", Source: SourceReverse},
+			"10.0.0.8": {Name: "printer.default.home.arpa", Source: SourceReverse},
+			"10.0.0.9": {Name: "camera.default.home.arpa", Source: SourceReverse},
+		},
+	})
+	want := map[string][2]string{
+		"mac:3c:22:fb:01:02:03": {"George's MacBook", SourceUniFi},
+		"mac:da:a1:19:00:00:01": {"Kids iPad", SourceOperator},
+		"mac:aa:00:00:00:00:07": {"new-name", SourceUniFi},
+		"ip:10.0.0.8":           {"printer.default.home.arpa", SourceReverse},
+		"mac:aa:00:00:00:00:09": {"camera.default.home.arpa", SourceReverse},
+	}
+	if len(built) != len(want) {
+		t.Fatalf("devices = %+v", built)
+	}
+	for _, device := range built {
+		if got := [2]string{device.Name, device.NameSource}; got != want[device.Key] {
+			t.Errorf("%s is named %q from %q, want %q from %q", device.Key, got[0], got[1], want[device.Key][0], want[device.Key][1])
+		}
+	}
+
+	// Lists that rank single addresses get the same given names.
+	given := NewGivenNames(identities, clients)
+	for address, want := range map[string]string{
+		"10.0.0.5": "George's MacBook", "10.0.0.6": "Kids iPad", "fd00::7": "new-name", "10.0.0.8": "", "10.0.0.9": "",
+	} {
+		if got := given.Address(address); got != want {
+			t.Errorf("given name for %s = %q, want %q", address, got, want)
+		}
+	}
+	if got := (GivenNames{}).Address("10.0.0.5"); got != "" {
+		t.Errorf("empty given names named an address %q", got)
+	}
+}
+
+// Sable knows the machines it runs on: it marks them and counts running Sable
+// as evidence of a server, without overruling stronger evidence.
+func TestSableServersAreMarkedAndLookLikeServers(t *testing.T) {
+	t.Parallel()
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "10.0.7.12", Queries: 50}, {Client: "10.0.7.13", Queries: 40}, {Client: "10.0.7.20", Queries: 30},
+		}},
+		Servers: map[string]string{"10.0.7.12": "This server", "10.0.7.13": "Sable node"},
+	})
+	Identify(built, map[string][]string{"10.0.7.13": {"formulae.brew.sh", "marketplace.visualstudio.com"}})
+	byKey := map[string]Device{}
+	for _, device := range built {
+		byKey[device.Key] = device
+	}
+	server := byKey["ip:10.0.7.12"]
+	if server.Server != "This server" || server.Guess.Type != "server" || server.Guess.Confidence != ConfidenceMedium ||
+		len(server.Guess.Reasons) != 1 || server.Guess.Reasons[0].Text != "Runs Sable" {
+		t.Fatalf("this server = %+v", server)
+	}
+	// A developer's laptop that runs a Sable node is still a laptop.
+	if laptop := byKey["ip:10.0.7.13"]; laptop.Server != "Sable node" || laptop.Guess.Type != "computer" {
+		t.Fatalf("laptop running a node = %+v", laptop)
+	}
+	if other := byKey["ip:10.0.7.20"]; other.Server != "" || other.Guess.Type != "" {
+		t.Fatalf("an ordinary device = %+v", other)
+	}
+}
+
+func TestAddressesOfFollowsTheLatestSighting(t *testing.T) {
+	t.Parallel()
+	laptop := "3c:22:fb:01:02:03"
+	identities := []querylog.ClientIdentity{
+		{Address: "fd00::5", MAC: laptop, Source: "neighbor", LastSeen: testNow},
+		{Address: "10.0.0.5", MAC: laptop, Source: "unifi", LastSeen: testNow.Add(-time.Hour)},
+		// The laptop's old address now belongs to someone else.
+		{Address: "10.0.0.6", MAC: laptop, Source: "neighbor", LastSeen: testNow.Add(-48 * time.Hour)},
+		{Address: "10.0.0.6", MAC: "aa:00:00:00:00:06", Source: "neighbor", LastSeen: testNow},
+	}
+	if got := AddressesOf(identities, laptop); !slices.Equal(got, []string{"10.0.0.5", "fd00::5"}) {
+		t.Fatalf("addresses = %v", got)
+	}
+	if got := AddressesOf(identities, "aa:00:00:00:00:99"); len(got) != 0 {
+		t.Fatalf("an unseen device has addresses %v", got)
+	}
+}
+
+// A name or type set for a whole network says so, and a device's own outranks
+// its network's.
+func TestNetworkNamesAndTypesSayWhereTheyComeFrom(t *testing.T) {
+	t.Parallel()
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{{Client: "10.20.40.9", Queries: 20}, {Client: "10.20.40.10", Queries: 10}}},
+		Clients: []config.Client{
+			{Name: "Guest Wi-Fi", Address: "10.20.40.0/24", Type: "phone"},
+			{Name: "Front Desk", Address: "10.20.40.10", Type: "computer"},
+		},
+	})
+	Identify(built, nil)
+	byKey := map[string]Device{}
+	for _, device := range built {
+		byKey[device.Key] = device
+	}
+	guest := byKey["ip:10.20.40.9"]
+	if guest.Name != "Guest Wi-Fi" || guest.NameNetwork != "10.20.40.0/24" || !guest.Named || guest.Type != "" ||
+		guest.Guess.Type != "phone" || guest.Guess.Reasons[0] != (insights.Reason{Text: "You set this type for", Code: "10.20.40.0/24"}) {
+		t.Fatalf("guest = %+v", guest)
+	}
+	desk := byKey["ip:10.20.40.10"]
+	if desk.Name != "Front Desk" || desk.NameNetwork != "" || desk.Type != "computer" || desk.NetworkType != "phone" ||
+		desk.Guess.Type != "computer" || desk.Guess.Reasons[0].Text != "You set this type" {
+		t.Fatalf("front desk = %+v", desk)
+	}
+}
+
 func TestChangesReportNewDevicesHonestly(t *testing.T) {
 	t.Parallel()
 	windowStart := testNow.Add(-30 * 24 * time.Hour)

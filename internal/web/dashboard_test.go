@@ -11,6 +11,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -145,7 +146,7 @@ func TestDashboardInsightsRanksPersistedQuerySample(t *testing.T) {
 		{Event: querylog.Event{ClientIP: "192.0.2.20", Name: "ads.example.", RecordType: dns.TypeA, ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked}},
 	}
 	window := insightWindow{Label: "Last hour"}
-	view := dashboardInsights(insightsFrom(entries), window, []config.HostOverride{{
+	view := dashboardInsights(insightsFrom(entries), window, devices.GivenNames{}, []config.HostOverride{{
 		Name: "laptop.home.arpa", Addresses: []string{"192.0.2.10"}, TTL: 60,
 	}}, nil)
 	if dashboardClientSample(entries) != 2 || len(view.TopClients) != 2 {
@@ -186,7 +187,7 @@ func TestDashboardInsightsNamesClientsFromReverseZones(t *testing.T) {
 			{Name: "9", Type: "PTR", Value: "retired.default.clients.example.net.", TTL: 300, Disabled: true},
 		},
 	}}
-	view := dashboardInsights(insightsFrom(entries), insightWindow{}, []config.HostOverride{{
+	view := dashboardInsights(insightsFrom(entries), insightWindow{}, devices.GivenNames{}, []config.HostOverride{{
 		Name: "gateway.example.net", Addresses: []string{"10.0.9.1"}, TTL: 60,
 	}}, zones)
 
@@ -203,6 +204,54 @@ func TestDashboardInsightsNamesClientsFromReverseZones(t *testing.T) {
 	for address, hostname := range expected {
 		if names[address] != hostname {
 			t.Fatalf("hostname for %s = %q, want %q", address, names[address], hostname)
+		}
+	}
+}
+
+// A client is named the way Insights names its device: the operator's name,
+// then UniFi's, then a host override, then a PTR record.
+func TestDashboardInsightsNameClientsTheWayInsightsNamesDevices(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	var entries []querylog.Entry
+	for _, client := range []string{"10.0.7.1", "10.0.7.2", "10.0.7.3", "10.0.7.4"} {
+		entries = append(entries, querylog.Entry{Event: querylog.Event{ClientIP: client, Name: "api.example.", RecordType: dns.TypeA, ResponseCode: dns.RcodeSuccess}})
+	}
+	given := devices.NewGivenNames([]querylog.ClientIdentity{
+		{Address: "10.0.7.1", MAC: "aa:00:00:00:00:01", Source: "unifi", Hostname: "iPad", LastSeen: now},
+		// The neighbor table saw the TV after UniFi did, without a name.
+		{Address: "10.0.7.2", MAC: "aa:00:00:00:00:02", Source: "unifi", Hostname: "Living Room TV", LastSeen: now.Add(-2 * time.Minute)},
+		{Address: "10.0.7.2", MAC: "aa:00:00:00:00:02", Source: "neighbor", LastSeen: now},
+	}, []config.Client{{Name: "Kids iPad", MAC: "aa:00:00:00:00:01"}})
+	zones := []zonemodel.Zone{{
+		Name: "7.0.10.in-addr.arpa",
+		Records: []zonemodel.Record{
+			{Name: "1", Type: "PTR", Value: "ipad.default.clients.example.net.", TTL: 300},
+			{Name: "2", Type: "PTR", Value: "living-room-tv.default.clients.example.net.", TTL: 300},
+			{Name: "3", Type: "PTR", Value: "nas.default.clients.example.net.", TTL: 300},
+			{Name: "4", Type: "PTR", Value: "printer.default.clients.example.net.", TTL: 300},
+		},
+	}}
+	hosts := []config.HostOverride{
+		{Name: "tablet.home.arpa", Addresses: []string{"10.0.7.1"}, TTL: 60},
+		{Name: "tv.home.arpa", Addresses: []string{"10.0.7.2"}, TTL: 60},
+		{Name: "nas.home.arpa", Addresses: []string{"10.0.7.3"}, TTL: 60},
+	}
+	view := dashboardInsights(insightsFrom(entries), insightWindow{}, given, hosts, zones)
+
+	names := make(map[string]string, len(view.TopClients))
+	for _, client := range view.TopClients {
+		names[client.Name] = client.Secondary
+	}
+	for address, want := range map[string]string{
+		"10.0.7.1": "Kids iPad",
+		"10.0.7.2": "Living Room TV",
+		"10.0.7.3": "nas.home.arpa",
+		"10.0.7.4": "printer.default.clients.example.net",
+	} {
+		if names[address] != want {
+			t.Errorf("name for %s = %q, want %q", address, names[address], want)
 		}
 	}
 }

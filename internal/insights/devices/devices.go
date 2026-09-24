@@ -46,11 +46,21 @@ type Device struct {
 	PrivateMAC bool
 	// Named is set when the operator named this device in Sable.
 	Named bool
+	// NameNetwork is the network the operator's name was given to, when it
+	// names a whole network rather than this device.
+	NameNetwork string
+	// Server is set when the device runs Sable: "This server" for the one
+	// that counted the queries, "Sable node" for the rest of its cluster.
+	Server string
 	// Vendor is the maker of the device's network interface, from its
 	// hardware address.
 	Vendor string
-	// Type is the kind of device the operator said this is, if they did.
-	Type string
+	// Type is the kind of device the operator said this device is, if they
+	// did. NetworkType is the kind they said every device on TypeNetwork is,
+	// which applies when the device has no type of its own.
+	Type        string
+	NetworkType string
+	TypeNetwork string
 	// Guess is what kind of device this is, filled in by Identify once the
 	// services the device uses are known.
 	Guess Guess
@@ -94,12 +104,14 @@ func (device Device) ClientAddresses() []string {
 
 // Input is everything devices are built from. Names holds names discovered
 // for individual addresses, such as local host entries and PTR records, with
-// the source of each.
+// the source of each. Servers marks the client addresses of Sable servers
+// with what each one is to the server that counted the queries.
 type Input struct {
 	Activity   querylog.ClientActivityReport
 	Identities []querylog.ClientIdentity
 	Clients    []config.Client
 	Names      map[string]DiscoveredName
+	Servers    map[string]string
 }
 
 // DiscoveredName is a name found for one address and where it came from.
@@ -108,15 +120,42 @@ type DiscoveredName struct {
 	Source string
 }
 
+// GivenNames are the names a device was given rather than discovered: the one
+// the operator set in Sable, then the one its UniFi controller reports. Both
+// follow the device's hardware address, so they hold while its IP addresses
+// change and outrank any name discovered for one address.
+type GivenNames struct {
+	identities map[string]querylog.ClientIdentity
+	operator   operatorNames
+	unifi      map[string]string
+}
+
+// NewGivenNames reads the operator's names and the UniFi names among the
+// hardware sightings.
+func NewGivenNames(identities []querylog.ClientIdentity, clients []config.Client) GivenNames {
+	return GivenNames{
+		identities: latestIdentities(identities),
+		operator:   newOperatorNames(clients),
+		unifi:      unifiNames(identities),
+	}
+}
+
+// Address returns the given name of the device behind one client address, or
+// nothing when only a discovered name could label it.
+func (given GivenNames) Address(address string) string {
+	device := Device{MAC: given.identities[address].MAC, Addresses: []Address{{Address: address}}}
+	name, _, _ := chooseName(device, given, nil)
+	return name
+}
+
 // Build groups client activity into devices, busiest first.
 func Build(input Input) []Device {
-	identities := latestIdentities(input.Identities)
-	named := newOperatorNames(input.Clients)
+	given := NewGivenNames(input.Identities, input.Clients)
 	devices := make(map[string]*Device)
 	order := make([]string, 0)
 	for _, activity := range input.Activity.Clients {
 		address := activity.Client
-		identity, identified := identities[address]
+		identity, identified := given.identities[address]
 		key := "ip:" + address
 		if identified {
 			key = "mac:" + identity.MAC
@@ -158,8 +197,16 @@ func Build(input Input) []Device {
 			}
 			return cmp.Compare(left.Address, right.Address)
 		})
-		device.Name, device.NameSource, device.Named = chooseName(*device, named, identities, input.Names)
-		device.Type = named.forDevice(*device, clientType)
+		device.Name, device.NameSource, device.NameNetwork = chooseName(*device, given, input.Names)
+		device.Named = device.NameSource == SourceOperator
+		device.Type = given.operator.own(*device, clientType)
+		device.NetworkType, device.TypeNetwork = given.operator.network(*device, clientType)
+		for _, address := range device.Addresses {
+			if server := input.Servers[address.Address]; server != "" {
+				device.Server = server
+				break
+			}
+		}
 		if device.MAC != "" {
 			device.Vendor, _ = vendors.Lookup(device.MAC)
 		}
@@ -175,7 +222,8 @@ func Build(input Input) []Device {
 }
 
 // latestIdentities keeps each address's most recent hardware sighting. A UniFi
-// sighting wins a tie because it also carries the host's name.
+// sighting wins a tie so the answer does not depend on the order sightings
+// were read in.
 func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.ClientIdentity {
 	latest := make(map[string]querylog.ClientIdentity, len(identities))
 	for _, identity := range identities {
@@ -186,6 +234,39 @@ func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.
 		}
 	}
 	return latest
+}
+
+// AddressesOf lists, in order, the client addresses whose most recent hardware
+// sighting is mac: the addresses Sable ties to that device now.
+func AddressesOf(identities []querylog.ClientIdentity, mac string) []string {
+	addresses := make([]string, 0)
+	for address, identity := range latestIdentities(identities) {
+		if identity.MAC == mac {
+			addresses = append(addresses, address)
+		}
+	}
+	slices.Sort(addresses)
+	return addresses
+}
+
+// unifiNames keeps the name each hardware address had in its most recent UniFi
+// sighting. It is keyed by hardware address rather than read from an
+// address's latest sighting because the neighbor table is sampled more often
+// than the controller and carries no name, so the latest sighting is usually
+// one without it.
+func unifiNames(identities []querylog.ClientIdentity) map[string]string {
+	names := make(map[string]string)
+	seen := make(map[string]time.Time)
+	for _, identity := range identities {
+		if identity.Source != identityUniFi || identity.MAC == "" || identity.Hostname == "" {
+			continue
+		}
+		if last, found := seen[identity.MAC]; found && !identity.LastSeen.After(last) {
+			continue
+		}
+		names[identity.MAC], seen[identity.MAC] = identity.Hostname, identity.LastSeen
+	}
+	return names
 }
 
 // operatorNames resolves what an operator said about devices: by hardware
@@ -225,8 +306,18 @@ func newOperatorNames(clients []config.Client) operatorNames {
 }
 
 // forDevice returns the most specific value the operator set for a device,
-// read from each matching entry with pick.
-func (names operatorNames) forDevice(device Device, pick func(config.Client) string) string {
+// read from each matching entry with pick, and the network it was set for
+// when it came from a whole network rather than the device's own entry.
+func (names operatorNames) forDevice(device Device, pick func(config.Client) string) (string, string) {
+	if value := names.own(device, pick); value != "" {
+		return value, ""
+	}
+	return names.network(device, pick)
+}
+
+// own returns the value the operator set for the device itself: by its
+// hardware address, then by one of its addresses.
+func (names operatorNames) own(device Device, pick func(config.Client) string) string {
 	if device.MAC != "" {
 		if value := pick(names.byMAC[device.MAC]); value != "" {
 			return value
@@ -237,6 +328,12 @@ func (names operatorNames) forDevice(device Device, pick func(config.Client) str
 			return value
 		}
 	}
+	return ""
+}
+
+// network returns the value the operator set for the most specific network
+// containing one of the device's addresses, and that network.
+func (names operatorNames) network(device Device, pick func(config.Client) string) (string, string) {
 	for _, address := range device.Addresses {
 		parsed, err := netip.ParseAddr(address.Address)
 		if err != nil {
@@ -244,31 +341,31 @@ func (names operatorNames) forDevice(device Device, pick func(config.Client) str
 		}
 		for _, network := range names.networks {
 			if value := pick(network.client); value != "" && network.prefix.Contains(parsed.Unmap()) {
-				return value
+				return value, network.prefix.String()
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func clientName(client config.Client) string { return client.Name }
 func clientType(client config.Client) string { return client.Type }
 
-func chooseName(device Device, named operatorNames, identities map[string]querylog.ClientIdentity, discovered map[string]DiscoveredName) (string, string, bool) {
-	if name := named.forDevice(device, clientName); name != "" {
-		return name, SourceOperator, true
+// chooseName returns a device's name, where it came from, and the network an
+// operator's name was given to when it names a whole network.
+func chooseName(device Device, given GivenNames, discovered map[string]DiscoveredName) (string, string, string) {
+	if name, network := given.operator.forDevice(device, clientName); name != "" {
+		return name, SourceOperator, network
 	}
-	for _, address := range device.Addresses {
-		if identity := identities[address.Address]; identity.Source == identityUniFi && identity.Hostname != "" {
-			return identity.Hostname, SourceUniFi, false
-		}
+	if name := given.unifi[device.MAC]; name != "" {
+		return name, SourceUniFi, ""
 	}
 	for _, address := range device.Addresses {
 		if name := discovered[address.Address]; name.Name != "" {
-			return name.Name, name.Source, false
+			return name.Name, name.Source, ""
 		}
 	}
-	return "", "", false
+	return "", "", ""
 }
 
 // Find returns the device with a key.

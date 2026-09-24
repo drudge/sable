@@ -34,6 +34,8 @@ Insights reports:
 
 The **Devices** tab lists every device that sent queries in the range. Sable keeps a device's addresses together through the names you give it, UniFi, and the server's neighbor table, so a laptop's IPv4 and changing IPv6 addresses count as one device.
 
+The machine Sable runs on is marked **This server**, and the rest of its cluster **Sable node**. What Sable looks up for itself on a timer, such as its dynamic DNS updates, UniFi sync, and block list downloads, never counts as a check-in.
+
 ![Insights Devices tab listing devices with their type and traffic](../assets/screenshots/insights-devices.png "Each device shows its name, hardware and IP address, and what Sable thinks it is.")
 
 Open a device to see its maker, apps, busiest domains, and first-time domains.
@@ -41,6 +43,8 @@ Open a device to see its maker, apps, busiest domains, and first-time domains.
 ### Name a device
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.
+
+When a device has more than one name, Sable uses yours first, then the name UniFi reports, then a [local host override](../configuration.md#local-host-overrides), then reverse DNS. The badge beside the name says which one it is. The dashboard's client rankings use the same order.
 
 ### What a device is
 

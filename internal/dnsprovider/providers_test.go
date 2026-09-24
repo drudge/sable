@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -461,5 +462,26 @@ func TestRecordTTLRangeUsesProviderLimits(t *testing.T) {
 	}
 	if err := ValidateRecordTTL("cloudflare", 300); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAPIHostsNameWhatSableLooksUp(t *testing.T) {
+	t.Parallel()
+	for provider, want := range map[string][]string{
+		"cloudflare": {"api.cloudflare.com"},
+		" Route53 ":  {"route53.amazonaws.com"},
+		"ovh":        {"eu.api.ovh.com", "ca.api.ovh.com", "api.us.ovhcloud.com"},
+		// RFC 2136 talks DNS to a server the operator names.
+		"rfc2136": {},
+		"unknown": {},
+	} {
+		if got := APIHosts(provider); !slices.Equal(got, want) {
+			t.Errorf("APIHosts(%q) = %v, want %v", provider, got, want)
+		}
+	}
+	for _, provider := range supportedProviders {
+		if provider != "rfc2136" && len(APIHosts(provider)) == 0 {
+			t.Errorf("%s has no API host", provider)
+		}
 	}
 }

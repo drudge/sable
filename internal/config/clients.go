@@ -123,24 +123,49 @@ func (configuration *Config) normalizeClients() {
 
 // SetClientName names a device, replacing any name it already had and keeping
 // its type. An empty name removes the name, and the entry with it when no type
-// is left.
-func SetClientName(clients []Client, named Client) ([]Client, error) {
-	return updateClient(clients, named, func(client *Client) { client.Name = strings.TrimSpace(named.Name) })
+// is left. For a device named by hardware address, addresses lists the client
+// addresses it uses, and any name kept on one of them is cleared: Sable only
+// names an address until it knows the hardware behind it, and a name left
+// there would come back once this one is removed.
+func SetClientName(clients []Client, named Client, addresses ...string) ([]Client, error) {
+	return updateClient(clients, named, addresses, strings.TrimSpace(named.Name), func(client *Client, name string) { client.Name = name })
 }
 
 // SetClientType records what kind of device a device is, keeping its name. An
-// empty type returns the device to Sable's own guess.
-func SetClientType(clients []Client, typed Client) ([]Client, error) {
-	return updateClient(clients, typed, func(client *Client) { client.Type = strings.TrimSpace(typed.Type) })
+// empty type returns the device to Sable's own guess. addresses clears the
+// types kept on a device's addresses the way SetClientName clears names.
+func SetClientType(clients []Client, typed Client, addresses ...string) ([]Client, error) {
+	return updateClient(clients, typed, addresses, strings.TrimSpace(typed.Type), func(client *Client, kind string) { client.Type = kind })
 }
 
-// updateClient changes the entry for one device, creating it when needed and
-// dropping it when nothing is left to say about the device.
-func updateClient(clients []Client, target Client, change func(*Client)) ([]Client, error) {
+// updateClient sets one field of the entry for a device. A device known by
+// hardware address takes the field over from the entries of its addresses.
+func updateClient(clients []Client, target Client, addresses []string, value string, set func(*Client, string)) ([]Client, error) {
 	target = normalizeClient(target)
 	if target.MAC == "" && target.Address == "" {
 		return nil, errors.New("a device needs a hardware address or an IP address")
 	}
+	updated := clients
+	if target.MAC != "" {
+		for _, address := range addresses {
+			// Only an exact address stood in for the hardware; a network names
+			// every device on it.
+			if _, err := netip.ParseAddr(address); err != nil {
+				continue
+			}
+			var err error
+			if updated, err = changeClient(updated, Client{Address: address}, func(client *Client) { set(client, "") }); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return changeClient(updated, target, func(client *Client) { set(client, value) })
+}
+
+// changeClient changes the entry for one device, creating it when needed and
+// dropping it when nothing is left to say about the device.
+func changeClient(clients []Client, target Client, change func(*Client)) ([]Client, error) {
+	target = normalizeClient(target)
 	entry := Client{MAC: target.MAC, Address: target.Address}
 	updated := slices.DeleteFunc(slices.Clone(clients), func(client Client) bool {
 		if normalizeClient(client).Key() != target.Key() {

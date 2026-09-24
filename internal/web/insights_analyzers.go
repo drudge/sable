@@ -3,10 +3,14 @@ package web
 import (
 	"context"
 	"errors"
+	"net"
+	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/insights/devices"
@@ -210,7 +214,8 @@ func (sources *deviceSources) HourlyActivity(ctx context.Context, since time.Tim
 
 // RepeatedLookups reads the last day's repeated lookups once per window and
 // leaves out names in zones this server answers for, which are the network's
-// own hosts rather than anything a device phones home to.
+// own hosts rather than anything a device phones home to, and the lookups a
+// Sable server makes for itself, such as its dynamic DNS updates.
 func (sources *deviceSources) RepeatedLookups(ctx context.Context, since time.Time) ([]querylog.LookupTimes, error) {
 	lookups, _, err := sources.server.repeatedLookupCache.load(ctx, sources.window, repeatedLookups(sources.reader, since))
 	if err != nil {
@@ -218,11 +223,14 @@ func (sources *deviceSources) RepeatedLookups(ctx context.Context, since time.Ti
 		return nil, err
 	}
 	zones := sources.server.zones.Current().Zones
+	servers, own := sources.server.sableServers(), ownLookups(sources.server.config.Current().Config)
 	kept := make([]querylog.LookupTimes, 0, len(lookups))
 	for _, lookup := range lookups {
-		if !inLocalZone(lookup.Name, zones) {
-			kept = append(kept, lookup)
+		ownLookup := servers[lookup.Client] != "" && own[strings.TrimSuffix(strings.ToLower(lookup.Name), ".")]
+		if ownLookup || inLocalZone(lookup.Name, zones) {
+			continue
 		}
+		kept = append(kept, lookup)
 	}
 	return kept, nil
 }
@@ -244,4 +252,68 @@ func inLocalZone(name string, zones []zonemodel.Zone) bool {
 		}
 	}
 	return false
+}
+
+// Labels for the devices that run Sable.
+const (
+	thisServerLabel = "This server"
+	sableNodeLabel  = "Sable node"
+)
+
+// sableServers marks the client addresses of Sable servers: every address of
+// this host, which is where Sable's own lookups come from when the host
+// resolves through it, and the DNS addresses of the rest of its cluster.
+func (server *Server) sableServers() map[string]string {
+	servers := make(map[string]string)
+	if server.cluster != nil {
+		state := server.cluster.Snapshot()
+		for _, node := range state.Nodes {
+			label := sableNodeLabel
+			if node.ID == state.NodeID {
+				label = thisServerLabel
+			}
+			for _, address := range node.Addresses {
+				if parsed, err := netip.ParseAddrPort(address); err == nil {
+					servers[parsed.Addr().Unmap().String()] = label
+				} else if parsed, err := netip.ParseAddr(address); err == nil {
+					servers[parsed.Unmap().String()] = label
+				}
+			}
+		}
+	}
+	assigned, _ := net.InterfaceAddrs()
+	for _, address := range assigned {
+		if prefix, err := netip.ParsePrefix(address.String()); err == nil {
+			servers[prefix.Addr().Unmap().WithZone("").String()] = thisServerLabel
+		}
+	}
+	return servers
+}
+
+// ownLookups lists the names Sable looks up for itself on a timer: where it
+// discovers its public address and its provider's API for dynamic DNS, the
+// UniFi controller, and block list downloads.
+func ownLookups(configuration config.Config) map[string]bool {
+	names := make(map[string]bool)
+	add := func(endpoint string) {
+		if parsed, err := url.Parse(strings.TrimSpace(endpoint)); err == nil && parsed.Hostname() != "" {
+			names[strings.ToLower(parsed.Hostname())] = true
+		}
+	}
+	if settings := configuration.DynamicDNS; settings.Runnable() {
+		add(settings.IPv4URL)
+		add(settings.IPv6URL)
+		for _, provider := range settings.ProviderNames() {
+			for _, host := range dnsprovider.APIHosts(provider) {
+				names[host] = true
+			}
+		}
+	}
+	if configuration.UniFi.Enabled {
+		add(configuration.UniFi.ControllerURL)
+	}
+	for _, list := range configuration.Blocking.Lists {
+		add(list.URL)
+	}
+	return names
 }

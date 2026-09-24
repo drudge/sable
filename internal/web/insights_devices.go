@@ -69,7 +69,8 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 	snapshot := server.config.Current().Config
 	built := devices.Build(devices.Input{
 		Activity: activity, Identities: identities, Clients: snapshot.Clients,
-		Names: server.discoveredClientNames(activity, snapshot.Resolver.Hosts),
+		Names:   server.discoveredClientNames(activity, snapshot.Resolver.Hosts),
+		Servers: server.sableServers(),
 	})
 	for index := range built {
 		if len(built[index].Addresses) < 2 {
@@ -114,7 +115,8 @@ func (server *Server) discoveredClientNames(activity querylog.ClientActivityRepo
 		}
 	}
 	names := make(map[string]devices.DiscoveredName, len(counts))
-	ranked := rankedStats(counts, dashboardClientNames(counts, nil, server.zones.Current().Zones), len(counts))
+	// Given names are left to devices.Build, which ranks them above these.
+	ranked := rankedStats(counts, dashboardClientNames(counts, devices.GivenNames{}, nil, server.zones.Current().Zones), len(counts))
 	server.nameRankedClients(ranked)
 	for _, client := range ranked {
 		switch {
@@ -159,9 +161,9 @@ func insightDeviceViews(report deviceReport) []pages.InsightDeviceView {
 func insightDeviceView(device devices.Device, report deviceReport) pages.InsightDeviceView {
 	view := pages.InsightDeviceView{
 		Key: device.Key, Label: devices.Label(device), Named: device.Name != "", NameSource: device.NameSource,
-		MAC: device.MAC, PrivateMAC: device.PrivateMAC, Queries: device.Queries, Blocked: device.Blocked,
+		MAC: device.MAC, PrivateMAC: device.PrivateMAC, Server: device.Server, Queries: device.Queries, Blocked: device.Blocked,
 		NewDomains: device.NewDomains, FirstSeen: device.FirstSeen, LastSeen: device.LastSeen,
-		OperatorNamed: device.Named && device.NameSource == devices.SourceOperator,
+		OperatorNamed: device.Named && device.NameNetwork == "", NameNetwork: device.NameNetwork, OwnType: device.Type != "",
 		New: !device.FirstSeen.Before(report.window.Start) && !report.seenSince.IsZero() &&
 			report.seenSince.Add(time.Hour).Before(device.FirstSeen),
 	}
@@ -169,6 +171,9 @@ func insightDeviceView(device devices.Device, report deviceReport) pages.Insight
 		view.Addresses = append(view.Addresses, pages.InsightDeviceAddressView{Address: address.Address, Queries: address.Queries, Blocked: address.Blocked})
 	}
 	view.Vendor = device.Vendor
+	if device.NetworkType != "" {
+		view.NetworkTypeLabel, view.TypeNetwork = devices.TypeLabel(device.NetworkType), device.TypeNetwork
+	}
 	if device.Guess.Detected != "" {
 		view.DetectedLabel = devices.TypeLabel(device.Guess.Detected)
 	}
@@ -224,6 +229,11 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 	}
 	view.Device = insightDeviceView(device, report)
 	view.Device.TypeOptions = devices.TypeLabels()
+	// A device without a type of its own takes its network's, if the operator
+	// gave that one, rather than Sable's guess.
+	if message == typeReturnedMessage && device.NetworkType != "" {
+		view.Message = "It takes the type you set for " + device.TypeNetwork + " again."
+	}
 	addresses := device.ClientAddresses()
 	// One ranking feeds both lists: the apps need the long tail, the domain
 	// list only its head.
@@ -280,9 +290,13 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 		name = ""
 	}
 	client, err := clientForDeviceKey(key, name)
+	var addresses []string
+	if err == nil {
+		addresses, err = server.deviceAddresses(request.Context(), key)
+	}
 	if err == nil {
 		err = server.updateClients(request, func(clients []config.Client) ([]config.Client, error) {
-			return config.SetClientName(clients, client)
+			return config.SetClientName(clients, client, addresses...)
 		})
 	}
 	if err != nil {
@@ -302,6 +316,10 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 	server.renderDeviceDrawer(writer, request, console, window, key, "", message, "")
 }
 
+// typeReturnedMessage confirms a type handed back to Sable. renderDeviceDrawer
+// rewords it for a device whose network has a type of its own.
+const typeReturnedMessage = "Sable will guess this device's type again."
+
 // typeInsightsDevice records what kind of device a device is, or returns it
 // to Sable's own guess.
 func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *http.Request) {
@@ -318,10 +336,14 @@ func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *ht
 	window := insightsWindow(request.FormValue("range"), time.Now())
 	key, kind := request.FormValue("key"), strings.TrimSpace(request.FormValue("type"))
 	client, err := clientForDeviceKey(key, "")
+	var addresses []string
+	if err == nil {
+		addresses, err = server.deviceAddresses(request.Context(), key)
+	}
 	if err == nil {
 		client.Type = kind
 		err = server.updateClients(request, func(clients []config.Client) ([]config.Client, error) {
-			return config.SetClientType(clients, client)
+			return config.SetClientType(clients, client, addresses...)
 		})
 	}
 	if err != nil {
@@ -332,7 +354,7 @@ func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *ht
 	}
 	message, summary := "Type saved.", "set device "+deviceKeyIdentifier(key)+" type to "+kind
 	if kind == "" {
-		message, summary = "Sable will guess this device's type again.", "cleared the type of device "+deviceKeyIdentifier(key)
+		message, summary = typeReturnedMessage, "cleared the type of device "+deviceKeyIdentifier(key)
 	}
 	server.recordControlPlaneAudit(request, "insights.device.type", summary)
 	writer.Header().Set("HX-Trigger", "insightsChanged")
@@ -367,6 +389,22 @@ func clientForDeviceKey(key, name string) (config.Client, error) {
 	default:
 		return config.Client{}, errors.New("unknown device")
 	}
+}
+
+// deviceAddresses lists the addresses Sable ties to a device it knows by
+// hardware address. A name or type set by hardware address takes over what
+// was kept on those addresses before Sable knew the hardware.
+func (server *Server) deviceAddresses(ctx context.Context, key string) ([]string, error) {
+	mac, byHardware := strings.CutPrefix(key, "mac:")
+	reader, ok := server.queries.(clientIdentityReader)
+	if !byHardware || !ok {
+		return nil, nil
+	}
+	identities, err := reader.ClientIdentities(ctx, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	return devices.AddressesOf(identities, mac), nil
 }
 
 func deviceKeyIdentifier(key string) string {
