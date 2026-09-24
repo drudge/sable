@@ -1888,11 +1888,32 @@ func insightAlertFor(view InsightAlertsView, kinds string) bool {
 	return slices.Contains(strings.Fields(kinds), insightAlertKind(view))
 }
 
+// insightAlertMarks are the brand marks of the services alerts go to, drawn
+// in one color to match the Send To control. Discord's comes from the app
+// logos; ntfy's is from Simple Icons 16.32.0 and Slack's from Simple Icons
+// 15.0.0, the last release to carry it, both CC0.
+var insightAlertMarks = map[string]string{
+	"slack":   "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
+	"discord": appLogos["discord"].Path,
+	"text":    "M12.597 13.693v2.156h6.205v-2.156ZM5.183 6.549v2.363l3.591 1.901.023.01-.023.009-3.591 1.901v2.35l.386-.211 5.456-2.969V9.729ZM3.659 2.037C1.915 2.037.42 3.41.42 5.154v.002L.438 18.73 0 21.963l5.956-1.583h14.806c1.744 0 3.238-1.374 3.238-3.118V5.154c0-1.744-1.493-3.116-3.237-3.117h-.001zm0 2.2h17.104c.613.001 1.037.447 1.037.917v12.108c0 .47-.424.916-1.038.916H5.633l-3.026.915.031-.179-.017-13.76c0-.47.424-.917 1.038-.917z",
+}
+
+// insightAlertKindIcon is a kind's brand mark, or an icon for a plain
+// webhook and for Pushover, which Simple Icons does not carry.
+templ insightAlertKindIcon(kind string) {
+	if mark, found := insightAlertMarks[kind]; found {
+		<svg class="nav-icon insight-alert-mark" viewBox="0 0 24 24" aria-hidden="true"><path d={ mark } fill="currentColor"></path></svg>
+	} else {
+		@Icon(ifThen(kind == "pushover", "bell", "webhook"))
+	}
+}
+
 // insightAlertKindOption is one choice in the Send To control. The choices
 // are radio buttons, so the form posts the one picked as its format.
 templ insightAlertKindOption(view InsightAlertsView, kind, label string) {
 	<label class="insight-alert-kind">
 		<input class="sr-only" type="radio" name="format" value={ kind } checked?={ insightAlertKind(view) == kind }/>
+		@insightAlertKindIcon(kind)
 		<span>{ label }</span>
 	</label>
 }
@@ -1943,7 +1964,7 @@ templ InsightAlerts(view InsightAlertsView) {
 			<label class="field-control" data-alert-for="json slack discord text" hidden?={ !insightAlertFor(view, "json slack discord text") }>
 				<span data-alert-for="json slack discord" hidden?={ !insightAlertFor(view, "json slack discord") }>Webhook URL</span>
 				<span data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Topic URL</span>
-				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ insightAlertPlaceholder(view) } data-placeholder-json="https://example.com/hooks/sable" data-placeholder-slack="https://hooks.slack.com/services/…" data-placeholder-discord="https://discord.com/api/webhooks/…" data-placeholder-text="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ insightAlertPlaceholder(view) } data-placeholder-json="https://example.com/hooks/sable" data-placeholder-slack="https://hooks.slack.com/services/…" data-placeholder-discord="https://discord.com/api/webhooks/…" data-placeholder-text="https://ntfy.sh/your-topic" data-saved-kind={ insightAlertKind(view) } data-saved-url={ ifThen(view.Format == "pushover", "", view.URL) } autocomplete="off" spellcheck="false"/>
 				<small data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Home Assistant, or anything else that takes a JSON POST.</small>
 				<small data-alert-for="slack" hidden?={ !insightAlertFor(view, "slack") }>An incoming webhook from your Slack app. Findings arrive as a card with a button to Insights.</small>
 				<small data-alert-for="discord" hidden?={ !insightAlertFor(view, "discord") }>From a channel's Integrations settings. Findings arrive as an embed colored by how much they matter.</small>

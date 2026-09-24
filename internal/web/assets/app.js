@@ -1626,6 +1626,12 @@
     const url = form?.querySelector('input[name="url"]');
     const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
     if (placeholder) url.placeholder = placeholder;
+    // A URL belongs to its kind: an ntfy topic is no Slack webhook. Leaving
+    // the saved kind empties the box, and coming back fills it again.
+    if (url && url.dataset.savedKind) {
+      if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
+      else if (url.value === url.dataset.savedUrl) url.value = "";
+    }
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });
