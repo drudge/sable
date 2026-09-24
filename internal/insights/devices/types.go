@@ -277,9 +277,9 @@ func GuessText(guess Guess) string {
 	case ConfidenceSet, ConfidenceHigh:
 		return label
 	case ConfidenceMedium:
-		return "Probably " + article(label) + " " + strings.ToLower(label)
+		return "Probably " + article(label) + " " + inSentence(label)
 	default:
-		return "Maybe " + article(label) + " " + strings.ToLower(label)
+		return "Maybe " + article(label) + " " + inSentence(label)
 	}
 }
 
@@ -290,7 +290,7 @@ func describeDevice(device Device) string {
 	case device.Guess.Type != "" && device.Guess.Confidence != ConfidenceLow:
 		text := GuessText(device.Guess)
 		if device.Guess.Confidence == ConfidenceSet || device.Guess.Confidence == ConfidenceHigh {
-			text = article(text) + " " + strings.ToLower(text)
+			text = article(text) + " " + inSentence(text)
 			text = strings.ToUpper(text[:1]) + text[1:]
 		}
 		if device.Vendor != "" {
@@ -302,6 +302,15 @@ func describeDevice(device Device) string {
 	default:
 		return ""
 	}
+}
+
+// inSentence sets a type for the middle of a sentence: "a doorbell", but "a
+// TV", since an acronym keeps its capitals.
+func inSentence(label string) string {
+	if label == strings.ToUpper(label) {
+		return label
+	}
+	return strings.ToLower(label)
 }
 
 func article(word string) string {

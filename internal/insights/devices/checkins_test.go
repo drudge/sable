@@ -45,6 +45,11 @@ func TestChangesReportLookupsOnASteadySchedule(t *testing.T) {
 	if findings[0].Query == nil || findings[0].Query.ClientIP != "10.20.30.42" {
 		t.Fatalf("query = %+v", findings[0].Query)
 	}
+	// One mark per resolution, with its A and AAAA queries as one.
+	if chart := findings[0].Chart; chart == nil || chart.Schedule == nil || len(chart.Schedule.Times) != 280 ||
+		!chart.Schedule.End.Equal(testNow) || !chart.Schedule.Start.Equal(testNow.Add(-24*time.Hour)) {
+		t.Fatalf("chart = %+v", chart)
+	}
 }
 
 func TestSteadyScheduleNeedsTheNight(t *testing.T) {

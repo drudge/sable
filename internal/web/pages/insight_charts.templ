@@ -1,0 +1,93 @@
+package pages
+
+import (
+	"fmt"
+	"strconv"
+)
+
+// insightChart pictures a finding's evidence under its fact cards, marking
+// what the finding is about in the finding's own color.
+templ insightChart(finding InsightFindingView) {
+	if finding.Chart != nil {
+		<section class={ "query-detail-answer insight-chart", "tone-" + finding.Tone } aria-labelledby={ finding.ID + "-chart" }>
+			switch {
+				case finding.Chart.Days != nil:
+					@insightDayChart(finding.ID+"-chart", dayChartLayout(*finding.Chart.Days))
+				case finding.Chart.Hours != nil:
+					@insightHourChart(finding.ID+"-chart", hourChartLayout(*finding.Chart.Hours))
+				case finding.Chart.Schedule != nil:
+					@insightScheduleChart(finding.ID+"-chart", scheduleChartLayout(*finding.Chart.Schedule))
+			}
+		</section>
+	}
+}
+
+templ insightDayChart(id string, view dayChartView) {
+	<h3 id={ id }>Queries per day</h3>
+	@insightChartFrame(id, view.Summary, view.Readings, view.Focus) {
+		<svg class="insight-chart-plot" viewBox="0 0 480 120" aria-hidden="true">
+			<line class="insight-chart-baseline" x1="0" x2="480" y1="112" y2="112"></line>
+			@insightChartMarks(view.Marks)
+			<line class="insight-chart-average" x1="0" x2={ fmt.Sprintf("%.1f", view.AverageEnd) } y1={ fmt.Sprintf("%.1f", view.AverageY) } y2={ fmt.Sprintf("%.1f", view.AverageY) }></line>
+		</svg>
+	}
+	<ul class="insight-chart-legend">
+		<li><span class="insight-chart-swatch muted"></span>Week before</li>
+		<li><span class="insight-chart-swatch average"></span>Daily average</li>
+		<li><span class="insight-chart-swatch emphasis"></span>Last 24 hours</li>
+	</ul>
+}
+
+templ insightHourChart(id string, view hourChartView) {
+	<h3 id={ id }>Queries by hour of the day</h3>
+	@insightChartFrame(id, view.Summary, view.Readings, view.Focus) {
+		<svg class="insight-chart-plot" viewBox="0 0 480 120" aria-hidden="true">
+			<line class="insight-chart-baseline" x1="0" x2="480" y1="112" y2="112"></line>
+			@insightChartMarks(view.Marks)
+		</svg>
+	}
+	<div class="insight-chart-axis quarters" aria-hidden="true"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span></div>
+	<ul class="insight-chart-legend">
+		<li><span class="insight-chart-swatch muted"></span>Usual day</li>
+		<li><span class="insight-chart-swatch emphasis"></span>Last 24 hours</li>
+	</ul>
+}
+
+templ insightScheduleChart(id string, view scheduleChartView) {
+	<h3 id={ id }>Lookups over the last day</h3>
+	<svg class="insight-chart-plot" viewBox="0 0 480 36" role="img" aria-label={ view.Summary }>
+		<path class="insight-chart-ticks" d={ view.Ticks }></path>
+	</svg>
+	<div class="insight-chart-axis ends" aria-hidden="true"><span>24 hours ago</span><span>12 hours ago</span><span>Now</span></div>
+	<ul class="insight-chart-legend">
+		<li><span class="insight-chart-swatch tick"></span>One lookup</li>
+	</ul>
+}
+
+// insightChartFrame holds a bar chart and reads out one slot at a time: the
+// slot under the pointer, the one last tapped, or, from the keyboard, the one
+// the arrow keys step to, starting on the slot the finding is about.
+templ insightChartFrame(id string, summary string, readings []chartReading, focus int) {
+	<div
+		class="insight-chart-frame"
+		data-insight-chart
+		data-chart-readings={ chartReadingsJSON(readings) }
+		data-chart-focus={ strconv.Itoa(focus) }
+		role="img"
+		tabindex="0"
+		aria-label={ summary + " Use Left and Right Arrow keys to read each bar." }
+		aria-describedby={ id + "-reading" }
+	>
+		{ children... }
+		<div class="chart-tooltip insight-chart-tooltip" data-chart-tooltip aria-hidden="true" hidden></div>
+		<span class="sr-only" id={ id + "-reading" } aria-live="polite" aria-atomic="true" data-chart-keyboard-status></span>
+	</div>
+}
+
+templ insightChartMarks(marks []chartMark) {
+	for _, mark := range marks {
+		if mark.Path != "" {
+			<path class={ mark.Class } d={ mark.Path } data-chart-slot={ strconv.Itoa(mark.Slot) }></path>
+		}
+	}
+}

@@ -3,6 +3,7 @@ package insights
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,7 +53,7 @@ func TestCollectOrdersFindingsAndGivesThemStableIDs(t *testing.T) {
 	}
 }
 
-func TestSummarizeNamesWhatStandsOut(t *testing.T) {
+func TestHeadlinesNameWhatStandsOut(t *testing.T) {
 	t.Parallel()
 	findings := []Finding{
 		{Headline: "dock-camera-02 went quiet"},
@@ -61,13 +62,15 @@ func TestSummarizeNamesWhatStandsOut(t *testing.T) {
 		{Headline: "george-laptop started using Discord"},
 		{Headline: "file-server woke up at 3 AM"},
 	}
-	if got := Summarize(findings); got != "dock-camera-02 went quiet, front-door-doorbell joined the network, and george-laptop started using Discord. 1 more thing below." {
-		t.Errorf("Summarize = %q", got)
+	named, more := Headlines(findings)
+	headlines := make([]string, 0, len(named))
+	for _, finding := range named {
+		headlines = append(headlines, finding.Headline)
 	}
-	if got := Summarize(findings[:1]); got != "dock-camera-02 went quiet." {
-		t.Errorf("Summarize one = %q", got)
+	if got := strings.Join(headlines, "; "); got != "dock-camera-02 went quiet; front-door-doorbell joined the network; george-laptop started using Discord" || more != 1 {
+		t.Errorf("Headlines = %q and %d more", got, more)
 	}
-	if got := Summarize(nil); got != "All quiet. Nothing on your network changed in a way that needs a look." {
-		t.Errorf("Summarize none = %q", got)
+	if named, more := Headlines(nil); len(named) != 0 || more != 0 {
+		t.Errorf("Headlines of nothing = %d named and %d more", len(named), more)
 	}
 }

@@ -211,6 +211,31 @@ func TestNetworkNamesAndTypesSayWhereTheyComeFrom(t *testing.T) {
 	}
 }
 
+// Went quiet sets the device's last day beside each day of the week before,
+// read from its hourly activity, with the finding's own average.
+func TestDayChartsReadTheWeekFromHourlyActivity(t *testing.T) {
+	t.Parallel()
+	day := 24 * time.Hour
+	camera := Device{Key: "mac:aa:00:00:00:00:02", MAC: "aa:00:00:00:00:02", Name: "camera", FirstSeen: testNow.Add(-30 * day), Baseline: 7 * 1_050}
+	hourly := map[time.Time]uint64{}
+	for before := 1; before <= 7; before++ {
+		for hour := 1; hour <= 10; hour++ {
+			hourly[testNow.Add(-time.Duration(before)*day-time.Duration(hour)*time.Hour)] = uint64(100 + before)
+		}
+	}
+	findings := Changes(ChangesInput{
+		Now: testNow, WindowStart: testNow.Add(-day), SeenSince: testNow.Add(-60 * day),
+		Devices: []Device{camera}, Hourly: func(Device) map[time.Time]uint64 { return hourly },
+	})
+	if len(findings) != 1 || findings[0].Kind != KindWentQuiet || findings[0].Chart == nil || findings[0].Chart.Days == nil {
+		t.Fatalf("findings = %+v", findings)
+	}
+	chart := findings[0].Chart.Days
+	if !slices.Equal(chart.Before, []uint64{1_070, 1_060, 1_050, 1_040, 1_030, 1_020, 1_010}) || chart.Average != 1_050 || chart.Last != 0 {
+		t.Fatalf("chart = %+v", chart)
+	}
+}
+
 func TestChangesReportNewDevicesHonestly(t *testing.T) {
 	t.Parallel()
 	windowStart := testNow.Add(-30 * 24 * time.Hour)

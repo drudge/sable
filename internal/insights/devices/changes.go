@@ -221,6 +221,7 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 			},
 			Method: "Sable compares each " + noun(device) + "'s last 24 hours with its own average over the seven days before, " +
 				"and reports only devices that were active the whole week and at least tripled their usual volume.",
+			Chart: dayChart(input, device),
 		})
 	}
 	return findings
@@ -248,9 +249,32 @@ func quietFindings(input ChangesInput) []insights.Finding {
 			),
 			Explanations: []string{"Switched off or unplugged", "Moved to another network", "Set to use a different DNS server"},
 			Method:       "Sable reports a " + noun(device) + " that was steadily active all of the previous week and has sent nothing for a full day.",
+			Chart:        dayChart(input, device),
 		})
 	}
 	return findings
+}
+
+// dayChart pictures a device's last 24 hours beside each day of the week
+// before. The last day and the average are the finding's own counts; the days
+// before are read from the device's hourly activity.
+func dayChart(input ChangesInput, device Device) *insights.Chart {
+	if input.Hourly == nil {
+		return nil
+	}
+	hourly := input.Hourly(device)
+	if hourly == nil {
+		return nil
+	}
+	day := 24 * time.Hour
+	start := input.Now.Add(-(baselineDays + 1) * day)
+	before := make([]uint64, baselineDays)
+	for hour, hits := range hourly {
+		if !hour.Before(start) && hour.Before(input.Now.Add(-day)) {
+			before[hour.Sub(start)/day] += hits
+		}
+	}
+	return &insights.Chart{Days: &insights.DayChart{Before: before, Average: dailyAverage(device), Last: device.Recent}}
 }
 
 func noun(device Device) string {

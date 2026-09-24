@@ -49,6 +49,10 @@ type windowCache[T any] struct {
 	staleFor time.Duration
 	// timeout bounds one count; zero means dashboardInsightQueryTimeout.
 	timeout time.Duration
+	// background runs each count, on a context that ends with the server, so
+	// the server can wait for counts still running when it closes. Nil runs
+	// them in a goroutine of their own.
+	background func(func(context.Context))
 }
 
 // dashboardInsightCache holds the dashboard rankings and distributions.
@@ -110,8 +114,12 @@ func (cache *windowCache[T]) start(
 	if timeout <= 0 {
 		timeout = dashboardInsightQueryTimeout
 	}
-	go func() {
-		queryContext, cancel := context.WithTimeout(context.Background(), timeout)
+	background := cache.background
+	if background == nil {
+		background = func(work func(context.Context)) { go work(context.Background()) }
+	}
+	background(func(ctx context.Context) {
+		queryContext, cancel := context.WithTimeout(ctx, timeout)
 		select {
 		case gate <- struct{}{}:
 			flight.insights, flight.err = load(queryContext, window.Start, window.End)
@@ -133,7 +141,7 @@ func (cache *windowCache[T]) start(
 		delete(cache.flights, key)
 		close(flight.done)
 		cache.mu.Unlock()
-	}()
+	})
 	return flight
 }
 

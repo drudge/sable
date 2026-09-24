@@ -248,6 +248,9 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 			view.Message = "Saved. New findings will be sent to this webhook."
 		}
 		server.recordControlPlaneAudit(request, "insights.alerts", ifThenString(webhook.URL != "", "set the Insights alert webhook", "turned Insights alerts off"))
+		// The bell beside the range control shows the old state until the page
+		// reloads itself.
+		writer.Header().Set("HX-Trigger", "insightsChanged")
 	}
 	server.renderInsightAlerts(writer, request, view)
 }

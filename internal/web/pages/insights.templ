@@ -47,7 +47,7 @@ type InsightsOverviewView struct {
 	ActiveTab           string
 	CanNameDevices      bool
 	// Headline says what stands out in one sentence.
-	Headline string
+	Headline *InsightHeadlineView
 	// Alerts is the webhook setup, shown to operators who can change it.
 	Alerts *InsightAlertsView
 	// CanHideFindings is set for operators who may hide findings for everyone.
@@ -92,6 +92,9 @@ type InsightDeviceView struct {
 	TypeOptions [][2]string
 	// DetectedLabel is the type Sable guesses on its own, if any.
 	DetectedLabel string
+	// DefaultType is the type the device takes without one of its own: its
+	// network's, or the one Sable detects.
+	DefaultType string
 	// OwnType is set when the operator typed this device itself.
 	// NetworkTypeLabel is the type they gave TypeNetwork, which the device
 	// takes when it has no type of its own.
@@ -150,10 +153,38 @@ type InsightDeviceDrawerView struct {
 
 // InsightAppView is one app a device used and how much.
 type InsightAppView struct {
+	// ID is the app's service ID, which picks its logo.
+	ID       string
 	Name     string
 	Category string
 	Queries  uint64
 	Domains  int
+}
+
+// InsightAppDrawerView is one app's details: the domains it was reached at in
+// the window, busiest first, and the devices that looked it up.
+type InsightAppDrawerView struct {
+	Range          string
+	LogWindowQuery string
+	Missing        bool
+	Error          string
+	App            InsightAppView
+	Domains        []InsightDeviceDomainView
+	// Devices are busiest first; MoreDevices counts the ones left off.
+	Devices     []InsightAppDeviceView
+	MoreDevices int
+}
+
+// InsightAppDeviceView is one device that used an app, with what Sable thinks
+// it is.
+type InsightAppDeviceView struct {
+	Key            string
+	Label          string
+	Named          bool
+	Detail         string
+	Type           string
+	TypeLabel      string
+	TypeConfidence string
 }
 
 // InsightsActivityView holds exact counts of blocked queries in the window.
@@ -162,6 +193,26 @@ type InsightsActivityView struct {
 	Blocked        uint64
 	BlockedDomains uint64
 	BlockedClients uint64
+}
+
+// InsightHeadlineView is the Overview's one sentence about what stands out, in
+// clauses, so the page can set apart what each finding is about and open the
+// finding from it. No clauses means nothing stands out.
+type InsightHeadlineView struct {
+	Clauses []InsightHeadlineClause
+	// More counts the findings with news the sentence leaves to the list.
+	More int
+}
+
+// InsightHeadlineClause is one finding's headline, split after its subject
+// when it starts with one.
+type InsightHeadlineClause struct {
+	Subject   string
+	Rest      string
+	Monospace bool
+	Tone      string
+	// Dialog is the drawer of the finding, when the page shows the finding.
+	Dialog string
 }
 
 type InsightFindingView struct {
@@ -187,6 +238,8 @@ type InsightFindingView struct {
 	Domains          []InsightDeviceDomainView
 	// FindingID is the finding's stable identifier, which feedback is kept by.
 	FindingID string
+	// Chart pictures the evidence, for findings that have one.
+	Chart *insights.Chart
 }
 
 // InsightHiddenFindingView is a finding an operator hid, and until when.
@@ -261,10 +314,10 @@ templ InsightsPage(view InsightsPageView) {
 	@AppDocument(view.Console, documentTitle(tabLabel(insightsTabOptions, view.Overview.ActiveTab), "Insights"), "insights", insightsDocument(view.Overview))
 }
 
-// insightsDocument keeps the update indicator and the device drawer outside the
-// swapped overview: the indicator reports range changes but not the first load,
-// which has its own skeleton, and the drawer stays open while the page behind
-// it refreshes after a device is renamed.
+// insightsDocument keeps the update indicator, the drawers, and the alert setup
+// outside the swapped overview: the indicator reports range changes but not the
+// first load, which has its own skeleton, and a drawer or the alert setup stays
+// open while the page behind it refreshes after a change.
 templ insightsDocument(view InsightsOverviewView) {
 	@UpdateIndicator("insights-update-indicator", "Updating insights…")
 	@InsightsContent(view)
@@ -279,6 +332,17 @@ templ insightsDocument(view InsightsOverviewView) {
 		<template id="insight-device-loading">
 			@insightDeviceLoading()
 		</template>
+		<dialog class="query-detail-dialog insight-device-dialog" id="insight-app-dialog" aria-labelledby="insight-app-title">
+			<div class="insight-device-content" id="insight-app-content">
+				@insightAppLoading()
+			</div>
+		</dialog>
+		<template id="insight-app-loading">
+			@insightAppLoading()
+		</template>
+	}
+	if view.Alerts != nil {
+		@InsightAlertsDialog(*view.Alerts)
 	}
 }
 
@@ -305,6 +369,7 @@ templ InsightsContent(view InsightsOverviewView) {
 		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
 			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
 			<div class="insights-range">
+				@insightAlertsButton(view.Alerts)
 				@RangeTabs(insightsRangeControl(view.Range))
 				@RangeSelect(insightsRangeControl(view.Range))
 			</div>
@@ -320,8 +385,8 @@ templ InsightsContent(view InsightsOverviewView) {
 			if view.Loading {
 				@insightsSkeleton(view)
 			} else {
-				if view.Headline != "" {
-					<p class="insights-headline" aria-live="polite">{ view.Headline }</p>
+				if view.Headline != nil {
+					@insightsHeadline(*view.Headline)
 				}
 				@insightsNotes(view)
 				@insightsOverviewMetrics(view)
@@ -332,15 +397,12 @@ templ InsightsContent(view InsightsOverviewView) {
 						@RankedPanel("Busiest Devices", "devices", view.BusiestDevices, insightsRankingWindow(view))
 					</section>
 				}
-				if view.Alerts != nil {
-					@InsightAlerts(*view.Alerts)
-				}
 			}
 		</div>
 		if view.CanLogs {
 			<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="devices" hidden?={ view.ActiveTab != "devices" }>
 				if view.Loading {
-					@insightDevicesSkeleton()
+					@insightDevicesSkeleton(view.RangeLabel)
 				} else {
 					@InsightDevices(view)
 				}
@@ -367,16 +429,76 @@ templ InsightsContent(view InsightsOverviewView) {
 	</div>
 }
 
+// insightsHeadline opens the Overview with one sentence about what stands out,
+// led by an icon in the tone of the most important finding. Each subject the
+// sentence names opens its finding.
+templ insightsHeadline(headline InsightHeadlineView) {
+	<div class={ "insights-headline", "tone-" + insightHeadlineTone(headline) } aria-live="polite">
+		<span class="insights-headline-icon" aria-hidden="true">@Icon(ifThen(len(headline.Clauses) == 0, "check-circle", "search-alert"))</span>
+		<p>
+			if len(headline.Clauses) == 0 {
+				All quiet. Nothing on your network changed in a way that needs a look.
+			}
+			for index, clause := range headline.Clauses {
+				{ insightHeadlineLead(index, len(headline.Clauses)) }@insightHeadlineSubject(clause)<span>{ clause.Rest + insightHeadlineEnd(index, len(headline.Clauses)) }</span>
+			}
+			if headline.More > 0 {
+				{ " " }<a class="insights-headline-more" href="#insight-findings">{ fmt.Sprintf("%d more %s below", headline.More, insights.Plural(headline.More, "thing", "things")) }</a>{ "." }
+			}
+		</p>
+	</div>
+}
+
+templ insightHeadlineSubject(clause InsightHeadlineClause) {
+	if clause.Subject != "" && clause.Dialog != "" {
+		<button type="button" class={ "insights-headline-subject", "tone-" + clause.Tone, templ.KV("mono", clause.Monospace) } data-dialog-open={ clause.Dialog }>{ clause.Subject }</button>
+	} else if clause.Subject != "" {
+		<strong class={ "insights-headline-subject", "tone-" + clause.Tone, templ.KV("mono", clause.Monospace) }>{ clause.Subject }</strong>
+	}
+}
+
+// insightHeadlineLead and insightHeadlineEnd are the words before and the
+// punctuation after a clause, so the clauses read as one sentence: "A.",
+// "A and B.", or "A, B, and C." The page puts a space between clauses.
+func insightHeadlineLead(index, count int) string {
+	if count > 1 && index == count-1 {
+		return "and "
+	}
+	return ""
+}
+
+func insightHeadlineEnd(index, count int) string {
+	switch {
+	case index == count-1:
+		return "."
+	case count > 2:
+		return ","
+	default:
+		return ""
+	}
+}
+
+func insightHeadlineTone(headline InsightHeadlineView) string {
+	if len(headline.Clauses) == 0 {
+		return string(insights.TonePositive)
+	}
+	return headline.Clauses[0].Tone
+}
+
 templ insightsSkeleton(view InsightsOverviewView) {
 	<div class="insights-skeleton" role="status" aria-live="polite" aria-busy="true">
 		<span class="sr-only">Analyzing your network…</span>
+		<div class="insights-headline insights-headline-skeleton" aria-hidden="true">
+			<span class="insights-headline-icon insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
 		<div class="operational-metric-grid insight-metrics" aria-hidden="true">
 			for range 4 {
 				<div class="operational-metric insight-metric-skeleton"><span class="insights-skeleton-block"></span></div>
 			}
 		</div>
 		<section class="card insight-findings insight-findings-skeleton" aria-hidden="true">
-			<header class="isotope-data-header"><div><h2>Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div></header>
+			<header class="isotope-data-header"><div class="ranking-heading"><h2>Worth a Look</h2><small>{ view.RangeLabel }</small></div></header>
 			for range 3 {
 				<div class="insight-finding">
 					<span class="insight-finding-icon insights-skeleton-block"></span>
@@ -390,10 +512,10 @@ templ insightsSkeleton(view InsightsOverviewView) {
 	</div>
 }
 
-templ insightDevicesSkeleton() {
+templ insightDevicesSkeleton(rangeLabel string) {
 	<section class="card isotope-data-card insight-devices" role="status" aria-live="polite" aria-busy="true">
 		<span class="sr-only">Loading devices…</span>
-		<header class="isotope-data-header" aria-hidden="true"><div><h2>Devices</h2></div></header>
+		<header class="isotope-data-header" aria-hidden="true"><div class="ranking-heading"><h2>Devices</h2><small>{ rangeLabel }</small></div></header>
 		for range 6 {
 			<div class="insight-finding" aria-hidden="true">
 				<span class="insight-finding-icon insights-skeleton-block"></span>
@@ -427,7 +549,7 @@ templ insightsOverviewMetrics(view InsightsOverviewView) {
 	if view.CanLogs && !view.DevicesUnavailable {
 		<div class="operational-metric-grid insight-metrics" data-metric-count="4">
 			@OperationalMetricCard("monitor-smartphone", "Active Devices", formatNumber(uint64(view.DeviceSummary.Devices)), "Devices and unidentified addresses that sent at least one query in this period", "blue")
-			@OperationalMetricCard("plus", "New Devices", formatNumber(uint64(view.DeviceSummary.New)), "First seen during this period, while Sable was already watching", "green")
+			@OperationalMetricCard("circle-plus", "New Devices", formatNumber(uint64(view.DeviceSummary.New)), "First seen during this period, while Sable was already watching", "green")
 			@OperationalMetricCard("line-chart", "Queries", formatNumber(view.DeviceSummary.Queries), "Every query in this period, from query history", "purple")
 			@OperationalMetricCard("ban", "Blocked", percent(view.DeviceSummary.Blocked, view.DeviceSummary.Queries), formatNumber(view.DeviceSummary.Blocked) + " queries answered by blocking policy in this period", "red")
 		</div>
@@ -447,9 +569,9 @@ templ insightsNotes(view InsightsOverviewView) {
 }
 
 templ InsightFindings(view InsightsOverviewView) {
-	<section class="card isotope-data-card insight-findings" aria-labelledby="insight-findings-title">
+	<section class="card isotope-data-card insight-findings" id="insight-findings" aria-labelledby="insight-findings-title">
 		<header class="isotope-data-header">
-			<div><h2 id="insight-findings-title">Things Worth Your Attention</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			<div class="ranking-heading"><h2 id="insight-findings-title">Worth a Look</h2><small>{ view.RangeLabel }</small></div>
 			if len(view.Findings) > 0 {
 				<span class="count-badge">{ fmt.Sprint(len(view.Findings)) } { insights.Plural(len(view.Findings), "finding", "findings") }</span>
 			}
@@ -518,21 +640,22 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		}
 		if len(finding.Facts) > 0 {
 			<dl class="query-detail-grid insight-evidence-facts">
-				for index, fact := range finding.Facts {
-					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", insightFactFull(fact)), templ.KV("insight-fact-copyable", fact.Monospace) }>
-						<dt>{ fact.Label }</dt>
+				for index, card := range insightFactRows(finding.Facts) {
+					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", card.Full), templ.KV("insight-fact-copyable", card.Monospace) }>
+						<dt>{ card.Label }</dt>
 						<dd>
-							if fact.Monospace {
-								<code id={ fmt.Sprintf("%s-fact-%d", finding.ID, index) }>{ insightFactValue(fact, view.TimeDisplay) }</code>
-								@FactCopyButton(fmt.Sprintf("%s-fact-%d", finding.ID, index), "Copy "+strings.ToLower(fact.Label))
+							if card.Monospace {
+								<code id={ fmt.Sprintf("%s-fact-%d", finding.ID, index) }>{ insightFactValue(card.InsightFactView, view.TimeDisplay) }</code>
+								@FactCopyButton(fmt.Sprintf("%s-fact-%d", finding.ID, index), "Copy "+strings.ToLower(card.Label))
 							} else {
-								{ insightFactValue(fact, view.TimeDisplay) }
+								{ insightFactValue(card.InsightFactView, view.TimeDisplay) }
 							}
 						</dd>
 					</div>
 				}
 			</dl>
 		}
+		@insightChart(finding)
 		if len(finding.Clients) > 0 {
 			<section class="query-detail-answer insight-evidence-clients" aria-labelledby={ finding.ID + "-clients" }>
 				<h3 id={ finding.ID + "-clients" }>Affected clients</h3>
@@ -903,8 +1026,51 @@ func insightFactValue(fact InsightFactView, display TimeDisplay) string {
 	return FormatShortDateTime(fact.Time, display, false)
 }
 
+// insightFactFull reports whether a fact's value needs a row of its own. DNS
+// data is set in a monospace face and breaks mid-name when it wraps, so it
+// gets a row once it would not fit half of a phone-width drawer; words wrap
+// between themselves and can run longer.
 func insightFactFull(fact InsightFactView) bool {
+	if fact.Monospace {
+		return len(fact.Value) > 16
+	}
 	return len(fact.Value) > 28
+}
+
+// insightFactCard is a fact card as the grid places it: a full card takes a
+// row of its own, and two half cards share one.
+type insightFactCard struct {
+	InsightFactView
+	Full bool
+}
+
+// insightFactRows orders fact cards so the half-width ones pair up. A
+// full-width card waits until the row it would break is filled, and a half
+// card left without a partner stretches across its row, so the grid never
+// leaves a hole beside a card and reading order stays the order shown.
+func insightFactRows(facts []InsightFactView) []insightFactCard {
+	cards := make([]insightFactCard, 0, len(facts))
+	var waiting []insightFactCard
+	open := -1
+	for _, fact := range facts {
+		card := insightFactCard{InsightFactView: fact, Full: insightFactFull(fact)}
+		switch {
+		case card.Full && open >= 0:
+			waiting = append(waiting, card)
+		case card.Full:
+			cards = append(cards, card)
+		case open >= 0:
+			cards = append(append(cards, card), waiting...)
+			waiting, open = nil, -1
+		default:
+			open = len(cards)
+			cards = append(cards, card)
+		}
+	}
+	if open >= 0 {
+		cards[open].Full = true
+	}
+	return append(cards, waiting...)
 }
 
 // insightQueryURL opens the query log on exactly the rows a finding counted:
@@ -941,7 +1107,7 @@ templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, wind
 templ InsightDevices(view InsightsOverviewView) {
 	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title">
 		<header class="isotope-data-header">
-			<div><h2 id="insight-devices-title">Devices</h2><span class="desktop-only">{ view.RangeLabel }</span></div>
+			<div class="ranking-heading"><h2 id="insight-devices-title">Devices</h2><small>{ view.RangeLabel }</small></div>
 			if len(view.Devices) > 0 {
 				<span class="count-badge">{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
 			}
@@ -962,12 +1128,10 @@ templ InsightDevices(view InsightsOverviewView) {
 			<div class="admin-mobile-list insight-device-mobile">
 				for _, device := range view.Devices {
 					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
+						@insightTypeTile(device)
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 							@insightDeviceSubtitle(device)
-							if device.TypeLabel != "" {
-								<small>{ insightTypeText(device) }</small>
-							}
 							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
 						</div>
 						@Icon("chevron-right")
@@ -980,7 +1144,6 @@ templ InsightDevices(view InsightsOverviewView) {
 					<thead>
 						<tr>
 							<th scope="col">Device</th>
-							<th scope="col">Type</th>
 							<th scope="col" class="right-cell">Queries</th>
 							<th scope="col" class="right-cell">Blocked</th>
 							<th scope="col" class="right-cell insight-optional-cell">First-time domains</th>
@@ -993,12 +1156,14 @@ templ InsightDevices(view InsightsOverviewView) {
 						for _, device := range view.Devices {
 							<tr data-row-opener>
 								<th scope="row">
-									<span class="insight-device-cell">
-										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
-										@insightDeviceSubtitle(device)
+									<span class="insight-device-heading">
+										@insightTypeTile(device)
+										<span class="insight-device-cell">
+											<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+											@insightDeviceSubtitle(device)
+										</span>
 									</span>
 								</th>
-								<td class={ ifThen(device.TypeConfidence == "low" || device.TypeLabel == "", "muted-cell", "") }>{ insightTypeText(device) }</td>
 								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
 								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
 								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
@@ -1106,8 +1271,10 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 						for index, app := range view.Apps {
 							@InsightListRow(InsightListRowView{
 								ID: fmt.Sprintf("insight-device-app-%d", index), Value: app.Name, Plain: true,
-								Detail: app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + pluralizeDomain(app.Domains),
-								Count:  formatNumber(app.Queries),
+								Detail:  app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + pluralizeDomain(app.Domains),
+								Count:   formatNumber(app.Queries),
+								Leading: AppIcon(app.ID, app.Category),
+								Drawer:  AppDrawerLink(app.ID, view.Range),
 							})
 						}
 					</div>
@@ -1143,6 +1310,79 @@ templ insightDeviceFooter(view InsightDeviceDrawerView) {
 
 func insightDeviceURL(key, rangeName string) string {
 	return "/ui/insights/device?" + url.Values{"key": []string{key}, "range": []string{rangeName}}.Encode()
+}
+
+// DeviceDrawerLink opens a device's drawer on the Insights page.
+func DeviceDrawerLink(key, rangeName string) *DrawerLink {
+	return &DrawerLink{Dialog: "insight-device-dialog", Loading: "insight-device-loading", URL: insightDeviceURL(key, rangeName), Target: "insight-device-content"}
+}
+
+// AppDrawerLink opens an app's drawer on the Insights page.
+func AppDrawerLink(id, rangeName string) *DrawerLink {
+	return &DrawerLink{
+		Dialog: "insight-app-dialog", Loading: "insight-app-loading", Target: "insight-app-content",
+		URL: "/ui/insights/app?" + url.Values{"id": []string{id}, "range": []string{rangeName}}.Encode(),
+	}
+}
+
+templ insightAppLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Title: "Loading…", CloseLabel: "Close app details"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading app details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+// InsightAppDrawer is one app's details, loaded into the open drawer. Each
+// domain links to exactly the queries it counts, and each device opens its
+// own drawer.
+templ InsightAppDrawer(view InsightAppDrawerView) {
+	@DetailDrawerContent(insightAppDrawerHeader(view), insightDeviceCloseFooter()) {
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
+		}
+		if view.Missing {
+			<div class="query-detail-section-heading"><p>Nothing on the network used this app in the selected period.</p></div>
+		} else if view.App.Name != "" {
+			<dl class="query-detail-grid">
+				<div class="query-detail-fact-wide"><dt>Category</dt><dd>{ view.App.Category }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.App.Queries) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Domains</dt><dd>{ formatNumber(uint64(view.App.Domains)) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Devices</dt><dd>{ formatNumber(uint64(len(view.Devices) + view.MoreDevices)) }</dd></div>
+			</dl>
+			<section class="query-detail-answer" aria-labelledby="insight-app-domains">
+				<h3 id="insight-app-domains">Most queried domains</h3>
+				<div class="insight-client-list">
+					for index, domain := range view.Domains {
+						@InsightListRow(InsightListRowView{
+							ID: fmt.Sprintf("insight-app-domain-%d", index), Value: domain.Name, CopyLabel: "Copy domain",
+							Count: formatNumber(domain.Queries), Href: insightQueryURL(InsightQueryView{Name: domain.Name}, view.LogWindowQuery),
+						})
+					}
+				</div>
+			</section>
+			if len(view.Devices) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-app-devices">
+					<h3 id="insight-app-devices">Devices that used it</h3>
+					<div class="insight-client-list">
+						for index, device := range view.Devices {
+							@InsightListRow(InsightListRowView{
+								ID: fmt.Sprintf("insight-app-device-%d", index), Value: device.Label, Detail: device.Detail, Plain: device.Named,
+								Drawer:  DeviceDrawerLink(device.Key, view.Range),
+								Leading: insightTypeTile(InsightDeviceView{Type: device.Type, TypeLabel: device.TypeLabel, TypeConfidence: device.TypeConfidence}),
+							})
+						}
+					</div>
+					if view.MoreDevices > 0 {
+						<p class="insight-list-more">And { formatNumber(uint64(view.MoreDevices)) } more.</p>
+					}
+				</section>
+			}
+		}
+	}
 }
 
 func insightDrawerTitle(view InsightDeviceDrawerView) string {
@@ -1214,13 +1454,20 @@ type InsightListRowView struct {
 	CopyLabel string
 	// Plain sets the value in the body face, for names that are not DNS data.
 	Plain bool
+	// Drawer opens a drawer from the row, in place of a query log link.
+	Drawer *DrawerLink
+	// Leading starts the row, such as the icon for what a device is.
+	Leading templ.Component
 }
 
 // InsightListRow puts the copy button right after the value, as zone record
 // details do. The link to the query log covers the whole row, so the row stays
 // one large target while the copy button sits above it.
 templ InsightListRow(row InsightListRowView) {
-	<div class={ "insight-list-row", templ.KV("has-link", row.Href != "") }>
+	<div class={ "insight-list-row", templ.KV("has-link", row.Href != "" || row.Drawer != nil) }>
+		if row.Leading != nil {
+			@row.Leading
+		}
 		<div class="insight-list-copy">
 			<span class={ "copyable-text insight-row-value", templ.KV("plain", row.Plain) }>
 				<strong id={ row.ID }>{ row.Value }</strong>
@@ -1240,6 +1487,14 @@ templ InsightListRow(row InsightListRowView) {
 					@Icon("chevron-right")
 				}
 			</a>
+		} else if row.Drawer != nil {
+			<button class="insight-list-link" type="button" { drawerOpener(row.Drawer)... } aria-label={ "View details for " + row.Value }>
+				if row.Count != "" {
+					{ row.Count }
+				} else {
+					@Icon("chevron-right")
+				}
+			</button>
 		} else if row.Count != "" {
 			<span class="insight-list-count">{ row.Count }</span>
 		}
@@ -1268,11 +1523,21 @@ func insightDomainDetail(domain InsightDeviceDomainView, display TimeDisplay) st
 	}
 }
 
+// insightAppDrawerHeader leads the app drawer with the app's logo.
+func insightAppDrawerHeader(view InsightAppDrawerView) DetailDrawerView {
+	header := DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Title: ifThen(view.App.Name != "", view.App.Name, "App"), CloseLabel: "Close app details"}
+	if view.App.ID != "" {
+		header.Leading = AppIcon(view.App.ID, view.App.Category)
+	}
+	return header
+}
+
 func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
 	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
 	if view.Device.Key == "" || view.Missing {
 		return header
 	}
+	header.Leading = insightTypeTile(view.Device)
 	if view.CanName && view.Editing {
 		header.TitleEditor = insightDeviceNameEditor(view)
 	} else if view.CanName || view.Device.NameSource != "" {
@@ -1293,11 +1558,9 @@ templ insightDeviceTitleActions(view InsightDeviceDrawerView) {
 }
 
 templ insightDeviceRenameButton(view InsightDeviceDrawerView) {
-	<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=1" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Rename " + view.Device.Label } title="Rename device" data-replica-primary-action>@Icon("pencil")</button>
+	<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=1" } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "Rename " + view.Device.Label } title="Rename device" data-replica-primary-action>@Icon("pencil")</button>
 }
 
-// insightDeviceNameEditor edits the device's name in place of its title. Enter
-// saves, and Escape or Cancel returns to the title without closing the drawer.
 // insightDeviceType says what Sable thinks the device is and why, and lets an
 // operator who can rename devices correct it. A correction is kept against the
 // device's hardware address, like its name.
@@ -1312,7 +1575,7 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 				<strong class="insight-type-unknown">Sable can't tell yet</strong>
 			}
 			if view.CanName && !view.EditingType {
-				<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=type" } hx-target="#insight-device-content" hx-swap="innerHTML" aria-label={ "Change the type of " + view.Device.Label } title="Change type" data-replica-primary-action>@Icon("pencil")</button>
+				<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=type" } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "Change the type of " + view.Device.Label } title="Change type" data-replica-primary-action>@Icon("pencil")</button>
 			}
 		</div>
 		if len(view.Device.TypeReasons) > 0 {
@@ -1343,9 +1606,14 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 							<option value={ option[0] } selected?={ view.Device.OwnType && view.Device.Type == option[0] }>{ option[1] }</option>
 						}
 					</select>
+					// The styled list shows each choice with its icon.
+					<template data-option-icon="">@Icon(insightTypeIcon(view.Device.DefaultType))</template>
+					for _, option := range view.Device.TypeOptions {
+						<template data-option-icon={ option[0] }>@Icon(insightTypeIcon(option[0]))</template>
+					}
 				</label>
-				<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-type-cancel>Cancel</button>
-				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+				<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" data-type-cancel>Cancel</button>
+				<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
 			</form>
 		}
 	</section>
@@ -1377,6 +1645,50 @@ func insightConfidenceText(confidence string) string {
 	}
 }
 
+// insightTypeIcons draws each device type. A doorbell is a door and smart
+// lighting a ceiling lamp, because a bell and a lightbulb already mean alerts
+// and the Overview on this page.
+var insightTypeIcons = map[string]string{
+	"phone": "smartphone", "tablet": "tablet", "computer": "laptop", "server": "server", "tv": "tv",
+	"streaming-player": "cast", "smart-speaker": "speaker", "speaker": "speaker", "camera": "cctv",
+	"doorbell": "door-closed", "game-console": "gamepad-2", "printer": "printer", "storage": "hard-drive",
+	"network": "router", "thermostat": "thermometer", "lighting": "lamp-ceiling", "smart-plug": "plug-zap",
+	"smart-home": "house-wifi", "watch": "watch",
+}
+
+// insightTypeIcon is the icon for a device type, and a plain device for one
+// Sable can't tell.
+func insightTypeIcon(kind string) string {
+	if icon, found := insightTypeIcons[kind]; found {
+		return icon
+	}
+	return "monitor-smartphone"
+}
+
+// insightTypeTile shows what a device is, at the start of its row in a list
+// and beside its name in the drawer, in gray, since color on this page means
+// a finding. Its tooltip says the type in words.
+templ insightTypeTile(device InsightDeviceView) {
+	<span class="insight-type-tile" role="img" aria-label={ insightTypeTitle(device) } title={ insightTypeTitle(device) }>@Icon(insightDeviceIcon(device))</span>
+}
+
+// insightDeviceIcon is the icon for what a device is. A guess Sable is unsure
+// of shows a plain device, so the icon never claims more than Sable knows.
+func insightDeviceIcon(device InsightDeviceView) string {
+	if device.TypeConfidence == "low" {
+		return insightTypeIcon("")
+	}
+	return insightTypeIcon(device.Type)
+}
+
+// insightTypeTitle is a device's type in words, for the icon that shows it.
+func insightTypeTitle(device InsightDeviceView) string {
+	if device.TypeLabel == "" {
+		return "Type unknown"
+	}
+	return insightTypeText(device)
+}
+
 // insightTypeText is a device's type as a list shows it, hedged when Sable is
 // unsure.
 func insightTypeText(device InsightDeviceView) string {
@@ -1388,12 +1700,19 @@ func insightTypeText(device InsightDeviceView) string {
 		if strings.ContainsRune("AEIOU", rune(device.TypeLabel[0])) {
 			article = "an "
 		}
-		return "Maybe " + article + strings.ToLower(device.TypeLabel)
+		if device.TypeLabel != strings.ToUpper(device.TypeLabel) {
+			return "Maybe " + article + strings.ToLower(device.TypeLabel)
+		}
+		return "Maybe " + article + device.TypeLabel
 	default:
 		return device.TypeLabel
 	}
 }
 
+// insightDeviceNameEditor edits the device's name in place of its title. Enter
+// saves, and Escape or Cancel returns to the title without closing the drawer.
+// Remove Name sends its own request rather than submitting the form: Enter in
+// a field presses a form's first submit button, which must be Save.
 templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
 	<form class="insight-name-editor" hx-post="/ui/insights/devices/name" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button">
 		<input type="hidden" name="key" value={ view.Device.Key }/>
@@ -1405,12 +1724,19 @@ templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
 		<small class="insight-name-help">{ insightNameHelp(view.Device) }</small>
 		<div class="insight-name-actions">
 			if view.Device.OperatorNamed {
-				<button class="button outline compact destructive" type="submit" name="remove" value="1" formnovalidate data-replica-primary-action>Remove Name</button>
+				<button class="button outline compact destructive insight-action" type="button" hx-post="/ui/insights/devices/name" hx-vals={ `{"remove":"1"}` } hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button" data-replica-primary-action>@insightActionLabel("Remove Name", "Removing…")</button>
 			}
-			<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" data-name-cancel>Cancel</button>
-			<button class="button compact" type="submit" data-replica-primary-action>Save</button>
+			<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" data-name-cancel>Cancel</button>
+			<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
 		</div>
 	</form>
+}
+
+// insightActionLabel keeps a drawer button's width while its request runs,
+// showing a spinner in place of its label.
+templ insightActionLabel(label, pending string) {
+	<span class="insight-action-idle">{ label }</span>
+	<span class="insight-action-pending">@Icon("loader-circle")<span class="sr-only">{ pending }</span></span>
 }
 
 // insightCauses joins possible causes into one sentence: "a, b, or c."
@@ -1454,40 +1780,56 @@ type InsightAlertsView struct {
 
 // InsightAlerts sets up where new findings are sent. It swaps itself in place
 // when saved or tested.
+// insightAlertsButton opens the alert setup from beside the range control and
+// says whether alerts are on. Only operators who can change settings see it.
+templ insightAlertsButton(alerts *InsightAlertsView) {
+	if alerts != nil {
+		<button class={ "button outline compact insight-alerts-button", templ.KV("active", alerts.URL != "") } type="button" data-dialog-open="insight-alerts-dialog" aria-label={ ifThen(alerts.URL != "", "Alerts on", "Alerts off") } title={ ifThen(alerts.URL != "", "Alerts are on", "Alerts are off") }>
+			@Icon(ifThen(alerts.URL != "", "bell", "bell-off"))
+			<span>{ ifThen(alerts.URL != "", "On", "Off") }</span>
+		</button>
+	}
+}
+
+// InsightAlertsDialog holds the alert setup, which saving replaces in place.
+templ InsightAlertsDialog(view InsightAlertsView) {
+	<dialog class="custom-server-dialog isotope-form-dialog insight-alerts-dialog" id="insight-alerts-dialog" aria-labelledby="insight-alerts-title">
+		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send each new finding worth a look to a webhook</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		@InsightAlerts(view)
+	</dialog>
+}
+
+// InsightAlerts is the alert setup form. Save is its only submit button, so
+// Enter in the URL saves; Send Test sends a request of its own.
 templ InsightAlerts(view InsightAlertsView) {
-	<section class="card isotope-data-card insight-alerts" id="insight-alerts" aria-labelledby="insight-alerts-title">
-		<header class="isotope-data-header">
-			<div><h2 id="insight-alerts-title">Alerts</h2></div>
-			<span class={ "status-badge", templ.KV("active", view.URL != "") }>{ ifThen(view.URL != "", "On", "Off") }</span>
-		</header>
+	<form class="insight-alerts" id="insight-alerts" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
 		if view.Message != "" {
 			@Toast(view.Message, "success")
 		}
 		if view.Error != "" {
 			@Toast(view.Error, "error")
 		}
-		<form class="insight-alerts-form" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
-			<p>Sable sends each new finding worth a look to a webhook, once, and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
-			<div class="field-grid two">
-				<label class="field-control">
-					<span>Webhook URL</span>
-					<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
-					<small>Leave empty to turn alerts off.</small>
-				</label>
-				<label class="field-control">
-					<span>Format</span>
-					<select name="format" data-styled-select>
-						<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
-						<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
-					</select>
-				</label>
-			</div>
-			<div class="insight-alerts-actions">
-				if view.URL != "" {
-					<button class="button outline compact" type="submit" formaction="/ui/insights/alerts/test" hx-post="/ui/insights/alerts/test" data-replica-primary-action>Send Test</button>
-				}
-				<button class="button compact" type="submit" data-replica-primary-action>Save</button>
-			</div>
-		</form>
-	</section>
+		<div class="isotope-dialog-body insight-alerts-body">
+			<p>Sable sends each new finding to the webhook once and skips anything you hide. Works with ntfy, Home Assistant, Slack, Discord, and anything else that takes a POST.</p>
+			<label class="field-control">
+				<span>Webhook URL</span>
+				<input type="url" name="url" value={ view.URL } placeholder="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+				<small>Leave empty to turn alerts off.</small>
+			</label>
+			<label class="field-control">
+				<span>Format</span>
+				<select name="format" data-styled-select>
+					<option value="json" selected?={ view.Format != "text" }>JSON (Slack, Discord, Home Assistant)</option>
+					<option value="text" selected?={ view.Format == "text" }>Plain text (ntfy)</option>
+				</select>
+			</label>
+		</div>
+		<div class="dialog-footer">
+			if view.URL != "" {
+				<button class="button outline" type="button" hx-post="/ui/insights/alerts/test" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>Send Test</button>
+			}
+			<button class="button" type="submit" data-replica-primary-action>Save</button>
+		</div>
+	</form>
 }

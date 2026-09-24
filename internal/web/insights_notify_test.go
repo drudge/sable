@@ -91,10 +91,16 @@ func TestInsightAlertsCanBeSetUpAndTestedFromTheOverview(t *testing.T) {
 	}))
 	t.Cleanup(hook.Close)
 	server := newInsightsTestServer(t)
-	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `id="insight-alerts"`) {
-		t.Fatal("the overview offers no alert setup")
+	// The setup opens from a bell beside the range control, in a dialog that
+	// stays outside the overview the range control swaps.
+	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `data-dialog-open="insight-alerts-dialog" aria-label="Alerts off"`) ||
+		strings.Contains(overview, `id="insight-alerts"`) {
+		t.Fatal("the overview does not offer the alert setup from its bell")
 	}
-	if overview := server.get(t, "logs-reader", "/ui/insights/overview?range=day", true).Body.String(); strings.Contains(overview, `id="insight-alerts"`) {
+	if page := server.get(t, "everything", "/insights?range=day", false).Body.String(); !strings.Contains(page, `id="insight-alerts-dialog"`) || !strings.Contains(page, `id="insight-alerts"`) {
+		t.Fatal("the page has no alert setup dialog")
+	}
+	if overview := server.get(t, "logs-reader", "/ui/insights/overview?range=day", true).Body.String(); strings.Contains(overview, "insight-alerts-dialog") {
 		t.Fatal("an operator without settings write sees the alert setup")
 	}
 	form := url.Values{"url": {hook.URL}, "format": {"text"}}
@@ -102,8 +108,11 @@ func TestInsightAlertsCanBeSetUpAndTestedFromTheOverview(t *testing.T) {
 		t.Fatalf("saving without settings write = %d", response.Code)
 	}
 	saved := server.post(t, "everything", "/ui/insights/alerts", form)
-	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "New findings will be sent") {
-		t.Fatalf("saving = %d %s", saved.Code, saved.Body.String())
+	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "New findings will be sent") || saved.Header().Get("HX-Trigger") != "insightsChanged" {
+		t.Fatalf("saving = %d %q %s", saved.Code, saved.Header().Get("HX-Trigger"), saved.Body.String())
+	}
+	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `aria-label="Alerts on"`) {
+		t.Fatal("the bell does not say alerts are on")
 	}
 	if webhook := server.config.Current().Config.Insights.Webhook; webhook != (config.InsightsWebhook{URL: hook.URL, Format: "text"}) {
 		t.Fatalf("webhook = %+v", webhook)

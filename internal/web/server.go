@@ -228,6 +228,14 @@ func New(
 	server.deviceSignalCache.serveStale()
 	server.repeatedLookupCache.serveStale()
 	server.appCache.serveStale()
+	// Each cache counts in the background, detached from the request that asked,
+	// for as long as the server runs.
+	server.insightCache.background = server.goBackground
+	server.appCache.background = server.goBackground
+	server.blockingActivityCache.background = server.goBackground
+	server.deviceActivityCache.background = server.goBackground
+	server.deviceSignalCache.background = server.goBackground
+	server.repeatedLookupCache.background = server.goBackground
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
 	}
@@ -255,6 +263,7 @@ func New(
 	mux.HandleFunc("GET /insights", server.insightsPage)
 	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
 	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
+	mux.HandleFunc("GET /ui/insights/app", server.insightsAppPanel)
 	mux.HandleFunc("POST /ui/insights/devices/name", server.nameInsightsDevice)
 	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
 	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
@@ -579,6 +588,27 @@ func (server *Server) Close(ctx context.Context) error {
 		server.logger.Warn("persist query statistics", "error", err)
 	}
 	return shutdownError
+}
+
+// goBackground runs work the console starts on its own, such as the reads that
+// warm the Insights caches, without holding up the request that started it.
+// The work gets a context Close cancels, and Close waits for it to return, so
+// no background read is still using the store once the server has closed.
+// Work started after Close runs at once on the canceled context, untracked,
+// so anything waiting on it still hears back.
+func (server *Server) goBackground(work func(context.Context)) {
+	server.runtimeLifecycleMu.Lock()
+	tracked := !server.runtimeClosed
+	if tracked {
+		server.runtimeWG.Add(1)
+	}
+	server.runtimeLifecycleMu.Unlock()
+	go func() {
+		if tracked {
+			defer server.runtimeWG.Done()
+		}
+		work(server.runtimeContext)
+	}()
 }
 
 func (server *Server) dashboard(writer http.ResponseWriter, request *http.Request) {
