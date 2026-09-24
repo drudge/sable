@@ -8,6 +8,43 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.2] - 2026-09-23
+
+Sable 1.5.0-beta.2 makes Insights fast on a real month of history. Tested with
+a month of busy network traffic, about seven million queries, the page took
+fifteen seconds to open and still left sections empty. It now opens in about a
+second, and after that answers from its last count while a fresh one runs.
+
+### Insights
+
+- Keep hourly and daily totals of the query log alongside the per-minute
+  ones, and read whole hours and days from them, so a month is thousands of
+  rows instead of millions. After upgrading, Sable fills them from existing
+  history in the background, which takes about a minute for a busy month;
+  until then Insights reads the minutes as before.
+- Count the blocked queries each device made before 1.5.0-beta.1 once, in the
+  background, instead of reading them from the raw query log on every visit.
+- Look for scheduled check-ins in the last day of queries alone, rather than
+  in each name's whole history.
+- Answer from the last count while a fresh one runs, and start every slow read
+  at once when the page opens, so only the first visit after a restart waits.
+- Keep showing the last block list comparison while a refreshed list is
+  compared again. Adding or removing a list still waits for the new one.
+- Read a device's busiest domains by time or by device, whichever is shorter
+  for its traffic and the selected range.
+- Open a device's details from anywhere on its row. The Devices table drops
+  its history columns, and on narrow screens becomes a list, before a row can
+  run past the edge of the card and hide its details button.
+- Start the device drawer from its loading state when opening another device,
+  instead of showing the previous one until the new one arrives.
+- Show Sable's spinner in the Insights and dashboard update indicator, and
+  keep its text on one line.
+
+### Dashboard
+
+- Rank clients and domains for longer ranges from the hourly and daily
+  totals as well.
+
 ## [1.5.0-beta.1] - 2026-09-23
 
 Sable 1.5.0-beta.1 introduces Insights: a local view of what changed on your
