@@ -1642,16 +1642,17 @@
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
     const inset = 8;
-    const gap = 6;
+    const gap = 4;
     const width = Math.min(34 * 16, window.innerWidth - inset * 2);
     const above = rect.top - inset - gap;
     const below = window.innerHeight - rect.bottom - inset - gap;
     popover.style.width = `${width}px`;
     popover.style.maxHeight = "";
     const wanted = Math.min(popover.scrollHeight, 28 * 16);
-    const side = below >= wanted || below >= above ? "bottom" : "top";
+    // Like a menu, it stays below and scrolls unless there is barely any room.
+    const side = below >= Math.min(wanted, 15 * 16) || below >= above ? "bottom" : "top";
     popover.dataset.side = side;
-    popover.style.maxHeight = `${Math.max(160, Math.min(28 * 16, side === "bottom" ? below : above))}px`;
+    popover.style.maxHeight = `${Math.max(120, Math.min(28 * 16, side === "bottom" ? below : above))}px`;
     popover.style.left = `${Math.min(Math.max(rect.left, inset), window.innerWidth - inset - width)}px`;
     const height = popover.getBoundingClientRect().height;
     popover.style.top = `${side === "top" ? rect.top - gap - height : rect.bottom + gap}px`;
@@ -1687,13 +1688,6 @@
   }, true);
   window.addEventListener("resize", () => {
     document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
-  });
-  document.addEventListener("click", (event) => {
-    const close = event.target.closest("[data-alert-preview-close]");
-    if (!close) return;
-    const popover = close.closest("[data-alert-preview-popover]");
-    popover?.hidePopover();
-    popover?.closest("form")?.querySelector("[data-alert-preview]")?.focus();
   });
 
   const UPDATE_CHECK_RETRY_MS = 2000;
