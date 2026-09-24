@@ -138,6 +138,7 @@ ON sable_query_log (occurred_at)`, `
 CREATE INDEX IF NOT EXISTS sable_server_log_occurred_at_idx
 ON sable_server_log (occurred_at)`}
 	statements = append(statements, queryStatsTables()...)
+	statements = append(statements, rollupTierTables()...)
 	statements = append(statements, clientSightingTables()...)
 	statements = append(statements, insightFeedbackTable(), insightNotifiedTable())
 	statements = append(statements, store.authenticationTables()...)
@@ -329,6 +330,10 @@ func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) erro
 	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log_rollup WHERE bucket_start <= "+placeholder, before.UTC().Truncate(time.Minute)); err != nil {
 		_ = transaction.Rollback()
 		return fmt.Errorf("prune query log rollups: %w", err)
+	}
+	if err := store.pruneRollupTiers(ctx, transaction, before.UTC().Truncate(time.Minute)); err != nil {
+		_ = transaction.Rollback()
+		return err
 	}
 	if err := store.pruneClientSightings(ctx, transaction, before); err != nil {
 		_ = transaction.Rollback()

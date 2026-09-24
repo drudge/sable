@@ -231,20 +231,44 @@ func TestAnalyzerReusesTheComparisonUntilAListChanges(t *testing.T) {
 		t.Fatalf("analysis ran %d times for unchanged lists, want 1", calls.Load())
 	}
 
-	// An update rewrites the cached file, which must invalidate the result.
+	// An update rewrites the cached file, which must invalidate the result. The
+	// last comparison answers until the new one is ready.
 	future := time.Now().Add(time.Hour)
 	updated := writeList(t, directory, "beta", "two.example", "three.example")
 	if err := os.Chtimes(filepath.Join(directory, updated.Path), future, future); err != nil {
 		t.Fatal(err)
 	}
-	second, err := analyzer.Contribution(context.Background(), directory, lists)
+	stale, err := analyzer.Contribution(context.Background(), directory, lists)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls.Load() != 2 || second.AnalyzedAt.Equal(first.AnalyzedAt) {
+	if !stale.AnalyzedAt.Equal(first.AnalyzedAt) {
+		t.Fatalf("waited for a new comparison when only a list file changed")
+	}
+	var second Contribution
+	for deadline := time.Now().Add(5 * time.Second); second.AnalyzedAt.IsZero() || second.AnalyzedAt.Equal(first.AnalyzedAt); {
+		if time.Now().After(deadline) {
+			t.Fatal("the new comparison never replaced the last one")
+		}
+		time.Sleep(5 * time.Millisecond)
+		if second, err = analyzer.Contribution(context.Background(), directory, lists); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls.Load() != 2 {
 		t.Fatalf("analysis runs = %d after a list changed, want 2", calls.Load())
 	}
 	if beta := contributionByName(t, second, "beta"); beta.Domains != 2 || beta.Unique != 1 {
 		t.Fatalf("beta after update = %+v", beta)
+	}
+
+	// A different set of lists is a different question, so it waits.
+	added := append(lists, writeList(t, directory, "gamma", "four.example"))
+	third, err := analyzer.Contribution(context.Background(), directory, added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 3 || len(third.Lists) != 3 {
+		t.Fatalf("analysis runs = %d with %d lists after one was added, want 3 and 3", calls.Load(), len(third.Lists))
 	}
 }

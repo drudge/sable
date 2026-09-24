@@ -205,3 +205,47 @@ func TestClientHourlyActivityCountsEachHour(t *testing.T) {
 		t.Fatalf("activity = %+v", activity)
 	}
 }
+
+// A busy device's whole history is longer than a day of everyone's traffic and
+// a quiet device's is shorter, so each is read the shorter way, and either way
+// the counts are the query log's.
+func TestClientTopDomainsReadsTheShorterWay(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	events := make([]querylog.Event, 0, 260)
+	for index := range 200 {
+		events = append(events, blockingEvent(now.Add(-time.Duration(index)*time.Hour), "10.0.0.1", "busy.example.", querylog.SourceUpstream))
+	}
+	for index := range 20 {
+		events = append(events, blockingEvent(now.Add(-time.Duration(index)*time.Minute), "10.0.0.3", "other.example.", querylog.SourceUpstream))
+	}
+	events = append(events,
+		blockingEvent(now.Add(-2*time.Hour), "10.0.0.2", "quiet.example.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-90*time.Minute), "10.0.0.2", "quiet.example.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-3*time.Hour), "10.0.0.2", "ads.example.", querylog.SourceBlocked),
+	)
+	opened := openQueryLogStore(t, events)
+	since := now.Add(-24 * time.Hour)
+
+	for _, test := range []struct {
+		client, index, name string
+		queries             uint64
+	}{
+		{"10.0.0.1", opened.queryLogTimeIndex(), "busy.example", 25},
+		{"10.0.0.2", " INDEXED BY sable_query_log_client_key_idx", "quiet.example", 2},
+	} {
+		index, err := opened.clientWindowIndex(ctx, []string{test.client}, since, now)
+		if err != nil || index != test.index {
+			t.Fatalf("%s index = %q, %v; want %q", test.client, index, err, test.index)
+		}
+		domains, err := opened.ClientTopDomains(ctx, []string{test.client}, since, now, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(domains) == 0 || domains[0].Name != test.name || domains[0].Queries != test.queries {
+			t.Fatalf("%s domains = %+v", test.client, domains)
+		}
+	}
+}

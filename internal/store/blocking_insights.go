@@ -130,33 +130,47 @@ func (store *Store) blockedSourceActivity(ctx context.Context, since, until time
 		fullStart, fullEnd = until, until
 	}
 
-	rows, err := store.database.QueryContext(ctx, `
-SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
-FROM sable_query_log_rollup
-WHERE dimension IN (`+store.placeholder(1)+`, `+store.placeholder(2)+`)
-  AND bucket_start >= `+store.placeholder(3)+` AND bucket_start < `+store.placeholder(4)+`
-GROUP BY dimension, value`,
-		queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource, fullStart, fullEnd)
+	spans, err := store.rollupSpans(ctx, fullStart, fullEnd, dayRollupTier.size)
 	if err != nil {
-		return nil, time.Time{}, fmt.Errorf("read blocked source rollups: %w", err)
+		return nil, time.Time{}, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var dimension, source string
-		var hits uint64
-		if err := rows.Scan(&dimension, &source, &hits); err != nil {
-			return nil, time.Time{}, fmt.Errorf("scan blocked source rollup: %w", err)
+	if len(spans) > 0 {
+		var arguments []any
+		bind := func(value any) string {
+			arguments = append(arguments, value)
+			return store.placeholder(len(arguments))
 		}
-		counts := activity[source]
-		if dimension == queryLogRollupBlockedSoleSource {
-			counts.Sole += hits
-		} else {
-			counts.Blocked += hits
+		arms := make([]string, 0, len(spans))
+		for _, span := range spans {
+			arms = append(arms, "SELECT dimension, value, hits FROM "+span.table+
+				" WHERE "+store.dimensionCondition([]string{queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource}, bind)+
+				" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
 		}
-		activity[source] = counts
-	}
-	if err := rows.Err(); err != nil {
-		return nil, time.Time{}, fmt.Errorf("iterate blocked source rollups: %w", err)
+		rows, err := store.database.QueryContext(ctx, `
+SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
+FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS rolled
+GROUP BY dimension, value`, arguments...)
+		if err != nil {
+			return nil, time.Time{}, fmt.Errorf("read blocked source rollups: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var dimension, source string
+			var hits uint64
+			if err := rows.Scan(&dimension, &source, &hits); err != nil {
+				return nil, time.Time{}, fmt.Errorf("scan blocked source rollup: %w", err)
+			}
+			counts := activity[source]
+			if dimension == queryLogRollupBlockedSoleSource {
+				counts.Sole += hits
+			} else {
+				counts.Blocked += hits
+			}
+			activity[source] = counts
+		}
+		if err := rows.Err(); err != nil {
+			return nil, time.Time{}, fmt.Errorf("iterate blocked source rollups: %w", err)
+		}
 	}
 
 	edges, err := store.database.QueryContext(ctx, `
@@ -321,16 +335,23 @@ func (store *Store) summarizeRollupDimension(
 		}
 	}
 
+	spans, err := store.rollupSpans(ctx, fullStart, fullEnd, dayRollupTier.size)
+	if err != nil {
+		return summary, err
+	}
+
 	var arguments []any
 	bind := func(value any) string {
 		arguments = append(arguments, value)
 		return store.placeholder(len(arguments))
 	}
 	var statement strings.Builder
+	// The raw edges are read by time even when a filter names clients or
+	// domains: those indexes would walk the named values' whole history.
 	statement.WriteString(`
 WITH boundary AS (
     SELECT ` + dimension.column + ` AS value
-    FROM sable_query_log
+    FROM sable_query_log` + store.queryLogTimeIndex() + `
     WHERE ((occurred_at >= ` + bind(since) + ` AND occurred_at < ` + bind(fullStart) + `)
         OR (occurred_at >= ` + bind(fullEnd) + ` AND occurred_at <= ` + bind(until) + `))`)
 	if dimension.blockedOnly {
@@ -340,15 +361,19 @@ WITH boundary AS (
 		statement.WriteString(` AND ` + store.rollupValueCondition(dimension.column, *filter, bind))
 	}
 	statement.WriteString(`
-), combined (value, hits) AS (
+), combined (value, hits) AS (`)
+	for _, span := range spans {
+		statement.WriteString(`
     SELECT value, hits
-    FROM sable_query_log_rollup
-    WHERE dimension = ` + bind(dimension.name) + ` AND bucket_start >= ` + bind(fullStart) + ` AND bucket_start < ` + bind(fullEnd))
-	if filter != nil {
-		statement.WriteString(` AND ` + store.rollupValueCondition("value", *filter, bind))
+    FROM ` + span.table + `
+    WHERE dimension = ` + bind(dimension.name) + ` AND bucket_start >= ` + bind(span.start) + ` AND bucket_start < ` + bind(span.end))
+		if filter != nil {
+			statement.WriteString(` AND ` + store.rollupValueCondition("value", *filter, bind))
+		}
+		statement.WriteString(`
+    UNION ALL`)
 	}
 	statement.WriteString(`
-    UNION ALL
     SELECT value, COUNT(*) FROM boundary GROUP BY value
 ), totals AS (
     -- PostgreSQL promotes SUM(BIGINT) to NUMERIC, so cast it back to the

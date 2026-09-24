@@ -111,6 +111,16 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 }
 
 func (store *Store) upsertQueryLogRollups(ctx context.Context, transaction *sql.Tx, rollups []queryLogRollup) error {
+	return store.writeRollupRows(ctx, transaction, rollups, "sable_query_log_rollup.hits + excluded.hits")
+}
+
+// replaceQueryLogRollups writes counts that already cover whole minutes, such
+// as ones recounted from the raw log, over whatever those minutes held.
+func (store *Store) replaceQueryLogRollups(ctx context.Context, transaction *sql.Tx, rollups []queryLogRollup) error {
+	return store.writeRollupRows(ctx, transaction, rollups, "excluded.hits")
+}
+
+func (store *Store) writeRollupRows(ctx context.Context, transaction *sql.Tx, rollups []queryLogRollup, hits string) error {
 	if len(rollups) == 0 {
 		return nil
 	}
@@ -127,7 +137,7 @@ func (store *Store) upsertQueryLogRollups(ctx context.Context, transaction *sql.
 	statement := `INSERT INTO sable_query_log_rollup (bucket_start, dimension, value, hits) VALUES ` +
 		strings.Join(values, ", ") + `
 ON CONFLICT (bucket_start, dimension, value) DO UPDATE
-SET hits = sable_query_log_rollup.hits + excluded.hits`
+SET hits = ` + hits
 	if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
 		return fmt.Errorf("upsert query log rollups: %w", err)
 	}

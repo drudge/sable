@@ -83,15 +83,21 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 		}
 		built[index].NewDomains = count
 	}
-	signals, _, err := server.deviceSignalCache.load(ctx, window, func(ctx context.Context, since, _ time.Time) (map[string][]string, error) {
-		return reader.ClientNamesMatching(ctx, since, deviceTypeSuffixes)
-	})
+	signals, _, err := server.deviceSignalCache.load(ctx, window, deviceSignals(reader))
 	if err != nil {
 		// Types then rest on makers and names alone.
 		server.logger.Warn("read device service signals", "error", err)
 	}
 	devices.Identify(built, signals)
 	return deviceReport{devices: built, seenSince: activity.SeenSince, window: counted}, nil
+}
+
+// deviceSignals reads, for each client address, the names it queried that say
+// what kind of device it is.
+func deviceSignals(reader deviceInsightReader) func(context.Context, time.Time, time.Time) (map[string][]string, error) {
+	return func(ctx context.Context, since, _ time.Time) (map[string][]string, error) {
+		return reader.ClientNamesMatching(ctx, since, deviceTypeSuffixes)
+	}
 }
 
 // discoveredClientNames names addresses from local host entries, local reverse

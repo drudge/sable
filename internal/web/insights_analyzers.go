@@ -212,9 +212,7 @@ func (sources *deviceSources) HourlyActivity(ctx context.Context, since time.Tim
 // leaves out names in zones this server answers for, which are the network's
 // own hosts rather than anything a device phones home to.
 func (sources *deviceSources) RepeatedLookups(ctx context.Context, since time.Time) ([]querylog.LookupTimes, error) {
-	lookups, _, err := sources.server.repeatedLookupCache.load(ctx, sources.window, func(ctx context.Context, _, until time.Time) ([]querylog.LookupTimes, error) {
-		return sources.reader.RepeatedLookups(ctx, since, until)
-	})
+	lookups, _, err := sources.server.repeatedLookupCache.load(ctx, sources.window, repeatedLookups(sources.reader, since))
 	if err != nil {
 		sources.server.logger.Warn("read repeated lookups", "error", err)
 		return nil, err
@@ -227,6 +225,14 @@ func (sources *deviceSources) RepeatedLookups(ctx context.Context, since time.Ti
 		}
 	}
 	return kept, nil
+}
+
+// repeatedLookups reads the names one client looked up again and again from
+// since to the end of the window.
+func repeatedLookups(reader deviceInsightReader, since time.Time) func(context.Context, time.Time, time.Time) ([]querylog.LookupTimes, error) {
+	return func(ctx context.Context, _, until time.Time) ([]querylog.LookupTimes, error) {
+		return reader.RepeatedLookups(ctx, since, until)
+	}
 }
 
 func inLocalZone(name string, zones []zonemodel.Zone) bool {

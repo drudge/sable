@@ -254,10 +254,7 @@ templ InsightsPage(view InsightsPageView) {
 // which has its own skeleton, and the drawer stays open while the page behind
 // it refreshes after a device is renamed.
 templ insightsDocument(view InsightsOverviewView) {
-	<div id="insights-update-indicator" class="dashboard-update-indicator htmx-indicator" role="status" aria-live="polite">
-		@Icon("refresh")
-		<span>Updating insights…</span>
-	</div>
+	@UpdateIndicator("insights-update-indicator", "Updating insights…")
 	@InsightsContent(view)
 	if view.CanLogs {
 		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title">
@@ -265,6 +262,11 @@ templ insightsDocument(view InsightsOverviewView) {
 				@insightDeviceLoading()
 			</div>
 		</dialog>
+		// Opening another device starts from this rather than showing the last
+		// device until the new one arrives.
+		<template id="insight-device-loading">
+			@insightDeviceLoading()
+		</template>
 	}
 }
 
@@ -617,7 +619,7 @@ templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewVie
 	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions insight-drawer-actions">
 		if finding.DeviceKey != "" && view.CanLogs {
-			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
+			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
 				<span>Device Details</span>
 			</button>
 		}
@@ -947,7 +949,7 @@ templ InsightDevices(view InsightsOverviewView) {
 		} else {
 			<div class="admin-mobile-list insight-device-mobile">
 				for _, device := range view.Devices {
-					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
+					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 							@insightDeviceSubtitle(device)
@@ -977,7 +979,7 @@ templ InsightDevices(view InsightsOverviewView) {
 					</thead>
 					<tbody>
 						for _, device := range view.Devices {
-							<tr>
+							<tr data-row-opener>
 								<th scope="row">
 									<span class="insight-device-cell">
 										<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
@@ -990,7 +992,7 @@ templ InsightDevices(view InsightsOverviewView) {
 								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
 								<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
 								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
-								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
+								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
 							</tr>
 						}
 					</tbody>

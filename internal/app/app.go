@@ -401,7 +401,10 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)
 	})
 	runRuntimeWorker(func(context.Context) {
+		// One after the other: each reads through the whole query history.
 		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
+		backfillBlockedClientRollups(runtimeContext, database.BackfillBlockedClientRollups, logger)
+		compactQueryLogRollups(runtimeContext, database.CompactQueryLogRollups, rollupCompactionInterval, logger)
 	})
 	dynamicDNS := dynamicdns.New(
 		configurationManager,
