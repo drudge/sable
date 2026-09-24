@@ -1647,6 +1647,12 @@
 
   const mountNotificationRegion = (region) => {
     if (!region || region.hasAttribute("data-notification-local")) return region;
+    // A toast from inside an open modal stays there; the page stack sits under
+    // the modal's backdrop, where it would be blurred and unclickable.
+    if (region.closest("dialog[open]")) {
+      region.setAttribute("data-notification-local", "");
+      return region;
+    }
     const stack = document.querySelector("[data-notification-stack]");
     if (!stack) return region;
     if (region.parentElement !== stack) {
