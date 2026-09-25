@@ -120,6 +120,7 @@ func TestAppsHaveIcons(t *testing.T) {
 		"snapchat": `fill="#FFFC00"`,
 		// ChatGPT keeps OpenAI's mark from before it left Simple Icons.
 		"chatgpt": `fill="#412991"`,
+		"xbox":    `fill="#107C10"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
