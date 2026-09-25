@@ -60,6 +60,12 @@ type doqServer struct {
 	liveMu sync.Mutex
 	live   map[*quic.Conn]struct{}
 	closed bool
+
+	// acceptDone closes once serve has drained the accept queue. Close waits
+	// for it so connections still queued at shutdown are refused while the
+	// socket can carry their CONNECTION_CLOSE; otherwise the peer waits out
+	// the idle timeout. It stays nil until serve starts.
+	acceptDone chan struct{}
 }
 
 func newDoQServer(
@@ -81,7 +87,7 @@ func newDoQServer(
 }
 
 // track registers an accepted connection. It reports false once the server is
-// closing so a connection accepted during the race is torn down immediately.
+// closing so a connection still in the accept queue is torn down immediately.
 func (server *doqServer) track(connection *quic.Conn) bool {
 	server.liveMu.Lock()
 	defer server.liveMu.Unlock()
@@ -129,11 +135,21 @@ func doqQUICConfig() *quic.Config {
 // serve accepts connections until the listener is closed. It mirrors the
 // blocking contract of dns.Server.ActivateAndServe and http.Server.ServeTLS.
 func (server *doqServer) serve() error {
+	acceptDone := make(chan struct{})
+	server.liveMu.Lock()
+	server.acceptDone = acceptDone
+	server.liveMu.Unlock()
+
 	for {
 		connection, err := server.listener.Accept(context.Background())
 		if err != nil {
+			close(acceptDone)
 			server.connections.Wait()
 			return err
+		}
+		if !server.track(connection) {
+			_ = connection.CloseWithError(doqNoError, "server shutting down")
+			continue
 		}
 		server.connections.Add(1)
 		go func() {
@@ -144,10 +160,6 @@ func (server *doqServer) serve() error {
 }
 
 func (server *doqServer) serveConnection(connection *quic.Conn) {
-	if !server.track(connection) {
-		_ = connection.CloseWithError(doqNoError, "server shutting down")
-		return
-	}
 	var streams sync.WaitGroup
 	defer func() {
 		streams.Wait()
@@ -226,8 +238,16 @@ func (server *doqServer) abort(connection *quic.Conn, code quic.ApplicationError
 func (server *doqServer) Close() error {
 	var err error
 	server.closeOnce.Do(func() {
+		// Closing the listener waits for in-flight handshakes, after which
+		// Accept only drains the connections already queued.
 		listenerErr := server.listener.Close()
 		server.closeLiveConnections()
+		server.liveMu.Lock()
+		acceptDone := server.acceptDone
+		server.liveMu.Unlock()
+		if acceptDone != nil {
+			<-acceptDone
+		}
 		err = errors.Join(listenerErr, server.transport.Close(), server.packets.Close())
 	})
 	return err
