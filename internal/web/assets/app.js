@@ -1766,11 +1766,13 @@
       try {
         subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
       } catch (error) {
-        // Brave, and Chrome builds without Google's services, have no push
-        // service until one is allowed in their settings.
-        throw new Error(/push service/i.test(error.message) ?
-          "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again." :
-          error.message);
+        // A browser whose push service is switched off fails here with a
+        // message that does not say so: Brave until Google's push is allowed,
+        // and Firefox or Zen with dom.push.connection.enabled turned off.
+        if (!/push (service|subscription)/i.test(error.message)) throw error;
+        throw new Error(/Firefox\//.test(navigator.userAgent) ?
+          "This browser's push service is off. Open about:config, set dom.push.connection.enabled to true, restart the browser, then try again." :
+          "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again.");
       }
       panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
       panel.querySelector("[data-push-submit]").click();
