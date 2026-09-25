@@ -1632,6 +1632,7 @@
       if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
       else if (url.value === url.dataset.savedUrl) url.value = "";
     }
+    if (kind === "browser") showPushState(form.querySelector("[data-push-panel]"));
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });
@@ -1691,6 +1692,90 @@
   window.addEventListener("resize", () => {
     document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
   });
+
+  // Browser alerts. Nothing is installed in a browser until someone turns
+  // alerts on in it: then Sable's service worker is registered, the browser
+  // asks for permission, and it subscribes with Sable's push key.
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  // The card says what this browser can do: turn alerts on, already has,
+  // or cannot, and why. Each state shows only its own parts.
+  const setPushState = (panel, state, error = "") => {
+    const card = panel.querySelector("[data-push-card]");
+    if (!card) return;
+    card.dataset.pushState = state;
+    card.querySelectorAll("[data-push-when]").forEach((part) => {
+      part.hidden = part.dataset.pushWhen !== state;
+    });
+    const message = card.querySelector("[data-push-error]");
+    message.textContent = error;
+    message.hidden = !error;
+  };
+  const base64URLBytes = (value) => {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  };
+  // The server names each browser by a hash of its endpoint, so the page can
+  // find this browser in the list without the server knowing which it is.
+  const pushBrowserID = async (endpoint) => {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
+    return btoa(String.fromCharCode(...digest.slice(0, 12))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const showPushState = async (panel) => {
+    if (!panel?.querySelector("[data-push-card]")) return;
+    if (!window.isSecureContext) return setPushState(panel, "insecure");
+    if (!pushSupported()) return setPushState(panel, "unsupported");
+    if (Notification.permission === "denied") return setPushState(panel, "blocked");
+    setPushState(panel, "ready");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription();
+      const row = subscription && panel.querySelector(`[data-push-browser="${await pushBrowserID(subscription.endpoint)}"]`);
+      if (!row) return;
+      row.querySelector("[data-push-this]")?.removeAttribute("hidden");
+      setPushState(panel, "on");
+    } catch {
+      // The card still offers to turn alerts on; this browser just is not
+      // marked in the list.
+    }
+  };
+  const turnOnPush = async (panel) => {
+    const enable = panel.querySelector("[data-push-enable]");
+    enable.disabled = true;
+    try {
+      if (await Notification.requestPermission() !== "granted") {
+        setPushState(panel, Notification.permission === "denied" ? "blocked" : "ready");
+        return;
+      }
+      const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
+      const {key, error} = await answer.json();
+      if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
+      const registration = await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+      await navigator.serviceWorker.ready;
+      const serverKey = base64URLBytes(key);
+      let subscription = await registration.pushManager.getSubscription();
+      // A subscription made for another key cannot receive Sable's pushes.
+      const current = subscription?.options.applicationServerKey;
+      if (subscription && !(current && new Uint8Array(current).every((byte, index) => byte === serverKey[index]))) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
+      panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
+      panel.querySelector("[data-push-submit]").click();
+    } catch (error) {
+      setPushState(panel, "ready", error.message || "This browser could not turn on alerts.");
+    } finally {
+      enable.disabled = false;
+    }
+  };
+  const alertPushPanel = () => document.querySelector("#insight-alerts [data-push-panel]");
+  document.addEventListener("click", (event) => {
+    const enable = event.target.closest("[data-push-enable]");
+    if (enable) turnOnPush(enable.closest("[data-push-panel]"));
+    if (event.target.closest('[data-dialog-open="insight-alerts-dialog"]')) showPushState(alertPushPanel());
+  });
+  document.body.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
+  showPushState(alertPushPanel());
 
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;

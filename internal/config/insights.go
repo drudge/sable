@@ -22,6 +22,9 @@ const (
 	InsightsWebhookSlack = "slack"
 	// InsightsWebhookDiscord posts a Discord webhook embed colored by tone.
 	InsightsWebhookDiscord = "discord"
+	// InsightsWebhookBrowser pushes each finding to the browsers that turned
+	// alerts on, through their own push services. It needs no URL.
+	InsightsWebhookBrowser = "browser"
 	// InsightsWebhookPushover posts the form Pushover's message API takes,
 	// with the application token and user key it needs.
 	InsightsWebhookPushover = "pushover"
@@ -76,14 +79,14 @@ func (webhook InsightsWebhook) Validate() error {
 		}
 	}
 	switch webhook.Format {
-	case "", InsightsWebhookJSON, InsightsWebhookText, InsightsWebhookSlack, InsightsWebhookDiscord:
+	case "", InsightsWebhookJSON, InsightsWebhookText, InsightsWebhookSlack, InsightsWebhookDiscord, InsightsWebhookBrowser:
 	case InsightsWebhookPushover:
 		if webhook.URL != "" && (webhook.PushoverToken == "" || webhook.PushoverUser == "") {
 			return fmt.Errorf("insights.webhook: Pushover needs an application token and a user key")
 		}
 	default:
-		return fmt.Errorf("insights.webhook.format must be %q, %q, %q, %q, or %q",
-			InsightsWebhookJSON, InsightsWebhookSlack, InsightsWebhookDiscord, InsightsWebhookText, InsightsWebhookPushover)
+		return fmt.Errorf("insights.webhook.format must be %q, %q, %q, %q, %q, or %q",
+			InsightsWebhookJSON, InsightsWebhookSlack, InsightsWebhookDiscord, InsightsWebhookText, InsightsWebhookPushover, InsightsWebhookBrowser)
 	}
 	for _, header := range webhook.Headers {
 		switch {
@@ -136,11 +139,21 @@ func (webhook *InsightsWebhook) Normalize() {
 	if webhook.Format != "" && webhook.Format != InsightsWebhookText {
 		webhook.Headers = nil
 	}
+	// Browsers subscribe on their own, so there is no URL to keep.
+	if webhook.Format == InsightsWebhookBrowser {
+		webhook.URL = ""
+	}
 	// ntfy takes plain text, so only that format can expect its receipt.
 	if webhook.Format != InsightsWebhookText {
 		webhook.NtfyReceipt = false
 	}
-	if webhook.URL == "" {
+	if !webhook.Configured() {
 		webhook.Paused = false
 	}
+}
+
+// Configured reports whether alerts have somewhere to go: a URL, or the
+// browsers that turned them on.
+func (webhook InsightsWebhook) Configured() bool {
+	return webhook.URL != "" || webhook.Format == InsightsWebhookBrowser
 }

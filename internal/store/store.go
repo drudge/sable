@@ -140,7 +140,7 @@ ON sable_server_log (occurred_at)`}
 	statements = append(statements, queryStatsTables()...)
 	statements = append(statements, rollupTierTables()...)
 	statements = append(statements, clientSightingTables()...)
-	statements = append(statements, insightFeedbackTable(), insightNotifiedTable())
+	statements = append(statements, insightFeedbackTable(), insightNotifiedTable(), pushSubscriptionTable())
 	statements = append(statements, store.authenticationTables()...)
 	statements = append(statements, passkeyTable, "CREATE INDEX IF NOT EXISTS sable_passkeys_user_idx ON sable_passkeys (user_id)")
 	statements = append(statements, trustAnchorTables()...)

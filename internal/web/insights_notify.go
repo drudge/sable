@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,7 +18,9 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	"github.com/drudge/sable/internal/version"
+	webassets "github.com/drudge/sable/internal/web/assets"
 	"github.com/drudge/sable/internal/web/pages"
+	"github.com/drudge/sable/internal/webpush"
 )
 
 const (
@@ -31,6 +34,29 @@ const (
 	insightAlertForget  = 6 * time.Hour
 	insightAlertTimeout = 10 * time.Second
 )
+
+// insightPushTTL is how long a browser's push service holds an alert for a
+// browser that is offline. A finding older than a day is no longer news.
+const insightPushTTL = 24 * time.Hour
+
+// pushSubscriptionStore is the optional store capability behind browser
+// alerts.
+type pushSubscriptionStore interface {
+	SavePushSubscription(context.Context, webpush.Subscription) error
+	PushSubscriptions(context.Context) ([]webpush.Subscription, error)
+	DeletePushSubscription(context.Context, string) error
+}
+
+// pushKeySource hands out the key browser pushes are signed with.
+type pushKeySource interface {
+	PushKey(context.Context) (*ecdsa.PrivateKey, error)
+}
+
+// SetPushKeys lets Insights push alerts to browsers.
+func (server *Server) SetPushKeys(keys pushKeySource) { server.pushKeys = keys }
+
+// errNoBrowsers is why a browser alert went nowhere.
+var errNoBrowsers = errors.New("no browser has turned alerts on yet; use Turn On in This Browser first")
 
 // insightNotificationStore is the optional store capability behind alerts.
 type insightNotificationStore interface {
@@ -88,10 +114,10 @@ func (server *Server) sendInsightAlerts(ctx context.Context, now time.Time) erro
 	snapshot := server.config.Current().Config
 	webhook := snapshot.Insights.Webhook
 	notifications, ok := server.queries.(insightNotificationStore)
-	if webhook.URL == "" || !ok {
+	if !webhook.Configured() || !ok {
 		return nil
 	}
-	target := insightAlertTarget(webhook.URL)
+	target := insightAlertTarget(insightAlertDestination(webhook))
 	notified, known, err := notifications.InsightsNotified(ctx, target)
 	if err != nil {
 		return err
@@ -111,7 +137,7 @@ func (server *Server) sendInsightAlerts(ctx context.Context, now time.Time) erro
 			continue
 		}
 		if !webhook.Paused {
-			if _, err := server.postInsightAlert(ctx, webhook, snapshot, finding); err != nil {
+			if err := server.deliverInsightAlert(ctx, webhook, snapshot, finding); err != nil {
 				return err
 			}
 		}
@@ -314,6 +340,17 @@ func buildInsightAlert(webhook config.InsightsWebhook, snapshot config.Config, f
 			return built, err
 		}
 		built.ContentType, built.Body = "application/json", encoded
+	case config.InsightsWebhookBrowser:
+		// Each browser gets this encrypted for it alone; the service worker
+		// shows it as a notification.
+		encoded, err := json.Marshal(insightPush{
+			Title: truncateAlertText(title, 120), Body: truncateAlertText(finding.Summary, 400),
+			URL: "/insights", Tag: finding.ID, Icon: webassets.URL("sable-icon-180.png"),
+		})
+		if err != nil {
+			return built, err
+		}
+		built.ContentType, built.Body = "application/json", encoded
 	case config.InsightsWebhookPushover:
 		form := url.Values{
 			"token": {webhook.PushoverToken}, "user": {webhook.PushoverUser},
@@ -418,6 +455,113 @@ func (server *Server) postInsightAlert(ctx context.Context, webhook config.Insig
 	return receipt.ID, nil
 }
 
+// insightAlertDestination is what alerts go to: a URL, or the browsers that
+// turned them on.
+func insightAlertDestination(webhook config.InsightsWebhook) string {
+	if webhook.Format == config.InsightsWebhookBrowser {
+		return "browser"
+	}
+	return webhook.URL
+}
+
+// deliverInsightAlert sends one finding wherever alerts go.
+func (server *Server) deliverInsightAlert(ctx context.Context, webhook config.InsightsWebhook, snapshot config.Config, finding insights.Finding) error {
+	if webhook.Format == config.InsightsWebhookBrowser {
+		_, err := server.pushInsightAlert(ctx, snapshot, finding)
+		if errors.Is(err, errNoBrowsers) {
+			return nil
+		}
+		return err
+	}
+	_, err := server.postInsightAlert(ctx, webhook, snapshot, finding)
+	return err
+}
+
+// insightPush is what a browser's service worker gets for a finding.
+type insightPush struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	URL   string `json:"url"`
+	Tag   string `json:"tag"`
+	Icon  string `json:"icon"`
+}
+
+// pushInsightAlert pushes one finding to every browser that turned alerts
+// on, and forgets any whose push service says it is gone. It counts the
+// browsers reached; one that fails does not keep the rest from hearing.
+func (server *Server) pushInsightAlert(ctx context.Context, snapshot config.Config, finding insights.Finding) (int, error) {
+	subscriptions, err := server.pushSubscriptions(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(subscriptions) == 0 {
+		return 0, errNoBrowsers
+	}
+	sender, err := server.pushSender(ctx, snapshot)
+	if err != nil {
+		return 0, err
+	}
+	built, err := buildInsightAlert(config.InsightsWebhook{Format: config.InsightsWebhookBrowser}, snapshot, finding)
+	if err != nil {
+		return 0, err
+	}
+	payload := built.Body
+	store := server.queries.(pushSubscriptionStore)
+	sent := 0
+	var failure error
+	for _, subscription := range subscriptions {
+		sendContext, cancel := context.WithTimeout(ctx, insightAlertTimeout)
+		err := sender.Send(sendContext, subscription, payload, insightPushTTL)
+		cancel()
+		switch {
+		case err == nil:
+			sent++
+		case errors.Is(err, webpush.ErrGone):
+			if err := store.DeletePushSubscription(ctx, subscription.Endpoint); err != nil {
+				server.logger.Warn("forget gone push subscription", "error", err)
+			}
+		default:
+			server.logger.Warn("push insight alert", "browser", subscription.Label, "error", err)
+			failure = err
+		}
+	}
+	if sent == 0 && failure != nil {
+		return 0, failure
+	}
+	if sent == 0 {
+		return 0, errNoBrowsers
+	}
+	return sent, nil
+}
+
+// pushSubscriptions lists the browsers that turned alerts on, or none when
+// this server cannot keep them.
+func (server *Server) pushSubscriptions(ctx context.Context) ([]webpush.Subscription, error) {
+	store, ok := server.queries.(pushSubscriptionStore)
+	if !ok || server.pushKeys == nil {
+		return nil, nil
+	}
+	return store.PushSubscriptions(ctx)
+}
+
+// pushSender signs pushes with this server's key. Push services want a way
+// to reach whoever runs the server, so it names the console when it is
+// served over HTTPS and Sable's project page when it is not.
+func (server *Server) pushSender(ctx context.Context, snapshot config.Config) (webpush.Sender, error) {
+	if server.pushKeys == nil {
+		return webpush.Sender{}, errors.New("browser alerts are not available on this server")
+	}
+	key, err := server.pushKeys.PushKey(ctx)
+	if err != nil {
+		return webpush.Sender{}, err
+	}
+	subject := strings.TrimRight(snapshot.AdvertisedBaseURL(), "/")
+	if !strings.HasPrefix(subject, "https://") {
+		subject = "https://github.com/drudge/sable"
+	}
+	return webpush.Sender{Key: key, Subject: subject, Client: server.pushClient}, nil
+}
+
 // insightAlertTarget names a webhook without keeping its URL, which often
 // carries a secret token, in the database.
 func insightAlertTarget(url string) string {
@@ -427,15 +571,42 @@ func insightAlertTarget(url string) string {
 
 // insightAlertsView is the alert setup as the Overview shows it, for
 // operators who can change it.
-func (server *Server) insightAlertsView(console pages.DashboardView) *pages.InsightAlertsView {
+func (server *Server) insightAlertsView(ctx context.Context, console pages.DashboardView) *pages.InsightAlertsView {
 	if !console.CanWriteSettings {
 		return nil
 	}
 	if _, ok := server.queries.(insightNotificationStore); !ok {
 		return nil
 	}
-	view := newInsightAlertsView(server.config.Current().Config.Insights.Webhook)
+	view := server.alertsView(ctx, server.config.Current().Config.Insights.Webhook)
 	return &view
+}
+
+// alertsView lays out an alert setup with the browsers that turned alerts on.
+// Browser alerts count as on only once some browser has.
+func (server *Server) alertsView(ctx context.Context, webhook config.InsightsWebhook) pages.InsightAlertsView {
+	view := newInsightAlertsView(webhook)
+	view.On = webhook.URL != ""
+	if server.pushKeys == nil {
+		return view
+	}
+	if _, ok := server.queries.(pushSubscriptionStore); !ok {
+		return view
+	}
+	view.PushAvailable = true
+	subscriptions, err := server.pushSubscriptions(ctx)
+	if err != nil {
+		server.logger.Warn("read push subscriptions", "error", err)
+	}
+	for _, subscription := range subscriptions {
+		view.Browsers = append(view.Browsers, pages.InsightAlertBrowser{
+			ID: subscription.ID(), Label: subscription.Label, By: subscription.CreatedBy, Added: subscription.CreatedAt,
+		})
+	}
+	if webhook.Format == config.InsightsWebhookBrowser {
+		view.On = len(view.Browsers) > 0
+	}
+	return view
 }
 
 func newInsightAlertsView(webhook config.InsightsWebhook) pages.InsightAlertsView {
@@ -462,7 +633,7 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		return
 	}
 	webhook := insightWebhookFromForm(request, server.config.Current().Config.Insights.Webhook)
-	view := newInsightAlertsView(webhook)
+	view := server.alertsView(request.Context(), webhook)
 	editor, ok := server.config.(settingsEditor)
 	err := webhook.Validate()
 	if err == nil && !ok {
@@ -478,15 +649,20 @@ func (server *Server) saveInsightAlerts(writer http.ResponseWriter, request *htt
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
 		view.Error = err.Error()
 	} else {
+		view = server.alertsView(request.Context(), webhook)
 		switch {
-		case webhook.URL == "":
+		case webhook.Format == config.InsightsWebhookBrowser && len(view.Browsers) == 0:
+			view.Message = "Saved. Turn on alerts in this browser to start getting them."
+		case webhook.Format == config.InsightsWebhookBrowser:
+			view.Message = "Saved. New findings will be pushed to the browsers below."
+		case !webhook.Configured():
 			view.Message = "Alerts turned off."
 		case webhook.Paused:
 			view.Message = "Saved. Alerts are paused."
 		default:
 			view.Message = "Saved. New findings will be sent to this webhook."
 		}
-		server.recordControlPlaneAudit(request, "insights.alerts", ifThenString(webhook.URL != "", "set the Insights alert webhook", "turned Insights alerts off"))
+		server.recordControlPlaneAudit(request, "insights.alerts", ifThenString(webhook.Configured(), "set the Insights alert webhook", "turned Insights alerts off"))
 		// The bell beside the range control shows the old state until the page
 		// reloads itself.
 		writer.Header().Set("HX-Trigger", "insightsChanged")
@@ -536,6 +712,11 @@ func (server *Server) previewInsightAlerts(writer http.ResponseWriter, request *
 	webhook := insightWebhookFromForm(request, snapshot.Insights.Webhook)
 	built, err := buildInsightAlert(webhook, snapshot, sampleInsightFinding(time.Now()))
 	preview := pages.InsightAlertPreview{Method: "POST", URL: maskInsightWebhookURL(webhook), ContentType: built.ContentType}
+	if webhook.Format == config.InsightsWebhookBrowser {
+		// What each push service gets is sealed for one browser; show what
+		// the browser opens.
+		preview.URL, preview.ContentType = "(each browser's push service)", "application/json, encrypted for each browser"
+	}
 	if err != nil {
 		preview.Error = err.Error()
 	}
@@ -628,8 +809,8 @@ func (server *Server) setInsightAlertsEnabled(writer http.ResponseWriter, reques
 	}
 	paused := request.FormValue("enabled") != "true"
 	webhook := server.config.Current().Config.Insights.Webhook
-	view := newInsightAlertsView(webhook)
-	if webhook.URL == "" {
+	view := server.alertsView(request.Context(), webhook)
+	if !webhook.Configured() {
 		view.Error = "Save a webhook URL first."
 		server.renderInsightAlerts(writer, request, view)
 		return
@@ -664,9 +845,21 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 	}
 	snapshot := server.config.Current().Config
 	webhook := snapshot.Insights.Webhook
-	view := newInsightAlertsView(webhook)
-	if webhook.URL == "" {
+	view := server.alertsView(request.Context(), webhook)
+	if !webhook.Configured() {
 		view.Error = "Save a webhook URL first."
+		server.renderInsightAlerts(writer, request, view)
+		return
+	}
+	if webhook.Format == config.InsightsWebhookBrowser {
+		if sent, err := server.pushInsightAlert(request.Context(), snapshot, sampleInsightFinding(time.Now())); err != nil {
+			view.Error = err.Error()
+		} else {
+			view.Message = fmt.Sprintf("Test sent to %d %s.", sent, ifThenString(sent == 1, "browser", "browsers"))
+		}
+		// A browser whose push service said it is gone was just forgotten.
+		fresh := server.alertsView(request.Context(), webhook)
+		view.Browsers, view.On = fresh.Browsers, fresh.On
 		server.renderInsightAlerts(writer, request, view)
 		return
 	}
@@ -682,6 +875,156 @@ func (server *Server) testInsightAlerts(writer http.ResponseWriter, request *htt
 		view.Message = "Test sent."
 	}
 	server.renderInsightAlerts(writer, request, view)
+}
+
+// pushSubscriptionForm is what the dialog posts when a browser subscribes:
+// the browser's PushSubscription as JSON.
+type pushSubscriptionForm struct {
+	Endpoint string `json:"endpoint"`
+	Keys     struct {
+		P256DH string `json:"p256dh"`
+		Auth   string `json:"auth"`
+	} `json:"keys"`
+}
+
+// addInsightAlertBrowser keeps the browser that just subscribed, and makes
+// browsers where alerts go.
+func (server *Server) addInsightAlertBrowser(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		writeFragmentStatus(writer, http.StatusBadRequest)
+		return
+	}
+	webhook := server.config.Current().Config.Insights.Webhook
+	store, ok := server.queries.(pushSubscriptionStore)
+	editor, editable := server.config.(settingsEditor)
+	var form pushSubscriptionForm
+	err := json.Unmarshal([]byte(request.FormValue("push_subscription")), &form)
+	subscription := webpush.Subscription{
+		Endpoint: form.Endpoint, P256DH: form.Keys.P256DH, Auth: form.Keys.Auth,
+		Label: browserLabel(request.UserAgent()), CreatedBy: console.Username, CreatedAt: time.Now(),
+	}
+	switch {
+	case !ok || server.pushKeys == nil || !editable:
+		err = errors.New("browser alerts are not available on this server")
+	case err != nil:
+		err = errors.New("the browser sent a subscription Sable could not read")
+	default:
+		err = subscription.Valid()
+	}
+	if err == nil {
+		err = store.SavePushSubscription(request.Context(), subscription)
+	}
+	if err == nil && webhook.Format != config.InsightsWebhookBrowser {
+		webhook = config.InsightsWebhook{Format: config.InsightsWebhookBrowser, Paused: webhook.Paused}
+		err = editor.Update(request.Context(), func(configuration *config.Config) error {
+			configuration.Insights.Webhook = webhook
+			return nil
+		})
+	}
+	view := server.alertsView(request.Context(), server.config.Current().Config.Insights.Webhook)
+	if err != nil {
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		view.Error = err.Error()
+	} else {
+		view.Message = "This browser will get alerts."
+		server.recordControlPlaneAudit(request, "insights.alerts", "turned on Insights alerts in "+subscription.Label)
+		writer.Header().Set("HX-Trigger", "insightsChanged")
+	}
+	server.renderInsightAlerts(writer, request, view)
+}
+
+// insightAlertPushKey hands a browser the public key to subscribe with. The
+// key is made the first time a browser asks, not before, so a server that
+// never uses browser alerts never makes one.
+func (server *Server) insightAlertPushKey(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "no-store")
+	if server.pushKeys == nil {
+		writer.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(writer).Encode(map[string]string{"error": "browser alerts are not available on this server"})
+		return
+	}
+	key, err := server.pushKeys.PushKey(request.Context())
+	public := ""
+	if err == nil {
+		public, err = webpush.PublicKey(key)
+	}
+	if err != nil {
+		server.logger.Error("read push key", "error", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(writer).Encode(map[string]string{"error": "Sable could not read its push key"})
+		return
+	}
+	_ = json.NewEncoder(writer).Encode(map[string]string{"key": public})
+}
+
+// removeInsightAlertBrowser stops alerts to one browser.
+func (server *Server) removeInsightAlertBrowser(writer http.ResponseWriter, request *http.Request) {
+	console := server.consoleView(request)
+	if !console.CanWriteSettings {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		writeFragmentStatus(writer, http.StatusBadRequest)
+		return
+	}
+	subscriptions, err := server.pushSubscriptions(request.Context())
+	removed := ""
+	for _, subscription := range subscriptions {
+		if err == nil && subscription.ID() == request.FormValue("browser") {
+			err = server.queries.(pushSubscriptionStore).DeletePushSubscription(request.Context(), subscription.Endpoint)
+			removed = subscription.Label
+		}
+	}
+	view := server.alertsView(request.Context(), server.config.Current().Config.Insights.Webhook)
+	switch {
+	case err != nil:
+		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
+		view.Error = err.Error()
+	case removed == "":
+		view.Error = "That browser was already removed."
+	default:
+		view.Message = removed + " will no longer get alerts."
+		server.recordControlPlaneAudit(request, "insights.alerts", "stopped Insights alerts in "+removed)
+		writer.Header().Set("HX-Trigger", "insightsChanged")
+	}
+	server.renderInsightAlerts(writer, request, view)
+}
+
+// browserLabel names a browser the way people know it, from its user agent.
+func browserLabel(userAgent string) string {
+	browser := "A browser"
+	for _, known := range []struct{ token, name string }{
+		{"Edg/", "Edge"}, {"OPR/", "Opera"}, {"Firefox/", "Firefox"}, {"FxiOS/", "Firefox"},
+		{"CriOS/", "Chrome"}, {"Chrome/", "Chrome"}, {"Safari/", "Safari"},
+	} {
+		if strings.Contains(userAgent, known.token) {
+			browser = known.name
+			break
+		}
+	}
+	for _, known := range []struct{ token, name string }{
+		{"iPhone", "iPhone"}, {"iPad", "iPad"}, {"Android", "Android"}, {"Mac OS X", "macOS"},
+		{"Windows", "Windows"}, {"CrOS", "ChromeOS"}, {"Linux", "Linux"},
+	} {
+		if strings.Contains(userAgent, known.token) {
+			return browser + " on " + known.name
+		}
+	}
+	return browser
 }
 
 func (server *Server) renderInsightAlerts(writer http.ResponseWriter, request *http.Request, view pages.InsightAlertsView) {
