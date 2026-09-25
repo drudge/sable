@@ -85,6 +85,10 @@ var retired = map[string]retiredMark{
 	"adobe": {Release: "13.21.0", Hex: "FF0000", Path: "M13.966 22.624l-1.69-4.281H8.122l3.892-9.144 5.662 13.425zM8.884 1.376H0v21.248zm15.116 0h-8.884L24 22.624Z"},
 }
 
+// whiteTiles are the brands whose own app icon is a black mark on white
+// rather than a mark on their brand color.
+var whiteTiles = map[string]bool{"chatgpt": true}
+
 // darkMarks are the brands that show a black mark on their own color, though
 // the color is not light enough for the rule below to call for one.
 var darkMarks = map[string]bool{"android": true, "homebrew": true, "kagi": true, "plex": true, "spotify": true, "synology": true}
@@ -143,12 +147,12 @@ func generate(directory, output string) error {
 		}
 		entry, found := bySlug[slug]
 		if old, kept := retired[service.ID]; kept && !found {
-			ink, err := inkOn(old.Hex)
+			color, ink, err := tile(service.ID, old.Hex)
 			if err != nil {
 				return fmt.Errorf("%s: %w", service.ID, err)
 			}
 			fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q}, // Simple Icons %s, the last release with this mark\n",
-				service.ID, old.Path, "#"+old.Hex, ink, old.Release)
+				service.ID, old.Path, color, ink, old.Release)
 			continue
 		}
 		if slug == "" || !found {
@@ -163,14 +167,14 @@ func generate(directory, output string) error {
 		if path == nil {
 			return fmt.Errorf("%s: no path in %s.svg", service.ID, slug)
 		}
-		ink, err := inkOn(entry.Hex)
+		color, ink, err := tile(service.ID, entry.Hex)
 		if err != nil {
 			return fmt.Errorf("%s: %w", service.ID, err)
 		}
 		if darkMarks[slug] {
 			ink = "#000"
 		}
-		fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q},\n", service.ID, path[1], "#"+entry.Hex, ink)
+		fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q},\n", service.ID, path[1], color, ink)
 	}
 	fmt.Fprintf(&table, "}\n")
 	source, err := format.Source(table.Bytes())
@@ -182,6 +186,15 @@ func generate(directory, output string) error {
 	}
 	log.Printf("%d apps have no mark and show their category: %s", len(missing), strings.Join(missing, " "))
 	return nil
+}
+
+// tile picks an app's tile color and the ink for its mark.
+func tile(id, hex string) (string, string, error) {
+	if whiteTiles[id] {
+		return "#FFFFFF", "#000", nil
+	}
+	ink, err := inkOn(hex)
+	return "#" + hex, ink, err
 }
 
 // inkOn picks the ink for a mark on a brand color. Brands draw their marks in

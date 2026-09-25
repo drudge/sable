@@ -118,8 +118,9 @@ func TestAppsHaveIcons(t *testing.T) {
 	for id, want := range map[string]string{
 		"netflix":  `<rect width="24" height="24" rx="6" fill="#E50914"></rect>`,
 		"snapchat": `fill="#FFFC00"`,
-		// ChatGPT keeps OpenAI's mark from before it left Simple Icons.
-		"chatgpt":       `fill="#412991"`,
+		// ChatGPT keeps OpenAI's mark from before it left Simple Icons, drawn
+		// black on white like its app icon.
+		"chatgpt":       `class="app-icon app-icon-white"`,
 		"xbox":          `fill="#107C10"`,
 		"prime-video":   `fill="#1F2E3E"`,
 		"teams":         `fill="#6264A7"`,
@@ -136,7 +137,7 @@ func TestAppsHaveIcons(t *testing.T) {
 	}
 	// Brands draw their marks in white on their color unless it is very light,
 	// or their own look is a dark mark, as Spotify's is.
-	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000"} {
+	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000", "chatgpt": "#000"} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, `fill="`+ink+`" transform=`) {
 			t.Errorf("%s mark is not drawn in %s: %s", id, ink, drawn)
 		}

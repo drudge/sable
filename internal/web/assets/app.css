@@ -3896,7 +3896,7 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
    icon on a gray tile. The app's name always sits beside it. */
 .app-icon { width: 2rem; height: 2rem; flex: 0 0 2rem; }
 svg.app-icon { display: block; border-radius: .5rem; }
-.dark svg.app-icon { box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent); }
+.dark svg.app-icon, svg.app-icon-white { box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent); }
 .app-icon-category { display: grid; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
 .app-icon-category .nav-icon { width: 1rem; height: 1rem; }
 .top-stats-row > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }

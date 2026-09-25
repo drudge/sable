@@ -22,12 +22,13 @@ var appCategoryIcons = map[string]string{
 }
 
 // AppIcon is an app's logo as a small app tile: the brand's mark, in white or
-// black, whichever reads better, on the brand's color. An app without a mark
+// black, whichever reads better, on the brand's color. A white tile gets a
+// hairline so it holds its shape on a white card. An app without a mark
 // shows its category's icon on a gray tile, as a device shows its type. The
 // app's name always sits beside it, so the icon is decoration.
 templ AppIcon(id, category string) {
 	if logo, found := appLogos[id]; found {
-		<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<svg class={ "app-icon", templ.KV("app-icon-white", logo.Color == "#FFFFFF") } viewBox="0 0 24 24" aria-hidden="true">
 			<rect width="24" height="24" rx="6" fill={ logo.Color }></rect>
 			<path d={ logo.Path } fill={ logo.Ink } transform="translate(5 5) scale(.5833)"></path>
 		</svg>
