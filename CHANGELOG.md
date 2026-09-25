@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.7] - 2026-09-24
+
+Sable 1.5.0-beta.7 draws the ChatGPT and Microsoft 365 logos the way their
+apps do, and closes DNS-over-QUIC connections cleanly when Sable stops.
+
+### Insights
+
+- Show ChatGPT's logo in black on white, like its app, instead of on
+  OpenAI's old purple.
+- Show Microsoft 365 with Microsoft's four-color logo on white instead of
+  Office's retired mark.
+
+### DNS over QUIC
+
+- Tell a client that connects just as Sable stops that the connection is
+  closing, so it reconnects right away instead of waiting for its idle
+  timeout.
+
 ## [1.5.0-beta.6] - 2026-09-24
 
 Sable 1.5.0-beta.6 fixes turning on browser alerts in browsers whose push
