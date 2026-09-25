@@ -120,16 +120,17 @@ func TestAppsHaveIcons(t *testing.T) {
 		"snapchat": `fill="#FFFC00"`,
 		// ChatGPT keeps OpenAI's mark from before it left Simple Icons, drawn
 		// black on white like its app icon.
-		"chatgpt":       `class="app-icon app-icon-white"`,
-		"xbox":          `fill="#107C10"`,
-		"prime-video":   `fill="#1F2E3E"`,
-		"teams":         `fill="#6264A7"`,
-		"slack":         `fill="#4A154B"`,
-		"linkedin":      `fill="#0A66C2"`,
-		"bing":          `fill="#258FFA"`,
-		"nintendo":      `fill="#E60012"`,
-		"adobe":         `fill="#FF0000"`,
-		"microsoft-365": `fill="#D83B01"`,
+		"chatgpt":     `class="app-icon app-icon-white"`,
+		"xbox":        `fill="#107C10"`,
+		"prime-video": `fill="#1F2E3E"`,
+		"teams":       `fill="#6264A7"`,
+		"slack":       `fill="#4A154B"`,
+		"linkedin":    `fill="#0A66C2"`,
+		"bing":        `fill="#258FFA"`,
+		"nintendo":    `fill="#E60012"`,
+		"adobe":       `fill="#FF0000"`,
+		// Microsoft 365 wears Microsoft's four-color squares on white.
+		"microsoft-365": `class="app-icon app-icon-white"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
@@ -141,6 +142,9 @@ func TestAppsHaveIcons(t *testing.T) {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, `fill="`+ink+`" transform=`) {
 			t.Errorf("%s mark is not drawn in %s: %s", id, ink, drawn)
 		}
+	}
+	if drawn := renderComponent(t, AppIcon("microsoft-365", "")); strings.Count(drawn, "<path ") != 4 || !strings.Contains(drawn, `fill="#F25022"`) || !strings.Contains(drawn, `fill="#FFB900"`) {
+		t.Errorf("Microsoft 365 logo = %s", drawn)
 	}
 	if drawn := renderComponent(t, AppIcon("docusign", services.CategoryProductivity)); !strings.Contains(drawn, `class="app-icon app-icon-category"`) || !strings.Contains(drawn, "icon-briefcase") {
 		t.Errorf("an app without a logo shows %s", drawn)
