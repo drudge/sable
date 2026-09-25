@@ -13,6 +13,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# setup-go keys its cache on go.sum alone and never refreshes it. Each job
+# instead keeps its own build and test cache keyed on the commit, saved from
+# main so pull requests start warm.
+
 jobs:
   quality:
     name: Quality
@@ -27,7 +31,18 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-quality-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-ci-quality-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            go-ci-quality-${{ runner.os }}-
 
       - name: Check formatting
         shell: bash
@@ -48,8 +63,81 @@ jobs:
       - name: Verify generated code, tests, and static analysis
         run: go tool mage verify
 
+      - name: Scan reachable dependencies
+        run: go tool govulncheck ./...
+
+      - name: Save Go cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-quality-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-race-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-ci-race-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            go-ci-race-${{ runner.os }}-
+
       - name: Run race detector
         run: go tool mage race
+
+      - name: Save Go cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-race-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+
+  browser:
+    name: Browser regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-browser-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-ci-browser-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            go-ci-browser-${{ runner.os }}-
 
       - name: Set up Node for browser regression tests
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -57,12 +145,31 @@ jobs:
           node-version: '24'
 
       - name: Install browser test dependencies
-        run: |
-          npm ci --prefix scripts/browser
-          scripts/browser/node_modules/.bin/playwright install --with-deps chromium
+        run: npm ci --prefix scripts/browser
+
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/browser/package-lock.json') }}
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: scripts/browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: scripts/browser/node_modules/.bin/playwright install-deps chromium
 
       - name: Check live refresh and block-list feedback
         run: go test -count=1 -tags=browser -run TestBrowser -v ./internal/web
 
-      - name: Scan reachable dependencies
-        run: go tool govulncheck ./...
+      - name: Save Go cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-ci-browser-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
