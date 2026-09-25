@@ -504,7 +504,8 @@ func clearSessionCookie(writer http.ResponseWriter, request *http.Request, name 
 
 func publicRequest(path string) bool {
 	return path == passkeyLoginBegin || path == passkeyLoginFinish || path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
-		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/")
+		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/") ||
+		path == serviceWorkerPath || path == webManifestPath
 }
 
 func tokenRequest(path string) bool {
@@ -581,7 +582,8 @@ func validatedReturnTarget(rawTarget, requestHost string) string {
 		return "/"
 	}
 	if target.Path == "/login" || target.Path == "/setup" || target.Path == "/logout" ||
-		tokenRequest(target.Path) || strings.HasPrefix(target.Path, "/ui/") || strings.HasPrefix(target.Path, "/assets/") {
+		tokenRequest(target.Path) || strings.HasPrefix(target.Path, "/ui/") || strings.HasPrefix(target.Path, "/assets/") ||
+		target.Path == serviceWorkerPath || target.Path == webManifestPath {
 		return "/"
 	}
 	target.Scheme = ""

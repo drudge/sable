@@ -370,6 +370,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<link rel="icon" href={ assetURL("sable-mark.svg") } type="image/svg+xml"/>
 			<link rel="icon" href={ assetURL("sable-icon-180.png") } type="image/png" sizes="180x180"/>
 			<link rel="apple-touch-icon" href={ assetURL("sable-icon-180.png") }/>
+			<link rel="manifest" href="/manifest.webmanifest"/>
 			<script src={ assetURL("bootstrap.js") }></script>
 			<link rel="stylesheet" href={ assetURL("app.css") }/>
 			<script src={ assetURL("app.js") } defer></script>
@@ -951,6 +952,7 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 			<link rel="icon" href={ assetURL("sable-mark.svg") } type="image/svg+xml"/>
 			<link rel="icon" href={ assetURL("sable-icon-180.png") } type="image/png" sizes="180x180"/>
 			<link rel="apple-touch-icon" href={ assetURL("sable-icon-180.png") }/>
+			<link rel="manifest" href="/manifest.webmanifest"/>
 			<script src={ assetURL("bootstrap.js") }></script>
 			<link rel="stylesheet" href={ assetURL("app.css") }/>
 			<script src={ assetURL("app.js") } defer></script>
@@ -1674,6 +1676,8 @@ templ Icon(kind string) {
 				<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path><path d="M11 7v4"></path><path d="M11 15h.01"></path>
 			case "check":
 				<path d="m20 6-11 11-5-5"></path>
+			case "webhook":
+				<path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"></path><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"></path><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"></path>
 			case "bell":
 				<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>
 			case "bell-off":

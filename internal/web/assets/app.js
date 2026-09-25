@@ -1593,6 +1593,190 @@
 	  });
 	});
 
+  // Insights alert headers are rows of name and value; the form posts them as
+  // parallel lists, so adding and removing rows needs no bookkeeping.
+  document.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-alert-header-add]");
+    if (add) {
+      const form = add.closest("form");
+      const row = form?.querySelector("[data-alert-header-template]")?.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      form.querySelector("[data-alert-headers]").append(row);
+      row.querySelector("input")?.focus();
+      return;
+    }
+    const remove = event.target.closest("[data-alert-header-remove]");
+    if (remove) {
+      const form = remove.closest("form");
+      remove.closest("[data-alert-header]")?.remove();
+      form?.querySelector("[data-alert-header-add]")?.focus();
+    }
+  });
+
+  // Each kind of alert shows only its own setup: parts marked
+  // data-alert-for list the kinds they belong to. Pushover always posts to
+  // its own API, so it has no URL to ask for.
+  document.addEventListener("change", (event) => {
+    if (!event.target.matches?.('#insight-alerts input[name="format"]')) return;
+    const form = event.target.form;
+    const kind = event.target.value;
+    form?.querySelectorAll("[data-alert-for]").forEach((part) => {
+      part.hidden = !part.dataset.alertFor.split(" ").includes(kind);
+    });
+    const url = form?.querySelector('input[name="url"]');
+    const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
+    if (placeholder) url.placeholder = placeholder;
+    // A URL belongs to its kind: an ntfy topic is no Slack webhook. Leaving
+    // the saved kind empties the box, and coming back fills it again.
+    if (url && url.dataset.savedKind) {
+      if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
+      else if (url.value === url.dataset.savedUrl) url.value = "";
+    }
+    if (kind === "browser") showPushState(form.querySelector("[data-push-panel]"));
+    // An open preview follows the format.
+    if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
+  });
+  // The preview drops out of its button like Sable's other menus, flipping
+  // above only when there is no room below, so looking at it never changes
+  // the dialog's size.
+  const alertPreviewTrigger = (popover) => popover.closest("form")?.querySelector("[data-alert-preview]");
+  const positionAlertPreview = (popover) => {
+    const trigger = alertPreviewTrigger(popover);
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const inset = 8;
+    const gap = 4;
+    const width = Math.min(34 * 16, window.innerWidth - inset * 2);
+    const above = rect.top - inset - gap;
+    const below = window.innerHeight - rect.bottom - inset - gap;
+    popover.style.width = `${width}px`;
+    popover.style.maxHeight = "";
+    const wanted = Math.min(popover.scrollHeight, 28 * 16);
+    // Like a menu, it stays below and scrolls unless there is barely any room.
+    const side = below >= Math.min(wanted, 15 * 16) || below >= above ? "bottom" : "top";
+    popover.dataset.side = side;
+    popover.style.maxHeight = `${Math.max(120, Math.min(28 * 16, side === "bottom" ? below : above))}px`;
+    popover.style.left = `${Math.min(Math.max(rect.left, inset), window.innerWidth - inset - width)}px`;
+    const height = popover.getBoundingClientRect().height;
+    popover.style.top = `${side === "top" ? rect.top - gap - height : rect.bottom + gap}px`;
+  };
+  document.body.addEventListener("htmx:after:swap", (event) => {
+    const popover = event.detail?.ctx?.target;
+    if (!popover?.matches?.("[data-alert-preview-popover]")) return;
+    if (!popover.matches(":popover-open")) popover.showPopover();
+    positionAlertPreview(popover);
+  });
+  document.addEventListener("toggle", (event) => {
+    if (!event.target.matches?.("[data-alert-preview-popover]")) return;
+    alertPreviewTrigger(event.target)?.setAttribute("aria-expanded", String(event.newState === "open"));
+  }, true);
+  // Pressing Preview again closes it. A pointer press outside the popover
+  // light-dismisses it before the click lands, so remember it was open.
+  document.addEventListener("pointerdown", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    trigger.dataset.previewWasOpen = String(!!trigger.form?.querySelector("[data-alert-preview-popover]:popover-open"));
+  }, true);
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    const popover = trigger.form?.querySelector("[data-alert-preview-popover]");
+    const wasOpen = trigger.dataset.previewWasOpen === "true" || popover?.matches(":popover-open");
+    delete trigger.dataset.previewWasOpen;
+    // A click the format change sends only refreshes an open preview.
+    if (!wasOpen || !event.isTrusted) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (popover?.matches(":popover-open")) popover.hidePopover();
+  }, true);
+  window.addEventListener("resize", () => {
+    document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
+  });
+
+  // Browser alerts. Nothing is installed in a browser until someone turns
+  // alerts on in it: then Sable's service worker is registered, the browser
+  // asks for permission, and it subscribes with Sable's push key.
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  // The card says what this browser can do: turn alerts on, already has,
+  // or cannot, and why. Each state shows only its own parts.
+  const setPushState = (panel, state, error = "") => {
+    const card = panel.querySelector("[data-push-card]");
+    if (!card) return;
+    card.dataset.pushState = state;
+    card.querySelectorAll("[data-push-when]").forEach((part) => {
+      part.hidden = part.dataset.pushWhen !== state;
+    });
+    const message = card.querySelector("[data-push-error]");
+    message.textContent = error;
+    message.hidden = !error;
+  };
+  const base64URLBytes = (value) => {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  };
+  // The server names each browser by a hash of its endpoint, so the page can
+  // find this browser in the list without the server knowing which it is.
+  const pushBrowserID = async (endpoint) => {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
+    return btoa(String.fromCharCode(...digest.slice(0, 12))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const showPushState = async (panel) => {
+    if (!panel?.querySelector("[data-push-card]")) return;
+    if (!window.isSecureContext) return setPushState(panel, "insecure");
+    if (!pushSupported()) return setPushState(panel, "unsupported");
+    if (Notification.permission === "denied") return setPushState(panel, "blocked");
+    setPushState(panel, "ready");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription();
+      const row = subscription && panel.querySelector(`[data-push-browser="${await pushBrowserID(subscription.endpoint)}"]`);
+      if (!row) return;
+      row.querySelector("[data-push-this]")?.removeAttribute("hidden");
+      setPushState(panel, "on");
+    } catch {
+      // The card still offers to turn alerts on; this browser just is not
+      // marked in the list.
+    }
+  };
+  const turnOnPush = async (panel) => {
+    const enable = panel.querySelector("[data-push-enable]");
+    enable.disabled = true;
+    try {
+      if (await Notification.requestPermission() !== "granted") {
+        setPushState(panel, Notification.permission === "denied" ? "blocked" : "ready");
+        return;
+      }
+      const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
+      const {key, error} = await answer.json();
+      if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
+      const registration = await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+      await navigator.serviceWorker.ready;
+      const serverKey = base64URLBytes(key);
+      let subscription = await registration.pushManager.getSubscription();
+      // A subscription made for another key cannot receive Sable's pushes.
+      const current = subscription?.options.applicationServerKey;
+      if (subscription && !(current && new Uint8Array(current).every((byte, index) => byte === serverKey[index]))) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
+      panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
+      panel.querySelector("[data-push-submit]").click();
+    } catch (error) {
+      setPushState(panel, "ready", error.message || "This browser could not turn on alerts.");
+    } finally {
+      enable.disabled = false;
+    }
+  };
+  const alertPushPanel = () => document.querySelector("#insight-alerts [data-push-panel]");
+  document.addEventListener("click", (event) => {
+    const enable = event.target.closest("[data-push-enable]");
+    if (enable) turnOnPush(enable.closest("[data-push-panel]"));
+    if (event.target.closest('[data-dialog-open="insight-alerts-dialog"]')) showPushState(alertPushPanel());
+  });
+  document.body.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
+  showPushState(alertPushPanel());
+
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;
@@ -1647,6 +1831,12 @@
 
   const mountNotificationRegion = (region) => {
     if (!region || region.hasAttribute("data-notification-local")) return region;
+    // A toast from inside an open modal stays there; the page stack sits under
+    // the modal's backdrop, where it would be blurred and unclickable.
+    if (region.closest("dialog[open]")) {
+      region.setAttribute("data-notification-local", "");
+      return region;
+    }
     const stack = document.querySelector("[data-notification-stack]");
     if (!stack) return region;
     if (region.parentElement !== stack) {

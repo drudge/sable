@@ -88,6 +88,10 @@ type Server struct {
 	setupRequired     atomic.Bool
 	history           *statsHistory
 	insightCache      dashboardInsightCache
+	// pushKeys signs Insights alerts pushed to browsers, and pushClient
+	// carries them; nil sends through the default client.
+	pushKeys   pushKeySource
+	pushClient *http.Client
 	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
 	// page. appCache counts what the app ranking reads apart from the
 	// dashboard's insightCache, because Insights answers from a recent count
@@ -256,6 +260,8 @@ func New(
 	server.setupRequired.Store(setupRequired)
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", webassets.Handler())
+	mux.Handle("GET "+serviceWorkerPath, webassets.Root("sw.js"))
+	mux.HandleFunc("GET "+webManifestPath, serveWebManifest)
 	mux.HandleFunc("POST "+ssoStartPath, server.startSSO)
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
@@ -269,7 +275,12 @@ func New(
 	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
 	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
 	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/enabled", server.setInsightAlertsEnabled)
 	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/preview", server.previewInsightAlerts)
+	mux.HandleFunc("GET /ui/insights/alerts/browsers/key", server.insightAlertPushKey)
+	mux.HandleFunc("POST /ui/insights/alerts/browsers", server.addInsightAlertBrowser)
+	mux.HandleFunc("POST /ui/insights/alerts/browsers/remove", server.removeInsightAlertBrowser)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)

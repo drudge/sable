@@ -8,6 +8,42 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.5] - 2026-09-24
+
+Sable 1.5.0-beta.5 gives Insights alerts more places to go and makes sure
+they get there. Alerts can go to your browsers as notifications, to Slack and
+Discord as rich cards, or to Pushover, and Sable now checks that the service
+it sent to actually took the message instead of trusting any answer.
+
+### Insights alerts
+
+- Send alerts straight to your browsers with **Browser**. Turn it on in each
+  browser that should get them; notifications show up even when Sable is
+  closed, and no account or app is needed. Browsers allow this only when
+  Sable is opened over HTTPS or at `localhost`, and on iPhone and iPad only
+  after Sable is added to the Home Screen.
+- Send alerts to Slack as a card with a colored bar for how much a finding
+  matters, its reasons, and a button to Insights, and to Discord as an embed
+  in the same colors that never mentions anyone.
+- Send alerts to Pushover with just your application token and user key.
+- Pick where alerts go under **Send To**, with each service's mark. A URL
+  entered for one service stays with it when you look at another.
+- Check that ntfy, Slack, Discord, Pushover, and browsers actually took an
+  alert. Before, any server that answered counted as sent, so a mistyped URL
+  such as a parked domain looked like it worked. For ntfy, turn on **Check
+  for an ntfy Receipt** under **Advanced**.
+- Pause and resume alerts without losing their setup. Findings that turn up
+  while alerts are paused are not sent when they resume.
+- See exactly what an alert sends with **Preview**, with tokens cut short,
+  and copy it.
+- Add headers to webhook and ntfy alerts under **Advanced**, such as
+  `Authorization` for a protected ntfy topic or `Priority`.
+
+### Console
+
+- Show a message from inside a dialog above the dialog instead of behind its
+  blurred backdrop.
+
 ## [1.5.0-beta.4] - 2026-09-24
 
 Sable 1.5.0-beta.4 lets Insights show its evidence instead of only listing it.

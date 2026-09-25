@@ -445,6 +445,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	webServer.SetDynamicDNSController(dynamicDNS)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
+	webServer.SetPushKeys(newPushKeyStore(secretVault))
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
 		// with security switched off has no provider and no sign-in button.
