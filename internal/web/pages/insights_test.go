@@ -118,6 +118,17 @@ func TestAppsHaveIcons(t *testing.T) {
 	for id, want := range map[string]string{
 		"netflix":  `<rect width="24" height="24" rx="6" fill="#E50914"></rect>`,
 		"snapchat": `fill="#FFFC00"`,
+		// ChatGPT keeps OpenAI's mark from before it left Simple Icons.
+		"chatgpt":       `fill="#412991"`,
+		"xbox":          `fill="#107C10"`,
+		"prime-video":   `fill="#1F2E3E"`,
+		"teams":         `fill="#6264A7"`,
+		"slack":         `fill="#4A154B"`,
+		"linkedin":      `fill="#0A66C2"`,
+		"bing":          `fill="#258FFA"`,
+		"nintendo":      `fill="#E60012"`,
+		"adobe":         `fill="#FF0000"`,
+		"microsoft-365": `fill="#D83B01"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
@@ -130,7 +141,7 @@ func TestAppsHaveIcons(t *testing.T) {
 			t.Errorf("%s mark is not drawn in %s: %s", id, ink, drawn)
 		}
 	}
-	if drawn := renderComponent(t, AppIcon("microsoft-365", services.CategoryProductivity)); !strings.Contains(drawn, `class="app-icon app-icon-category"`) || !strings.Contains(drawn, "icon-briefcase") {
+	if drawn := renderComponent(t, AppIcon("docusign", services.CategoryProductivity)); !strings.Contains(drawn, `class="app-icon app-icon-category"`) || !strings.Contains(drawn, "icon-briefcase") {
 		t.Errorf("an app without a logo shows %s", drawn)
 	}
 }

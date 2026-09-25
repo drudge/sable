@@ -8,6 +8,29 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.6] - 2026-09-24
+
+Sable 1.5.0-beta.6 fixes turning on browser alerts in browsers whose push
+service is switched off, tidies the Alerts dialog, and gives many more apps
+their logos in Insights.
+
+### Insights alerts
+
+- Turn on browser alerts even when the browser cannot read back an old
+  subscription, and say how to switch a browser's push service back on when
+  it is off, as in Brave by default or in Firefox and Zen with
+  `dom.push.connection.enabled` turned off, instead of showing "Error
+  retrieving push subscription."
+- Fit all six **Send To** choices on one line, and show **Remove** for a
+  browser in red like other removals.
+
+### Insights
+
+- Show the logos of ChatGPT, Microsoft 365, Microsoft Teams, OneDrive, Bing,
+  Microsoft services, Slack, LinkedIn, Amazon, Prime Video, Alexa, Fire TV,
+  Xbox, Nintendo, and Adobe, kept from the last Simple Icons releases that
+  carried them.
+
 ## [1.5.0-beta.5] - 2026-09-24
 
 Sable 1.5.0-beta.5 gives Insights alerts more places to go and makes sure
