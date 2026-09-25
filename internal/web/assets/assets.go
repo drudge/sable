@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,7 +22,7 @@ const (
 	legacyCachePolicy    = "no-cache"
 )
 
-//go:embed passkeys.js app.css app.js bootstrap.js htmx.min.js sable-headshot.png sable-icon-180.png sable-mark.svg
+//go:embed passkeys.js app.css app.js bootstrap.js htmx.min.js sw.js sable-headshot.png sable-icon-180.png sable-mark.svg
 var files embed.FS
 
 type asset struct {
@@ -36,7 +37,7 @@ var manifest = loadManifest()
 
 func loadManifest() map[string]asset {
 	names := []string{
-		"app.css", "app.js", "passkeys.js", "bootstrap.js", "htmx.min.js",
+		"app.css", "app.js", "passkeys.js", "bootstrap.js", "htmx.min.js", "sw.js",
 		"sable-headshot.png", "sable-icon-180.png", "sable-mark.svg",
 	}
 	loaded := make(map[string]asset, len(names))
@@ -91,6 +92,22 @@ func URL(name string) string {
 		return assetPrefix + name
 	}
 	return assetPrefix + entry.fingerprint + "/" + name
+}
+
+// Root serves one embedded asset at a fixed path outside /assets/, for files
+// a browser looks for by name, such as a service worker, whose path sets what
+// it controls and which must never be cached past an update.
+func Root(name string) http.Handler {
+	entry, found := manifest[name]
+	if !found {
+		panic("serve unknown web asset " + name)
+	}
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", entry.contentType)
+		writer.Header().Set("Cache-Control", legacyCachePolicy)
+		writer.Header().Set("ETag", `"`+entry.digest+`"`)
+		http.ServeContent(writer, request, name, time.Time{}, bytes.NewReader(entry.content))
+	})
 }
 
 // Handler serves embedded assets with content-addressed caching, validators,

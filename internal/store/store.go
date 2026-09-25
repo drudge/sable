@@ -138,6 +138,9 @@ ON sable_query_log (occurred_at)`, `
 CREATE INDEX IF NOT EXISTS sable_server_log_occurred_at_idx
 ON sable_server_log (occurred_at)`}
 	statements = append(statements, queryStatsTables()...)
+	statements = append(statements, rollupTierTables()...)
+	statements = append(statements, clientSightingTables()...)
+	statements = append(statements, insightFeedbackTable(), insightNotifiedTable(), pushSubscriptionTable())
 	statements = append(statements, store.authenticationTables()...)
 	statements = append(statements, passkeyTable, "CREATE INDEX IF NOT EXISTS sable_passkeys_user_idx ON sable_passkeys (user_id)")
 	statements = append(statements, trustAnchorTables()...)
@@ -158,6 +161,9 @@ ON sable_server_log (occurred_at)`}
 	}
 	if err := store.migrateQueryLogIndexes(ctx); err != nil {
 		return fmt.Errorf("migrate %s query log indexes: %w", store.driver, err)
+	}
+	if err := store.migrateActivityMarkers(ctx); err != nil {
+		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
 	if err := store.migrateZoneRecordSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
@@ -298,6 +304,10 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 		_ = transaction.Rollback()
 		return err
 	}
+	if err := store.writeClientSightings(ctx, transaction, events); err != nil {
+		_ = transaction.Rollback()
+		return err
+	}
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit query log batch: %w", err)
 	}
@@ -320,6 +330,14 @@ func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) erro
 	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log_rollup WHERE bucket_start <= "+placeholder, before.UTC().Truncate(time.Minute)); err != nil {
 		_ = transaction.Rollback()
 		return fmt.Errorf("prune query log rollups: %w", err)
+	}
+	if err := store.pruneRollupTiers(ctx, transaction, before.UTC().Truncate(time.Minute)); err != nil {
+		_ = transaction.Rollback()
+		return err
+	}
+	if err := store.pruneClientSightings(ctx, transaction, before); err != nil {
+		_ = transaction.Rollback()
+		return err
 	}
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit query log prune: %w", err)

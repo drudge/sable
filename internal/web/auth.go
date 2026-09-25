@@ -60,6 +60,10 @@ func (server *Server) accessControl(next http.Handler) http.Handler {
 			server.authenticationFailure(writer, request, http.StatusForbidden, "")
 			return
 		}
+		if permissions := requiredAnyPermission(request); len(permissions) > 0 && !hasAnyPermission(principal, permissions) {
+			server.authenticationFailure(writer, request, http.StatusForbidden, "")
+			return
+		}
 		if !safeMethod(request.Method) {
 			csrfToken := request.Header.Get("X-CSRF-Token")
 			if csrfToken == "" && nativeProfileRequest(request) {
@@ -151,6 +155,25 @@ func requiredPermission(request *http.Request) string {
 	default:
 		return ""
 	}
+}
+
+// requiredAnyPermission lists permissions any one of which opens a route. It
+// serves pages that combine several areas and show each section only to an
+// operator who may read it.
+func requiredAnyPermission(request *http.Request) []string {
+	if insightsRoute(request.URL.Path) {
+		return insightsPermissions
+	}
+	return nil
+}
+
+func hasAnyPermission(principal auth.Principal, permissions []string) bool {
+	for _, permission := range permissions {
+		if auth.HasPermission(principal, permission) {
+			return true
+		}
+	}
+	return false
 }
 
 func (server *Server) authenticateRequest(request *http.Request) (auth.Principal, error) {
@@ -481,7 +504,8 @@ func clearSessionCookie(writer http.ResponseWriter, request *http.Request, name 
 
 func publicRequest(path string) bool {
 	return path == passkeyLoginBegin || path == passkeyLoginFinish || path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
-		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/")
+		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/") ||
+		path == serviceWorkerPath || path == webManifestPath
 }
 
 func tokenRequest(path string) bool {
@@ -558,7 +582,8 @@ func validatedReturnTarget(rawTarget, requestHost string) string {
 		return "/"
 	}
 	if target.Path == "/login" || target.Path == "/setup" || target.Path == "/logout" ||
-		tokenRequest(target.Path) || strings.HasPrefix(target.Path, "/ui/") || strings.HasPrefix(target.Path, "/assets/") {
+		tokenRequest(target.Path) || strings.HasPrefix(target.Path, "/ui/") || strings.HasPrefix(target.Path, "/assets/") ||
+		target.Path == serviceWorkerPath || target.Path == webManifestPath {
 		return "/"
 	}
 	target.Scheme = ""

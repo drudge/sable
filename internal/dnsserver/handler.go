@@ -43,25 +43,29 @@ type Runtime struct {
 	retries                int
 	retryTimeout           time.Duration
 	staleMaxWait           time.Duration
-	blocked                map[string]struct{}
-	allowedExact           map[string]struct{}
-	allowedWildcard        map[string]struct{}
-	blocking               bool
-	blockType              string
-	blockTTL               uint32
-	blockAddrs             []netip.Addr
-	bypass                 []netip.Prefix
-	blockTXT               bool
-	cache                  *ResponseCache
-	blockLists             []BlockListStats
-	hosts                  map[string]localHostRecords
-	zones                  map[string]*authoritativeZone
-	managedZones           map[string]managedZone
-	tsigKeys               map[string]tsigKey
-	zoneCount              int
-	dnssec                 *dnssecValidator
-	zoneInsecure           []string
-	managedTrustAnchors    bool
+	// blocked maps each blocked domain to the set of sources that list it,
+	// an index into blockedOwners. The set rides along with the lookup the
+	// policy check already makes, so attribution costs no extra work per query.
+	blocked             map[string]uint32
+	blockedOwners       [][]string
+	allowedExact        map[string]struct{}
+	allowedWildcard     map[string]struct{}
+	blocking            bool
+	blockType           string
+	blockTTL            uint32
+	blockAddrs          []netip.Addr
+	bypass              []netip.Prefix
+	blockTXT            bool
+	cache               *ResponseCache
+	blockLists          []BlockListStats
+	hosts               map[string]localHostRecords
+	zones               map[string]*authoritativeZone
+	managedZones        map[string]managedZone
+	tsigKeys            map[string]tsigKey
+	zoneCount           int
+	dnssec              *dnssecValidator
+	zoneInsecure        []string
+	managedTrustAnchors bool
 }
 
 type managedZone struct {
@@ -76,33 +80,38 @@ type tsigKey struct {
 }
 
 type RuntimeConfig struct {
-	MaxConcurrent              int
-	MaxConcurrentPerClient     int
-	Recursion                  string
-	RecursionClients           []string
-	Mode                       string
-	Forwarders                 []string
-	RootHints                  []string
-	Routes                     []ForwardingRoute
-	Timeout                    time.Duration
-	Retries                    int
-	RetryTimeout               time.Duration
-	CacheSize                  int
-	CacheMinimumTTL            uint32
-	CacheMaximumTTL            uint32
-	CacheNegativeTTL           uint32
-	CacheFailureTTL            uint32
-	ServeStale                 bool
-	CacheStaleTTL              uint32
-	CacheStaleAnswerTTL        uint32
-	CacheStaleResetTTL         uint32
-	CacheStaleMaxWait          time.Duration
-	CachePrefetchMinimumTTL    uint32
-	CachePrefetchTriggerTTL    uint32
-	CachePrefetchSample        time.Duration
-	CachePrefetchHitsPerHour   uint32
-	Blocking                   bool
-	BlockedDomains             []string
+	MaxConcurrent            int
+	MaxConcurrentPerClient   int
+	Recursion                string
+	RecursionClients         []string
+	Mode                     string
+	Forwarders               []string
+	RootHints                []string
+	Routes                   []ForwardingRoute
+	Timeout                  time.Duration
+	Retries                  int
+	RetryTimeout             time.Duration
+	CacheSize                int
+	CacheMinimumTTL          uint32
+	CacheMaximumTTL          uint32
+	CacheNegativeTTL         uint32
+	CacheFailureTTL          uint32
+	ServeStale               bool
+	CacheStaleTTL            uint32
+	CacheStaleAnswerTTL      uint32
+	CacheStaleResetTTL       uint32
+	CacheStaleMaxWait        time.Duration
+	CachePrefetchMinimumTTL  uint32
+	CachePrefetchTriggerTTL  uint32
+	CachePrefetchSample      time.Duration
+	CachePrefetchHitsPerHour uint32
+	Blocking                 bool
+	BlockedDomains           []string
+	// BlockedDomainOwners runs parallel to BlockedDomains and indexes
+	// BlockedDomainOwnerSets, the block lists that contributed each domain.
+	// Both are optional; without them blocked queries carry no attribution.
+	BlockedDomainOwners        []uint32
+	BlockedDomainOwnerSets     [][]string
 	AllowedDomains             []string
 	BlockLists                 []BlockListStats
 	BlockingType               string
@@ -357,21 +366,26 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 			return nil, fmt.Errorf("compile DNSSEC validator: %w", err)
 		}
 	}
-	blocked := make(map[string]struct{}, len(configuration.BlockedDomains))
-	for _, domain := range configuration.BlockedDomains {
+	blocked := make(map[string]uint32, len(configuration.BlockedDomains))
+	attributed := len(configuration.BlockedDomainOwners) == len(configuration.BlockedDomains)
+	for index, domain := range configuration.BlockedDomains {
+		owner := uint32(0)
+		if attributed && int(configuration.BlockedDomainOwners[index]) < len(configuration.BlockedDomainOwnerSets) {
+			owner = configuration.BlockedDomainOwners[index]
+		}
 		trimmed := strings.TrimPrefix(strings.TrimSpace(domain), "*.")
 		// Block lists arrive already normalized by the block-list compiler, which
 		// ran the same IDNA pass. Skip the expensive second idna.ToASCII for a
 		// name that is already in canonical form; only re-normalize the rest.
 		if isCanonicalDomain(trimmed) {
-			blocked[trimmed] = struct{}{}
+			blocked[trimmed] = owner
 			continue
 		}
 		normalized, err := dnsname.Normalize(trimmed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid blocked domain %q: %w", domain, err)
 		}
-		blocked[normalized] = struct{}{}
+		blocked[normalized] = owner
 	}
 	allowedExact := make(map[string]struct{}, len(configuration.AllowedDomains))
 	allowedWildcard := make(map[string]struct{}, len(configuration.AllowedDomains))
@@ -666,6 +680,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		retryTimeout:    cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
 		staleMaxWait:    configuration.CacheStaleMaxWait,
 		blocked:         blocked,
+		blockedOwners:   configuration.BlockedDomainOwnerSets,
 		allowedExact:    allowedExact,
 		allowedWildcard: allowedWildcard,
 		blocking:        configuration.Blocking,
@@ -1384,11 +1399,11 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	if !recursionAllowed {
 		return recursionRefused(request)
 	}
-	policy, policyRule := runtime.policyDecision(request.Question[0].Name, clientIP, handler.BlockingPaused())
+	policy, policyRule, policySources := runtime.policyDecision(request.Question[0].Name, clientIP, handler.BlockingPaused())
 	if policy == querylog.PolicyBlocked {
 		handler.blocked.Add(1)
 		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
-			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Resolver: querylog.ResolverBlocked}}
+			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Resolver: querylog.ResolverBlocked}}
 	}
 	if response, found, prefetch := runtime.cache.GetWithPrefetch(request); found {
 		handler.cacheHits.Add(1)
@@ -3046,7 +3061,8 @@ func responseWriterClientIP(writer dns.ResponseWriter) string {
 }
 
 func (runtime *Runtime) matchesBlocked(name string) bool {
-	return matchingDomainRule(runtime.blocked, name) != ""
+	rule, _ := matchingDomainRule(runtime.blocked, name)
+	return rule != ""
 }
 
 func (runtime *Runtime) matchesAllowed(name string) bool {
@@ -3070,40 +3086,49 @@ func (runtime *Runtime) matchingAllowedRule(name string) string {
 	}
 }
 
-func matchingDomainRule(domains map[string]struct{}, name string) string {
+func matchingDomainRule(domains map[string]uint32, name string) (string, uint32) {
 	name = normalizeName(name)
 	for name != "" {
-		if _, found := domains[name]; found {
-			return name
+		if owner, found := domains[name]; found {
+			return name, owner
 		}
 		separator := strings.IndexByte(name, '.')
 		if separator < 0 {
-			return ""
+			return "", 0
 		}
 		name = name[separator+1:]
 	}
-	return ""
+	return "", 0
 }
 
-func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (querylog.PolicyDecision, string) {
+// blockedSources names the sources behind an owner set. The slice is shared and
+// never modified, so a query can carry it without copying.
+func (runtime *Runtime) blockedSources(owner uint32) []string {
+	if int(owner) >= len(runtime.blockedOwners) {
+		return nil
+	}
+	return runtime.blockedOwners[owner]
+}
+
+func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (querylog.PolicyDecision, string, []string) {
 	if !runtime.blocking {
-		return querylog.PolicyDisabled, ""
+		return querylog.PolicyDisabled, "", nil
 	}
 	if paused {
-		return querylog.PolicyPaused, ""
+		return querylog.PolicyPaused, "", nil
 	}
 	if runtime.clientBypasses(clientIP) {
 		// The fact that the client bypassed policy is useful; persisting the
 		// matching address or network would duplicate sensitive configuration.
-		return querylog.PolicyClientBypass, ""
+		return querylog.PolicyClientBypass, "", nil
 	}
 	if rule := runtime.matchingAllowedRule(name); rule != "" {
-		return querylog.PolicyAllowed, rule
+		return querylog.PolicyAllowed, rule, nil
 	}
-	if rule := matchingDomainRule(runtime.blocked, name); rule != "" {
-		return querylog.PolicyBlocked, rule
+	if rule, owner := matchingDomainRule(runtime.blocked, name); rule != "" {
+		return querylog.PolicyBlocked, rule, runtime.blockedSources(owner)
 	}
-	return querylog.PolicyNoMatch, ""
+	return querylog.PolicyNoMatch, "", nil
 }
 
 func (runtime *Runtime) clientBypasses(value string) bool {

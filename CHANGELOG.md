@@ -8,6 +8,262 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.7] - 2026-09-24
+
+Sable 1.5.0-beta.7 draws the ChatGPT and Microsoft 365 logos the way their
+apps do, and closes DNS-over-QUIC connections cleanly when Sable stops.
+
+### Insights
+
+- Show ChatGPT's logo in black on white, like its app, instead of on
+  OpenAI's old purple.
+- Show Microsoft 365 with Microsoft's four-color logo on white instead of
+  Office's retired mark.
+
+### DNS over QUIC
+
+- Tell a client that connects just as Sable stops that the connection is
+  closing, so it reconnects right away instead of waiting for its idle
+  timeout.
+
+## [1.5.0-beta.6] - 2026-09-24
+
+Sable 1.5.0-beta.6 fixes turning on browser alerts in browsers whose push
+service is switched off, tidies the Alerts dialog, and gives many more apps
+their logos in Insights.
+
+### Insights alerts
+
+- Turn on browser alerts even when the browser cannot read back an old
+  subscription, and say how to switch a browser's push service back on when
+  it is off, as in Brave by default or in Firefox and Zen with
+  `dom.push.connection.enabled` turned off, instead of showing "Error
+  retrieving push subscription."
+- Fit all six **Send To** choices on one line, and show **Remove** for a
+  browser in red like other removals.
+
+### Insights
+
+- Show the logos of ChatGPT, Microsoft 365, Microsoft Teams, OneDrive, Bing,
+  Microsoft services, Slack, LinkedIn, Amazon, Prime Video, Alexa, Fire TV,
+  Xbox, Nintendo, and Adobe, kept from the last Simple Icons releases that
+  carried them.
+
+## [1.5.0-beta.5] - 2026-09-24
+
+Sable 1.5.0-beta.5 gives Insights alerts more places to go and makes sure
+they get there. Alerts can go to your browsers as notifications, to Slack and
+Discord as rich cards, or to Pushover, and Sable now checks that the service
+it sent to actually took the message instead of trusting any answer.
+
+### Insights alerts
+
+- Send alerts straight to your browsers with **Browser**. Turn it on in each
+  browser that should get them; notifications show up even when Sable is
+  closed, and no account or app is needed. Browsers allow this only when
+  Sable is opened over HTTPS or at `localhost`, and on iPhone and iPad only
+  after Sable is added to the Home Screen.
+- Send alerts to Slack as a card with a colored bar for how much a finding
+  matters, its reasons, and a button to Insights, and to Discord as an embed
+  in the same colors that never mentions anyone.
+- Send alerts to Pushover with just your application token and user key.
+- Pick where alerts go under **Send To**, with each service's mark. A URL
+  entered for one service stays with it when you look at another.
+- Check that ntfy, Slack, Discord, Pushover, and browsers actually took an
+  alert. Before, any server that answered counted as sent, so a mistyped URL
+  such as a parked domain looked like it worked. For ntfy, turn on **Check
+  for an ntfy Receipt** under **Advanced**.
+- Pause and resume alerts without losing their setup. Findings that turn up
+  while alerts are paused are not sent when they resume.
+- See exactly what an alert sends with **Preview**, with tokens cut short,
+  and copy it.
+- Add headers to webhook and ntfy alerts under **Advanced**, such as
+  `Authorization` for a protected ntfy topic or `Priority`.
+
+### Console
+
+- Show a message from inside a dialog above the dialog instead of behind its
+  blurred backdrop.
+
+## [1.5.0-beta.4] - 2026-09-24
+
+Sable 1.5.0-beta.4 lets Insights show its evidence instead of only listing it.
+Findings chart what changed, devices and apps are recognizable at a glance,
+and the Overview opens with one sentence you can act on. The console also
+reloads itself once an update finishes, so it runs the new release right away.
+
+### Insights
+
+- Chart the evidence in a finding's details: a device that went quiet or got
+  busy against each day of its week before, one active at an unusual hour
+  against its usual day, and a check-in as one mark per lookup across the
+  last day. Point at or tap a bar to read its count, or drag across the bars
+  on a phone.
+- Open the Overview with one sentence about what stands out. Each device it
+  names opens its finding, and the list below it is now **Worth a Look**.
+- Open Top Apps and Busiest Devices entries in drawers. An app's drawer lists
+  the domains it used, each linked to its queries, and the devices that used
+  it. Apps and devices open each other's drawers.
+- Show app logos in each brand's color for most of the apps Insights
+  recognizes, and a category icon for the rest.
+- Show what each device is as an icon at the start of its row and beside its
+  name, in place of the Type column, and in the type picker. Hover the icon
+  to read the type.
+- Move alert setup behind a bell beside the range control, which shows
+  whether alerts are on.
+- Jump to App, Device, and Blocking Insights, or straight to alert setup,
+  from the command palette.
+- Show a spinner while a device's name saves or is removed, and stop Enter in
+  the name field from removing the name.
+- Keep a finding's fact cards in pairs without gaps, and give a long DNS name
+  a row of its own instead of wrapping it mid-name.
+- Write TV in capitals when describing a device's type.
+
+### Updates
+
+- Reload the console once an update finishes, so it runs the new release: at
+  the end of a rolling update watched from the Cluster page, and when an
+  installed update finishes because Sable was restarted outside the console,
+  such as by its service manager.
+- Start or follow a rolling update from the command palette with **Update
+  Cluster**.
+
+### Console
+
+- Make every View all an ordinary button with a chevron, centered in its
+  card's header, and count apps and devices, not domains, in their full lists.
+
+## [1.5.0-beta.3] - 2026-09-23
+
+Sable 1.5.0-beta.3 settles how devices are named and teaches Insights to
+recognize Sable itself. A device keeps the same name from one visit to the
+next, and Sable's own scheduled lookups are no longer reported as a device
+phoning home.
+
+### Insights
+
+- Name every device in one order: the name you gave it, then UniFi's, then a
+  local host override, then reverse DNS. A UniFi name no longer gives way to
+  reverse DNS whenever the server's neighbor table saw the device more
+  recently than the controller did.
+- Mark the machine Sable runs on as **This server** and the rest of its
+  cluster as **Sable node**, and count running Sable as a clue that a device
+  is a server.
+- Leave out what Sable looks up for itself on a timer, such as dynamic DNS
+  updates, UniFi sync, and block list downloads, when looking for check-ins,
+  so a server with dynamic DNS is no longer reported for calling its DNS
+  provider every five minutes.
+- Remove a device's name or type completely. One given while Sable only knew
+  the device's IP address stayed behind once Sable learned its hardware
+  address, so removing it said it worked while the device kept it.
+- Say when a device's name or type comes from an entry for its whole network,
+  and stop offering to remove that name from one device. Handing a device's
+  type back names the network's type it will take.
+
+### Dashboard
+
+- Name top clients the way Insights names devices, so your names and UniFi
+  names show there too, ahead of host overrides and reverse DNS.
+
+## [1.5.0-beta.2] - 2026-09-23
+
+Sable 1.5.0-beta.2 makes Insights fast on a real month of history. Tested with
+a month of busy network traffic, about seven million queries, the page took
+fifteen seconds to open and still left sections empty. It now opens in about a
+second, and after that answers from its last count while a fresh one runs.
+
+### Insights
+
+- Keep hourly and daily totals of the query log alongside the per-minute
+  ones, and read whole hours and days from them, so a month is thousands of
+  rows instead of millions. After upgrading, Sable fills them from existing
+  history in the background, which takes about a minute for a busy month;
+  until then Insights reads the minutes as before.
+- Count the blocked queries each device made before 1.5.0-beta.1 once, in the
+  background, instead of reading them from the raw query log on every visit.
+- Look for scheduled check-ins in the last day of queries alone, rather than
+  in each name's whole history.
+- Answer from the last count while a fresh one runs, and start every slow read
+  at once when the page opens, so only the first visit after a restart waits.
+- Keep showing the last block list comparison while a refreshed list is
+  compared again. Adding or removing a list still waits for the new one.
+- Read a device's busiest domains by time or by device, whichever is shorter
+  for its traffic and the selected range.
+- Open a device's details from anywhere on its row. The Devices table drops
+  its history columns, and on narrow screens becomes a list, before a row can
+  run past the edge of the card and hide its details button.
+- Start the device drawer from its loading state when opening another device,
+  instead of showing the previous one until the new one arrives.
+- Show Sable's spinner in the Insights and dashboard update indicator, and
+  keep its text on one line.
+
+### Dashboard
+
+- Rank clients and domains for longer ranges from the hourly and daily
+  totals as well.
+
+## [1.5.0-beta.1] - 2026-09-23
+
+Sable 1.5.0-beta.1 introduces Insights: a local view of what changed on your
+network, what each device is, and what is worth a look. Every finding shows
+the evidence behind it and links to the exact queries it counted. Insights uses
+fixed rules and lookup tables on your own server, with no machine learning or
+cloud service, and none of it runs on the DNS request path.
+
+### Insights
+
+- Add an Insights page with Overview, Devices, and Blocking tabs, reachable
+  from the sidebar and the command palette with either logs or blocking read
+  permission.
+- Open the Overview with one sentence about what stands out, followed by
+  network metrics, the findings behind it, Top Apps, and Busiest Devices.
+- Explain every finding in a drawer with fact cards, the reasons Sable
+  surfaced it, what it could mean, and the rule that produced it, with copy
+  buttons for addresses and names and a link to the matching query log rows.
+- Report new devices, devices that went quiet or became unusually busy,
+  devices active at an hour they never use, appliances such as cameras and
+  doorbells that start calling new services, devices that start using a new
+  app, and names only one device looks up on a steady schedule.
+- Fill device history from the existing query log after upgrading, so
+  Insights knows which devices were already on the network from the first day.
+- Let operators dismiss a finding for a day, snooze it for a week, or mark it
+  normal, with hidden findings listed and restorable. Feedback is kept by the
+  device's hardware address, so it survives renames.
+- Send each new finding worth a look to an optional webhook, once, in JSON
+  for Slack, Discord, and Home Assistant or plain text for ntfy. A new webhook
+  takes stock quietly instead of receiving old news, only the primary node
+  sends, and the webhook URL is never stored in the database.
+
+### Devices
+
+- Group client addresses into devices by hardware address using UniFi, the
+  server's neighbor table on Linux and macOS, and names you give, so a
+  device's IPv4 and changing IPv6 addresses count as one.
+- Name devices from your own names, UniFi, local host entries, and reverse
+  DNS, with a badge showing where each name came from, and rename a device
+  from its drawer.
+- Name each device's maker from the IEEE registry built into Sable, and guess
+  its type from the maker, its name, and the services it talks to, with a
+  confidence level and the clues behind it. Correct a wrong guess from the
+  device drawer; the correction follows the hardware address.
+- Name the apps behind domains from a built-in catalog, and list each
+  device's apps, busiest domains, and first-time domains.
+
+### Blocking
+
+- Record which block list supplied the rule behind every blocked query and
+  show it in the query explanation.
+- Compare enabled block lists by the domains only they cover, their largest
+  overlap, and the blocked queries each one accounted for alone.
+- Find names that were blocked before an operator allowed them, and block
+  lists that stopped updating or could not be read.
+
+### Configuration
+
+- Add `type` to `[[clients]]` entries, and allow an entry to set a name, a
+  type, or both.
+- Add `[insights.webhook]` with `url` and `format` for Insights alerts.
+
 ## [1.4.0] - 2026-09-18
 
 Sable 1.4.0 gives the console a more deliberate visual hierarchy across desktop

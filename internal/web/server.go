@@ -27,6 +27,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsserver"
+	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
@@ -72,45 +73,60 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames       *reverseNameCache
-	reload             func(context.Context) error
-	auth               Authenticator
-	sso                ssoController
-	ssoAdmin           ssoAdministration
-	ssoStateStore      *ssoStateStore
-	preAuthTokens      *preAuthTokenStore
-	passkeyCeremonies  passkeyCeremonyStore
-	crossOrigin        *http.CrossOriginProtection
-	securityEnabled    bool
-	secureCookies      bool
-	sessionCookie      string
-	setupRequired      atomic.Bool
-	history            *statsHistory
-	insightCache       dashboardInsightCache
-	historyPrune       chan struct{}
-	runtimeContext     context.Context
-	runtimeCancel      context.CancelFunc
-	runtimeLifecycleMu sync.Mutex
-	runtimeStarted     bool
-	runtimeClosed      bool
-	runtimeWG          sync.WaitGroup
-	runtimeWaitOnce    sync.Once
-	runtimeDone        chan struct{}
-	blockLists         *blockcompiler.Updater
-	dnssec             dnssecController
-	cluster            clusterController
-	dynamicDNS         dynamicDNSController
-	unifi              unifiController
-	certificates       certificateController
-	tsigKeys           tsigController
-	updates            updateController
-	backups            backupController
-	backupStaging      backupStaging
-	administrator      administrator
-	restart            func()
-	restartRequested   atomic.Bool
-	instanceID         string
-	demoLogin          devDemoAutoLoginState
+	reverseNames      *reverseNameCache
+	reload            func(context.Context) error
+	auth              Authenticator
+	sso               ssoController
+	ssoAdmin          ssoAdministration
+	ssoStateStore     *ssoStateStore
+	preAuthTokens     *preAuthTokenStore
+	passkeyCeremonies passkeyCeremonyStore
+	crossOrigin       *http.CrossOriginProtection
+	securityEnabled   bool
+	secureCookies     bool
+	sessionCookie     string
+	setupRequired     atomic.Bool
+	history           *statsHistory
+	insightCache      dashboardInsightCache
+	// pushKeys signs Insights alerts pushed to browsers, and pushClient
+	// carries them; nil sends through the default client.
+	pushKeys   pushKeySource
+	pushClient *http.Client
+	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
+	// page. appCache counts what the app ranking reads apart from the
+	// dashboard's insightCache, because Insights answers from a recent count
+	// while it refreshes.
+	blockingActivityCache windowCache[querylog.BlockingActivity]
+	deviceActivityCache   windowCache[querylog.ClientActivityReport]
+	deviceSignalCache     windowCache[map[string][]string]
+	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
+	appCache              dashboardInsightCache
+	blockListAnalysis     blockinginsights.ContributionCache
+	baseDirectory         string
+	historyPrune          chan struct{}
+	runtimeContext        context.Context
+	runtimeCancel         context.CancelFunc
+	runtimeLifecycleMu    sync.Mutex
+	runtimeStarted        bool
+	runtimeClosed         bool
+	runtimeWG             sync.WaitGroup
+	runtimeWaitOnce       sync.Once
+	runtimeDone           chan struct{}
+	blockLists            *blockcompiler.Updater
+	dnssec                dnssecController
+	cluster               clusterController
+	dynamicDNS            dynamicDNSController
+	unifi                 unifiController
+	certificates          certificateController
+	tsigKeys              tsigController
+	updates               updateController
+	backups               backupController
+	backupStaging         backupStaging
+	administrator         administrator
+	restart               func()
+	restartRequested      atomic.Bool
+	instanceID            string
+	demoLogin             devDemoAutoLoginState
 }
 
 type devDemoAutoLoginState struct {
@@ -211,6 +227,19 @@ func New(
 		instanceID:     strconv.FormatInt(time.Now().UnixNano(), 36),
 		runtimeContext: runtimeContext, runtimeCancel: runtimeCancel, runtimeDone: make(chan struct{}),
 	}
+	server.blockingActivityCache.serveStale()
+	server.deviceActivityCache.serveStale()
+	server.deviceSignalCache.serveStale()
+	server.repeatedLookupCache.serveStale()
+	server.appCache.serveStale()
+	// Each cache counts in the background, detached from the request that asked,
+	// for as long as the server runs.
+	server.insightCache.background = server.goBackground
+	server.appCache.background = server.goBackground
+	server.blockingActivityCache.background = server.goBackground
+	server.deviceActivityCache.background = server.goBackground
+	server.deviceSignalCache.background = server.goBackground
+	server.repeatedLookupCache.background = server.goBackground
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
 	}
@@ -221,6 +250,7 @@ func New(
 	if located, ok := configuration.(interface{ BaseDirectory() string }); ok {
 		baseDirectory = located.BaseDirectory()
 	}
+	server.baseDirectory = baseDirectory
 	server.sessionCookie = scopedSessionCookieName(configuration.Current().Config.SecuritySecretKeyPath(baseDirectory))
 	server.configureDevDemoAutoLogin()
 	server.blockLists = blockcompiler.NewUpdater(baseDirectory)
@@ -230,10 +260,27 @@ func New(
 	server.setupRequired.Store(setupRequired)
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", webassets.Handler())
+	mux.Handle("GET "+serviceWorkerPath, webassets.Root("sw.js"))
+	mux.HandleFunc("GET "+webManifestPath, serveWebManifest)
 	mux.HandleFunc("POST "+ssoStartPath, server.startSSO)
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
+	mux.HandleFunc("GET /insights", server.insightsPage)
+	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
+	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
+	mux.HandleFunc("GET /ui/insights/app", server.insightsAppPanel)
+	mux.HandleFunc("POST /ui/insights/devices/name", server.nameInsightsDevice)
+	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
+	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
+	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
+	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/enabled", server.setInsightAlertsEnabled)
+	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
+	mux.HandleFunc("POST /ui/insights/alerts/preview", server.previewInsightAlerts)
+	mux.HandleFunc("GET /ui/insights/alerts/browsers/key", server.insightAlertPushKey)
+	mux.HandleFunc("POST /ui/insights/alerts/browsers", server.addInsightAlertBrowser)
+	mux.HandleFunc("POST /ui/insights/alerts/browsers/remove", server.removeInsightAlertBrowser)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
@@ -554,6 +601,27 @@ func (server *Server) Close(ctx context.Context) error {
 	return shutdownError
 }
 
+// goBackground runs work the console starts on its own, such as the reads that
+// warm the Insights caches, without holding up the request that started it.
+// The work gets a context Close cancels, and Close waits for it to return, so
+// no background read is still using the store once the server has closed.
+// Work started after Close runs at once on the canceled context, untracked,
+// so anything waiting on it still hears back.
+func (server *Server) goBackground(work func(context.Context)) {
+	server.runtimeLifecycleMu.Lock()
+	tracked := !server.runtimeClosed
+	if tracked {
+		server.runtimeWG.Add(1)
+	}
+	server.runtimeLifecycleMu.Unlock()
+	go func() {
+		if tracked {
+			defer server.runtimeWG.Done()
+		}
+		work(server.runtimeContext)
+	}()
+}
+
 func (server *Server) dashboard(writer http.ResponseWriter, request *http.Request) {
 	if request.URL.Path != "/" {
 		http.NotFound(writer, request)
@@ -616,12 +684,13 @@ func (server *Server) dashboardInsightsView(request *http.Request, window insigh
 	view := dashboardInsights(
 		insights,
 		countedWindow,
+		server.givenClientNames(request.Context(), countedWindow.Start),
 		server.config.Current().Config.Resolver.Hosts,
 		server.zones.Current().Zones,
 	)
-	// Whatever the host overrides and the local zones could not name is asked
-	// of the resolver, which is the only path that sees a reverse zone this
-	// server merely forwards.
+	// Whatever the given names, host overrides, and local zones could not name
+	// is asked of the resolver, which is the only path that sees a reverse
+	// zone this server merely forwards.
 	server.nameRankedClients(view.TopClients)
 	return view
 }
@@ -905,6 +974,9 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 					ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
 					Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
 				})
+			}
+			if command, ok := server.clusterUpdateCommand(request); ok {
+				add(command)
 			}
 		}
 	}
@@ -1640,6 +1712,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.PolicyBlocked:
 		view.Policy = "Blocked by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
+			view.PolicyDetail += " from " + sources
+		}
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
 	}
@@ -1691,6 +1766,21 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		view.DNSSEC = "DNSSEC not validated"
 	}
 	return view
+}
+
+// joinSourceNames lists block sources in a sentence: "A", "A and B", or
+// "A, B, and C".
+func joinSourceNames(sources []string) string {
+	switch len(sources) {
+	case 0:
+		return ""
+	case 1:
+		return sources[0]
+	case 2:
+		return sources[0] + " and " + sources[1]
+	default:
+		return strings.Join(sources[:len(sources)-1], ", ") + ", and " + sources[len(sources)-1]
+	}
 }
 
 func matchedDecisionRule(rule string) string {

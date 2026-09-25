@@ -13,6 +13,7 @@
     "guides/reverse-dns": "Reverse DNS",
     "guides/forwarding": "Forwarding",
     "guides/blocking": "Blocking",
+    "guides/insights": "Insights",
     "guides/troubleshooting": "Troubleshooting",
     "guides/import-export": "Import & export",
     "guides/delegation": "Delegation",
@@ -55,13 +56,14 @@
       { "slug": "guides/connect-network", "file": "docs/guides/connect-network.md", "title": "Connect your network", "description": "Move clients to Sable without losing your recovery path or leaking policy through a second resolver." }
     ] },
     { "title": "Everyday DNS", "collections": [
-      { "title": "Your network", "pages": ["guides/private-names", "guides/reverse-dns", "guides/forwarding", "guides/blocking", "guides/troubleshooting"] },
+      { "title": "Your network", "pages": ["guides/private-names", "guides/reverse-dns", "guides/forwarding", "guides/blocking", "guides/insights", "guides/troubleshooting"] },
       { "title": "Authoritative DNS", "pages": ["guides/import-export", "guides/delegation", "guides/zone-transfers", "guides/dynamic-updates", "guides/dnssec"] }
     ], "pages": [
       { "slug": "guides/private-names", "file": "docs/guides/private-names.md", "title": "Give your services names", "description": "Create a private zone, add host records, and make them resolve from your devices.", "featured": true },
       { "slug": "guides/reverse-dns", "file": "docs/guides/reverse-dns.md", "title": "Set up reverse DNS", "description": "Turn IPv4 and IPv6 addresses back into meaningful names with reverse zones and PTR records." },
       { "slug": "guides/forwarding", "file": "docs/guides/forwarding.md", "title": "Choose where queries go", "description": "Use direct recursion, shared upstreams, and conditional forwarding for private namespaces." },
       { "slug": "guides/blocking", "file": "docs/guides/blocking.md", "title": "Block unwanted domains", "description": "Add lists and precise exceptions, verify the policy, and recover when a service breaks.", "featured": true },
+      { "slug": "guides/insights", "file": "docs/guides/insights.md", "title": "Understand your network with Insights", "description": "See what changed, what each device is, and what is worth a look, with the evidence behind every finding.", "featured": true },
       { "slug": "guides/troubleshooting", "file": "docs/guides/troubleshooting.md", "title": "Explain a DNS answer", "description": "Follow a query through policy, cache, resolver routing, and DNSSEC to find the cause." },
       { "slug": "guides/import-export", "file": "docs/guides/import-export.md", "title": "Import, export, and undo changes", "description": "Move zone data safely and use the Change Center to restore an earlier revision." },
       { "slug": "guides/delegation", "file": "docs/guides/delegation.md", "title": "Host and delegate a zone", "description": "Publish authoritative data, configure parent delegation, and verify the whole lookup path." },

@@ -409,6 +409,21 @@
 	  if (!select || select.dataset.styledSelectReady === "true") return;
 	  select.dataset.styledSelectReady = "true";
 
+	  // A select can give its choices icons: a template beside it for each
+	  // choice's value holds the icon, which the list and the trigger show
+	  // before the choice's label.
+	  const optionIcons = new Map([...(select.parentElement?.querySelectorAll(":scope > template[data-option-icon]") ?? [])]
+		.map((template) => [template.dataset.optionIcon, template]));
+	  const optionIcon = (value) => {
+		const template = optionIcons.get(value);
+		if (!template) return null;
+		const icon = document.createElement("span");
+		icon.className = "styled-select-icon";
+		icon.setAttribute("aria-hidden", "true");
+		icon.append(template.content.cloneNode(true));
+		return icon;
+	  };
+
 	  const root = document.createElement("div");
 	  root.className = "styled-select";
 	  select.classList.forEach((className) => root.classList.add(className));
@@ -452,6 +467,8 @@
 		button.className = "styled-select-option";
 		button.dataset.value = option.value;
 		button.textContent = option.textContent.trim();
+		const icon = optionIcon(option.value);
+		if (icon) button.prepend(icon);
 		button.classList.toggle("placeholder", option.hasAttribute("data-placeholder"));
 		button.disabled = option.disabled;
 		button.tabIndex = -1;
@@ -504,6 +521,9 @@
 	  const syncSelection = () => {
 		const selected = select.selectedOptions[0];
 		selectedLabel.textContent = selected?.textContent?.trim() || "Choose an option";
+		trigger.querySelector(":scope > .styled-select-icon")?.remove();
+		const icon = selected && optionIcon(selected.value);
+		if (icon) trigger.prepend(icon);
 		trigger.classList.toggle("placeholder", selected?.hasAttribute("data-placeholder") === true);
 		trigger.removeAttribute("aria-invalid");
 		optionButtons.forEach((button) => button.setAttribute("aria-selected", String(button.dataset.value === select.value)));
@@ -1469,6 +1489,308 @@
 	  if (resumed) show(resumed, pointerPosition.x, pointerPosition.y);
 	};
 
+	// Insights' evidence charts split their width into one slot per bar. The
+	// slot under the pointer, the one a finger taps or drags across, or the one
+	// the arrow keys step to shows its reading in a tooltip at the top of the
+	// chart while the other bars fade back. A tap's reading stays up, since a
+	// finger has nothing to hover with, until a tap lands outside the chart.
+	const setupInsightChart = (frame) => {
+	  if (!frame || frame.dataset.insightChartReady === "true") return;
+	  frame.dataset.insightChartReady = "true";
+
+	  const tooltip = frame.querySelector("[data-chart-tooltip]");
+	  const status = frame.querySelector("[data-chart-keyboard-status]");
+	  const svg = frame.querySelector("svg");
+	  let readings;
+	  try {
+		readings = JSON.parse(frame.dataset.chartReadings || "null");
+	  } catch (_) {
+		return;
+	  }
+	  if (!tooltip || !svg || !readings?.length) return;
+	  const marks = [...svg.querySelectorAll("[data-chart-slot]")];
+	  const focusSlot = Math.max(0, Math.min(Number.parseInt(frame.dataset.chartFocus, 10) || 0, readings.length - 1));
+	  let current = -1;
+
+	  const show = (slot, announce = false) => {
+		const reading = readings[slot];
+		if (!reading) return;
+		current = slot;
+		frame.classList.add("is-reading");
+		marks.forEach((mark) => mark.classList.toggle("is-active", mark.dataset.chartSlot === String(slot)));
+		const label = document.createElement("div");
+		label.className = "chart-tooltip-time";
+		label.textContent = reading.label;
+		const rows = (reading.rows || []).map((entry) => {
+		  const row = document.createElement("div");
+		  row.className = "chart-tooltip-row";
+		  const swatch = document.createElement("i");
+		  swatch.className = `insight-chart-swatch ${entry.key}`;
+		  const name = document.createElement("span");
+		  name.textContent = entry.series;
+		  const value = document.createElement("b");
+		  value.textContent = entry.value;
+		  row.append(swatch, name, value);
+		  return row;
+		});
+		tooltip.replaceChildren(label, ...rows);
+		tooltip.hidden = false;
+		// Beside the bar rather than over it, and on its left near the edge.
+		const box = frame.getBoundingClientRect();
+		const plot = svg.getBoundingClientRect();
+		const center = plot.left - box.left + ((slot + .5) / readings.length) * plot.width;
+		const width = tooltip.offsetWidth;
+		const left = center + 12 + width > box.width ? center - 12 - width : center + 12;
+		tooltip.style.left = `${Math.max(0, Math.min(left, box.width - width))}px`;
+		if (announce && status) {
+		  status.textContent = [reading.label, ...(reading.rows || []).map((entry) => `${entry.series}: ${entry.value}`)].join(". ");
+		}
+	  };
+
+	  const hide = () => {
+		current = -1;
+		frame.classList.remove("is-reading");
+		marks.forEach((mark) => mark.classList.remove("is-active"));
+		tooltip.hidden = true;
+	  };
+	  frame.sableHideReading = hide;
+
+	  const track = (event) => {
+		const plot = svg.getBoundingClientRect();
+		if (!plot.width) return;
+		const slot = Math.floor(((event.clientX - plot.left) / plot.width) * readings.length);
+		const clamped = Math.max(0, Math.min(slot, readings.length - 1));
+		if (clamped !== current) show(clamped);
+	  };
+
+	  frame.addEventListener("pointerdown", track);
+	  frame.addEventListener("pointermove", (event) => {
+		if (event.pointerType === "mouse" || event.buttons) track(event);
+	  });
+	  frame.addEventListener("pointerleave", (event) => {
+		if (event.pointerType === "mouse" && !frame.matches(":focus-visible")) hide();
+	  });
+	  // A tap focuses the chart too; only a keyboard arrival starts a reading.
+	  frame.addEventListener("focus", () => {
+		if (frame.matches(":focus-visible")) show(current >= 0 ? current : focusSlot, true);
+	  });
+	  frame.addEventListener("blur", hide);
+	  frame.addEventListener("keydown", (event) => {
+		let next = current >= 0 ? current : focusSlot;
+		if (event.key === "ArrowLeft") next--;
+		else if (event.key === "ArrowRight") next++;
+		else if (event.key === "Home") next = 0;
+		else if (event.key === "End") next = readings.length - 1;
+		else if (event.key === "Escape") { hide(); return; }
+		else return;
+		event.preventDefault();
+		show(Math.max(0, Math.min(next, readings.length - 1)), true);
+	  });
+	};
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll("[data-insight-chart].is-reading").forEach((frame) => {
+		if (!frame.contains(event.target)) frame.sableHideReading?.();
+	  });
+	});
+
+  // Insights alert headers are rows of name and value; the form posts them as
+  // parallel lists, so adding and removing rows needs no bookkeeping.
+  document.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-alert-header-add]");
+    if (add) {
+      const form = add.closest("form");
+      const row = form?.querySelector("[data-alert-header-template]")?.content.firstElementChild?.cloneNode(true);
+      if (!row) return;
+      form.querySelector("[data-alert-headers]").append(row);
+      row.querySelector("input")?.focus();
+      return;
+    }
+    const remove = event.target.closest("[data-alert-header-remove]");
+    if (remove) {
+      const form = remove.closest("form");
+      remove.closest("[data-alert-header]")?.remove();
+      form?.querySelector("[data-alert-header-add]")?.focus();
+    }
+  });
+
+  // Each kind of alert shows only its own setup: parts marked
+  // data-alert-for list the kinds they belong to. Pushover always posts to
+  // its own API, so it has no URL to ask for.
+  document.addEventListener("change", (event) => {
+    if (!event.target.matches?.('#insight-alerts input[name="format"]')) return;
+    const form = event.target.form;
+    const kind = event.target.value;
+    form?.querySelectorAll("[data-alert-for]").forEach((part) => {
+      part.hidden = !part.dataset.alertFor.split(" ").includes(kind);
+    });
+    const url = form?.querySelector('input[name="url"]');
+    const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
+    if (placeholder) url.placeholder = placeholder;
+    // A URL belongs to its kind: an ntfy topic is no Slack webhook. Leaving
+    // the saved kind empties the box, and coming back fills it again.
+    if (url && url.dataset.savedKind) {
+      if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
+      else if (url.value === url.dataset.savedUrl) url.value = "";
+    }
+    if (kind === "browser") showPushState(form.querySelector("[data-push-panel]"));
+    // An open preview follows the format.
+    if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
+  });
+  // The preview drops out of its button like Sable's other menus, flipping
+  // above only when there is no room below, so looking at it never changes
+  // the dialog's size.
+  const alertPreviewTrigger = (popover) => popover.closest("form")?.querySelector("[data-alert-preview]");
+  const positionAlertPreview = (popover) => {
+    const trigger = alertPreviewTrigger(popover);
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const inset = 8;
+    const gap = 4;
+    const width = Math.min(34 * 16, window.innerWidth - inset * 2);
+    const above = rect.top - inset - gap;
+    const below = window.innerHeight - rect.bottom - inset - gap;
+    popover.style.width = `${width}px`;
+    popover.style.maxHeight = "";
+    const wanted = Math.min(popover.scrollHeight, 28 * 16);
+    // Like a menu, it stays below and scrolls unless there is barely any room.
+    const side = below >= Math.min(wanted, 15 * 16) || below >= above ? "bottom" : "top";
+    popover.dataset.side = side;
+    popover.style.maxHeight = `${Math.max(120, Math.min(28 * 16, side === "bottom" ? below : above))}px`;
+    popover.style.left = `${Math.min(Math.max(rect.left, inset), window.innerWidth - inset - width)}px`;
+    const height = popover.getBoundingClientRect().height;
+    popover.style.top = `${side === "top" ? rect.top - gap - height : rect.bottom + gap}px`;
+  };
+  document.body.addEventListener("htmx:after:swap", (event) => {
+    const popover = event.detail?.ctx?.target;
+    if (!popover?.matches?.("[data-alert-preview-popover]")) return;
+    if (!popover.matches(":popover-open")) popover.showPopover();
+    positionAlertPreview(popover);
+  });
+  document.addEventListener("toggle", (event) => {
+    if (!event.target.matches?.("[data-alert-preview-popover]")) return;
+    alertPreviewTrigger(event.target)?.setAttribute("aria-expanded", String(event.newState === "open"));
+  }, true);
+  // Pressing Preview again closes it. A pointer press outside the popover
+  // light-dismisses it before the click lands, so remember it was open.
+  document.addEventListener("pointerdown", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    trigger.dataset.previewWasOpen = String(!!trigger.form?.querySelector("[data-alert-preview-popover]:popover-open"));
+  }, true);
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest?.("[data-alert-preview]");
+    if (!trigger) return;
+    const popover = trigger.form?.querySelector("[data-alert-preview-popover]");
+    const wasOpen = trigger.dataset.previewWasOpen === "true" || popover?.matches(":popover-open");
+    delete trigger.dataset.previewWasOpen;
+    // A click the format change sends only refreshes an open preview.
+    if (!wasOpen || !event.isTrusted) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (popover?.matches(":popover-open")) popover.hidePopover();
+  }, true);
+  window.addEventListener("resize", () => {
+    document.querySelectorAll("[data-alert-preview-popover]:popover-open").forEach(positionAlertPreview);
+  });
+
+  // Browser alerts. Nothing is installed in a browser until someone turns
+  // alerts on in it: then Sable's service worker is registered, the browser
+  // asks for permission, and it subscribes with Sable's push key.
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  // The card says what this browser can do: turn alerts on, already has,
+  // or cannot, and why. Each state shows only its own parts.
+  const setPushState = (panel, state, error = "") => {
+    const card = panel.querySelector("[data-push-card]");
+    if (!card) return;
+    card.dataset.pushState = state;
+    card.querySelectorAll("[data-push-when]").forEach((part) => {
+      part.hidden = part.dataset.pushWhen !== state;
+    });
+    const message = card.querySelector("[data-push-error]");
+    message.textContent = error;
+    message.hidden = !error;
+  };
+  const base64URLBytes = (value) => {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  };
+  // The server names each browser by a hash of its endpoint, so the page can
+  // find this browser in the list without the server knowing which it is.
+  const pushBrowserID = async (endpoint) => {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
+    return btoa(String.fromCharCode(...digest.slice(0, 12))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  };
+  const showPushState = async (panel) => {
+    if (!panel?.querySelector("[data-push-card]")) return;
+    if (!window.isSecureContext) return setPushState(panel, "insecure");
+    if (!pushSupported()) return setPushState(panel, "unsupported");
+    if (Notification.permission === "denied") return setPushState(panel, "blocked");
+    setPushState(panel, "ready");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription().catch(() => null);
+      const row = subscription && panel.querySelector(`[data-push-browser="${await pushBrowserID(subscription.endpoint)}"]`);
+      if (!row) return;
+      row.querySelector("[data-push-this]")?.removeAttribute("hidden");
+      setPushState(panel, "on");
+    } catch {
+      // The card still offers to turn alerts on; this browser just is not
+      // marked in the list.
+    }
+  };
+  const turnOnPush = async (panel) => {
+    const enable = panel.querySelector("[data-push-enable]");
+    enable.disabled = true;
+    try {
+      if (await Notification.requestPermission() !== "granted") {
+        setPushState(panel, Notification.permission === "denied" ? "blocked" : "ready");
+        return;
+      }
+      const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
+      const {key, error} = await answer.json();
+      if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
+      await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+      // Push belongs to the active worker, which register() may not hand back
+      // yet on a first visit.
+      const registration = await navigator.serviceWorker.ready;
+      const serverKey = base64URLBytes(key);
+      // A browser that cannot read back an old subscription can still make a
+      // new one, so a failed look is no reason to stop.
+      let subscription = await registration.pushManager.getSubscription().catch(() => null);
+      // A subscription made for another key cannot receive Sable's pushes.
+      const current = subscription?.options.applicationServerKey;
+      if (subscription && !(current && new Uint8Array(current).every((byte, index) => byte === serverKey[index]))) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+      try {
+        subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
+      } catch (error) {
+        // A browser whose push service is switched off fails here with a
+        // message that does not say so: Brave until Google's push is allowed,
+        // and Firefox or Zen with dom.push.connection.enabled turned off.
+        if (!/push (service|subscription)/i.test(error.message)) throw error;
+        throw new Error(/Firefox\//.test(navigator.userAgent) ?
+          "This browser's push service is off. Open about:config, set dom.push.connection.enabled to true, restart the browser, then try again." :
+          "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again.");
+      }
+      panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
+      panel.querySelector("[data-push-submit]").click();
+    } catch (error) {
+      setPushState(panel, "ready", error.message || "This browser could not turn on alerts.");
+    } finally {
+      enable.disabled = false;
+    }
+  };
+  const alertPushPanel = () => document.querySelector("#insight-alerts [data-push-panel]");
+  document.addEventListener("click", (event) => {
+    const enable = event.target.closest("[data-push-enable]");
+    if (enable) turnOnPush(enable.closest("[data-push-panel]"));
+    if (event.target.closest('[data-dialog-open="insight-alerts-dialog"]')) showPushState(alertPushPanel());
+  });
+  document.body.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
+  showPushState(alertPushPanel());
+
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
   let updateCheckRetries = 0;
@@ -1523,6 +1845,12 @@
 
   const mountNotificationRegion = (region) => {
     if (!region || region.hasAttribute("data-notification-local")) return region;
+    // A toast from inside an open modal stays there; the page stack sits under
+    // the modal's backdrop, where it would be blurred and unclickable.
+    if (region.closest("dialog[open]")) {
+      region.setAttribute("data-notification-local", "");
+      return region;
+    }
     const stack = document.querySelector("[data-notification-stack]");
     if (!stack) return region;
     if (region.parentElement !== stack) {
@@ -2267,6 +2595,32 @@
 		showFailure("Sable has not come back online. Check the Docker or service restart policy, then try again.");
 	  };
 
+	  // An installed update also finishes when Sable is restarted another way,
+	  // such as by its service manager. The page notices the new process and
+	  // reloads to run the new console, unless a rolling update on the page is
+	  // still running and will reload it at the end.
+	  if (root.dataset.updatedVersion) {
+		(async () => {
+		  let loaded = "";
+		  while (root.isConnected && !previousInstance) {
+			try {
+			  const response = await fetchHealth();
+			  const health = response.ok ? await response.json() : {};
+			  if (!loaded) {
+				loaded = health.instance_id || "";
+			  } else if (health.instance_id && health.instance_id !== loaded && !previousInstance &&
+				!document.querySelector('#cluster-updates[data-rollout-active="true"]')) {
+				continueAfterRestart();
+				return;
+			  }
+			} catch {
+			  // Sable is restarting; keep asking until it answers.
+			}
+			await sleep(5000);
+		  }
+		})();
+	  }
+
 	  button?.addEventListener("click", async () => {
 		if (!previousInstance && root.dataset.restartConfirm) {
 		  const accepted = await confirmAction(root.dataset.restartConfirm, {
@@ -2678,7 +3032,7 @@
 	  if (empty) empty.hidden = visible !== 0 || rows.length === 0;
 	  const count = dialog.querySelector("[data-top-stats-count]");
 	  if (count) {
-		const noun = dialog.id.includes("clients") ? "clients" : "domains";
+		const noun = count.dataset.topStatsNoun || (dialog.id.includes("clients") ? "clients" : "domains");
 		count.textContent = `${visible.toLocaleString()}${query ? ` of ${Math.min(rows.length, limit).toLocaleString()}` : ""} ${noun}`;
 	  }
 	  const total = dialog.querySelector("[data-top-stats-total]");
@@ -2748,7 +3102,35 @@
 	};
 	document.addEventListener("pointerdown", closeInteractivePopovers);
 
+	// A rolling update restarts the server this page talks to, yet the page
+	// keeps running the console it loaded. Once a rollout the page watched is
+	// over, and the server restarted since the page loaded, the page reloads to
+	// run the new console, announcing the update when the rollout completed.
+	let rolloutWatch = null;
+	const followRollout = (panel) => {
+	  const {rolloutId, rolloutActive, rolloutPhase, rolloutVersion, instanceId} = panel.dataset;
+	  if (!instanceId) return;
+	  rolloutWatch ??= {instance: instanceId, watched: ""};
+	  if (!rolloutId) return;
+	  if (rolloutActive === "true") {
+		rolloutWatch.watched = rolloutId;
+		return;
+	  }
+	  if (rolloutWatch.watched !== rolloutId || instanceId === rolloutWatch.instance) return;
+	  rolloutWatch.watched = "";
+	  if (rolloutPhase === "complete" && rolloutVersion) {
+		try {
+		  sessionStorage.setItem(UPDATE_COMPLETED_KEY, rolloutVersion);
+		} catch {
+		  // The confirmation is a courtesy; the reload matters more.
+		}
+	  }
+	  window.location.reload();
+	};
+
 	const initializeSwappedContent = (root) => {
+	  if (root.matches?.("#cluster-updates")) followRollout(root);
+	  root.querySelectorAll?.("#cluster-updates").forEach(followRollout);
 	  if (!root) return;
 	  setupReplicaReadOnly(root);
 	  if (root.matches?.("[data-resolver-combobox]")) setupResolverCombobox(root);
@@ -2771,6 +3153,8 @@
 	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
 	  if (root.matches?.("[data-donut]")) setupDonutChart(root);
 	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
+	  if (root.matches?.("[data-insight-chart]")) setupInsightChart(root);
+	  root.querySelectorAll?.("[data-insight-chart]").forEach(setupInsightChart);
 	  if (root.matches?.("[data-toast]")) setupToast(root);
 	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
 	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
@@ -3969,10 +4353,28 @@
 		  return route.pathname === current.pathname && [...route.searchParams].every(([name, value]) => current.searchParams.get(name) === value);
 		};
 		window.requestAnimationFrame(() => {
-		  if (!pendingRouteMatches() || !localCommandTarget(pending)) {
+		  if (pendingRouteMatches() && localCommandTarget(pending)) return;
+		  const unavailable = () => {
 			document.getElementById("main-content")?.focus();
 			announce(`${pending?.label || "Command"} is unavailable`);
+		  };
+		  if (!pendingRouteMatches()) {
+			unavailable();
+			return;
 		  }
+		  // Part of a page can load after the page itself, as Insights loads its
+		  // analysis, so give the command's target a few seconds to arrive.
+		  let timer = 0;
+		  const retry = () => {
+			if (!localCommandTarget(pending)) return;
+			window.clearTimeout(timer);
+			document.body.removeEventListener("htmx:after:swap", retry);
+		  };
+		  timer = window.setTimeout(() => {
+			document.body.removeEventListener("htmx:after:swap", retry);
+			unavailable();
+		  }, 10000);
+		  document.body.addEventListener("htmx:after:swap", retry);
 		});
 	  }
 	};
@@ -3985,6 +4387,15 @@
 	document.body.addEventListener("htmx:before:request", (event) => {
 	  if (event.detail?.ctx?.sourceElement?.id !== "dashboard-insights") return;
 	  if (document.querySelector("#dashboard-insights dialog[open]")) event.preventDefault();
+	});
+	// A drawer that loads one record at a time starts from its loading state
+	// when another record is opened, rather than showing the last one dimmed
+	// until the new one arrives.
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const loading = document.getElementById(ctx?.sourceElement?.dataset?.drawerLoading || "");
+	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
+	  ctx.target.replaceChildren(loading.content.cloneNode(true));
 	});
 	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
 	syncRoutedDialogs();
@@ -4036,6 +4447,14 @@
 	  if (recordOpener && !recordInteractive && !window.getSelection()?.toString()) {
 		const dialog = document.getElementById(recordOpener.dataset.dialogOpen);
 		showRoutedDialog(dialog, Boolean(recordOpener.dataset.dialogUrl), recordOpener);
+		return;
+	  }
+	  // A row whose record loads on demand opens through its own button, so a
+	  // click anywhere in the row does exactly what the button does.
+	  const openerRow = event.target.closest?.("tr[data-row-opener]");
+	  const openerInteractive = event.target.closest?.("button, a, input, select, textarea, label, summary");
+	  if (openerRow && !openerInteractive && !window.getSelection()?.toString()) {
+		openerRow.querySelector("[data-dialog-open]")?.click();
 		return;
 	  }
 	  const dialogRow = event.target.closest("[data-dialog-open]");
@@ -4092,7 +4511,14 @@
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
 		dialogOpen.closest(".zone-action-menu")?.removeAttribute("open");
-		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), dialogOpen);
+		// A drawer opened from another stacks on top of it, so closing it goes
+		// back. One already open underneath, such as the app drawer a device
+		// drawer was opened from, comes back by closing the drawer on top, and
+		// keeps where it returns focus to.
+		const from = dialogOpen.closest("dialog[open]");
+		const reopening = Boolean(dialog?.open && from && from !== dialog);
+		if (reopening) from.close();
+		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), reopening ? null : dialogOpen);
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
 		return;
 	  }
@@ -4192,6 +4618,18 @@
 		if (label) label.textContent = "Copy failed";
       }
     });
+
+	// An inline editor can ask Escape to press its Cancel button instead of
+	// closing the dialog around it, so backing out of an edit keeps the drawer.
+	document.addEventListener("keydown", (event) => {
+	  if (event.key !== "Escape") return;
+	  const field = event.target.closest?.("[data-escape-click]");
+	  const cancel = field && document.querySelector(field.dataset.escapeClick);
+	  if (!cancel) return;
+	  event.preventDefault();
+	  event.stopPropagation();
+	  cancel.click();
+	}, true);
 
 	document.addEventListener("keydown", (event) => {
 	  const tab = event.target.closest?.("[data-blocking-tab], [data-catalog-tab]");

@@ -88,6 +88,40 @@ func ValidateCredentials(provider string, credentials Credentials) error {
 	return nil
 }
 
+// providerAPIs are the HTTP APIs of the providers with a single one. OVHcloud
+// has one per region, and RFC 2136 sends DNS updates to a server the operator
+// names.
+var providerAPIs = map[string]string{
+	"cloudflare":   "https://api.cloudflare.com/client/v4",
+	"porkbun":      "https://api.porkbun.com/api/json/v3",
+	"namecheap":    "https://api.namecheap.com/xml.response",
+	"godaddy":      "https://api.godaddy.com/v3",
+	"digitalocean": "https://api.digitalocean.com",
+	"hetzner":      "https://api.hetzner.cloud/v1",
+	"route53":      "https://route53.amazonaws.com",
+}
+
+// APIHosts lists the host names Sable looks up to reach a provider's API.
+func APIHosts(name string) []string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var endpoints []string
+	if name == "ovh" {
+		for _, region := range []string{"ovh-eu", "ovh-ca", "ovh-us"} {
+			endpoint, _ := ovhEndpoint(region)
+			endpoints = append(endpoints, endpoint)
+		}
+	} else if endpoint, found := providerAPIs[name]; found {
+		endpoints = append(endpoints, endpoint)
+	}
+	hosts := make([]string, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if parsed, err := url.Parse(endpoint); err == nil && parsed.Hostname() != "" {
+			hosts = append(hosts, parsed.Hostname())
+		}
+	}
+	return hosts
+}
+
 // New returns an authenticated external DNS provider.
 func New(name string, credentials Credentials) (Provider, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
@@ -95,23 +129,24 @@ func New(name string, credentials Credentials) (Provider, error) {
 		return nil, err
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
+	baseURL := providerAPIs[name]
 	switch name {
 	case "cloudflare":
-		return &cloudflareProvider{credentials: credentials, client: client, baseURL: "https://api.cloudflare.com/client/v4"}, nil
+		return &cloudflareProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "porkbun":
-		return &porkbunProvider{credentials: credentials, client: client, baseURL: "https://api.porkbun.com/api/json/v3"}, nil
+		return &porkbunProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "namecheap":
-		return &namecheapProvider{credentials: credentials, client: client, baseURL: "https://api.namecheap.com/xml.response"}, nil
+		return &namecheapProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "godaddy":
-		return &godaddyProvider{credentials: credentials, client: client, baseURL: "https://api.godaddy.com/v3"}, nil
+		return &godaddyProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "digitalocean":
-		return &digitalOceanProvider{credentials: credentials, client: client, baseURL: "https://api.digitalocean.com"}, nil
+		return &digitalOceanProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "hetzner":
-		return &hetznerProvider{credentials: credentials, client: client, baseURL: "https://api.hetzner.cloud/v1"}, nil
+		return &hetznerProvider{credentials: credentials, client: client, baseURL: baseURL}, nil
 	case "rfc2136":
 		return &rfc2136Provider{credentials: credentials}, nil
 	case "route53":
-		return &route53Provider{credentials: credentials, client: client, baseURL: "https://route53.amazonaws.com", now: time.Now}, nil
+		return &route53Provider{credentials: credentials, client: client, baseURL: baseURL, now: time.Now}, nil
 	case "ovh":
 		endpoint, _ := ovhEndpoint(credentials.Endpoint)
 		return &ovhProvider{credentials: credentials, client: client, baseURL: endpoint, now: time.Now}, nil

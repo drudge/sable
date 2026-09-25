@@ -14,6 +14,10 @@ type ClusterUpdateView struct {
 	Version   string
 	Release   UpdateView
 	Rollout   cluster.RolloutStatus
+	// InstanceID names the server process that rendered the panel. The page
+	// compares it with the one it loaded with to tell that a rollout restarted
+	// its server, and reloads once the rollout is over to run the new console.
+	InstanceID string
 }
 
 // Keep a started rollout visible while restarting nodes renegotiate support,
@@ -51,6 +55,11 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 		if outOfBand {
 			hx-swap-oob="outerHTML"
 		}
+		data-rollout-id={ view.Rollout.ID }
+		data-rollout-active={ fmt.Sprint(view.Rollout.Active()) }
+		data-rollout-phase={ view.Rollout.Phase }
+		data-rollout-version={ formatReleaseVersion(view.Rollout.Version) }
+		data-instance-id={ view.InstanceID }
 	>
 		if view.Visible() {
 			<section class="card cluster-update-card">

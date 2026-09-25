@@ -11,6 +11,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
@@ -113,6 +114,7 @@ func (window insightWindow) logWindowQuery() string {
 func dashboardInsights(
 	insights querylog.Insights,
 	window insightWindow,
+	given devices.GivenNames,
 	hosts []config.HostOverride,
 	zones []zonemodel.Zone,
 ) pages.DashboardInsightsView {
@@ -136,7 +138,7 @@ func dashboardInsights(
 		}
 		responseCodes[label] += count
 	}
-	clientNames := dashboardClientNames(insights.Clients, hosts, zones)
+	clientNames := dashboardClientNames(insights.Clients, given, hosts, zones)
 	return pages.DashboardInsightsView{
 		RangeLabel:      window.Label,
 		LogWindowQuery:  window.logWindowQuery(),
@@ -161,15 +163,21 @@ func dashboardClientSample(entries []querylog.Entry) int {
 	return len(clients)
 }
 
-// dashboardClientNames labels the client addresses in the query sample. A
-// configured host override wins because an operator wrote it by hand; every
-// other address falls back to a PTR record from a zone this server answers
-// for, which is where the UniFi synchronizer publishes DHCP client names.
-func dashboardClientNames(clients map[string]uint64, hosts []config.HostOverride, zones []zonemodel.Zone) map[string]string {
+// dashboardClientNames labels client addresses in the order Insights names
+// devices: the name the operator gave the device, then UniFi's, then a
+// configured host override, then a PTR record from a zone this server answers
+// for. Whatever is still unnamed is left for nameRankedClients to ask the
+// resolver about.
+func dashboardClientNames(clients map[string]uint64, given devices.GivenNames, hosts []config.HostOverride, zones []zonemodel.Zone) map[string]string {
 	names := make(map[string]string, len(clients))
 	for _, host := range hosts {
 		for _, address := range host.Addresses {
 			names[address] = host.Name
+		}
+	}
+	for address := range clients {
+		if name := given.Address(address); name != "" {
+			names[address] = name
 		}
 	}
 	if len(zones) == 0 {

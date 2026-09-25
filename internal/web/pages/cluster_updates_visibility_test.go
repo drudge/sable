@@ -51,3 +51,22 @@ func TestActiveRollingUpdateHidesTransientUnavailableWarning(t *testing.T) {
 		}
 	}
 }
+
+// The panel tells the page whether a rollout is running, what it installs,
+// and which server process rendered it, so the page can reload once a rollout
+// that restarted its server is over.
+func TestRollingUpdatePanelTellsThePageWhenToReload(t *testing.T) {
+	var html strings.Builder
+	view := ClusterUpdateView{Initialized: true, InstanceID: "m3k9", Rollout: cluster.RolloutStatus{ID: "rollout", Version: "1.2.0", Phase: "complete"}}
+	if err := ClusterUpdatePanel(view, true).Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		`data-rollout-id="rollout"`, `data-rollout-active="false"`, `data-rollout-phase="complete"`,
+		`data-rollout-version="v1.2.0"`, `data-instance-id="m3k9"`,
+	} {
+		if !strings.Contains(html.String(), expected) {
+			t.Errorf("panel is missing %s", expected)
+		}
+	}
+}

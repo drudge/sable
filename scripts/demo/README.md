@@ -32,7 +32,7 @@ login page available for authentication testing.
 
 The primary is set up with three block list subscriptions, seven hand-written
 blocked domains, two allowed overrides, and a UniFi integration publishing
-thirty hosts across three networks into `corp.vandelay.com`,
+thirty-one hosts across three networks into `corp.vandelay.com`,
 `warehouse.vandelay.com`, and `iot.vandelay.com`.
 
 ## Passkey UI

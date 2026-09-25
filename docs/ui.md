@@ -16,6 +16,12 @@ New screens and components must preserve Isotope's:
 - light, dark, and system theme behavior;
 - hover, focus, loading, empty, error, and disabled states.
 
+Apps are the one place brand marks appear: Insights draws each app it
+recognizes as a small tile in the brand's color, with the mark from Simple
+Icons (CC0, see `third_party/simple-icons`), and falls back to a gray Lucide
+icon for the app's category when Simple Icons has no mark. Regenerate the marks
+with `go run ./internal/web/pages/internal/applogos`.
+
 Only product identity, backend-specific terminology, and controls unsupported
 by Sable may differ. Unsupported destinations remain visibly disabled until
 their native Sable backend exists; they must not be redesigned or silently
