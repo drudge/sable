@@ -119,8 +119,9 @@ func TestAppsHaveIcons(t *testing.T) {
 		"netflix":  `<rect width="24" height="24" rx="6" fill="#E50914"></rect>`,
 		"snapchat": `fill="#FFFC00"`,
 		// ChatGPT keeps OpenAI's mark from before it left Simple Icons.
-		"chatgpt": `fill="#412991"`,
-		"xbox":    `fill="#107C10"`,
+		"chatgpt":     `fill="#412991"`,
+		"xbox":        `fill="#107C10"`,
+		"prime-video": `fill="#1F2E3E"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
