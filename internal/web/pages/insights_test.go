@@ -127,6 +127,7 @@ func TestAppsHaveIcons(t *testing.T) {
 		"linkedin":      `fill="#0A66C2"`,
 		"bing":          `fill="#258FFA"`,
 		"nintendo":      `fill="#E60012"`,
+		"adobe":         `fill="#FF0000"`,
 		"microsoft-365": `fill="#D83B01"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
