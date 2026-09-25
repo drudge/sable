@@ -23,6 +23,7 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
 )
@@ -920,5 +921,98 @@ func TestInsightFindingsCanBeHiddenAndShownAgain(t *testing.T) {
 	}
 	if !strings.Contains(server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(), `<span class="insight-finding-title">Possible past blocking issue</span>`) {
 		t.Fatal("a finding shown again is still hidden")
+	}
+}
+
+// A phone makes a new IPv6 privacy address every day and keeps the old ones
+// quiet. The neighbor table tied each one to the phone while it was in use, so
+// alerts, which read only the last day, must still know last week's addresses
+// were the phone: none of them went quiet, and the phone is as busy as ever.
+// A privacy address nothing ties to hardware is no new device either.
+func TestInsightAlertsKnowADevicesOlderIPv6Addresses(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	now := time.Now().UTC().Truncate(time.Second)
+	opened, err := store.Open(context.Background(), "sqlite", filepath.Join(directory, "sable.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { opened.Close() })
+	metadata, err := sql.Open("sqlite", filepath.Join(directory, "sable.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := metadata.Exec("UPDATE sable_metadata SET value = ? WHERE key LIKE 'query_log_%_since'",
+		now.Add(-30*24*time.Hour).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	metadata.Close()
+
+	const mac = "da:a1:19:00:00:01"
+	day := 24 * time.Hour
+	events := make([]querylog.Event, 0)
+	lookup := func(at time.Time, client string) {
+		events = append(events, querylog.Event{
+			OccurredAt: at, ClientIP: client, Name: "time.apple.com.", RecordType: dns.TypeA,
+			Class: dns.ClassINET, ResponseCode: dns.RcodeSuccess, Source: querylog.SourceUpstream, Protocol: "UDP",
+		})
+	}
+	identities := []querylog.ClientIdentity{
+		{Address: "10.0.0.20", MAC: mac, Source: "neighbor", SeenAt: now.Add(-10 * day)},
+		{Address: "10.0.0.20", MAC: mac, Source: "neighbor", SeenAt: now.Add(-time.Minute)},
+	}
+	for at := now.Add(-10 * day); at.Before(now); at = at.Add(4 * time.Hour) {
+		lookup(at, "10.0.0.20")
+	}
+	// Each day's address carries 600 lookups, then falls silent.
+	for age := 10; age >= 1; age-- {
+		address := "2001:db8::" + strconv.Itoa(age) + ":beef:cafe:1"
+		start := now.Add(-time.Duration(age) * day)
+		for at := start; at.Before(start.Add(day)); at = at.Add(144 * time.Second) {
+			lookup(at, address)
+		}
+		identities = append(identities,
+			querylog.ClientIdentity{Address: address, MAC: mac, Source: "neighbor", SeenAt: start},
+			querylog.ClientIdentity{Address: address, MAC: mac, Source: "neighbor", SeenAt: start.Add(day - time.Minute)})
+	}
+	for at := now.Add(-2 * time.Hour); at.Before(now); at = at.Add(10 * time.Minute) {
+		lookup(at, "2001:db8::715d:2004:187e:18a2")
+	}
+	if err := opened.WriteQueryEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.RecordClientIdentities(context.Background(), identities); err != nil {
+		t.Fatal(err)
+	}
+
+	configuration := config.Defaults()
+	configuration.Cluster.DataDirectory = t.TempDir()
+	server, err := New(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testStats{snapshot: dnsserver.Stats{StartedAt: now.Add(-time.Hour)}},
+		&editableTestConfiguration{snapshot: config.Snapshot{Config: configuration, Revision: 1}, baseDirectory: directory},
+		testZones{}, "sqlite", testQueryLog{}, opened,
+		func(context.Context) error { return nil },
+		permissionAuthenticator{sessions: insightsTestSessions}, true, false, false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeTestServer(t, server) })
+
+	for _, finding := range server.insightNews(context.Background(), now) {
+		if finding.Kind == devices.KindWentQuiet || finding.Kind == devices.KindTrafficSpike || finding.Kind == devices.KindNewDevice {
+			t.Errorf("alert for addresses that changed and nothing else: %s %s: %s", finding.Title, finding.Subject.Label, finding.Summary)
+		}
+	}
+	report, err := server.insightDevices(context.Background(), opened, insightsWindow("day", now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if phone, found := devices.Find(report.devices, "mac:"+mac); !found || len(report.devices) != 2 || phone.Baseline < 7*600 {
+		t.Fatalf("day view devices = %+v", report.devices)
+	}
+	if summary := insightDeviceSummary(insightDeviceViews(report)); summary.New != 0 {
+		t.Fatalf("new devices = %d, want none", summary.New)
 	}
 }

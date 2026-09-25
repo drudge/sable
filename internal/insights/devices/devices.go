@@ -1,9 +1,10 @@
 // Package devices turns client addresses into devices and reports what changed
 // about them. An address is tied to a device through the names an operator
-// gave it, a UniFi controller's inventory, or the host's neighbor table, so a
-// laptop's IPv4 and rotating IPv6 addresses count as one device. When nothing
-// ties an address to hardware, the address stands on its own and every
-// sentence about it says "address" rather than claiming a device.
+// gave it, a UniFi controller's inventory, the host's neighbor table, or the
+// hardware address an IPv6 address was built from, so a laptop's IPv4 and
+// rotating IPv6 addresses count as one device. When nothing ties an address
+// to hardware, the address stands on its own and every sentence about it says
+// "address" rather than claiming a device.
 package devices
 
 import (
@@ -42,6 +43,9 @@ type Device struct {
 	Name       string
 	NameSource string
 	MAC        string
+	// MACFromAddress marks a hardware address read out of the device's IPv6
+	// addresses rather than seen with them on the network.
+	MACFromAddress bool
 	// PrivateMAC marks a randomized per-network hardware address.
 	PrivateMAC bool
 	// Named is set when the operator named this device in Sable.
@@ -143,9 +147,21 @@ func NewGivenNames(identities []querylog.ClientIdentity, clients []config.Client
 // Address returns the given name of the device behind one client address, or
 // nothing when only a discovered name could label it.
 func (given GivenNames) Address(address string) string {
-	device := Device{MAC: given.identities[address].MAC, Addresses: []Address{{Address: address}}}
+	mac, _, _ := given.hardware(address)
+	device := Device{MAC: mac, Addresses: []Address{{Address: address}}}
 	name, _, _ := chooseName(device, given, nil)
 	return name
+}
+
+// hardware returns the hardware address behind a client address: the one it
+// was last seen with on the network, or else the one an IPv6 address was built
+// from, which fromAddress marks.
+func (given GivenNames) hardware(address string) (mac string, fromAddress, found bool) {
+	if identity, seen := given.identities[address]; seen {
+		return identity.MAC, false, true
+	}
+	mac, found = hardwareFromAddress(address)
+	return mac, found, found
 }
 
 // Build groups client activity into devices, busiest first.
@@ -155,23 +171,26 @@ func Build(input Input) []Device {
 	order := make([]string, 0)
 	for _, activity := range input.Activity.Clients {
 		address := activity.Client
-		identity, identified := given.identities[address]
+		mac, fromAddress, identified := given.hardware(address)
 		key := "ip:" + address
 		if identified {
-			key = "mac:" + identity.MAC
+			key = "mac:" + mac
 		}
 		device, found := devices[key]
 		if !found {
-			device = &Device{Key: key}
+			device = &Device{Key: key, MACFromAddress: fromAddress}
 			if identified {
-				device.MAC = identity.MAC
-				if parsed, err := net.ParseMAC(identity.MAC); err == nil {
+				device.MAC = mac
+				if parsed, err := net.ParseMAC(mac); err == nil {
 					device.PrivateMAC = len(parsed) > 0 && parsed[0]&0x02 != 0
 				}
 			}
 			devices[key] = device
 			order = append(order, key)
 		}
+		// One address seen with the hardware on the network is better evidence
+		// than any number built from it.
+		device.MACFromAddress = device.MACFromAddress && fromAddress
 		device.Addresses = append(device.Addresses, Address{Address: address, Queries: activity.Queries, Blocked: activity.Blocked})
 		device.Queries += activity.Queries
 		device.Blocked += activity.Blocked

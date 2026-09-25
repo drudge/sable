@@ -42,6 +42,11 @@ const (
 	maximumListedNames  = 10
 )
 
+// privacyMethod says why arrivals and silences leave out IPv6 privacy
+// addresses Sable could not tie to a device.
+const privacyMethod = "IPv6 privacy addresses, which phones and computers replace about once a day, " +
+	"count only once Sable ties them to a device."
+
 // ChangesInput is what the change findings are derived from. SeenSince is when
 // first-seen tracking began, and NewDomains lists a device's first-time names
 // for the devices whose new destinations are reported.
@@ -101,7 +106,7 @@ func (input ChangesInput) trackedBefore(moment time.Time) bool {
 func newDeviceFindings(input ChangesInput) []insights.Finding {
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if device.Queries > 0 && !device.FirstSeen.Before(input.WindowStart) && input.trackedBefore(device.FirstSeen) {
+		if device.Queries > 0 && !device.FirstSeen.Before(input.WindowStart) && input.trackedBefore(device.FirstSeen) && !device.PrivacyAddressesOnly() {
 			candidates = append(candidates, device)
 		}
 	}
@@ -121,7 +126,8 @@ func newDeviceFindings(input ChangesInput) []insights.Finding {
 			Reasons:      newDeviceReasons(device, input),
 			Facts:        deviceFacts(device, true),
 			Explanations: newDeviceExplanations(device),
-			Method:       "Sable records when it first sees each client. This one first appeared inside the selected period, while Sable was already watching.",
+			Method: "Sable records when it first sees each client. This one first appeared inside the selected period, while Sable was already watching. " +
+				privacyMethod,
 		})
 	}
 	return findings
@@ -162,7 +168,7 @@ func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Fi
 			),
 			Facts:        append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
 			Explanations: []string{"A software update or a newly installed app", "Someone started using a new service on this device"},
-			Method: "Sable remembers every domain each client has queried and reports a " + noun(device) +
+			Method: "Sable remembers every domain each client has queried and reports " + aNoun(device) +
 				" that queried at least 20 it had never queried before the selected period.",
 		}
 		if input.NewDomains != nil {
@@ -230,7 +236,7 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 func quietFindings(input ChangesInput) []insights.Finding {
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if device.Recent == 0 && input.baselineReady(device) {
+		if device.Recent == 0 && input.baselineReady(device) && !device.PrivacyAddressesOnly() {
 			candidates = append(candidates, device)
 		}
 	}
@@ -248,8 +254,9 @@ func quietFindings(input ChangesInput) []insights.Finding {
 				insights.Fact{Label: "Daily average before", Value: insights.FormatCount(uint64(dailyAverage(device) + 0.5))},
 			),
 			Explanations: []string{"Switched off or unplugged", "Moved to another network", "Set to use a different DNS server"},
-			Method:       "Sable reports a " + noun(device) + " that was steadily active all of the previous week and has sent nothing for a full day.",
-			Chart:        dayChart(input, device),
+			Method: "Sable reports " + aNoun(device) + " that was steadily active all of the previous week and has sent nothing for a full day. " +
+				privacyMethod,
+			Chart: dayChart(input, device),
 		})
 	}
 	return findings
@@ -282,6 +289,14 @@ func noun(device Device) string {
 		return "device"
 	}
 	return "address"
+}
+
+// aNoun is noun with its article.
+func aNoun(device Device) string {
+	if device.Identified() {
+		return "a device"
+	}
+	return "an address"
 }
 
 // Label is how a device is named in a sentence: its name, or its hardware or
@@ -338,6 +353,8 @@ func newDeviceReasons(device Device, input ChangesInput) []insights.Reason {
 	switch {
 	case device.Named:
 		reasons = append(reasons, insights.Reason{Text: "Identified by the name you gave it"})
+	case device.MACFromAddress:
+		reasons = append(reasons, insights.Reason{Text: "Identified by the hardware address its IPv6 address is built from", Code: device.MAC})
 	case device.MAC != "":
 		reasons = append(reasons, insights.Reason{Text: "Identified by hardware address", Code: device.MAC})
 	default:
