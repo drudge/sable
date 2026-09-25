@@ -6459,11 +6459,7 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = insightAlertKindOption(view, "json", "Webhook").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = insightAlertKindOption(view, "slack", "Slack").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = insightAlertKindOption(view, "browser", "Browser").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -6479,7 +6475,11 @@ func InsightAlerts(view InsightAlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = insightAlertKindOption(view, "browser", "Browser").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = insightAlertKindOption(view, "slack", "Slack").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = insightAlertKindOption(view, "json", "Webhook").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

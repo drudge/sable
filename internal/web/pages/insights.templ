@@ -1985,12 +1985,12 @@ templ InsightAlerts(view InsightAlertsView) {
 			<fieldset class="field-control insight-alert-kinds">
 				<legend>Send To</legend>
 				<div class="insight-alert-kind-tabs">
-					@insightAlertKindOption(view, "json", "Webhook")
-					@insightAlertKindOption(view, "slack", "Slack")
+					@insightAlertKindOption(view, "browser", "Browser")
 					@insightAlertKindOption(view, "discord", "Discord")
 					@insightAlertKindOption(view, "text", "ntfy")
 					@insightAlertKindOption(view, "pushover", "Pushover")
-					@insightAlertKindOption(view, "browser", "Browser")
+					@insightAlertKindOption(view, "slack", "Slack")
+					@insightAlertKindOption(view, "json", "Webhook")
 				</div>
 			</fieldset>
 			<label class="field-control" data-alert-for="json slack discord text" hidden?={ !insightAlertFor(view, "json slack discord text") }>
