@@ -2041,7 +2041,7 @@ templ InsightAlerts(view InsightAlertsView) {
 										<strong>{ browser.Label }<span class="insight-alert-browser-this" data-push-this hidden>This browser</span></strong>
 										<small>{ insightAlertBrowserAdded(browser) }</small>
 									</div>
-									<button class="button outline compact" type="button" hx-post="/ui/insights/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">Remove</button>
+									<button class="button outline compact destructive" type="button" hx-post="/ui/insights/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">@Icon("trash")<span>Remove</span></button>
 								</div>
 							}
 						</div>

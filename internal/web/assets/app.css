@@ -2508,6 +2508,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .token-secret button { opacity: 1; }
 
 .isotope-form-dialog { width: min(calc(100% - 2rem), 32rem); }
+/* Six Send To choices fit on one line. */
+.isotope-form-dialog.insight-alerts-dialog { width: min(calc(100% - 2rem), 38rem); }
 .isotope-dialog-body { display: grid; gap: 1rem; overflow-y: auto; padding: 1.5rem; }
 .isotope-dialog-body > label, .embedded-admin-form > label { display: grid; gap: .5rem; font-size: .8125rem; font-weight: 500; }
 .isotope-dialog-body fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .75rem; }
@@ -3153,6 +3155,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.certificate-detail-grid { grid-template-columns: 1fr; }
   .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
 	.isotope-form-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog.insight-alerts-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
 	.user-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
@@ -4056,8 +4059,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .insight-alerts .dialog-footer .insight-alert-preview-button { margin-right: auto; }
 .isotope-dialog-body fieldset.insight-alert-kinds { min-width: 0; margin: 0; border: 0; padding: 0; }
 .isotope-dialog-body .insight-alert-kinds > legend { margin-bottom: .5rem; padding: 0; font-size: .8125rem; font-weight: 500; }
-.insight-alert-kind-tabs { display: flex; flex-wrap: wrap; width: fit-content; max-width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
-.insight-alert-kind { display: inline-flex; height: 1.75rem; align-items: center; gap: .4rem; border-radius: .375rem; padding: 0 .75rem; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
+.insight-alert-kind-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.insight-alert-kind { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
 .insight-alert-kind .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
 .insight-alert-kind .insight-alert-mark { width: .8rem; height: .8rem; flex-basis: .8rem; }
 .insight-alert-kind:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
