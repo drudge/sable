@@ -1728,7 +1728,7 @@
     setPushState(panel, "ready");
     try {
       const registration = await navigator.serviceWorker.getRegistration("/");
-      const subscription = await registration?.pushManager.getSubscription();
+      const subscription = await registration?.pushManager.getSubscription().catch(() => null);
       const row = subscription && panel.querySelector(`[data-push-browser="${await pushBrowserID(subscription.endpoint)}"]`);
       if (!row) return;
       row.querySelector("[data-push-this]")?.removeAttribute("hidden");
@@ -1749,17 +1749,29 @@
       const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
       const {key, error} = await answer.json();
       if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
-      const registration = await navigator.serviceWorker.register("/sw.js", {scope: "/"});
-      await navigator.serviceWorker.ready;
+      await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+      // Push belongs to the active worker, which register() may not hand back
+      // yet on a first visit.
+      const registration = await navigator.serviceWorker.ready;
       const serverKey = base64URLBytes(key);
-      let subscription = await registration.pushManager.getSubscription();
+      // A browser that cannot read back an old subscription can still make a
+      // new one, so a failed look is no reason to stop.
+      let subscription = await registration.pushManager.getSubscription().catch(() => null);
       // A subscription made for another key cannot receive Sable's pushes.
       const current = subscription?.options.applicationServerKey;
       if (subscription && !(current && new Uint8Array(current).every((byte, index) => byte === serverKey[index]))) {
         await subscription.unsubscribe();
         subscription = null;
       }
-      subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
+      try {
+        subscription ||= await registration.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: serverKey});
+      } catch (error) {
+        // Brave, and Chrome builds without Google's services, have no push
+        // service until one is allowed in their settings.
+        throw new Error(/push service/i.test(error.message) ?
+          "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again." :
+          error.message);
+      }
       panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
       panel.querySelector("[data-push-submit]").click();
     } catch (error) {
