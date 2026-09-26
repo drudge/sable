@@ -241,6 +241,33 @@ func TestAutomaticChecksCacheFailuresAndRespectChannelChanges(t *testing.T) {
 	}
 }
 
+// The schedule decides when to look, so a scheduled check asks GitHub even
+// right after another check, and a sign-in right after it reuses its result.
+func TestScheduledChecksSkipTheSignInCache(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	source := releaseServer(t, "v1.1.0", false, nil)
+	transport := &countingReleaseTransport{}
+	manager := NewManager(Options{APIBaseURL: source.URL, BinaryPath: installedExecutable(t, "old"), Client: &http.Client{Transport: transport}})
+	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.CheckOnSchedule(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if transport.calls.Load() != 2 {
+		t.Fatalf("metadata requests = %d, want the scheduled check to ask again", transport.calls.Load())
+	}
+	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if transport.calls.Load() != 2 {
+		t.Fatal("a sign-in right after a scheduled check asked GitHub again")
+	}
+	if status := manager.Status(); !status.Available || status.LatestVersion != "1.1.0" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
 // An update alert lasts as long as the found release is newer than the running
 // build, so the answer must not change while another check runs or fails.
 func TestNewerReleaseComparesTheFoundReleaseWithTheRunningBuild(t *testing.T) {

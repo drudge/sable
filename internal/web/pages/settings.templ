@@ -187,9 +187,21 @@ type SettingsUpdatePreferencesView struct {
  IncludePreRelease bool
  CanEditReleaseChannel bool
 	CheckOnLogin bool
+	// CheckSchedule is hourly, daily, or weekly. Daily and weekly checks run
+	// at CheckAt, HH:MM in this node's local time, and weekly ones on CheckDay.
+	CheckSchedule string
+	CheckAt string
+	CheckDay string
 	CanEdit bool
 	Message string
 	Error string
+}
+
+// updateCheckDays are the days a weekly update check can fall on, as the
+// schedule saves them and as the picker shows them.
+var updateCheckDays = [][2]string{
+	{"monday", "Monday"}, {"tuesday", "Tuesday"}, {"wednesday", "Wednesday"}, {"thursday", "Thursday"},
+	{"friday", "Friday"}, {"saturday", "Saturday"}, {"sunday", "Sunday"},
 }
 
 templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
@@ -199,13 +211,42 @@ templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
 		@SettingsCard("download", "Software Updates", "Update preferences for this node") {
 			<div class="isotope-card-content">
  <input type="hidden" name="update_preferences_present" value="true" form="settings-form"/>
-				<label class="field-control switch-row setting-switch-row"><span><strong>Check for updates</strong><small>Look for a new release once a day and when you sign in, and alert when one is out. Updates are installed only when you choose.</small></span><input type="checkbox" role="switch" form="settings-form" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
+				@updateCheckSchedule(view)
                 if view.CanEditReleaseChannel {
                     <input type="hidden" form="settings-form" name="release_channel_present" value="true"/>
                 }
                 <label class="field-control switch-row setting-switch-row"><span><strong>Include pre-releases</strong><small>Include preview releases when checking for updates.</small></span><input type="checkbox" role="switch" form="settings-form" name="pre_release" value="true" checked?={ view.IncludePreRelease } disabled?={ !view.CanEditReleaseChannel }/></label>
 			</div>
 		}
+	</div>
+}
+
+// updateCheckSchedule is the Check for updates switch with when to check
+// under it. The schedule folds away while checks are off, and the day and time
+// show only for the schedules that use them.
+templ updateCheckSchedule(view SettingsUpdatePreferencesView) {
+	<div class="update-check">
+		<label class="field-control switch-row setting-switch-row"><span><strong>Check for updates</strong><small>Look for a new release when you sign in and on a schedule. Updates are installed only when you choose.</small></span><input type="checkbox" role="switch" form="settings-form" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
+		<div class="update-check-schedule" role="group" aria-label="When to check for updates">
+			<span>Check</span>
+			<select form="settings-form" name="check_schedule" aria-label="How often to check for updates" data-styled-select disabled?={ !view.CanEdit }>
+				<option value="hourly" selected?={ view.CheckSchedule == "hourly" }>Hourly</option>
+				<option value="daily" selected?={ view.CheckSchedule == "daily" }>Daily</option>
+				<option value="weekly" selected?={ view.CheckSchedule == "weekly" }>Weekly</option>
+			</select>
+			<span class="update-check-day">
+				<span>on</span>
+				<select form="settings-form" name="check_day" aria-label="Day to check for updates" data-styled-select disabled?={ !view.CanEdit }>
+					for _, day := range updateCheckDays {
+						<option value={ day[0] } selected?={ view.CheckDay == day[0] }>{ day[1] }</option>
+					}
+				</select>
+			</span>
+			<span class="update-check-at">
+				<span>at</span>
+				<input type="time" form="settings-form" name="check_at" value={ view.CheckAt } step="60" aria-label="Time to check for updates" data-styled-time disabled?={ !view.CanEdit }/>
+			</span>
+		</div>
 	</div>
 }
 

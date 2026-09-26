@@ -429,7 +429,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		RestartManaged: initial.Updates.RestartManaged,
 		PreRelease:     initial.Updates.PreRelease,
 	})
-	runRuntimeWorker(newDailyUpdateCheck(updateManager, configurationManager, func() bool {
+	runRuntimeWorker(newScheduledUpdateCheck(updateManager, configurationManager, func() bool {
 		state := clusterService.Snapshot()
 		return !state.Initialized || state.LocalRole != cluster.RoleReplica
 	}, logger).Run)

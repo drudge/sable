@@ -587,6 +587,37 @@ func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
 	}
 }
 
+// The schedule saves with the rest of the update preferences. A time or day
+// left blank keeps the saved one, and a form without a schedule, such as a
+// page from before schedules, leaves it alone.
+func TestUpdateCheckScheduleSavesWithThePreferences(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{})
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+	server.config = configuration
+	saved := func() config.Updates { return configuration.snapshot.Config.Updates }
+
+	response := serveUpdateForm(server, "/ui/settings/updates", url.Values{
+		"check_on_login": {"true"}, "check_schedule": {"weekly"}, "check_day": {"friday"}, "check_at": {"18:30"},
+	})
+	if got := saved(); response.Code != http.StatusOK || got.CheckSchedule != "weekly" || got.CheckDay != "friday" || got.CheckAt != "18:30" {
+		t.Fatalf("saving a weekly schedule = %d %+v", response.Code, got)
+	}
+	for _, want := range []string{`<option value="weekly" selected>`, `<option value="friday" selected>`, `name="check_at" value="18:30"`} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("the saved preferences lack %q", want)
+		}
+	}
+
+	serveUpdateForm(server, "/ui/settings/updates", url.Values{"check_on_login": {"true"}, "check_schedule": {"hourly"}, "check_day": {""}, "check_at": {""}})
+	if got := saved(); got.CheckSchedule != "hourly" || got.CheckDay != "friday" || got.CheckAt != "18:30" {
+		t.Fatalf("an hourly schedule saved %+v", got)
+	}
+	serveUpdateForm(server, "/ui/settings/updates", url.Values{"check_on_login": {"true"}})
+	if got := saved(); got.CheckSchedule != "hourly" {
+		t.Fatalf("a form without a schedule saved %+v", got)
+	}
+}
+
 func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
 	for path, permission := range map[string]string{
 		"/ui/updates/automatic-check": auth.PermissionUpdatesRead,

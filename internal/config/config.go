@@ -139,6 +139,12 @@ type Config struct {
 // Updates holds this node's release channel. It is not replicated to peers.
 type Updates struct {
 	CheckOnLogin bool `toml:"check_on_login"`
+	// CheckSchedule is how often the lead looks for a release on its own while
+	// CheckOnLogin is on: hourly, daily, or weekly. Daily and weekly checks run
+	// at CheckAt, HH:MM in this node's local time, and weekly ones on CheckDay.
+	CheckSchedule string `toml:"check_schedule"`
+	CheckAt       string `toml:"check_at"`
+	CheckDay      string `toml:"check_day"`
 	// RestartManaged opts externally supervised deployments into rolling restarts.
 	RestartManaged bool `toml:"restart_managed"`
 	// PreRelease includes release candidates when resolving the newest
@@ -470,7 +476,9 @@ type Reload struct {
 
 func Defaults() Config {
 	return Config{
-		Updates: Updates{CheckOnLogin: true},
+		Updates: Updates{
+			CheckOnLogin: true, CheckSchedule: UpdateCheckHourly, CheckAt: defaultUpdateCheckAt, CheckDay: defaultUpdateCheckDay,
+		},
 		Server: Server{
 			HTTPListen:      defaultHTTPListen,
 			DNSListen:       []string{defaultDNSListen},
@@ -806,6 +814,7 @@ func (configuration Config) Validate() error {
 	if configuration.Backup.RetentionCount < 1 || configuration.Backup.RetentionCount > 1000 {
 		validationErrors = append(validationErrors, errors.New("backup.retention_count must be between 1 and 1000"))
 	}
+	validationErrors = append(validationErrors, configuration.Updates.validate()...)
 	for index, address := range configuration.EncryptedDNS.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
 	}
@@ -1203,6 +1212,7 @@ func (configuration Config) DedicatedDoHListeners() []string {
 func (configuration *Config) normalize() {
 	configuration.normalizeClients()
 	configuration.normalizeAlerts()
+	configuration.Updates.normalize()
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
 	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
 	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)

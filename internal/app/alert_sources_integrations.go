@@ -191,7 +191,7 @@ func publicAddressChanged(change publicAddressChange, published bool) alerts.Ale
 
 // updateAlertSource reports a Sable release newer than the running build for
 // as long as it stays newer, which lasts until Sable restarts into it. The
-// daily update check keeps the answer fresh.
+// scheduled update check keeps the answer fresh.
 type updateAlertSource struct {
 	updates updateStatusReader
 }

@@ -4158,11 +4158,21 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-choice label:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
 .alert-choice label:has(input:disabled) { cursor: not-allowed; opacity: .58; }
 /* The failed sign-in limit belongs to its switch, so the two share a border. */
-.alert-sign-ins { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
-.alert-sign-ins > .switch-row { border: 0; }
-.alert-sign-in-limit { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding: .75rem 1rem; color: var(--muted-foreground); font-size: .78rem; }
+/* Failed Sign-Ins carries its limit under its switch, and Check for updates
+   its schedule. */
+.alert-sign-ins, .update-check { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-sign-ins > .switch-row, .update-check > .switch-row { border: 0; }
+.alert-sign-in-limit, .update-check-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding: .75rem 1rem; color: var(--muted-foreground); font-size: .78rem; }
 .alert-sign-in-limit input { width: 5rem; height: 2rem; }
 .alert-sign-ins:has(input[name="sign_ins"]:not(:checked)) .alert-sign-in-limit { opacity: .6; }
+.update-check-schedule > span { display: inline-flex; align-items: center; gap: .5rem; }
+.update-check-schedule .styled-select, .update-check-schedule .styled-time { width: 8.5rem; }
+.update-check-day .styled-select { width: 9.5rem; }
+/* The schedule folds away while checks are off, and the day and time show
+   only for the schedules that use them. */
+.update-check:has(input[name="check_on_login"]:not(:checked)) .update-check-schedule { display: none; }
+.update-check-schedule:has(select[name="check_schedule"] option[value="hourly"]:checked) .update-check-at { display: none; }
+.update-check-schedule:not(:has(select[name="check_schedule"] option[value="weekly"]:checked)) .update-check-day { display: none; }
 /* The Insights Findings switch carries a switch for each kind of finding, so
    the kinds sit inside its border. */
 .alert-insights { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }

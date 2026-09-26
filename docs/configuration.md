@@ -1307,16 +1307,24 @@ statistics return HTTP 503.
 [updates]
 pre_release = false
 check_on_login = true
+check_schedule = "hourly"
+check_at = "09:00"
+check_day = "monday"
 restart_managed = false
 ```
 
 These preferences are node-local. `check_on_login` controls release checks after
 sign-in, and it is also consent to check in the background: while it is on, the
-lead node, or a node on its own, asks GitHub once a day, so an `updates`
-[alert](#alerts) about a newer release does not wait for someone to sign in.
-Both kinds of check share one six-hour cache. The alert lasts until the node
-runs that release, so it goes out once per release. `check_on_login` never
-authorizes automatic installation. `pre_release` includes
+lead node, or a node on its own, asks GitHub on the schedule in
+`check_schedule`, so an `updates` [alert](#alerts) about a newer release does
+not wait for someone to sign in. `check_schedule` is `hourly`, the default,
+`daily`, or `weekly`. Daily and weekly checks run at `check_at`, HH:MM in the
+node's local timezone as for scheduled backups, and weekly ones on
+`check_day`, such as `friday`. A node that has never found a release asks
+right away. Sign-in checks share a six-hour cache so signing in cannot use up
+GitHub's anonymous limit; scheduled checks keep to their schedule instead. The
+alert lasts until the node runs that release, so it goes out once per release.
+`check_on_login` never authorizes automatic installation. `pre_release` includes
 prereleases in this node's checks. Changes to `restart_managed` take effect on
 startup: set it only when a supervisor will restart Sable after it exits.
 Installed systemd services are detected automatically. For Docker rolling
