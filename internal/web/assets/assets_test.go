@@ -231,6 +231,25 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	}
 }
 
+func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if strings.Contains(stylesheet, ".sidebar .nav { overflow-y: hidden; }") {
+		t.Error("desktop sidebar navigation cannot scroll, so a short window cuts off its last items")
+	}
+	sharedStyles, _, _ := strings.Cut(stylesheet, "@media (max-width: 767px)")
+	for _, expected := range []string{
+		`.nav[data-scroll-fade-bottom="true"]`,
+		`.nav[data-scroll-fade-top="true"]`,
+		`.sidebar-nav-hint[data-visible="true"] { opacity: 1; }`,
+	} {
+		if !strings.Contains(sharedStyles, expected) {
+			t.Errorf("sidebar navigation cue %q applies only on phones", expected)
+		}
+	}
+}
+
 func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	t.Parallel()
 

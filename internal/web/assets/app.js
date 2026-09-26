@@ -3640,6 +3640,23 @@
 	  nav.dataset.scrollFadeBottom = String(hasMoreBelow);
 	  hint.dataset.visible = String(hasMoreBelow);
 };
+	// The page the sidebar marks as current stays in sight. A list too tall
+	// for the window scrolls to it, clear of the fades its scroll padding
+	// leaves room for at either edge.
+	const revealActiveNavItem = () => {
+	  const nav = document.querySelector(".nav");
+	  const active = nav?.querySelector(".nav-item.active");
+	  if (!nav || !active) return;
+	  const clearance = parseFloat(getComputedStyle(nav).scrollPaddingTop) || 0;
+	  const view = nav.getBoundingClientRect();
+	  const item = active.getBoundingClientRect();
+	  if (item.bottom > view.bottom - clearance) nav.scrollTop += item.bottom - view.bottom + clearance;
+	  else if (item.top < view.top + clearance) nav.scrollTop -= view.top + clearance - item.top;
+	};
+	const settleSidebarNav = () => {
+	  revealActiveNavItem();
+	  updateSidebarNavScrollHint();
+	};
 	const sidebarNav = document.querySelector(".nav");
 	if (sidebarNav && !document.querySelector(".sidebar-nav-hint")) {
 	  const navWrap = document.createElement("div");
@@ -3655,7 +3672,7 @@
 }
 	sidebarNav?.addEventListener("scroll", updateSidebarNavScrollHint, { passive: true });
 	window.addEventListener("resize", updateSidebarNavScrollHint);
-	updateSidebarNavScrollHint();
+	settleSidebarNav();
 
 	const syncSidebarToggleState = () => {
 	  const mobile = window.matchMedia("(max-width: 767px)").matches;
@@ -3665,7 +3682,7 @@
 	  const main = document.getElementById("main-content");
 	  const mobileToggle = document.querySelector("[data-mobile-header] [data-sidebar-toggle]");
 	  document.documentElement.classList.toggle("sidebar-mobile-open", mobile && mobileOpen);
-	  window.requestAnimationFrame(updateSidebarNavScrollHint);
+	  window.requestAnimationFrame(settleSidebarNav);
 	  // Offscreen navigation must leave the tab order and accessibility tree.
 	  // Keep this in the shared sync path so initial load and resizing agree.
 	  const returnToPage = mobile && !mobileOpen && sidebar?.contains(document.activeElement);
