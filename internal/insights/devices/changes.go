@@ -19,27 +19,22 @@ const (
 	KindWentQuiet       = "devices.went-quiet"
 )
 
-// Thresholds for change findings. Each one is conservative on purpose: a
-// quiet page is better than a page that cries wolf about normal variation.
+// Fixed rules for change findings. The thresholds an operator may move are
+// in Limits.
 const (
 	// trackingGrace keeps devices that were already present when first-seen
 	// tracking began from being reported as new.
 	trackingGrace = time.Hour
-	// minimumNewDomains recognizes a device that started talking to a
-	// meaningfully different set of places.
-	minimumNewDomains = 20
 	// baselineDays matches the store's comparison window.
 	baselineDays = 7
-	// minimumDailyBaseline ignores devices too quiet for a ratio to mean much.
+	// minimumDailyBaseline ignores devices too quiet for a ratio to mean much
+	// when looking for a spike or an appliance's new services.
 	minimumDailyBaseline = 50
-	// spikeFactor and minimumSpikeQueries define a traffic spike.
-	spikeFactor         = 3.0
-	minimumSpikeQueries = 500
-	maximumNewDevices   = 3
-	maximumDestinations = 2
-	maximumSpikes       = 2
-	maximumQuiet        = 2
-	maximumListedNames  = 10
+	maximumNewDevices    = 3
+	maximumDestinations  = 2
+	maximumSpikes        = 2
+	maximumQuiet         = 2
+	maximumListedNames   = 10
 )
 
 // ChangesInput is what the change findings are derived from. SeenSince is when
@@ -64,22 +59,44 @@ type ChangesInput struct {
 	// RepeatedLookups are names only one client looked up many times in the
 	// last day, with every lookup's time.
 	RepeatedLookups []querylog.LookupTimes
+	// Limits are the thresholds each change must pass. Zero ones take their
+	// defaults.
+	Limits Limits
+	// Off lists the kinds of finding an operator turned off. They are not
+	// looked for, so they cost nothing and never keep another finding about
+	// the same device from being reported.
+	Off map[string]bool
 }
 
 // Changes reports what changed about devices, most important first. Every
 // statement compares a device only with its own history, and a device that
 // has no hardware identity is described as an address.
 func Changes(input ChangesInput) []insights.Finding {
+	input.Limits = input.Limits.withDefaults()
 	findings := make([]insights.Finding, 0)
-	findings = append(findings, quietFindings(input)...)
-	findings = append(findings, spikeFindings(input)...)
-	findings = append(findings, unusualHourFindings(input)...)
-	findings = append(findings, checkInFindings(input)...)
-	findings = append(findings, newDeviceFindings(input)...)
+	for _, analysis := range []struct {
+		kind string
+		find func(ChangesInput) []insights.Finding
+	}{
+		{KindWentQuiet, quietFindings}, {KindTrafficSpike, spikeFindings}, {KindUnusualHours, unusualHourFindings},
+		{KindCheckIn, checkInFindings}, {KindNewDevice, newDeviceFindings},
+	} {
+		if !input.Off[analysis.kind] {
+			findings = append(findings, analysis.find(input)...)
+		}
+	}
 	// A device already reported for its new destinations needs no second
-	// finding that counts the same domains another way.
+	// finding that counts the same domains another way. A kind that is off is
+	// never looked for, so it cannot take a device's report from another.
 	reported := make(map[string]bool)
-	for _, group := range [][]insights.Finding{applianceFindings(input, reported), newAppFindings(input)} {
+	groups := make([][]insights.Finding, 0, 2)
+	if !input.Off[KindApplianceDrift] {
+		groups = append(groups, applianceFindings(input, reported))
+	}
+	if !input.Off[KindNewApp] {
+		groups = append(groups, newAppFindings(input))
+	}
+	for _, group := range groups {
 		for _, finding := range group {
 			if reported[finding.Subject.Device] {
 				continue
@@ -88,7 +105,9 @@ func Changes(input ChangesInput) []insights.Finding {
 			findings = append(findings, finding)
 		}
 	}
-	findings = append(findings, destinationFindings(input, reported)...)
+	if !input.Off[KindNewDestinations] {
+		findings = append(findings, destinationFindings(input, reported)...)
+	}
 	return findings
 }
 
@@ -143,7 +162,7 @@ func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Fi
 	}
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if device.NewDomains >= minimumNewDomains && device.FirstSeen.Before(input.WindowStart) && !skip[device.Key] {
+		if device.NewDomains >= input.Limits.NewDomains && device.FirstSeen.Before(input.WindowStart) && !skip[device.Key] {
 			candidates = append(candidates, device)
 		}
 	}
@@ -163,7 +182,7 @@ func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Fi
 			Facts:        append(deviceFacts(device, false), insights.Fact{Label: "First-time domains", Value: insights.FormatCount(device.NewDomains)}),
 			Explanations: []string{"A software update or a newly installed app", "Someone started using a new service on this device"},
 			Method: "Sable remembers every domain each client has queried and reports a " + noun(device) +
-				" that queried at least 20 it had never queried before the selected period.",
+				" that queried at least " + insights.FormatCount(input.Limits.NewDomains) + " it had never queried before the selected period.",
 		}
 		if input.NewDomains != nil {
 			finding.Domains = input.NewDomains(device)
@@ -177,11 +196,12 @@ func destinationFindings(input ChangesInput, skip map[string]bool) []insights.Fi
 }
 
 // baselineReady reports whether a device was around for the whole comparison
-// week, so its average is a real average.
-func (input ChangesInput) baselineReady(device Device) bool {
+// week and averaged at least minimumDaily lookups a day, so its average is a
+// real average.
+func (input ChangesInput) baselineReady(device Device, minimumDaily uint64) bool {
 	start := input.Now.Add(-(baselineDays + 1) * 24 * time.Hour)
 	return !device.FirstSeen.IsZero() && !device.FirstSeen.After(start) && input.trackedBefore(start) &&
-		device.Baseline >= minimumDailyBaseline*baselineDays
+		device.Baseline >= minimumDaily*baselineDays
 }
 
 func dailyAverage(device Device) float64 { return float64(device.Baseline) / baselineDays }
@@ -189,7 +209,8 @@ func dailyAverage(device Device) float64 { return float64(device.Baseline) / bas
 func spikeFindings(input ChangesInput) []insights.Finding {
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if input.baselineReady(device) && device.Recent >= minimumSpikeQueries && float64(device.Recent) >= spikeFactor*dailyAverage(device) {
+		if input.baselineReady(device, minimumDailyBaseline) && device.Recent >= input.Limits.SpikeLookups &&
+			float64(device.Recent) >= input.Limits.SpikeFactor*dailyAverage(device) {
 			candidates = append(candidates, device)
 		}
 	}
@@ -220,7 +241,7 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 				"Heavier use than usual, such as streaming or a large backup",
 			},
 			Method: "Sable compares each " + noun(device) + "'s last 24 hours with its own average over the seven days before, " +
-				"and reports only devices that were active the whole week and at least tripled their usual volume.",
+				"and reports only devices that were active the whole week and " + growthText(input.Limits.SpikeFactor) + ".",
 			Chart: dayChart(input, device),
 		})
 	}
@@ -230,7 +251,7 @@ func spikeFindings(input ChangesInput) []insights.Finding {
 func quietFindings(input ChangesInput) []insights.Finding {
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
-		if device.Recent == 0 && input.baselineReady(device) {
+		if device.Recent == 0 && input.baselineReady(device, input.Limits.QuietDailyLookups) {
 			candidates = append(candidates, device)
 		}
 	}
@@ -383,6 +404,12 @@ type Sources interface {
 // Analyzer reports what changed about the network's devices.
 type Analyzer struct {
 	Sources Sources
+	// Limits are the thresholds each change must pass. Zero ones take their
+	// defaults.
+	Limits Limits
+	// Off lists the kinds of finding an operator turned off, which are not
+	// looked for.
+	Off map[string]bool
 }
 
 // Analyze compares each device in the window with its own history.
@@ -391,12 +418,23 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 	if err != nil {
 		return nil, err
 	}
+	off := analyzer.Off
 	// Routines need two weeks before the last day, whatever window is shown.
-	hourly, hourlyErr := analyzer.Sources.HourlyActivity(ctx, report.Window.End.Add(-(routineDays+1)*24*time.Hour))
-	// A failed read only leaves check-ins out.
-	repeated, _ := analyzer.Sources.RepeatedLookups(ctx, report.Window.End.Add(-24*time.Hour))
+	// Only unusual hours and the charts of quiet and busy devices read them.
+	hourlyRead := !off[KindWentQuiet] || !off[KindTrafficSpike] || !off[KindUnusualHours]
+	var hourly map[string]map[time.Time]uint64
+	var hourlyErr error
+	if hourlyRead {
+		hourly, hourlyErr = analyzer.Sources.HourlyActivity(ctx, report.Window.End.Add(-(routineDays+1)*24*time.Hour))
+	}
+	var repeated []querylog.LookupTimes
+	if !off[KindCheckIn] {
+		// A failed read only leaves check-ins out.
+		repeated, _ = analyzer.Sources.RepeatedLookups(ctx, report.Window.End.Add(-24*time.Hour))
+	}
 	return Changes(ChangesInput{
 		Devices: report.Devices, WindowStart: report.Window.Start, Now: report.Window.End, SeenSince: report.SeenSince,
+		Limits: analyzer.Limits, Off: off,
 		NewDomains: func(device Device) []insights.DomainEvidence {
 			domains, err := analyzer.Sources.NewDomains(ctx, device, report.Window)
 			if err != nil {
@@ -409,7 +447,7 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 			return history, complete && err == nil
 		},
 		Hourly: func(device Device) map[time.Time]uint64 {
-			if hourlyErr != nil {
+			if !hourlyRead || hourlyErr != nil {
 				return nil
 			}
 			merged := make(map[time.Time]uint64)

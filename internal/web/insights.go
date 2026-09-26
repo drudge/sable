@@ -101,6 +101,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
+		Settings: server.insightSettingsPageView(console),
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights page", "error", err)
@@ -178,6 +179,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		TimeDisplay:     console.TimeDisplay,
 		BlockingEnabled: blocking.Enabled,
 		CanNameDevices:  console.CanWriteSettings,
+		Settings:        server.insightSettingsPageView(console),
 	}
 	if console.CanLogs {
 		view.QueryLogDisabled = !snapshot.Config.QueryLog.Enabled
@@ -191,6 +193,9 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		func(analyzer insights.Analyzer, err error) {
 			server.logger.Warn("analyze insights", "analyzer", fmt.Sprintf("%T", analyzer), "error", err)
 		})
+	// Kinds an operator turned off never reach the page, whichever analyzer
+	// made them.
+	findings = insightModesOf(snapshot.Config.Insights.Findings).shown(findings)
 	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
 	view.CanHideFindings = canRemember && console.CanWriteSettings
 	if canRemember {

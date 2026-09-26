@@ -566,6 +566,7 @@ func Defaults() Config {
 			Watch:    true,
 			Debounce: Duration{Duration: defaultReloadDebounce},
 		},
+		Insights: Insights{Findings: DefaultInsightFindings()},
 	}
 }
 
@@ -933,6 +934,9 @@ func (configuration Config) Validate() error {
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
+	for _, problem := range configuration.Insights.Findings.Problems() {
+		validationErrors = append(validationErrors, problem)
+	}
 	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
 		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf(
@@ -1243,6 +1247,7 @@ func (configuration *Config) normalize() {
 	}
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
+	configuration.normalizeInsights()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
 	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)

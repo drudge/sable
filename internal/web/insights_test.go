@@ -284,6 +284,8 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		// alerts need permission to change settings.
 		for command, shown := range map[string]bool{
 			`id="command-page-insights-blocking"`: want,
+			// Anyone who may read the query log may look at Insights settings.
+			`id="command-page-insights-settings"`: want && session != "blocking-only",
 			`id="command-page-insights-devices"`:  want && session != "blocking-only",
 			`id="command-page-insights-apps"`:     want && session != "blocking-only",
 			`id="command-action-insights-alerts"`: session == "everything",
@@ -299,6 +301,7 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
 		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
 		`data-command-label="App Insights"`, `data-command-route="/insights" data-command-dialog="top-stats-apps-dialog"`,
+		`data-command-label="Insights Settings"`, `data-command-route="/insights" data-command-dialog="insight-settings-dialog"`,
 	} {
 		if !strings.Contains(palette, expected) {
 			t.Errorf("palette is missing %s", expected)

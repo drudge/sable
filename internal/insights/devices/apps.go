@@ -120,7 +120,7 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 		}
 		reasons = append(reasons, insights.Reason{Text: "Also new to it: " + insights.JoinAnd(others)})
 	}
-	if device.NewDomains >= minimumNewDomains {
+	if device.NewDomains >= input.Limits.NewDomains {
 		reasons = append(reasons, insights.Reason{Text: fmt.Sprintf("%s domains queried for the first time in all", insights.FormatCount(device.NewDomains))})
 	}
 	reasons = append(reasons, insights.Reason{

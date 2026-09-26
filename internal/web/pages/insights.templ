@@ -57,6 +57,9 @@ type InsightsOverviewView struct {
 	DevicesUnavailable  bool
 	Devices             []InsightDeviceView
 	DeviceSummary       InsightDeviceSummaryView
+	// Settings are Insights settings, which the bell opens. Nil hides the
+	// bell from operators who may not read the query log.
+	Settings *InsightSettingsView
 }
 
 // InsightDeviceView is one device with its traffic in the window.
@@ -321,6 +324,9 @@ templ InsightsPage(view InsightsPageView) {
 // open while the page behind it refreshes after a change.
 templ insightsDocument(view InsightsOverviewView) {
 	@UpdateIndicator("insights-update-indicator", "Updating insights…")
+	if view.Settings != nil {
+		@InsightSettingsDialog(*view.Settings)
+	}
 	@InsightsContent(view)
 	if view.CanLogs {
 		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title">
@@ -370,7 +376,7 @@ templ InsightsContent(view InsightsOverviewView) {
 		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
 			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
 			<div class="insights-range">
-				@insightAlertsButton(view.Alerts)
+				@InsightSettingsBell(insightSettingsBellState(view.Settings))
 				@RangeTabs(insightsRangeControl(view.Range))
 				@RangeSelect(insightsRangeControl(view.Range))
 			</div>

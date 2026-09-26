@@ -44,7 +44,7 @@ func (server *Server) SetAlerts(dispatcher *alerts.Dispatcher, secrets *alerts.S
 }
 
 // InsightAlerts is Insights as an alert source: every finding from the last
-// day that is news, minus what an operator hid.
+// day that is news, of the kinds set to alert, minus what an operator hid.
 func (server *Server) InsightAlerts() alerts.Source {
 	return &insightAlertSource{server: server}
 }
@@ -53,19 +53,24 @@ type insightAlertSource struct {
 	server *Server
 	mu     sync.Mutex
 	at     time.Time
-	alerts []alerts.Alert
+	// revision is the configuration the alerts were found under.
+	revision uint64
+	alerts   []alerts.Alert
 }
 
 func (source *insightAlertSource) Alerts(ctx context.Context, now time.Time) ([]alerts.Alert, error) {
 	source.mu.Lock()
 	defer source.mu.Unlock()
-	if source.at.IsZero() || now.Before(source.at) || now.Sub(source.at) >= insightAlertCache {
+	// A change to Insights settings, such as a kind set to show only, counts
+	// from the next round rather than once the kept answer runs out.
+	revision := source.server.config.Current().Revision
+	if source.at.IsZero() || now.Before(source.at) || now.Sub(source.at) >= insightAlertCache || revision != source.revision {
 		news := source.server.insightNews(ctx, now)
 		source.alerts = make([]alerts.Alert, 0, len(news))
 		for _, finding := range news {
 			source.alerts = append(source.alerts, insightAlert(finding))
 		}
-		source.at = now
+		source.at, source.revision = now, revision
 	}
 	return slices.Clone(source.alerts), nil
 }
@@ -93,8 +98,8 @@ func insightAlert(finding insights.Finding) alerts.Alert {
 	}
 }
 
-// insightNews is every finding from the last day that is news, minus what an
-// operator hid.
+// insightNews is every finding from the last day that is news, of the kinds
+// set to alert, minus what an operator hid.
 func (server *Server) insightNews(ctx context.Context, now time.Time) []insights.Finding {
 	window := insightsWindow("day", now)
 	console := pages.DashboardView{CanLogs: true, CanBlocking: true}
@@ -108,9 +113,11 @@ func (server *Server) insightNews(ctx context.Context, now time.Time) []insights
 			findings, _ = insights.Hide(findings, feedback, now)
 		}
 	}
+	// A kind set to show only stays on the page and out of alerts.
+	modes := insightModesOf(server.config.Current().Config.Insights.Findings)
 	news := make([]insights.Finding, 0, len(findings))
 	for _, finding := range findings {
-		if finding.Headline != "" {
+		if finding.Headline != "" && modes.alerts(finding.Kind) {
 			news = append(news, finding)
 		}
 	}
