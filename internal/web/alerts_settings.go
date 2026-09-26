@@ -109,6 +109,26 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 	return view
 }
 
+// alertsBellState is what the Insights bell says about alerts. Only operators
+// who can read settings get a bell; everyone else gets an empty state.
+func (server *Server) alertsBellState(ctx context.Context, console pages.DashboardView) pages.AlertsState {
+	if !console.CanSettings {
+		return ""
+	}
+	configuration := server.config.Current().Config.Alerts
+	destinations := server.alertSecrets.Hydrate(ctx, configuration.Destinations)
+	browsers := 0
+	store, push := server.alertPushStore()
+	// Counting browsers reads the database, so it waits until a destination
+	// would send to them.
+	if push && slices.ContainsFunc(destinations, isBrowserDestination) {
+		if subscriptions, err := store.PushSubscriptions(ctx); err == nil {
+			browsers = len(subscriptions)
+		}
+	}
+	return alertsState(configuration, destinations, browsers, push)
+}
+
 // alertsState says whether alerts go out: paused when an operator paused them,
 // on when some destination can send, and off otherwise.
 func alertsState(configuration config.Alerts, destinations []config.AlertDestination, browsers int, push bool) pages.AlertsState {

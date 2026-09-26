@@ -3,7 +3,6 @@ package pages
 import (
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -49,8 +48,9 @@ type InsightsOverviewView struct {
 	CanNameDevices      bool
 	// Headline says what stands out in one sentence.
 	Headline *InsightHeadlineView
-	// Alerts is the webhook setup, shown to operators who can change it.
-	Alerts *InsightAlertsView
+	// Alerts is what the bell beside the range control says, for operators
+	// who can read settings. Empty hides the bell.
+	Alerts AlertsState
 	// CanHideFindings is set for operators who may hide findings for everyone.
 	CanHideFindings bool
 	HiddenFindings  []InsightHiddenFindingView
@@ -315,10 +315,10 @@ templ InsightsPage(view InsightsPageView) {
 	@AppDocument(view.Console, documentTitle(tabLabel(insightsTabOptions, view.Overview.ActiveTab), "Insights"), "insights", insightsDocument(view.Overview))
 }
 
-// insightsDocument keeps the update indicator, the drawers, and the alert setup
-// outside the swapped overview: the indicator reports range changes but not the
-// first load, which has its own skeleton, and a drawer or the alert setup stays
-// open while the page behind it refreshes after a change.
+// insightsDocument keeps the update indicator and the drawers outside the
+// swapped overview: the indicator reports range changes but not the first load,
+// which has its own skeleton, and a drawer stays open while the page behind it
+// refreshes after a change.
 templ insightsDocument(view InsightsOverviewView) {
 	@UpdateIndicator("insights-update-indicator", "Updating insights…")
 	@InsightsContent(view)
@@ -341,9 +341,6 @@ templ insightsDocument(view InsightsOverviewView) {
 		<template id="insight-app-loading">
 			@insightAppLoading()
 		</template>
-	}
-	if view.Alerts != nil {
-		@InsightAlertsDialog(*view.Alerts)
 	}
 }
 
@@ -1771,318 +1768,24 @@ type InsightReasonView struct {
 	Code string
 }
 
-// InsightAlertsView is the webhook Insights sends new findings to.
-type InsightAlertsView struct {
-	URL         string
-	Format      string
-	Paused      bool
-	NtfyReceipt bool
-	// PushoverToken and PushoverUser are only sent with the pushover format.
-	PushoverToken string
-	PushoverUser  string
-	Headers       []InsightAlertHeader
-	// On is whether alerts have somewhere to go: a URL, or for browser
-	// alerts, a browser that turned them on.
-	On bool
-	// PushAvailable is whether this server can push to browsers, and
-	// Browsers are the ones that turned alerts on.
-	PushAvailable bool
-	Browsers      []InsightAlertBrowser
-	Message       string
-	Error         string
-}
-
-// InsightAlertBrowser is one browser that gets alerts.
-type InsightAlertBrowser struct {
-	ID    string
-	Label string
-	By    string
-	Added time.Time
-}
-
-// InsightAlertPreview is a sample alert laid out the way it would be sent.
-type InsightAlertPreview struct {
-	Method      string
-	URL         string
-	ContentType string
-	Headers     []InsightAlertHeader
-	Body        string
-	Error       string
-}
-
-// Text is the request as it would go over the wire, headers then body.
-func (preview InsightAlertPreview) Text() string {
-	var text strings.Builder
-	text.WriteString(preview.Method + " " + ifThen(preview.URL != "", preview.URL, "(no URL yet)") + "\n")
-	text.WriteString("Content-Type: " + preview.ContentType + "\n")
-	for _, header := range preview.Headers {
-		text.WriteString(header.Name + ": " + header.Value + "\n")
-	}
-	text.WriteString("\n" + preview.Body)
-	return text.String()
-}
-
-// InsightAlertHeader is one extra header sent with each alert.
-type InsightAlertHeader struct {
-	Name  string
-	Value string
-}
-
-// insightAlertsState is what the bell says: on, paused, or off.
-func insightAlertsState(alerts *InsightAlertsView) string {
-	switch {
-	case !alerts.On:
-		return "off"
-	case alerts.Paused:
-		return "paused"
-	default:
-		return "on"
-	}
-}
-
-// InsightAlerts sets up where new findings are sent. It swaps itself in place
-// when saved or tested.
-// insightAlertsButton opens the alert setup from beside the range control and
-// says whether alerts are on. Only operators who can change settings see it.
-templ insightAlertsButton(alerts *InsightAlertsView) {
-	if alerts != nil {
-		switch insightAlertsState(alerts) {
-			case "on":
-				<button class="button outline compact insight-alerts-button active" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts on" title="Alerts are on">
-					@Icon("bell")
-					<span>On</span>
-				</button>
-			case "paused":
-				<button class="button outline compact insight-alerts-button paused" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts paused" title="Alerts are paused">
-					@Icon("pause")
-					<span>Paused</span>
-				</button>
-			default:
-				<button class="button outline compact insight-alerts-button" type="button" data-dialog-open="insight-alerts-dialog" aria-label="Alerts off" title="Alerts are off">
-					@Icon("bell-off")
-					<span>Off</span>
-				</button>
-		}
-	}
-}
-
-// InsightAlertsDialog holds the alert setup, which saving replaces in place.
-templ InsightAlertsDialog(view InsightAlertsView) {
-	<dialog class="custom-server-dialog isotope-form-dialog insight-alerts-dialog" id="insight-alerts-dialog" aria-labelledby="insight-alerts-title">
-		<div class="dialog-header"><h2 id="insight-alerts-title">Alerts</h2><p>Send new findings worth a look where you will see them</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		@InsightAlerts(view)
-	</dialog>
-}
-
-// insightAlertKind is the format a view sends, with JSON as the default.
-func insightAlertKind(view InsightAlertsView) string {
-	if view.Format == "" {
-		return "json"
-	}
-	return view.Format
-}
-
-// insightAlertBrowserAdded says when a browser turned alerts on, and who did.
-func insightAlertBrowserAdded(browser InsightAlertBrowser) string {
-	added := "Added " + browser.Added.Local().Format("Jan 2, 2006")
-	if browser.By != "" {
-		added += " by " + browser.By
-	}
-	return added
-}
-
-// insightAlertPlaceholder is an example URL for the view's kind.
-func insightAlertPlaceholder(view InsightAlertsView) string {
-	switch insightAlertKind(view) {
-	case "slack":
-		return "https://hooks.slack.com/services/…"
-	case "discord":
-		return "https://discord.com/api/webhooks/…"
-	case "text":
-		return "https://ntfy.sh/your-topic"
-	default:
-		return "https://example.com/hooks/sable"
-	}
-}
-
-// insightAlertFor reports whether a part of the setup that belongs to the
-// space-separated kinds shows for the view's kind.
-func insightAlertFor(view InsightAlertsView, kinds string) bool {
-	return slices.Contains(strings.Fields(kinds), insightAlertKind(view))
-}
-
-// insightAlertMarks are the brand marks of the services alerts go to, drawn
-// in one color to match the Send To control. Discord's comes from the app
-// logos; ntfy's is from Simple Icons 16.32.0 and Slack's from Simple Icons
-// 15.0.0, the last release to carry it, both CC0.
-var insightAlertMarks = map[string]string{
-	"slack":   "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
-	"discord": appLogos["discord"].Path,
-	"text":    "M12.597 13.693v2.156h6.205v-2.156ZM5.183 6.549v2.363l3.591 1.901.023.01-.023.009-3.591 1.901v2.35l.386-.211 5.456-2.969V9.729ZM3.659 2.037C1.915 2.037.42 3.41.42 5.154v.002L.438 18.73 0 21.963l5.956-1.583h14.806c1.744 0 3.238-1.374 3.238-3.118V5.154c0-1.744-1.493-3.116-3.237-3.117h-.001zm0 2.2h17.104c.613.001 1.037.447 1.037.917v12.108c0 .47-.424.916-1.038.916H5.633l-3.026.915.031-.179-.017-13.76c0-.47.424-.917 1.038-.917z",
-}
-
-// insightAlertKindIcon is a kind's brand mark, or an icon for a plain
-// webhook, for Pushover, which Simple Icons does not carry, and for browsers.
-templ insightAlertKindIcon(kind string) {
-	if mark, found := insightAlertMarks[kind]; found {
-		<svg class="nav-icon insight-alert-mark" viewBox="0 0 24 24" aria-hidden="true"><path d={ mark } fill="currentColor"></path></svg>
-	} else {
-		switch kind {
-			case "pushover":
+// insightAlertsButton links to Settings > Alerts from beside the range control
+// and says whether alerts are on. Only operators who can read settings see it.
+templ insightAlertsButton(state AlertsState) {
+	switch state {
+		case AlertsOn:
+			<a class="button outline compact insight-alerts-button active" href="/settings?tab=alerts" aria-label="Alerts on" title="Alerts are on">
 				@Icon("bell")
-			case "browser":
-				@Icon("monitor-smartphone")
-			default:
-				@Icon("webhook")
-		}
+				<span>On</span>
+			</a>
+		case AlertsPaused:
+			<a class="button outline compact insight-alerts-button paused" href="/settings?tab=alerts" aria-label="Alerts paused" title="Alerts are paused">
+				@Icon("pause")
+				<span>Paused</span>
+			</a>
+		case AlertsOff:
+			<a class="button outline compact insight-alerts-button" href="/settings?tab=alerts" aria-label="Alerts off" title="Alerts are off">
+				@Icon("bell-off")
+				<span>Off</span>
+			</a>
 	}
-}
-
-// insightAlertKindOption is one choice in the Send To control. The choices
-// are radio buttons, so the form posts the one picked as its format.
-templ insightAlertKindOption(view InsightAlertsView, kind, label string) {
-	<label class="insight-alert-kind">
-		<input class="sr-only" type="radio" name="format" value={ kind } checked?={ insightAlertKind(view) == kind }/>
-		@insightAlertKindIcon(kind)
-		<span>{ label }</span>
-	</label>
-}
-
-// InsightAlertPreviewPanel shows a sample alert as the request Sable would
-// send. It fills a menu that drops from the Preview button, so looking never
-// resizes the dialog.
-templ InsightAlertPreviewPanel(preview InsightAlertPreview) {
-	if preview.Error != "" {
-		<p class="insight-alert-preview-error">{ preview.Error }</p>
-	}
-	<button class="about-copy-button insight-alert-preview-copy" type="button" data-copy-target="insight-alerts-preview-text" aria-label="Copy preview" title="Copy preview">@CopyIcons()</button>
-	<pre><code id="insight-alerts-preview-text">{ preview.Text() }</code></pre>
-}
-
-// insightAlertHeaderRow is one header's name and value, removable on its own.
-templ insightAlertHeaderRow(header InsightAlertHeader) {
-	<div class="insight-alert-header" data-alert-header>
-		<input name="header_name" value={ header.Name } placeholder="Name" aria-label="Header name" autocomplete="off" spellcheck="false"/>
-		<input name="header_value" value={ header.Value } placeholder="Value" aria-label="Header value" autocomplete="off" spellcheck="false"/>
-		<button class="icon-button" type="button" data-alert-header-remove aria-label="Remove header" title="Remove header">@Icon("x")</button>
-	</div>
-}
-
-// InsightAlerts is the alert setup form. Save is its only submit button, so
-// Enter in the URL saves; Pause, Resume, and Send Test send requests of their
-// own. The buttons keep the order the Integrations cards use.
-templ InsightAlerts(view InsightAlertsView) {
-	<form class="insight-alerts" id="insight-alerts" hx-post="/ui/insights/alerts" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">
-		if view.Message != "" {
-			@Toast(view.Message, "success")
-		}
-		if view.Error != "" {
-			@Toast(view.Error, "error")
-		}
-		<div class="isotope-dialog-body insight-alerts-body">
-			<p>Sable sends each new finding once and skips anything you hide.</p>
-			<fieldset class="field-control insight-alert-kinds">
-				<legend>Send To</legend>
-				<div class="insight-alert-kind-tabs">
-					@insightAlertKindOption(view, "browser", "Browser")
-					@insightAlertKindOption(view, "discord", "Discord")
-					@insightAlertKindOption(view, "text", "ntfy")
-					@insightAlertKindOption(view, "pushover", "Pushover")
-					@insightAlertKindOption(view, "slack", "Slack")
-					@insightAlertKindOption(view, "json", "Webhook")
-				</div>
-			</fieldset>
-			<label class="field-control" data-alert-for="json slack discord text" hidden?={ !insightAlertFor(view, "json slack discord text") }>
-				<span data-alert-for="json slack discord" hidden?={ !insightAlertFor(view, "json slack discord") }>Webhook URL</span>
-				<span data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Topic URL</span>
-				<input type="url" name="url" value={ ifThen(view.Format == "pushover", "", view.URL) } placeholder={ insightAlertPlaceholder(view) } data-placeholder-json="https://example.com/hooks/sable" data-placeholder-slack="https://hooks.slack.com/services/…" data-placeholder-discord="https://discord.com/api/webhooks/…" data-placeholder-text="https://ntfy.sh/your-topic" data-saved-kind={ insightAlertKind(view) } data-saved-url={ ifThen(view.Format == "pushover", "", view.URL) } autocomplete="off" spellcheck="false"/>
-				<small data-alert-for="json" hidden?={ !insightAlertFor(view, "json") }>Home Assistant, or anything else that takes a JSON POST.</small>
-				<small data-alert-for="slack" hidden?={ !insightAlertFor(view, "slack") }>An incoming webhook from your Slack app. Findings arrive as a card with a button to Insights.</small>
-				<small data-alert-for="discord" hidden?={ !insightAlertFor(view, "discord") }>From a channel's Integrations settings. Findings arrive as an embed colored by how much they matter.</small>
-				<small data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }>Sent as plain text with a title, which ntfy shows as a notification.</small>
-			</label>
-			<div class="field-grid two" data-alert-for="pushover" hidden?={ !insightAlertFor(view, "pushover") }>
-				<label class="field-control"><span>Application Token</span><input name="pushover_token" value={ view.PushoverToken } autocomplete="off" spellcheck="false"/><small>From the application you made for Sable.</small></label>
-				<label class="field-control"><span>User Key</span><input name="pushover_user" value={ view.PushoverUser } autocomplete="off" spellcheck="false"/><small>Your user key, or a group key.</small></label>
-			</div>
-			<div class="insight-alert-browsers" data-alert-for="browser" hidden?={ !insightAlertFor(view, "browser") } data-push-panel>
-				if view.PushAvailable {
-					<div class="insight-alert-push-card" data-push-card data-push-state="ready">
-						<span class="insight-alert-push-icon" aria-hidden="true">
-							<span data-push-when="ready">@Icon("bell")</span>
-							<span data-push-when="on" hidden>@Icon("check-circle")</span>
-							<span data-push-when="blocked" hidden>@Icon("bell-off")</span>
-							<span data-push-when="insecure" hidden>@Icon("lock")</span>
-							<span data-push-when="unsupported" hidden>@Icon("alert-triangle")</span>
-						</span>
-						<div class="insight-alert-push-copy" aria-live="polite">
-							<strong data-push-when="ready">Get alerts in this browser</strong>
-							<small data-push-when="ready">They show up even when Sable is closed.</small>
-							<strong data-push-when="on" hidden>This browser gets alerts</strong>
-							<small data-push-when="on" hidden>Remove it below to stop them.</small>
-							<strong data-push-when="blocked" hidden>Notifications are blocked</strong>
-							<small data-push-when="blocked" hidden>Allow them for this site in your browser's settings, then reload.</small>
-							<strong data-push-when="insecure" hidden>Needs HTTPS</strong>
-							<small data-push-when="insecure" hidden>Browsers only allow notifications over HTTPS. Open Sable at its https:// address.</small>
-							<strong data-push-when="unsupported" hidden>Not supported here</strong>
-							<small data-push-when="unsupported" hidden>This browser cannot show notifications from websites.</small>
-							<small class="insight-alert-push-error" data-push-error hidden></small>
-						</div>
-						<button class="button compact" type="button" data-push-enable data-push-when="ready">Turn On</button>
-					</div>
-					if len(view.Browsers) > 0 {
-						<div class="insight-alert-browser-list">
-							<span class="insight-alert-browser-heading">Browsers getting alerts</span>
-							for _, browser := range view.Browsers {
-								<div class="insight-alert-browser" data-push-browser={ browser.ID }>
-									@Icon("monitor-smartphone")
-									<div>
-										<strong>{ browser.Label }<span class="insight-alert-browser-this" data-push-this hidden>This browser</span></strong>
-										<small>{ insightAlertBrowserAdded(browser) }</small>
-									</div>
-									<button class="button outline compact destructive" type="button" hx-post="/ui/insights/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button">@Icon("trash")<span>Remove</span></button>
-								</div>
-							}
-						</div>
-					}
-					<input type="hidden" name="push_subscription" data-push-subscription/>
-					<button type="button" hidden hx-post="/ui/insights/alerts/browsers" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-push-submit></button>
-					<small class="insight-alert-browser-tip">On iPhone and iPad, add Sable to your Home Screen first.</small>
-				} else {
-					<p class="insight-alert-browser-note">Browser alerts are not available on this server.</p>
-				}
-			</div>
-			<details class="settings-advanced insight-alerts-advanced" data-alert-for="json text" hidden?={ !insightAlertFor(view, "json text") } open?={ view.NtfyReceipt || len(view.Headers) > 0 }>
-				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
-				<div class="insight-alerts-advanced-body">
-					<label class="field-control switch-row setting-switch-row" data-alert-for="text" hidden?={ !insightAlertFor(view, "text") }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ view.NtfyReceipt }/></label>
-					<div class="field-control">
-						<span>Headers</span>
-						<div class="insight-alert-headers" data-alert-headers>
-							for _, header := range view.Headers {
-								@insightAlertHeaderRow(header)
-							}
-						</div>
-						<button class="button outline compact insight-alert-header-add" type="button" data-alert-header-add>@Icon("plus")<span>Add Header</span></button>
-						<small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is.</small>
-						<template data-alert-header-template>@insightAlertHeaderRow(InsightAlertHeader{})</template>
-					</div>
-				</div>
-			</details>
-		</div>
-		<div id="insight-alerts-preview" class="insight-alert-preview" popover role="dialog" aria-label="Preview of a sample alert" data-alert-preview-popover></div>
-		<div class="dialog-footer">
-			<button class="button outline insight-alert-preview-button" type="button" hx-post="/ui/insights/alerts/preview" hx-target="#insight-alerts-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="insight-alerts-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
-			if view.On {
-				if view.Paused {
-					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"true"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
-				} else {
-					<button class="button outline" type="button" hx-post="/ui/insights/alerts/enabled" hx-vals='{"enabled":"false"}' hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>@Icon("pause")<span>Pause</span></button>
-				}
-				<button class="button outline" type="button" hx-post="/ui/insights/alerts/test" hx-target="#insight-alerts" hx-swap="outerHTML" hx-disable="#insight-alerts button" data-replica-primary-action>Send Test</button>
-			}
-			<button class="button" type="submit" data-replica-primary-action>Save</button>
-		</div>
-	</form>
 }

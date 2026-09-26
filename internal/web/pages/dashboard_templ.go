@@ -1337,8 +1337,8 @@ func CommandPalette(view DashboardView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if view.CanWriteSettings && (view.CanBlocking || view.CanLogs) {
-			templ_7745c5c3_Err = CommandOption("command-action-insights-alerts", "Insight Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "").Render(ctx, templ_7745c5c3_Buffer)
+		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+			templ_7745c5c3_Err = CommandOption("command-action-insights-alerts", "Set Up Alerts", "Choose where alerts go and which ones Sable sends", "bell", "Action", "alerts notifications notify webhook findings insights slack discord ntfy pushover browser push", "/settings?tab=alerts", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

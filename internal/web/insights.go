@@ -100,7 +100,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
-		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
+		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking, Alerts: server.alertsBellState(request.Context(), console),
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights page", "error", err)
@@ -178,6 +178,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		TimeDisplay:     console.TimeDisplay,
 		BlockingEnabled: blocking.Enabled,
 		CanNameDevices:  console.CanWriteSettings,
+		Alerts:          server.alertsBellState(request.Context(), console),
 	}
 	if console.CanLogs {
 		view.QueryLogDisabled = !snapshot.Config.QueryLog.Enabled

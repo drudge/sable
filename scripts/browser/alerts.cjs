@@ -142,6 +142,16 @@ const {chromium} = require('playwright');
     await panel.waitFor();
     await shoot('dark', true);
 
+    // The Insights bell says alerts are on and leads back to the tab.
+    await page.emulateMedia({colorScheme: 'light'});
+    await page.goto(`${base}/insights?range=day`);
+    const bell = page.getByRole('link', {name: 'Alerts on'});
+    await bell.waitFor();
+    await shoot('insights-bell');
+    await bell.click();
+    await page.waitForURL(/\/settings\?tab=alerts$/);
+    assert.equal(await page.getByRole('tab', {name: 'Alerts'}).getAttribute('aria-selected'), 'true');
+
     assert.deepEqual(errors, [], 'the page threw no errors');
     console.log('PASS Settings > Alerts adds, previews, lists, and tests an ntfy destination');
   } finally {

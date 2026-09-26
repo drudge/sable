@@ -985,6 +985,33 @@ func TestOnlyOneAlertDestinationPushesToBrowsers(t *testing.T) {
 	}
 }
 
+func TestInsightsBellSaysWhetherAlertsAreOn(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	overview := func(session string) string {
+		t.Helper()
+		return server.get(t, session, "/ui/insights/overview?range=day", true).Body.String()
+	}
+	const link = `href="/settings?tab=alerts" aria-label="Alerts `
+	if body := overview("everything"); !strings.Contains(body, link+`off"`) {
+		t.Fatal("the bell does not say alerts are off")
+	}
+	if page := server.get(t, "everything", "/insights?range=day", false).Body.String(); !strings.Contains(page, link+`off"`) || strings.Contains(page, "insight-alerts-dialog") {
+		t.Fatal("the Insights page does not link its bell to Settings, or still carries the old dialog")
+	}
+	server.saveDestination(t, url.Values{"format": {"text"}, "url": {"https://ntfy.sh/sable-alerts"}})
+	if body := overview("everything"); !strings.Contains(body, link+`on"`) {
+		t.Fatal("the bell does not say alerts are on")
+	}
+	server.post(t, "everything", "/ui/settings/alerts/paused", url.Values{"paused": {"true"}})
+	if body := overview("logs-reader"); !strings.Contains(body, link+`paused"`) {
+		t.Fatal("the bell does not say alerts are paused to an operator who can read settings")
+	}
+	if body := overview("logs-only"); strings.Contains(body, "insight-alerts-button") {
+		t.Fatal("an operator who cannot read settings gets the bell")
+	}
+}
+
 func TestAlertsStateSaysWhetherAnyDestinationCanSend(t *testing.T) {
 	t.Parallel()
 	ntfy := config.AlertDestination{ID: "phone", Format: config.AlertFormatText, URL: "https://ntfy.sh/x"}
