@@ -42,6 +42,9 @@ const {chromium} = require('playwright');
     // On a phone the first reason starts clear of the button, which sits on
     // the heading's line, and the menu stays inside the drawer's body.
     await page.setViewportSize({width: 390, height: 844});
+    // Crossing into the phone layout replays the drawer's slide-up, so let it
+    // settle before measuring anything in it.
+    await drawer.evaluate(dialog => Promise.all(dialog.getAnimations({subtree: true}).map(animation => animation.finished)));
     const button = await hide.boundingBox();
     const reason = await drawer.locator('.insight-why li').first().boundingBox();
     assert.ok(reason.y >= button.y + button.height + 4, `the first reason clears the button: ${JSON.stringify({button, reason})}`);
