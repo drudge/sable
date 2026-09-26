@@ -80,6 +80,11 @@ type Dispatcher struct {
 	mu      sync.Mutex
 	sources []Source
 	status  map[string]Status
+	// followed remembers that the last round ran on a replica. The first
+	// round after a replica becomes the lead takes stock quietly: its record
+	// of what each destination was sent is its own, while the old lead
+	// already told every destination what is news now.
+	followed bool
 }
 
 // Add gives the dispatcher more sources.
@@ -114,6 +119,10 @@ func (dispatcher *Dispatcher) Run(ctx context.Context, leading func() bool) {
 // sends each destination what it has not been sent. One destination failing
 // does not keep the rest from hearing.
 func (dispatcher *Dispatcher) Tick(ctx context.Context, now time.Time, leading bool) error {
+	dispatcher.mu.Lock()
+	promoted := leading && dispatcher.followed
+	dispatcher.followed = !leading
+	dispatcher.mu.Unlock()
 	destinations := dispatcher.Destinations(ctx)
 	if len(destinations) == 0 {
 		return nil
@@ -126,6 +135,12 @@ func (dispatcher *Dispatcher) Tick(ctx context.Context, now time.Time, leading b
 	configuration := dispatcher.configuration()
 	var failures []error
 	for _, destination := range destinations {
+		if promoted {
+			if err := dispatcher.Sent.MarkAlertsSent(ctx, destination.ID, idsOf(current), now); err != nil {
+				failures = append(failures, fmt.Errorf("%s: %w", destination.Label(), err))
+			}
+			continue
+		}
 		if err := dispatcher.send(ctx, configuration.Alerts, destination, current, complete, now); err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", destination.Label(), err))
 		}

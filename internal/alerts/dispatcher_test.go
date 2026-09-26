@@ -337,3 +337,31 @@ func TestBrowsersGetPushesAndGoneOnesAreForgotten(t *testing.T) {
 		t.Fatalf("a gone browser was kept: %+v", remaining)
 	}
 }
+
+// A replica keeps its own record of what each destination was sent, and it
+// never ran the lead's sources. When it becomes the lead, the old lead already
+// told every destination what is news, so its first round only takes stock.
+func TestANewLeadTakesStockInsteadOfSendingAgain(t *testing.T) {
+	t.Parallel()
+	hook := newRecordingHook(t)
+	source := &staticSource{}
+	source.set(finding("already-sent-by-the-old-lead"))
+	dispatcher, sent, _ := newTestDispatcher(t, []config.AlertDestination{{ID: "hook", URL: hook.URL}}, source)
+	ctx := context.Background()
+	if err := dispatcher.Tick(ctx, testNow, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatcher.Tick(ctx, testNow.Add(time.Minute), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(hook.received()) != 0 || !sent.has("hook", "already-sent-by-the-old-lead") {
+		t.Fatalf("the new lead sent %d alerts the old lead had already sent", len(hook.received()))
+	}
+	source.set(finding("already-sent-by-the-old-lead"), finding("new"))
+	if err := dispatcher.Tick(ctx, testNow.Add(2*time.Minute), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(hook.received()) != 1 {
+		t.Fatalf("the new lead sent %d alerts, want the one that is new", len(hook.received()))
+	}
+}
