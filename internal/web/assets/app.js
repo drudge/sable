@@ -3051,8 +3051,11 @@
 		}
 	  }
 	  dialog.addEventListener("close", () => {
-		const returnFocus = dialog.sableReturnFocus;
+		let returnFocus = dialog.sableReturnFocus;
 		dialog.sableReturnFocus = null;
+		// A change made in the dialog can redraw the page behind it, invoker
+		// and all. A redrawn invoker keeps its id, so focus finds it again.
+		if (returnFocus && !returnFocus.isConnected && returnFocus.id) returnFocus = document.getElementById(returnFocus.id);
 		if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
 	  });
 	};
