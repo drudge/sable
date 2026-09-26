@@ -514,6 +514,25 @@ func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
 	}
 }
 
+func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	_, phone, found := strings.Cut(stylesheet, "@media (max-width: 639px)")
+	for _, expected := range []string{
+		".dialog-footer { flex-direction: column-reverse; }",
+		".dialog-footer > [data-dialog-close] { order: -1; }",
+	} {
+		if !found || !strings.Contains(phone, expected) {
+			t.Errorf("phone dialog footers do not put the main button on top and the close button at the bottom: missing %q", expected)
+		}
+	}
+	// The update dialog follows the shared rule instead of stacking in order.
+	if strings.Contains(stylesheet, ".update-release-dialog .dialog-footer { flex-direction: column; }") {
+		t.Error("the update dialog stacks its buttons its own way on phones")
+	}
+}
+
 func TestMobileBackupActionsCenterButtonContents(t *testing.T) {
 	t.Parallel()
 

@@ -1938,7 +1938,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.resolver-combobox, .query-options-row .transport-picker, .query-options-row .edns-subnet { width: auto; }
 	.resolver-combobox { grid-column: span 2; }
 	.resolver-popover { width: 100%; }
+	/* Stacked on a phone, the main button (last in every footer) goes on top,
+	   and the one that just closes the dialog, such as Cancel or Done, goes to
+	   the bottom, the way iOS stacks them. */
 	.dialog-footer { flex-direction: column-reverse; }
+	.dialog-footer > [data-dialog-close] { order: -1; }
 	.dialog-footer .button { width: 100%; }
 	.isotope-record-dialog { width: calc(100vw - 1rem); max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
 	.isotope-record-dialog-header { padding: 1.25rem 3rem .85rem 1rem; }
@@ -2885,7 +2889,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   .about-update-actions > .button, .about-update-split { flex: 1 1 0; }
   .about-update-actions > .button { justify-content: center; }
   .about-update-split > .button { flex: 1; justify-content: center; }
-  .update-release-dialog .dialog-footer { flex-direction: column; }
 }
 .settings-link-button { display: inline-flex; width: fit-content; align-items: center; gap: .5rem; }
 .settings-link-button .nav-icon { width: 1rem; height: 1rem; }
