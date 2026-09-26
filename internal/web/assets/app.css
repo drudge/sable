@@ -4069,11 +4069,25 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .query-detail-answer .insight-type-reasons li code { border: 0; background: none; padding: 0; font-size: .78rem; overflow-wrap: anywhere; }
 .insight-type-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
 .insight-type-form .field-control { min-width: 12rem; flex: 1; }
-/* Hiding a finding: the drawer's last section and the card's hidden list. */
-.insight-feedback { display: grid; gap: .65rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
-.insight-feedback h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.insight-feedback p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
-.insight-feedback-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* Hiding a finding: Hide Finding at the end of Why Sable surfaced this, and
+   the card's hidden list. The row is as tall as the button and rises into the
+   section's top padding, so the heading stays where it sits without the
+   button and the reasons start the section's own gap below it. The summary is
+   a block, so the menu's box is exactly the button whatever the font's line
+   metrics. The menu opens upward when the drawer has no room below it. */
+.insight-why-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.insight-why-heading.has-hide-menu { margin-top: -.5rem; }
+.insight-hide-menu { position: relative; }
+.insight-hide-menu > summary.button { display: flex; list-style: none; cursor: pointer; }
+.insight-hide-menu > summary::-webkit-details-marker { display: none; }
+.insight-hide-menu[open] > summary { background: var(--accent); color: var(--accent-foreground); }
+.insight-hide-menu > form { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 20; display: grid; width: 16rem; max-width: calc(100vw - 2.5rem); margin: 0; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); padding: .375rem; color: var(--popover-foreground); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+.insight-hide-menu[data-side="top"] > form { top: auto; bottom: calc(100% + .35rem); }
+.insight-hide-menu > form > span { padding: .3rem .5rem .35rem; color: var(--muted-foreground); font-size: .6875rem; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; }
+.insight-hide-menu button { display: grid; gap: .2rem; width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .55rem .5rem; color: inherit; text-align: left; }
+.insight-hide-menu button:hover, .insight-hide-menu button:focus-visible { background: var(--accent); color: var(--accent-foreground); }
+.insight-hide-menu strong { font-size: .8125rem; font-weight: 500; }
+.insight-hide-menu small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
 .insight-hidden { border-top: 1px solid var(--border); padding: .75rem 1.25rem; }
 .insight-hidden > summary { width: fit-content; cursor: pointer; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .insight-hidden > summary:hover { color: var(--foreground); }
