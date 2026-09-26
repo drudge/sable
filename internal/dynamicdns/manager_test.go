@@ -87,6 +87,104 @@ func TestPublicationHistorySurvivesManagerRestart(t *testing.T) {
 	}
 }
 
+// addressHistory is the part of the status an address-change alert reads.
+type addressHistory struct {
+	IPv4, IPv6, PreviousIPv4, PreviousIPv6 string
+	IPv4ChangedAt, IPv6ChangedAt           time.Time
+}
+
+func historyOf(status Status) addressHistory {
+	return addressHistory{
+		IPv4: status.IPv4, IPv6: status.IPv6, PreviousIPv4: status.PreviousIPv4, PreviousIPv6: status.PreviousIPv6,
+		IPv4ChangedAt: status.IPv4ChangedAt, IPv6ChangedAt: status.IPv6ChangedAt,
+	}
+}
+
+// A changed address stays news for a while, so what it changed from and when
+// must survive a restart, including one straight after an upgrade from a
+// release that saved no history.
+func TestAddressChangesAreRememberedAcrossARestart(t *testing.T) {
+	t.Parallel()
+	run := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	earlier := run.Add(-3 * time.Hour)
+	for _, test := range []struct {
+		name string
+		// saved is what an earlier run left in the database.
+		saved PersistentState
+		// ipv4 and ipv6 are what this run discovers; empty fails discovery.
+		ipv4, ipv6 string
+		want       addressHistory
+	}{
+		{
+			name: "the first address found is not a change",
+			ipv4: "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888"},
+		},
+		{
+			name:  "the same address again is not a change",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", LastSuccess: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888"},
+		},
+		{
+			name:  "a new IPv4 address after state an older release saved",
+			saved: PersistentState{IPv4: "8.8.4.4", IPv6: "2001:4860:4860::8888", LastSuccess: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: run},
+		},
+		{
+			name:  "a new IPv6 address leaves the IPv4 history alone",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8844", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{
+				IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", PreviousIPv6: "2001:4860:4860::8844",
+				IPv4ChangedAt: earlier, IPv6ChangedAt: run,
+			},
+		},
+		{
+			name:  "a later change replaces the earlier one",
+			saved: PersistentState{IPv4: "8.8.4.4", IPv6: "2001:4860:4860::8888", PreviousIPv4: "1.1.1.1", IPv4ChangedAt: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: run},
+		},
+		{
+			name:  "a failed discovery keeps the history",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+			want:  addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			settings := testDynamicDNSSettings()
+			settings.Records[0].IPv6 = true
+			durable := &testStateStore{state: test.saved}
+			manager := newTestManager(settings, &testProvider{changed: true})
+			manager.state = durable
+			manager.now = func() time.Time { return run }
+			manager.discover = func(_ context.Context, _ string, recordType string) (netip.Addr, error) {
+				address := test.ipv4
+				if recordType == dnsprovider.TypeAAAA {
+					address = test.ipv6
+				}
+				if address == "" {
+					return netip.Addr{}, io.ErrUnexpectedEOF
+				}
+				return netip.MustParseAddr(address), nil
+			}
+			manager.restoreStatus(ctx)
+			manager.runOnce(ctx)
+
+			restarted := newTestManager(settings, &testProvider{})
+			restarted.state = durable
+			restarted.restoreStatus(ctx)
+			if got := historyOf(restarted.Status(ctx)); got != test.want {
+				t.Fatalf("address history after a restart = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestReconcileDiscoversEachFamilyOnceAndPublishesEveryRecord(t *testing.T) {
 	settings := config.DynamicDNS{
 		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
