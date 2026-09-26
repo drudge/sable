@@ -3958,7 +3958,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
 @media (max-width: 639px) {
 	.insights-tab-list { width: 100%; }
 	.insights-tab-list .isotope-tab { min-width: 0; flex: 1; }
-	.insights-heading { display: grid; }
+	/* The column fills the page. Left to size itself, it shrinks to the
+	   subtitle, and the range row ends where the subtitle does. */
+	.insights-heading { display: grid; grid-template-columns: minmax(0, 1fr); }
 	.insights-range { width: 100%; padding-top: 0; }
 	.insights-range .range-select { width: 100%; }
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: minmax(0, 1fr); }
