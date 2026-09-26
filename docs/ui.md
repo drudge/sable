@@ -56,6 +56,17 @@ Build `inter-extra.woff2` the same way from its own rule's `unicode-range`.
 A character the console starts to show should fall in the Latin file's
 range, or every page that shows it loads the second file.
 
+Third-Party Licenses, a button in About's MIT License dialog, lists the
+software Sable is built with and shows each license as its authors wrote it,
+since many of those licenses ask to travel with the binary. The list comes
+from `internal/notices/notices.json`, which `go tool mage generate` rebuilds from
+the modules compiled in on every release platform, the Go toolchain, and the
+console's files under `third_party`. `go tool mage verify` fails while it is
+out of date. A module under a license the generator doesn't recognize stops
+it, so a new kind of license gets a person's look before it ships. Update the
+console entries in `internal/notices/internal/generate` along with the files
+they describe.
+
 The application helper is registered before htmx initializes. It adds CSRF
 headers, initializes controls in the original document and later fragments,
 and owns behavior that should not be encoded as server state: themes, sidebar

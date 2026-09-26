@@ -1718,6 +1718,28 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .license-dialog { width: min(32rem, calc(100vw - 2rem)); }
 .license-dialog .license-content { max-height: min(28rem, 60dvh); margin-inline: -1.5rem; overflow: auto; }
 .license-dialog .license-content pre { margin: 0; border-right: 0; border-left: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground); font: .75rem/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+/* Third-party licenses: a row per piece of software that opens to its
+   license. The dialog's list is the one scroll area, so an open license
+   grows the list rather than scrolling inside it. */
+.license-dialog .dialog-footer .third-party-licenses-button { margin-right: auto; }
+.third-party-licenses-dialog { width: min(36rem, calc(100vw - 2rem)); }
+.third-party-licenses section + section { margin-top: .5rem; }
+.release-notes-content.third-party-licenses h3 { margin: .75rem 1.5rem .5rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
+.third-party-license { border-top: 1px solid var(--border); }
+.third-party-license:last-child { border-bottom: 1px solid var(--border); }
+.third-party-license > summary { display: grid; min-height: 2.75rem; grid-template-columns: minmax(0, 1fr) auto 1rem; align-items: center; gap: .75rem; padding: .5rem 1.5rem; cursor: pointer; list-style: none; }
+.third-party-license > summary::-webkit-details-marker { display: none; }
+.third-party-license > summary:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.third-party-license-name { overflow-wrap: anywhere; font-weight: 500; }
+.third-party-license-kind { flex: none; border: 1px solid var(--border); border-radius: 999px; padding: .05rem .5rem; color: var(--muted-foreground); font-size: .6875rem; font-weight: 600; }
+.third-party-license > summary .nav-icon { flex: 0 0 1rem; color: var(--muted-foreground); transition: transform 150ms ease; }
+.third-party-license[open] > summary .nav-icon { transform: rotate(180deg); }
+.third-party-license-text { display: grid; justify-items: start; gap: .5rem; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 25%, transparent); padding: .75rem 1.5rem 1rem; }
+.third-party-license-link { display: inline-flex; max-width: 100%; align-items: center; gap: .35rem; font-size: .75rem; overflow-wrap: anywhere; }
+.third-party-license-link .nav-icon { width: .8rem; height: .8rem; flex: 0 0 .8rem; }
+.release-notes-content .third-party-license-text h4 { margin: .5rem 0 0; font-size: .75rem; }
+.license-dialog .license-content .third-party-license-text pre { max-height: none; overflow: visible; border: 0; background: transparent; padding: 0; }
+.third-party-license-loading { color: var(--muted-foreground); font-size: .78rem; }
 .auth-form { display: grid; gap: 1rem; }
 .auth-form button { width: 100%; margin-top: 0.25rem; }
 .integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }

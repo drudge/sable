@@ -1,6 +1,12 @@
 package pages
 
-import "strings"
+import (
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/drudge/sable/internal/notices"
+)
 
 const shortCommitLength = 7
 
@@ -139,7 +145,69 @@ templ AboutContent(view AboutPageView) {
 			<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>
 		</footer>
 	</div>
-	@mitLicenseDialog()
+	@mitLicenseDialog(true)
+	@thirdPartyLicensesDialog(notices.All())
+}
+
+// thirdPartyLicensesDialog lists the third-party software built into Sable,
+// and opens from the MIT License dialog in its place. Each license's text
+// loads the first time its row opens.
+templ thirdPartyLicensesDialog(all []notices.Notice) {
+	<dialog class="custom-server-dialog license-dialog third-party-licenses-dialog" id="third-party-licenses-dialog" aria-labelledby="third-party-licenses-dialog-title">
+		<div class="dialog-header">
+			<h2 id="third-party-licenses-dialog-title">Third-Party Licenses</h2>
+			<p>Sable loves open source and stands on the shoulders of giants. Thank you to everyone who builds these projects.</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="release-notes-content license-content third-party-licenses">
+			<section aria-labelledby="third-party-licenses-console">
+				<h3 id="third-party-licenses-console">Web console</h3>
+				for index, notice := range all {
+					if notice.Console {
+						@thirdPartyLicenseRow(index, notice)
+					}
+				}
+			</section>
+			<section aria-labelledby="third-party-licenses-server">
+				<h3 id="third-party-licenses-server">Server</h3>
+				for index, notice := range all {
+					if !notice.Console {
+						@thirdPartyLicenseRow(index, notice)
+					}
+				}
+			</section>
+		</div>
+		<div class="dialog-footer">
+			<button class="button" type="button" data-dialog-close>Done</button>
+		</div>
+	</dialog>
+}
+
+templ thirdPartyLicenseRow(index int, notice notices.Notice) {
+	<details class="third-party-license" hx-get={ templ.SafeURL("/ui/about/license?name=" + url.QueryEscape(notice.Name)) } hx-trigger="toggle once" hx-target={ "#" + thirdPartyLicenseID(index) } hx-swap="innerHTML">
+		<summary>
+			<span class="third-party-license-name">{ notice.Name }</span>
+			<span class="third-party-license-kind">{ notice.License }</span>
+			@Icon("chevron-down")
+		</summary>
+		<div class="third-party-license-text" id={ thirdPartyLicenseID(index) }><span class="third-party-license-loading">Loading license…</span></div>
+	</details>
+}
+
+// ThirdPartyLicenseText is one piece of software's license files, as its
+// authors wrote them, under a link to where it comes from.
+templ ThirdPartyLicenseText(notice notices.Notice) {
+	<a class="inline-link third-party-license-link" href={ templ.SafeURL(notice.URL) } target="_blank" rel="noopener noreferrer"><span>{ strings.TrimPrefix(notice.URL, "https://") }</span>@Icon("external-link")</a>
+	for _, file := range notice.Files {
+		if len(notice.Files) > 1 {
+			<h4>{ file.Name }</h4>
+		}
+		<pre>{ file.Text }</pre>
+	}
+}
+
+func thirdPartyLicenseID(index int) string {
+	return "third-party-license-" + strconv.Itoa(index)
 }
 
 // UpdatePanel renders the release check, the installation, and the restart

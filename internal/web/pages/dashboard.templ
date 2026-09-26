@@ -1020,12 +1020,14 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 				<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>
 			</footer>
 			</div>
-			@mitLicenseDialog()
+			@mitLicenseDialog(false)
 		</body>
 	</html>
 }
 
-templ mitLicenseDialog() {
+// mitLicenseDialog shows Sable's license. With thirdParty, it also leads to
+// the licenses of the software Sable is built with, which only About lists.
+templ mitLicenseDialog(thirdParty bool) {
 	<dialog class="custom-server-dialog license-dialog" id="mit-license-dialog" aria-labelledby="mit-license-dialog-title">
 		<div class="dialog-header">
 			<h2 id="mit-license-dialog-title">MIT License</h2>
@@ -1036,6 +1038,9 @@ templ mitLicenseDialog() {
 			<pre>{ mitLicenseText }</pre>
 		</div>
 		<div class="dialog-footer">
+			if thirdParty {
+				<button class="button outline third-party-licenses-button" type="button" data-dialog-switch="third-party-licenses-dialog">Third-Party Licenses</button>
+			}
 			<a class="button outline" href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
 				<span>View on GitHub</span>@Icon("external-link")
 			</a>
