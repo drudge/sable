@@ -212,7 +212,7 @@ func (service *Service) AllowPasskeyAttempt(clientIP string) error {
 }
 
 func (service *Service) RecordPasskeyFailure(ctx context.Context, clientIP, userAgent string) {
-	service.audit(ctx, nil, "auth.login.passkey.failed", clientIP, userAgent, "passkey verification failed")
+	service.audit(ctx, nil, ActionPasskeyLoginFailed, clientIP, userAgent, "passkey verification failed")
 }
 
 // ValidatePasskeyDisable checks the alternate sign-in methods before hiding passkeys.
