@@ -35,6 +35,27 @@ are embedded with `go:embed`. There is no Node.js runtime or separately
 deployed frontend. Every asset URL contains a content fingerprint; immutable
 assets are served precompressed when the browser accepts gzip.
 
+Text is set in Inter 3.019 (OFL, see `third_party/inter`), embedded like
+every other asset so it takes the same room on every device, not only where
+Inter is installed. It ships upright, with every weight from 100 to 900, in
+two files split by character. `inter-latin.woff2` holds what nearly every
+page shows, and the page preloads it. `inter-extra.woff2` holds the rest of
+Inter's characters and loads only on a page that shows one. The
+`unicode-range` of each `@font-face` rule in `app.css` lists its characters.
+To rebuild them from the variable font Google Fonts served for Inter 3.019,
+use fontTools (`pip install fonttools brotli`):
+
+```sh
+fonttools varLib.instancer Inter-VariableFont_slnt,wght.ttf slnt=0 -o inter-roman.ttf
+pyftsubset inter-roman.ttf --output-file=inter-latin.woff2 --flavor=woff2 \
+  --layout-features='*' --name-IDs='*' --notdef-outline \
+  --unicodes='<the unicode-range of the inter-latin.woff2 rule>'
+```
+
+Build `inter-extra.woff2` the same way from its own rule's `unicode-range`.
+A character the console starts to show should fall in the Latin file's
+range, or every page that shows it loads the second file.
+
 The application helper is registered before htmx initializes. It adds CSRF
 headers, initializes controls in the original document and later fragments,
 and owns behavior that should not be encoded as server state: themes, sidebar

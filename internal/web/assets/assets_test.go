@@ -131,6 +131,32 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 	}
 }
 
+func TestStylesheetLoadsFingerprintedFonts(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, name := range []string{"inter-latin.woff2", "inter-extra.woff2"} {
+		path := URL(name)
+		if !strings.Contains(stylesheet, `url("`+path+`")`) || strings.Contains(stylesheet, `url("`+name+`")`) {
+			t.Errorf("stylesheet does not load %s from its fingerprinted path %s", name, path)
+		}
+		response := httptest.NewRecorder()
+		Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", name, response.Code)
+		}
+		if got := response.Header().Get("Content-Type"); got != "font/woff2" {
+			t.Errorf("%s Content-Type = %q, want font/woff2", name, got)
+		}
+		if got := response.Header().Get("Cache-Control"); got != immutableCachePolicy {
+			t.Errorf("%s Cache-Control = %q", name, got)
+		}
+		if !bytes.HasPrefix(response.Body.Bytes(), []byte("wOF2")) {
+			t.Errorf("%s is not a WOFF2 font", name)
+		}
+	}
+}
+
 func TestVendoredHTMXVersion(t *testing.T) {
 	t.Parallel()
 
@@ -202,6 +228,25 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	}
 	if !strings.Contains(stylesheet, ".mobile-header [data-sidebar-toggle] .nav-icon { width: 1.25rem; height: 1.25rem; }") {
 		t.Fatal("mobile menu icon does not use its larger header size")
+	}
+}
+
+func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if strings.Contains(stylesheet, ".sidebar .nav { overflow-y: hidden; }") {
+		t.Error("desktop sidebar navigation cannot scroll, so a short window cuts off its last items")
+	}
+	sharedStyles, _, _ := strings.Cut(stylesheet, "@media (max-width: 767px)")
+	for _, expected := range []string{
+		`.nav[data-scroll-fade-bottom="true"]`,
+		`.nav[data-scroll-fade-top="true"]`,
+		`.sidebar-nav-hint[data-visible="true"] { opacity: 1; }`,
+	} {
+		if !strings.Contains(sharedStyles, expected) {
+			t.Errorf("sidebar navigation cue %q applies only on phones", expected)
+		}
 	}
 }
 
