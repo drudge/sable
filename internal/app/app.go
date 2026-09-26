@@ -463,6 +463,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
 	pushKeys := newPushKeyStore(secretVault)
 	webServer.SetPushKeys(pushKeys)
+	stateReplicator.setAlerts(alertSecrets, pushKeys, database)
 	alertDispatcher := &alerts.Dispatcher{
 		Config:   func() config.Config { return configurationManager.Current().Config },
 		Secrets:  alertSecrets,
@@ -480,6 +481,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		trustAnchors: trustAnchorManager, trustAnchorUpdates: handler.DNSSECTrustAnchorUpdatesEnabled,
 		auditLog: database, signIns: authentication != nil,
 	}.alertSources()...)
+	alertDispatcher.Add(clusterAlertSources(clusterService)...)
+	clusterService.SetLocalAlerts(alertDispatcher.Local)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment

@@ -161,6 +161,15 @@ type Service struct {
 	logger                         *slog.Logger
 	clientsMu                      sync.Mutex
 	memberClients                  map[string]*http.Client
+	// localAlerts gathers this node's own alerts while it is a replica, and
+	// alertReport keeps them for the heartbeat. alertPrimaryID names the
+	// primary that advertised it takes them.
+	localAlerts    LocalAlerts
+	alertReport    alertReporter
+	alertPrimaryID string
+	// reportedAlerts is what each replica last said about itself, kept while
+	// this node is the primary.
+	reportedAlerts map[string]reportedAlerts
 }
 
 func Open(options Options) (*Service, error) {
@@ -208,7 +217,7 @@ func Open(options Options) (*Service, error) {
 		version:             options.Version, startedAt: options.StartedAt,
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
 		baseHTTPClient: baseHTTPClient, memberClients: make(map[string]*http.Client), replicator: options.Replicator,
-		logger: options.Logger,
+		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts),
 	}
 	if service.nodeName == "" {
 		service.nodeName = nodeID[:8]
@@ -424,6 +433,7 @@ func (service *Service) Promote(_ context.Context, nodeID string) error {
 	}
 	service.manifest = candidate
 	clear(service.telemetry)
+	clear(service.reportedAlerts)
 	return nil
 }
 
@@ -455,6 +465,7 @@ func (service *Service) Remove(_ context.Context, nodeID string) error {
 	}
 	service.manifest = candidate
 	delete(service.telemetry, nodeID)
+	delete(service.reportedAlerts, nodeID)
 	return nil
 }
 
@@ -532,6 +543,7 @@ func (service *Service) clearLocalMembership() error {
 	service.httpClient = service.baseHTTPClient
 	service.lastSuccessfulSync = time.Time{}
 	clear(service.telemetry)
+	clear(service.reportedAlerts)
 	return nil
 }
 

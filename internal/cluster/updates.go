@@ -44,6 +44,13 @@ const (
 	actionRelease    = "release"
 )
 
+// The phases a rollout ends in.
+const (
+	RolloutComplete = updateComplete
+	RolloutFailed   = updateFailed
+	RolloutStopped  = rolloutStopped
+)
+
 type UpdateController interface {
 	Status() update.Status
 	Installable() error
@@ -90,6 +97,16 @@ type RolloutStatus struct {
 	Nodes     []RolloutNode `json:"nodes"`
 	Index     int           `json:"index"`
 	Deadline  time.Time     `json:"deadline"`
+	// StartedAt and FinishedAt are when the rollout began, and when it
+	// completed, failed, or was stopped. They are saved with it, so its
+	// alerts stay news for a day after each even across the coordinator's
+	// own restart, which is how a rollout ends. A rollout saved by an older
+	// release has neither.
+	StartedAt  time.Time `json:"started_at,omitzero"`
+	FinishedAt time.Time `json:"finished_at,omitzero"`
+	// FailedNode names the node a failed rollout stopped at, when the failure
+	// was down to one.
+	FailedNode string `json:"failed_node,omitempty"`
 }
 
 func (status RolloutStatus) Active() bool {
@@ -147,6 +164,7 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 			updates.rollout.Deadline = time.Now().Add(rolloutNodeTimeout)
 		} else {
 			updates.rollout.Phase, updates.rollout.Error = updateFailed, "The coordinator restarted. Review every node before starting another rollout."
+			updates.rollout.FinishedAt = time.Now()
 		}
 		if err := writeClusterJSON(service.directory, rolloutFileName, updates.rollout); err != nil {
 			return err
@@ -275,7 +293,7 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		return errors.New("choose a published release version")
 	}
 	reports := service.updateReports()
-	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: rolloutPreparing, Deadline: time.Now().Add(rolloutPrepareTimeout)}
+	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: rolloutPreparing, Deadline: time.Now().Add(rolloutPrepareTimeout), StartedAt: time.Now()}
 	needsUpdate := false
 	for _, node := range state.Nodes {
 		if !rolloutNodeHealthy(node) {
@@ -338,10 +356,19 @@ func (service *Service) StopRollout() error {
 	return service.saveRollout(rollout)
 }
 
-// saveRollout is called with updates.mu held, and persists before issuing commands.
+// saveRollout is called with updates.mu held, and persists before issuing
+// commands. A rollout that stops running is stamped with when it did.
 func (service *Service) saveRollout(rollout RolloutStatus) error {
+	if !rollout.Active() && rollout.FinishedAt.IsZero() {
+		rollout.FinishedAt = time.Now()
+	}
 	if err := writeClusterJSON(service.directory, rolloutFileName, rollout); err != nil {
-		service.updates.rollout.Phase, service.updates.rollout.Error = updateFailed, "Cannot persist rollout progress: "+err.Error()
+		// Only a running rollout has progress to lose. Failing one that
+		// already ended would report a second, false ending.
+		if service.updates.rollout.Active() {
+			service.updates.rollout.Phase, service.updates.rollout.Error = updateFailed, "Cannot persist rollout progress: "+err.Error()
+			service.updates.rollout.FinishedAt = time.Now()
+		}
 		return err
 	}
 	service.updates.rollout = rollout
@@ -421,29 +448,34 @@ func (service *Service) advanceRollout(state State) {
 	if !rollout.Active() {
 		return
 	}
-	fail := func(message string) {
-		rollout.Phase, rollout.Error = updateFailed, message
+	// fail ends the rollout, naming the node it stopped at when there is one.
+	fail := func(node, message string) {
+		rollout.Phase, rollout.Error, rollout.FailedNode = updateFailed, message, node
 		_ = service.saveRollout(rollout)
 	}
 	if rollout.ClusterID != state.ClusterID || rollout.PrimaryID != state.PrimaryID || len(rollout.Nodes) != len(state.Nodes) {
-		fail("Cluster membership or primary changed during the rollout.")
+		fail("", "Cluster membership or primary changed during the rollout.")
 		return
 	}
 	for _, planned := range rollout.Nodes {
 		if !slices.ContainsFunc(state.Nodes, func(node Node) bool { return node.ID == planned.ID }) {
-			fail("Cluster membership changed during the rollout.")
+			fail("", "Cluster membership changed during the rollout.")
 			return
 		}
 	}
 	if time.Now().After(rollout.Deadline) {
-		fail("Timed out waiting for a node. Review its version, health, and synchronization before retrying.")
+		waiting := ""
+		if rollout.Phase == rolloutUpdating && rollout.Index < len(rollout.Nodes) {
+			waiting = rollout.Nodes[rollout.Index].Name
+		}
+		fail(waiting, "Timed out waiting for a node. Review its version, health, and synchronization before retrying.")
 		return
 	}
 	reports := service.updateReports()
 	for _, node := range rollout.Nodes {
 		report := reports[node.ID]
 		if report.ID == rollout.ID && report.Error != "" {
-			fail(node.Name + ": " + report.Error)
+			fail(node.Name, node.Name+": "+report.Error)
 			return
 		}
 	}
@@ -451,7 +483,7 @@ func (service *Service) advanceRollout(state State) {
 		for _, node := range state.Nodes {
 			report := reports[node.ID]
 			if !rolloutNodeHealthy(node) {
-				fail(node.Name + " lost health or synchronization during preparation.")
+				fail(node.Name, node.Name+" lost health or synchronization during preparation.")
 				return
 			}
 			if report.ID != rollout.ID || report.Phase != updatePrepared {

@@ -39,6 +39,8 @@ const (
 	initialBlockedDomain       = "enrollment-replication.test"
 	updatedBlockedDomain       = "heartbeat-replication.test"
 	handoffBlockedDomain       = "handoff-replication.test"
+	replicatedAlertDestination = "integration-hook"
+	replicatedAlertSecret      = "integration-hook-token"
 )
 
 type integrationNodePorts struct {
@@ -80,6 +82,11 @@ func TestTwoNodeClusterReplicaEnrollmentAndSynchronization(t *testing.T) {
 	primaryCertificate := generatePrimaryCertificate(t, primaryDirectory)
 	primaryConfiguration := integrationNodeConfiguration(primaryDirectory, primaryPorts, "primary", primaryCertificate)
 	primaryConfiguration.Blocking.Domains = []string{initialBlockedDomain}
+	// Written the way an older release left it, so the primary moves the
+	// secret into its vault on start.
+	primaryConfiguration.Alerts.Destinations = []config.AlertDestination{{
+		ID: replicatedAlertDestination, Name: "Integration hook", URL: "https://hooks.example.test/" + replicatedAlertSecret,
+	}}
 	primaryConfigurationPath := writeIntegrationConfiguration(t, primaryDirectory, primaryConfiguration)
 	primaryClient := trustedHTTPClient(t, filepath.Join(primaryDirectory, primaryCertificate.CAFile))
 	primary := startIntegrationNode(t, primaryConfigurationPath, primaryClient, primaryPorts.https)
@@ -107,6 +114,17 @@ func TestTwoNodeClusterReplicaEnrollmentAndSynchronization(t *testing.T) {
 	}
 
 	waitForBlockedDNSResponse(t, replica, replicaPorts.dns, initialBlockedDomain)
+	// Alert destinations follow the primary, and their secrets land in the
+	// replica's vault rather than in its configuration file.
+	waitForCondition(t, replica, func() bool {
+		contents, err := os.ReadFile(replicaConfigurationPath)
+		return err == nil && strings.Contains(string(contents), replicatedAlertDestination)
+	})
+	for _, path := range []string{primaryConfigurationPath, replicaConfigurationPath} {
+		if contents, err := os.ReadFile(path); err != nil || strings.Contains(string(contents), replicatedAlertSecret) {
+			t.Fatalf("%s holds an alert secret or cannot be read: %v", path, err)
+		}
+	}
 	addBlockedDomain(t, primaryClient, primaryPorts.https, primaryConfigurationPath, updatedBlockedDomain)
 	updatedPrimaryState := waitForClusterState(t, primary, primaryClient, primaryPorts.https, func(state cluster.State) bool {
 		return state.Generation > replicaState.Generation
