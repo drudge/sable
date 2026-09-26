@@ -1814,14 +1814,17 @@
   // made the change included. Focus goes to that control's replacement, which
   // keeps its id, or to Add Destination when it has none to go back to. A
   // removal takes its button with it, and focus would otherwise land on the
-  // next Remove button, so it always goes to Add Destination.
+  // next Remove button, so it always goes to Add Destination. htmx disables a
+  // form's submit button before this hears of the request, and some browsers
+  // take focus off a disabled button at once, so the button that submitted
+  // the form stands in for the focused control.
   document.addEventListener("htmx:before:request", (event) => {
     const ctx = event.detail?.ctx;
     const source = ctx?.sourceElement;
     if (!source?.closest?.("#alerts-panel") || source.hasAttribute("data-dialog-load")) return;
     const removal = source.matches("[data-alert-destination-remove], [data-alert-browser-remove]");
     const focused = document.activeElement?.closest?.("#alerts-panel") ? document.activeElement.id : "";
-    ctx.sableAlertsFocus = {removal, id: removal ? "alert-destination-add" : focused || source.id};
+    ctx.sableAlertsFocus = {removal, id: removal ? "alert-destination-add" : focused || ctx.request?.submitter?.id || source.id};
   });
   document.addEventListener("htmx:after:swap", (event) => {
     const focus = event.detail?.ctx?.sableAlertsFocus;
