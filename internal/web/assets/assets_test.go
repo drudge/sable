@@ -277,6 +277,21 @@ func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
 	}
 }
 
+func TestPhoneMenuScrimBlursLikeDialogBackdrops(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"dialog[open]::backdrop {\n  -webkit-backdrop-filter: blur(4px);\n  backdrop-filter: blur(4px);\n}",
+		".sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+		".sidebar-mobile-open .sidebar-scrim { display: block; animation: backdrop-in 150ms ease-out; }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("the phone menu's scrim no longer blurs and fades in like a dialog backdrop: missing %q", expected)
+		}
+	}
+}
+
 func TestFrontmostNotificationKeepsItsFullCardHeight(t *testing.T) {
 	t.Parallel()
 
