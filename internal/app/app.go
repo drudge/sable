@@ -471,6 +471,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		Logger:   logger,
 	}
 	alertDispatcher.Add(webServer.InsightAlerts())
+	alertDispatcher.Add(newUniFiAlertSource(unifiSync, configurationManager), newDynamicDNSAlertSource(dynamicDNS, configurationManager))
+	alertDispatcher.Add(newUpdateAlertSource(updateManager))
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
