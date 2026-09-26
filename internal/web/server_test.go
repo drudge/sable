@@ -461,7 +461,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 			t.Errorf("dashboard htmx 4 configuration does not contain %q", expected)
 		}
 	}
-	for _, name := range []string{"bootstrap.js", "app.css", "app.js", "htmx.min.js", "sable-mark.svg", "sable-icon-180.png"} {
+	for _, name := range []string{"bootstrap.js", "app.css", "app.js", "htmx.min.js", "sable-mark.svg", "sable-icon-180.png", "inter-latin.woff2"} {
 		if path := webassets.URL(name); !strings.Contains(dashboard, path) {
 			t.Errorf("dashboard does not contain fingerprinted asset %q", path)
 		}

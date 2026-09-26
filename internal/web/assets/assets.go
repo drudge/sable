@@ -22,7 +22,7 @@ const (
 	legacyCachePolicy    = "no-cache"
 )
 
-//go:embed passkeys.js app.css app.js bootstrap.js htmx.min.js sw.js sable-headshot.png sable-icon-180.png sable-mark.svg
+//go:embed passkeys.js app.css app.js bootstrap.js htmx.min.js sw.js sable-headshot.png sable-icon-180.png sable-mark.svg inter-latin.woff2 inter-extra.woff2
 var files embed.FS
 
 type asset struct {
@@ -36,7 +36,9 @@ type asset struct {
 var manifest = loadManifest()
 
 func loadManifest() map[string]asset {
+	// The fonts load before the stylesheet, which links them by fingerprint.
 	names := []string{
+		"inter-latin.woff2", "inter-extra.woff2",
 		"app.css", "app.js", "passkeys.js", "bootstrap.js", "htmx.min.js", "sw.js",
 		"sable-headshot.png", "sable-icon-180.png", "sable-mark.svg",
 	}
@@ -45,6 +47,9 @@ func loadManifest() map[string]asset {
 		content, err := files.ReadFile(name)
 		if err != nil {
 			panic(fmt.Sprintf("read embedded web asset %s: %v", name, err))
+		}
+		if filepath.Ext(name) == ".css" {
+			content = linkAssets(content, loaded)
 		}
 		sum := sha256.Sum256(content)
 		digest := hex.EncodeToString(sum[:])
@@ -60,6 +65,8 @@ func loadManifest() map[string]asset {
 			contentType = "text/javascript; charset=utf-8"
 		case ".svg":
 			contentType = "image/svg+xml"
+		case ".woff2":
+			contentType = "font/woff2"
 		}
 		loaded[name] = asset{
 			content: content, compressed: compressed,
@@ -68,6 +75,16 @@ func loadManifest() map[string]asset {
 		}
 	}
 	return loaded
+}
+
+// linkAssets points a stylesheet's url("name") references at the fingerprinted
+// paths of assets already loaded. The fonts it names are then cached as long
+// as it is, and a changed font changes the stylesheet's fingerprint too.
+func linkAssets(stylesheet []byte, loaded map[string]asset) []byte {
+	for name, entry := range loaded {
+		stylesheet = bytes.ReplaceAll(stylesheet, []byte(`url("`+name+`")`), []byte(`url("`+assetPrefix+entry.fingerprint+"/"+name+`")`))
+	}
+	return stylesheet
 }
 
 func gzipAsset(content []byte) []byte {

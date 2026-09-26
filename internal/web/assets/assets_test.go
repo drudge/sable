@@ -131,6 +131,32 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 	}
 }
 
+func TestStylesheetLoadsFingerprintedFonts(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, name := range []string{"inter-latin.woff2", "inter-extra.woff2"} {
+		path := URL(name)
+		if !strings.Contains(stylesheet, `url("`+path+`")`) || strings.Contains(stylesheet, `url("`+name+`")`) {
+			t.Errorf("stylesheet does not load %s from its fingerprinted path %s", name, path)
+		}
+		response := httptest.NewRecorder()
+		Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", name, response.Code)
+		}
+		if got := response.Header().Get("Content-Type"); got != "font/woff2" {
+			t.Errorf("%s Content-Type = %q, want font/woff2", name, got)
+		}
+		if got := response.Header().Get("Cache-Control"); got != immutableCachePolicy {
+			t.Errorf("%s Cache-Control = %q", name, got)
+		}
+		if !bytes.HasPrefix(response.Body.Bytes(), []byte("wOF2")) {
+			t.Errorf("%s is not a WOFF2 font", name)
+		}
+	}
+}
+
 func TestVendoredHTMXVersion(t *testing.T) {
 	t.Parallel()
 
