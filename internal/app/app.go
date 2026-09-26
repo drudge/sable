@@ -421,6 +421,17 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		logger,
 	)
 	runRuntimeWorker(func(context.Context) { dynamicDNS.Run(zoneRefreshContext) })
+	updateManager := newUpdateManager(update.Options{
+		ReleaseStore:   database,
+		Logger:         logger,
+		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
+		RestartManaged: initial.Updates.RestartManaged,
+		PreRelease:     initial.Updates.PreRelease,
+	})
+	runRuntimeWorker(newDailyUpdateCheck(updateManager, configurationManager, func() bool {
+		state := clusterService.Snapshot()
+		return !state.Initialized || state.LocalRole != cluster.RoleReplica
+	}, logger).Run)
 
 	var webAuthentication web.Authenticator
 	if authentication != nil {
@@ -472,13 +483,6 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	if err := webServer.SetStatsStore(ctx, database); err != nil {
 		logger.Warn("restore query statistics", "error", err)
 	}
-	updateManager := newUpdateManager(update.Options{
-		ReleaseStore:   database,
-		Logger:         logger,
-		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
-		RestartManaged: initial.Updates.RestartManaged,
-		PreRelease:     initial.Updates.PreRelease,
-	})
 	webServer.SetUpdateController(updateManager)
 	webServer.SetBackupController(scheduledBackups)
 	restartRequests := make(chan struct{}, 1)
