@@ -100,7 +100,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
-		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking, Alerts: server.insightAlertsView(request.Context(), console),
+		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 	}}
 	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights page", "error", err)
@@ -202,7 +202,6 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
 	}
-	view.Alerts = server.insightAlertsView(request.Context(), console)
 	// Client addresses, and so the names of their devices, are shown only to
 	// operators who can read the query log.
 	var given devices.GivenNames

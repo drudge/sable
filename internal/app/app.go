@@ -13,6 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/alerts"
 	"github.com/drudge/sable/internal/auth"
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/certificates"
@@ -31,6 +32,7 @@ import (
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web"
+	webassets "github.com/drudge/sable/internal/web/assets"
 	"github.com/drudge/sable/internal/zone"
 )
 
@@ -346,6 +348,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		return err
 	}
 	migrateTSIGSecrets(ctx, configurationManager, tsigSecrets, logger)
+	alertSecrets := alerts.NewSecretStore(secretVault)
+	migrateAlertSecrets(ctx, configurationManager, alertSecrets, logger)
 	dynamicUpdater := newDynamicZoneUpdater(ctx, zoneManager, handler, database, logger)
 	handler.SetZoneUpdater(dynamicUpdater.Update)
 	handler.SetZoneUpdateAuditor(dynamicUpdater.Audit)
@@ -445,7 +449,18 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	webServer.SetDynamicDNSController(dynamicDNS)
 	webServer.SetUniFiController(unifiSync)
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
-	webServer.SetPushKeys(newPushKeyStore(secretVault))
+	pushKeys := newPushKeyStore(secretVault)
+	webServer.SetPushKeys(pushKeys)
+	alertDispatcher := &alerts.Dispatcher{
+		Config:   func() config.Config { return configurationManager.Current().Config },
+		Secrets:  alertSecrets,
+		Sent:     database,
+		Browsers: &alerts.Browsers{Keys: pushKeys, Store: database, Logger: logger},
+		Icon:     webassets.URL("sable-icon-180.png"),
+		Logger:   logger,
+	}
+	alertDispatcher.Add(webServer.InsightAlerts())
+	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
 		// with security switched off has no provider and no sign-in button.
@@ -489,7 +504,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	clusterService.StartMonitoring(runtimeContext)
 	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
 	runRuntimeWorker(func(context.Context) {
-		webServer.RunInsightAlerts(runtimeContext, func() bool {
+		alertDispatcher.Run(runtimeContext, func() bool {
 			state := clusterService.Snapshot()
 			return !state.Initialized || state.LocalRole != cluster.RoleReplica
 		})
@@ -987,6 +1002,32 @@ func migrateTSIGSecrets(
 		return
 	}
 	logger.Info("moved TSIG secrets into the encrypted vault", "keys", migrated)
+}
+
+// migrateAlertSecrets moves alert destination URLs, keys, and header values
+// still written in sable.toml into the vault on the first boot after an
+// upgrade, then rewrites the file without them. Like the TSIG move, a failure
+// is logged rather than fatal: the secrets are already loaded, so alerts keep
+// working and the move is tried again on the next start.
+func migrateAlertSecrets(
+	ctx context.Context,
+	configuration *config.Manager,
+	secrets *alerts.SecretStore,
+	logger *slog.Logger,
+) {
+	if !alerts.Pending(configuration.Current().Config) {
+		return
+	}
+	migrated := 0
+	if err := configuration.Update(ctx, func(candidate *config.Config) error {
+		moved, err := secrets.Migrate(ctx, candidate)
+		migrated = moved
+		return err
+	}); err != nil {
+		logger.Warn("move alert secrets into the encrypted vault", "error", err)
+		return
+	}
+	logger.Info("moved alert secrets into the encrypted vault", "destinations", migrated)
 }
 
 // hydrateTSIGKeys returns the configuration with every TSIG secret read back

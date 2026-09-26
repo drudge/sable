@@ -664,14 +664,6 @@ name = "Front door"
 mac = "34:3e:a4:33:0c:c6"
 type = "doorbell"
 
-[insights.webhook]
-url = "https://ntfy.sh/your-topic"
-format = "text"
-ntfy_receipt = true
-
-[[insights.webhook.headers]]
-name = "Priority"
-value = "high"
 ```
 
 Each `[[clients]]` entry is what an operator told Sable about one device,
@@ -684,33 +676,89 @@ these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 `game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
 `smart-plug`, `smart-home`, and `watch`.
 
-`[insights.webhook]` sends each new Insights finding worth a look to a URL,
-once, and skips anything an operator dismissed, snoozed, or marked normal. The
-`json` format (the default) posts an object with the finding's kind, subject,
-summary, and reasons, plus `text` and `content` fields that Slack and Discord
-show as the message. The `text` format posts the summary as plain text with a
-`Title` header, which suits ntfy. The `slack` format posts a Slack incoming-webhook card with a colored bar, the
-finding's reasons, and a button to Insights; the `discord` format posts a
-Discord webhook embed colored by tone that mentions no one. Both fail unless
-Slack or Discord itself answers, which catches a mistyped URL. The `browser` format needs no `url`: it pushes each finding to the browsers
-that turned alerts on in the console, through their own push services, signed
-with a key Sable makes the first time a browser asks and keeps sealed in its
-secret vault. The `pushover` format posts Pushover's
-message form with the application token in `pushover_token` and the user or
-group key in `pushover_user`, and fails when Pushover does not accept it. It
-needs no `url`: Sable uses `https://api.pushover.net/1/messages.json`, and the
-keys alone say whether alerts are on. Only the `json` and `text` formats send
-`headers`. When a webhook is first set, Sable takes stock
-of what it already knows without sending it, so turning alerts on never floods
-the webhook with old news. `paused = true` stops sending but keeps the webhook;
-findings that turn up while paused are not sent when alerts resume. Any server
-can answer a request with success, including a parked domain behind a typo, so
-`ntfy_receipt = true` only counts a send when ntfy answers with the ID of the
-message it published; it applies only with `format = "text"`. Each `[[insights.webhook.headers]]` entry is sent with
-every alert, such as `Authorization` for a protected ntfy topic; Sable sets
-`Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself. Only the
-primary node sends alerts. The Insights Overview can set the webhook, pause and
-resume it, and send a test.
+Insights findings worth a look are sent as alerts; see [Alerts](#alerts).
+
+## Alerts
+
+```toml
+[alerts]
+paused = false
+
+[alerts.send]
+insights = true
+cluster = true
+updates = true
+integrations = true
+backups = "failures"
+server = true
+sign_ins = false
+
+[alerts.sign_ins]
+after = 5
+within = "10m"
+
+[[alerts.destinations]]
+id = "phone"
+name = "Phone"
+format = "pushover"
+sends = ["cluster", "sign_ins"]
+
+[[alerts.destinations]]
+id = "chat"
+name = "Home Slack"
+format = "slack"
+```
+
+Sable sends each new alert once to every destination that wants its group, and
+skips any Insights finding an operator dismissed, snoozed, or marked normal.
+Settings > Alerts sets all of this up, so most people never edit it by hand.
+
+Each `[alerts.send]` switch covers one group. `insights` is findings worth a
+look. `cluster` is a node going down and coming back, and update rollouts.
+`updates` is a new Sable release. `integrations` is UniFi sync and dynamic DNS.
+`backups` is `"failures"` (the default), `"all"` to hear about every finished
+backup too, or `"off"`. `server` is certificate renewals, secondary zones, and
+DNSSEC keys. `sign_ins` is off by default; `[alerts.sign_ins]` sends one alert
+when `after` sign-ins fail on one node within `within`. Problems, such as a
+node down or a failed backup, go out at high priority on ntfy, Pushover, and
+browsers.
+
+Each `[[alerts.destinations]]` entry is one place alerts go. `id` names it for
+good: its record of what was sent and its secrets hang on it, so renaming it
+changes only `name`. `sends` limits it to some groups; leave it out to send
+everything. The `json` format (the default) posts an object with the alert's
+group, kind, priority, subject, summary, and reasons, plus `text` and `content`
+fields that Slack and Discord show as the message. Insights alerts keep
+`"event": "insight"`; other alerts name their group. The `text` format posts the
+summary as plain text with a `Title` header, which suits ntfy. The `slack`
+format posts a Slack incoming-webhook card with a colored bar, the alert's
+reasons, and a button to the console; the `discord` format posts a Discord
+webhook embed colored by tone that mentions no one. Both fail unless Slack or
+Discord itself answers, which catches a mistyped URL. The `browser` format needs
+no `url`: it pushes each alert to the browsers that turned alerts on, through
+their own push services, signed with a key Sable makes the first time a browser
+asks and keeps sealed in its secret vault. Only one destination can push to
+browsers. The `pushover` format posts Pushover's message form to
+`https://api.pushover.net/1/messages.json` and fails when Pushover does not
+accept it. Any server can answer a request with success, including a parked
+domain behind a typo, so `ntfy_receipt = true` only counts a send when ntfy
+answers with the ID of the message it published; it applies only with
+`format = "text"`.
+
+A destination's `url`, `pushover_token`, `pushover_user`, and `headers` are
+secrets, since a webhook URL usually carries a token. Sable keeps them in its
+encrypted vault, not in `sable.toml`. Any written in the file, by hand or by an
+older release's `[insights.webhook]`, move to the vault the next time Sable
+starts, and the file is written back without them. Only the `json` and `text`
+formats send headers, such as `Authorization` for a protected ntfy topic; Sable
+sets `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself.
+
+When a destination is added, Sable takes stock of what it already knows without
+sending it, so a new destination never gets old news. `paused = true` stops
+sending but keeps every destination; alerts that turn up while paused, or in a
+group that is switched off, are not sent later. A destination that fails keeps
+its alerts for the next try without holding up the others. Only the lead node
+sends alerts.
 
 ## Server logging
 

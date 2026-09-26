@@ -121,6 +121,7 @@ type Config struct {
 	Blocking     Blocking     `toml:"blocking"`
 	Clients      []Client     `toml:"clients"`
 	Insights     Insights     `toml:"insights"`
+	Alerts       Alerts       `toml:"alerts"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	ServerLog    ServerLog    `toml:"server_log"`
 	Statistics   Statistics   `toml:"statistics"`
@@ -507,6 +508,13 @@ func Defaults() Config {
 			Enabled: true, UpdateInterval: Duration{Duration: defaultBlockListUpdate},
 			ResponseType: "nxdomain", ResponseTTL: defaultBlockingTTL, AllowTXTReport: true,
 		},
+		Alerts: Alerts{
+			Send: AlertSwitches{
+				Insights: true, Cluster: true, Updates: true, Integrations: true,
+				Backups: AlertBackupsFailures, Server: true,
+			},
+			SignIns: AlertSignIns{After: defaultAlertSignInsAfter, Within: Duration{Duration: defaultAlertSignInsWithin}},
+		},
 		QueryLog: QueryLog{
 			Enabled:       true,
 			BufferSize:    defaultQueryLogBuffer,
@@ -592,7 +600,7 @@ func Decode(reader io.Reader) (Config, error) {
 func (configuration Config) Validate() error {
 	var validationErrors []error
 	validationErrors = append(validationErrors, validateClients(configuration.Clients))
-	validationErrors = append(validationErrors, validateInsights(configuration.Insights))
+	validationErrors = append(validationErrors, validateAlerts(configuration.Alerts))
 	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
 	if configuration.Server.HTTPSListen != "" {
 		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
@@ -1190,7 +1198,7 @@ func (configuration Config) DedicatedDoHListeners() []string {
 
 func (configuration *Config) normalize() {
 	configuration.normalizeClients()
-	configuration.normalizeInsights()
+	configuration.normalizeAlerts()
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
 	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
 	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)

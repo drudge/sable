@@ -91,10 +91,12 @@ CREATE TABLE IF NOT EXISTS sable_insight_notified (
 )`
 }
 
-// InsightsNotified lists the findings already sent to a target, with when.
-// found is false when nothing was ever recorded for the target, so a new
-// target can take stock of what is already there before alerting.
-func (store *Store) InsightsNotified(ctx context.Context, target string) (map[string]time.Time, bool, error) {
+// AlertsSent lists the alerts already sent to a destination, each with when it
+// was last seen as news. found is false when nothing was ever recorded for the
+// destination, so a new one can take stock of what is already there before
+// alerting. The table keeps its Insights-era name so records written by older
+// releases still count.
+func (store *Store) AlertsSent(ctx context.Context, target string) (map[string]time.Time, bool, error) {
 	rows, err := store.database.QueryContext(ctx,
 		"SELECT finding_id, notified_at FROM sable_insight_notified WHERE target = "+store.placeholder(1), target)
 	if err != nil {
@@ -119,9 +121,10 @@ func (store *Store) InsightsNotified(ctx context.Context, target string) (map[st
 	return notified, primed || len(notified) > 0, err
 }
 
-// MarkInsightsNotified records findings as sent to a target, and the target as
-// known even when there was nothing to send.
-func (store *Store) MarkInsightsNotified(ctx context.Context, target string, ids []string, at time.Time) error {
+// MarkAlertsSent records alerts as sent to a destination, or as still news when
+// they were sent before, and the destination as known even when there was
+// nothing to send.
+func (store *Store) MarkAlertsSent(ctx context.Context, target string, ids []string, at time.Time) error {
 	for _, id := range ids {
 		if _, err := store.database.ExecContext(ctx, `
 INSERT INTO sable_insight_notified (target, finding_id, notified_at) VALUES (`+store.placeholders(3)+`)
@@ -137,9 +140,9 @@ ON CONFLICT (target, finding_id) DO UPDATE SET notified_at = excluded.notified_a
 	return nil
 }
 
-// ForgetInsightsNotified drops findings from a target's sent list, so each
-// can alert again if it comes back.
-func (store *Store) ForgetInsightsNotified(ctx context.Context, target string, ids []string) error {
+// ForgetAlertsSent drops alerts from a destination's sent list, so each can
+// alert again if it comes back.
+func (store *Store) ForgetAlertsSent(ctx context.Context, target string, ids []string) error {
 	for _, id := range ids {
 		if _, err := store.database.ExecContext(ctx,
 			"DELETE FROM sable_insight_notified WHERE target = "+store.placeholder(1)+" AND finding_id = "+store.placeholder(2), target, id); err != nil {
