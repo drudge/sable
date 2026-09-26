@@ -45,7 +45,7 @@ func TestUniFiAlertSourceReportsASyncThatKeepsFailing(t *testing.T) {
 		ID: "integrations.unifi-failing", Group: config.AlertGroupIntegrations, Kind: "integrations.unifi-failing",
 		Problem: true, Tone: alerts.ToneAttention,
 		Title: "UniFi sync failing", Subject: "192.168.1.1",
-		Headline: "UniFi sync failed 3 times in a row.",
+		Headline: "UniFi sync failed 3 times in a row",
 		Summary:  "The last 3 tries to sync with the UniFi controller failed. Records from UniFi stay as they were until one works.",
 		Reasons:  []string{"Last error: controller unreachable", "Last success: Sep 25, 2026 09:30 UTC"},
 		Path:     "/integrations", PathLabel: "Open Integrations", ObservedAt: lastAttempt,
@@ -130,7 +130,7 @@ func TestDynamicDNSAlertSourceReportsFailuresAndAddressChanges(t *testing.T) {
 		ID: "integrations.ddns-failing", Group: config.AlertGroupIntegrations, Kind: "integrations.ddns-failing",
 		Problem: true, Tone: alerts.ToneAttention,
 		Title: "Dynamic DNS failing", Subject: "home.example.com and 1 more",
-		Headline: "Dynamic DNS failed 3 times in a row.",
+		Headline: "Dynamic DNS failed 3 times in a row",
 		Summary: "The last 3 tries to publish this network's public address failed. " +
 			"The records keep the last address Sable published until one works.",
 		Reasons: []string{
@@ -143,7 +143,7 @@ func TestDynamicDNSAlertSourceReportsFailuresAndAddressChanges(t *testing.T) {
 		ID: "integrations.ddns-ip-changed:198.51.100.4", Group: config.AlertGroupIntegrations, Kind: "integrations.ddns-ip-changed",
 		Tone:  alerts.ToneNotice,
 		Title: "Public IP changed", Subject: "home.example.com and 1 more",
-		Headline: "The public IPv4 address changed from 203.0.113.7 to 198.51.100.4.",
+		Headline: "The public IPv4 address changed from 203.0.113.7 to 198.51.100.4",
 		Summary: "The public IPv4 address changed from 203.0.113.7 to 198.51.100.4. " +
 			"Dynamic DNS moved home.example.com and 1 more to the new address.",
 		Reasons: []string{"Old address: 203.0.113.7", "New address: 198.51.100.4", "Names: home.example.com, vpn.example.com"},
@@ -156,7 +156,7 @@ func TestDynamicDNSAlertSourceReportsFailuresAndAddressChanges(t *testing.T) {
 		ID: "integrations.ddns-ip-changed:2001:db8::2", Group: config.AlertGroupIntegrations, Kind: "integrations.ddns-ip-changed",
 		Tone:  alerts.ToneNotice,
 		Title: "Public IP changed", Subject: "home.example.com",
-		Headline: "The public IPv6 address changed from 2001:db8::1 to 2001:db8::2.",
+		Headline: "The public IPv6 address changed from 2001:db8::1 to 2001:db8::2",
 		Summary: "The public IPv6 address changed from 2001:db8::1 to 2001:db8::2. " +
 			"Dynamic DNS moved home.example.com to the new address.",
 		Reasons: []string{"Old address: 2001:db8::1", "New address: 2001:db8::2"},
@@ -272,7 +272,7 @@ func TestUpdateAlertSourceReportsANewerReleaseUntilSableRunsIt(t *testing.T) {
 	available := alerts.Alert{
 		ID: "updates.available:1.6.0", Group: config.AlertGroupUpdates, Kind: "updates.available", Tone: alerts.ToneNotice,
 		Title: "Update available", Subject: "Sable v1.6.0",
-		Headline: "Sable v1.6.0 is available.",
+		Headline: "Sable v1.6.0 is available",
 		Summary: "Sable v1.6.0 is out, and this server runs v1.5.2. " +
 			"Read what changed and install it from the About page when you're ready.",
 		Reasons: []string{"Running v1.5.2", "Newest v1.6.0"},
@@ -281,7 +281,7 @@ func TestUpdateAlertSourceReportsANewerReleaseUntilSableRunsIt(t *testing.T) {
 	preRelease := alerts.Alert{
 		ID: "updates.available:1.6.0-rc.1", Group: config.AlertGroupUpdates, Kind: "updates.available", Tone: alerts.ToneNotice,
 		Title: "Update available", Subject: "Sable v1.6.0-rc.1",
-		Headline: "Sable v1.6.0-rc.1 is available as a pre-release.",
+		Headline: "Sable v1.6.0-rc.1 is available as a pre-release",
 		Summary: "Sable v1.6.0-rc.1 is out as a pre-release, and this server runs v1.5.2. " +
 			"Read what changed and install it from the About page when you're ready.",
 		Reasons: []string{"Running v1.5.2", "Newest v1.6.0-rc.1, a pre-release"},

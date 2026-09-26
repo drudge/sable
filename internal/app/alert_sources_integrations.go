@@ -81,7 +81,7 @@ func (source unifiAlertSource) Alerts(_ context.Context, now time.Time) ([]alert
 		Problem: true, Tone: alerts.ToneAttention,
 		Title:    "UniFi sync failing",
 		Subject:  unifiControllerName(source.configuration.Current().Config.UniFi.ControllerURL),
-		Headline: fmt.Sprintf("UniFi sync failed %d times in a row.", status.ConsecutiveFailures),
+		Headline: fmt.Sprintf("UniFi sync failed %d times in a row", status.ConsecutiveFailures),
 		Summary: fmt.Sprintf("The last %d tries to sync with the UniFi controller failed. "+
 			"Records from UniFi stay as they were until one works.", status.ConsecutiveFailures),
 		Reasons:    integrationAlertReasons(status.LastError, lastSuccess),
@@ -143,7 +143,7 @@ func dynamicDNSFailing(status dynamicdns.Status, names []string, now time.Time) 
 		Problem: true, Tone: alerts.ToneAttention,
 		Title:    "Dynamic DNS failing",
 		Subject:  dynamicDNSSubject(names),
-		Headline: fmt.Sprintf("Dynamic DNS failed %d times in a row.", status.ConsecutiveFailures),
+		Headline: fmt.Sprintf("Dynamic DNS failed %d times in a row", status.ConsecutiveFailures),
 		Summary: fmt.Sprintf("The last %d tries to publish this network's public address failed. "+
 			"The records keep the last address Sable published until one works.", status.ConsecutiveFailures),
 		Reasons:    integrationAlertReasons(status.LastError, lastSuccess),
@@ -170,7 +170,7 @@ func publicAddressChanged(change publicAddressChange, published bool) alerts.Ale
 	if !published {
 		moved = "Dynamic DNS is still trying to move " + subject + " to it."
 	}
-	headline := fmt.Sprintf("The public %s address changed from %s to %s.", change.family, change.previous, change.current)
+	headline := fmt.Sprintf("The public %s address changed from %s to %s", change.family, change.previous, change.current)
 	reasons := []string{"Old address: " + change.previous, "New address: " + change.current}
 	if len(change.names) > 1 {
 		reasons = append(reasons, "Names: "+strings.Join(change.names, ", "))
@@ -181,7 +181,7 @@ func publicAddressChanged(change publicAddressChange, published bool) alerts.Ale
 		Title:      "Public IP changed",
 		Subject:    subject,
 		Headline:   headline,
-		Summary:    headline + " " + moved,
+		Summary:    headline + ". " + moved,
 		Reasons:    reasons,
 		Path:       "/integrations",
 		PathLabel:  "Open Integrations",
@@ -206,11 +206,11 @@ func (source updateAlertSource) Alerts(_ context.Context, now time.Time) ([]aler
 		return nil, nil
 	}
 	latest, running := updateAlertVersion(status.LatestVersion), updateAlertVersion(status.CurrentVersion)
-	headline := "Sable " + latest + " is available."
+	headline := "Sable " + latest + " is available"
 	summary := fmt.Sprintf("Sable %s is out, and this server runs %s.", latest, running)
 	newest := "Newest " + latest
 	if status.PreRelease {
-		headline = "Sable " + latest + " is available as a pre-release."
+		headline = "Sable " + latest + " is available as a pre-release"
 		summary = fmt.Sprintf("Sable %s is out as a pre-release, and this server runs %s.", latest, running)
 		newest += ", a pre-release"
 	}
