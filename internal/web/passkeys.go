@@ -27,7 +27,7 @@ type PasskeyAuthenticator interface {
 	CompletePasskeyLogin(context.Context, auth.Passkey, webauthn.Credential, string, string) (auth.Credentials, error)
 	RemovePasskey(context.Context, auth.Principal, string, string, string) error
 	DisableOwnPassword(context.Context, auth.Principal, string, string) error
-	AllowPasskeyAttempt(string) error
+	AllowPasskeyAttempt(context.Context, string, string) error
 	RecordPasskeyFailure(context.Context, string, string)
 }
 
@@ -221,7 +221,7 @@ func (server *Server) beginPasskeyLogin(writer http.ResponseWriter, request *htt
 	if !server.passkeyRequest(writer, request) {
 		return
 	}
-	if err := server.passkeyAuth().AllowPasskeyAttempt(requestClientIP(request)); err != nil {
+	if err := server.passkeyAuth().AllowPasskeyAttempt(request.Context(), requestClientIP(request), request.UserAgent()); err != nil {
 		passkeyError(writer, http.StatusTooManyRequests, err.Error())
 		return
 	}

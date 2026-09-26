@@ -141,6 +141,33 @@ func TestFederatedLoginRecordsEachLockoutOnce(t *testing.T) {
 	}
 }
 
+// Every passkey sign-in counts against the client's budget before the browser
+// is asked for a passkey, so a client that keeps trying is turned away, and
+// that lockout is recorded once like any other.
+func TestPasskeyAttemptsRecordEachLockoutOnce(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore()
+	service, err := NewService(store, Options{LoginAttempts: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := service.AllowPasskeyAttempt(context.Background(), "203.0.113.7", "test"); err != nil {
+			t.Fatalf("attempt within the limit error = %v", err)
+		}
+	}
+	for range 3 {
+		if err := service.AllowPasskeyAttempt(context.Background(), "203.0.113.7", "test"); !errors.Is(err, ErrRateLimited) {
+			t.Fatalf("attempt past the limit error = %v, want %v", err, ErrRateLimited)
+		}
+	}
+	if len(store.audit) != 1 || store.audit[0].Action != ActionLoginLocked || store.audit[0].ClientIP != "203.0.113.7" ||
+		store.audit[0].Details != "too many passkey sign-in attempts" {
+		t.Fatalf("audit events = %+v, want one lockout", store.audit)
+	}
+}
+
 func TestAttemptedUsernameReadsOnlyARecordedUsername(t *testing.T) {
 	t.Parallel()
 
