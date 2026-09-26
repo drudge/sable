@@ -463,6 +463,13 @@ TTL values are normally 60–86400 seconds. GoDaddy and Porkbun require at least
 current public IP in its API allow-list, so it may be unsuitable when that IP
 changes without another way to update the allow-list.
 
+Dynamic DNS sends [alerts](#alerts) in the `integrations` group. Three failed
+publishes in a row send a problem alert with the last error, which clears once
+a publish works. When a run finds a new public IPv4 or IPv6 address, Sable sends
+a notice with the old and the new address, and it stays news for a day. The
+previous address and when it changed are saved with the rest of the
+publication history, so a restart does not lose them.
+
 Only the writable cluster node discovers each needed address family once per
 run and publishes it through every configured provider. A failure at one
 provider does not prevent the others from being attempted. Settings and all
@@ -544,6 +551,10 @@ themselves. The `[unifi]` section and the controller credentials still travel to
 every node, so a promoted replica picks the synchronization up instead of
 leaving the inherited records frozen. Point `tls_ca_file` at a path that exists
 on every node.
+
+Three failed syncs in a row send a problem [alert](#alerts) in the
+`integrations` group, with the last error and the time of the last good sync.
+It clears once a sync works.
 
 ## Blocking
 
@@ -1246,7 +1257,12 @@ restart_managed = false
 ```
 
 These preferences are node-local. `check_on_login` controls release checks after
-sign-in; it never authorizes automatic installation. `pre_release` includes
+sign-in, and it is also consent to check in the background: while it is on, the
+lead node, or a node on its own, asks GitHub once a day, so an `updates`
+[alert](#alerts) about a newer release does not wait for someone to sign in.
+Both kinds of check share one six-hour cache. The alert lasts until the node
+runs that release, so it goes out once per release. `check_on_login` never
+authorizes automatic installation. `pre_release` includes
 prereleases in this node's checks. Changes to `restart_managed` take effect on
 startup: set it only when a supervisor will restart Sable after it exits.
 Installed systemd services are detected automatically. For Docker rolling

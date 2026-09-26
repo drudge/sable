@@ -241,6 +241,34 @@ func TestAutomaticChecksCacheFailuresAndRespectChannelChanges(t *testing.T) {
 	}
 }
 
+// An update alert lasts as long as the found release is newer than the running
+// build, so the answer must not change while another check runs or fails.
+func TestNewerReleaseComparesTheFoundReleaseWithTheRunningBuild(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		status Status
+		want   bool
+	}{
+		{name: "a newer release", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Available: true}, want: true},
+		{name: "a newer release candidate", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0-rc.1", PreRelease: true}, want: true},
+		{name: "the running release", status: Status{CurrentVersion: "1.6.0", LatestVersion: "1.6.0"}},
+		{name: "an older release", status: Status{CurrentVersion: "1.6.0", LatestVersion: "1.5.2"}},
+		{name: "no check yet", status: Status{CurrentVersion: "1.5.2"}},
+		{name: "a development build", status: Status{CurrentVersion: "dev", LatestVersion: "1.6.0", Development: true}},
+		{name: "a later check still running", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Phase: PhaseChecking}, want: true},
+		{name: "a later check that failed", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Phase: PhaseFailed, Error: "GitHub is unreachable"}, want: true},
+		{name: "installed and waiting for a restart", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Installed: true}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := test.status.NewerRelease(); got != test.want {
+				t.Fatalf("NewerRelease() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestReservedUpdatePinsVersionAndBlocksOtherOperations(t *testing.T) {
 	setTestRelease(t, "1.0.0")
 	requireExecutableScripts(t)

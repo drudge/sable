@@ -246,9 +246,11 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.status.NextAttempt = syncer.now().Add(interval)
 	if err != nil {
 		syncer.status.LastError = err.Error()
+		syncer.status.ConsecutiveFailures++
 		return
 	}
 	syncer.status.LastError = ""
+	syncer.status.ConsecutiveFailures = 0
 	syncer.status.LastSuccess = started
 	syncer.status.Hosts = hosts
 	syncer.status.HostsByNetwork = plan.HostsByNetwork

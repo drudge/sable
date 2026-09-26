@@ -314,7 +314,8 @@ node_name = ""
 advertise_url = ""
 
 [updates]
-# Check for new releases when the console opens after sign-in. Never installs automatically.
+# Check for new releases when the console opens after sign-in, and once a day on
+# the lead node so an update alert goes out. Never installs automatically.
 check_on_login = true
 # Set only when an external supervisor (such as Docker with a restart policy)
 # restarts Sable after it exits. Installed systemd services are detected automatically.

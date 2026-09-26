@@ -80,6 +80,14 @@ func (status Status) UpToDate() bool {
 	return !status.Development && status.Checked() && !status.Available && !status.Installed && status.Error == ""
 }
 
+// NewerRelease reports whether the newest release a check found is newer than
+// the build this process runs. Unlike Available, it holds while a later check
+// runs and after one fails, so news of a release does not flicker, and it
+// stays true once the release is installed until Sable restarts into it.
+func (status Status) NewerRelease() bool {
+	return isNewer(status.LatestVersion, status.CurrentVersion)
+}
+
 // Manager runs release checks and installations for the web console. One
 // operation runs at a time, and installations run in the background so the
 // console can poll their progress instead of holding a request open for the

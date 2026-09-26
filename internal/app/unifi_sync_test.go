@@ -408,6 +408,35 @@ func TestUniFiSyncReportsControllerFailure(t *testing.T) {
 	}
 }
 
+// Alerts wait for several failures in a row, so the count must reset the
+// moment a sync works rather than add up over the life of the process.
+func TestUniFiSyncCountsFailuresInARow(t *testing.T) {
+	t.Parallel()
+	unreachable := errors.New("controller unreachable")
+	for _, test := range []struct {
+		name     string
+		outcomes []error
+		want     int
+	}{
+		{name: "each failure adds one", outcomes: []error{unreachable, unreachable, unreachable}, want: 3},
+		{name: "a sync that works starts the count over", outcomes: []error{unreachable, unreachable, nil}, want: 0},
+		{name: "failures after a success count from one", outcomes: []error{unreachable, nil, unreachable}, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			reader := &stubReader{inventory: testInventory()}
+			syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), &stubZoneEditor{}, reader)
+			for _, outcome := range test.outcomes {
+				reader.err = outcome
+				syncer.runOnce(t.Context())
+			}
+			if got := syncer.Status().ConsecutiveFailures; got != test.want {
+				t.Fatalf("consecutive failures = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestUniFiSyncRequiresCredentials(t *testing.T) {
 	editor := &stubZoneEditor{}
 	syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), editor, &stubReader{inventory: testInventory()})

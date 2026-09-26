@@ -38,6 +38,10 @@ The status card shows the last discovered addresses, last successful check,
 and whether records changed. **Publish Now** queues an immediate comparison.
 Repeated clicks coalesce while one run is active.
 
+With [alerts](../configuration.md#alerts) set up, three failed publishes in a
+row send an alert with the last error. A new public address sends a notice with
+the old and the new address.
+
 ## Understand ownership
 
 Sable treats each configured name and record type as an exact ownership unit.
