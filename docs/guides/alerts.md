@@ -58,7 +58,7 @@ Problems, such as a node going down or a backup failing, go out at high priority
 
 Use **Pause** to stop every alert without forgetting where they go, and **Resume** to start them again. Alerts that come up while alerts are paused are not sent when you resume. **Send Test** still works while paused. Pause shows only while alerts are on: with no destination able to send, there is nothing to pause.
 
-The top of the tab says whether alerts are **On**, **Paused**, or **Off**. On means they are not paused and at least one destination can send. The bell beside the range control in Insights says whether Insights findings go out, and opens Insights Settings.
+The top of the tab says whether alerts are **On**, **Paused**, or **Off**. On means they are not paused and at least one destination can send. The bell beside the range control in Insights says whether Insights findings go out, and opens this tab.
 
 ## Browsers
 

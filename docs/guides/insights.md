@@ -66,7 +66,7 @@ Hiding applies to everyone who uses Insights. Hidden findings are listed under t
 
 ## Choose what Insights shows and alerts
 
-Use the bell beside the range control at the top of Insights to open **Insights Settings**. The bell also shows whether alerts are **On**, **Paused**, or **Off**.
+Use **Settings** beside the range control at the top of Insights to open **Insights Settings**.
 
 Each kind of finding has three choices:
 
@@ -76,13 +76,15 @@ Each kind of finding has three choices:
 
 Some kinds have limits you can change, such as how many lookups make a device **Unusually busy**, or how many new domains make it **Talking to new places**. Raise a limit to hear less, or lower it to hear more. The findings that compare block lists are never news, so they can only be shown or turned off. **Reset to Defaults** puts every choice and limit back the way Sable ships them.
 
-The top of the dialog says whether alerts go anywhere, and **Where alerts go** opens Settings, where you choose where they are sent. Anyone who can read logs can see these settings. Changing them needs permission to change settings.
+Anyone who can read logs can see these settings. Changing them needs permission to change settings.
 
 You can also set these in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
 
 ## Get alerts
 
-Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**, or open it from **Where alerts go** in Insights Settings. See [Get alerts](alerts.md).
+Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
+
+The bell beside **Settings** shows whether Insights alerts are **On**, **Paused**, or **Off**. Hover over it to see why, or click it to open **Settings > Alerts**.
 
 ## Blocking
 

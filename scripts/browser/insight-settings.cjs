@@ -1,8 +1,9 @@
 const assert = require('node:assert/strict');
 const {chromium} = require('playwright');
 
-// Opens Insights settings from the bell, switches a kind to Show only with the
-// mouse and another off with the keyboard, fixes a refused limit, and saves.
+// Opens Insights settings from Settings beside the bell, switches a kind to
+// Show only with the mouse and another off with the keyboard, fixes a refused
+// limit, and saves.
 (async () => {
   const [baseURL, cookieName] = process.argv.slice(2);
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -17,12 +18,11 @@ const {chromium} = require('playwright');
     await page.goto(`${baseURL}/insights?range=day`);
     // The overview replaces the loading page, bell and all, once it is ready.
     await page.locator('#insight-findings').waitFor();
-    const bell = page.getByRole('button', {name: 'Insights settings, alerts off'});
-    await bell.click();
+    const settings = page.getByRole('button', {name: 'Settings', exact: true});
+    await settings.click();
     const dialog = page.getByRole('dialog', {name: 'Insights Settings'});
     await dialog.waitFor();
-    assert.match(await dialog.locator('.insight-settings-alerts').innerText(), /Alerts are off\s+Nothing is set up to receive them yet\./);
-    assert.equal(await dialog.getByRole('link', {name: 'Where alerts go'}).getAttribute('href'), '/settings?tab=alerts');
+    assert.equal(await dialog.getByText('Alerts are').count(), 0, 'alerts have a box of their own on the bell');
     // Opening puts the cursor on the first choice, not somewhere down the list.
     assert.equal(await page.evaluate(() => document.activeElement?.name), 'new_device.mode', 'focus starts on the first kind');
 
@@ -65,16 +65,22 @@ const {chromium} = require('playwright');
     assert.equal(await wentQuiet.getByRole('radio', {name: 'Show only'}).isChecked(), true, 'the saved form shows Show only');
     assert.equal(await dialog.isVisible(), true, 'the dialog stays open on the result');
 
-    // Saving redraws the page behind the dialog, bell and all, and closing
-    // still returns to the bell.
+    // Saving redraws the page behind the dialog, Settings and all, and
+    // closing still returns to Settings.
     await page.keyboard.press('Escape');
     await dialog.waitFor({state: 'hidden'});
     await page.waitForLoadState('networkidle');
-    await page.waitForFunction(() => document.activeElement?.id === 'insight-settings-bell', null, {timeout: 5000});
+    await page.waitForFunction(() => document.activeElement?.id === 'insight-settings-open', null, {timeout: 5000});
+
+    // The bell beside Settings says why nothing is sent and leads to where
+    // alerts are set up.
+    const bell = page.getByRole('link', {name: 'Insights alerts off'});
+    assert.equal(await bell.getAttribute('href'), '/settings?tab=alerts');
+    assert.equal(await bell.getAttribute('title'), 'Nothing is set up to receive them yet.');
 
     // On a phone the choices and buttons still fit inside the dialog.
     await page.setViewportSize({width: 390, height: 844});
-    await page.locator('#insight-settings-bell').click();
+    await page.locator('#insight-settings-open').click();
     await dialog.waitFor();
     const box = await dialog.boundingBox();
     for (const control of [
@@ -86,7 +92,7 @@ const {chromium} = require('playwright');
       assert.ok(bounds.height < 60, `keeps its height: ${JSON.stringify(bounds)}`);
     }
     assert.deepEqual(errors, []);
-    console.log('PASS Insights settings open from the bell, refuse a bad limit, and save Show only');
+    console.log('PASS Insights settings open from Settings, refuse a bad limit, and save Show only');
   } finally {
     await browser.close();
   }

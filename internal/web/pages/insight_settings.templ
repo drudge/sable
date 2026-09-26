@@ -65,41 +65,46 @@ type InsightLimitView struct {
 	Focus bool
 }
 
-// insightSettingsBellState is what the bell says, or nothing for an operator
-// who may not open Insights settings.
-func insightSettingsBellState(settings *InsightSettingsView) string {
-	if settings == nil {
-		return ""
-	}
-	return settings.Alerts.State
-}
-
 // insightSettingID turns a form field name, such as
 // "went_quiet.minimum_daily_lookups", into an element ID.
 func insightSettingID(name string) string {
 	return "insight-setting-" + strings.NewReplacer(".", "-", "_", "-").Replace(name)
 }
 
-// InsightSettingsBell opens Insights settings from beside the range control.
-// Its icon and word say whether Insights alerts are on, paused, or off.
-templ InsightSettingsBell(state string) {
+// InsightAlertsBell says with its icon and word whether Insights alerts are
+// on, paused, or off, and why when hovered. For operators who may open
+// Settings, it leads to Settings > Alerts, where alerts are set up.
+templ InsightAlertsBell(status InsightAlertStatusView) {
+	if status.Link != "" {
+		<a class={ "button outline compact insight-alerts-bell " + status.State } id="insight-alerts-bell" href={ templ.SafeURL(status.Link) } aria-label={ "Insights alerts " + status.State } title={ status.Detail }>
+			@insightAlertsBellFace(status.State)
+		</a>
+	} else {
+		<span class={ "button outline compact insight-alerts-bell " + status.State } id="insight-alerts-bell" title={ status.Detail }>
+			<span class="sr-only">Insights alerts</span>
+			@insightAlertsBellFace(status.State)
+		</span>
+	}
+}
+
+templ insightAlertsBellFace(state string) {
 	switch state {
 		case "on":
-			<button class="button outline compact insight-settings-bell on" id="insight-settings-bell" type="button" data-dialog-open="insight-settings-dialog" aria-label="Insights settings, alerts on" title="Insights settings">
-				@Icon("bell")
-				<span>On</span>
-			</button>
+			@Icon("bell")
+			<span>On</span>
 		case "paused":
-			<button class="button outline compact insight-settings-bell paused" id="insight-settings-bell" type="button" data-dialog-open="insight-settings-dialog" aria-label="Insights settings, alerts paused" title="Insights settings">
-				@Icon("pause")
-				<span>Paused</span>
-			</button>
-		case "off":
-			<button class="button outline compact insight-settings-bell off" id="insight-settings-bell" type="button" data-dialog-open="insight-settings-dialog" aria-label="Insights settings, alerts off" title="Insights settings">
-				@Icon("bell-off")
-				<span>Off</span>
-			</button>
+			@Icon("pause")
+			<span>Paused</span>
+		default:
+			@Icon("bell-off")
+			<span>Off</span>
 	}
+}
+
+// InsightSettingsButton opens Insights settings: what Insights does with each
+// kind of finding, and the limits that make one.
+templ InsightSettingsButton() {
+	<button class="button outline compact insight-settings-open" id="insight-settings-open" type="button" data-dialog-open="insight-settings-dialog">@Icon("sliders")<span>Settings</span></button>
 }
 
 // InsightSettingsDialog holds Insights settings. Saving swaps the form in
@@ -124,7 +129,6 @@ templ InsightSettings(view InsightSettingsView) {
 			@Toast(view.Error, "error")
 		}
 		<div class="isotope-dialog-body insight-settings-body">
-			@insightAlertStatus(view.Alerts)
 			if !view.CanEdit {
 				<p class="insight-settings-read-only">@Icon("lock")<span>You can see these settings. Changing them needs permission to change settings.</span></p>
 			}
@@ -147,30 +151,6 @@ templ InsightSettings(view InsightSettingsView) {
 			}
 		</div>
 	</form>
-}
-
-// insightAlertStatus says whether findings set to alert go anywhere, and
-// links to where that is set up.
-templ insightAlertStatus(status InsightAlertStatusView) {
-	<div class={ "insight-settings-alerts", "state-" + status.State }>
-		<span class="insight-settings-alerts-icon" aria-hidden="true">
-			switch status.State {
-				case "on":
-					@Icon("bell")
-				case "paused":
-					@Icon("pause")
-				default:
-					@Icon("bell-off")
-			}
-		</span>
-		<div class="insight-settings-alerts-copy">
-			<strong>{ "Alerts are " + status.State }</strong>
-			<small>{ status.Detail }</small>
-		</div>
-		if status.Link != "" {
-			<a class="button outline compact" href={ templ.SafeURL(status.Link) }><span>Where alerts go</span>@Icon("arrow-right")</a>
-		}
-	</div>
 }
 
 // insightKindSetting is one kind of finding: what it is, a choice of what

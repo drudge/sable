@@ -711,8 +711,8 @@ stop Insights looking for them at all. By default every kind that is news
 alerts, and the three that describe block list coverage are only shown. Those
 three are never news, so they take `"show"` or `"off"`. A limit left out, or
 set to 0, keeps its default, so a table only needs what it changes. Insights
-Settings, opened from the bell at the top of Insights, sets all of this, so most
-people never edit it by hand. A kind set to alert is sent only while
+Settings, opened from **Settings** at the top of Insights, sets all of this, so
+most people never edit it by hand. A kind set to alert is sent only while
 `[alerts.send]` has `insights = true` and a destination takes Insights alerts.
 
 | Table | Finding | Limits: default, range |

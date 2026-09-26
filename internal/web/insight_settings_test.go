@@ -45,7 +45,10 @@ func TestInsightSettingsFollowPermissions(t *testing.T) {
 					!regexp.MustCompile(`<input type="radio" name="went_quiet.mode" value="alert" checked disabled`).MatchString(body)) {
 					t.Error("a read-only view does not say so or leaves its fields enabled")
 				}
-				if strings.Contains(body, `href="/settings?tab=alerts"`) != test.linksSettings {
+				// The bell leads to Settings > Alerts for operators who may
+				// open Settings.
+				page := server.get(t, test.session, "/insights", false).Body.String()
+				if strings.Contains(page, `id="insight-alerts-bell" href="/settings?tab=alerts"`) != test.linksSettings {
 					t.Errorf("links to Settings = %t, want %t", !test.linksSettings, test.linksSettings)
 				}
 			}
@@ -61,32 +64,34 @@ func TestInsightSettingsFollowPermissions(t *testing.T) {
 	}
 }
 
-// The bell beside the range control opens Insights settings for anyone who
-// may read the query log, and says whether Insights alerts are on.
-func TestInsightsBellOpensSettingsAndShowsTheAlertState(t *testing.T) {
+// For anyone who may read the query log, the bell beside the range control
+// says whether Insights alerts are on and leads to Settings > Alerts, and
+// Settings beside it opens Insights settings.
+func TestInsightsBellLeadsToAlertsAndSettingsOpensSettings(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)
 	page := server.get(t, "everything", "/insights", false).Body.String()
 	for _, expected := range []string{
 		`id="insight-settings-dialog"`, `aria-labelledby="insight-settings-title"`, `id="insight-settings"`,
-		`data-dialog-open="insight-settings-dialog" aria-label="Insights settings, alerts off"`,
+		`id="insight-alerts-bell" href="/settings?tab=alerts" aria-label="Insights alerts off" title="Nothing is set up to receive them yet."`,
+		`id="insight-settings-open" type="button" data-dialog-open="insight-settings-dialog"`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("Insights page is missing %q", expected)
 		}
 	}
-	if blockingOnly := server.get(t, "blocking-only", "/insights", false).Body.String(); strings.Contains(blockingOnly, "insight-settings") {
-		t.Error("an operator who may not read the query log was offered Insights settings")
+	if blockingOnly := server.get(t, "blocking-only", "/insights", false).Body.String(); strings.Contains(blockingOnly, "insight-settings") || strings.Contains(blockingOnly, "insight-alerts") {
+		t.Error("an operator who may not read the query log was offered Insights settings or alerts")
 	}
 
 	server.updateTestConfiguration(t, func(configuration *config.Config) {
 		configuration.Alerts.Destinations = []config.AlertDestination{{ID: "phone", Format: config.AlertFormatPushover}}
 	})
-	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `class="button outline compact insight-settings-bell on"`) {
+	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `class="button outline compact insight-alerts-bell on"`) {
 		t.Error("the bell does not say alerts are on")
 	}
 	server.updateTestConfiguration(t, func(configuration *config.Config) { configuration.Alerts.Paused = true })
-	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `aria-label="Insights settings, alerts paused"`) {
+	if overview := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String(); !strings.Contains(overview, `aria-label="Insights alerts paused"`) {
 		t.Error("the bell does not say alerts are paused")
 	}
 }

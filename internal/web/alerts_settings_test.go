@@ -1072,8 +1072,8 @@ func TestOnlyOneAlertDestinationPushesToBrowsers(t *testing.T) {
 	}
 }
 
-// The Insights bell opens Insights settings, and says whether Insights
-// findings go out as alerts.
+// The Insights bell says whether Insights findings go out as alerts, and
+// leads to Settings > Alerts.
 func TestInsightsBellSaysWhetherAlertsAreOn(t *testing.T) {
 	t.Parallel()
 	server := newAlertsTestServer(t)
@@ -1081,12 +1081,9 @@ func TestInsightsBellSaysWhetherAlertsAreOn(t *testing.T) {
 		t.Helper()
 		return server.get(t, session, "/ui/insights/overview?range=day", true).Body.String()
 	}
-	const bell = `data-dialog-open="insight-settings-dialog" aria-label="Insights settings, alerts `
+	const bell = `id="insight-alerts-bell" href="/settings?tab=alerts" aria-label="Insights alerts `
 	if body := overview("everything"); !strings.Contains(body, bell+`off"`) {
 		t.Fatal("the bell does not say alerts are off")
-	}
-	if page := server.get(t, "everything", "/insights?range=day", false).Body.String(); strings.Contains(page, "insight-alerts-dialog") {
-		t.Fatal("the Insights page still carries the old alert dialog")
 	}
 	server.saveDestination(t, url.Values{"format": {"text"}, "url": {"https://ntfy.sh/sable-alerts"}})
 	if body := overview("everything"); !strings.Contains(body, bell+`on"`) {

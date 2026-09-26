@@ -4016,14 +4016,18 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
 .insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
-/* Insights settings: what Insights does with each kind of finding. The bell
-   beside the range control opens them and says whether alerts are on. */
-.insight-settings-bell { flex: 0 0 auto; gap: .35rem; }
-.insight-settings-bell .nav-icon { width: 1rem; height: 1rem; }
-.insight-settings-bell.on .nav-icon, .insight-settings-alerts.state-on .insight-settings-alerts-icon { color: #16a34a; }
-.insight-settings-bell.paused .nav-icon, .insight-settings-alerts.state-paused .insight-settings-alerts-icon { color: #d97706; }
-.dark .insight-settings-bell.on .nav-icon, .dark .insight-settings-alerts.state-on .insight-settings-alerts-icon { color: #22c55e; }
-.dark .insight-settings-bell.paused .nav-icon, .dark .insight-settings-alerts.state-paused .insight-settings-alerts-icon { color: #f1ad47; }
+/* The bell beside the range control says whether Insights alerts are on and
+   leads to Settings > Alerts. Settings beside it opens what Insights does
+   with each kind of finding. */
+.insight-alerts-bell, .insight-settings-open { flex: 0 0 auto; gap: .35rem; }
+.insight-alerts-bell .nav-icon, .insight-settings-open .nav-icon { width: 1rem; height: 1rem; }
+.insight-alerts-bell.on .nav-icon { color: #16a34a; }
+.insight-alerts-bell.paused .nav-icon { color: #d97706; }
+.dark .insight-alerts-bell.on .nav-icon { color: #22c55e; }
+.dark .insight-alerts-bell.paused .nav-icon { color: #f1ad47; }
+/* An operator who may not open Settings sees the state without a link. */
+span.insight-alerts-bell { cursor: default; }
+span.insight-alerts-bell:hover { background: var(--background); color: var(--foreground); }
 /* The header and footer stay put while the list of kinds scrolls between. */
 .isotope-form-dialog.insight-settings-dialog { width: min(calc(100% - 2rem), 46rem); max-height: min(92vh, 60rem); overflow: hidden; padding: 0; }
 .insight-settings-dialog[open] { grid-template-rows: auto minmax(0, 1fr); gap: 0; }
@@ -4032,13 +4036,6 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-settings-body { min-height: 0; gap: 1.25rem; padding-top: .25rem; }
 .insight-settings-footer { align-items: center; border-top: 1px solid var(--border); padding: 1rem 1.5rem; }
 .insight-settings-footer .insight-settings-reset { margin-right: auto; }
-.insight-settings-alerts { display: flex; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
-.insight-settings-alerts-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
-.insight-settings-alerts-icon .nav-icon { width: 1rem; height: 1rem; }
-.insight-settings-alerts-copy { display: grid; flex: 1 1 auto; min-width: 0; gap: .15rem; font-size: .8125rem; }
-.insight-settings-alerts-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
-.insight-settings-alerts > .button { flex: 0 0 auto; gap: .35rem; }
-.insight-settings-alerts > .button .nav-icon { width: .85rem; height: .85rem; }
 .insight-settings-read-only { display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
 .insight-settings-read-only .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; }
 .insight-settings-group { display: grid; }
@@ -4068,7 +4065,6 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 	.insight-settings-body { padding: .25rem 1.25rem 1.25rem; }
 	.insight-settings-footer { padding: .85rem 1.25rem; }
 	.insight-settings-footer .insight-settings-reset { margin-right: 0; }
-	.insight-settings-alerts { flex-wrap: wrap; }
 	.insight-setting-heading { grid-template-columns: 2rem minmax(0, 1fr); }
 	.insight-mode-control { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 	.insight-mode-option { padding: 0 .35rem; }

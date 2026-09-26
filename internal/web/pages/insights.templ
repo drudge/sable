@@ -370,7 +370,10 @@ templ InsightsContent(view InsightsOverviewView) {
 		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
 			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
 			<div class="insights-range">
-				@InsightSettingsBell(insightSettingsBellState(view.Settings))
+				if view.Settings != nil {
+					@InsightAlertsBell(view.Settings.Alerts)
+					@InsightSettingsButton()
+				}
 				@RangeTabs(insightsRangeControl(view.Range))
 				@RangeSelect(insightsRangeControl(view.Range))
 			</div>

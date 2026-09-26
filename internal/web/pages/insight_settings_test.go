@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestInsightSettingsBellSaysWhetherAlertsAreOn(t *testing.T) {
+func TestInsightAlertsBellSaysWhetherAlertsAreOn(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		state, icon, word string
@@ -17,11 +17,13 @@ func TestInsightSettingsBellSaysWhetherAlertsAreOn(t *testing.T) {
 	} {
 		t.Run(test.state, func(t *testing.T) {
 			t.Parallel()
-			bell := renderComponent(t, InsightSettingsBell(test.state))
-			// The accessible name carries the word the bell shows.
+			bell := renderComponent(t, InsightAlertsBell(InsightAlertStatusView{State: test.state, Detail: "Why it is " + test.state + ".", Link: "/settings?tab=alerts"}))
+			// The accessible name carries the word the bell shows, and
+			// hovering says why.
 			for _, expected := range []string{
-				`id="insight-settings-bell"`, `data-dialog-open="insight-settings-dialog"`, test.icon,
-				`aria-label="Insights settings, alerts ` + strings.ToLower(test.word) + `"`, `<span>` + test.word + `</span>`,
+				`<a class="button outline compact insight-alerts-bell ` + test.state + `" id="insight-alerts-bell" href="/settings?tab=alerts"`,
+				`aria-label="Insights alerts ` + strings.ToLower(test.word) + `"`, `title="Why it is ` + test.state + `."`,
+				test.icon, `<span>` + test.word + `</span>`,
 			} {
 				if !strings.Contains(bell, expected) {
 					t.Errorf("bell is missing %q:\n%s", expected, bell)
@@ -29,15 +31,16 @@ func TestInsightSettingsBellSaysWhetherAlertsAreOn(t *testing.T) {
 			}
 		})
 	}
-	if bell := renderComponent(t, InsightSettingsBell("")); strings.TrimSpace(bell) != "" {
-		t.Fatalf("an operator who may not open the settings got a bell: %s", bell)
+	// An operator who may not open Settings sees the state without a link.
+	static := renderComponent(t, InsightAlertsBell(InsightAlertStatusView{State: "on", Detail: "Kinds set to Show and alert go to 1 place."}))
+	if strings.Contains(static, "href=") || !strings.Contains(static, `<span class="sr-only">Insights alerts</span>`) || !strings.Contains(static, "<span>On</span>") {
+		t.Fatalf("the bell for an operator who may not open Settings = %s", static)
 	}
 }
 
 func insightSettingsFixture(canEdit bool) InsightSettingsView {
 	return InsightSettingsView{
 		CanEdit: canEdit,
-		Alerts:  InsightAlertStatusView{State: "paused", Detail: "Nothing is sent until alerts resume.", Link: "/settings?tab=alerts"},
 		Groups: []InsightSettingGroupView{
 			{ID: "devices", Title: "Devices", Kinds: []InsightKindSettingView{{
 				Key: "went_quiet", Title: "Went quiet", Description: "A device that was busy all week sends nothing for a day.",
@@ -64,7 +67,6 @@ func TestInsightSettingsNameEveryChoiceAndField(t *testing.T) {
 	for _, expected := range []string{
 		`id="insight-settings-dialog" aria-labelledby="insight-settings-title"`, `<h2 id="insight-settings-title">Insights Settings</h2>`,
 		`hx-post="/ui/insights/settings" hx-target="#insight-settings"`,
-		`<strong>Alerts are paused</strong>`, `href="/settings?tab=alerts"`,
 		`role="radiogroup" aria-labelledby="insight-setting-went-quiet-title" aria-describedby="insight-setting-went-quiet-description"`,
 		`<strong id="insight-setting-went-quiet-title">Went quiet</strong>`,
 		`<input type="radio" name="went_quiet.mode" value="show" checked>`,
@@ -80,6 +82,10 @@ func TestInsightSettingsNameEveryChoiceAndField(t *testing.T) {
 		if !strings.Contains(form, expected) {
 			t.Errorf("Insights settings are missing %q", expected)
 		}
+	}
+	// Alerts have a box of their own on the bell.
+	if strings.Contains(form, "Alerts are") {
+		t.Error("Insights settings still carry the alert status")
 	}
 	// Every ID a control points at exists.
 	for _, match := range regexp.MustCompile(`aria-(?:labelledby|describedby)="([^"]+)"`).FindAllStringSubmatch(form, -1) {
