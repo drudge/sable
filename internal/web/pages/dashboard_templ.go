@@ -3283,7 +3283,17 @@ func mitLicenseDialog(thirdParty bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "</pre></div><div class=\"dialog-footer\"><a class=\"button outline\" href=\"https://github.com/drudge/sable/blob/main/LICENSE\" target=\"_blank\" rel=\"noopener noreferrer\"><span>View on GitHub</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "</pre></div><div class=\"dialog-footer\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if thirdParty {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 222, "<button class=\"button outline third-party-licenses-button\" type=\"button\" data-dialog-switch=\"third-party-licenses-dialog\">Third-Party Licenses</button> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, "<a class=\"button outline\" href=\"https://github.com/drudge/sable/blob/main/LICENSE\" target=\"_blank\" rel=\"noopener noreferrer\"><span>View on GitHub</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3291,17 +3301,7 @@ func mitLicenseDialog(thirdParty bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 222, "</a> ")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if thirdParty {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, "<button class=\"button outline\" type=\"button\" data-dialog-switch=\"third-party-licenses-dialog\">Third-Party Licenses</button> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "<button class=\"button\" type=\"button\" data-dialog-close>Done</button></div></dialog>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "</a> <button class=\"button\" type=\"button\" data-dialog-close>Done</button></div></dialog>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

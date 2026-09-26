@@ -1038,12 +1038,12 @@ templ mitLicenseDialog(thirdParty bool) {
 			<pre>{ mitLicenseText }</pre>
 		</div>
 		<div class="dialog-footer">
+			if thirdParty {
+				<button class="button outline third-party-licenses-button" type="button" data-dialog-switch="third-party-licenses-dialog">Third-Party Licenses</button>
+			}
 			<a class="button outline" href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
 				<span>View on GitHub</span>@Icon("external-link")
 			</a>
-			if thirdParty {
-				<button class="button outline" type="button" data-dialog-switch="third-party-licenses-dialog">Third-Party Licenses</button>
-			}
 			<button class="button" type="button" data-dialog-close>Done</button>
 		</div>
 	</dialog>

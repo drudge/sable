@@ -1721,6 +1721,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* Third-party licenses: a row per piece of software that opens to its
    license. The dialog's list is the one scroll area, so an open license
    grows the list rather than scrolling inside it. */
+.license-dialog .dialog-footer .third-party-licenses-button { margin-right: auto; }
 .third-party-licenses-dialog { width: min(36rem, calc(100vw - 2rem)); }
 .third-party-licenses section + section { margin-top: .5rem; }
 .release-notes-content.third-party-licenses h3 { margin: .75rem 1.5rem .5rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
