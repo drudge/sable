@@ -461,6 +461,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		Logger:   logger,
 	}
 	alertDispatcher.Add(webServer.InsightAlerts())
+	alertDispatcher.Add(clusterAlertSources(clusterService)...)
+	clusterService.SetLocalAlerts(alertDispatcher.Local)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
