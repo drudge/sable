@@ -463,7 +463,7 @@ TTL values are normally 60–86400 seconds. GoDaddy and Porkbun require at least
 current public IP in its API allow-list, so it may be unsuitable when that IP
 changes without another way to update the allow-list.
 
-Dynamic DNS sends [alerts](#alerts) in the `integrations` group. Three failed
+Dynamic DNS sends [alerts](#alerts) of the `integrations` type. Three failed
 publishes in a row send a problem alert with the last error, which clears once
 a publish works. When a run finds a new public IPv4 or IPv6 address, Sable sends
 a notice with the old and the new address, and it stays news for a day. The
@@ -552,8 +552,8 @@ every node, so a promoted replica picks the synchronization up instead of
 leaving the inherited records frozen. Point `tls_ca_file` at a path that exists
 on every node.
 
-Three failed syncs in a row send a problem [alert](#alerts) in the
-`integrations` group, with the last error and the time of the last good sync.
+Three failed syncs in a row send a problem [alert](#alerts) of the
+`integrations` type, with the last error and the time of the last good sync.
 It clears once a sync works.
 
 ## Blocking
@@ -766,11 +766,11 @@ name = "Home Slack"
 format = "slack"
 ```
 
-Sable sends each new alert once to every destination that wants its group, and
+Sable sends each new alert once to every destination that wants its type, and
 skips any Insights finding an operator dismissed, snoozed, or marked normal.
 Settings > Alerts sets all of this up, so most people never edit it by hand.
 
-Each `[alerts.send]` switch covers one group. `insights` is findings worth a
+Each `[alerts.send]` switch covers one alert type. `insights` is findings worth a
 look. `cluster` is a node going down and coming back, and update rollouts.
 `updates` is a new Sable release. `integrations` is UniFi sync and dynamic DNS.
 `backups` is `"failures"` (the default), `"all"` to hear about every finished
@@ -782,12 +782,13 @@ browsers.
 
 Each `[[alerts.destinations]]` entry is one place alerts go. `id` names it for
 good: its record of what was sent and its secrets hang on it, so renaming it
-changes only `name`. `sends` limits it to some groups; leave it out to send
+changes only `name`. `sends` limits it to some alert types; leave it out to send
 everything. The `json` format (the default) posts an object with the alert's
-group, kind, priority, subject, summary, and reasons, plus `text` and `content`
-fields that Slack and Discord show as the message. Insights alerts keep
-`"event": "insight"`; other alerts name their group. The `text` format posts the
-summary as plain text with a `Title` header, which suits ntfy. The `slack`
+type as `group`, its kind, priority, subject, summary, and reasons, plus
+`text` and `content` fields that Slack and Discord show as the message.
+Insights alerts keep `"event": "insight"`; other alerts name their type in
+`group`. The `text` format posts the summary as plain text with a `Title`
+header, which suits ntfy. The `slack`
 format posts a Slack incoming-webhook card with a colored bar, the alert's
 reasons, and a button to the console; the `discord` format posts a Discord
 webhook embed colored by tone that mentions no one. Both fail unless Slack or
@@ -812,8 +813,8 @@ sets `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself.
 
 When a destination is added, Sable takes stock of what it already knows without
 sending it, so a new destination never gets old news. `paused = true` stops
-sending but keeps every destination; alerts that turn up while paused, or in a
-group that is switched off, are not sent later. A destination that fails keeps
+sending but keeps every destination; alerts that turn up while paused, or of a
+type that is switched off, are not sent later. A destination that fails keeps
 its alerts for the next try without holding up the others. In a cluster the
 lead node sends alerts, and a replica sends one only when the lead stops
 answering; see [Alerts in a cluster](clustering.md#alerts-in-a-cluster).

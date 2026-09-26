@@ -390,7 +390,7 @@ func alertDraftProblem(draft alertDestinationDraft) string {
 	case utf8.RuneCountInString(destination.Name) > alertDestinationNameLimit:
 		return fmt.Sprintf("Keep the name to %d characters.", alertDestinationNameLimit)
 	case draft.noGroups:
-		return "Pick at least one group, or choose Everything."
+		return "Pick at least one alert type, or choose Everything."
 	}
 	if destination.URL != "" {
 		parsed, err := url.Parse(destination.URL)

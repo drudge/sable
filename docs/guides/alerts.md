@@ -17,7 +17,7 @@ Select **Add Destination**, give it a name if you like, such as "Phone", and pic
 - **Pushover** asks only for your application token and user key; Sable knows Pushover's address.
 - **Browsers** shows each alert as a notification in the browsers that turn alerts on. See [Browsers](#browsers).
 
-**Sends** picks what the destination gets: **Everything**, or **Only These Groups**. You might send everything to a Slack channel and only cluster problems and failed sign-ins to your phone.
+**Sends** picks what the destination gets: **Everything**, or **Only These Types**. You might send everything to a Slack channel and only cluster problems and failed sign-ins to your phone.
 
 Use **Preview** to see exactly what Sable would send before you save, and **Copy** in its corner to take it with you. URL tokens, keys, and header values are cut short.
 
@@ -42,7 +42,7 @@ Each destination in the list shows its last send, or its last error, since Sable
 
 ## Choose which alerts Sable sends
 
-**Groups** turns whole kinds of alerts on or off for every destination. Select **Save Groups** after a change.
+**Alert Types** turns whole kinds of alerts on or off for every destination. Select **Save Alert Types** after a change.
 
 - **Insights Findings** are new findings worth a look. Anything you hid in Insights is skipped. Each kind of finding, such as a new device on the network, has its own switch under it; turning one off keeps that kind in Insights without alerts. Limits live in Insights Settings.
 - **Cluster** is a node going down and coming back up, and update rollouts.

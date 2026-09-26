@@ -192,7 +192,7 @@ handoff that gives the cluster a new lead within five minutes sends nothing.
 
 Problems, such as a node or the lead down or a failed rollout, go out at high
 priority. The `cluster` switch in **Settings → Alerts** turns all of these off
-together; a replica's own alerts follow their own groups.
+together; a replica's own alerts follow their own types.
 
 Each node keeps its own record of which alerts it has sent, so the first round
 after a replica becomes the lead only takes stock of what is news: the old lead

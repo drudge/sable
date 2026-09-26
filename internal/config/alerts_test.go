@@ -188,7 +188,7 @@ func TestAlertConfigurationIsValidated(t *testing.T) {
 		{func(alerts *Alerts) {
 			alerts.Destinations = []AlertDestination{{ID: "a", Format: "browser"}, {ID: "b", Format: "browser"}}
 		}, "only one destination can push to browsers"},
-		{func(alerts *Alerts) { alerts.Destinations = []AlertDestination{{ID: "a", Sends: []string{"weather"}}} }, "not an alert group"},
+		{func(alerts *Alerts) { alerts.Destinations = []AlertDestination{{ID: "a", Sends: []string{"weather"}}} }, "not an alert type"},
 		{func(alerts *Alerts) {
 			alerts.Destinations = []AlertDestination{{ID: "a", Headers: []AlertHeader{{Value: "orphan"}}}}
 		}, "needs a name"},

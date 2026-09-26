@@ -242,7 +242,7 @@ serve as a local example.
 what is news right now: Insights findings, cluster nodes and rollouts, UniFi and
 dynamic DNS, releases, and each node's certificates, secondary zones, DNSSEC
 keys, backups, and failed sign-ins. A dispatcher on the lead asks them once a
-minute and sends each alert once to each destination that wants its group,
+minute and sends each alert once to each destination that wants its type,
 recording what it sent by destination ID. Problems go out at high priority.
 Destination URLs and keys live in the encrypted vault. Replicas hand the lead
 what they see in themselves in their heartbeats, and report the lead when it

@@ -45,9 +45,9 @@ const {chromium} = require('playwright');
 
     // Picking only some groups shows them; Everything hides them again.
     const groups = dialog.locator('.alert-sends-groups');
-    assert.equal(await groups.isVisible(), false, 'Everything lists no groups');
-    await dialog.getByText('Only These Groups', {exact: true}).click();
-    assert.equal(await groups.isVisible(), true, 'picking groups lists them');
+    assert.equal(await groups.isVisible(), false, 'Everything lists no types');
+    await dialog.getByText('Only These Types', {exact: true}).click();
+    assert.equal(await groups.isVisible(), true, 'picking types lists them');
     await shoot('dialog-groups');
     await dialog.getByText('Everything', {exact: true}).click();
     assert.equal(await groups.isVisible(), false, 'Everything hides the groups again');
@@ -111,10 +111,10 @@ const {chromium} = require('playwright');
     await panel.getByRole('switch', {name: /Failed Sign-Ins/}).check();
     await panel.getByRole('spinbutton', {name: 'Failed sign-ins before an alert'}).fill('3');
     await panel.getByRole('spinbutton', {name: 'Minutes to count failed sign-ins in'}).fill('15');
-    await panel.getByRole('button', {name: 'Save Groups'}).click();
+    await panel.getByRole('button', {name: 'Save Alert Types'}).click();
     await page.getByText('Saved which alerts Sable sends.').waitFor();
     assert.equal(await panel.getByRole('switch', {name: /Failed Sign-Ins/}).isChecked(), true);
-    assert.equal(await focusedID(), 'alerts-groups-save', 'focus stays on Save Groups');
+    assert.equal(await focusedID(), 'alerts-groups-save', 'focus stays on Save Alert Types');
 
     // A problem shows in the open dialog and leaves what was typed alone.
     await panel.getByRole('button', {name: 'Add Destination'}).click();

@@ -272,7 +272,7 @@ func TestSettingsHasAnAlertsTab(t *testing.T) {
 	// them get its buttons.
 	readOnly := server.get(t, "logs-reader", "/settings?tab=alerts", false).Body.String()
 	if !strings.Contains(readOnly, `id="alerts-panel"`) || strings.Contains(readOnly, `id="alert-destination-add"`) ||
-		strings.Contains(readOnly, `id="alert-destination-dialog"`) || strings.Contains(readOnly, "Save Groups") ||
+		strings.Contains(readOnly, `id="alert-destination-dialog"`) || strings.Contains(readOnly, "Save Alert Types") ||
 		!regexp.MustCompile(`name="insights" value="true" checked disabled`).MatchString(readOnly) {
 		t.Fatal("an operator who cannot change settings gets the Alerts tab's buttons")
 	}
@@ -462,8 +462,8 @@ func TestAlertDestinationProblemsShowInTheDialog(t *testing.T) {
 		{"a header Sable sets itself", url.Values{"format": {"json"}, "url": {"https://hooks.example.com/x"}, "header_name": {"Host"}, "header_value": {"example.com"}}, "Sable sets Host itself."},
 		{"a header value on two lines", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "header_name": {"X-Note"}, "header_value": {"one\ntwo"}}, "The value for X-Note cannot contain line breaks."},
 		{"Pushover with only a token", url.Values{"format": {"pushover"}, "pushover_token": {"app-token"}}, "Pushover needs an application token and a user key."},
-		{"only some groups, but none picked", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "sends_all": {"false"}}, "Pick at least one group, or choose Everything."},
-		{"a group that does not exist", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "sends_all": {"false"}, "sends": {"weather"}}, `&#34;weather&#34; is not an alert group`},
+		{"only some types, but none picked", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "sends_all": {"false"}}, "Pick at least one alert type, or choose Everything."},
+		{"a type that does not exist", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "sends_all": {"false"}, "sends": {"weather"}}, `&#34;weather&#34; is not an alert type`},
 		{"a long name", url.Values{"format": {"text"}, "url": {"https://ntfy.sh/x"}, "name": {strings.Repeat("n", 65)}}, "Keep the name to 64 characters."},
 	} {
 		t.Run(test.name, func(t *testing.T) {
