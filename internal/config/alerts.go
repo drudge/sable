@@ -383,7 +383,7 @@ func validateAlerts(alerts Alerts) error {
 		}
 		for _, group := range destination.Sends {
 			if !slices.Contains(AlertGroupNames(), group) {
-				return fmt.Errorf("%s.sends: %q is not an alert group; use %s", field, group, strings.Join(AlertGroupNames(), ", "))
+				return fmt.Errorf("%s.sends: %q is not an alert type; use %s", field, group, strings.Join(AlertGroupNames(), ", "))
 			}
 		}
 	}

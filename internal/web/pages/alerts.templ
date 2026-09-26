@@ -418,7 +418,7 @@ func browserCount(count int) string {
 // alertsGroupsCard turns whole groups of alerts on or off. It saves on its own.
 templ alertsGroupsCard(view AlertsView) {
 	<section class="card settings-source-card alerts-groups-card">
-		<header><h2>@Icon("layers")<span>Groups</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
+		<header><h2>@Icon("list-checks")<span>Alert Types</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
 		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			@alertInsightKinds(view)
 			@alertGroupSwitch("cluster", "Cluster", "A node going down and coming back up, and update rollouts.", view.Groups.Cluster, view.CanEdit)
@@ -444,7 +444,7 @@ templ alertsGroupsCard(view AlertsView) {
 				</div>
 			</div>
 			if view.CanEdit {
-				<div class="alert-groups-save"><button class="button" id="alerts-groups-save" type="submit" data-replica-primary-action>Save Groups</button></div>
+				<div class="alert-groups-save"><button class="button" id="alerts-groups-save" type="submit" data-replica-primary-action>Save Alert Types</button></div>
 			}
 		</form>
 	</section>
@@ -662,7 +662,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 				<legend>Sends</legend>
 				<div class="alert-sends-choice">
 					<label><input type="radio" name="sends_all" value="true" checked?={ len(form.Sends) == 0 }/><span>Everything</span></label>
-					<label><input type="radio" name="sends_all" value="false" checked?={ len(form.Sends) > 0 }/><span>Only These Groups</span></label>
+					<label><input type="radio" name="sends_all" value="false" checked?={ len(form.Sends) > 0 }/><span>Only These Types</span></label>
 				</div>
 				<div class="alert-sends-groups">
 					for _, group := range form.Groups {
@@ -670,7 +670,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 							<input type="checkbox" name="sends" value={ group.Key } checked?={ slices.Contains(form.Sends, group.Key) }/>
 							<span>{ group.Label }</span>
 							if group.Off {
-								<small>Off under Groups</small>
+								<small>Off in Alert Types</small>
 							}
 						</label>
 					}

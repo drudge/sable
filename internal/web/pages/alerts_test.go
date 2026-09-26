@@ -60,7 +60,7 @@ func TestAlertsTabRendersGroupsAsSwitchesAndNamesEveryControl(t *testing.T) {
 		`aria-labelledby="alert-destination-title"`, `<h2 id="alert-destination-title">Edit Destination</h2>`,
 		`aria-label="Close"`, `aria-label="Preview of a sample alert"`, `aria-label="Header name"`, `aria-label="Header value"`,
 		`placeholder="Saved: https://ntfy.sh/••••erts"`, `data-saved`, "Leave it blank to keep the saved URL.",
-		`placeholder="Saved: ••••cret"`, `name="sends" value="cluster" checked`, "Off under Groups",
+		`placeholder="Saved: ••••cret"`, `name="sends" value="cluster" checked`, "Off in Alert Types",
 		// Browsers cannot push without a server that pushes.
 		`value="browser" disabled`, "Browser alerts are not available on this server.",
 	} {
@@ -91,7 +91,7 @@ func TestAlertsTabWithoutEditingShowsNoActions(t *testing.T) {
 			{ID: "browser", Label: "Browsers", Format: "browser", FormatLabel: "Browsers", Everything: true},
 		},
 	}))
-	for _, action := range []string{"alert-destination-add", "alert-destination-edit-phone", "Resume", "Save Groups", "Turn On in This Browser", "data-push-form"} {
+	for _, action := range []string{"alert-destination-add", "alert-destination-edit-phone", "Resume", "Save Alert Types", "Turn On in This Browser", "data-push-form"} {
 		if strings.Contains(markup, action) {
 			t.Errorf("an operator who cannot change settings gets %q", action)
 		}

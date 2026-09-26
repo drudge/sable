@@ -1148,11 +1148,11 @@ func alertsGroupsCard(view AlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("layers").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Icon("list-checks").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<span>Groups</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header><form class=\"isotope-card-content alert-groups\" hx-post=\"/ui/settings/alerts/groups\" hx-target=\"#alerts-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<span>Alert Types</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header><form class=\"isotope-card-content alert-groups\" hx-post=\"/ui/settings/alerts/groups\" hx-target=\"#alerts-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1255,7 +1255,7 @@ func alertsGroupsCard(view AlertsView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if view.CanEdit {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "<div class=\"alert-groups-save\"><button class=\"button\" id=\"alerts-groups-save\" type=\"submit\" data-replica-primary-action>Save Groups</button></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "<div class=\"alert-groups-save\"><button class=\"button\" id=\"alerts-groups-save\" type=\"submit\" data-replica-primary-action>Save Alert Types</button></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2195,7 +2195,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 182, "><span>Only These Groups</span></label></div><div class=\"alert-sends-groups\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 182, "><span>Only These Types</span></label></div><div class=\"alert-sends-groups\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2241,7 +2241,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if group.Off {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "<small>Off under Groups</small>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 188, "<small>Off in Alert Types</small>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
