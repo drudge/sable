@@ -682,7 +682,12 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		}
 		if len(finding.Reasons) > 0 || finding.Method != "" {
 			<section class="insight-why" aria-labelledby={ finding.ID + "-reasons" }>
-				<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
+				<div class="insight-why-heading">
+					<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
+					if view.CanHideFindings && finding.FindingID != "" {
+						@insightHideMenu(finding)
+					}
+				</div>
 				if len(finding.Reasons) > 0 || len(finding.Explanations) > 0 {
 					<ul>
 						for _, reason := range finding.Reasons {
@@ -713,29 +718,26 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				}
 			</section>
 		}
-		if view.CanHideFindings && finding.FindingID != "" {
-			@insightFeedback(finding)
-		}
 	}
 }
 
-// insightFeedback lets an operator hide a finding for now, for a week, or for
-// good because it is normal here. Hiding is shared by everyone who opens
-// Insights, and the finding comes back on its own when a snooze ends.
-templ insightFeedback(finding InsightFindingView) {
-	<form class="insight-feedback" hx-post="/ui/insights/feedback" hx-swap="none">
-		<input type="hidden" name="id" value={ finding.FindingID }/>
-		<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
-		<div>
-			<h3>Seen it?</h3>
-			<p>Hiding a finding hides it for everyone.</p>
-		</div>
-		<div class="insight-feedback-actions">
-			<button class="button outline compact" type="submit" name="action" value="dismiss" data-dialog-close data-replica-primary-action>Dismiss</button>
-			<button class="button outline compact" type="submit" name="action" value="snooze" data-dialog-close data-replica-primary-action>Snooze a Week</button>
-			<button class="button outline compact" type="submit" name="action" value="normal" data-dialog-close data-replica-primary-action>That's Normal</button>
-		</div>
-	</form>
+// insightHideMenu lets an operator hide a finding for a day, for a week, or
+// for good because it is normal here. It sits beside Why Sable surfaced
+// this, so the answer to Sable's reasons is next to them. Hiding is shared by
+// everyone who opens Insights, and a finding hidden for a while comes back
+// when the time is up if it still applies.
+templ insightHideMenu(finding InsightFindingView) {
+	<details class="insight-hide-menu">
+		<summary class="button outline compact" data-replica-primary-action>@Icon("eye-off")<span>Hide Finding</span></summary>
+		<form hx-post="/ui/insights/feedback" hx-swap="none">
+			<input type="hidden" name="id" value={ finding.FindingID }/>
+			<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
+			<span>Hide for Everyone</span>
+			<button type="submit" name="action" value="dismiss" data-dialog-close><strong>For a Day</strong><small>Back tomorrow if it still applies.</small></button>
+			<button type="submit" name="action" value="snooze" data-dialog-close><strong>For a Week</strong><small>Back in a week if it still applies.</small></button>
+			<button type="submit" name="action" value="normal" data-dialog-close><strong>That's Normal</strong><small>Hidden until you show it again.</small></button>
+		</form>
+	</details>
 }
 
 func insightEvidenceHeader(finding InsightFindingView) DetailDrawerView {

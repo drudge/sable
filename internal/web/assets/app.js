@@ -5290,11 +5290,11 @@
 		}
 		return;
 	  }
-	  const action = event.target.closest(".zone-import-menu button");
+	  const action = event.target.closest(".zone-import-menu button, .insight-hide-menu button");
 	  if (action && !action.disabled) action.closest("details").removeAttribute("open");
 	});
 
-	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open]";
+	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open], .insight-hide-menu[open]";
 	document.addEventListener("pointerdown", (event) => {
 	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");
@@ -5302,10 +5302,23 @@
 	});
 	document.addEventListener("keydown", (event) => {
 	  if (event.key !== "Escape") return;
-	  document.querySelectorAll(openMenus).forEach((menu) => {
+	  const menus = document.querySelectorAll(openMenus);
+	  // Escape closes only the menu, so a menu in a drawer keeps the drawer.
+	  if (menus.length > 0) event.preventDefault();
+	  menus.forEach((menu) => {
 		menu.removeAttribute("open");
 		menu.querySelector("summary")?.focus();
 	  });
+	});
+	// A finding's hide menu opens upward when the drawer has no room below it.
+	// It is opened here, not by the browser, so it is placed before it is drawn.
+	document.addEventListener("click", (event) => {
+	  const summary = event.target.closest?.(".insight-hide-menu > summary");
+	  if (!summary || event.defaultPrevented) return;
+	  event.preventDefault();
+	  const menu = summary.parentElement;
+	  menu.open = !menu.open;
+	  if (menu.open) positionAnchoredPopover(menu, summary, menu.querySelector(":scope > form"));
 	});
 
 	document.body.addEventListener("change", (event) => {

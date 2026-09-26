@@ -56,13 +56,13 @@ Devices with a private, randomized hardware address have no maker, so their type
 
 ## Hide what you have seen
 
-Every finding's drawer ends with **Seen it?**:
+Use **Hide Finding** beside **Why Sable surfaced this** in a finding's drawer, then choose how long to hide it:
 
-- **Dismiss** hides the finding for a day.
-- **Snooze a Week** hides it for a week.
+- **For a Day** hides it until tomorrow.
+- **For a Week** hides it for a week.
 - **That's Normal** hides it until you show it again.
 
-Hiding applies to everyone who uses Insights. Hidden findings are listed under the findings card, where **Show Again** brings one back. You need permission to change settings to hide findings.
+A finding hidden for a day or a week comes back when the time is up, if it still applies. Hiding applies to everyone who uses Insights. Hidden findings are listed under the findings card, where **Show Again** brings one back. You need permission to change settings to hide findings.
 
 ## Choose what Insights shows and alerts
 

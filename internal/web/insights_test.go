@@ -894,7 +894,7 @@ func TestInsightFindingsCanBeHiddenAndShownAgain(t *testing.T) {
 	server := newInsightsTestServer(t)
 	body := server.get(t, "everything", "/ui/insights/overview?range=day", true).Body.String()
 	match := regexp.MustCompile(`name="id" value="(blocking\.past-block/[^"]+)"`).FindStringSubmatch(body)
-	if match == nil {
+	if match == nil || !strings.Contains(body, "<span>Hide Finding</span>") {
 		t.Fatal("the past-block finding offers no way to hide it")
 	}
 	id := html.UnescapeString(match[1])
@@ -902,7 +902,7 @@ func TestInsightFindingsCanBeHiddenAndShownAgain(t *testing.T) {
 	if response := server.post(t, "logs-reader", "/ui/insights/feedback", form); response.Code != http.StatusForbidden {
 		t.Fatalf("hiding without settings write = %d", response.Code)
 	}
-	if strings.Contains(server.get(t, "logs-reader", "/ui/insights/overview?range=day", true).Body.String(), "Seen it?") {
+	if strings.Contains(server.get(t, "logs-reader", "/ui/insights/overview?range=day", true).Body.String(), "<span>Hide Finding</span>") {
 		t.Fatal("an operator without settings write is offered hiding")
 	}
 	response := server.post(t, "everything", "/ui/insights/feedback", form)
