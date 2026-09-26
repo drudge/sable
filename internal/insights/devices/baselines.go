@@ -19,16 +19,14 @@ const (
 	// routineDays is how long a device must have been watched before its
 	// daily routine is trusted.
 	routineDays = 14
-	// minimumUnusualHourQueries ignores a stray lookup at an odd hour.
-	minimumUnusualHourQueries = 30
 	// minimumRoutineDays is how many of the fourteen routine days a device
 	// must have been active on for its quiet hours to mean anything.
 	minimumRoutineDays = 10
-	// minimumApplianceNewDomains is how many first-time names in a day make an
-	// appliance worth a look.
-	minimumApplianceNewDomains = 3
-	maximumUnusualHours        = 2
-	maximumApplianceDrift      = 2
+	// applianceGrowth is how many times its usual daily count of first-time
+	// names an appliance's last day must reach.
+	applianceGrowth       = 3
+	maximumUnusualHours   = 2
+	maximumApplianceDrift = 2
 )
 
 // appliances are device types that normally talk to the same few services, so
@@ -107,8 +105,9 @@ func hourChart(hourly map[time.Time]uint64, now time.Time, location *time.Locati
 }
 
 // unusualSpan finds the busiest run of hours in the last day during which the
-// device had been silent every day of the two weeks before.
-func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Location) (hourSpan, bool) {
+// device had been silent every day of the two weeks before, counting only
+// hours with at least minimum lookups.
+func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Location, minimum uint64) (hourSpan, bool) {
 	recent, routine, activeDays := hourProfiles(hourly, now, location)
 	if activeDays < minimumRoutineDays {
 		// A device that was mostly away has no routine to break.
@@ -116,7 +115,7 @@ func unusualSpan(hourly map[time.Time]uint64, now time.Time, location *time.Loca
 	}
 	var unusual [24]bool
 	for hour := range 24 {
-		unusual[hour] = recent[hour] >= minimumUnusualHourQueries && routine[hour] == 0
+		unusual[hour] = recent[hour] >= minimum && routine[hour] == 0
 	}
 	best := hourSpan{}
 	for start := range 24 {
@@ -155,7 +154,7 @@ func unusualHourFindings(input ChangesInput) []insights.Finding {
 			continue
 		}
 		hourly := input.Hourly(device)
-		if span, found := unusualSpan(hourly, input.Now, location); found {
+		if span, found := unusualSpan(hourly, input.Now, location, input.Limits.UnusualHourLookups); found {
 			candidates = append(candidates, candidate{device: device, span: span, hourly: hourly})
 		}
 	}
@@ -185,7 +184,8 @@ func unusualHourFindings(input ChangesInput) []insights.Finding {
 				"Software on it started doing something on its own",
 			},
 			Method: "Sable learns the hours each " + noun(device) + " is active. It reports one that was active on most of the previous 14 days " +
-				"and then sent at least 30 queries in an hour of the day it had not used at all in that time.",
+				"and then sent at least " + insights.FormatCount(input.Limits.UnusualHourLookups) + " " +
+				insights.Plural(input.Limits.UnusualHourLookups, "query", "queries") + " in an hour of the day it had not used at all in that time.",
 			Chart: hourChart(entry.hourly, input.Now, location, span),
 		})
 	}
@@ -196,11 +196,14 @@ func applianceFindings(input ChangesInput, skip map[string]bool) []insights.Find
 	candidates := make([]Device, 0)
 	for _, device := range input.Devices {
 		guess := device.Guess
-		if skip[device.Key] || !appliances[guess.Type] || guess.Confidence == ConfidenceLow || !input.baselineReady(device) {
+		if skip[device.Key] || !appliances[guess.Type] || guess.Confidence == ConfidenceLow || !input.baselineReady(device, minimumDailyBaseline) {
 			continue
 		}
+		// The last day must also be well past the device's usual day. For a
+		// device that found nothing new all week the limit alone decides, so
+		// an operator can ask about a single new domain.
 		daily := float64(device.BaselineNewDomains) / baselineDays
-		if device.RecentNewDomains >= minimumApplianceNewDomains && float64(device.RecentNewDomains) >= 3*max(daily, 1) {
+		if device.RecentNewDomains >= input.Limits.ApplianceNewDomains && float64(device.RecentNewDomains) >= applianceGrowth*daily {
 			candidates = append(candidates, device)
 		}
 	}
@@ -229,7 +232,8 @@ func applianceFindings(input ChangesInput, skip map[string]bool) []insights.Find
 				"Software on it that should not be there",
 			},
 			Method: "Appliances such as cameras, doorbells, and TVs talk to the same few services day after day. Sable reports one that queried " +
-				"at least three domains it had never used in a single day, and at least three times its usual daily count.",
+				"at least " + countText(input.Limits.ApplianceNewDomains) + " " + insights.Plural(input.Limits.ApplianceNewDomains, "domain", "domains") +
+				" it had never used in a single day, and at least three times its usual daily count.",
 		}
 		if input.RecentDomains != nil {
 			finding.Domains = input.RecentDomains(device)
