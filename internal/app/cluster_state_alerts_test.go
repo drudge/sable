@@ -400,3 +400,26 @@ func TestClusterStateCapturesTheSameAlertsTheSameWay(t *testing.T) {
 		}
 	}
 }
+
+// Insights alerts come from the lead, so a replica takes the primary's
+// Insights settings, and a promoted replica judges findings the way the old
+// lead did.
+func TestClusterStateReplicatesInsightSettings(t *testing.T) {
+	t.Parallel()
+	configuration := config.Defaults()
+	configuration.Insights.Findings.CheckIn.Mode = config.InsightModeShow
+	configuration.Insights.Findings.WentQuiet.MinimumDailyLookups = 200
+	primary := newReplicatedNode(t, configuration, nil)
+	replica := newReplicatedNode(t, config.Defaults(), nil)
+	replicate(t, primary, replica)
+	findings := replica.manager.Current().Config.Insights.Findings
+	if findings.CheckIn.Mode != config.InsightModeShow || findings.WentQuiet.MinimumDailyLookups != 200 {
+		t.Fatalf("replica Insights settings = %+v", findings)
+	}
+	// Carried again unchanged, they leave the replica's configuration alone.
+	applies := replica.applies
+	replicate(t, primary, replica)
+	if replica.applies != applies {
+		t.Fatal("replicating the same Insights settings rewrote the configuration")
+	}
+}

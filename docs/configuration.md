@@ -814,8 +814,9 @@ When a destination is added, Sable takes stock of what it already knows without
 sending it, so a new destination never gets old news. `paused = true` stops
 sending but keeps every destination; alerts that turn up while paused, or in a
 group that is switched off, are not sent later. A destination that fails keeps
-its alerts for the next try without holding up the others. Only the lead node
-sends alerts.
+its alerts for the next try without holding up the others. In a cluster the
+lead node sends alerts, and a replica sends one only when the lead stops
+answering; see [Alerts in a cluster](clustering.md#alerts-in-a-cluster).
 
 ## Server logging
 

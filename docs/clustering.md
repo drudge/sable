@@ -119,6 +119,8 @@ Replicated state includes:
 - alert settings, every destination with its URL, keys, and header values,
   the key browser pushes are signed with, and the browsers that turned alerts
   on;
+- Insights settings: what each kind of finding does and the limits that make
+  one;
 - passkey availability (`security.passkeys_disabled`);
 - users, roles, permission grants, password hashes, passkey public credentials, API-token hashes, and token
   revocations.
@@ -192,9 +194,14 @@ Problems, such as a node or the lead down or a failed rollout, go out at high
 priority. The `cluster` switch in **Settings → Alerts** turns all of these off
 together; a replica's own alerts follow their own groups.
 
+Each node keeps its own record of which alerts it has sent, so the first round
+after a replica becomes the lead only takes stock of what is news: the old lead
+already sent it.
+
 A replica hands its alerts only to a primary that says it takes them, and a
-snapshot from an older primary leaves a newer replica's alert settings as they
-are, so alerts keep working while a rolling update runs mixed versions.
+snapshot from an older primary leaves a newer replica's alert and Insights
+settings as they are, so alerts keep working while a rolling update runs mixed
+versions.
 
 ## Planned primary handoff
 

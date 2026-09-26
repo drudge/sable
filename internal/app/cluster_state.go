@@ -121,6 +121,11 @@ type clusterRuntimeConfiguration struct {
 	// primary that predates them has none, which leaves this node's own alerts
 	// as they are.
 	Alerts *clusterAlerts `toml:"alerts,omitempty"`
+	// InsightFindings follow the primary too: Insights alerts come from the
+	// lead, so a promoted replica must judge findings the way the old lead
+	// did. A primary that predates them sends none, which leaves this node's
+	// own as they are.
+	InsightFindings *config.InsightFindings `toml:"insight_findings,omitempty"`
 }
 
 // clusterAlerts is the alert state that follows the primary.
@@ -219,6 +224,8 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		runtimeConfiguration.OIDCClientSecret = secret
 	}
 	runtimeConfiguration.Alerts = replicator.captureAlerts(ctx, active.Alerts)
+	findings := active.Insights.Findings
+	runtimeConfiguration.InsightFindings = &findings
 	configurationContents, err := toml.Marshal(runtimeConfiguration)
 	if err != nil {
 		return nil, fmt.Errorf("encode replicated runtime configuration: %w", err)
@@ -275,6 +282,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 		// The primary said nothing about alerts, so this node's are neither
 		// compared nor changed.
 		activeConfiguration.Alerts = nil
+	}
+	if runtimeConfiguration.InsightFindings == nil {
+		activeConfiguration.InsightFindings = nil
 	}
 	activeZones := replicator.zones.Current().Zones
 	activeAuthorization := store.AuthorizationState{}
@@ -389,6 +399,7 @@ func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool 
 }
 
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
+	findings := source.Insights.Findings
 	return clusterRuntimeConfiguration{
 		Resolver:         source.Resolver,
 		TSIGKeys:         source.TSIGKeys,
@@ -399,6 +410,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		OIDC:             replicatedOIDC(source.OIDC),
 		PasskeysDisabled: source.Security.PasskeysDisabled,
 		Alerts:           &clusterAlerts{Settings: cloneAlertSettings(source.Alerts)},
+		InsightFindings:  &findings,
 	}
 }
 
@@ -424,6 +436,9 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	candidate.OIDC.RedirectURL = override
 	if source.Alerts != nil {
 		candidate.Alerts = cloneAlertSettings(source.Alerts.Settings)
+	}
+	if source.InsightFindings != nil {
+		candidate.Insights.Findings = *source.InsightFindings
 	}
 }
 
