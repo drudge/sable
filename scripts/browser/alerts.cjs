@@ -97,6 +97,16 @@ const {chromium} = require('playwright');
     await dialog.waitFor({state: 'hidden'});
     assert.match(await focusedID(), /^alert-destination-edit-[0-9a-f]{16}$/, 'closing the dialog returns focus to Edit');
 
+    // With Insights Findings off, its kinds fold away, and they come back with it.
+    const insights = panel.getByRole('switch', {name: /Insights Findings/});
+    const kinds = panel.locator('.alert-insight-kinds');
+    assert.equal(await kinds.isVisible(), true, 'Insights Findings lists its kinds');
+    await insights.uncheck();
+    assert.equal(await kinds.isVisible(), false, 'turning Insights Findings off folds its kinds away');
+    await shoot('insights-off');
+    await insights.check();
+    assert.equal(await kinds.isVisible(), true, 'turning Insights Findings back on shows its kinds');
+
     // The groups save on their own.
     await panel.getByRole('switch', {name: /Failed Sign-Ins/}).check();
     await panel.getByRole('spinbutton', {name: 'Failed sign-ins before an alert'}).fill('3');

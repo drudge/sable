@@ -1297,7 +1297,7 @@ func alertInsightKinds(view AlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = alertGroupSwitch("insights", "Insights Findings", "New findings worth a look. Choose which kinds below.", view.Groups.Insights, view.CanEdit).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = alertGroupSwitch("insights", "Insights Findings", "New findings worth a look, for the kinds you choose.", view.Groups.Insights, view.CanEdit).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

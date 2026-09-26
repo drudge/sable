@@ -4181,7 +4181,9 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-insight-kind input[type=checkbox]:disabled { cursor: not-allowed; }
 .alert-insight-kinds-note { margin: 0; border-top: 1px solid var(--border); padding: .6rem 1rem; color: var(--muted-foreground); font-size: .75rem; }
 .alert-insight-kinds-note a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
-.alert-insights:has(input[name="insights"]:not(:checked)) .alert-insight-kinds { opacity: .6; }
+/* With Insights Findings off, its kinds fold away. They still post with the
+   form, so saving keeps each kind as it was. */
+.alert-insights:has(input[name="insights"]:not(:checked)) :is(.alert-insight-kinds, .alert-insight-kinds-note) { display: none; }
 .alert-groups-save { display: flex; justify-content: flex-end; }
 .alert-browsers { display: grid; gap: .75rem; }
 /* Browsers carry their browsers under the row, beside the destination's

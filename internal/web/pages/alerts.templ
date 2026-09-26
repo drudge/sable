@@ -456,7 +456,7 @@ templ alertsGroupsCard(view AlertsView) {
 // settings does.
 templ alertInsightKinds(view AlertsView) {
 	<div class="alert-insights">
-		@alertGroupSwitch("insights", "Insights Findings", "New findings worth a look. Choose which kinds below.", view.Groups.Insights, view.CanEdit)
+		@alertGroupSwitch("insights", "Insights Findings", "New findings worth a look, for the kinds you choose.", view.Groups.Insights, view.CanEdit)
 		<fieldset class="alert-insight-kinds">
 			<legend class="sr-only">Which Insights findings send alerts</legend>
 			<input type="hidden" name="insight_kinds" value="true"/>
