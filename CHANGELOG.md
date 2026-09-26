@@ -8,6 +8,49 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.10] - 2026-09-26
+
+Sable 1.5.0-beta.10 tidies the console. The sidebar fits a laptop screen and
+groups its pages more clearly, every device draws the console in Inter, and
+About credits the open-source software Sable is built on.
+
+### Sidebar
+
+- Fit the whole sidebar in a laptop-height browser window, so **About** no
+  longer sits cut off at the bottom.
+- Drop the **Overview** heading over the first group, and list
+  **Administration**, **Cluster**, **Integrations**, **Settings**, and
+  **About** under **System**. **Integrations** moves there from the first
+  group, and the command palette lists pages in the same order.
+- Scroll the sidebar in a window too short for it, with the fade and chevron
+  phones already show, and keep the current page in view.
+- Blur the page behind the open phone menu and fade in its dimming, as
+  dialogs do.
+
+### Console
+
+- Ship the Inter font with the console, so every device draws the same text.
+  Before, only a device with Inter installed drew it, and phones fell back to
+  their own font.
+- Credit the open-source software Sable is built on: **Third-Party Licenses**,
+  in About's **MIT License** dialog, lists each project with its license.
+- Stack a dialog's buttons on a phone with the one that only closes it,
+  **Cancel**, **Close**, or **Done**, at the bottom, the way iOS does.
+- Lay the ten **Settings** tabs out in two rows of five on phones at least
+  375px wide, instead of leaving two alone on a third row.
+
+### Alerts
+
+- Call the switches for each kind of alert **Alert Types** instead of groups,
+  in **Settings > Alerts** and in a destination's **Only These Types** choice.
+  The configuration and webhook JSON keep their names.
+
+### Fixes
+
+- Stretch the Insights time range picker across the full width of a phone
+  screen.
+- Keep the note on the **Alerts** card to one line while alerts are paused.
+
 ## [1.5.0-beta.9] - 2026-09-26
 
 Sable 1.5.0-beta.9 keeps button labels on one line in Safari.
