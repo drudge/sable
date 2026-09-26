@@ -92,8 +92,11 @@ without shipping a Node.js runtime or a separate frontend bundle.
 - Insights: evidence-backed findings about what changed on the network,
   device grouping by hardware address with maker and type detection, app
   naming, per-device routines, scheduled check-in detection, block list
-  contribution, operator feedback, and webhook alerts, all computed locally
-  and off the DNS request path
+  contribution, and operator feedback, all computed locally and off the DNS
+  request path
+- Alerts to ntfy, Pushover, Slack, Discord, webhooks, or browsers for Insights
+  findings, cluster nodes, updates, integrations, backups, certificates,
+  secondary zones, DNSSEC keys, and failed sign-ins
 
 Replicas continue serving DNS when the primary is
 unavailable, but control-plane writes require manual promotion; Sable does not

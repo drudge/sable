@@ -82,7 +82,7 @@ You can also set these in `sable.toml`; see [Devices and Insights](../configurat
 
 ## Get alerts
 
-Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**. The bell beside the range control shows whether alerts are on, paused, or off, and takes you there. See [Get alerts](alerts.md).
+Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**, or open it from **Where alerts go** in Insights Settings. See [Get alerts](alerts.md).
 
 ## Blocking
 
