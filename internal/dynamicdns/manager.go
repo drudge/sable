@@ -69,6 +69,9 @@ type Status struct {
 	NextAttempt           time.Time
 	Duration              time.Duration
 	LastError             string
+	// ConsecutiveFailures counts the attempts in a row that failed. It paces
+	// retries, and lets an alert wait out one failed request but not three.
+	ConsecutiveFailures int
 }
 
 // PersistentState is the useful publication history that survives process
@@ -95,9 +98,8 @@ type Manager struct {
 
 	wake chan struct{}
 
-	mu               sync.Mutex
-	status           Status
-	consecutiveFails int
+	mu     sync.Mutex
+	status Status
 }
 
 func New(
@@ -454,15 +456,15 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 		manager.status.LastPublished = finished
 	}
 	if err == nil {
-		manager.consecutiveFails = 0
+		manager.status.ConsecutiveFailures = 0
 		manager.status.LastSuccess = finished
 		manager.status.LastError = ""
 		manager.status.NextAttempt = started.Add(interval)
 		return
 	}
-	manager.consecutiveFails++
+	manager.status.ConsecutiveFailures++
 	manager.status.LastError = err.Error()
-	manager.status.NextAttempt = started.Add(retryDelay(manager.consecutiveFails, interval))
+	manager.status.NextAttempt = started.Add(retryDelay(manager.status.ConsecutiveFailures, interval))
 }
 
 func retryDelay(failures int, interval time.Duration) time.Duration {

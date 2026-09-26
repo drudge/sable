@@ -283,6 +283,42 @@ func TestValidatePublicAddressRejectsPrivateAndWrongFamily(t *testing.T) {
 	}
 }
 
+// Alerts wait for several failed publishes in a row, and retries back off by
+// the same count, so it must reset the moment a publish works.
+func TestConsecutiveFailuresAddUpAndResetOnSuccess(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		outcomes  []error
+		want      int
+		wantRetry time.Duration
+	}{
+		{name: "each failed publish adds one", outcomes: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF, io.ErrUnexpectedEOF}, want: 3, wantRetry: 2 * time.Minute},
+		{name: "a publish that works starts the count over", outcomes: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF, nil}, want: 0, wantRetry: 5 * time.Minute},
+		{name: "failures after a success count from one", outcomes: []error{io.ErrUnexpectedEOF, nil, io.ErrUnexpectedEOF}, want: 1, wantRetry: 30 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			publisher := &testProvider{changed: true}
+			manager := newTestManager(testDynamicDNSSettings(), publisher)
+			manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+				return netip.MustParseAddr("8.8.8.8"), nil
+			}
+			for _, outcome := range test.outcomes {
+				publisher.err = outcome
+				manager.runOnce(context.Background())
+			}
+			status := manager.Status(context.Background())
+			if status.ConsecutiveFailures != test.want {
+				t.Fatalf("consecutive failures = %d, want %d", status.ConsecutiveFailures, test.want)
+			}
+			if retry := status.NextAttempt.Sub(status.LastAttempt); retry != test.wantRetry {
+				t.Fatalf("next attempt in %s, want %s", retry, test.wantRetry)
+			}
+		})
+	}
+}
+
 func TestRetryDelayBacksOffAndRespectsInterval(t *testing.T) {
 	if got := retryDelay(1, 5*time.Minute); got != 30*time.Second {
 		t.Fatalf("first retry = %s", got)
