@@ -1,13 +1,18 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/drudge/sable/internal/alerts"
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/backup"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
@@ -101,6 +106,10 @@ type nodeHealth struct {
 	// up to date itself.
 	trustAnchorUpdates func() bool
 	backups            *scheduledBackupService
+	auditLog           signInAuditLog
+	// signIns reports whether anyone signs in to this node at all. With
+	// security switched off nobody does, and there is nothing to count.
+	signIns bool
 }
 
 // alertSources returns the sources of alerts about this node, each placed on
@@ -115,6 +124,12 @@ func (health nodeHealth) alertSources() []alerts.Source {
 			status: health.trustAnchors.Status, interval: health.trustAnchors.RefreshInterval,
 		},
 		backupAlertSource{node: health.node, schedule: health.backups.schedule},
+	}
+	if health.signIns {
+		sources = append(sources, &signInAlertSource{
+			node: health.node, auditLog: health.auditLog,
+			settings: func() config.AlertSignIns { return configuration().Alerts.SignIns },
+		})
 	}
 	for index, source := range sources {
 		sources[index] = alerts.Place(source, alerts.OnEachNode)
@@ -335,6 +350,224 @@ func (source backupAlertSource) Alerts(_ context.Context, now time.Time) ([]aler
 		})
 	}
 	return found, nil
+}
+
+// signInAuditLog is where this node records sign-ins, one log per node.
+type signInAuditLog interface {
+	ListAuditRecordsSince(ctx context.Context, actions []string, since time.Time, limit int) ([]auth.AuditRecord, error)
+}
+
+// signInAlertSource sends one alert for each burst of failed sign-ins on this
+// node: a wrong password, a passkey that did not verify, a single sign-on
+// identity turned away, or a lockout. A burst begins once After failures fall
+// inside Within of each other, and lasts until a whole Within passes with no
+// failure, so one that keeps going stays one alert. Each burst stays news for
+// a day after its last failure.
+type signInAlertSource struct {
+	node     func() alertNode
+	settings func() config.AlertSignIns
+	auditLog signInAuditLog
+
+	mu sync.Mutex
+	// reported is what the last look found. The log is read a day back, and
+	// no further, so a burst that has gone on longer than that starts before
+	// what is read; remembering it keeps the start, and so the ID, it was
+	// first reported with.
+	reported []signInBurst
+}
+
+// signInBurst is a run of failed sign-ins close enough together to be one
+// event.
+type signInBurst struct {
+	// start is the first failure of the first window that held enough of
+	// them, and last is the latest failure.
+	start, last time.Time
+	failures    int
+	lockouts    int
+	// usernames and addresses list what was tried and where from, most often
+	// first.
+	usernames []string
+	addresses []string
+}
+
+const (
+	// signInRecordLimit caps how many failures one look reads, far more than
+	// any alert needs. The newest are read, so a flood is still seen.
+	signInRecordLimit = 5000
+	// signInListLimit is how many usernames and addresses an alert names.
+	signInListLimit = 5
+)
+
+func (source *signInAlertSource) Alerts(ctx context.Context, now time.Time) ([]alerts.Alert, error) {
+	// The limit is read afresh each time, so a change applies at once. Loading
+	// a configuration fills it in; one that never went through loading gets
+	// the defaults.
+	settings := source.settings()
+	if settings.After < 1 || settings.Within.Duration <= 0 {
+		settings = config.Defaults().Alerts.SignIns
+	}
+	since := now.Add(-eventNews)
+	records, err := source.auditLog.ListAuditRecordsSince(ctx, auth.FailedSignInActions(), since, signInRecordLimit)
+	if err != nil {
+		return nil, err
+	}
+	slices.Reverse(records)
+	source.mu.Lock()
+	bursts := findSignInBursts(records, settings.After, settings.Within.Duration, since, source.reported)
+	source.reported = bursts
+	source.mu.Unlock()
+	if len(bursts) == 0 {
+		return nil, nil
+	}
+	node := source.node()
+	found := make([]alerts.Alert, 0, len(bursts))
+	for _, burst := range bursts {
+		count := countOf(burst.failures, "sign-in", "sign-ins")
+		summary := fmt.Sprintf("%s failed on %s in %s.", count, node.Name, alertDuration(burst.last.Sub(burst.start)))
+		var reasons []string
+		switch {
+		case len(burst.usernames) > 0 && len(burst.addresses) > 0:
+			summary += " They tried " + listSome(burst.usernames) + " from " + listSome(burst.addresses) + "."
+		case len(burst.usernames) > 0:
+			summary += " They tried " + listSome(burst.usernames) + "."
+		case len(burst.addresses) > 0:
+			summary += " They came from " + listSome(burst.addresses) + "."
+		}
+		if len(burst.usernames) > 0 {
+			reasons = append(reasons, "Tried "+listSome(burst.usernames))
+		}
+		if len(burst.addresses) > 0 {
+			reasons = append(reasons, "From "+listSome(burst.addresses))
+		}
+		if burst.lockouts > 0 {
+			reasons = append(reasons, countOf(burst.lockouts, "lockout", "lockouts"))
+		}
+		reasons = append(reasons, "Last failure "+alertAgo(burst.last, now))
+		found = append(found, alerts.Alert{
+			ID:    "sign_ins.failed:" + node.key() + ":" + strconv.FormatInt(burst.start.Unix(), 10),
+			Group: config.AlertGroupSignIns, Kind: "sign_ins.failed", Tone: alerts.ToneNotice,
+			Title: "Failed sign-ins", Subject: node.Name, Headline: count + " failed on " + node.Name,
+			Summary: summary, Reasons: reasons,
+			Path: "/administration?tab=sessions", PathLabel: "Open Sessions", ObservedAt: burst.start,
+		})
+	}
+	return found, nil
+}
+
+// findSignInBursts groups failed sign-ins, oldest first, into bursts. The
+// records reach back only to since, so the oldest run of failures may have
+// begun before it. Such a run keeps the start of the burst it continues from
+// reported, the bursts the last look found. A run that continues none of them
+// and turns dense within a window of since is left out: it began a day ago,
+// and was reported then if it was news, so reporting it now under a later
+// start would only say it again, as after a restart.
+func findSignInBursts(records []auth.AuditRecord, after int, within time.Duration, since time.Time, reported []signInBurst) []signInBurst {
+	var bursts []signInBurst
+	for first := 0; first < len(records); {
+		end := first + 1
+		for end < len(records) && records[end].OccurredAt.Sub(records[end-1].OccurredAt) < within {
+			end++
+		}
+		run, oldest := records[first:end], first == 0
+		first = end
+		if oldest {
+			if earlier, found := continuedBurst(run, within, reported); found {
+				bursts = append(bursts, newSignInBurst(earlier.start, run))
+				continue
+			}
+		}
+		dense := denseFrom(run, after, within)
+		if dense < 0 || (oldest && run[dense].OccurredAt.Sub(since) < within) {
+			continue
+		}
+		bursts = append(bursts, newSignInBurst(run[dense].OccurredAt, run))
+	}
+	return bursts
+}
+
+// continuedBurst finds the reported burst that a run carries on: one whose last
+// failure is in the run, or came less than a window before it began.
+func continuedBurst(run []auth.AuditRecord, within time.Duration, reported []signInBurst) (signInBurst, bool) {
+	first, last := run[0].OccurredAt, run[len(run)-1].OccurredAt
+	for _, burst := range reported {
+		if !last.Before(burst.last) && first.Sub(burst.last) < within {
+			return burst, true
+		}
+	}
+	return signInBurst{}, false
+}
+
+// denseFrom returns where a run of failures first holds after of them inside
+// within, or -1 when it never does.
+func denseFrom(run []auth.AuditRecord, after int, within time.Duration) int {
+	for index := 0; index+after <= len(run); index++ {
+		if run[index+after-1].OccurredAt.Sub(run[index].OccurredAt) < within {
+			return index
+		}
+	}
+	return -1
+}
+
+// newSignInBurst sums up the failures of a run from start on.
+func newSignInBurst(start time.Time, run []auth.AuditRecord) signInBurst {
+	burst := signInBurst{start: start, last: run[len(run)-1].OccurredAt}
+	usernames, addresses := make(map[string]int), make(map[string]int)
+	for _, record := range run {
+		if record.OccurredAt.Before(start) {
+			continue
+		}
+		burst.failures++
+		if record.Action == auth.ActionLoginLocked {
+			burst.lockouts++
+		}
+		if username := signInUsername(record); username != "" {
+			usernames[username]++
+		}
+		if record.ClientIP != "" {
+			addresses[record.ClientIP]++
+		}
+	}
+	burst.usernames, burst.addresses = mostOftenFirst(usernames), mostOftenFirst(addresses)
+	return burst
+}
+
+// signInUsername is the username a failed sign-in tried. A password sign-in
+// records the username typed; a single sign-on identity turned away names the
+// account it matched, if any. A passkey that did not verify names nobody.
+func signInUsername(record auth.AuditRecord) string {
+	switch record.Action {
+	case auth.ActionLoginFailed, auth.ActionLoginLocked:
+		return auth.AttemptedUsername(record.Details)
+	case auth.ActionFederatedDenied:
+		return record.Username
+	default:
+		return ""
+	}
+}
+
+// mostOftenFirst lists counted names by how often they came up, then by name.
+func mostOftenFirst(counts map[string]int) []string {
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	slices.SortFunc(names, func(left, right string) int {
+		return cmp.Or(cmp.Compare(counts[right], counts[left]), strings.Compare(left, right))
+	})
+	return names
+}
+
+// listSome names up to signInListLimit things in a sentence, then says how
+// many more there are: "a and b", or "a, b, c, d, e, and 3 more".
+func listSome(names []string) string {
+	switch {
+	case len(names) > signInListLimit:
+		return strings.Join(names[:signInListLimit], ", ") + ", and " + strconv.Itoa(len(names)-signInListLimit) + " more"
+	case len(names) > 2:
+		return strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
+	default:
+		return strings.Join(names, " and ")
+	}
 }
 
 // failedInARow says how many attempts in a row failed.

@@ -465,6 +465,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		node: clusterAlertNode(clusterService, configurationManager), configuration: configurationManager,
 		certificates: certificateManager, zones: zoneRefresher, backups: scheduledBackups,
 		trustAnchors: trustAnchorManager, trustAnchorUpdates: handler.DNSSECTrustAnchorUpdatesEnabled,
+		auditLog: database, signIns: authentication != nil,
 	}.alertSources()...)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {

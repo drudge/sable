@@ -1,7 +1,9 @@
 package app
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/alerts"
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/backup"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
@@ -365,14 +368,293 @@ func TestBackupAlertsWhenTheLatestBackupFailedOrOneFinished(t *testing.T) {
 	}
 }
 
+// fakeAuditLog answers the way the store does: the records of the actions
+// asked for since a time, newest first, up to a limit.
+type fakeAuditLog struct {
+	records []auth.AuditRecord
+	// until hides the records after it, which a test that moves the clock
+	// has not reached yet. Zero shows them all.
+	until time.Time
+}
+
+func (log *fakeAuditLog) ListAuditRecordsSince(_ context.Context, actions []string, since time.Time, limit int) ([]auth.AuditRecord, error) {
+	var found []auth.AuditRecord
+	for _, record := range log.records {
+		written := log.until.IsZero() || !record.OccurredAt.After(log.until)
+		if written && slices.Contains(actions, record.Action) && !record.OccurredAt.Before(since) {
+			found = append(found, record)
+		}
+	}
+	slices.SortFunc(found, func(left, right auth.AuditRecord) int {
+		return cmp.Or(right.OccurredAt.Compare(left.OccurredAt), cmp.Compare(right.ID, left.ID))
+	})
+	return found[:min(len(found), limit)], nil
+}
+
+// add records one audit event, numbered in the order it was added.
+func (log *fakeAuditLog) add(at time.Time, action, username, address string) {
+	record := auth.AuditRecord{ID: int64(len(log.records) + 1), OccurredAt: at, Action: action, ClientIP: address}
+	switch action {
+	case auth.ActionLoginFailed:
+		record.Details = "invalid credentials; username=" + username
+	case auth.ActionLoginLocked:
+		record.Details = "too many failed sign-ins; username=" + username
+	default:
+		record.Username = username
+	}
+	log.records = append(log.records, record)
+}
+
+// failures records count password failures a step apart, the first at start.
+func (log *fakeAuditLog) failures(start time.Time, step time.Duration, count int, username, address string) {
+	for index := range count {
+		log.add(start.Add(time.Duration(index)*step), auth.ActionLoginFailed, username, address)
+	}
+}
+
+func newSignInTestSource(log *fakeAuditLog, after int, within time.Duration) *signInAlertSource {
+	return &signInAlertSource{
+		node:     alertTestNode(false),
+		auditLog: log,
+		settings: func() config.AlertSignIns {
+			return config.AlertSignIns{After: after, Within: config.Duration{Duration: within}}
+		},
+	}
+}
+
+func signInAlertID(start time.Time) string {
+	return "sign_ins.failed:node-1:" + strconv.FormatInt(start.Unix(), 10)
+}
+
+func TestSignInAlertsOnceEnoughFailuresFallInsideTheWindow(t *testing.T) {
+	t.Parallel()
+
+	burstStart := alertTestNow.Add(-5 * time.Minute)
+	burst := func(summary string, reasons ...string) wantAlert {
+		return wantAlert{
+			id: signInAlertID(burstStart), group: config.AlertGroupSignIns, kind: "sign_ins.failed",
+			title: "Failed sign-ins", subject: "ns1", path: "/administration?tab=sessions", tone: alerts.ToneNotice,
+			summary: summary, reasons: reasons, observedAt: burstStart,
+		}
+	}
+	for _, testCase := range []struct {
+		name   string
+		after  int
+		within time.Duration
+		log    func(*fakeAuditLog)
+		want   []wantAlert
+	}{
+		{name: "no failures"},
+		{
+			name: "fewer failures than the limit",
+			log:  func(log *fakeAuditLog) { log.failures(burstStart, time.Minute, 4, "admin", "203.0.113.9") },
+		},
+		{
+			name: "enough failures inside the window",
+			log: func(log *fakeAuditLog) {
+				log.failures(burstStart, time.Minute, 3, "admin", "203.0.113.9")
+				log.failures(burstStart.Add(3*time.Minute), time.Minute, 2, "root", "203.0.113.9")
+			},
+			want: []wantAlert{burst(
+				"5 sign-ins failed on ns1 in 4 minutes. They tried admin and root from 203.0.113.9.",
+				"Tried admin and root", "From 203.0.113.9", "Last failure 1 minute ago",
+			)},
+		},
+		{
+			// Each failure comes within the window of the one before, but no
+			// five of them fit inside one window.
+			name: "failures too spread out",
+			log: func(log *fakeAuditLog) {
+				log.failures(alertTestNow.Add(-time.Hour), 3*time.Minute, 5, "admin", "203.0.113.9")
+			},
+		},
+		{
+			name: "every kind of failure counts",
+			log: func(log *fakeAuditLog) {
+				log.add(burstStart, auth.ActionLoginFailed, "admin", "203.0.113.9")
+				log.add(burstStart.Add(time.Minute), auth.ActionPasskeyLoginFailed, "", "203.0.113.9")
+				log.add(burstStart.Add(2*time.Minute), auth.ActionFederatedDenied, "casey", "198.51.100.4")
+				log.add(burstStart.Add(3*time.Minute), auth.ActionLoginLocked, "admin", "203.0.113.9")
+				// A sign-in that worked is no failure.
+				log.add(burstStart.Add(3*time.Minute), "auth.login", "casey", "198.51.100.4")
+				log.add(burstStart.Add(4*time.Minute), auth.ActionFederatedDenied, "", "198.51.100.4")
+			},
+			want: []wantAlert{burst(
+				"5 sign-ins failed on ns1 in 4 minutes. They tried admin and casey from 203.0.113.9 and 198.51.100.4.",
+				"Tried admin and casey", "From 203.0.113.9 and 198.51.100.4", "1 lockout", "Last failure 1 minute ago",
+			)},
+		},
+		{
+			name: "long lists name five and count the rest",
+			log: func(log *fakeAuditLog) {
+				for index := range 8 {
+					log.add(burstStart.Add(time.Duration(index)*10*time.Second), auth.ActionLoginFailed,
+						fmt.Sprintf("user%d", index), fmt.Sprintf("192.0.2.%d", index%7))
+				}
+			},
+			want: []wantAlert{burst(
+				"8 sign-ins failed on ns1 in 1 minute. They tried user0, user1, user2, user3, user4, and 3 more from 192.0.2.0, 192.0.2.1, 192.0.2.2, 192.0.2.3, 192.0.2.4, and 2 more.",
+				"Tried user0, user1, user2, user3, user4, and 3 more", "From 192.0.2.0, 192.0.2.1, 192.0.2.2, 192.0.2.3, 192.0.2.4, and 2 more",
+				"Last failure 3 minutes ago",
+			)},
+		},
+		{
+			name: "two bursts apart are two alerts",
+			log: func(log *fakeAuditLog) {
+				log.failures(alertTestNow.Add(-5*time.Hour), time.Minute, 5, "admin", "203.0.113.9")
+				log.failures(burstStart, time.Minute, 5, "root", "198.51.100.4")
+			},
+			want: []wantAlert{
+				{
+					id: signInAlertID(alertTestNow.Add(-5 * time.Hour)), group: config.AlertGroupSignIns, kind: "sign_ins.failed",
+					title: "Failed sign-ins", subject: "ns1", path: "/administration?tab=sessions", tone: alerts.ToneNotice,
+				},
+				burst("5 sign-ins failed on ns1 in 4 minutes. They tried root from 198.51.100.4."),
+			},
+		},
+		{
+			name:   "the limit comes from the configuration",
+			after:  2,
+			within: time.Minute,
+			log: func(log *fakeAuditLog) {
+				log.failures(burstStart, 30*time.Second, 2, "admin", "203.0.113.9")
+			},
+			want: []wantAlert{burst("2 sign-ins failed on ns1 in under a minute. They tried admin from 203.0.113.9.")},
+		},
+		{
+			// Its start is out of sight, so it was reported a day ago, when
+			// it began.
+			name: "a burst that began a day ago",
+			log: func(log *fakeAuditLog) {
+				log.failures(alertTestNow.Add(-24*time.Hour+time.Minute), time.Minute, 5, "admin", "203.0.113.9")
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			log := &fakeAuditLog{}
+			if testCase.log != nil {
+				testCase.log(log)
+			}
+			source := newSignInTestSource(log, cmp.Or(testCase.after, 5), cmp.Or(testCase.within, 10*time.Minute))
+			got, err := source.Alerts(context.Background(), alertTestNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkAlerts(t, got, testCase.want)
+		})
+	}
+}
+
+func TestSignInAlertKeepsOneIDWhileTheBurstGoesOn(t *testing.T) {
+	t.Parallel()
+
+	// Someone tries a password every minute for thirty hours, longer than
+	// the day of history each look reads, then stops. Three hours later a
+	// second burst begins.
+	started := alertTestNow.Add(-30 * time.Hour)
+	log := &fakeAuditLog{}
+	log.failures(started, time.Minute, 30*60, "admin", "203.0.113.9")
+	stopped := log.records[len(log.records)-1].OccurredAt
+	again := stopped.Add(3 * time.Hour)
+	log.failures(again, time.Minute, 5, "root", "198.51.100.4")
+	source := newSignInTestSource(log, 5, 10*time.Minute)
+	look := func(source *signInAlertSource, at time.Time) []string {
+		t.Helper()
+		log.until = at
+		got, err := source.Alerts(context.Background(), at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := make([]string, 0, len(got))
+		for _, alert := range got {
+			ids = append(ids, alert.ID)
+		}
+		return ids
+	}
+
+	// The dispatcher looks every minute. Once an hour is enough to follow the
+	// burst, since each look overlaps the one before.
+	for at := started.Add(5 * time.Minute); at.Before(stopped.Add(2 * time.Hour)); at = at.Add(time.Hour) {
+		if got, want := look(source, at), []string{signInAlertID(started)}; !slices.Equal(got, want) {
+			t.Fatalf("look at %s = %v, want %v", at, got, want)
+		}
+	}
+	if got, want := look(source, again.Add(5*time.Minute)), []string{signInAlertID(started), signInAlertID(again)}; !slices.Equal(got, want) {
+		t.Fatalf("after the second burst began = %v, want %v", got, want)
+	}
+	// A day after its last failure, the first burst is no longer news.
+	if got, want := look(source, stopped.Add(24*time.Hour+time.Minute)), []string{signInAlertID(again)}; !slices.Equal(got, want) {
+		t.Fatalf("a day after the first burst = %v, want %v", got, want)
+	}
+
+	// A restart forgets what was reported. A burst whose start is out of sight
+	// began a day ago and was reported then, so it is not reported again.
+	restarted := newSignInTestSource(log, 5, 10*time.Minute)
+	if got := look(restarted, stopped.Add(time.Minute)); len(got) != 0 {
+		t.Fatalf("after a restart = %v, want nothing", got)
+	}
+}
+
+func TestSignInAlertKeepsAQuietRunApartFromALaterBurst(t *testing.T) {
+	t.Parallel()
+
+	// A lone failure in the morning, then a burst in the afternoon. The lone
+	// failure is the oldest run each look reads, and must not pass for the
+	// burst it came before.
+	log := &fakeAuditLog{}
+	log.add(alertTestNow.Add(-20*time.Hour), auth.ActionLoginFailed, "casey", "192.0.2.50")
+	burstStart := alertTestNow.Add(-2 * time.Hour)
+	log.failures(burstStart, time.Minute, 5, "admin", "203.0.113.9")
+	source := newSignInTestSource(log, 5, 10*time.Minute)
+	for _, at := range []time.Time{alertTestNow, alertTestNow.Add(time.Minute)} {
+		got, err := source.Alerts(context.Background(), at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != signInAlertID(burstStart) || !strings.HasPrefix(got[0].Summary, "5 sign-ins failed") {
+			t.Fatalf("look at %s = %+v, want the afternoon burst alone", at, got)
+		}
+	}
+}
+
+func TestSignInAlertFollowsAFloodPastTheRecordLimit(t *testing.T) {
+	t.Parallel()
+
+	// More failures in a few minutes than one look reads.
+	log := &fakeAuditLog{}
+	started := alertTestNow.Add(-10 * time.Minute)
+	log.failures(started, 100*time.Millisecond, signInRecordLimit+1000, "admin", "203.0.113.9")
+	source := newSignInTestSource(log, 5, 10*time.Minute)
+
+	first, err := source.Alerts(context.Background(), alertTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 1 || !strings.HasPrefix(first[0].Summary, "5000 sign-ins failed") {
+		t.Fatalf("first look = %+v, want one alert counting the failures it read", first)
+	}
+	// The flood goes on, so the oldest failures read move on too, but the
+	// burst keeps the ID it was first reported with.
+	log.failures(alertTestNow, 100*time.Millisecond, 600, "admin", "203.0.113.9")
+	later, err := source.Alerts(context.Background(), alertTestNow.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(later) != 1 || later[0].ID != first[0].ID {
+		t.Fatalf("later look = %+v, want the same alert %s", later, first[0].ID)
+	}
+}
+
 func TestNodeHealthPlacesEverySourceOnEachNode(t *testing.T) {
 	t.Parallel()
 
-	sources := nodeHealth{}.alertSources()
-	if len(sources) == 0 {
-		t.Fatal("no node alert sources")
+	// With security switched off nobody signs in, so there is no sign-in
+	// source.
+	if sources, withSignIns := len(nodeHealth{}.alertSources()), len(nodeHealth{signIns: true}.alertSources()); withSignIns != sources+1 {
+		t.Fatalf("sources = %d without sign-ins and %d with them, want one more with them", sources, withSignIns)
 	}
-	for _, source := range sources {
+	for _, source := range (nodeHealth{signIns: true}).alertSources() {
 		placed, ok := source.(alerts.Placed)
 		if !ok || placed.Placement() != alerts.OnEachNode {
 			t.Errorf("%T is not placed on each node", source)
