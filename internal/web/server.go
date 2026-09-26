@@ -29,6 +29,7 @@ import (
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsserver"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
+	"github.com/drudge/sable/internal/notices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
@@ -268,6 +269,7 @@ func New(
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
+	mux.HandleFunc("GET /ui/about/license", server.thirdPartyLicense)
 	mux.HandleFunc("GET /insights", server.insightsPage)
 	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
 	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
@@ -758,6 +760,19 @@ func (server *Server) aboutPage(writer http.ResponseWriter, request *http.Reques
 	}
 	if err := pages.AboutPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render about page", "error", err)
+	}
+}
+
+// thirdPartyLicense renders the license files of one piece of third-party
+// software, for its row in About's Third-Party Licenses.
+func (server *Server) thirdPartyLicense(writer http.ResponseWriter, request *http.Request) {
+	notice, found := notices.Named(request.URL.Query().Get("name"))
+	if !found {
+		http.NotFound(writer, request)
+		return
+	}
+	if err := pages.ThirdPartyLicenseText(notice).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render third-party license", "error", err)
 	}
 }
 
