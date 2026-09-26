@@ -2653,11 +2653,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: .25rem; }
 .settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 9 * .25rem) / 10); }
 /* The basis names how many tabs share a row, and flex-grow fills whatever row
-   they land on: ten across while there is room, then five, then four. A plain
-   fixed basis wraps wherever it happens to run out and leaves the last row
-   holding one tab stretched across the whole strip. */
+   they land on: ten across while there is room, then two even rows of five,
+   down to phones 375px wide, where Recursion still fits. Narrower phones get
+   four. A plain fixed basis wraps wherever it happens to run out and leaves
+   the last row holding one tab stretched across the whole strip. */
 @media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
-@media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }
+@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }
 .settings-tab { height: 3.25rem; flex-direction: column; gap: .25rem; padding: .45rem .25rem; }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
 .settings-tab span { font-size: .6875rem; line-height: 1; }

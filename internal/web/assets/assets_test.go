@@ -500,6 +500,20 @@ func TestDialogFooterButtonsCenterFullWidthMobileLabels(t *testing.T) {
 	}
 }
 
+func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"@media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }",
+		"@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("settings tabs do not keep two rows of five down to 375px phones: missing %q", expected)
+		}
+	}
+}
+
 func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
 	t.Parallel()
 
