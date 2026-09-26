@@ -36,6 +36,10 @@ func TestAuthPageGroupsAlternateSignInMethods(t *testing.T) {
 				!strings.Contains(html, `href="https://github.com/drudge/sable/blob/main/LICENSE"`) {
 				t.Fatal("authentication page should provide an in-app MIT license dialog with a repository link")
 			}
+			// Third-party licenses load for a signed-in operator, from About.
+			if strings.Contains(html, "third-party-licenses-dialog") {
+				t.Error("authentication page offers third-party licenses it cannot load")
+			}
 			if got := strings.Count(html, `class="auth-divider"`); got != test.dividers {
 				t.Fatalf("got %d dividers, want %d", got, test.dividers)
 			}
