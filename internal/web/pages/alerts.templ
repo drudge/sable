@@ -309,7 +309,7 @@ func alertsStateSummary(view AlertsView) string {
 	case view.State == AlertsOn:
 		return "Sable sends each new alert once to every destination that wants it."
 	case view.State == AlertsPaused:
-		return "Nothing is sent while alerts are paused, and what comes up meanwhile is not sent later."
+		return "Nothing is sent until you resume, and missed alerts are dropped."
 	case len(view.Destinations) == 0:
 		return "Add a destination to start getting alerts."
 	default:
