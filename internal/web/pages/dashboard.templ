@@ -639,8 +639,8 @@ templ CommandPalette(view DashboardView) {
 				if view.CanCheckUpdates {
 					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`, "")
 				}
-				if view.CanWriteSettings && (view.CanBlocking || view.CanLogs) {
-					@CommandOption("command-action-insights-alerts", "Insight Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "")
+				if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+					@CommandOption("command-action-insights-alerts", "Set Up Alerts", "Choose where alerts go and which ones Sable sends", "bell", "Action", "alerts notifications notify webhook findings insights slack discord ntfy pushover browser push", "/settings?tab=alerts", "", "", "", "")
 				}
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
@@ -717,6 +717,8 @@ func settingsCommandDescription(tab string) string {
 		return "Filtering policy and block lists"
 	case "logging":
 		return "Query logging and retention"
+	case "alerts":
+		return "Where alerts go and which ones Sable sends"
 	case "backup":
 		return "Export and restore configuration"
 	default:
@@ -742,6 +744,8 @@ func settingsCommandKeywords(tab string) string {
 		return "settings configuration blocking filtering policy lists response bypass clients"
 	case "logging":
 		return "settings configuration logging logs query retention"
+	case "alerts":
+		return "settings configuration alerts notifications notify webhook ntfy pushover slack discord browser push"
 	case "backup":
 		return "settings configuration backup backups restore download disaster recovery"
 	default:

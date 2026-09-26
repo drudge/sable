@@ -279,9 +279,9 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		if strings.Contains(body, `href="/insights"`) != want || strings.Contains(body, `id="command-page-insights"`) != want {
 			t.Errorf("%s: Insights navigation present = %t, want %t", session, strings.Contains(body, `href="/insights"`), want)
 		}
-		// The palette also jumps to Insights' tabs and alert setup, each for
-		// the operators who can use it: Devices needs the query log, and
-		// alerts need permission to change settings.
+		// The palette also jumps to Insights' tabs and to alert setup, each
+		// for the operators who can use it: Devices needs the query log, and
+		// setting up alerts needs permission to change settings.
 		for command, shown := range map[string]bool{
 			`id="command-page-insights-blocking"`: want,
 			// Anyone who may read the query log may look at Insights settings.
@@ -297,9 +297,9 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 	}
 	palette := server.get(t, "everything", "/", false).Body.String()
 	for _, expected := range []string{
-		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Insight Alerts"`,
+		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Set Up Alerts"`,
 		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
-		`data-command-route="/insights" data-command-dialog="insight-alerts-dialog"`,
+		`data-command-href="/settings?tab=alerts"`,
 		`data-command-label="App Insights"`, `data-command-route="/insights" data-command-dialog="top-stats-apps-dialog"`,
 		`data-command-label="Insights Settings"`, `data-command-route="/insights" data-command-dialog="insight-settings-dialog"`,
 	} {
