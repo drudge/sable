@@ -8,6 +8,17 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.9] - 2026-09-26
+
+Sable 1.5.0-beta.9 keeps button labels on one line in Safari.
+
+### Console
+
+- Keep **Send Test** on one line on each alert destination in Safari, where
+  its button came out slightly too narrow for its label.
+- Keep small buttons with an icon on one line in Safari on a phone, such as
+  **Add Destination**, **Add Key**, and **Set Up UniFi Sync**.
+
 ## [1.5.0-beta.8] - 2026-09-26
 
 Sable 1.5.0-beta.8 turns Insights alerts into alerts for the whole server.
