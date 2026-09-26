@@ -451,6 +451,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
 	pushKeys := newPushKeyStore(secretVault)
 	webServer.SetPushKeys(pushKeys)
+	stateReplicator.setAlerts(alertSecrets, pushKeys, database)
 	alertDispatcher := &alerts.Dispatcher{
 		Config:   func() config.Config { return configurationManager.Current().Config },
 		Secrets:  alertSecrets,
