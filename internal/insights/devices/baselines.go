@@ -29,6 +29,13 @@ const (
 	maximumApplianceDrift = 2
 )
 
+// Lookback is how far before the end of a window device findings reach: the
+// last day and the two weeks of routine before it. Addresses must be tied to
+// their devices across all of it, or a device's own older addresses stand
+// beside it as strangers that went quiet, and its usual volume looks smaller
+// than it is.
+const Lookback = (routineDays + 1) * 24 * time.Hour
+
 // appliances are device types that normally talk to the same few services, so
 // new destinations mean more than they do for a computer or a phone.
 var appliances = map[string]bool{
