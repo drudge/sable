@@ -351,12 +351,21 @@ templ alertDestinationRow(destination AlertDestinationView, view AlertsView) {
 		<span class="alert-destination-icon">@alertFormatIcon(destination.Format)</span>
 		<div class="alert-destination-detail">
 			<strong>{ destination.Label }</strong>
-			<small>
-				{ destination.FormatLabel }
-				if destination.Address != "" {
-					<span class="alert-destination-separator" aria-hidden="true">·</span><code class="alert-destination-address">{ destination.Address }</code>
-				}
-			</small>
+			// A destination with no name of its own is already called by its
+			// format, so the line under it does not say the format again.
+			if destination.Label != destination.FormatLabel || destination.Address != "" {
+				<small>
+					if destination.Label != destination.FormatLabel {
+						{ destination.FormatLabel }
+					}
+					if destination.Label != destination.FormatLabel && destination.Address != "" {
+						<span class="alert-destination-separator" aria-hidden="true">·</span>
+					}
+					if destination.Address != "" {
+						<code class="alert-destination-address">{ destination.Address }</code>
+					}
+				</small>
+			}
 			<span class="alert-destination-groups">
 				<span class="sr-only">Gets</span>
 				if destination.Everything {

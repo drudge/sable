@@ -4185,8 +4185,15 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-groups-save { display: flex; justify-content: flex-end; }
 .alert-browsers { display: grid; gap: .75rem; }
 /* Browsers carry their browsers under the row, beside the destination's
-   details rather than under its icon. */
-.alert-destination-browsers { grid-column: 2 / -1; }
+   details rather than under its icon. They sit flat in the row, past a rule,
+   rather than in boxes of their own inside it. */
+.alert-destination-browsers { grid-column: 2 / -1; gap: .15rem; border-top: 1px solid var(--border); padding-top: .6rem; }
+.alert-destination-browsers .alert-push-card { gap: .6rem; border: 0; border-radius: 0; background: none; padding: .2rem 0; }
+.alert-destination-browsers .alert-push-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; align-self: flex-start; margin-top: .1rem; background: none; }
+.alert-destination-browsers .alert-browser-list { gap: 0; }
+.alert-destination-browsers .alert-browser-heading { padding-top: .45rem; }
+.alert-destination-browsers .alert-browser { gap: .6rem; border: 0; border-radius: 0; padding: .35rem 0; }
+.alert-destination-browsers .alert-browser + .alert-browser { border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
 .alert-push-card { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
 .alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
 .alert-push-icon .nav-icon { width: 1rem; height: 1rem; }

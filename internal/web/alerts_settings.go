@@ -224,7 +224,9 @@ func alertDestinationView(destination config.AlertDestination, status alerts.Sta
 	}
 	switch destination.Format {
 	case config.AlertFormatBrowser:
-		if browsers > 0 {
+		// Where browsers push, the row lists its browsers, so it does not count
+		// them too.
+		if browsers > 0 && !push {
 			view.Address = fmt.Sprintf("%d %s", browsers, ifThenString(browsers == 1, "browser", "browsers"))
 		}
 	case config.AlertFormatPushover:

@@ -975,8 +975,12 @@ func TestAlertBrowsersTurnOnAndGetTests(t *testing.T) {
 		t.Fatalf("destinations = %+v", destinations)
 	}
 	panel := server.get(t, "everything", "/settings?tab=alerts", false).Body.String()
-	if !strings.Contains(panel, "Browsers getting alerts") || !strings.Contains(panel, "2 browsers") || !strings.Contains(panel, `<span class="status-badge success">On</span>`) {
+	if !strings.Contains(panel, "Browsers getting alerts") || strings.Count(panel, "data-push-browser=") != 2 || !strings.Contains(panel, `<span class="status-badge success">On</span>`) {
 		t.Fatal("the tab does not list the browsers that turned alerts on")
+	}
+	// The row lists its browsers, so it does not count them as well.
+	if strings.Contains(panel, "2 browsers") {
+		t.Error("the Browsers row counts the browsers it lists")
 	}
 
 	tested := server.post(t, "everything", "/ui/settings/alerts/destinations/test", url.Values{"id": {"browser"}})
