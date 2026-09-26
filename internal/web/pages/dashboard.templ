@@ -400,7 +400,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					</div>
 					<nav class="nav" id="primary-navigation" aria-label="Primary navigation" tabindex="-1">
 						<div class="nav-group">
-							<div class="nav-label">Overview</div>
 							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
 							if view.CanBlocking || view.CanLogs {
 								@NavItem("Insights", "/insights", "lightbulb", activePage == "insights", false)
@@ -415,9 +414,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 								@NavItem("Allowed", "/blocked?tab=allowed", "shield-check", activePage == "allowed", false)
 								@NavItem("Blocked", "/blocked?tab=domains", "shield-x", activePage == "blocked", false)
 							}
-							if view.CanSettings {
-								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
-							}
 							@NavItem("DNS Client", "/dns-client", "terminal", activePage == "dns-client", false)
 							if view.CanLogs {
 								@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
@@ -425,14 +421,15 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 						</div>
 						<div class="nav-group">
 							<div class="nav-label">System</div>
-							if view.CanSettings {
-								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
-							}
 							if view.CanAdministration {
 								@NavItem("Administration", "/administration", "users", activePage == "administration", false)
 							}
 							if view.CanCluster {
 								@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
+							}
+							if view.CanSettings {
+								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
+								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
 							}
 							@NavItem("About", "/about", "info", activePage == "about", false)
 						</div>
@@ -570,22 +567,20 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-allowed", "Allowed Domains", "Domains exempt from blocking", "shield-check", "Page", "allow permit whitelist exceptions", "/blocked?tab=allowed", "", "", "", "")
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
 				}
-				if view.CanSettings {
-					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")
-				}
 				@CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "")
 				if view.CanLogs {
 					@CommandOption("command-page-server-logs", "Server Logs", "Runtime events and diagnostics", "logs", "Page", "runtime debug errors diagnostics", "/logs", "", "", "", "")
 					@CommandOption("command-page-query-logs", "Query Logs", "Search DNS query history", "search", "Page", "history clients domains response", "/logs?tab=queries", "", "", "", "")
-				}
-				if view.CanSettings {
-					@CommandOption("command-page-settings", "Settings", "DNS, logging, blocking, and backups", "settings", "Page", "configuration resolver protocols backup", "/settings", "", "", "", "")
 				}
 				if view.CanAdministration {
 					@CommandOption("command-page-administration", "Administration", "Users, groups, tokens, and sessions", "users", "Page", "accounts permissions roles sessions", "/administration", "", "", "", "")
 				}
 				if view.CanCluster {
 					@CommandOption("command-page-cluster", "Cluster", "Members, certificates, and replication", "cluster", "Page", "nodes primary replica sync", "/cluster", "", "", "", "")
+				}
+				if view.CanSettings {
+					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")
+					@CommandOption("command-page-settings", "Settings", "DNS, logging, blocking, and backups", "settings", "Page", "configuration resolver protocols backup", "/settings", "", "", "", "")
 				}
 				@CommandOption("command-page-about", "About", "Version and update information", "info", "Page", "release build update", "/about", "", "", "", "")
 				if view.SecurityEnabled {

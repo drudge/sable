@@ -266,7 +266,7 @@ func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
 	for _, expected := range []string{
 		".sidebar-header { padding: 0.5rem 0.375rem 0.25rem; }",
 		".nav-group { padding: 0.25rem 0; }",
-		".nav-label { height: 1.5rem; padding: 0.25rem 0.5rem;",
+		".nav-label { height: 2rem; padding: 0.75rem 0.5rem 0.25rem;",
 	} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("sidebar sections are spaced out again, which scrolls About out of a laptop-height window: missing %q", expected)
