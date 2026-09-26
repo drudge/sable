@@ -682,9 +682,9 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		}
 		if len(finding.Reasons) > 0 || finding.Method != "" {
 			<section class="insight-why" aria-labelledby={ finding.ID + "-reasons" }>
-				<div class="insight-why-heading">
+				<div class={ "insight-why-heading", templ.KV("has-hide-menu", view.canHide(finding)) }>
 					<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
-					if view.CanHideFindings && finding.FindingID != "" {
+					if view.canHide(finding) {
 						@insightHideMenu(finding)
 					}
 				</div>
@@ -719,6 +719,11 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 			</section>
 		}
 	}
+}
+
+// canHide reports whether the operator may hide a finding from its drawer.
+func (view InsightsOverviewView) canHide(finding InsightFindingView) bool {
+	return view.CanHideFindings && finding.FindingID != ""
 }
 
 // insightHideMenu lets an operator hide a finding for a day, for a week, or
