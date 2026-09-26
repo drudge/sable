@@ -143,6 +143,17 @@ func (manager *Manager) Status() Status {
 	return manager.snapshot.Status
 }
 
+// RefreshInterval is how long the manager waits between refreshes that work,
+// going by the key set's TTL and signature validity when it last saw them. A
+// trust point that has never been refreshed waits the longest interval.
+func (manager *Manager) RefreshInterval() time.Duration {
+	status := manager.Status()
+	return manager.refreshInterval(
+		time.Duration(status.OriginalTTLSeconds)*time.Second,
+		time.Duration(status.SignatureValiditySeconds)*time.Second,
+	)
+}
+
 func (manager *Manager) ActiveAnchors() ([]string, bool) {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
