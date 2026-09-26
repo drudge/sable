@@ -500,6 +500,24 @@ func TestDialogFooterButtonsCenterFullWidthMobileLabels(t *testing.T) {
 	}
 }
 
+func TestPhoneDialogFootersStackTheMainButtonAtTheBottom(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, reversed := range []string{
+		".dialog-footer { flex-direction: column-reverse; }",
+		".wizard-footer { align-items: stretch; flex-direction: column-reverse; }",
+		".wizard-footer-advance { align-items: stretch; flex-direction: column-reverse; }",
+	} {
+		if strings.Contains(stylesheet, reversed) {
+			t.Errorf("a phone dialog footer stacks its main button on top: %s", reversed)
+		}
+	}
+	if !strings.Contains(stylesheet, ".dialog-footer { flex-direction: column; }") {
+		t.Error("phone dialog footers do not stack their buttons in order")
+	}
+}
+
 func TestMobileBackupActionsCenterButtonContents(t *testing.T) {
 	t.Parallel()
 
