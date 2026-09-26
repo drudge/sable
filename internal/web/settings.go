@@ -472,7 +472,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 	// tab lands where its settings live now.
 	case "proxy":
 		activeTab = "recursion"
-	case "general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "logging", "backup":
+	case "general", "web-service", "protocols", "tsig", "recursion", "cache", "blocking", "logging", "alerts", "backup":
 	default:
 		activeTab = "general"
 	}
@@ -527,6 +527,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		TSIGKeys:       server.tsigKeyViews(request.Context()),
 		TSIGAlgorithms: tsig.Algorithms(),
 	}
+	view.Alerts = server.alertsView(request.Context(), view.Console)
 	if server.certificates != nil {
 		status := server.certificates.Status(request.Context(), configuration.EncryptedDNS)
 		view.ACMECredentialsConfigured = status.CredentialsConfigured

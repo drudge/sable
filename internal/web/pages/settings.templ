@@ -92,6 +92,8 @@ type SettingsPageView struct {
 	BlockingBypassClients string
 	BlockingAllowTXTReport bool
 	Backup                 SettingsBackupView
+	// Alerts is the Alerts tab, which saves on its own like TSIG and Backup.
+	Alerts AlertsView
 	// TSIGKeys lists the shared secrets this node knows about. Only the name
 	// and algorithm travel with the view: the secret itself stays in the
 	// encrypted vault and is shown once, right after it is generated.
@@ -119,6 +121,7 @@ var settingsTabs = []tabOption{
 	{"cache", "Cache", "database"},
 	{"blocking", "Blocking", "shield"},
 	{"logging", "Logging", "file-text"},
+	{"alerts", "Alerts", "bell"},
 	{"backup", "Backup", "hard-drive"},
 }
 
@@ -145,11 +148,16 @@ templ SettingsContent(view SettingsPageView) {
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="blocking" hidden?={ view.ActiveTab != "blocking" }>@SettingsBlockingPanel(view)</div>
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="logging" hidden?={ view.ActiveTab != "logging" }>@SettingsLoggingPanel(view)</div>
 		</form>
-		// TSIG and Backup live outside the settings form. Each posts its own
-		// actions and must never be swept up by a Save Settings submission.
+		// TSIG, Alerts, and Backup live outside the settings form. Each posts
+		// its own actions and must never be swept up by a Save Settings
+		// submission.
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="tsig" hidden?={ view.ActiveTab != "tsig" }>@SettingsTSIGPanel(view)</div>
+		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="alerts" hidden?={ view.ActiveTab != "alerts" }>@SettingsAlertsPanel(view.Alerts)</div>
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
+		if view.Alerts.Available && view.Alerts.CanEdit {
+			@AlertDestinationDialog(view.Alerts.NewDestination)
+		}
 		@RunLocalBackupDialog()
 		@LocalBackupRestoreDialog()
 		@UploadBackupRestoreDialog()
