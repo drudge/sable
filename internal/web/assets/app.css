@@ -2398,7 +2398,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .isotope-data-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
 .isotope-data-header > div > span { color: var(--muted-foreground); font-size: .875rem; }
 .button.compact { display: inline-flex; height: 2rem; align-items: center; gap: .45rem; padding-inline: .75rem; font-size: .75rem; }
-.button.compact .nav-icon { width: 1rem; height: 1rem; }
+/* The basis matches the width. Otherwise phones give the icon the sidebar's
+   1.25rem basis, and Safari sizes the button too small and wraps its label. */
+.button.compact .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 [data-replica-primary-only="true"] { cursor: not-allowed !important; opacity: .45 !important; }
 .switch:has(input[data-replica-primary-only="true"]) { cursor: not-allowed; opacity: .45; }
 .replica-read-only-banner { position: sticky; top: 0; z-index: 15; display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid color-mix(in oklch, #3b82f6 60%, var(--border)); background-color: color-mix(in oklch, #3b82f6 10%, var(--background)); background-image: repeating-linear-gradient(135deg, transparent 0 14px, color-mix(in oklch, #3b82f6 7%, transparent) 14px 22px); padding: .5rem 1.5rem; box-shadow: 0 2px 10px rgb(0 0 0 / .08); backdrop-filter: blur(12px); }
@@ -3223,7 +3225,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-wizard-dialog input[type="checkbox"], .unifi-wizard-dialog input[type="radio"] {
 	width: 1rem; height: 1rem; flex: 0 0 1rem; padding: 0; accent-color: #3b82f6;
 }
-.integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; }
+.integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 #unifi-status, #dynamic-dns-status { display: grid; gap: .6rem; }
 .unifi-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; color: var(--muted-foreground); font-size: .72rem; }
 .button.is-syncing .icon-refresh, .unifi-status-line .icon-refresh { animation: blocking-refresh-spin .8s linear infinite; }
@@ -4144,8 +4146,10 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-destination-groups { display: flex; flex-wrap: wrap; gap: .3rem; }
 .alert-group-tag { border-radius: 999px; background: var(--muted); padding: .05rem .5rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 600; line-height: 1.5; }
 .alert-destination-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
-.alert-destination-actions .button { display: inline-flex; align-items: center; gap: .4rem; }
-.alert-destination-actions .button .nav-icon { width: .9rem; height: .9rem; }
+/* The icon's flex-basis matches its width. Left at .nav-icon's larger basis,
+   Safari sizes each button for the smaller icon and Send Test wraps. */
+.alert-destination-actions .button { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.alert-destination-actions .button .nav-icon { width: .9rem; height: .9rem; flex-basis: .9rem; }
 .alert-groups { display: grid; gap: .75rem; }
 .alert-choice-row { flex-wrap: wrap; }
 .alert-choice { display: inline-flex; flex: 0 0 auto; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
@@ -4223,7 +4227,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-browser > div { display: grid; flex: 1 1 auto; min-width: 0; gap: .1rem; font-size: .8125rem; }
 .alert-browser small { color: var(--muted-foreground); font-size: .7rem; }
 .alert-browser > .button { display: inline-flex; align-items: center; gap: .4rem; }
-.alert-browser > .button .nav-icon { width: .9rem; height: .9rem; }
+.alert-browser > .button .nav-icon { width: .9rem; height: .9rem; flex-basis: .9rem; }
 .alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
 .alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
 .alert-browser-orphans { margin-top: .75rem; }
