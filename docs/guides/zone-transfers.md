@@ -34,6 +34,8 @@ Query the SOA on both nodes. Change a harmless test record on the primary and co
 
 An empty new Secondary is not ready to serve the intended records until its first transfer completes. If the primary remains unavailable beyond the SOA expiry interval, the Secondary cannot continue treating its copy as current indefinitely.
 
+When three refreshes in a row fail, or the zone expires, the node sends a server [alert](../configuration.md#alerts) naming the zone and the latest error; in a cluster, the alert names the node too. A catalog member that cannot finish its first transfer alerts the same way.
+
 ## Synchronize forwarding rules and overrides
 
 A [Secondary Forwarder](../reference/zones/forwarder.md#secondary-forwarder-synchronization) uses full AXFR to copy forwarding rules and local records from its source. Import a supported forwarder member through **Import from Catalog → Secondary** to stage it this way. The transfer protocol and TSIG settings authenticate synchronization separately from the protocols used by FWD records to resolve queries.

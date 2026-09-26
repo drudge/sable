@@ -914,7 +914,13 @@ The embedded console uses `HttpOnly`, `SameSite=Strict` session cookies and a
 per-session CSRF token for every mutation. Login attempts are throttled by
 username and source address, and concurrent password hashing is bounded to
 protect resolver memory. Setup, login, logout, failed login, and token creation
-produce persistent audit events.
+produce persistent audit events. A failed password sign-in records the username
+it tried, lowercased, when that is a well-formed username; anything else, such
+as a password typed into the username field, is recorded only as a malformed
+username. The password is never recorded. A sign-in refused after too many
+failures records one `auth.login.locked` event per lockout. With `sign_ins`
+switched on under [`[alerts.send]`](#alerts), each burst of failed sign-ins on
+a node sends one alert.
 
 The Administration page stores users, groups, permission grants, active
 sessions, and API-token metadata in the selected SQLite or PostgreSQL backend.
