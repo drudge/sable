@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,6 +41,13 @@ type Heartbeat struct {
 	StateDigest       string            `json:"state_digest,omitempty"`
 	UpSince           time.Time         `json:"up_since"`
 	SentAt            time.Time         `json:"sent_at"`
+	// Alerts is the replica's own alerts as a JSON list, carried only to a
+	// primary that advertised it takes them, and only when they changed or
+	// once a minute. A heartbeat that carries a list replaces what the primary
+	// knew, even when it lists nothing. The list crosses as raw JSON because
+	// the primary refuses heartbeat fields it does not know: an alert that
+	// gains a field in a later release still reaches an older primary.
+	Alerts json.RawMessage `json:"alerts,omitempty"`
 }
 
 type SyncConfiguration struct {
@@ -55,6 +63,7 @@ type SyncConfiguration struct {
 	Members        []Member       `json:"members"`
 	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
 	UpdateProtocol int            `json:"update_protocol,omitempty"`
+	AlertProtocol  int            `json:"alert_protocol,omitempty"`
 }
 
 type nodeTelemetry struct {
@@ -72,7 +81,10 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 		service.monitorLifecycleMu.Unlock()
 		go func() {
 			defer close(done)
+			var gathering sync.WaitGroup
+			gathering.Go(func() { service.gatherLocalAlerts(monitorContext) })
 			service.monitorPrimary(monitorContext)
+			gathering.Wait()
 		}()
 	})
 }
@@ -137,7 +149,12 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	if previouslyObserved && !heartbeat.SentAt.After(previous.heartbeat.SentAt) {
 		return SyncConfiguration{}, errors.New("synchronization heartbeat is stale or replayed")
 	}
-	service.telemetry[heartbeat.NodeID] = nodeTelemetry{heartbeat: heartbeat, received: now}
+	if heartbeat.Alerts != nil && localIsPrimary {
+		service.recordReportedAlerts(heartbeat.NodeID, heartbeat.Alerts, now)
+	}
+	observed := heartbeat
+	observed.Alerts = nil
+	service.telemetry[heartbeat.NodeID] = nodeTelemetry{heartbeat: observed, received: now}
 	if service.logger != nil && (!previouslyObserved || previous.heartbeat.AppliedGeneration != heartbeat.AppliedGeneration) {
 		syncState := "behind"
 		if heartbeat.AppliedGeneration == service.manifest.Generation && heartbeat.StateDigest == service.manifest.StateDigest {
@@ -160,6 +177,9 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		}
 	}
 	configuration := joinConfiguration(service.manifest, stateSnapshot)
+	if localIsPrimary {
+		configuration.AlertProtocol = alertProtocolVersion
+	}
 	return SyncConfiguration(configuration), nil
 }
 
@@ -235,6 +255,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		if syncErr != nil {
 			service.mu.Lock()
 			service.updatePrimaryID = ""
+			service.alertPrimaryID = ""
 			service.mu.Unlock()
 		}
 	}()
@@ -264,6 +285,10 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		AppliedGeneration: service.manifest.Generation,
 		StateDigest:       service.manifest.StateDigest,
 		UpSince:           service.startedAt, SentAt: time.Now(),
+	}
+	var alertRevision uint64
+	if found && service.alertPrimaryID == primary.ID {
+		heartbeat.Alerts, alertRevision = service.alertReport.pending(primary.ID, heartbeat.SentAt)
 	}
 	statusKey := service.manifest.StatusKey
 	service.mu.RUnlock()
@@ -304,6 +329,11 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	}
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("cluster primary rejected synchronization: %s", response.Status)
+	}
+	if heartbeat.Alerts != nil {
+		// The primary kept the list once it accepted the heartbeat, whatever
+		// becomes of the rest of this synchronization.
+		service.alertReport.delivered(primary.ID, alertRevision, heartbeat.SentAt)
 	}
 	var configuration SyncConfiguration
 	if err := json.NewDecoder(io.LimitReader(response.Body, maximumSyncBytes)).Decode(&configuration); err != nil {
@@ -354,6 +384,10 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	service.updatePrimaryID = ""
 	if configuration.UpdateProtocol == updateProtocolVersion && configuration.PrimaryID == primary.ID {
 		service.updatePrimaryID = primary.ID
+	}
+	service.alertPrimaryID = ""
+	if configuration.AlertProtocol == alertProtocolVersion && configuration.PrimaryID == primary.ID {
+		service.alertPrimaryID = primary.ID
 	}
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{

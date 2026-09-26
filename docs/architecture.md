@@ -214,12 +214,18 @@ When first-seen tracking begins on a database that already holds query history,
 a one-time background task fills device and domain sightings from that history,
 so Insights knows who was already on the network from the first day.
 
+For each kind of finding, `[insights.findings]` says whether Insights shows it
+and alerts on it, only shows it, or leaves it out, and holds the limits that
+make one. The analyzers take those limits and do not look for kinds that are
+off, so a kind that is off costs nothing and never keeps another from being
+reported. The console leaves kinds that are off out of the page and turns only
+kinds set to alert into alerts.
+
 Operators can dismiss a finding for a day, snooze it for a week, or mark it
 normal for good. That feedback is stored by finding ID, which names the subject
 durably, so it survives renames. The Overview joins the headlines of the most
-important findings into one sentence. A background worker on the primary node
-sends each new finding that is news to an optional webhook, once, and records
-what it sent by a hash of the webhook URL rather than the URL itself.
+important findings into one sentence. Findings that are news feed alerts as one
+source among others.
 
 Every statement must be supportable from the data shown beside it. Conclusions
 are typed results with evidence, not generated prose, and any future local
@@ -228,6 +234,19 @@ only for ambiguous cases, and a confidence with the evidence that produced it.
 Operator-given device names are keyed by the same device identity the analyzers
 use, so a correction stays attached to the device it describes and can later
 serve as a local example.
+
+## Alerts
+
+`internal/alerts` sends word of what Sable notices to the destinations in
+`[alerts]`: ntfy, Pushover, Slack, Discord, a webhook, or browsers. Sources say
+what is news right now: Insights findings, cluster nodes and rollouts, UniFi and
+dynamic DNS, releases, and each node's certificates, secondary zones, DNSSEC
+keys, backups, and failed sign-ins. A dispatcher on the lead asks them once a
+minute and sends each alert once to each destination that wants its group,
+recording what it sent by destination ID. Problems go out at high priority.
+Destination URLs and keys live in the encrypted vault. Replicas hand the lead
+what they see in themselves in their heartbeats, and report the lead when it
+stops answering.
 
 ## Clustering
 

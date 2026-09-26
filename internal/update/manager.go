@@ -80,6 +80,14 @@ func (status Status) UpToDate() bool {
 	return !status.Development && status.Checked() && !status.Available && !status.Installed && status.Error == ""
 }
 
+// NewerRelease reports whether the newest release a check found is newer than
+// the build this process runs. Unlike Available, it holds while a later check
+// runs and after one fails, so news of a release does not flicker, and it
+// stays true once the release is installed until Sable restarts into it.
+func (status Status) NewerRelease() bool {
+	return isNewer(status.LatestVersion, status.CurrentVersion)
+}
+
 // Manager runs release checks and installations for the web console. One
 // operation runs at a time, and installations run in the background so the
 // console can poll their progress instead of holding a request open for the
@@ -148,9 +156,23 @@ func (manager *Manager) Check(ctx context.Context, includePreRelease bool) (Stat
 // CheckAutomatically shares a cached result across console sessions, including
 // failed lookups, so signing in cannot exhaust GitHub's unauthenticated quota.
 func (manager *Manager) CheckAutomatically(ctx context.Context, includePreRelease bool) (Status, error) {
+	return manager.checkInBackground(ctx, includePreRelease, automaticCheckInterval)
+}
+
+// CheckOnSchedule is the scheduled check's lookup. The schedule already keeps
+// its checks at least an hour apart, so it skips the cache that sign-ins
+// share, which would otherwise hold an hourly check to one every six hours.
+func (manager *Manager) CheckOnSchedule(ctx context.Context, includePreRelease bool) (Status, error) {
+	return manager.checkInBackground(ctx, includePreRelease, 0)
+}
+
+// checkInBackground looks for a release with a short timeout, unless another
+// operation holds the updater or a result on the same channel is younger than
+// fresh.
+func (manager *Manager) checkInBackground(ctx context.Context, includePreRelease bool, fresh time.Duration) (Status, error) {
 	manager.mutex.Lock()
 	if manager.status.Busy() || manager.status.Installed || manager.reservation != "" ||
-		(manager.status.IncludePreRelease == includePreRelease && time.Since(manager.status.CheckedAt) < automaticCheckInterval) {
+		(manager.status.IncludePreRelease == includePreRelease && time.Since(manager.status.CheckedAt) < fresh) {
 		status := manager.status
 		status.ClusterUpdate = manager.reservation != ""
 		manager.mutex.Unlock()

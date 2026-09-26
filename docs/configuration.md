@@ -463,6 +463,13 @@ TTL values are normally 60–86400 seconds. GoDaddy and Porkbun require at least
 current public IP in its API allow-list, so it may be unsuitable when that IP
 changes without another way to update the allow-list.
 
+Dynamic DNS sends [alerts](#alerts) in the `integrations` group. Three failed
+publishes in a row send a problem alert with the last error, which clears once
+a publish works. When a run finds a new public IPv4 or IPv6 address, Sable sends
+a notice with the old and the new address, and it stays news for a day. The
+previous address and when it changed are saved with the rest of the
+publication history, so a restart does not lose them.
+
 Only the writable cluster node discovers each needed address family once per
 run and publishes it through every configured provider. A failure at one
 provider does not prevent the others from being attempted. Settings and all
@@ -544,6 +551,10 @@ themselves. The `[unifi]` section and the controller credentials still travel to
 every node, so a promoted replica picks the synchronization up instead of
 leaving the inherited records frozen. Point `tls_ca_file` at a path that exists
 on every node.
+
+Three failed syncs in a row send a problem [alert](#alerts) in the
+`integrations` group, with the last error and the time of the last good sync.
+It clears once a sync works.
 
 ## Blocking
 
@@ -664,14 +675,6 @@ name = "Front door"
 mac = "34:3e:a4:33:0c:c6"
 type = "doorbell"
 
-[insights.webhook]
-url = "https://ntfy.sh/your-topic"
-format = "text"
-ntfy_receipt = true
-
-[[insights.webhook.headers]]
-name = "Priority"
-value = "high"
 ```
 
 Each `[[clients]]` entry is what an operator told Sable about one device,
@@ -684,33 +687,136 @@ these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 `game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
 `smart-plug`, `smart-home`, and `watch`.
 
-`[insights.webhook]` sends each new Insights finding worth a look to a URL,
-once, and skips anything an operator dismissed, snoozed, or marked normal. The
-`json` format (the default) posts an object with the finding's kind, subject,
-summary, and reasons, plus `text` and `content` fields that Slack and Discord
-show as the message. The `text` format posts the summary as plain text with a
-`Title` header, which suits ntfy. The `slack` format posts a Slack incoming-webhook card with a colored bar, the
-finding's reasons, and a button to Insights; the `discord` format posts a
-Discord webhook embed colored by tone that mentions no one. Both fail unless
-Slack or Discord itself answers, which catches a mistyped URL. The `browser` format needs no `url`: it pushes each finding to the browsers
-that turned alerts on in the console, through their own push services, signed
-with a key Sable makes the first time a browser asks and keeps sealed in its
-secret vault. The `pushover` format posts Pushover's
-message form with the application token in `pushover_token` and the user or
-group key in `pushover_user`, and fails when Pushover does not accept it. It
-needs no `url`: Sable uses `https://api.pushover.net/1/messages.json`, and the
-keys alone say whether alerts are on. Only the `json` and `text` formats send
-`headers`. When a webhook is first set, Sable takes stock
-of what it already knows without sending it, so turning alerts on never floods
-the webhook with old news. `paused = true` stops sending but keeps the webhook;
-findings that turn up while paused are not sent when alerts resume. Any server
-can answer a request with success, including a parked domain behind a typo, so
-`ntfy_receipt = true` only counts a send when ntfy answers with the ID of the
-message it published; it applies only with `format = "text"`. Each `[[insights.webhook.headers]]` entry is sent with
-every alert, such as `Authorization` for a protected ntfy topic; Sable sets
-`Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself. Only the
-primary node sends alerts. The Insights Overview can set the webhook, pause and
-resume it, and send a test.
+Insights findings worth a look are sent as alerts; see [Alerts](#alerts).
+
+```toml
+[insights.findings.went_quiet]
+mode = "alert"
+minimum_daily_lookups = 50
+
+[insights.findings.traffic_spike]
+mode = "show"
+factor = 3.0
+minimum_lookups = 500
+
+[insights.findings.check_in]
+mode = "off"
+```
+
+`[insights.findings]` has a table for each kind of finding, named for the kind
+without its area: `went_quiet` is `devices.went-quiet`, the `kind` webhooks
+see. `mode` is `"alert"` to show findings of that kind in Insights and send
+each new one as an alert, `"show"` to show them without alerting, or `"off"` to
+stop Insights looking for them at all. By default every kind that is news
+alerts, and the three that describe block list coverage are only shown. Those
+three are never news, so they take `"show"` or `"off"`. A limit left out, or
+set to 0, keeps its default, so a table only needs what it changes. Insights
+Settings, opened from **Settings** at the top of Insights, sets all of this, so
+most people never edit it by hand. A kind set to alert is sent only while
+`[alerts.send]` has `insights = true` and a destination takes Insights alerts.
+
+| Table | Finding | Limits: default, range |
+| --- | --- | --- |
+| `new_device` | New device on the network | None |
+| `went_quiet` | Went quiet | `minimum_daily_lookups`: lookups a day it averaged over the week before; 50, 1 to 100,000. The day of silence is fixed. |
+| `traffic_spike` | Unusually busy | `factor`: times its daily average; 3.0, 1.5 to 100. `minimum_lookups`: lookups in the day; 500, 1 to 1,000,000. |
+| `new_destinations` | Talking to new places | `minimum_new_domains`: domains first queried in the selected period; 20, 1 to 10,000. |
+| `new_app` | Started using a new app | None |
+| `unusual_hours` | Active at an unusual hour | `minimum_lookups`: lookups in an hour it had not used for two weeks; 30, 1 to 100,000. |
+| `check_in` | Checks in on a schedule | `longest_interval`: most time between lookups; `"2h"`, 2 minutes to 2 hours. `shortest_span`: least time it keeps the schedule up; `"12h"`, 1 to 23 hours. |
+| `appliance_new_domains` | Appliance talking somewhere new | `minimum_new_domains`: domains it never used, in one day; 3, 1 to 1,000. |
+| `update_failing` | Block list updates are failing | `missed_updates`: update intervals without a download; 2, 1 to 100. |
+| `past_block` | Possible past blocking issue | None |
+| `list_unreadable` | Block list left out of the comparison | None. `"show"` or `"off"`. |
+| `low_unique_coverage` | Little unique coverage | None. `"show"` or `"off"`. |
+| `unique_coverage` | Meaningful unique coverage | None. `"show"` or `"off"`. |
+
+A kind that is off costs nothing: Insights skips the reads only it needs, and it
+never keeps another kind from reporting the same device. Changes reach the page
+the next time it loads and alerts on their next round.
+
+## Alerts
+
+```toml
+[alerts]
+paused = false
+
+[alerts.send]
+insights = true
+cluster = true
+updates = true
+integrations = true
+backups = "failures"
+server = true
+sign_ins = false
+
+[alerts.sign_ins]
+after = 5
+within = "10m"
+
+[[alerts.destinations]]
+id = "phone"
+name = "Phone"
+format = "pushover"
+sends = ["cluster", "sign_ins"]
+
+[[alerts.destinations]]
+id = "chat"
+name = "Home Slack"
+format = "slack"
+```
+
+Sable sends each new alert once to every destination that wants its group, and
+skips any Insights finding an operator dismissed, snoozed, or marked normal.
+Settings > Alerts sets all of this up, so most people never edit it by hand.
+
+Each `[alerts.send]` switch covers one group. `insights` is findings worth a
+look. `cluster` is a node going down and coming back, and update rollouts.
+`updates` is a new Sable release. `integrations` is UniFi sync and dynamic DNS.
+`backups` is `"failures"` (the default), `"all"` to hear about every finished
+backup too, or `"off"`. `server` is certificate renewals, secondary zones, and
+DNSSEC keys. `sign_ins` is off by default; `[alerts.sign_ins]` sends one alert
+when `after` sign-ins fail on one node within `within`. Problems, such as a
+node down or a failed backup, go out at high priority on ntfy, Pushover, and
+browsers.
+
+Each `[[alerts.destinations]]` entry is one place alerts go. `id` names it for
+good: its record of what was sent and its secrets hang on it, so renaming it
+changes only `name`. `sends` limits it to some groups; leave it out to send
+everything. The `json` format (the default) posts an object with the alert's
+group, kind, priority, subject, summary, and reasons, plus `text` and `content`
+fields that Slack and Discord show as the message. Insights alerts keep
+`"event": "insight"`; other alerts name their group. The `text` format posts the
+summary as plain text with a `Title` header, which suits ntfy. The `slack`
+format posts a Slack incoming-webhook card with a colored bar, the alert's
+reasons, and a button to the console; the `discord` format posts a Discord
+webhook embed colored by tone that mentions no one. Both fail unless Slack or
+Discord itself answers, which catches a mistyped URL. The `browser` format needs
+no `url`: it pushes each alert to the browsers that turned alerts on, through
+their own push services, signed with a key Sable makes the first time a browser
+asks and keeps sealed in its secret vault. Only one destination can push to
+browsers. The `pushover` format posts Pushover's message form to
+`https://api.pushover.net/1/messages.json` and fails when Pushover does not
+accept it. Any server can answer a request with success, including a parked
+domain behind a typo, so `ntfy_receipt = true` only counts a send when ntfy
+answers with the ID of the message it published; it applies only with
+`format = "text"`.
+
+A destination's `url`, `pushover_token`, `pushover_user`, and `headers` are
+secrets, since a webhook URL usually carries a token. Sable keeps them in its
+encrypted vault, not in `sable.toml`. Any written in the file, by hand or by an
+older release's `[insights.webhook]`, move to the vault the next time Sable
+starts, and the file is written back without them. Only the `json` and `text`
+formats send headers, such as `Authorization` for a protected ntfy topic; Sable
+sets `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself.
+
+When a destination is added, Sable takes stock of what it already knows without
+sending it, so a new destination never gets old news. `paused = true` stops
+sending but keeps every destination; alerts that turn up while paused, or in a
+group that is switched off, are not sent later. A destination that fails keeps
+its alerts for the next try without holding up the others. In a cluster the
+lead node sends alerts, and a replica sends one only when the lead stops
+answering; see [Alerts in a cluster](clustering.md#alerts-in-a-cluster).
 
 ## Server logging
 
@@ -866,7 +972,13 @@ The embedded console uses `HttpOnly`, `SameSite=Strict` session cookies and a
 per-session CSRF token for every mutation. Login attempts are throttled by
 username and source address, and concurrent password hashing is bounded to
 protect resolver memory. Setup, login, logout, failed login, and token creation
-produce persistent audit events.
+produce persistent audit events. A failed password sign-in records the username
+it tried, lowercased, when that is a well-formed username; anything else, such
+as a password typed into the username field, is recorded only as a malformed
+username. The password is never recorded. A sign-in refused after too many
+failures records one `auth.login.locked` event per lockout. With `sign_ins`
+switched on under [`[alerts.send]`](#alerts), each burst of failed sign-ins on
+a node sends one alert.
 
 The Administration page stores users, groups, permission grants, active
 sessions, and API-token metadata in the selected SQLite or PostgreSQL backend.
@@ -1104,12 +1216,13 @@ new node joins as a replica and begins pulling signed generations from the
 primary. Each generation carries a content-addressed snapshot of authoritative
 zones, resolver/cache policy, TSIG keys, blocking policy, query-log enablement,
 UniFi integration settings and controller credentials, single sign-on settings
-and their client secret, users, groups, permission grants, and hashed API
-tokens. Token deletion is
+and their client secret, alert settings with their destinations' secrets, the
+browser push key and the browsers that turned alerts on, users, groups,
+permission grants, and hashed API tokens. Token deletion is
 replicated as revocation. Password and token secrets are never stored in plain
-text, and replicated TSIG secrets, UniFi credentials, and the single sign-on
-client secret are written into the receiving node's own encrypted vault rather
-than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
+text, and replicated TSIG secrets, UniFi credentials, the single sign-on
+client secret, alert destination secrets, and the push key are written into
+the receiving node's own encrypted vault rather than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
 certificate configuration, database paths, security bootstrap, the single
 sign-on callback override, update release channel, and cluster settings remain node-local. Replicas continue serving DNS if the primary is
 unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is
@@ -1194,11 +1307,24 @@ statistics return HTTP 503.
 [updates]
 pre_release = false
 check_on_login = true
+check_schedule = "hourly"
+check_at = "09:00"
+check_day = "monday"
 restart_managed = false
 ```
 
 These preferences are node-local. `check_on_login` controls release checks after
-sign-in; it never authorizes automatic installation. `pre_release` includes
+sign-in, and it is also consent to check in the background: while it is on, the
+lead node, or a node on its own, asks GitHub on the schedule in
+`check_schedule`, so an `updates` [alert](#alerts) about a newer release does
+not wait for someone to sign in. `check_schedule` is `hourly`, the default,
+`daily`, or `weekly`. Daily and weekly checks run at `check_at`, HH:MM in the
+node's local timezone as for scheduled backups, and weekly ones on
+`check_day`, such as `friday`. A node that has never found a release asks
+right away. Sign-in checks share a six-hour cache so signing in cannot use up
+GitHub's anonymous limit; scheduled checks keep to their schedule instead. The
+alert lasts until the node runs that release, so it goes out once per release.
+`check_on_login` never authorizes automatic installation. `pre_release` includes
 prereleases in this node's checks. Changes to `restart_managed` take effect on
 startup: set it only when a supervisor will restart Sable after it exits.
 Installed systemd services are detected automatically. For Docker rolling

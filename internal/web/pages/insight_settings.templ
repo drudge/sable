@@ -1,0 +1,213 @@
+package pages
+
+import "strings"
+
+// InsightSettingsView is Insights settings: what Insights does with each kind
+// of finding, and whether its alerts go anywhere.
+type InsightSettingsView struct {
+	// CanEdit is set for operators who may change settings. Everyone else who
+	// may read the query log sees the settings without being able to change
+	// them.
+	CanEdit bool
+	Alerts  InsightAlertStatusView
+	Groups  []InsightSettingGroupView
+	Message string
+	Error   string
+}
+
+// InsightAlertStatusView says whether Insights alerts go out.
+type InsightAlertStatusView struct {
+	// State is "on", "paused", or "off".
+	State string
+	// Detail says why, in one sentence.
+	Detail string
+	// Link is where alerts are set up, for operators who may open it.
+	Link string
+}
+
+// InsightSettingGroupView is the kinds of finding one area of Insights makes.
+type InsightSettingGroupView struct {
+	ID    string
+	Title string
+	Kinds []InsightKindSettingView
+}
+
+// InsightKindSettingView is one kind of finding and what Insights does with it.
+type InsightKindSettingView struct {
+	// Key names the kind's settings, such as "went_quiet", and prefixes its
+	// form fields.
+	Key         string
+	Title       string
+	Description string
+	Icon        string
+	// Mode is "alert", "show", or "off".
+	Mode string
+	// CanAlert is false for findings that are never news, which can only be
+	// shown or left out; Note says why.
+	CanAlert bool
+	Note     string
+	Limits   []InsightLimitView
+}
+
+// InsightLimitView is one limit's field, holding the number as the operator
+// typed it when a save was refused.
+type InsightLimitView struct {
+	Name    string
+	Label   string
+	Help    string
+	Value   string
+	Minimum string
+	Maximum string
+	// Step is "1" for a whole number and "any" otherwise.
+	Step  string
+	Error string
+	// Focus puts the cursor in the first field a refused save marked.
+	Focus bool
+}
+
+// insightSettingID turns a form field name, such as
+// "went_quiet.minimum_daily_lookups", into an element ID.
+func insightSettingID(name string) string {
+	return "insight-setting-" + strings.NewReplacer(".", "-", "_", "-").Replace(name)
+}
+
+// InsightAlertsBell says with its icon and word whether Insights alerts are
+// on, paused, or off, and why when hovered. For operators who may open
+// Settings, it leads to Settings > Alerts, where alerts are set up.
+templ InsightAlertsBell(status InsightAlertStatusView) {
+	if status.Link != "" {
+		<a class={ "button outline compact insight-alerts-bell " + status.State } id="insight-alerts-bell" href={ templ.SafeURL(status.Link) } aria-label={ "Insights alerts " + status.State } title={ status.Detail }>
+			@insightAlertsBellFace(status.State)
+		</a>
+	} else {
+		<span class={ "button outline compact insight-alerts-bell " + status.State } id="insight-alerts-bell" title={ status.Detail }>
+			<span class="sr-only">Insights alerts</span>
+			@insightAlertsBellFace(status.State)
+		</span>
+	}
+}
+
+templ insightAlertsBellFace(state string) {
+	switch state {
+		case "on":
+			@Icon("bell")
+			<span>On</span>
+		case "paused":
+			@Icon("pause")
+			<span>Paused</span>
+		default:
+			@Icon("bell-off")
+			<span>Off</span>
+	}
+}
+
+// InsightSettingsButton opens Insights settings: what Insights does with each
+// kind of finding, and the limits that make one.
+templ InsightSettingsButton() {
+	<button class="button outline compact insight-settings-open" id="insight-settings-open" type="button" data-dialog-open="insight-settings-dialog">@Icon("sliders")<span>Settings</span></button>
+}
+
+// InsightSettingsDialog holds Insights settings. Saving swaps the form in
+// place, so the dialog stays open on the result.
+templ InsightSettingsDialog(view InsightSettingsView) {
+	<dialog class="custom-server-dialog isotope-form-dialog insight-settings-dialog" id="insight-settings-dialog" aria-labelledby="insight-settings-title">
+		<div class="dialog-header"><h2 id="insight-settings-title">Insights Settings</h2><p>Choose what Insights looks for and what it alerts you about</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		@InsightSettings(view)
+	</dialog>
+}
+
+// InsightSettings is the settings form. Save is its only submit button, so
+// Enter in a limit saves; Reset to Defaults asks first and sends its own
+// request.
+templ InsightSettings(view InsightSettingsView) {
+	<form class="insight-settings" id="insight-settings" hx-post="/ui/insights/settings" hx-target="#insight-settings" hx-swap="outerHTML" hx-disable="#insight-settings button">
+		if view.Message != "" {
+			@Toast(view.Message, "success")
+		}
+		if view.Error != "" {
+			@Toast(view.Error, "error")
+		}
+		<div class="isotope-dialog-body insight-settings-body">
+			if !view.CanEdit {
+				<p class="insight-settings-read-only">@Icon("lock")<span>You can see these settings. Changing them needs permission to change settings.</span></p>
+			}
+			for _, group := range view.Groups {
+				<section class="insight-settings-group" aria-labelledby={ "insight-settings-" + group.ID }>
+					<h3 id={ "insight-settings-" + group.ID }>{ group.Title }</h3>
+					for _, kind := range group.Kinds {
+						@insightKindSetting(kind, view.CanEdit)
+					}
+				</section>
+			}
+		</div>
+		<div class="dialog-footer insight-settings-footer">
+			if view.CanEdit {
+				<button class="button outline insight-settings-reset" type="button" hx-post="/ui/insights/settings/reset" hx-target="#insight-settings" hx-swap="outerHTML" hx-confirm="Every kind of finding goes back to its default choice and limits." data-confirm-title="Reset Insights settings?" data-confirm-action="Reset" data-confirm-tone="neutral">@Icon("rotate-ccw")<span>Reset to Defaults</span></button>
+				<button class="button outline" type="button" data-dialog-close>Cancel</button>
+				<button class="button" type="submit" id="insight-settings-save">Save</button>
+			} else {
+				<button class="button outline" type="button" data-dialog-close>Close</button>
+			}
+		</div>
+	</form>
+}
+
+// insightKindSetting is one kind of finding: what it is, a choice of what
+// Insights does with it, and the limits that make one.
+templ insightKindSetting(kind InsightKindSettingView, canEdit bool) {
+	<div class="insight-setting">
+		<div class="insight-setting-heading">
+			<span class="insight-setting-icon" aria-hidden="true">@Icon(kind.Icon)</span>
+			<div class="insight-setting-copy">
+				<strong id={ insightSettingID(kind.Key) + "-title" }>{ kind.Title }</strong>
+				<small id={ insightSettingID(kind.Key) + "-description" }>{ kind.Description }</small>
+				if kind.Note != "" {
+					<small class="insight-setting-note" id={ insightSettingID(kind.Key) + "-note" }>{ kind.Note }</small>
+				}
+			</div>
+			<div class="insight-mode-control" role="radiogroup" aria-labelledby={ insightSettingID(kind.Key) + "-title" } aria-describedby={ insightSettingID(kind.Key) + "-description" }>
+				@insightModeOption(kind, "alert", "Show and alert", canEdit)
+				@insightModeOption(kind, "show", "Show only", canEdit)
+				@insightModeOption(kind, "off", "Off", canEdit)
+			</div>
+		</div>
+		if len(kind.Limits) > 0 {
+			<div class="insight-setting-limits">
+				for _, limit := range kind.Limits {
+					@insightLimitField(limit, canEdit)
+				}
+			</div>
+		}
+	</div>
+}
+
+// insightModeOption is one of the three choices. A kind that is never news
+// cannot alert, and its note says why.
+templ insightModeOption(kind InsightKindSettingView, mode, label string, canEdit bool) {
+	<label class="insight-mode-option">
+		if mode == "alert" && !kind.CanAlert {
+			<input type="radio" name={ kind.Key + ".mode" } value={ mode } disabled aria-describedby={ insightSettingID(kind.Key) + "-note" }/>
+		} else {
+			<input type="radio" name={ kind.Key + ".mode" } value={ mode } checked?={ kind.Mode == mode } disabled?={ !canEdit }/>
+		}
+		<span>{ label }</span>
+	</label>
+}
+
+// insightLimitField is one limit. A refused save marks the field and says
+// what it needs.
+templ insightLimitField(limit InsightLimitView, canEdit bool) {
+	<label class="field-control insight-limit">
+		<span>{ limit.Label }</span>
+		if limit.Error != "" {
+			<input type="number" id={ insightSettingID(limit.Name) } name={ limit.Name } value={ limit.Value } min={ limit.Minimum } max={ limit.Maximum } step={ limit.Step } required disabled?={ !canEdit } autofocus?={ limit.Focus } aria-invalid="true" aria-describedby={ insightSettingID(limit.Name) + "-help " + insightSettingID(limit.Name) + "-error" }/>
+		} else {
+			<input type="number" id={ insightSettingID(limit.Name) } name={ limit.Name } value={ limit.Value } min={ limit.Minimum } max={ limit.Maximum } step={ limit.Step } required disabled?={ !canEdit } aria-describedby={ insightSettingID(limit.Name) + "-help" }/>
+		}
+		<small id={ insightSettingID(limit.Name) + "-help" }>{ limit.Help }</small>
+		if limit.Error != "" {
+			<small class="field-error" id={ insightSettingID(limit.Name) + "-error" }>{ limit.Error }</small>
+		}
+	</label>
+}

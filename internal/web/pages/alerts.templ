@@ -1,0 +1,735 @@
+package pages
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// AlertsState is whether alerts go out, as Settings > Alerts and the Insights
+// bell say it.
+type AlertsState string
+
+const (
+	// AlertsOn means alerts are not paused and some destination can send.
+	AlertsOn AlertsState = "on"
+	// AlertsPaused means an operator paused them. Nothing is sent, and what
+	// comes up meanwhile is not sent later.
+	AlertsPaused AlertsState = "paused"
+	// AlertsOff means no destination can send yet.
+	AlertsOff AlertsState = "off"
+)
+
+// AlertsView is Settings > Alerts: whether alerts go out, where they go and
+// how sending there has gone, which groups are on, and the browsers that
+// turned alerts on.
+type AlertsView struct {
+	// Available is false on a server that runs the console without alerts,
+	// which then shows a note in place of the tab.
+	Available bool
+	// CanEdit is set for operators who may change settings. Everyone else sees
+	// the tab without its buttons.
+	CanEdit bool
+	State   AlertsState
+	// Destinations are where alerts go, in the order they were added.
+	Destinations []AlertDestinationView
+	Groups       AlertGroupsView
+	// Push is set when this server can push alerts to browsers. Browsers are
+	// the ones that turned alerts on, and BrowserDestination is set when a
+	// destination sends to them.
+	Push               bool
+	Browsers           []AlertBrowserView
+	BrowserDestination bool
+	// NewDestination is the empty form the Add Destination dialog opens with.
+	NewDestination AlertDestinationFormView
+	Message        string
+	Error          string
+}
+
+// AlertDestinationView is one destination as the list shows it. Nothing in it
+// is a secret: the address comes cut short.
+type AlertDestinationView struct {
+	ID    string
+	Label string
+	// Format is "json", "text", "slack", "discord", "pushover", or "browser",
+	// and FormatLabel names it the way people know it, such as "ntfy".
+	Format      string
+	FormatLabel string
+	// Address is where it sends with its secret part cut short, such as
+	// "https://ntfy.sh/••••erts" or "2 browsers".
+	Address string
+	// Everything is set when the destination gets every group. Otherwise
+	// Groups names the ones it gets.
+	Everything bool
+	Groups     []string
+	// Problem says why it cannot send yet, such as a URL that was never
+	// saved.
+	Problem string
+	// LastSent and LastSentTitle describe the last alert it was sent since
+	// Sable started, and LastError the send that failed after it, if one did.
+	LastSent      string
+	LastSentTitle string
+	LastError     string
+	LastErrorAt   string
+}
+
+// AlertGroupsView is which alert groups are on.
+type AlertGroupsView struct {
+	Insights     bool
+	Cluster      bool
+	Updates      bool
+	Integrations bool
+	// Backups is "failures", "all", or "off".
+	Backups string
+	Server  bool
+	SignIns bool
+	// SignInsAfter failed sign-ins within SignInsWithin minutes send one
+	// alert.
+	SignInsAfter  int
+	SignInsWithin int
+	// InsightKinds are the kinds of finding that can alert, each with its own
+	// switch under Insights Findings.
+	InsightKinds []AlertInsightKindView
+	// InsightSettings opens Insights settings, for the limits and what shows
+	// in Insights. Empty for an operator who cannot open them.
+	InsightSettings string
+}
+
+// AlertInsightKindView is one kind of finding and whether it alerts. Its
+// switch changes the same setting Insights settings does.
+type AlertInsightKindView struct {
+	// Key names the switch, as insight_alert_<key>.
+	Key   string
+	Title string
+	Alert bool
+	// Hidden marks a kind turned off in Insights. Turning its alerts on shows
+	// it again.
+	Hidden bool
+}
+
+// AlertBrowserView is one browser that turned alerts on.
+type AlertBrowserView struct {
+	ID    string
+	Label string
+	// Added says when it turned alerts on, and who did.
+	Added string
+}
+
+// AlertDestinationFormView is the Add or Edit Destination dialog. Saved
+// secrets never come back to the browser: each shows cut short as its field's
+// placeholder, and a field left blank keeps what is saved.
+type AlertDestinationFormView struct {
+	// ID is empty for a new destination.
+	ID   string
+	Name string
+	// Format is "json", "text", "slack", "discord", "pushover", or "browser".
+	Format      string
+	NtfyReceipt bool
+	// Sends lists the groups the destination gets. Empty means every group.
+	Sends []string
+	// Groups are every group, in the order the console shows them.
+	Groups []AlertGroupChoice
+	// SavedURL, SavedPushoverToken, and SavedPushoverUser are what is saved,
+	// cut short, or empty when nothing is.
+	SavedURL           string
+	SavedPushoverToken string
+	SavedPushoverUser  string
+	Headers            []AlertHeaderView
+	// Push is set when this server can push to browsers, and BrowsersTaken
+	// when another destination already does.
+	Push          bool
+	BrowsersTaken bool
+}
+
+// AlertGroupChoice is one group a destination can pick. Off is set when the
+// group is switched off for every destination.
+type AlertGroupChoice struct {
+	Key   string
+	Label string
+	Off   bool
+}
+
+// AlertHeaderView is one extra header sent with each alert. Saved is its
+// saved value cut short; the value itself is never sent back.
+type AlertHeaderView struct {
+	Name  string
+	Saved string
+}
+
+// AlertPreview is a sample alert laid out the way it would be sent.
+type AlertPreview struct {
+	Method      string
+	URL         string
+	ContentType string
+	Headers     []AlertHeaderPreview
+	Body        string
+	Error       string
+}
+
+// AlertHeaderPreview is one header a previewed alert carries.
+type AlertHeaderPreview struct {
+	Name  string
+	Value string
+}
+
+// Text is the request as it would go over the wire, headers then body.
+func (preview AlertPreview) Text() string {
+	var text strings.Builder
+	text.WriteString(preview.Method + " " + ifThen(preview.URL != "", preview.URL, "(no URL yet)") + "\n")
+	text.WriteString("Content-Type: " + preview.ContentType + "\n")
+	for _, header := range preview.Headers {
+		text.WriteString(header.Name + ": " + header.Value + "\n")
+	}
+	text.WriteString("\n" + preview.Body)
+	return text.String()
+}
+
+// alertGroupLabels names each alert group the way the console shows it.
+var alertGroupLabels = map[string]string{
+	"insights": "Insights Findings", "cluster": "Cluster", "updates": "Sable Updates", "integrations": "Integrations",
+	"backups": "Backups", "server": "Server Health", "sign_ins": "Failed Sign-Ins",
+}
+
+// AlertGroupLabel names an alert group the way the console shows it.
+func AlertGroupLabel(group string) string {
+	if label, found := alertGroupLabels[group]; found {
+		return label
+	}
+	return group
+}
+
+// alertFormatMarks are the brand marks of the services alerts go to, drawn in
+// one color to match the Format control. Discord's comes from the app logos;
+// ntfy's is from Simple Icons 16.32.0 and Slack's from Simple Icons 15.0.0,
+// the last release to carry it, both CC0.
+var alertFormatMarks = map[string]string{
+	"slack":   "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
+	"discord": appLogos["discord"].Path,
+	"text":    "M12.597 13.693v2.156h6.205v-2.156ZM5.183 6.549v2.363l3.591 1.901.023.01-.023.009-3.591 1.901v2.35l.386-.211 5.456-2.969V9.729ZM3.659 2.037C1.915 2.037.42 3.41.42 5.154v.002L.438 18.73 0 21.963l5.956-1.583h14.806c1.744 0 3.238-1.374 3.238-3.118V5.154c0-1.744-1.493-3.116-3.237-3.117h-.001zm0 2.2h17.104c.613.001 1.037.447 1.037.917v12.108c0 .47-.424.916-1.038.916H5.633l-3.026.915.031-.179-.017-13.76c0-.47.424-.917 1.038-.917z",
+}
+
+// alertFormatIcon is a format's brand mark, or an icon for a plain webhook,
+// for Pushover, which Simple Icons does not carry, and for browsers.
+templ alertFormatIcon(format string) {
+	if mark, found := alertFormatMarks[format]; found {
+		<svg class="nav-icon alert-format-mark" viewBox="0 0 24 24" aria-hidden="true"><path d={ mark } fill="currentColor"></path></svg>
+	} else {
+		switch format {
+			case "pushover":
+				@Icon("bell")
+			case "browser":
+				@Icon("monitor-smartphone")
+			default:
+				@Icon("webhook")
+		}
+	}
+}
+
+// SettingsAlertsPanel is Settings > Alerts. It lives outside the settings form
+// because each part saves on its own, and every change swaps the whole panel.
+templ SettingsAlertsPanel(view AlertsView) {
+	<div class="settings-panel-stack alerts-panel" id="alerts-panel">
+		@Toast(view.Message, "success")
+		// A failed test names what the destination said, so it waits to be
+		// read rather than clearing itself.
+		@ToastSticky(view.Error, "error")
+		if !view.Available {
+			@SettingsCard("bell", "Alerts", "Hear about what Sable notices, wherever you look.") {
+				<div class="isotope-card-content"><div class="certificate-manual-note">@Icon("info")<span>Alerts are not available on this server.</span></div></div>
+			}
+		} else {
+			@alertsStatusCard(view)
+			@alertsDestinationsCard(view)
+			@alertsGroupsCard(view)
+		}
+	</div>
+}
+
+// alertsStatusCard says whether alerts go out, and pauses or resumes them.
+templ alertsStatusCard(view AlertsView) {
+	<section class="card alerts-status-card" aria-label="Alert status">
+		<div class={ "alerts-status", string(view.State) }>
+			<span class="alerts-status-icon">@Icon(alertsStateIcon(view.State))</span>
+			<div class="alerts-status-detail">
+				<div class="alerts-status-heading"><strong>Alerts</strong><span class={ alertsStateBadgeClass(view.State) }>{ alertsStateLabel(view.State) }</span></div>
+				<span>{ alertsStateSummary(view) }</span>
+			</div>
+			// Only alerts that go out can be paused, and only paused ones
+			// resumed; with nothing able to send, there is nothing to pause.
+			if view.CanEdit && view.State != AlertsOff {
+				if view.State == AlertsPaused {
+					<button class="button outline" id="alerts-pause" type="button" hx-post="/ui/settings/alerts/paused" hx-vals='{"paused":"false"}' hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
+				} else {
+					<button class="button outline" id="alerts-pause" type="button" hx-post="/ui/settings/alerts/paused" hx-vals='{"paused":"true"}' hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action>@Icon("pause")<span>Pause</span></button>
+				}
+			}
+		</div>
+	</section>
+}
+
+func alertsStateIcon(state AlertsState) string {
+	switch state {
+	case AlertsOn:
+		return "bell"
+	case AlertsPaused:
+		return "pause"
+	default:
+		return "bell-off"
+	}
+}
+
+func alertsStateLabel(state AlertsState) string {
+	switch state {
+	case AlertsOn:
+		return "On"
+	case AlertsPaused:
+		return "Paused"
+	default:
+		return "Off"
+	}
+}
+
+// alertsStateBadgeClass colors the state's badge: green when on, amber when
+// paused, and gray when off.
+func alertsStateBadgeClass(state AlertsState) string {
+	switch state {
+	case AlertsOn:
+		return "status-badge success"
+	case AlertsPaused:
+		return "status-badge warning"
+	default:
+		return "status-badge"
+	}
+}
+
+// alertsStateSummary says in one sentence what the state means for what gets
+// sent.
+func alertsStateSummary(view AlertsView) string {
+	switch {
+	case view.State == AlertsOn:
+		return "Sable sends each new alert once to every destination that wants it."
+	case view.State == AlertsPaused:
+		return "Nothing is sent while alerts are paused, and what comes up meanwhile is not sent later."
+	case len(view.Destinations) == 0:
+		return "Add a destination to start getting alerts."
+	default:
+		return "No destination can send yet. Finish setting one up below."
+	}
+}
+
+// alertsDestinationsCard lists where alerts go.
+templ alertsDestinationsCard(view AlertsView) {
+	<section class="card settings-source-card settings-action-card alerts-destinations-card">
+		<header>
+			<div><h2>@Icon("send")<span>Destinations</span></h2><p>Where Sable sends alerts. Their URLs and keys stay in the encrypted vault.</p></div>
+			if view.CanEdit {
+				<button class="button compact" id="alert-destination-add" type="button" hx-get="/ui/settings/alerts/destinations/form" hx-target="#alert-destination-content" hx-swap="innerHTML" data-dialog-load="alert-destination-dialog" data-replica-primary-action>@Icon("plus")<span>Add Destination</span></button>
+			}
+		</header>
+		<div class="isotope-card-content">
+			if len(view.Destinations) == 0 {
+				<div class="alerts-empty">@Icon("bell")<h3>No destinations yet</h3><p>Send alerts to ntfy, Pushover, Slack, Discord, a webhook, or your browsers.</p></div>
+			} else {
+				<div class="alert-destination-list">
+					for _, destination := range view.Destinations {
+						@alertDestinationRow(destination, view)
+					}
+				</div>
+			}
+			if !view.BrowserDestination && len(view.Browsers) > 0 {
+				<p class="alert-browser-note alert-browser-orphans">{ browserCount(len(view.Browsers)) } turned alerts on, but Browsers is not a destination, so they get nothing. Add Browsers to send to them again.</p>
+			}
+		</div>
+	</section>
+}
+
+// alertDestinationRow is one destination: what it is, where it sends, which
+// groups it gets, how its last send went, and its actions. The Browsers
+// destination also carries its browsers, and the button that adds this one.
+templ alertDestinationRow(destination AlertDestinationView, view AlertsView) {
+	<article class="alert-destination-row" id={ "alert-destination-" + destination.ID }>
+		<span class="alert-destination-icon">@alertFormatIcon(destination.Format)</span>
+		<div class="alert-destination-detail">
+			<strong>{ destination.Label }</strong>
+			// A destination with no name of its own is already called by its
+			// format, so the line under it does not say the format again.
+			if destination.Label != destination.FormatLabel || destination.Address != "" {
+				<small>
+					if destination.Label != destination.FormatLabel {
+						{ destination.FormatLabel }
+					}
+					if destination.Label != destination.FormatLabel && destination.Address != "" {
+						<span class="alert-destination-separator" aria-hidden="true">·</span>
+					}
+					if destination.Address != "" {
+						<code class="alert-destination-address">{ destination.Address }</code>
+					}
+				</small>
+			}
+			<span class="alert-destination-groups">
+				<span class="sr-only">Gets</span>
+				if destination.Everything {
+					<span class="alert-group-tag">Everything</span>
+				} else {
+					// The space keeps a screen reader from running the names together.
+					for _, group := range destination.Groups {
+						<span class="alert-group-tag">{ group }</span>{ " " }
+					}
+				}
+			</span>
+			if destination.Problem != "" {
+				<small class="alert-destination-problem">@Icon("alert-triangle")<span>{ destination.Problem }</span></small>
+			} else if destination.LastError != "" {
+				<small class="alert-destination-problem">@Icon("alert-triangle")<span>Last send failed { destination.LastErrorAt }: { destination.LastError }</span></small>
+			} else if destination.LastSent != "" {
+				<small>Last sent { destination.LastSent }: { destination.LastSentTitle }</small>
+			}
+		</div>
+		if view.CanEdit {
+			<div class="alert-destination-actions">
+				<button class="button outline compact" id={ "alert-destination-test-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/test" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Send Test to " + destination.Label } data-replica-primary-action>@Icon("send")<span>Send Test</span></button>
+				<button class="button outline compact" id={ "alert-destination-edit-" + destination.ID } type="button" hx-get={ "/ui/settings/alerts/destinations/form?id=" + destination.ID } hx-target="#alert-destination-content" hx-swap="innerHTML" data-dialog-load="alert-destination-dialog" aria-label={ "Edit " + destination.Label } data-replica-primary-action>@Icon("pencil")<span>Edit</span></button>
+				<button class="button outline compact destructive" id={ "alert-destination-remove-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ alertRemoveConfirmation(destination) } data-confirm-title="Remove destination?" data-confirm-action="Remove" aria-label={ "Remove " + destination.Label } data-alert-destination-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+			</div>
+		}
+		if destination.Format == "browser" && view.Push {
+			@alertBrowsersPanel(view)
+		}
+	</article>
+}
+
+// alertRemoveConfirmation says what removing a destination forgets. Removing
+// Browsers forgets the browsers too, since nothing else sends to them.
+func alertRemoveConfirmation(destination AlertDestinationView) string {
+	if destination.Format == "browser" {
+		return "Remove " + destination.Label + "? Sable stops pushing alerts and forgets every browser that turned them on."
+	}
+	return "Remove " + destination.Label + "? Sable stops sending it alerts and forgets its saved URL and keys."
+}
+
+// browserCount counts browsers in words, such as "2 browsers".
+func browserCount(count int) string {
+	if count == 1 {
+		return "1 browser"
+	}
+	return fmt.Sprintf("%d browsers", count)
+}
+
+// alertsGroupsCard turns whole groups of alerts on or off. It saves on its own.
+templ alertsGroupsCard(view AlertsView) {
+	<section class="card settings-source-card alerts-groups-card">
+		<header><h2>@Icon("layers")<span>Groups</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
+		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
+			@alertInsightKinds(view)
+			@alertGroupSwitch("cluster", "Cluster", "A node going down and coming back up, and update rollouts.", view.Groups.Cluster, view.CanEdit)
+			@alertGroupSwitch("updates", "Sable Updates", "A new release of Sable.", view.Groups.Updates, view.CanEdit)
+			@alertGroupSwitch("integrations", "Integrations", "UniFi sync and dynamic DNS.", view.Groups.Integrations, view.CanEdit)
+			<div class="field-control switch-row alert-choice-row" id="alerts-group-backups">
+				<span><strong>Backups</strong><small>Backups that fail, or every backup as it finishes.</small></span>
+				<div class="alert-choice" role="radiogroup" aria-label="Backup alerts">
+					@alertBackupsOption("failures", "Failures Only", view)
+					@alertBackupsOption("all", "Every Backup", view)
+					@alertBackupsOption("off", "Off", view)
+				</div>
+			</div>
+			@alertGroupSwitch("server", "Server Health", "Certificate renewals, secondary zones, and DNSSEC keys.", view.Groups.Server, view.CanEdit)
+			<div class="alert-sign-ins">
+				@alertGroupSwitch("sign_ins", "Failed Sign-Ins", "Several failed sign-ins on one node in a short time. Off unless you turn it on.", view.Groups.SignIns, view.CanEdit)
+				<div class="alert-sign-in-limit" role="group" aria-label="When failed sign-ins send an alert">
+					<span>Send one after</span>
+					<input type="number" name="sign_ins_after" min="1" max="1000" value={ fmt.Sprint(view.Groups.SignInsAfter) } aria-label="Failed sign-ins before an alert" required disabled?={ !view.CanEdit }/>
+					<span>failures within</span>
+					<input type="number" name="sign_ins_within" min="1" max="1440" value={ fmt.Sprint(view.Groups.SignInsWithin) } aria-label="Minutes to count failed sign-ins in" required disabled?={ !view.CanEdit }/>
+					<span>minutes.</span>
+				</div>
+			</div>
+			if view.CanEdit {
+				<div class="alert-groups-save"><button class="button" id="alerts-groups-save" type="submit" data-replica-primary-action>Save Groups</button></div>
+			}
+		</form>
+	</section>
+}
+
+// alertInsightKinds is the Insights Findings switch with a switch for each
+// kind of finding under it, so an operator can stop one kind, such as new
+// devices, without leaving Settings. Each changes the same setting Insights
+// settings does.
+templ alertInsightKinds(view AlertsView) {
+	<div class="alert-insights">
+		@alertGroupSwitch("insights", "Insights Findings", "New findings worth a look, for the kinds you choose.", view.Groups.Insights, view.CanEdit)
+		<fieldset class="alert-insight-kinds">
+			<legend class="sr-only">Which Insights findings send alerts</legend>
+			<input type="hidden" name="insight_kinds" value="true"/>
+			for _, kind := range view.Groups.InsightKinds {
+				<label class="alert-insight-kind" id={ "alerts-insight-" + kind.Key }>
+					<span>
+						<strong>{ kind.Title }</strong>
+						if kind.Hidden {
+							<small>Hidden in Insights. Turning alerts on shows it again.</small>
+						}
+					</span>
+					<input type="checkbox" role="switch" name={ "insight_alert_" + kind.Key } value="true" checked?={ kind.Alert } disabled?={ !view.CanEdit }/>
+				</label>
+			}
+		</fieldset>
+		if view.Groups.InsightSettings != "" {
+			<p class="alert-insight-kinds-note">Limits, and what shows in Insights, are in <a href={ templ.SafeURL(view.Groups.InsightSettings) }>Insights Settings</a>.</p>
+		}
+	</div>
+}
+
+// alertGroupSwitch is one group's switch. Its id lets other pages link to it.
+templ alertGroupSwitch(group, title, description string, on, canEdit bool) {
+	<label class="field-control switch-row setting-switch-row" id={ "alerts-group-" + group }><span><strong>{ title }</strong><small>{ description }</small></span><input type="checkbox" role="switch" name={ group } value="true" checked?={ on } disabled?={ !canEdit }/></label>
+}
+
+// alertBackupsOption is one choice of which backups send alerts.
+templ alertBackupsOption(value, label string, view AlertsView) {
+	<label><input class="sr-only" type="radio" name="backups" value={ value } checked?={ view.Groups.Backups == value } disabled?={ !view.CanEdit }/><span>{ label }</span></label>
+}
+
+// alertBrowsersPanel turns alerts on in this browser and lists the browsers
+// that did, inside the Browsers destination they belong to. A browser
+// subscribes with the page's script, which then posts the small form here.
+templ alertBrowsersPanel(view AlertsView) {
+	<div class="alert-browsers alert-destination-browsers" data-push-panel>
+		if view.CanEdit {
+			<div class="alert-push-card" data-push-card data-push-state="ready">
+				<span class="alert-push-icon" aria-hidden="true">
+					<span data-push-when="ready">@Icon("bell")</span>
+					<span data-push-when="on" hidden>@Icon("check-circle")</span>
+					<span data-push-when="blocked" hidden>@Icon("bell-off")</span>
+					<span data-push-when="insecure" hidden>@Icon("lock")</span>
+					<span data-push-when="unsupported" hidden>@Icon("alert-triangle")</span>
+				</span>
+				<div class="alert-push-copy" aria-live="polite">
+					<strong data-push-when="ready">Get alerts in this browser</strong>
+					<small data-push-when="ready">They show up even when Sable is closed. On iPhone and iPad, add Sable to your Home Screen first.</small>
+					<strong data-push-when="on" hidden>This browser gets alerts</strong>
+					<small data-push-when="on" hidden>Remove it below to stop them.</small>
+					<strong data-push-when="blocked" hidden>Notifications are blocked</strong>
+					<small data-push-when="blocked" hidden>Allow them for this site in your browser's settings, then reload.</small>
+					<strong data-push-when="insecure" hidden>Needs HTTPS</strong>
+					<small data-push-when="insecure" hidden>Browsers only allow notifications over HTTPS. Open Sable at its https:// address.</small>
+					<strong data-push-when="unsupported" hidden>Not supported here</strong>
+					<small data-push-when="unsupported" hidden>This browser cannot show notifications from websites.</small>
+					<small class="alert-push-error" data-push-error hidden></small>
+				</div>
+				<button class="button compact" type="button" data-push-enable data-push-when="ready" data-replica-primary-action>Turn On in This Browser</button>
+			</div>
+			<form class="alert-push-form" hx-post="/ui/settings/alerts/browsers" hx-target="#alerts-panel" hx-swap="outerHTML" data-push-form>
+				<input type="hidden" name="push_subscription" data-push-subscription/>
+			</form>
+		}
+		if len(view.Browsers) > 0 {
+			<div class="alert-browser-list">
+				<span class="alert-browser-heading">Browsers getting alerts</span>
+				for _, browser := range view.Browsers {
+					<div class="alert-browser" data-push-browser={ browser.ID }>
+						@Icon("monitor-smartphone")
+						<div>
+							<strong>{ browser.Label }<span class="alert-browser-this" data-push-this hidden>This browser</span></strong>
+							<small>{ browser.Added }</small>
+						</div>
+						if view.CanEdit {
+							<button class="button outline compact destructive" id={ "alert-browser-remove-" + browser.ID } type="button" hx-post="/ui/settings/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Remove " + browser.Label } data-alert-browser-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+						}
+					</div>
+				}
+			</div>
+		} else if !view.CanEdit {
+			<p class="alert-browser-note">No browser has turned alerts on yet.</p>
+		}
+	</div>
+}
+
+// AlertDestinationDialog holds the Add and Edit Destination form. It opens on
+// an empty form; Add Destination and each Edit button load a fresh one first.
+templ AlertDestinationDialog(form AlertDestinationFormView) {
+	<dialog class="custom-server-dialog isotope-form-dialog alert-destination-dialog" id="alert-destination-dialog" aria-labelledby="alert-destination-title">
+		<div class="alert-destination-content" id="alert-destination-content">
+			@AlertDestinationForm(form)
+		</div>
+	</dialog>
+}
+
+// alertFormKind is the format a form sends, with a plain JSON webhook as the
+// default.
+func alertFormKind(form AlertDestinationFormView) string {
+	if form.Format == "" {
+		return "json"
+	}
+	return form.Format
+}
+
+// alertFormFor reports whether a part of the form that belongs to the
+// space-separated formats shows for the form's format.
+func alertFormFor(form AlertDestinationFormView, formats string) bool {
+	return slices.Contains(strings.Fields(formats), alertFormKind(form))
+}
+
+// alertURLPlaceholder is what the URL field shows while empty: the saved URL
+// cut short, or an example for the format.
+func alertURLPlaceholder(form AlertDestinationFormView) string {
+	if form.SavedURL != "" {
+		return "Saved: " + form.SavedURL
+	}
+	switch alertFormKind(form) {
+	case "slack":
+		return "https://hooks.slack.com/services/…"
+	case "discord":
+		return "https://discord.com/api/webhooks/…"
+	case "text":
+		return "https://ntfy.sh/your-topic"
+	default:
+		return "https://example.com/hooks/sable"
+	}
+}
+
+// alertSavedPlaceholder shows a saved secret cut short, or a hint when none is
+// saved.
+func alertSavedPlaceholder(saved, hint string) string {
+	if saved != "" {
+		return "Saved: " + saved
+	}
+	return hint
+}
+
+// alertBrowsersUnavailable says why the Browsers format cannot be picked, or
+// nothing when it can.
+func alertBrowsersUnavailable(form AlertDestinationFormView) string {
+	switch {
+	case alertFormKind(form) == "browser":
+		return ""
+	case !form.Push:
+		return "Browser alerts are not available on this server."
+	case form.BrowsersTaken:
+		return "Another destination already sends to your browsers."
+	default:
+		return ""
+	}
+}
+
+// AlertDestinationForm is the Add or Edit Destination form. Save is its only
+// submit button, so Enter in a field saves. A saved destination swaps the
+// whole panel and closes the dialog; a problem shows here instead, leaving
+// what was typed alone.
+templ AlertDestinationForm(form AlertDestinationFormView) {
+	<form class="alert-destination-form" hx-post="/ui/settings/alerts/destinations/save" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-alert-destination-form>
+		<div class="dialog-header">
+			<h2 id="alert-destination-title">{ ifThen(form.ID == "", "Add Destination", "Edit Destination") }</h2>
+			<p>{ ifThen(form.ID == "", "Choose where Sable sends alerts.", "Secrets you leave blank stay as they are.") }</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		if form.ID != "" {
+			<input type="hidden" name="id" value={ form.ID }/>
+		}
+		<div class="isotope-dialog-body alert-destination-body">
+			<div class="alert-destination-notice" id="alert-destination-notice"></div>
+			<label class="field-control"><span>Name (Optional)</span><input name="name" value={ form.Name } placeholder="Phone" maxlength="64" autocomplete="off"/><small>What the list calls it. Leave it blank to use the format's name.</small></label>
+			<fieldset class="field-control alert-formats">
+				<legend>Format</legend>
+				<div class="alert-format-tabs">
+					@alertFormatOption(form, "json", "Webhook", false)
+					@alertFormatOption(form, "text", "ntfy", false)
+					@alertFormatOption(form, "slack", "Slack", false)
+					@alertFormatOption(form, "discord", "Discord", false)
+					@alertFormatOption(form, "pushover", "Pushover", false)
+					@alertFormatOption(form, "browser", "Browsers", alertBrowsersUnavailable(form) != "")
+				</div>
+				if alertBrowsersUnavailable(form) != "" {
+					<small>{ alertBrowsersUnavailable(form) }</small>
+				}
+			</fieldset>
+			<label class="field-control" data-alert-for="json text slack discord" hidden?={ !alertFormFor(form, "json text slack discord") }>
+				<span data-alert-for="json slack discord" hidden?={ !alertFormFor(form, "json slack discord") }>Webhook URL</span>
+				<span data-alert-for="text" hidden?={ !alertFormFor(form, "text") }>Topic URL</span>
+				<input type="url" name="url" placeholder={ alertURLPlaceholder(form) } data-saved?={ form.SavedURL != "" } data-placeholder-json="https://example.com/hooks/sable" data-placeholder-slack="https://hooks.slack.com/services/…" data-placeholder-discord="https://discord.com/api/webhooks/…" data-placeholder-text="https://ntfy.sh/your-topic" autocomplete="off" spellcheck="false"/>
+				if form.SavedURL != "" {
+					<small>Leave it blank to keep the saved URL.</small>
+				}
+				<small data-alert-for="json" hidden?={ !alertFormFor(form, "json") }>Posts JSON to Home Assistant, or anything else that takes it.</small>
+				<small data-alert-for="slack" hidden?={ !alertFormFor(form, "slack") }>An incoming webhook from your Slack app. Alerts arrive as a card with a button back to Sable.</small>
+				<small data-alert-for="discord" hidden?={ !alertFormFor(form, "discord") }>From a channel's Integrations settings. Alerts arrive as an embed colored by how much they matter.</small>
+				<small data-alert-for="text" hidden?={ !alertFormFor(form, "text") }>Sent as plain text with a title, which ntfy shows as a notification.</small>
+			</label>
+			<div class="field-grid two" data-alert-for="pushover" hidden?={ !alertFormFor(form, "pushover") }>
+				<label class="field-control"><span>Application Token</span><input type="password" name="pushover_token" placeholder={ alertSavedPlaceholder(form.SavedPushoverToken, "Your application's token") } autocomplete="new-password" spellcheck="false"/><small>From the application you made for Sable.</small></label>
+				<label class="field-control"><span>User Key</span><input type="password" name="pushover_user" placeholder={ alertSavedPlaceholder(form.SavedPushoverUser, "Your user or group key") } autocomplete="new-password" spellcheck="false"/><small>Your user key, or a group key.</small></label>
+			</div>
+			<p class="alert-destination-note" data-alert-for="browser" hidden?={ !alertFormFor(form, "browser") }>Alerts go to every browser that turned them on. Once this is saved, turn them on from the Browsers row.</p>
+			<fieldset class="field-control alert-sends">
+				<legend>Sends</legend>
+				<div class="alert-sends-choice">
+					<label><input type="radio" name="sends_all" value="true" checked?={ len(form.Sends) == 0 }/><span>Everything</span></label>
+					<label><input type="radio" name="sends_all" value="false" checked?={ len(form.Sends) > 0 }/><span>Only These Groups</span></label>
+				</div>
+				<div class="alert-sends-groups">
+					for _, group := range form.Groups {
+						<label>
+							<input type="checkbox" name="sends" value={ group.Key } checked?={ slices.Contains(form.Sends, group.Key) }/>
+							<span>{ group.Label }</span>
+							if group.Off {
+								<small>Off under Groups</small>
+							}
+						</label>
+					}
+				</div>
+			</fieldset>
+			<details class="settings-advanced alert-destination-advanced" data-alert-for="json text" hidden?={ !alertFormFor(form, "json text") } open?={ form.NtfyReceipt || len(form.Headers) > 0 }>
+				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
+				<div class="alert-destination-advanced-body">
+					<label class="field-control switch-row setting-switch-row" data-alert-for="text" hidden?={ !alertFormFor(form, "text") }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ form.NtfyReceipt }/></label>
+					<div class="field-control">
+						<span>Headers</span>
+						<div class="alert-headers" data-alert-headers>
+							for _, header := range form.Headers {
+								@alertHeaderRow(header)
+							}
+						</div>
+						<button class="button outline compact alert-header-add" type="button" data-alert-header-add>@Icon("plus")<span>Add Header</span></button>
+						<small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is. A saved value stays unless you type a new one.</small>
+						<template data-alert-header-template>@alertHeaderRow(AlertHeaderView{})</template>
+					</div>
+				</div>
+			</details>
+		</div>
+		<div class="alert-preview" id="alert-destination-preview" popover role="dialog" aria-label="Preview of a sample alert" data-alert-preview-popover></div>
+		<div class="dialog-footer">
+			<button class="button outline alert-preview-button" type="button" hx-post="/ui/settings/alerts/destinations/preview" hx-target="#alert-destination-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="alert-destination-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
+			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+			<button class="button" type="submit" data-replica-primary-action>Save</button>
+		</div>
+	</form>
+}
+
+// alertFormatOption is one choice in the Format control. The choices are
+// radio buttons, so the form posts the one picked as its format.
+templ alertFormatOption(form AlertDestinationFormView, format, label string, disabled bool) {
+	<label class="alert-format">
+		<input class="sr-only" type="radio" name="format" value={ format } checked?={ alertFormKind(form) == format } disabled?={ disabled }/>
+		@alertFormatIcon(format)
+		<span>{ label }</span>
+	</label>
+}
+
+// alertHeaderRow is one header's name and value, removable on its own. A saved
+// value shows cut short as the placeholder, and stays when left blank.
+templ alertHeaderRow(header AlertHeaderView) {
+	<div class="alert-header" data-alert-header>
+		<input name="header_name" value={ header.Name } placeholder="Name" aria-label="Header name" autocomplete="off" spellcheck="false"/>
+		<input name="header_value" placeholder={ alertSavedPlaceholder(header.Saved, "Value") } aria-label="Header value" autocomplete="off" spellcheck="false"/>
+		<button class="icon-button" type="button" data-alert-header-remove aria-label="Remove header" title="Remove header">@Icon("x")</button>
+	</div>
+}
+
+// AlertPreviewPanel shows a sample alert as the request Sable would send. It
+// fills a menu that drops from the Preview button, so looking never resizes
+// the dialog.
+templ AlertPreviewPanel(preview AlertPreview) {
+	if preview.Error != "" {
+		<p class="alert-preview-error">{ preview.Error }</p>
+	}
+	<button class="about-copy-button alert-preview-copy" type="button" data-copy-target="alert-destination-preview-text" aria-label="Copy preview" title="Copy preview">@CopyIcons()</button>
+	<pre><code id="alert-destination-preview-text">{ preview.Text() }</code></pre>
+}

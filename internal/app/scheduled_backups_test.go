@@ -167,6 +167,46 @@ func TestScheduledBackupRunEnforcesRetentionBeforeTheNextBackupIsDue(t *testing.
 	}
 }
 
+func TestScheduledBackupRemembersItsLastSuccessAcrossARestart(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	configurationPath := newBackupDeployment(t)
+	policy := config.Backup{
+		Enabled: true, Directory: "backups", Interval: config.Duration{Duration: 24 * time.Hour}, RunAt: "02:00", RetentionCount: 3,
+	}
+	start := func() *scheduledBackupService {
+		manager := config.NewManager(configurationPath, config.Defaults(), func(context.Context, config.Config, config.Config) error { return nil })
+		service, err := newScheduledBackupService(configurationPath, manager, &memoryBackupVault{}, slog.New(slog.NewTextHandler(io.Discard, nil)), policy)
+		if err != nil {
+			t.Fatalf("newScheduledBackupService() error = %v", err)
+		}
+		return service
+	}
+
+	first := start()
+	created, err := first.createScheduled(ctx, policy, backupTestPassphrase)
+	if err != nil {
+		t.Fatalf("createScheduled() error = %v", err)
+	}
+	// A backup someone ran by hand afterwards is not a scheduled success.
+	if _, err := first.CreateLocalBackup(ctx, backupTestPassphrase, nil); err != nil {
+		t.Fatalf("CreateLocalBackup() error = %v", err)
+	}
+
+	restarted := start()
+	restarted.recoverLastSuccess(ctx)
+	if got := restarted.schedule().LastSuccess; !got.Equal(created) {
+		t.Fatalf("LastSuccess after a restart = %s, want %s, the time the scheduled archive was taken", got, created)
+	}
+
+	restarted.recordScheduledFailure(errors.New("disk full"))
+	schedule := restarted.schedule()
+	if schedule.LastError != "disk full" || schedule.LastErrorAt.IsZero() || !schedule.LastSuccess.Equal(created) {
+		t.Fatalf("schedule after a failure = %+v, want the error, when it happened, and the last success kept", schedule)
+	}
+}
+
 func TestLocalBackupRestoreRejectsTraversalAndSymlinks(t *testing.T) {
 	service, policy := newScheduledBackupTestService(t, 2)
 	if _, _, err := service.LocalBackupForRestore(context.Background(), "../outside.sablebackup", "passphrase"); err == nil {

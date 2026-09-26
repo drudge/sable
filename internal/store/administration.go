@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
@@ -242,8 +243,44 @@ ORDER BY audit.id DESC LIMIT `+store.placeholder(1), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list audit records: %w", err)
 	}
+	return scanAuditRecords(rows, limit)
+}
+
+// ListAuditRecordsSince returns the records of the given actions that
+// happened at or after since, newest first and at most limit of them, such as
+// the failed sign-ins of the last day. Unlike ListAuditRecords, a record that
+// names no account has no username, so a failed sign-in as nobody in
+// particular cannot pass for something the system did.
+func (store *Store) ListAuditRecordsSince(ctx context.Context, actions []string, since time.Time, limit int) ([]auth.AuditRecord, error) {
+	if limit <= 0 || len(actions) == 0 {
+		return []auth.AuditRecord{}, nil
+	}
+	arguments := make([]any, 0, len(actions)+2)
+	arguments = append(arguments, since.UTC())
+	placeholders := make([]string, 0, len(actions))
+	for _, action := range actions {
+		arguments = append(arguments, action)
+		placeholders = append(placeholders, store.placeholder(len(arguments)))
+	}
+	arguments = append(arguments, limit)
+	rows, err := store.database.QueryContext(ctx, `
+SELECT audit.id, audit.occurred_at, COALESCE(users.username, ''),
+       audit.action, audit.client_ip, audit.details
+FROM sable_audit_log AS audit
+LEFT JOIN sable_users AS users ON users.id = audit.user_id
+WHERE audit.occurred_at >= `+store.placeholder(1)+`
+  AND audit.action IN (`+strings.Join(placeholders, ", ")+`)
+ORDER BY audit.occurred_at DESC, audit.id DESC
+LIMIT `+store.placeholder(len(arguments)), arguments...)
+	if err != nil {
+		return nil, fmt.Errorf("list audit records by action: %w", err)
+	}
+	return scanAuditRecords(rows, 0)
+}
+
+func scanAuditRecords(rows *sql.Rows, capacity int) ([]auth.AuditRecord, error) {
 	defer rows.Close()
-	records := make([]auth.AuditRecord, 0, limit)
+	records := make([]auth.AuditRecord, 0, capacity)
 	for rows.Next() {
 		var record auth.AuditRecord
 		if err := rows.Scan(&record.ID, &record.OccurredAt, &record.Username, &record.Action, &record.ClientIP, &record.Details); err != nil {

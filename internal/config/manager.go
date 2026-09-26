@@ -104,7 +104,19 @@ func cloneConfig(source Config) Config {
 	cloned.OIDC.Scopes = append([]string(nil), source.OIDC.Scopes...)
 	cloned.OIDC.DefaultRoles = append([]string(nil), source.OIDC.DefaultRoles...)
 	cloned.OIDC.RoleMappings = append([]OIDCRoleMapping(nil), source.OIDC.RoleMappings...)
-	cloned.Insights.Webhook.Headers = append([]InsightsWebhookHeader(nil), source.Insights.Webhook.Headers...)
+	// Insights.Findings holds only modes and limits, so copying the struct is
+	// a deep copy. Anything shared that is added to it needs copying here.
+	cloned.Insights.Findings = source.Insights.Findings
+	cloned.Insights.Webhook.Headers = append([]AlertHeader(nil), source.Insights.Webhook.Headers...)
+	cloned.Alerts.Destinations = make([]AlertDestination, len(source.Alerts.Destinations))
+	for index, destination := range source.Alerts.Destinations {
+		cloned.Alerts.Destinations[index] = destination
+		cloned.Alerts.Destinations[index].Sends = append([]string(nil), destination.Sends...)
+		cloned.Alerts.Destinations[index].Headers = append([]AlertHeader(nil), destination.Headers...)
+	}
+	if source.Alerts.Destinations == nil {
+		cloned.Alerts.Destinations = nil
+	}
 	return cloned
 }
 

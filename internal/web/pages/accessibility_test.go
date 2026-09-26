@@ -76,6 +76,7 @@ func TestRenderedDialogsHaveAccessibleNames(t *testing.T) {
 	pages := map[string]string{
 		"administration": renderComponent(t, AdministrationContent(AdministrationPageView{ActiveTab: "users"})),
 		"blocking":       renderComponent(t, BlockingContent(BlockingPageView{ActiveTab: "lists"})),
+		"settings":       renderComponent(t, SettingsContent(SettingsPageView{ActiveTab: "alerts", Alerts: AlertsView{Available: true, CanEdit: true}})),
 	}
 	for name, page := range pages {
 		for _, dialog := range openingTags(page, "<dialog ", "") {

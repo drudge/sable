@@ -201,10 +201,16 @@ func (service *Service) EnableOwnPassword(ctx context.Context, principal Princip
 	return nil
 }
 
-func (service *Service) AllowPasskeyAttempt(clientIP string) error {
+// AllowPasskeyAttempt counts a passkey sign-in against the client's budget.
+// A client turned away is audited once per lockout, like a password sign-in,
+// so a burst of refused passkey attempts counts toward failed sign-in alerts.
+func (service *Service) AllowPasskeyAttempt(ctx context.Context, clientIP, userAgent string) error {
 	key := "passkey\x00" + clientIP
 	now := service.now()
 	if !service.limiter.allow(key, now) {
+		if service.limiter.refuse(key, now) {
+			service.audit(ctx, nil, ActionLoginLocked, clientIP, userAgent, "too many passkey sign-in attempts")
+		}
 		return ErrRateLimited
 	}
 	service.limiter.failure(key, now)
@@ -212,7 +218,7 @@ func (service *Service) AllowPasskeyAttempt(clientIP string) error {
 }
 
 func (service *Service) RecordPasskeyFailure(ctx context.Context, clientIP, userAgent string) {
-	service.audit(ctx, nil, "auth.login.passkey.failed", clientIP, userAgent, "passkey verification failed")
+	service.audit(ctx, nil, ActionPasskeyLoginFailed, clientIP, userAgent, "passkey verification failed")
 }
 
 // ValidatePasskeyDisable checks the alternate sign-in methods before hiding passkeys.

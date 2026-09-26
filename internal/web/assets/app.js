@@ -1593,8 +1593,8 @@
 	  });
 	});
 
-  // Insights alert headers are rows of name and value; the form posts them as
-  // parallel lists, so adding and removing rows needs no bookkeeping.
+  // Alert destination headers are rows of name and value; the form posts them
+  // as parallel lists, so adding and removing rows needs no bookkeeping.
   document.addEventListener("click", (event) => {
     const add = event.target.closest("[data-alert-header-add]");
     if (add) {
@@ -1613,11 +1613,12 @@
     }
   });
 
-  // Each kind of alert shows only its own setup: parts marked
-  // data-alert-for list the kinds they belong to. Pushover always posts to
-  // its own API, so it has no URL to ask for.
+  // Each format shows only its own setup: parts marked data-alert-for list
+  // the formats they belong to. Pushover always posts to its own API, so it
+  // has no URL to ask for. A saved URL keeps its placeholder whatever the
+  // format, since leaving the field blank keeps it.
   document.addEventListener("change", (event) => {
-    if (!event.target.matches?.('#insight-alerts input[name="format"]')) return;
+    if (!event.target.matches?.('[data-alert-destination-form] input[name="format"]')) return;
     const form = event.target.form;
     const kind = event.target.value;
     form?.querySelectorAll("[data-alert-for]").forEach((part) => {
@@ -1625,14 +1626,7 @@
     });
     const url = form?.querySelector('input[name="url"]');
     const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
-    if (placeholder) url.placeholder = placeholder;
-    // A URL belongs to its kind: an ntfy topic is no Slack webhook. Leaving
-    // the saved kind empties the box, and coming back fills it again.
-    if (url && url.dataset.savedKind) {
-      if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
-      else if (url.value === url.dataset.savedUrl) url.value = "";
-    }
-    if (kind === "browser") showPushState(form.querySelector("[data-push-panel]"));
+    if (placeholder && !url.hasAttribute("data-saved")) url.placeholder = placeholder;
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });
@@ -1746,7 +1740,7 @@
         setPushState(panel, Notification.permission === "denied" ? "blocked" : "ready");
         return;
       }
-      const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
+      const answer = await fetch("/ui/settings/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
       const {key, error} = await answer.json();
       if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
       await navigator.serviceWorker.register("/sw.js", {scope: "/"});
@@ -1774,22 +1768,71 @@
           "This browser's push service is off. Open about:config, set dom.push.connection.enabled to true, restart the browser, then try again." :
           "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again.");
       }
-      panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
-      panel.querySelector("[data-push-submit]").click();
+      const form = panel.querySelector("[data-push-form]");
+      form.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
+      form.requestSubmit();
     } catch (error) {
       setPushState(panel, "ready", error.message || "This browser could not turn on alerts.");
     } finally {
       enable.disabled = false;
     }
   };
-  const alertPushPanel = () => document.querySelector("#insight-alerts [data-push-panel]");
+  const alertPushPanel = () => document.querySelector("#alerts-panel [data-push-panel]");
   document.addEventListener("click", (event) => {
     const enable = event.target.closest("[data-push-enable]");
     if (enable) turnOnPush(enable.closest("[data-push-panel]"));
-    if (event.target.closest('[data-dialog-open="insight-alerts-dialog"]')) showPushState(alertPushPanel());
   });
-  document.body.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
+  // The Alerts panel swaps itself, which htmx reports on the document when
+  // the button that asked went with it.
+  document.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
   showPushState(alertPushPanel());
+
+  // Add Destination and each Edit button load a fresh form into the dialog,
+  // then open it, so the dialog never shows the form it held before and focus
+  // lands on the new form's first field.
+  document.addEventListener("htmx:after:swap", (event) => {
+    const ctx = event.detail?.ctx;
+    const dialog = document.getElementById(ctx?.sourceElement?.dataset?.dialogLoad || "");
+    if (!dialog || !ctx.response || ctx.response.status >= 400) return;
+    showRoutedDialog(dialog, false, ctx.sourceElement);
+  });
+  // Saving a destination swaps the whole Alerts panel, the button that opened
+  // the dialog included. The dialog closes and forgets what was typed, and
+  // focus goes to that button's replacement, which keeps its id.
+  document.addEventListener("htmx:after:swap", (event) => {
+    const ctx = event.detail?.ctx;
+    const form = ctx?.sourceElement;
+    if (!form?.matches?.("[data-alert-destination-form]") || !ctx.response || ctx.response.status >= 400) return;
+    const dialog = form.closest("dialog");
+    const opener = dialog?.sableReturnFocus;
+    if (dialog) dialog.sableReturnFocus = null;
+    form.reset();
+    dialog?.close();
+    document.getElementById(opener?.id || "alert-destination-add")?.focus();
+  });
+  // Every other change on the Alerts panel swaps it too, the control that
+  // made the change included. Focus goes to that control's replacement, which
+  // keeps its id, or to Add Destination when it has none to go back to. A
+  // removal takes its button with it, and focus would otherwise land on the
+  // next Remove button, so it always goes to Add Destination. htmx disables a
+  // form's submit button before this hears of the request, and some browsers
+  // take focus off a disabled button at once, so the button that submitted
+  // the form stands in for the focused control.
+  document.addEventListener("htmx:before:request", (event) => {
+    const ctx = event.detail?.ctx;
+    const source = ctx?.sourceElement;
+    if (!source?.closest?.("#alerts-panel") || source.hasAttribute("data-dialog-load")) return;
+    const removal = source.matches("[data-alert-destination-remove], [data-alert-browser-remove]");
+    const focused = document.activeElement?.closest?.("#alerts-panel") ? document.activeElement.id : "";
+    ctx.sableAlertsFocus = {removal, id: removal ? "alert-destination-add" : focused || ctx.request?.submitter?.id || source.id};
+  });
+  document.addEventListener("htmx:after:swap", (event) => {
+    const focus = event.detail?.ctx?.sableAlertsFocus;
+    if (!focus || (!focus.removal && document.activeElement && document.activeElement !== document.body)) return;
+    const replacement = document.getElementById(focus.id);
+    replacement?.focus();
+    if (!replacement || document.activeElement !== replacement) document.getElementById("alert-destination-add")?.focus();
+  });
 
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
@@ -3051,8 +3094,11 @@
 		}
 	  }
 	  dialog.addEventListener("close", () => {
-		const returnFocus = dialog.sableReturnFocus;
+		let returnFocus = dialog.sableReturnFocus;
 		dialog.sableReturnFocus = null;
+		// A change made in the dialog can redraw the page behind it, invoker
+		// and all. A redrawn invoker keeps its id, so focus finds it again.
+		if (returnFocus && !returnFocus.isConnected && returnFocus.id) returnFocus = document.getElementById(returnFocus.id);
 		if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
 	  });
 	};

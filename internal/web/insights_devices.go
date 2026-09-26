@@ -62,7 +62,14 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 	if err != nil {
 		return deviceReport{}, err
 	}
-	identities, err := reader.ClientIdentities(ctx, counted.Start)
+	// Findings compare each device with as much as two weeks before the
+	// window ends, so an address belongs to its device by any sighting in that
+	// time, not only one inside the window on screen.
+	since := counted.End.Add(-devices.Lookback)
+	if counted.Start.Before(since) {
+		since = counted.Start
+	}
+	identities, err := reader.ClientIdentities(ctx, since)
 	if err != nil {
 		return deviceReport{}, err
 	}
@@ -165,7 +172,7 @@ func insightDeviceView(device devices.Device, report deviceReport) pages.Insight
 		NewDomains: device.NewDomains, FirstSeen: device.FirstSeen, LastSeen: device.LastSeen,
 		OperatorNamed: device.Named && device.NameNetwork == "", NameNetwork: device.NameNetwork, OwnType: device.Type != "",
 		New: !device.FirstSeen.Before(report.window.Start) && !report.seenSince.IsZero() &&
-			report.seenSince.Add(time.Hour).Before(device.FirstSeen),
+			report.seenSince.Add(time.Hour).Before(device.FirstSeen) && !device.PrivacyAddressesOnly(),
 	}
 	for _, address := range device.Addresses {
 		view.Addresses = append(view.Addresses, pages.InsightDeviceAddressView{Address: address.Address, Queries: address.Queries, Blocked: address.Blocked})

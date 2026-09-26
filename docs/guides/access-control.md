@@ -43,3 +43,5 @@ An identity with no Web UI grants is API-only and cannot create a console sessio
 ## Verify and audit
 
 Use a second browser session to test the least-privileged identity before closing your administrator session. Check audit events for expected account and access changes. Browser sessions and audit history stay node-local even when users, groups, and revocations replicate through a cluster.
+
+A failed password sign-in records the username it tried, never the password, and a lockout after too many failures is recorded once. To hear about someone trying passwords, switch on sign-in [alerts](../configuration.md#alerts): each node sends one alert per burst of failed sign-ins, 5 within 10 minutes by default, with the usernames tried and the addresses they came from.

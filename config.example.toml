@@ -106,6 +106,20 @@ batch_size = 256
 flush_interval = "250ms"
 retention = "30d"
 
+# What Insights does with each kind of finding. Each table is named for the
+# kind: went_quiet is devices.went-quiet. mode is "alert" to show it and send
+# each new one as an alert, "show" to only show it, or "off" to stop looking for
+# it. Limits left out keep their defaults. Set these from the bell at the top of
+# Insights; docs/configuration.md lists every kind and its limits.
+# [insights.findings.went_quiet]
+# mode = "alert"
+# minimum_daily_lookups = 50
+#
+# [insights.findings.traffic_spike]
+# mode = "show"
+# factor = 3.0
+# minimum_lookups = 500
+
 [server_log]
 enabled = true
 level = "info"
@@ -178,25 +192,42 @@ ipv6_url = "https://api6.ipify.org"
 # ipv6 = true
 # ttl = 600
 
-# Insights alerts. Each new finding worth a look is sent to this webhook once;
-# findings an operator hid are skipped. "json" suits Home Assistant and any
-# JSON endpoint; "text" posts plain text with a Title header, which suits ntfy;
-# "slack" and "discord" post rich cards to their webhooks; "pushover" posts to
-# Pushover with pushover_token and pushover_user and needs no url; "browser"
-# pushes to the browsers turned on from the Insights Overview and needs no url.
-# Leave url empty to turn alerts off, or set paused = true to stop sending but
-# keep the webhook. The Insights Overview can also set this.
-# ntfy_receipt = true only counts a send when ntfy answers with a message ID,
-# which catches a mistyped server. Add [[insights.webhook.headers]] entries to
-# send headers such as an ntfy access token or Priority with every alert.
-[insights.webhook]
-url = ""
-format = "json"
+# Alerts. Sable sends each new alert once to every destination that wants its
+# group, from the node leading the cluster. Set these up in Settings > Alerts.
+# Destination URLs, Pushover keys, and header values live in the encrypted
+# vault; any written here move there the next time Sable starts. paused = true
+# stops sending but keeps every destination.
+[alerts]
 paused = false
-ntfy_receipt = false
-# [[insights.webhook.headers]]
-# name = "Authorization"
-# value = "Bearer tk_..."
+
+# Which groups send alerts. backups is "failures", "all" to hear about every
+# finished backup too, or "off". server covers certificate renewals, secondary
+# zones, and DNSSEC keys.
+[alerts.send]
+insights = true
+cluster = true
+updates = true
+integrations = true
+backups = "failures"
+server = true
+sign_ins = false
+
+# Failed sign-ins on one node alert once they pass this many inside this long.
+[alerts.sign_ins]
+after = 5
+within = "10m"
+
+# One entry per destination. "json" suits Home Assistant and any JSON endpoint;
+# "text" posts plain text with a Title header, which suits ntfy; "slack" and
+# "discord" post rich cards; "pushover" posts to Pushover's API; "browser"
+# pushes to the browsers turned on in Settings > Alerts. sends limits a
+# destination to some groups; leave it out to send everything. ntfy_receipt =
+# true only counts a send when ntfy answers with a message ID.
+# [[alerts.destinations]]
+# id = "phone"
+# name = "Phone"
+# format = "pushover"
+# sends = ["cluster", "sign_ins"]
 
 # UniFi host synchronization. Set this up from Apps in the console: the wizard
 # discovers the controller's networks, maps each one to a zone, and previews the
@@ -297,8 +328,16 @@ node_name = ""
 advertise_url = ""
 
 [updates]
-# Check for new releases when the console opens after sign-in. Never installs automatically.
+# Check for new releases when the console opens after sign-in, and on the
+# schedule below on the lead node so an update alert goes out. Never installs
+# automatically.
 check_on_login = true
+# How often the lead checks on its own: "hourly", "daily", or "weekly". Daily
+# and weekly checks run at check_at, HH:MM in this node's local time, and
+# weekly ones on check_day.
+check_schedule = "hourly"
+check_at = "09:00"
+check_day = "monday"
 # Set only when an external supervisor (such as Docker with a restart policy)
 # restarts Sable after it exits. Installed systemd services are detected automatically.
 restart_managed = false

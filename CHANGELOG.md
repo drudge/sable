@@ -8,6 +8,112 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.8] - 2026-09-26
+
+Sable 1.5.0-beta.8 turns Insights alerts into alerts for the whole server.
+Set them up under **Settings > Alerts** and hear about nodes going down,
+failed backups, failing integrations, certificate and zone trouble, new
+releases, and bursts of failed sign-ins, along with Insights findings. You
+can also choose what Insights does with each kind of finding, and phones'
+rotating private IPv6 addresses no longer show up as new or quiet devices.
+
+### Alerts
+
+- Set up alerts under **Settings > Alerts** instead of in Insights. An
+  existing Insights webhook becomes the first destination on the next start,
+  and nothing it already sent goes out again.
+- Add as many destinations as you need, each a webhook, ntfy topic, Slack or
+  Discord channel, Pushover, or your browsers, and send each one
+  **Everything** or **Only These Groups**.
+- Keep destination URLs, Pushover keys, and header values in the encrypted
+  vault instead of `sable.toml`. Saved ones move there on the next start and
+  show cut short when you edit a destination.
+- Turn groups of alerts on or off: Insights Findings, Cluster, Sable Updates,
+  Integrations, Backups, Server Health, and Failed Sign-Ins.
+- Send problems, such as a node going down or a backup failing, at high
+  priority on ntfy, Pushover, and browsers.
+- Keep sending to every other destination when one fails, and show each
+  destination's last send or last error.
+- Send an alert once for as long as it stays news. Before, one that lasted
+  more than six hours could go out again.
+- Turn on browser alerts from the **Browsers** destination's row, which lists
+  every browser that turned them on. Removing Browsers forgets them all.
+
+### New alerts
+
+- **Cluster:** a node that has not checked in for five minutes, and again
+  when it comes back. A node restarting for an update within those five
+  minutes says nothing. If the lead stops answering, a replica says so after
+  five minutes, unless a planned handoff gave the cluster a new lead. Rolling
+  updates alert when they start, finish, fail, or stop.
+- **Sable Updates:** a release newer than the one running.
+- **Integrations:** UniFi sync or dynamic DNS failing three times in a row,
+  and a new public IPv4 or IPv6 address, with the address it replaced.
+- **Backups:** a scheduled backup that fails, or every backup as it finishes.
+- **Server Health:** a certificate renewal failing near expiry or three times
+  in a row, a secondary zone that stops refreshing or expires, and DNSSEC
+  root keys that stop updating. Certificates installed by hand are left out.
+- **Failed Sign-Ins:** off unless you turn it on. One alert for each burst, 5
+  failures within 10 minutes unless you change it, with the usernames tried
+  and the addresses they came from.
+
+### Clusters
+
+- Copy alert settings, their secrets, and the browsers that turned alerts on
+  to every node, so a new lead keeps sending to the same places. Only the
+  lead sends, so each alert arrives once.
+- Send each replica's own backup, certificate, zone, and DNSSEC problems
+  through the lead.
+- Copy Insights settings to every node.
+
+### Insights
+
+- Choose what Insights does with each kind of finding, **Show and alert**,
+  **Show only**, or **Off**, and change the limits behind it, such as how much
+  busier than usual a device must get. Open **Settings** beside the range
+  control. Alerts for each kind can also be switched under Insights Findings
+  in **Settings > Alerts**.
+- Show whether Insights alerts are **On**, **Paused**, or **Off** on the bell
+  beside **Settings**, say why when you hover over it, and open
+  **Settings > Alerts** from it.
+- Stop reporting a phone's or computer's private IPv6 address, which changes
+  about once a day, as a new address or one that went quiet.
+- Tie a device's older IPv6 addresses to it across the whole two weeks that
+  Went quiet, Unusually busy, and Active at an unusual hour look back, so last
+  week's address no longer looks like a device that went quiet and the phone
+  no longer looks unusually busy. Tie IPv6 addresses built from a hardware
+  address to that hardware right away.
+
+### Software updates
+
+- Look for a new Sable release in the background on the lead node, so an
+  update alert does not wait for someone to sign in. Check **Hourly**, the
+  default, **Daily** at a time, or **Weekly** on a day and time, under
+  **Settings > General > Software Updates**. Turning off **Check for updates**
+  stops these checks too.
+
+### Audit log
+
+- Record the username a failed password sign-in tried, never the password.
+- Record each password, single sign-on, and passkey lockout once.
+
+### Fixes
+
+- Show the last good scheduled backup on the Backup tab after a restart
+  instead of nothing.
+- Stop reporting a second, false failure for a rolling update that had
+  already ended.
+- Return focus to the button that opened a dialog even when saving redraws
+  the page behind it.
+
+### Configuration
+
+- Add `[alerts]` with `paused`, `[alerts.send]` for the groups,
+  `[alerts.sign_ins]`, and `[[alerts.destinations]]`. `[insights.webhook]`
+  still loads and moves into `[[alerts.destinations]]`.
+- Add `[insights.findings]`, with a mode and limits for each kind of finding.
+- Add `check_schedule`, `check_at`, and `check_day` to `[updates]`.
+
 ## [1.5.0-beta.7] - 2026-09-24
 
 Sable 1.5.0-beta.7 draws the ChatGPT and Microsoft 365 logos the way their

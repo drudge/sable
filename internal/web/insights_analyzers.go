@@ -30,18 +30,22 @@ import (
 var errActivityUnavailable = errors.New("query history is not available for insights")
 
 // insightAnalyzers returns the analyzers the operator's permissions allow,
-// with the sources the page reuses for its own sections.
+// with the sources the page reuses for its own sections. Each runs with the
+// limits in Insights settings and skips the kinds that are off.
 func (server *Server) insightAnalyzers(console pages.DashboardView, window insightWindow) ([]insights.Analyzer, *blockingSources, *deviceSources) {
-	blocking := &blockingSources{server: server, console: console, window: window, configuration: server.config.Current().Config.Blocking}
+	configuration := server.config.Current().Config
+	blocking := &blockingSources{server: server, console: console, window: window, configuration: configuration.Blocking}
+	settings := configuration.Insights.Findings
+	off := insightModesOf(settings).off()
 	analyzers := []insights.Analyzer{}
 	var deviceData *deviceSources
 	if console.CanLogs {
 		if reader, ok := server.queries.(deviceInsightReader); ok {
 			deviceData = &deviceSources{server: server, reader: reader, window: window}
-			analyzers = append(analyzers, devices.Analyzer{Sources: deviceData})
+			analyzers = append(analyzers, devices.Analyzer{Sources: deviceData, Limits: insightDeviceLimits(settings), Off: off})
 		}
 	}
-	analyzers = append(analyzers, blockinginsights.Analyzer{Sources: blocking})
+	analyzers = append(analyzers, blockinginsights.Analyzer{Sources: blocking, Limits: insightBlockingLimits(settings), Off: off})
 	return analyzers, blocking, deviceData
 }
 

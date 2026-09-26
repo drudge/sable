@@ -121,6 +121,7 @@ type Config struct {
 	Blocking     Blocking     `toml:"blocking"`
 	Clients      []Client     `toml:"clients"`
 	Insights     Insights     `toml:"insights"`
+	Alerts       Alerts       `toml:"alerts"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	ServerLog    ServerLog    `toml:"server_log"`
 	Statistics   Statistics   `toml:"statistics"`
@@ -138,6 +139,12 @@ type Config struct {
 // Updates holds this node's release channel. It is not replicated to peers.
 type Updates struct {
 	CheckOnLogin bool `toml:"check_on_login"`
+	// CheckSchedule is how often the lead looks for a release on its own while
+	// CheckOnLogin is on: hourly, daily, or weekly. Daily and weekly checks run
+	// at CheckAt, HH:MM in this node's local time, and weekly ones on CheckDay.
+	CheckSchedule string `toml:"check_schedule"`
+	CheckAt       string `toml:"check_at"`
+	CheckDay      string `toml:"check_day"`
 	// RestartManaged opts externally supervised deployments into rolling restarts.
 	RestartManaged bool `toml:"restart_managed"`
 	// PreRelease includes release candidates when resolving the newest
@@ -469,7 +476,9 @@ type Reload struct {
 
 func Defaults() Config {
 	return Config{
-		Updates: Updates{CheckOnLogin: true},
+		Updates: Updates{
+			CheckOnLogin: true, CheckSchedule: UpdateCheckHourly, CheckAt: defaultUpdateCheckAt, CheckDay: defaultUpdateCheckDay,
+		},
 		Server: Server{
 			HTTPListen:      defaultHTTPListen,
 			DNSListen:       []string{defaultDNSListen},
@@ -506,6 +515,13 @@ func Defaults() Config {
 		Blocking: Blocking{
 			Enabled: true, UpdateInterval: Duration{Duration: defaultBlockListUpdate},
 			ResponseType: "nxdomain", ResponseTTL: defaultBlockingTTL, AllowTXTReport: true,
+		},
+		Alerts: Alerts{
+			Send: AlertSwitches{
+				Insights: true, Cluster: true, Updates: true, Integrations: true,
+				Backups: AlertBackupsFailures, Server: true,
+			},
+			SignIns: AlertSignIns{After: defaultAlertSignInsAfter, Within: Duration{Duration: defaultAlertSignInsWithin}},
 		},
 		QueryLog: QueryLog{
 			Enabled:       true,
@@ -558,6 +574,7 @@ func Defaults() Config {
 			Watch:    true,
 			Debounce: Duration{Duration: defaultReloadDebounce},
 		},
+		Insights: Insights{Findings: DefaultInsightFindings()},
 	}
 }
 
@@ -592,7 +609,7 @@ func Decode(reader io.Reader) (Config, error) {
 func (configuration Config) Validate() error {
 	var validationErrors []error
 	validationErrors = append(validationErrors, validateClients(configuration.Clients))
-	validationErrors = append(validationErrors, validateInsights(configuration.Insights))
+	validationErrors = append(validationErrors, validateAlerts(configuration.Alerts))
 	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
 	if configuration.Server.HTTPSListen != "" {
 		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
@@ -797,6 +814,7 @@ func (configuration Config) Validate() error {
 	if configuration.Backup.RetentionCount < 1 || configuration.Backup.RetentionCount > 1000 {
 		validationErrors = append(validationErrors, errors.New("backup.retention_count must be between 1 and 1000"))
 	}
+	validationErrors = append(validationErrors, configuration.Updates.validate()...)
 	for index, address := range configuration.EncryptedDNS.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
 	}
@@ -925,6 +943,9 @@ func (configuration Config) Validate() error {
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
+	for _, problem := range configuration.Insights.Findings.Problems() {
+		validationErrors = append(validationErrors, problem)
+	}
 	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
 		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf(
@@ -1190,7 +1211,8 @@ func (configuration Config) DedicatedDoHListeners() []string {
 
 func (configuration *Config) normalize() {
 	configuration.normalizeClients()
-	configuration.normalizeInsights()
+	configuration.normalizeAlerts()
+	configuration.Updates.normalize()
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
 	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
 	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)
@@ -1235,6 +1257,7 @@ func (configuration *Config) normalize() {
 	}
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
+	configuration.normalizeInsights()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
 	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)

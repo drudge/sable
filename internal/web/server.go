@@ -20,6 +20,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/alerts"
 	"github.com/drudge/sable/internal/auth"
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/certificates"
@@ -88,10 +89,11 @@ type Server struct {
 	setupRequired     atomic.Bool
 	history           *statsHistory
 	insightCache      dashboardInsightCache
-	// pushKeys signs Insights alerts pushed to browsers, and pushClient
-	// carries them; nil sends through the default client.
-	pushKeys   pushKeySource
-	pushClient *http.Client
+	// pushKeys signs alerts pushed to browsers. alerts sends alerts, and
+	// alertSecrets keeps their destinations' URLs and keys in the vault.
+	pushKeys     pushKeySource
+	alerts       *alerts.Dispatcher
+	alertSecrets *alerts.SecretStore
 	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
 	// page. appCache counts what the app ranking reads apart from the
 	// dashboard's insightCache, because Insights answers from a recent count
@@ -274,13 +276,9 @@ func New(
 	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
 	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
 	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
-	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
-	mux.HandleFunc("POST /ui/insights/alerts/enabled", server.setInsightAlertsEnabled)
-	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
-	mux.HandleFunc("POST /ui/insights/alerts/preview", server.previewInsightAlerts)
-	mux.HandleFunc("GET /ui/insights/alerts/browsers/key", server.insightAlertPushKey)
-	mux.HandleFunc("POST /ui/insights/alerts/browsers", server.addInsightAlertBrowser)
-	mux.HandleFunc("POST /ui/insights/alerts/browsers/remove", server.removeInsightAlertBrowser)
+	mux.HandleFunc("GET /ui/insights/settings", server.insightSettingsPanel)
+	mux.HandleFunc("POST /ui/insights/settings", server.saveInsightSettings)
+	mux.HandleFunc("POST /ui/insights/settings/reset", server.resetInsightSettings)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
@@ -311,6 +309,16 @@ func New(
 	mux.HandleFunc("POST /ui/settings/updates", server.updatePreferences)
 	mux.HandleFunc("POST /ui/settings/tsig/save", server.saveTSIGKey)
 	mux.HandleFunc("POST /ui/settings/tsig/delete", server.deleteTSIGKey)
+	mux.HandleFunc("GET /ui/settings/alerts/destinations/form", server.alertDestinationFormPanel)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/save", server.saveAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/remove", server.removeAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/test", server.testAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/preview", server.previewAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/paused", server.setAlertsPaused)
+	mux.HandleFunc("POST /ui/settings/alerts/groups", server.saveAlertGroups)
+	mux.HandleFunc("GET /ui/settings/alerts/browsers/key", server.alertBrowserPushKey)
+	mux.HandleFunc("POST /ui/settings/alerts/browsers", server.addAlertBrowser)
+	mux.HandleFunc("POST /ui/settings/alerts/browsers/remove", server.removeAlertBrowser)
 	mux.HandleFunc("POST /ui/certificates/renew", server.renewCertificate)
 	mux.HandleFunc("POST /ui/certificates/generate", server.generateManualCertificate)
 	mux.HandleFunc("POST /ui/certificates/import", server.importManualCertificate)

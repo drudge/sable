@@ -31,6 +31,7 @@
     "guides/glance": "Glance",
     "guides/operations": "Operations",
     "guides/logging": "Logs & metrics",
+    "guides/alerts": "Alerts",
     "guides/backup": "Backup & restore",
     "guides/updates": "Updates",
     "guides/clustering": "Clustering",
@@ -89,6 +90,7 @@
     { "title": "Operate and recover", "pages": [
       { "slug": "guides/operations", "file": "docs/operations.md", "title": "Day-to-day operations", "description": "Check health, control the service, monitor failures, and preserve incident evidence.", "aliases": ["operations"] },
       { "slug": "guides/logging", "file": "docs/guides/logging.md", "title": "Use logs and metrics", "description": "Understand dashboard ranges, choose retention, and monitor the DNS service with Prometheus." },
+      { "slug": "guides/alerts", "file": "docs/guides/alerts.md", "title": "Get alerts", "description": "Hear about what Sable notices on your phone, in a chat channel, through a webhook, or in your browser." },
       { "slug": "guides/backup", "file": "docs/backup.md", "title": "Back up and restore", "description": "Schedule encrypted backups, keep an off-host copy, and rehearse recovery before you need it.", "featured": true, "aliases": ["backup"] },
       { "slug": "guides/updates", "file": "docs/guides/updates.md", "title": "Update Sable safely", "description": "Choose a release channel, roll out the same version, and keep a known-good recovery point." },
       { "slug": "guides/clustering", "file": "docs/clustering.md", "title": "Build a resilient cluster", "description": "Enroll replicas, inspect synchronization, and plan maintenance or recovery promotion.", "aliases": ["clustering"] }

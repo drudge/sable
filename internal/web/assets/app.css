@@ -2508,8 +2508,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .token-secret button { opacity: 1; }
 
 .isotope-form-dialog { width: min(calc(100% - 2rem), 32rem); }
-/* Six Send To choices fit on one line. */
-.isotope-form-dialog.insight-alerts-dialog { width: min(calc(100% - 2rem), 38rem); }
+/* Six Format choices fit on one line. */
+.isotope-form-dialog.alert-destination-dialog { width: min(calc(100% - 2rem), 38rem); }
 .isotope-dialog-body { display: grid; gap: 1rem; overflow-y: auto; padding: 1.5rem; }
 .isotope-dialog-body > label, .embedded-admin-form > label { display: grid; gap: .5rem; font-size: .8125rem; font-weight: 500; }
 .isotope-dialog-body fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .75rem; }
@@ -2595,13 +2595,13 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* The strip shares each row out between whatever tabs land on it, so adding
    or dropping a section never leaves a hole at the end of a row. */
 .settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: .25rem; }
-.settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 8 * .25rem) / 9); }
+.settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 9 * .25rem) / 10); }
 /* The basis names how many tabs share a row, and flex-grow fills whatever row
-   they land on: nine across while there is room, then five, then three. A
-   plain fixed basis wraps wherever it happens to run out and leaves the last
-   row holding one tab stretched across the whole strip. */
+   they land on: ten across while there is room, then five, then four. A plain
+   fixed basis wraps wherever it happens to run out and leaves the last row
+   holding one tab stretched across the whole strip. */
 @media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
-@media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 2 * .25rem) / 3); } }
+@media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }
 .settings-tab { height: 3.25rem; flex-direction: column; gap: .25rem; padding: .45rem .25rem; }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
 .settings-tab span { font-size: .6875rem; line-height: 1; }
@@ -3155,7 +3155,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.certificate-detail-grid { grid-template-columns: 1fr; }
   .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
 	.isotope-form-dialog { width: calc(100% - 1rem); }
-	.isotope-form-dialog.insight-alerts-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
 	.user-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
@@ -4016,6 +4016,63 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
 .insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
+/* The bell beside the range control says whether Insights alerts are on and
+   leads to Settings > Alerts. Settings beside it opens what Insights does
+   with each kind of finding. */
+.insight-alerts-bell, .insight-settings-open { flex: 0 0 auto; gap: .35rem; }
+.insight-alerts-bell .nav-icon, .insight-settings-open .nav-icon { width: 1rem; height: 1rem; }
+.insight-alerts-bell.on .nav-icon { color: #16a34a; }
+.insight-alerts-bell.paused .nav-icon { color: #d97706; }
+.dark .insight-alerts-bell.on .nav-icon { color: #22c55e; }
+.dark .insight-alerts-bell.paused .nav-icon { color: #f1ad47; }
+/* An operator who may not open Settings sees the state without a link. */
+span.insight-alerts-bell { cursor: default; }
+span.insight-alerts-bell:hover { background: var(--background); color: var(--foreground); }
+/* The header and footer stay put while the list of kinds scrolls between. */
+.isotope-form-dialog.insight-settings-dialog { width: min(calc(100% - 2rem), 46rem); max-height: min(92vh, 60rem); overflow: hidden; padding: 0; }
+.insight-settings-dialog[open] { grid-template-rows: auto minmax(0, 1fr); gap: 0; }
+.insight-settings-dialog > .dialog-header { padding: 1.5rem 3.5rem 1rem 1.5rem; }
+.insight-settings { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+.insight-settings-body { min-height: 0; gap: 1.25rem; padding-top: .25rem; }
+.insight-settings-footer { align-items: center; border-top: 1px solid var(--border); padding: 1rem 1.5rem; }
+.insight-settings-footer .insight-settings-reset { margin-right: auto; }
+.insight-settings-read-only { display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
+.insight-settings-read-only .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; }
+.insight-settings-group { display: grid; }
+.insight-settings-group > h3 { margin: 0 0 .25rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insight-setting { display: grid; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 0; }
+.insight-setting-heading { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
+.insight-setting-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .5rem; background: color-mix(in oklch, currentColor 11%, transparent); color: var(--muted-foreground); }
+.insight-setting-icon .nav-icon { width: 1rem; height: 1rem; }
+.insight-setting-copy { display: grid; min-width: 0; gap: .15rem; }
+.insight-setting-copy strong { font-size: .8125rem; font-weight: 600; }
+.insight-setting-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+/* Show and alert, Show only, or Off: one choice, drawn like the range tabs. */
+.insight-mode-control { display: inline-flex; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.insight-mode-option { display: inline-flex; height: 1.75rem; align-items: center; justify-content: center; border-radius: .375rem; padding: 0 .6rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.insight-mode-option input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; border: 0; padding: 0; clip-path: inset(50%); opacity: 0; pointer-events: none; white-space: nowrap; }
+.insight-mode-option:hover:not(:has(input:disabled)) { color: var(--foreground); }
+.insight-mode-option:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.insight-mode-option:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.insight-mode-option:has(input:disabled) { cursor: default; }
+.insight-mode-option:has(input:disabled:not(:checked)) { opacity: .5; }
+/* Limits line up under the kind's name, and fade while the kind is off. */
+.insight-setting-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding-left: 2.75rem; }
+.insight-setting:has(input[value="off"]:checked) .insight-setting-limits { opacity: .55; }
+.insight-limit input { height: 2rem; font-size: .8125rem; }
+@media (max-width: 640px) {
+	.insight-settings-dialog > .dialog-header { padding: 1.25rem 3.25rem .85rem 1.25rem; }
+	.insight-settings-body { padding: .25rem 1.25rem 1.25rem; }
+	.insight-settings-footer { padding: .85rem 1.25rem; }
+	.insight-settings-footer .insight-settings-reset { margin-right: 0; }
+	.insight-setting-heading { grid-template-columns: 2rem minmax(0, 1fr); }
+	.insight-mode-control { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.insight-mode-option { padding: 0 .35rem; }
+	.insight-setting-limits { grid-template-columns: minmax(0, 1fr); padding-left: 0; }
+}
+@media (forced-colors: active) {
+	.insight-mode-option:has(input:checked) { border: 1px solid Highlight; }
+}
 /* The Overview opens with one sentence about what stands out, led by an icon
    in the tone of the most important finding. Each subject it names is
    underlined in its own finding's tone and opens that finding. */
@@ -4043,57 +4100,173 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 	.insights-headline > p { font-size: 1rem; }
 	.insight-findings { scroll-margin-top: 4.5rem; }
 }
-/* Alerts: where Insights sends new findings. */
-/* The alert setup opens from a bell beside the range control, green when on. */
+/* The Insights bell beside the range control says whether alerts are on:
+   green when they are, and amber when they are paused. */
 .insight-alerts-button { flex: 0 0 auto; gap: .35rem; }
 .insight-alerts-button .nav-icon { width: 1rem; height: 1rem; }
 .insight-alerts-button.active .nav-icon { color: #16a34a; }
 .dark .insight-alerts-button.active .nav-icon { color: #22c55e; }
 .insight-alerts-button.paused .nav-icon { color: #d97706; }
 .dark .insight-alerts-button.paused .nav-icon { color: #f59e0b; }
-.insight-alerts-advanced-body { display: grid; gap: .85rem; }
-.insight-alert-headers { display: grid; gap: .5rem; }
-.insight-alert-headers:empty { display: none; }
-.insight-alert-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; gap: .5rem; }
-.insight-alert-header-add { justify-self: start; }
-.insight-alerts .dialog-footer .insight-alert-preview-button { margin-right: auto; }
-.isotope-dialog-body fieldset.insight-alert-kinds { min-width: 0; margin: 0; border: 0; padding: 0; }
-.isotope-dialog-body .insight-alert-kinds > legend { margin-bottom: .5rem; padding: 0; font-size: .8125rem; font-weight: 500; }
-.insight-alert-kind-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
-.insight-alert-kind { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
-.insight-alert-kind .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
-.insight-alert-kind .insight-alert-mark { width: .8rem; height: .8rem; flex-basis: .8rem; }
-.insight-alert-kind:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
-.insight-alert-kind:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
-.insight-alert-preview-copy { z-index: 1; }
-.insight-alert-browsers { display: grid; gap: .75rem; }
-.insight-alert-push-card { display: flex; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
-.insight-alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
-.insight-alert-push-icon .nav-icon { width: 1rem; height: 1rem; }
-.insight-alert-push-card[data-push-state="ready"] .insight-alert-push-icon { color: #2563eb; }
-.insight-alert-push-card[data-push-state="on"] .insight-alert-push-icon { color: #16a34a; }
-.insight-alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .insight-alert-push-icon { color: #d97706; }
-.dark .insight-alert-push-card[data-push-state="ready"] .insight-alert-push-icon { color: #60a5fa; }
-.dark .insight-alert-push-card[data-push-state="on"] .insight-alert-push-icon { color: #22c55e; }
-.dark .insight-alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .insight-alert-push-icon { color: #f1ad47; }
-.insight-alert-push-copy { display: grid; flex: 1 1 auto; min-width: 0; gap: .15rem; font-size: .8125rem; }
-.insight-alert-push-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
-.insight-alert-push-copy .insight-alert-push-error { color: var(--destructive); }
-.insight-alert-push-card > .button { flex: 0 0 auto; }
-.insight-alert-browser-list { display: grid; gap: .4rem; }
-.insight-alert-browser-heading { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
-.insight-alert-browser { display: flex; align-items: center; gap: .65rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .55rem .65rem; }
-.insight-alert-browser > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
-.insight-alert-browser > div { display: grid; flex: 1 1 auto; min-width: 0; gap: .1rem; font-size: .8125rem; }
-.insight-alert-browser small { color: var(--muted-foreground); font-size: .7rem; }
-.insight-alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
-.insight-alert-browser-tip { color: var(--muted-foreground); font-size: .7rem; }
-.insight-alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
-.insight-alert-preview { position: fixed; inset: auto; z-index: 100; box-sizing: border-box; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); }
-.insight-alert-preview:popover-open { display: flex; flex-direction: column; transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
-.insight-alert-preview[data-side="top"] { transform-origin: bottom left; }
-.insight-alert-preview-error { margin: 0; padding: .45rem .65rem 0; color: var(--destructive); font-size: .8125rem; }
-.insight-alert-preview pre { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; border: 0; border-radius: 0; background: transparent; padding: .45rem 2.25rem .45rem .65rem; font-size: .75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.insight-alerts { display: grid; gap: 1rem; }
-.insight-alerts-body { padding: 0; }
-.insight-alerts-body > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
+
+/* Settings > Alerts. */
+.alerts-status-card { padding: 1rem 1.5rem; }
+.alerts-status { display: flex; flex-wrap: wrap; align-items: center; gap: .9rem; }
+.alerts-status-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: var(--muted); color: var(--muted-foreground); }
+.alerts-status-icon .nav-icon { width: 1.25rem; height: 1.25rem; }
+.alerts-status.on .alerts-status-icon { background: rgb(34 197 94 / .14); color: #16a34a; }
+.dark .alerts-status.on .alerts-status-icon { color: #22c55e; }
+.alerts-status.paused .alerts-status-icon { background: rgb(245 158 11 / .14); color: #d97706; }
+.dark .alerts-status.paused .alerts-status-icon { color: #f59e0b; }
+/* The detail keeps a floor of 16rem so Pause drops to its own row on a narrow
+   card rather than squeezing the sentence into a column. */
+.alerts-status-detail { display: grid; min-width: 0; flex: 1 1 16rem; gap: .25rem; }
+.alerts-status-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.alerts-status-heading strong { font-size: .875rem; }
+.alerts-status-detail > span { color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
+.alerts-status > .button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .45rem; }
+.alerts-empty { display: grid; place-items: center; align-content: center; gap: .35rem; padding: 2rem 1rem; color: var(--muted-foreground); text-align: center; }
+.alerts-empty > .nav-icon { width: 1.6rem; height: 1.6rem; margin-bottom: .3rem; }
+.alerts-empty h3 { margin: 0; color: var(--foreground); font-size: .9rem; }
+.alerts-empty p { margin: 0; max-width: 28rem; font-size: .78rem; }
+.alert-destination-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.alert-destination-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1rem; }
+.alert-destination-row:first-child { border-top: 0; }
+.alert-destination-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.alert-destination-icon .nav-icon { width: 1rem; height: 1rem; }
+.alert-destination-icon .alert-format-mark { width: .9rem; height: .9rem; }
+.alert-destination-detail { display: grid; min-width: 0; gap: .25rem; }
+.alert-destination-detail strong { font-size: .875rem; overflow-wrap: anywhere; }
+.alert-destination-detail small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
+.alert-destination-detail .alert-destination-problem { display: flex; align-items: flex-start; gap: .3rem; color: var(--destructive); }
+.alert-destination-problem .nav-icon { width: .85rem; height: .85rem; flex: 0 0 auto; margin-top: .1rem; }
+.alert-destination-separator { margin-inline: .35rem; }
+.alert-destination-groups { display: flex; flex-wrap: wrap; gap: .3rem; }
+.alert-group-tag { border-radius: 999px; background: var(--muted); padding: .05rem .5rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 600; line-height: 1.5; }
+.alert-destination-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+.alert-destination-actions .button { display: inline-flex; align-items: center; gap: .4rem; }
+.alert-destination-actions .button .nav-icon { width: .9rem; height: .9rem; }
+.alert-groups { display: grid; gap: .75rem; }
+.alert-choice-row { flex-wrap: wrap; }
+.alert-choice { display: inline-flex; flex: 0 0 auto; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.alert-choice label { display: inline-flex; height: 1.75rem; align-items: center; border-radius: .375rem; padding: 0 .65rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.alert-choice label:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.alert-choice label:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.alert-choice label:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+/* The failed sign-in limit belongs to its switch, so the two share a border. */
+/* Failed Sign-Ins carries its limit under its switch, and Check for updates
+   its schedule. */
+.alert-sign-ins, .update-check { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-sign-ins > .switch-row, .update-check > .switch-row { border: 0; }
+.alert-sign-in-limit, .update-check-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding: .75rem 1rem; color: var(--muted-foreground); font-size: .78rem; }
+.alert-sign-in-limit input { width: 5rem; height: 2rem; }
+.alert-sign-ins:has(input[name="sign_ins"]:not(:checked)) .alert-sign-in-limit { opacity: .6; }
+.update-check-schedule > span { display: inline-flex; align-items: center; gap: .5rem; }
+.update-check-schedule .styled-select, .update-check-schedule .styled-time { width: 8.5rem; }
+.update-check-day .styled-select { width: 9.5rem; }
+/* The schedule folds away while checks are off, and the day and time show
+   only for the schedules that use them. */
+.update-check:has(input[name="check_on_login"]:not(:checked)) .update-check-schedule { display: none; }
+.update-check-schedule:has(select[name="check_schedule"] option[value="hourly"]:checked) .update-check-at { display: none; }
+.update-check-schedule:not(:has(select[name="check_schedule"] option[value="weekly"]:checked)) .update-check-day { display: none; }
+/* The Insights Findings switch carries a switch for each kind of finding, so
+   the kinds sit inside its border. */
+.alert-insights { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-insights > .switch-row { border: 0; }
+.alert-insight-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .15rem 1.5rem; min-width: 0; margin: 0; border: 0; border-top: 1px solid var(--border); padding: .5rem 1rem; }
+.alert-insight-kind { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 2.25rem; cursor: pointer; }
+.alert-insight-kind > span { display: grid; gap: .1rem; min-width: 0; }
+.alert-insight-kind strong { font-size: .8rem; font-weight: 500; }
+.alert-insight-kind small { color: var(--muted-foreground); font-size: .72rem; }
+.alert-insight-kind input[type=checkbox] { position: relative; width: 2.25rem; height: 1.25rem; flex: 0 0 2.25rem; appearance: none; border: 1px solid var(--input); border-radius: 999px; background: var(--muted); padding: 0; cursor: pointer; transition: border-color 150ms, background 150ms; }
+.alert-insight-kind input[type=checkbox]::after { position: absolute; top: .125rem; left: .125rem; width: .875rem; height: .875rem; border-radius: 50%; background: var(--background); box-shadow: 0 1px 3px rgb(0 0 0 / .28); content: ""; transition: transform 150ms; }
+.alert-insight-kind input[type=checkbox]:checked { border-color: var(--primary); background: var(--primary); }
+.alert-insight-kind input[type=checkbox]:checked::after { transform: translateX(1rem); }
+.alert-insight-kind input[type=checkbox]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.alert-insight-kind:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+.alert-insight-kind input[type=checkbox]:disabled { cursor: not-allowed; }
+.alert-insight-kinds-note { margin: 0; border-top: 1px solid var(--border); padding: .6rem 1rem; color: var(--muted-foreground); font-size: .75rem; }
+.alert-insight-kinds-note a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+/* With Insights Findings off, its kinds fold away. They still post with the
+   form, so saving keeps each kind as it was. */
+.alert-insights:has(input[name="insights"]:not(:checked)) :is(.alert-insight-kinds, .alert-insight-kinds-note) { display: none; }
+.alert-groups-save { display: flex; justify-content: flex-end; }
+.alert-browsers { display: grid; gap: .75rem; }
+/* Browsers carry their browsers under the row, beside the destination's
+   details rather than under its icon. They sit flat in the row, past a rule,
+   rather than in boxes of their own inside it. */
+.alert-destination-browsers { grid-column: 2 / -1; gap: .15rem; border-top: 1px solid var(--border); padding-top: .6rem; }
+.alert-destination-browsers .alert-push-card { gap: .6rem; border: 0; border-radius: 0; background: none; padding: .2rem 0; }
+.alert-destination-browsers .alert-push-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; align-self: flex-start; margin-top: .1rem; background: none; }
+.alert-destination-browsers .alert-browser-list { gap: 0; }
+.alert-destination-browsers .alert-browser-heading { padding-top: .45rem; }
+.alert-destination-browsers .alert-browser { gap: .6rem; border: 0; border-radius: 0; padding: .35rem 0; }
+.alert-destination-browsers .alert-browser + .alert-browser { border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+.alert-push-card { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
+.alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.alert-push-icon .nav-icon { width: 1rem; height: 1rem; }
+.alert-push-card[data-push-state="ready"] .alert-push-icon { color: #2563eb; }
+.alert-push-card[data-push-state="on"] .alert-push-icon { color: #16a34a; }
+.alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .alert-push-icon { color: #d97706; }
+.dark .alert-push-card[data-push-state="ready"] .alert-push-icon { color: #60a5fa; }
+.dark .alert-push-card[data-push-state="on"] .alert-push-icon { color: #22c55e; }
+.dark .alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .alert-push-icon { color: #f1ad47; }
+.alert-push-copy { display: grid; flex: 1 1 14rem; min-width: 0; gap: .15rem; font-size: .8125rem; }
+.alert-push-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+.alert-push-copy .alert-push-error { color: var(--destructive); }
+.alert-push-card > .button { flex: 0 0 auto; }
+.alert-push-form { display: none; }
+.alert-browser-list { display: grid; gap: .4rem; }
+.alert-browser-heading { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
+.alert-browser { display: flex; align-items: center; gap: .65rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .55rem .65rem; }
+.alert-browser > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
+.alert-browser > div { display: grid; flex: 1 1 auto; min-width: 0; gap: .1rem; font-size: .8125rem; }
+.alert-browser small { color: var(--muted-foreground); font-size: .7rem; }
+.alert-browser > .button { display: inline-flex; align-items: center; gap: .4rem; }
+.alert-browser > .button .nav-icon { width: .9rem; height: .9rem; }
+.alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
+.alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
+.alert-browser-orphans { margin-top: .75rem; }
+@media (max-width: 640px) {
+	.alerts-status-card { padding: 1rem; }
+	.alert-destination-row { grid-template-columns: 2rem minmax(0, 1fr); padding-inline: .75rem; }
+	.alert-destination-actions { grid-column: 2 / -1; justify-content: flex-start; }
+}
+
+/* The Add and Edit Destination dialog. Six Format choices fit on one line. */
+.alert-destination-form { display: grid; gap: 1rem; }
+.alert-destination-body { padding: 0; }
+/* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
+.alert-destination-notice { display: contents; }
+.alert-destination-form .dialog-footer .alert-preview-button { margin-right: auto; }
+.isotope-dialog-body fieldset.alert-formats, .isotope-dialog-body fieldset.alert-sends { min-width: 0; margin: 0; border: 0; padding: 0; }
+.isotope-dialog-body :is(.alert-formats, .alert-sends) > legend { margin-bottom: .5rem; padding: 0; font-size: .8125rem; font-weight: 500; }
+.alert-format-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.alert-format { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
+.alert-format .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
+.alert-format .alert-format-mark { width: .8rem; height: .8rem; flex-basis: .8rem; }
+.alert-format:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
+.alert-format:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.alert-format:has(input:disabled) { cursor: not-allowed; opacity: .5; }
+.alert-sends-choice { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; font-size: .8125rem; font-weight: 400; }
+.alert-sends-choice label, .alert-sends-groups label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
+.alert-sends :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
+.alert-sends-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem 1rem; margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
+.alert-sends-groups small { color: var(--muted-foreground); font-size: .68rem; }
+/* Everything needs no list of groups. */
+.alert-sends:has(input[name="sends_all"][value="true"]:checked) .alert-sends-groups { display: none; }
+.alert-destination-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
+.alert-destination-advanced-body { display: grid; gap: .85rem; }
+.alert-headers { display: grid; gap: .5rem; }
+.alert-headers:empty { display: none; }
+.alert-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; gap: .5rem; }
+.alert-header-add { justify-self: start; }
+.alert-preview-copy { z-index: 1; }
+.alert-preview { position: fixed; inset: auto; z-index: 100; box-sizing: border-box; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); }
+.alert-preview:popover-open { display: flex; flex-direction: column; transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
+.alert-preview[data-side="top"] { transform-origin: bottom left; }
+.alert-preview-error { margin: 0; padding: .45rem .65rem 0; color: var(--destructive); font-size: .8125rem; }
+.alert-preview pre { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; border: 0; border-radius: 0; background: transparent; padding: .45rem 2.25rem .45rem .65rem; font-size: .75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+	.alert-sends-groups { grid-template-columns: 1fr; }
+}
