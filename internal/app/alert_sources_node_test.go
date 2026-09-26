@@ -4,11 +4,13 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/drudge/sable/internal/alerts"
+	"github.com/drudge/sable/internal/backup"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
@@ -268,6 +270,92 @@ func TestTrustAnchorAlertsOnlyOnceUpdatesStayBroken(t *testing.T) {
 				status:   func() trustanchor.Status { return testCase.status },
 				interval: func() time.Duration { return interval },
 			}
+			got, err := source.Alerts(context.Background(), alertTestNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkAlerts(t, got, testCase.want)
+		})
+	}
+}
+
+func TestBackupAlertsWhenTheLatestBackupFailedOrOneFinished(t *testing.T) {
+	t.Parallel()
+
+	finishedAt := alertTestNow.Add(-2 * time.Hour)
+	failed := func(summary string, reasons ...string) wantAlert {
+		return wantAlert{
+			id: "backups.failed:node-1", group: config.AlertGroupBackups, kind: "backups.failed", title: "Backup failed",
+			subject: "ns1", path: "/settings?tab=backup", problem: true, tone: alerts.ToneAttention,
+			summary: summary, reasons: reasons, observedAt: alertTestNow.Add(-time.Minute),
+		}
+	}
+	finished := func(reasons ...string) wantAlert {
+		return wantAlert{
+			id:    "backups.finished:node-1:" + strconv.FormatInt(finishedAt.Unix(), 10),
+			group: config.AlertGroupBackups, kind: "backups.finished", title: "Backup finished", subject: "ns1",
+			path: "/settings?tab=backup", tone: alerts.TonePositive,
+			summary: "The scheduled backup on ns1 finished and was saved in /srv/backups.", reasons: reasons,
+			observedAt: finishedAt,
+		}
+	}
+	for _, testCase := range []struct {
+		name     string
+		schedule backup.Schedule
+		want     []wantAlert
+	}{
+		{name: "never switched on"},
+		{
+			name:     "a failure stops mattering once backups are switched off",
+			schedule: backup.Schedule{LastError: "disk full", LastErrorAt: alertTestNow.Add(-time.Minute)},
+		},
+		{
+			name: "a failure before any backup worked",
+			schedule: backup.Schedule{
+				Enabled: true, LastError: "disk full", LastErrorAt: alertTestNow.Add(-time.Minute), NextRun: alertTestNow.Add(4 * time.Minute),
+			},
+			want: []wantAlert{failed(
+				"The scheduled backup on ns1 failed, and none has worked there yet.",
+				"Last error: disk full", "No good backup yet", "Next try in 4 minutes",
+			)},
+		},
+		{
+			name: "a failure after an older backup",
+			schedule: backup.Schedule{
+				Enabled: true, LastError: "disk full", LastErrorAt: alertTestNow.Add(-time.Minute), LastSuccess: alertTestNow.Add(-50 * time.Hour),
+			},
+			want: []wantAlert{failed(
+				"The scheduled backup on ns1 failed. Its last good backup is 2 days old.",
+				"Last error: disk full", "Last good backup 2 days ago",
+			)},
+		},
+		{
+			name: "a backup that finished today",
+			schedule: backup.Schedule{
+				Enabled: true, ResolvedDirectory: "/srv/backups", LastSuccess: finishedAt, NextRun: alertTestNow.Add(22 * time.Hour),
+			},
+			want: []wantAlert{finished("Saved in /srv/backups", "Next backup in 22 hours")},
+		},
+		{
+			name:     "a backup from yesterday is no longer news",
+			schedule: backup.Schedule{Enabled: true, ResolvedDirectory: "/srv/backups", LastSuccess: alertTestNow.Add(-25 * time.Hour)},
+		},
+		{
+			name: "a failure after a backup that finished today",
+			schedule: backup.Schedule{
+				Enabled: true, ResolvedDirectory: "/srv/backups", LastSuccess: finishedAt, NextRun: alertTestNow.Add(4 * time.Minute),
+				LastError: "disk full", LastErrorAt: alertTestNow.Add(-time.Minute),
+			},
+			want: []wantAlert{
+				failed("The scheduled backup on ns1 failed. Its last good backup is 2 hours old.",
+					"Last error: disk full", "Last good backup 2 hours ago", "Next try in 4 minutes"),
+				finished("Saved in /srv/backups", "Next backup in 4 minutes"),
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			source := backupAlertSource{node: alertTestNode(false), schedule: func() backup.Schedule { return testCase.schedule }}
 			got, err := source.Alerts(context.Background(), alertTestNow)
 			if err != nil {
 				t.Fatal(err)

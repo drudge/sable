@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/alerts"
+	"github.com/drudge/sable/internal/backup"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
@@ -35,6 +36,10 @@ const (
 	// a DNSSEC key update working before it is worth an alert. Keys change
 	// over months, so a day or two of failures is no emergency.
 	trustAnchorMissedRefreshes = 2
+	// eventNews is how long an event, such as a finished backup, stays news.
+	// The dispatcher tries again each round while it is, so a destination that
+	// is down for a while still hears of it.
+	eventNews = 24 * time.Hour
 )
 
 // alertNode is the node an alert is about.
@@ -95,6 +100,7 @@ type nodeHealth struct {
 	// trustAnchorUpdates reports whether this node keeps its DNSSEC root keys
 	// up to date itself.
 	trustAnchorUpdates func() bool
+	backups            *scheduledBackupService
 }
 
 // alertSources returns the sources of alerts about this node, each placed on
@@ -108,6 +114,7 @@ func (health nodeHealth) alertSources() []alerts.Source {
 			node: health.node, enabled: health.trustAnchorUpdates,
 			status: health.trustAnchors.Status, interval: health.trustAnchors.RefreshInterval,
 		},
+		backupAlertSource{node: health.node, schedule: health.backups.schedule},
 	}
 	for index, source := range sources {
 		sources[index] = alerts.Place(source, alerts.OnEachNode)
@@ -271,6 +278,63 @@ func (source trustAnchorAlertSource) Alerts(_ context.Context, now time.Time) ([
 		Headline: node.Name + " cannot update its DNSSEC root keys", Summary: summary, Reasons: reasons,
 		Path: "/settings?tab=recursion", PathLabel: "Open Recursion Settings", ObservedAt: observed,
 	}}, nil
+}
+
+// backupAlertSource tells people how this node's scheduled backups went: a
+// problem while the latest one has failed, and news each time one finishes.
+// Backups run on every node, each into its own directory.
+type backupAlertSource struct {
+	node     func() alertNode
+	schedule func() backup.Schedule
+}
+
+func (source backupAlertSource) Alerts(_ context.Context, now time.Time) ([]alerts.Alert, error) {
+	schedule := source.schedule()
+	// A failure stops mattering once scheduled backups are switched off, but a
+	// backup that finished stays news for a day either way.
+	failed := schedule.Enabled && schedule.LastError != ""
+	finished := !schedule.LastSuccess.IsZero() && now.Sub(schedule.LastSuccess) < eventNews
+	if !failed && !finished {
+		return nil, nil
+	}
+	node := source.node()
+	var found []alerts.Alert
+	if failed {
+		summary := fmt.Sprintf("The scheduled backup on %s failed, and none has worked there yet.", node.Name)
+		reasons := []string{"Last error: " + schedule.LastError, "No good backup yet"}
+		if !schedule.LastSuccess.IsZero() {
+			summary = fmt.Sprintf("The scheduled backup on %s failed. Its last good backup is %s old.", node.Name, alertDuration(now.Sub(schedule.LastSuccess)))
+			reasons[1] = "Last good backup " + alertAgo(schedule.LastSuccess, now)
+		}
+		if schedule.NextRun.After(now) {
+			reasons = append(reasons, "Next try "+alertIn(schedule.NextRun, now))
+		}
+		observed := schedule.LastErrorAt
+		if observed.IsZero() {
+			observed = now
+		}
+		found = append(found, alerts.Alert{
+			ID: "backups.failed:" + node.key(), Group: config.AlertGroupBackups, Kind: "backups.failed",
+			Problem: true, Tone: alerts.ToneAttention, Title: "Backup failed", Subject: node.Name,
+			Headline: "The scheduled backup on " + node.Name + " failed", Summary: summary, Reasons: reasons,
+			Path: "/settings?tab=backup", PathLabel: "Open Backup Settings", ObservedAt: observed,
+		})
+	}
+	if finished {
+		reasons := []string{"Saved in " + schedule.ResolvedDirectory}
+		if schedule.NextRun.After(now) {
+			reasons = append(reasons, "Next backup "+alertIn(schedule.NextRun, now))
+		}
+		found = append(found, alerts.Alert{
+			// Each backup is its own news, named by when it was taken.
+			ID:    "backups.finished:" + node.key() + ":" + strconv.FormatInt(schedule.LastSuccess.Unix(), 10),
+			Group: config.AlertGroupBackups, Kind: "backups.finished", Tone: alerts.TonePositive,
+			Title: "Backup finished", Subject: node.Name, Headline: node.Name + " finished a scheduled backup",
+			Summary: fmt.Sprintf("The scheduled backup on %s finished and was saved in %s.", node.Name, schedule.ResolvedDirectory),
+			Reasons: reasons, Path: "/settings?tab=backup", PathLabel: "Open Backup Settings", ObservedAt: schedule.LastSuccess,
+		})
+	}
+	return found, nil
 }
 
 // failedInARow says how many attempts in a row failed.

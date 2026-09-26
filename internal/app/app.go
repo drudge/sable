@@ -463,7 +463,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	alertDispatcher.Add(webServer.InsightAlerts())
 	alertDispatcher.Add(nodeHealth{
 		node: clusterAlertNode(clusterService, configurationManager), configuration: configurationManager,
-		certificates: certificateManager, zones: zoneRefresher,
+		certificates: certificateManager, zones: zoneRefresher, backups: scheduledBackups,
 		trustAnchors: trustAnchorManager, trustAnchorUpdates: handler.DNSSECTrustAnchorUpdatesEnabled,
 	}.alertSources()...)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
