@@ -210,6 +210,14 @@ after each atomic archive write. It keeps the newest configured number of its
 own scheduled archives. It does not purge invalid files, manually named
 backups, or another node's scheduled backups if a directory is shared.
 
+Each node reports its own scheduled backups as [alerts](configuration.md#alerts).
+A failed backup is a problem, sent at high priority with the error and the age
+of the last good backup, and it stays one alert until a backup works again.
+The default, `backups = "failures"` under `[alerts.send]`, sends only failures;
+`backups = "all"` also sends each finished backup. The time of the last good
+backup is read back from the newest scheduled archive when Sable starts, so the
+Backup tab and the alerts keep it across a restart.
+
 The CLI remains useful when an external scheduler, remote destination, or
 different retention policy owns the workflow:
 

@@ -355,7 +355,8 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	handler.SetZoneUpdateAuditor(dynamicUpdater.Audit)
 	zoneRefreshContext, stopZoneRefresh := context.WithCancel(runtimeContext)
 	defer stopZoneRefresh()
-	runRuntimeWorker(func(context.Context) { newZoneRefresher(zoneManager, handler, logger).Run(zoneRefreshContext) })
+	zoneRefresher := newZoneRefresher(zoneManager, handler, logger)
+	runRuntimeWorker(func(context.Context) { zoneRefresher.Run(zoneRefreshContext) })
 	runRuntimeWorker(func(context.Context) { runDNSSECRefresher(zoneRefreshContext, zoneManager, dnssec, handler, logger) })
 	runRuntimeWorker(func(context.Context) { trustAnchorManager.Run(zoneRefreshContext, logger) })
 
@@ -473,6 +474,12 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	alertDispatcher.Add(webServer.InsightAlerts())
 	alertDispatcher.Add(newUniFiAlertSource(unifiSync, configurationManager), newDynamicDNSAlertSource(dynamicDNS, configurationManager))
 	alertDispatcher.Add(newUpdateAlertSource(updateManager))
+	alertDispatcher.Add(nodeHealth{
+		node: clusterAlertNode(clusterService, configurationManager), configuration: configurationManager,
+		certificates: certificateManager, zones: zoneRefresher, backups: scheduledBackups,
+		trustAnchors: trustAnchorManager, trustAnchorUpdates: handler.DNSSECTrustAnchorUpdatesEnabled,
+		auditLog: database, signIns: authentication != nil,
+	}.alertSources()...)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment

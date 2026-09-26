@@ -214,6 +214,45 @@ func TestManagerFailureUsesRFC5011RetryFloor(t *testing.T) {
 	}
 }
 
+func TestManagerRefreshIntervalFollowsTheLastKeySetSeen(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	key := newTestKey(t, ".")
+	for _, testCase := range []struct {
+		name    string
+		refresh bool
+		want    time.Duration
+	}{
+		{name: "never refreshed waits the longest interval", want: 15 * 24 * time.Hour},
+		// The key set's TTL is two hours and its signature has four hours
+		// left, so half the TTL comes first.
+		{name: "refreshed waits half the key set's TTL", refresh: true, want: time.Hour},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			response := signedDNSKEYResponse(t, now, []*testKey{key}, key)
+			manager, err := New(context.Background(), &memoryStore{}, func(context.Context, string, uint16) (*dns.Msg, error) {
+				return response.Copy(), nil
+			}, Options{
+				Bootstrap:      []string{dnskeyAnchor(key.key)},
+				MinimumRefresh: time.Minute,
+				Now:            func() time.Time { return now },
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if testCase.refresh {
+				if err := manager.Refresh(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := manager.RefreshInterval(); got != testCase.want {
+				t.Fatalf("RefreshInterval() = %s, want %s", got, testCase.want)
+			}
+		})
+	}
+}
+
 func newTestKey(t *testing.T, owner string) *testKey {
 	t.Helper()
 	key := &dns.DNSKEY{
