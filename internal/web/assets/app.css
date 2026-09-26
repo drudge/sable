@@ -2865,7 +2865,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 @media (prefers-reduced-motion: reduce) {
   .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check].htmx-request .icon-refresh { animation: none; }
 }
-.about-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: .25rem .5rem; padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
+.about-footer { padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
 @media (max-width: 640px) {
   .about-hero { padding: 1rem .5rem; }
   .about-mascot { width: 8.5rem; margin-bottom: .75rem; }

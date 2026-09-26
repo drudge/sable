@@ -143,16 +143,15 @@ templ AboutContent(view AboutPageView) {
 
 		<footer class="about-footer">
 			<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>
-			<span aria-hidden="true">·</span>
-			<button class="about-license-button" type="button" data-dialog-open="third-party-licenses-dialog">Third-Party Licenses</button>
 		</footer>
 	</div>
-	@mitLicenseDialog()
+	@mitLicenseDialog(true)
 	@thirdPartyLicensesDialog(notices.All())
 }
 
-// thirdPartyLicensesDialog lists the third-party software built into Sable.
-// Each license's text loads the first time its row opens.
+// thirdPartyLicensesDialog lists the third-party software built into Sable,
+// and opens from the MIT License dialog in its place. Each license's text
+// loads the first time its row opens.
 templ thirdPartyLicensesDialog(all []notices.Notice) {
 	<dialog class="custom-server-dialog license-dialog third-party-licenses-dialog" id="third-party-licenses-dialog" aria-labelledby="third-party-licenses-dialog-title">
 		<div class="dialog-header">

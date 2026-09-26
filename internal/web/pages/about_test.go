@@ -52,8 +52,12 @@ func TestAboutListsThirdPartyLicenses(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := body.String()
+	// The MIT License dialog hands over to the third-party list.
+	mit := strings.Index(html, `id="mit-license-dialog"`)
+	if swap := strings.Index(html, `data-dialog-switch="third-party-licenses-dialog"`); mit < 0 || swap < mit || swap > strings.Index(html[mit:], "</dialog>")+mit {
+		t.Error("the MIT License dialog does not lead to third-party licenses")
+	}
 	for _, expected := range []string{
-		`data-dialog-open="third-party-licenses-dialog"`,
 		`id="third-party-licenses-dialog"`,
 		`<span class="third-party-license-name">htmx</span>`,
 		`<span class="third-party-license-name">Go</span>`,
