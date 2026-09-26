@@ -44,7 +44,7 @@ Each destination in the list shows its last send, or its last error, since Sable
 
 **Groups** turns whole kinds of alerts on or off for every destination. Select **Save Groups** after a change.
 
-- **Insights Findings** are new findings worth a look. Anything you hid in Insights is skipped.
+- **Insights Findings** are new findings worth a look. Anything you hid in Insights is skipped. Each kind of finding, such as a new device on the network, has its own switch under it; turning one off keeps that kind in Insights without alerts. Limits live in Insights Settings.
 - **Cluster** is a node going down and coming back up, and update rollouts.
 - **Sable Updates** is a new release of Sable.
 - **Integrations** is UniFi sync and dynamic DNS.
@@ -56,13 +56,13 @@ Problems, such as a node going down or a backup failing, go out at high priority
 
 ## Pause alerts
 
-Use **Pause** to stop every alert without forgetting where they go, and **Resume** to start them again. Alerts that come up while alerts are paused are not sent when you resume. **Send Test** still works while paused.
+Use **Pause** to stop every alert without forgetting where they go, and **Resume** to start them again. Alerts that come up while alerts are paused are not sent when you resume. **Send Test** still works while paused. Pause shows only while alerts are on: with no destination able to send, there is nothing to pause.
 
-The top of the tab says whether alerts are **On**, **Paused**, or **Off**. On means they are not paused and at least one destination can send. The bell beside the range control in Insights says the same, and takes you to the tab.
+The top of the tab says whether alerts are **On**, **Paused**, or **Off**. On means they are not paused and at least one destination can send. The bell beside the range control in Insights says whether Insights findings go out, and opens Insights Settings.
 
 ## Browsers
 
-Select **Turn On in This Browser** and allow notifications when your browser asks. Alerts then show up even when Sable is closed. The first browser you turn on adds **Browsers** to your destinations. The list shows every browser that turned alerts on, and **Remove** stops one.
+Add **Browsers** as a destination. Its row then has **Turn On in This Browser**: select it and allow notifications when your browser asks. Alerts then show up even when Sable is closed. The row lists every browser that turned alerts on, and **Remove** beside one stops it. Removing the Browsers destination stops them all and forgets them.
 
 No account or app is needed: Sable signs each push with its own key, and your browser's push service delivers it. Browsers allow this only when Sable is opened over HTTPS, or at `localhost`, and on iPhone and iPad only after Sable is added to the Home Screen. The Sable server needs to reach the internet to hand pushes to those services.
 

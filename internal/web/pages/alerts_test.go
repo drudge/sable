@@ -17,6 +17,7 @@ func TestAlertsTabRendersGroupsAsSwitchesAndNamesEveryControl(t *testing.T) {
 		Destinations: []AlertDestinationView{
 			{ID: "phone", Label: "Phone", Format: "text", FormatLabel: "ntfy", Address: "https://ntfy.sh/••••erts", Everything: true},
 			{ID: "chat", Label: "Slack", Format: "slack", FormatLabel: "Slack", Groups: []string{"Cluster"}, Problem: "No URL is saved."},
+			{ID: "browser", Label: "Browsers", Format: "browser", FormatLabel: "Browsers", Everything: true},
 		},
 		Browsers: []AlertBrowserView{{ID: "abc", Label: "Safari on iPhone", Added: "Added Sep 25, 2026 by operator"}},
 	}
@@ -34,11 +35,19 @@ func TestAlertsTabRendersGroupsAsSwitchesAndNamesEveryControl(t *testing.T) {
 		`role="radiogroup" aria-label="Backup alerts"`, `name="backups" value="all" checked`,
 		`aria-label="Failed sign-ins before an alert" required`, `value="3"`, `value="15"`,
 		`aria-label="Remove Safari on iPhone"`, "Browsers getting alerts", "Added Sep 25, 2026 by operator",
-		`data-push-panel`, `data-push-form`, "Turn On in This Browser",
+		`data-push-panel`, `data-push-form`, "Turn On in This Browser", "forgets every browser that turned them on",
 	} {
 		if !strings.Contains(markup, want) {
 			t.Errorf("the Alerts tab lacks %q", want)
 		}
+	}
+	// The browsers belong to the Browsers destination, inside its row.
+	row := markup[strings.Index(markup, `id="alert-destination-browser"`):]
+	if row = row[:strings.Index(row, "</article>")]; !strings.Contains(row, "data-push-panel") || !strings.Contains(row, "Safari on iPhone") {
+		t.Error("the browsers are not in the Browsers row")
+	}
+	if strings.Contains(markup, "alerts-browsers-card") {
+		t.Error("the browsers still have a card of their own")
 	}
 
 	form := renderComponent(t, AlertDestinationDialog(AlertDestinationFormView{
@@ -76,8 +85,11 @@ func TestAlertsTabWithoutEditingShowsNoActions(t *testing.T) {
 	t.Parallel()
 	markup := renderComponent(t, SettingsAlertsPanel(AlertsView{
 		Available: true, State: AlertsPaused, Push: true,
-		Groups:       AlertGroupsView{Backups: "failures", SignInsAfter: 5, SignInsWithin: 10},
-		Destinations: []AlertDestinationView{{ID: "phone", Label: "Phone", Format: "text", FormatLabel: "ntfy", Everything: true}},
+		Groups: AlertGroupsView{Backups: "failures", SignInsAfter: 5, SignInsWithin: 10},
+		Destinations: []AlertDestinationView{
+			{ID: "phone", Label: "Phone", Format: "text", FormatLabel: "ntfy", Everything: true},
+			{ID: "browser", Label: "Browsers", Format: "browser", FormatLabel: "Browsers", Everything: true},
+		},
 	}))
 	for _, action := range []string{"alert-destination-add", "alert-destination-edit-phone", "Resume", "Save Groups", "Turn On in This Browser", "data-push-form"} {
 		if strings.Contains(markup, action) {
@@ -90,6 +102,33 @@ func TestAlertsTabWithoutEditingShowsNoActions(t *testing.T) {
 	unavailable := renderComponent(t, SettingsAlertsPanel(AlertsView{}))
 	if !strings.Contains(unavailable, "Alerts are not available on this server.") || strings.Contains(unavailable, "alert-destination-list") {
 		t.Fatal("a server without alerts renders the tab")
+	}
+}
+
+// Only alerts that go out can be paused. With destinations that cannot send
+// yet, alerts are off and there is nothing to pause.
+func TestAlertsOffOffersNoPause(t *testing.T) {
+	t.Parallel()
+	markup := renderComponent(t, SettingsAlertsPanel(AlertsView{
+		Available: true, CanEdit: true, State: AlertsOff, Push: true,
+		Groups:       AlertGroupsView{Backups: "failures", SignInsAfter: 5, SignInsWithin: 10},
+		Destinations: []AlertDestinationView{{ID: "browser", Label: "Browsers", Format: "browser", FormatLabel: "Browsers", Everything: true}},
+	}))
+	if strings.Contains(markup, `id="alerts-pause"`) {
+		t.Error("alerts that are off offer Pause or Resume")
+	}
+	if !strings.Contains(markup, "Turn On in This Browser") {
+		t.Error("Browsers with no browser yet does not offer to add this one")
+	}
+	// Browsers left subscribed without the destination are named, so they
+	// are not forgotten silently.
+	orphans := renderComponent(t, SettingsAlertsPanel(AlertsView{
+		Available: true, CanEdit: true, State: AlertsOff, Push: true,
+		Groups:   AlertGroupsView{Backups: "failures", SignInsAfter: 5, SignInsWithin: 10},
+		Browsers: []AlertBrowserView{{ID: "abc", Label: "Safari on iPhone"}, {ID: "def", Label: "Chrome on macOS"}},
+	}))
+	if !strings.Contains(orphans, "2 browsers turned alerts on, but Browsers is not a destination") {
+		t.Error("browsers without the destination are not mentioned")
 	}
 }
 

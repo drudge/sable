@@ -188,12 +188,36 @@ func alertDestinationProblem(destination config.AlertDestination, browsers int, 
 	}
 }
 
+// forgetAlertBrowsers stops alerts to every browser. A browser that cannot be
+// forgotten is logged: it gets nothing without the Browsers destination.
+func (server *Server) forgetAlertBrowsers(ctx context.Context) {
+	store, push := server.alertPushStore()
+	if !push {
+		return
+	}
+	subscriptions, err := store.PushSubscriptions(ctx)
+	if err != nil {
+		server.logger.Warn("read push subscriptions", "error", err)
+		return
+	}
+	for _, subscription := range subscriptions {
+		if err := store.DeletePushSubscription(ctx, subscription.Endpoint); err != nil {
+			server.logger.Warn("forget push subscription", "browser", subscription.Label, "error", err)
+		}
+	}
+}
+
 // alertDestinationView is one destination as the list shows it, with its
 // address cut short and how sending there has gone since Sable started.
 func alertDestinationView(destination config.AlertDestination, status alerts.Status, browsers int, push bool, display pages.TimeDisplay) pages.AlertDestinationView {
 	view := pages.AlertDestinationView{
 		ID: destination.ID, Label: destination.Label(), Format: alertFormatKey(destination.Format), FormatLabel: destination.FormatLabel(),
 		Everything: len(destination.Sends) == 0, Problem: alertDestinationProblem(destination, browsers, push),
+	}
+	// Browsers with no browser yet is not a problem to warn about: its row
+	// holds the button that adds one.
+	if destination.Format == config.AlertFormatBrowser && push && browsers == 0 {
+		view.Problem = ""
 	}
 	for _, group := range destination.Sends {
 		view.Groups = append(view.Groups, pages.AlertGroupLabel(group))
@@ -534,6 +558,11 @@ func (server *Server) removeAlertDestination(writer http.ResponseWriter, request
 	// ciphertext nothing reads, so a failure here is logged, not shown.
 	if err := server.alertSecrets.Forget(request.Context(), id); err != nil {
 		server.logger.Warn("forget alert destination secrets", "destination", removed.Label(), "error", err)
+	}
+	// Browsers get alerts only through the Browsers destination, so removing
+	// it forgets them too rather than leaving them subscribed to nothing.
+	if removed.Format == config.AlertFormatBrowser {
+		server.forgetAlertBrowsers(request.Context())
 	}
 	server.recordControlPlaneAudit(request, "alerts", "removed alert destination "+removed.Label())
 	server.renderAlertsPanel(writer, request, console, http.StatusOK, "Removed "+removed.Label()+".", "")

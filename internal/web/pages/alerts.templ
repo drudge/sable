@@ -241,9 +241,6 @@ templ SettingsAlertsPanel(view AlertsView) {
 			@alertsStatusCard(view)
 			@alertsDestinationsCard(view)
 			@alertsGroupsCard(view)
-			if view.Push {
-				@alertsBrowsersCard(view)
-			}
 		}
 	</div>
 }
@@ -257,7 +254,9 @@ templ alertsStatusCard(view AlertsView) {
 				<div class="alerts-status-heading"><strong>Alerts</strong><span class={ alertsStateBadgeClass(view.State) }>{ alertsStateLabel(view.State) }</span></div>
 				<span>{ alertsStateSummary(view) }</span>
 			</div>
-			if view.CanEdit && len(view.Destinations) > 0 {
+			// Only alerts that go out can be paused, and only paused ones
+			// resumed; with nothing able to send, there is nothing to pause.
+			if view.CanEdit && view.State != AlertsOff {
 				if view.State == AlertsPaused {
 					<button class="button outline" id="alerts-pause" type="button" hx-post="/ui/settings/alerts/paused" hx-vals='{"paused":"false"}' hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
 				} else {
@@ -333,17 +332,21 @@ templ alertsDestinationsCard(view AlertsView) {
 			} else {
 				<div class="alert-destination-list">
 					for _, destination := range view.Destinations {
-						@alertDestinationRow(destination, view.CanEdit)
+						@alertDestinationRow(destination, view)
 					}
 				</div>
+			}
+			if !view.BrowserDestination && len(view.Browsers) > 0 {
+				<p class="alert-browser-note alert-browser-orphans">{ browserCount(len(view.Browsers)) } turned alerts on, but Browsers is not a destination, so they get nothing. Add Browsers to send to them again.</p>
 			}
 		</div>
 	</section>
 }
 
 // alertDestinationRow is one destination: what it is, where it sends, which
-// groups it gets, how its last send went, and its actions.
-templ alertDestinationRow(destination AlertDestinationView, canEdit bool) {
+// groups it gets, how its last send went, and its actions. The Browsers
+// destination also carries its browsers, and the button that adds this one.
+templ alertDestinationRow(destination AlertDestinationView, view AlertsView) {
 	<article class="alert-destination-row" id={ "alert-destination-" + destination.ID }>
 		<span class="alert-destination-icon">@alertFormatIcon(destination.Format)</span>
 		<div class="alert-destination-detail">
@@ -373,14 +376,34 @@ templ alertDestinationRow(destination AlertDestinationView, canEdit bool) {
 				<small>Last sent { destination.LastSent }: { destination.LastSentTitle }</small>
 			}
 		</div>
-		if canEdit {
+		if view.CanEdit {
 			<div class="alert-destination-actions">
 				<button class="button outline compact" id={ "alert-destination-test-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/test" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Send Test to " + destination.Label } data-replica-primary-action>@Icon("send")<span>Send Test</span></button>
 				<button class="button outline compact" id={ "alert-destination-edit-" + destination.ID } type="button" hx-get={ "/ui/settings/alerts/destinations/form?id=" + destination.ID } hx-target="#alert-destination-content" hx-swap="innerHTML" data-dialog-load="alert-destination-dialog" aria-label={ "Edit " + destination.Label } data-replica-primary-action>@Icon("pencil")<span>Edit</span></button>
-				<button class="button outline compact destructive" id={ "alert-destination-remove-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ "Remove " + destination.Label + "? Sable stops sending it alerts and forgets its saved URL and keys." } data-confirm-title="Remove destination?" data-confirm-action="Remove" aria-label={ "Remove " + destination.Label } data-alert-destination-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+				<button class="button outline compact destructive" id={ "alert-destination-remove-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ alertRemoveConfirmation(destination) } data-confirm-title="Remove destination?" data-confirm-action="Remove" aria-label={ "Remove " + destination.Label } data-alert-destination-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
 			</div>
 		}
+		if destination.Format == "browser" && view.Push {
+			@alertBrowsersPanel(view)
+		}
 	</article>
+}
+
+// alertRemoveConfirmation says what removing a destination forgets. Removing
+// Browsers forgets the browsers too, since nothing else sends to them.
+func alertRemoveConfirmation(destination AlertDestinationView) string {
+	if destination.Format == "browser" {
+		return "Remove " + destination.Label + "? Sable stops pushing alerts and forgets every browser that turned them on."
+	}
+	return "Remove " + destination.Label + "? Sable stops sending it alerts and forgets its saved URL and keys."
+}
+
+// browserCount counts browsers in words, such as "2 browsers".
+func browserCount(count int) string {
+	if count == 1 {
+		return "1 browser"
+	}
+	return fmt.Sprintf("%d browsers", count)
 }
 
 // alertsGroupsCard turns whole groups of alerts on or off. It saves on its own.
@@ -456,68 +479,59 @@ templ alertBackupsOption(value, label string, view AlertsView) {
 	<label><input class="sr-only" type="radio" name="backups" value={ value } checked?={ view.Groups.Backups == value } disabled?={ !view.CanEdit }/><span>{ label }</span></label>
 }
 
-// alertsBrowsersCard turns alerts on in this browser and lists the browsers
-// that did. A browser subscribes with the page's script, which then posts the
-// small form here.
-templ alertsBrowsersCard(view AlertsView) {
-	<section class="card settings-source-card alerts-browsers-card">
-		<header><h2>@Icon("monitor-smartphone")<span>Browsers</span></h2><p>Show alerts as notifications, even when Sable is closed.</p></header>
-		<div class="isotope-card-content alert-browsers" data-push-panel>
-			if view.CanEdit {
-				<div class="alert-push-card" data-push-card data-push-state="ready">
-					<span class="alert-push-icon" aria-hidden="true">
-						<span data-push-when="ready">@Icon("bell")</span>
-						<span data-push-when="on" hidden>@Icon("check-circle")</span>
-						<span data-push-when="blocked" hidden>@Icon("bell-off")</span>
-						<span data-push-when="insecure" hidden>@Icon("lock")</span>
-						<span data-push-when="unsupported" hidden>@Icon("alert-triangle")</span>
-					</span>
-					<div class="alert-push-copy" aria-live="polite">
-						<strong data-push-when="ready">Get alerts in this browser</strong>
-						<small data-push-when="ready">{ ifThen(view.BrowserDestination, "They show up even when Sable is closed.", "This adds Browsers to your destinations.") }</small>
-						<strong data-push-when="on" hidden>This browser gets alerts</strong>
-						<small data-push-when="on" hidden>Remove it below to stop them.</small>
-						<strong data-push-when="blocked" hidden>Notifications are blocked</strong>
-						<small data-push-when="blocked" hidden>Allow them for this site in your browser's settings, then reload.</small>
-						<strong data-push-when="insecure" hidden>Needs HTTPS</strong>
-						<small data-push-when="insecure" hidden>Browsers only allow notifications over HTTPS. Open Sable at its https:// address.</small>
-						<strong data-push-when="unsupported" hidden>Not supported here</strong>
-						<small data-push-when="unsupported" hidden>This browser cannot show notifications from websites.</small>
-						<small class="alert-push-error" data-push-error hidden></small>
-					</div>
-					<button class="button compact" type="button" data-push-enable data-push-when="ready" data-replica-primary-action>Turn On in This Browser</button>
+// alertBrowsersPanel turns alerts on in this browser and lists the browsers
+// that did, inside the Browsers destination they belong to. A browser
+// subscribes with the page's script, which then posts the small form here.
+templ alertBrowsersPanel(view AlertsView) {
+	<div class="alert-browsers alert-destination-browsers" data-push-panel>
+		if view.CanEdit {
+			<div class="alert-push-card" data-push-card data-push-state="ready">
+				<span class="alert-push-icon" aria-hidden="true">
+					<span data-push-when="ready">@Icon("bell")</span>
+					<span data-push-when="on" hidden>@Icon("check-circle")</span>
+					<span data-push-when="blocked" hidden>@Icon("bell-off")</span>
+					<span data-push-when="insecure" hidden>@Icon("lock")</span>
+					<span data-push-when="unsupported" hidden>@Icon("alert-triangle")</span>
+				</span>
+				<div class="alert-push-copy" aria-live="polite">
+					<strong data-push-when="ready">Get alerts in this browser</strong>
+					<small data-push-when="ready">They show up even when Sable is closed. On iPhone and iPad, add Sable to your Home Screen first.</small>
+					<strong data-push-when="on" hidden>This browser gets alerts</strong>
+					<small data-push-when="on" hidden>Remove it below to stop them.</small>
+					<strong data-push-when="blocked" hidden>Notifications are blocked</strong>
+					<small data-push-when="blocked" hidden>Allow them for this site in your browser's settings, then reload.</small>
+					<strong data-push-when="insecure" hidden>Needs HTTPS</strong>
+					<small data-push-when="insecure" hidden>Browsers only allow notifications over HTTPS. Open Sable at its https:// address.</small>
+					<strong data-push-when="unsupported" hidden>Not supported here</strong>
+					<small data-push-when="unsupported" hidden>This browser cannot show notifications from websites.</small>
+					<small class="alert-push-error" data-push-error hidden></small>
 				</div>
-				<form class="alert-push-form" hx-post="/ui/settings/alerts/browsers" hx-target="#alerts-panel" hx-swap="outerHTML" data-push-form>
-					<input type="hidden" name="push_subscription" data-push-subscription/>
-				</form>
-			}
-			if len(view.Browsers) > 0 {
-				<div class="alert-browser-list">
-					<span class="alert-browser-heading">{ ifThen(view.BrowserDestination, "Browsers getting alerts", "Browsers with alerts turned on") }</span>
-					for _, browser := range view.Browsers {
-						<div class="alert-browser" data-push-browser={ browser.ID }>
-							@Icon("monitor-smartphone")
-							<div>
-								<strong>{ browser.Label }<span class="alert-browser-this" data-push-this hidden>This browser</span></strong>
-								<small>{ browser.Added }</small>
-							</div>
-							if view.CanEdit {
-								<button class="button outline compact destructive" id={ "alert-browser-remove-" + browser.ID } type="button" hx-post="/ui/settings/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Remove " + browser.Label } data-alert-browser-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
-							}
+				<button class="button compact" type="button" data-push-enable data-push-when="ready" data-replica-primary-action>Turn On in This Browser</button>
+			</div>
+			<form class="alert-push-form" hx-post="/ui/settings/alerts/browsers" hx-target="#alerts-panel" hx-swap="outerHTML" data-push-form>
+				<input type="hidden" name="push_subscription" data-push-subscription/>
+			</form>
+		}
+		if len(view.Browsers) > 0 {
+			<div class="alert-browser-list">
+				<span class="alert-browser-heading">Browsers getting alerts</span>
+				for _, browser := range view.Browsers {
+					<div class="alert-browser" data-push-browser={ browser.ID }>
+						@Icon("monitor-smartphone")
+						<div>
+							<strong>{ browser.Label }<span class="alert-browser-this" data-push-this hidden>This browser</span></strong>
+							<small>{ browser.Added }</small>
 						</div>
-					}
-				</div>
-				if !view.BrowserDestination {
-					<p class="alert-browser-note">These browsers get nothing until Browsers is a destination again. Add it under Destinations.</p>
+						if view.CanEdit {
+							<button class="button outline compact destructive" id={ "alert-browser-remove-" + browser.ID } type="button" hx-post="/ui/settings/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Remove " + browser.Label } data-alert-browser-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+						}
+					</div>
 				}
-			} else if !view.CanEdit {
-				<p class="alert-browser-note">No browser has turned alerts on yet.</p>
-			}
-			if view.CanEdit {
-				<small class="alert-browser-tip">On iPhone and iPad, add Sable to your Home Screen first.</small>
-			}
-		</div>
-	</section>
+			</div>
+		} else if !view.CanEdit {
+			<p class="alert-browser-note">No browser has turned alerts on yet.</p>
+		}
+	</div>
 }
 
 // AlertDestinationDialog holds the Add and Edit Destination form. It opens on
@@ -634,7 +648,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 				<label class="field-control"><span>Application Token</span><input type="password" name="pushover_token" placeholder={ alertSavedPlaceholder(form.SavedPushoverToken, "Your application's token") } autocomplete="new-password" spellcheck="false"/><small>From the application you made for Sable.</small></label>
 				<label class="field-control"><span>User Key</span><input type="password" name="pushover_user" placeholder={ alertSavedPlaceholder(form.SavedPushoverUser, "Your user or group key") } autocomplete="new-password" spellcheck="false"/><small>Your user key, or a group key.</small></label>
 			</div>
-			<p class="alert-destination-note" data-alert-for="browser" hidden?={ !alertFormFor(form, "browser") }>Alerts go to every browser that turned them on. Turn them on under Browsers once this is saved.</p>
+			<p class="alert-destination-note" data-alert-for="browser" hidden?={ !alertFormFor(form, "browser") }>Alerts go to every browser that turned them on. Once this is saved, turn them on from the Browsers row.</p>
 			<fieldset class="field-control alert-sends">
 				<legend>Sends</legend>
 				<div class="alert-sends-choice">

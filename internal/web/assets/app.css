@@ -4184,6 +4184,9 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-insights:has(input[name="insights"]:not(:checked)) .alert-insight-kinds { opacity: .6; }
 .alert-groups-save { display: flex; justify-content: flex-end; }
 .alert-browsers { display: grid; gap: .75rem; }
+/* Browsers carry their browsers under the row, beside the destination's
+   details rather than under its icon. */
+.alert-destination-browsers { grid-column: 2 / -1; }
 .alert-push-card { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
 .alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
 .alert-push-icon .nav-icon { width: 1rem; height: 1rem; }
@@ -4207,8 +4210,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-browser > .button { display: inline-flex; align-items: center; gap: .4rem; }
 .alert-browser > .button .nav-icon { width: .9rem; height: .9rem; }
 .alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
-.alert-browser-tip { color: var(--muted-foreground); font-size: .7rem; }
 .alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
+.alert-browser-orphans { margin-top: .75rem; }
 @media (max-width: 640px) {
 	.alerts-status-card { padding: 1rem; }
 	.alert-destination-row { grid-template-columns: 2rem minmax(0, 1fr); padding-inline: .75rem; }

@@ -1022,6 +1022,29 @@ func TestAlertBrowsersCanBeRemoved(t *testing.T) {
 	}
 }
 
+// Browsers get alerts only through the Browsers destination, so removing it
+// forgets them too instead of leaving them subscribed to nothing.
+func TestRemovingBrowsersForgetsItsBrowsers(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	server.saveDestination(t, url.Values{"format": {"browser"}})
+	subscription := webpush.Subscription{Endpoint: "https://push.example/one", P256DH: "k", Auth: "a", Label: "Safari on iPhone", CreatedAt: time.Now()}
+	if err := server.store.SavePushSubscription(context.Background(), subscription); err != nil {
+		t.Fatal(err)
+	}
+	panel := server.get(t, "everything", "/settings?tab=alerts", false).Body.String()
+	row := panel[strings.Index(panel, `id="alert-destination-browser"`):]
+	if row = row[:strings.Index(row, "</article>")]; !strings.Contains(row, "Safari on iPhone") || !strings.Contains(row, "Turn On in This Browser") {
+		t.Fatal("the Browsers row does not hold its browsers and the button that adds this one")
+	}
+	if removed := server.post(t, "everything", "/ui/settings/alerts/destinations/remove", url.Values{"id": {"browser"}}); removed.Code != http.StatusOK {
+		t.Fatalf("removing Browsers = %d %s", removed.Code, removed.Body.String())
+	}
+	if subscriptions, _ := server.store.PushSubscriptions(context.Background()); len(subscriptions) != 0 {
+		t.Fatalf("browsers kept after removing Browsers: %+v", subscriptions)
+	}
+}
+
 func TestOnlyOneAlertDestinationPushesToBrowsers(t *testing.T) {
 	t.Parallel()
 	server := newAlertsTestServer(t)
