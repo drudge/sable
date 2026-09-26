@@ -214,6 +214,13 @@ When first-seen tracking begins on a database that already holds query history,
 a one-time background task fills device and domain sightings from that history,
 so Insights knows who was already on the network from the first day.
 
+For each kind of finding, `[insights.findings]` says whether Insights shows it
+and alerts on it, only shows it, or leaves it out, and holds the limits that
+make one. The analyzers take those limits and do not look for kinds that are
+off, so a kind that is off costs nothing and never keeps another from being
+reported. The console leaves kinds that are off out of the page and turns only
+kinds set to alert into alerts.
+
 Operators can dismiss a finding for a day, snooze it for a week, or mark it
 normal for good. That feedback is stored by finding ID, which names the subject
 durably, so it survives renames. The Overview joins the headlines of the most

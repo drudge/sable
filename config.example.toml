@@ -106,6 +106,20 @@ batch_size = 256
 flush_interval = "250ms"
 retention = "30d"
 
+# What Insights does with each kind of finding. Each table is named for the
+# kind: went_quiet is devices.went-quiet. mode is "alert" to show it and send
+# each new one as an alert, "show" to only show it, or "off" to stop looking for
+# it. Limits left out keep their defaults. Set these from the bell at the top of
+# Insights; docs/configuration.md lists every kind and its limits.
+# [insights.findings.went_quiet]
+# mode = "alert"
+# minimum_daily_lookups = 50
+#
+# [insights.findings.traffic_spike]
+# mode = "show"
+# factor = 3.0
+# minimum_lookups = 500
+
 [server_log]
 enabled = true
 level = "info"

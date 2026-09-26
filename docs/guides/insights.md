@@ -64,6 +64,22 @@ Every finding's drawer ends with **Seen it?**:
 
 Hiding applies to everyone who uses Insights. Hidden findings are listed under the findings card, where **Show Again** brings one back. You need permission to change settings to hide findings.
 
+## Choose what Insights shows and alerts
+
+Use the bell beside the range control at the top of Insights to open **Insights Settings**. The bell also shows whether alerts are **On**, **Paused**, or **Off**.
+
+Each kind of finding has three choices:
+
+- **Show and alert** shows it in Insights and sends each new one as an alert. Everything that is news starts here.
+- **Show only** keeps it in Insights without sending alerts.
+- **Off** stops Insights from looking for it at all.
+
+Some kinds have limits you can change, such as how many lookups make a device **Unusually busy**, or how many new domains make it **Talking to new places**. Raise a limit to hear less, or lower it to hear more. The findings that compare block lists are never news, so they can only be shown or turned off. **Reset to Defaults** puts every choice and limit back the way Sable ships them.
+
+The top of the dialog says whether alerts go anywhere, and **Where alerts go** opens Settings, where you choose where they are sent. Anyone who can read logs can see these settings. Changing them needs permission to change settings.
+
+You can also set these in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
+
 ## Get alerts
 
 Insights can send each new finding worth a look to Slack, Discord, ntfy, Pushover, a webhook, or straight to your browsers. Use the bell beside the range control at the top of Insights, which also shows whether alerts are on, paused, or off, then pick where under **Send To**:

@@ -678,6 +678,52 @@ these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 
 Insights findings worth a look are sent as alerts; see [Alerts](#alerts).
 
+```toml
+[insights.findings.went_quiet]
+mode = "alert"
+minimum_daily_lookups = 50
+
+[insights.findings.traffic_spike]
+mode = "show"
+factor = 3.0
+minimum_lookups = 500
+
+[insights.findings.check_in]
+mode = "off"
+```
+
+`[insights.findings]` has a table for each kind of finding, named for the kind
+without its area: `went_quiet` is `devices.went-quiet`, the `kind` webhooks
+see. `mode` is `"alert"` to show findings of that kind in Insights and send
+each new one as an alert, `"show"` to show them without alerting, or `"off"` to
+stop Insights looking for them at all. By default every kind that is news
+alerts, and the three that describe block list coverage are only shown. Those
+three are never news, so they take `"show"` or `"off"`. A limit left out, or
+set to 0, keeps its default, so a table only needs what it changes. Insights
+Settings, opened from the bell at the top of Insights, sets all of this, so most
+people never edit it by hand. A kind set to alert is sent only while
+`[alerts.send]` has `insights = true` and a destination takes Insights alerts.
+
+| Table | Finding | Limits: default, range |
+| --- | --- | --- |
+| `new_device` | New device on the network | None |
+| `went_quiet` | Went quiet | `minimum_daily_lookups`: lookups a day it averaged over the week before; 50, 1 to 100,000. The day of silence is fixed. |
+| `traffic_spike` | Unusually busy | `factor`: times its daily average; 3.0, 1.5 to 100. `minimum_lookups`: lookups in the day; 500, 1 to 1,000,000. |
+| `new_destinations` | Talking to new places | `minimum_new_domains`: domains first queried in the selected period; 20, 1 to 10,000. |
+| `new_app` | Started using a new app | None |
+| `unusual_hours` | Active at an unusual hour | `minimum_lookups`: lookups in an hour it had not used for two weeks; 30, 1 to 100,000. |
+| `check_in` | Checks in on a schedule | `longest_interval`: most time between lookups; `"2h"`, 2 minutes to 2 hours. `shortest_span`: least time it keeps the schedule up; `"12h"`, 1 to 23 hours. |
+| `appliance_new_domains` | Appliance talking somewhere new | `minimum_new_domains`: domains it never used, in one day; 3, 1 to 1,000. |
+| `update_failing` | Block list updates are failing | `missed_updates`: update intervals without a download; 2, 1 to 100. |
+| `past_block` | Possible past blocking issue | None |
+| `list_unreadable` | Block list left out of the comparison | None. `"show"` or `"off"`. |
+| `low_unique_coverage` | Little unique coverage | None. `"show"` or `"off"`. |
+| `unique_coverage` | Meaningful unique coverage | None. `"show"` or `"off"`. |
+
+A kind that is off costs nothing: Insights skips the reads only it needs, and it
+never keeps another kind from reporting the same device. Changes reach the page
+the next time it loads and alerts on their next round.
+
 ## Alerts
 
 ```toml
