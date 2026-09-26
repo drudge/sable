@@ -778,6 +778,66 @@ func TestPausingAlertsKeepsEveryDestination(t *testing.T) {
 	}
 }
 
+// Each kind of Insights finding has its own switch under Insights Findings,
+// so new devices, say, can stop alerting without leaving Settings. The switch
+// changes the same setting Insights settings does: off keeps the kind in
+// Insights without alerts, and on shows a hidden kind again.
+func TestEachKindOfInsightFindingHasItsOwnAlertSwitch(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	if err := server.config.(settingsEditor).Update(context.Background(), func(candidate *config.Config) error {
+		candidate.Insights.Findings.CheckIn.Mode = config.InsightModeOff
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	page := server.get(t, "everything", "/settings?tab=alerts", false).Body.String()
+	for _, want := range []string{
+		`name="insight_alert_new_device" value="true" checked`, `name="insight_alert_went_quiet" value="true" checked`,
+		"Hidden in Insights.", `href="/insights?sable-command=command-page-insights-settings"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the Insights Findings group lacks %q", want)
+		}
+	}
+	if strings.Contains(page, `name="insight_alert_check_in" value="true" checked`) || strings.Contains(page, "insight_alert_unique_coverage") {
+		t.Error("a hidden kind shows as alerting, or a kind that never alerts has a switch")
+	}
+	form := url.Values{
+		"insights": {"true"}, "backups": {"failures"}, "sign_ins_after": {"5"}, "sign_ins_within": {"10"}, "insight_kinds": {"true"},
+		"insight_alert_went_quiet": {"true"}, "insight_alert_check_in": {"true"},
+	}
+	if saved := server.post(t, "everything", "/ui/settings/alerts/groups", form); saved.Code != http.StatusOK {
+		t.Fatalf("saving = %d %s", saved.Code, saved.Body.String())
+	}
+	findings := server.config.Current().Config.Insights.Findings
+	if findings.NewDevice.Mode != config.InsightModeShow || findings.WentQuiet.Mode != config.InsightModeAlert ||
+		findings.CheckIn.Mode != config.InsightModeAlert || findings.UniqueCoverage.Mode != config.InsightModeShow {
+		t.Fatalf("findings = %+v", findings)
+	}
+	// A kind switched off stays off rather than coming back to show.
+	if err := server.config.(settingsEditor).Update(context.Background(), func(candidate *config.Config) error {
+		candidate.Insights.Findings.NewApp.Mode = config.InsightModeOff
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server.post(t, "everything", "/ui/settings/alerts/groups", form)
+	if mode := server.config.Current().Config.Insights.Findings.NewApp.Mode; mode != config.InsightModeOff {
+		t.Fatalf("a hidden kind switched off became %q", mode)
+	}
+	// A form from before the switches existed leaves the kinds alone.
+	delete(form, "insight_kinds")
+	delete(form, "insight_alert_went_quiet")
+	server.post(t, "everything", "/ui/settings/alerts/groups", form)
+	if mode := server.config.Current().Config.Insights.Findings.WentQuiet.Mode; mode != config.InsightModeAlert {
+		t.Fatalf("a form without the switches changed went quiet to %q", mode)
+	}
+	if readOnly := server.get(t, "logs-reader", "/settings?tab=alerts", false).Body.String(); !strings.Contains(readOnly, `name="insight_alert_new_device" value="true" disabled`) {
+		t.Error("an operator who cannot change settings can flip a kind's switch")
+	}
+}
+
 func TestAlertGroupsAndTheFailedSignInLimitSave(t *testing.T) {
 	t.Parallel()
 	server := newAlertsTestServer(t)

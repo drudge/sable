@@ -84,7 +84,11 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 			Integrations: configuration.Send.Integrations, Backups: configuration.Send.Backups, Server: configuration.Send.Server,
 			SignIns: configuration.Send.SignIns, SignInsAfter: configuration.SignIns.After,
 			SignInsWithin: alertSignInMinutes(configuration.SignIns.Within.Duration),
+			InsightKinds:  alertInsightKinds(server.config.Current().Config.Insights.Findings),
 		},
+	}
+	if console.CanLogs {
+		view.Groups.InsightSettings = "/insights?sable-command=command-page-insights-settings"
 	}
 	if !view.Available {
 		return view
@@ -107,6 +111,45 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 		view.NewDestination = alertDestinationFormView(configuration, config.AlertDestination{}, push)
 	}
 	return view
+}
+
+// alertInsightKinds lists the kinds of finding that can alert, in the order
+// Insights settings lists them, with whether each does.
+func alertInsightKinds(findings config.InsightFindings) []pages.AlertInsightKindView {
+	kinds := make([]pages.AlertInsightKindView, 0)
+	for _, kind := range insightKindSettings() {
+		if kind.note != "" {
+			continue
+		}
+		mode := *kind.mode(&findings)
+		kinds = append(kinds, pages.AlertInsightKindView{
+			Key: kind.key, Title: kind.title, Alert: mode == config.InsightModeAlert, Hidden: mode == config.InsightModeOff,
+		})
+	}
+	return kinds
+}
+
+// alertInsightModes applies the Insights Findings switches to the settings.
+// A kind switched on alerts. A kind switched off stops alerting but still
+// shows in Insights, unless it was already hidden there. A form without the
+// switches, from a page that predates them, changes nothing.
+func alertInsightModes(form url.Values, findings config.InsightFindings) config.InsightFindings {
+	if !form.Has("insight_kinds") {
+		return findings
+	}
+	for _, kind := range insightKindSettings() {
+		if kind.note != "" {
+			continue
+		}
+		mode := kind.mode(&findings)
+		switch {
+		case form.Get("insight_alert_"+kind.key) == "true":
+			*mode = config.InsightModeAlert
+		case *mode == config.InsightModeAlert:
+			*mode = config.InsightModeShow
+		}
+	}
+	return findings
 }
 
 // alertsState says whether alerts go out: paused when an operator paused them,
@@ -691,6 +734,7 @@ func (server *Server) saveAlertGroups(writer http.ResponseWriter, request *http.
 	err = editor.Update(request.Context(), func(candidate *config.Config) error {
 		candidate.Alerts.Send = send
 		candidate.Alerts.SignIns = config.AlertSignIns{After: after, Within: config.Duration{Duration: time.Duration(within) * time.Minute}}
+		candidate.Insights.Findings = alertInsightModes(request.PostForm, candidate.Insights.Findings)
 		return nil
 	})
 	if err != nil {

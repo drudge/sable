@@ -4163,6 +4163,25 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-sign-in-limit { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding: .75rem 1rem; color: var(--muted-foreground); font-size: .78rem; }
 .alert-sign-in-limit input { width: 5rem; height: 2rem; }
 .alert-sign-ins:has(input[name="sign_ins"]:not(:checked)) .alert-sign-in-limit { opacity: .6; }
+/* The Insights Findings switch carries a switch for each kind of finding, so
+   the kinds sit inside its border. */
+.alert-insights { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-insights > .switch-row { border: 0; }
+.alert-insight-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .15rem 1.5rem; min-width: 0; margin: 0; border: 0; border-top: 1px solid var(--border); padding: .5rem 1rem; }
+.alert-insight-kind { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 2.25rem; cursor: pointer; }
+.alert-insight-kind > span { display: grid; gap: .1rem; min-width: 0; }
+.alert-insight-kind strong { font-size: .8rem; font-weight: 500; }
+.alert-insight-kind small { color: var(--muted-foreground); font-size: .72rem; }
+.alert-insight-kind input[type=checkbox] { position: relative; width: 2.25rem; height: 1.25rem; flex: 0 0 2.25rem; appearance: none; border: 1px solid var(--input); border-radius: 999px; background: var(--muted); padding: 0; cursor: pointer; transition: border-color 150ms, background 150ms; }
+.alert-insight-kind input[type=checkbox]::after { position: absolute; top: .125rem; left: .125rem; width: .875rem; height: .875rem; border-radius: 50%; background: var(--background); box-shadow: 0 1px 3px rgb(0 0 0 / .28); content: ""; transition: transform 150ms; }
+.alert-insight-kind input[type=checkbox]:checked { border-color: var(--primary); background: var(--primary); }
+.alert-insight-kind input[type=checkbox]:checked::after { transform: translateX(1rem); }
+.alert-insight-kind input[type=checkbox]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.alert-insight-kind:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+.alert-insight-kind input[type=checkbox]:disabled { cursor: not-allowed; }
+.alert-insight-kinds-note { margin: 0; border-top: 1px solid var(--border); padding: .6rem 1rem; color: var(--muted-foreground); font-size: .75rem; }
+.alert-insight-kinds-note a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+.alert-insights:has(input[name="insights"]:not(:checked)) .alert-insight-kinds { opacity: .6; }
 .alert-groups-save { display: flex; justify-content: flex-end; }
 .alert-browsers { display: grid; gap: .75rem; }
 .alert-push-card { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }

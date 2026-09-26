@@ -87,6 +87,24 @@ type AlertGroupsView struct {
 	// alert.
 	SignInsAfter  int
 	SignInsWithin int
+	// InsightKinds are the kinds of finding that can alert, each with its own
+	// switch under Insights Findings.
+	InsightKinds []AlertInsightKindView
+	// InsightSettings opens Insights settings, for the limits and what shows
+	// in Insights. Empty for an operator who cannot open them.
+	InsightSettings string
+}
+
+// AlertInsightKindView is one kind of finding and whether it alerts. Its
+// switch changes the same setting Insights settings does.
+type AlertInsightKindView struct {
+	// Key names the switch, as insight_alert_<key>.
+	Key   string
+	Title string
+	Alert bool
+	// Hidden marks a kind turned off in Insights. Turning its alerts on shows
+	// it again.
+	Hidden bool
 }
 
 // AlertBrowserView is one browser that turned alerts on.
@@ -370,7 +388,7 @@ templ alertsGroupsCard(view AlertsView) {
 	<section class="card settings-source-card alerts-groups-card">
 		<header><h2>@Icon("layers")<span>Groups</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
 		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@alertGroupSwitch("insights", "Insights Findings", "New findings worth a look, such as a new device or one that went quiet.", view.Groups.Insights, view.CanEdit)
+			@alertInsightKinds(view)
 			@alertGroupSwitch("cluster", "Cluster", "A node going down and coming back up, and update rollouts.", view.Groups.Cluster, view.CanEdit)
 			@alertGroupSwitch("updates", "Sable Updates", "A new release of Sable.", view.Groups.Updates, view.CanEdit)
 			@alertGroupSwitch("integrations", "Integrations", "UniFi sync and dynamic DNS.", view.Groups.Integrations, view.CanEdit)
@@ -398,6 +416,34 @@ templ alertsGroupsCard(view AlertsView) {
 			}
 		</form>
 	</section>
+}
+
+// alertInsightKinds is the Insights Findings switch with a switch for each
+// kind of finding under it, so an operator can stop one kind, such as new
+// devices, without leaving Settings. Each changes the same setting Insights
+// settings does.
+templ alertInsightKinds(view AlertsView) {
+	<div class="alert-insights">
+		@alertGroupSwitch("insights", "Insights Findings", "New findings worth a look. Choose which kinds below.", view.Groups.Insights, view.CanEdit)
+		<fieldset class="alert-insight-kinds">
+			<legend class="sr-only">Which Insights findings send alerts</legend>
+			<input type="hidden" name="insight_kinds" value="true"/>
+			for _, kind := range view.Groups.InsightKinds {
+				<label class="alert-insight-kind" id={ "alerts-insight-" + kind.Key }>
+					<span>
+						<strong>{ kind.Title }</strong>
+						if kind.Hidden {
+							<small>Hidden in Insights. Turning alerts on shows it again.</small>
+						}
+					</span>
+					<input type="checkbox" role="switch" name={ "insight_alert_" + kind.Key } value="true" checked?={ kind.Alert } disabled?={ !view.CanEdit }/>
+				</label>
+			}
+		</fieldset>
+		if view.Groups.InsightSettings != "" {
+			<p class="alert-insight-kinds-note">Limits, and what shows in Insights, are in <a href={ templ.SafeURL(view.Groups.InsightSettings) }>Insights Settings</a>.</p>
+		}
+	</div>
 }
 
 // alertGroupSwitch is one group's switch. Its id lets other pages link to it.
