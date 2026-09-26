@@ -22,6 +22,12 @@ Icons (CC0, see `third_party/simple-icons`), and falls back to a gray Lucide
 icon for the app's category when Simple Icons has no mark. Regenerate the marks
 with `go run ./internal/web/pages/internal/applogos`.
 
+The sidebar's first group has no heading. Isotope calls it Overview, but that
+fit only the Dashboard and Insights, and it already titles the Dashboard's
+first card and the first Insights tab. System lists Administration, Cluster,
+Integrations, Settings, and About. Integrations, which Isotope doesn't have,
+sits there because it is setup rather than daily DNS work.
+
 Only product identity, backend-specific terminology, and controls unsupported
 by Sable may differ. Unsupported destinations remain visibly disabled until
 their native Sable backend exists; they must not be redesigned or silently

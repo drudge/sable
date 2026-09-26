@@ -259,6 +259,39 @@ func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	}
 }
 
+func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		".sidebar-header { padding: 0.5rem 0.375rem 0.25rem; }",
+		".nav-group { padding: 0.25rem 0; }",
+		".nav-label { height: 2rem; padding: 0.75rem 0.5rem 0.25rem;",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("sidebar sections are spaced out again, which scrolls About out of a laptop-height window: missing %q", expected)
+		}
+	}
+	if !strings.Contains(stylesheet, ".sidebar-collapsed .nav-group { padding: 0.5rem 0; }") {
+		t.Error("the collapsed sidebar rail runs its groups together once their labels are hidden")
+	}
+}
+
+func TestPhoneMenuScrimBlursLikeDialogBackdrops(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"dialog[open]::backdrop {\n  -webkit-backdrop-filter: blur(4px);\n  backdrop-filter: blur(4px);\n}",
+		".sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+		".sidebar-mobile-open .sidebar-scrim { display: block; animation: backdrop-in 150ms ease-out; }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("the phone menu's scrim no longer blurs and fades in like a dialog backdrop: missing %q", expected)
+		}
+	}
+}
+
 func TestFrontmostNotificationKeepsItsFullCardHeight(t *testing.T) {
 	t.Parallel()
 
