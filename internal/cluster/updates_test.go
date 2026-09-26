@@ -419,6 +419,93 @@ func TestPrimaryReopensPersistedFinalRestartForVerification(t *testing.T) {
 	}
 }
 
+// A rollout keeps when it started and ended, and which node it stopped at, so
+// its alerts can say so for a day, even after the coordinator restarts.
+func TestRolloutRecordsWhenAndWhereItEnded(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		end        func(t *testing.T, fixture *rolloutFixture)
+		phase      string
+		failedNode string
+	}{
+		{
+			name: "a finished rollout", phase: RolloutComplete,
+			end: func(t *testing.T, fixture *rolloutFixture) {
+				// The replica restarts on the new release first, and the
+				// coordinator last.
+				for _, index := range []int{1, 0} {
+					for range 15 {
+						fixture.tick(t)
+					}
+					fixture.restart(t, index, "1.1.0")
+				}
+				for range 10 {
+					fixture.tick(t)
+				}
+			},
+		},
+		{
+			name: "a failed installation names its node", phase: RolloutFailed, failedNode: "dns-2",
+			end: func(t *testing.T, fixture *rolloutFixture) {
+				fixture.updaters[1].failInstall = true
+				for range 15 {
+					fixture.tick(t)
+				}
+			},
+		},
+		{
+			name: "a stopped rollout", phase: RolloutStopped,
+			end: func(t *testing.T, fixture *rolloutFixture) {
+				fixture.tick(t)
+				if err := fixture.nodes[0].StopRollout(); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "a timeout names the node it waited on", phase: RolloutFailed, failedNode: "dns-2",
+			end: func(t *testing.T, fixture *rolloutFixture) {
+				primary := fixture.nodes[0]
+				for range 15 {
+					if primary.RolloutStatus().Phase == rolloutUpdating {
+						break
+					}
+					fixture.tick(t)
+				}
+				primary.updates.mu.Lock()
+				primary.updates.rollout.Deadline = time.Now().Add(-time.Second)
+				primary.updates.mu.Unlock()
+				fixture.tick(t)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newRolloutFixture(t, 1)
+			primary := fixture.nodes[0]
+			before := time.Now()
+			if err := primary.StartRollout(context.Background(), "1.1.0"); err != nil {
+				t.Fatal(err)
+			}
+			if started := primary.RolloutStatus(); started.StartedAt.Before(before) || !started.FinishedAt.IsZero() {
+				t.Fatalf("a new rollout = %+v", started)
+			}
+			test.end(t, fixture)
+			var saved RolloutStatus
+			if err := readUpdateState(primary.directory, rolloutFileName, &saved); err != nil {
+				t.Fatal(err)
+			}
+			for _, status := range []RolloutStatus{primary.RolloutStatus(), saved} {
+				if status.Phase != test.phase || status.FailedNode != test.failedNode ||
+					status.StartedAt.Before(before) || status.FinishedAt.Before(status.StartedAt) {
+					t.Fatalf("rollout = %+v, want phase %q stopped at %q", status, test.phase, test.failedNode)
+				}
+			}
+		})
+	}
+}
+
 func TestPrimaryHandoffMarksTheOldRolloutFailed(t *testing.T) {
 	fixture := newRolloutFixture(t, 1)
 	primary, replica := fixture.nodes[0], fixture.nodes[1]
