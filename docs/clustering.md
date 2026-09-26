@@ -116,6 +116,9 @@ Replicated state includes:
 - Dynamic DNS settings and external provider credentials;
 - UniFi settings and controller credentials;
 - OpenID Connect settings, client secret, linked identities, and role mappings;
+- alert settings, every destination with its URL, keys, and header values,
+  the key browser pushes are signed with, and the browsers that turned alerts
+  on;
 - passkey availability (`security.passkeys_disabled`);
 - users, roles, permission grants, password hashes, passkey public credentials, API-token hashes, and token
   revocations.
@@ -127,7 +130,8 @@ Node-local state includes:
 - the OpenID Connect callback override;
 - update checks, installed binaries, and the `updates.pre_release` preference;
 - browser sessions, audit history, token-use timestamps, query/server logs,
-  dashboard history, and response caches.
+  dashboard history, and response caches;
+- each node's record of which alerts it has sent.
 
 Replicas validate and activate a complete candidate before recording the new
 generation. A rejected candidate leaves the previous runtime and manifest
@@ -155,6 +159,42 @@ and that the URL hostname appears on the member certificate.
 Prometheus exposes aggregate and per-node cluster gauges. The
 [operations guide](operations.md) includes the metric names and routine health
 checks.
+
+## Alerts in a cluster
+
+A cluster sends each alert once. Set up alerts on the primary in
+**Settings → Alerts**, and turn on browser alerts there too. Every replica
+gets the same settings, destinations, secrets, and browsers with the next
+generation, so any node can send after a handoff. The node that leads sends
+almost everything:
+
+- **Node down** when a node has not checked in with the lead for five minutes,
+  and **Node back up** when it checks in again. A node that is back within five
+  minutes, such as one restarting for an update, alerts nothing. After the lead
+  restarts or takes over, each node gets five minutes to check in before it can
+  count as down.
+- **Rolling update started**, **finished**, **failed**, or **stopped**. A
+  failed rollout names the release and, when one node was to blame, that node.
+  Each stays news for a day, so a lead that restarts to finish a rollout still
+  sends it.
+- Whatever each replica sees in itself, such as a failed backup. Replicas hand
+  these to the lead in their heartbeats, once a minute or as soon as they
+  change. If a replica stops reporting, its alerts stop counting as news
+  after three minutes.
+
+The lead cannot report that it stopped answering, so replicas watch it. When
+the lead has been out of reach for five minutes, the replica with the lowest
+node ID sends **Lead node not answering**, using its own copy of the
+destinations, and **Lead node back up** when the lead answers again. A planned
+handoff that gives the cluster a new lead within five minutes sends nothing.
+
+Problems, such as a node or the lead down or a failed rollout, go out at high
+priority. The `cluster` switch in **Settings → Alerts** turns all of these off
+together; a replica's own alerts follow their own groups.
+
+A replica hands its alerts only to a primary that says it takes them, and a
+snapshot from an older primary leaves a newer replica's alert settings as they
+are, so alerts keep working while a rolling update runs mixed versions.
 
 ## Planned primary handoff
 

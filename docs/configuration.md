@@ -1152,12 +1152,13 @@ new node joins as a replica and begins pulling signed generations from the
 primary. Each generation carries a content-addressed snapshot of authoritative
 zones, resolver/cache policy, TSIG keys, blocking policy, query-log enablement,
 UniFi integration settings and controller credentials, single sign-on settings
-and their client secret, users, groups, permission grants, and hashed API
-tokens. Token deletion is
+and their client secret, alert settings with their destinations' secrets, the
+browser push key and the browsers that turned alerts on, users, groups,
+permission grants, and hashed API tokens. Token deletion is
 replicated as revocation. Password and token secrets are never stored in plain
-text, and replicated TSIG secrets, UniFi credentials, and the single sign-on
-client secret are written into the receiving node's own encrypted vault rather
-than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
+text, and replicated TSIG secrets, UniFi credentials, the single sign-on
+client secret, alert destination secrets, and the push key are written into
+the receiving node's own encrypted vault rather than its configuration file. Browser sessions, audit history, token usage timestamps, listener and
 certificate configuration, database paths, security bootstrap, the single
 sign-on callback override, update release channel, and cluster settings remain node-local. Replicas continue serving DNS if the primary is
 unavailable, but reject control-plane and RFC 2136 writes. Manual promotion is
