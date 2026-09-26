@@ -191,6 +191,9 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		func(analyzer insights.Analyzer, err error) {
 			server.logger.Warn("analyze insights", "analyzer", fmt.Sprintf("%T", analyzer), "error", err)
 		})
+	// Kinds an operator turned off never reach the page, whichever analyzer
+	// made them.
+	findings = insightModesOf(snapshot.Config.Insights.Findings).shown(findings)
 	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
 	view.CanHideFindings = canRemember && console.CanWriteSettings
 	if canRemember {
