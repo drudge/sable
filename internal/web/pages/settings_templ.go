@@ -757,7 +757,7 @@ func SettingsUpdatePreferences(view SettingsUpdatePreferencesView) templ.Compone
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<div class=\"isotope-card-content\"><input type=\"hidden\" name=\"update_preferences_present\" value=\"true\" form=\"settings-form\"> <label class=\"field-control switch-row setting-switch-row\"><span><strong>Check for updates on sign-in</strong><small>Notify when a new release is available. Updates are installed only when you choose.</small></span><input type=\"checkbox\" role=\"switch\" form=\"settings-form\" name=\"check_on_login\" value=\"true\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<div class=\"isotope-card-content\"><input type=\"hidden\" name=\"update_preferences_present\" value=\"true\" form=\"settings-form\"> <label class=\"field-control switch-row setting-switch-row\"><span><strong>Check for updates</strong><small>Look for a new release once a day and when you sign in, and alert when one is out. Updates are installed only when you choose.</small></span><input type=\"checkbox\" role=\"switch\" form=\"settings-form\" name=\"check_on_login\" value=\"true\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

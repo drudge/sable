@@ -199,7 +199,7 @@ templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
 		@SettingsCard("download", "Software Updates", "Update preferences for this node") {
 			<div class="isotope-card-content">
  <input type="hidden" name="update_preferences_present" value="true" form="settings-form"/>
-				<label class="field-control switch-row setting-switch-row"><span><strong>Check for updates on sign-in</strong><small>Notify when a new release is available. Updates are installed only when you choose.</small></span><input type="checkbox" role="switch" form="settings-form" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
+				<label class="field-control switch-row setting-switch-row"><span><strong>Check for updates</strong><small>Look for a new release once a day and when you sign in, and alert when one is out. Updates are installed only when you choose.</small></span><input type="checkbox" role="switch" form="settings-form" name="check_on_login" value="true" checked?={ view.CheckOnLogin } disabled?={ !view.CanEdit }/></label>
                 if view.CanEditReleaseChannel {
                     <input type="hidden" form="settings-form" name="release_channel_present" value="true"/>
                 }
