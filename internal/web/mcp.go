@@ -118,7 +118,7 @@ func (server *Server) mcp(writer http.ResponseWriter, request *http.Request) {
 	case "ping":
 		result = struct{}{}
 	case "tools/list":
-		result = map[string]any{"tools": mcpToolList()}
+		result = map[string]any{"tools": mcpToolList(server.config.Current().Config.MCP)}
 	case "tools/call":
 		result, failure = server.callMCPTool(request, message.Params)
 	default:
@@ -164,6 +164,11 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 	tool, found := mcpToolByName(input.Name)
 	if !found {
 		return nil, &mcpError{Code: mcpInvalidParams, Message: "unknown tool: " + input.Name}
+	}
+	// A client may still hold a tool list from before an option was turned
+	// off, so say so plainly instead of calling the tool unknown.
+	if tool.option != nil && !tool.option(server.config.Current().Config.MCP) {
+		return mcpToolFailure(fmt.Errorf("the %s tool is turned off in Sable under Integrations, MCP Server", tool.Name)), nil
 	}
 	arguments := input.Arguments
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
@@ -300,6 +305,42 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 	server.logger.Info("MCP server changed", "enabled", enabled, "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, action, message)
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
+}
+
+// setMCPTools turns the optional tools on or off. Like the server itself it
+// is cluster-wide, so only the primary accepts it.
+func (server *Server) setMCPTools(writer http.ResponseWriter, request *http.Request) {
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
+		return
+	}
+	on := func(name string) bool { return request.FormValue(name) == "true" }
+	var enabled []string
+	if err := server.updateMCP(request, func(settings *config.MCP) {
+		settings.DeleteZones, settings.BlockLists = on("delete_zones"), on("block_lists")
+		settings.InsightFindings, settings.QueryLog = on("insight_findings"), on("query_log")
+		for name, value := range map[string]bool{
+			"delete_zones": settings.DeleteZones, "block_lists": settings.BlockLists,
+			"insight_findings": settings.InsightFindings, "query_log": settings.QueryLog,
+		} {
+			if value {
+				enabled = append(enabled, name)
+			}
+		}
+	}); err != nil {
+		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	slices.Sort(enabled)
+	details := "optional MCP tools: none"
+	if len(enabled) > 0 {
+		details = "optional MCP tools: " + strings.Join(enabled, ", ")
+	}
+	writer.Header().Set("HX-Replace-Url", "/integrations")
+	server.logger.Info("MCP optional tools changed", "enabled", strings.Join(enabled, ","), "client", requestClientIP(request))
+	server.recordControlPlaneAudit(request, "integrations.mcp.tools", details)
+	server.renderIntegrationsMutation(writer, request, http.StatusOK, "Optional tools saved. Assistants see the change the next time they connect.", "")
 }
 
 // removeMCP turns the server off and returns the card to setup. API tokens

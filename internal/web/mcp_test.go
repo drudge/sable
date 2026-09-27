@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/miekg/dns"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
@@ -81,6 +83,7 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 			{Permission: auth.PermissionZonesCreate, Surface: auth.SurfaceAPI},
 			mcpZoneGrant(auth.PermissionZonesRead, "zone-example"),
 		}},
+		"sable_pat_logs":     {UserID: 7, Username: "analyst", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionLogsRead}},
 		"sable_pat_metrics":  {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
 		"sable_pat_blocking": {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
 		"sable_pat_scoped": {UserID: 3, Username: "deploy", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Grants: []auth.Grant{
@@ -105,14 +108,30 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 // in its metadata table.
 type mcpTestQueries struct {
 	testQueryLog
-	mu  sync.Mutex
-	use store.MCPUse
+	mu     sync.Mutex
+	use    store.MCPUse
+	filter querylog.Filter
 }
 
 func (queries *mcpTestQueries) LoadMCPUse(context.Context) (store.MCPUse, error) {
 	queries.mu.Lock()
 	defer queries.mu.Unlock()
 	return queries.use, nil
+}
+
+// QueryEvents answers the query log search with two lookups from one device
+// and remembers the filter it was asked for.
+func (queries *mcpTestQueries) QueryEvents(_ context.Context, filter querylog.Filter) (querylog.Page, error) {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	queries.filter = filter
+	now := time.Now()
+	return querylog.Page{TotalEntries: 2, Entries: []querylog.Entry{
+		{ID: 2, Event: querylog.Event{OccurredAt: now, ClientIP: "10.99.7.20", Name: "ads.example", RecordType: dns.TypeA,
+			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Decision: querylog.Decision{PolicyRule: "ads.example"}}},
+		{ID: 1, Event: querylog.Event{OccurredAt: now.Add(-time.Minute), ClientIP: "10.99.7.20", Name: "www.example.com", RecordType: dns.TypeAAAA,
+			Source: querylog.SourceUpstream, Answer: "2001:db8::1", Duration: 1500 * time.Microsecond}},
+	}}, nil
 }
 
 func (queries *mcpTestQueries) SaveMCPUse(_ context.Context, use store.MCPUse) error {
@@ -619,7 +638,7 @@ func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
 		return response.Body.String()
 	}
 	before := card()
-	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList()))) || !strings.Contains(before, ">Never<") {
+	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList(config.MCP{})))) || !strings.Contains(before, ">Never<") {
 		t.Fatalf("card before any call lacks the tool count or Never")
 	}
 

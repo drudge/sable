@@ -14,6 +14,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -25,6 +26,9 @@ type mcpTool struct {
 	InputSchema map[string]any     `json:"inputSchema"`
 	Annotations mcpToolAnnotations `json:"annotations"`
 	call        func(*Server, *http.Request, json.RawMessage) (any, error)
+	// option names the Integrations switch that offers this tool. Tools
+	// without one are always offered while the server is on.
+	option func(config.MCP) bool
 }
 
 type mcpToolAnnotations struct {
@@ -178,12 +182,18 @@ var mcpCreateZoneTool = mcpTool{
 	call:        (*Server).mcpCreateZone,
 }
 
-func mcpToolList() []mcpTool {
-	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools)
+// mcpAllTools is every tool Sable has, whether or not it is switched on.
+func mcpAllTools() []mcpTool {
+	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools, mcpOptionalTools)
+}
+
+// mcpToolList is what assistants are offered with these settings.
+func mcpToolList(settings config.MCP) []mcpTool {
+	return slices.DeleteFunc(mcpAllTools(), func(tool mcpTool) bool { return tool.option != nil && !tool.option(settings) })
 }
 
 func mcpToolByName(name string) (mcpTool, bool) {
-	tools := mcpToolList()
+	tools := mcpAllTools()
 	index := slices.IndexFunc(tools, func(tool mcpTool) bool { return tool.Name == name })
 	if index < 0 {
 		return mcpTool{}, false
@@ -543,7 +553,7 @@ func (server *Server) mcpCreateZone(request *http.Request, arguments json.RawMes
 		if findZone(*zones, name) != nil {
 			return fmt.Errorf("zone %s already exists", name)
 		}
-		*zones = append(*zones, zonemodel.Zone{Name: name, Type: "primary", DefaultTTL: ttl, Records: []zonemodel.Record{
+		*zones = append(*zones, zonemodel.Zone{Name: name, Type: "primary", DefaultTTL: ttl, Source: zonemodel.SourceMCP, Records: []zonemodel.Record{
 			newZoneSOA(primaryNS, responsible, ttl, time.Now()),
 			{Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)},
 		}})

@@ -22,11 +22,28 @@ The assistant signs in with an [API token](api-tokens.md). The token's groups de
 | `block_domain` | Puts a domain on the block list and takes it off the allow list |
 | `remove_domain_rule` | Takes a domain off both lists, so block lists alone decide |
 
-Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot delete or reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It cannot add or remove block lists, or pause or turn off blocking.
+Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 
 A new zone answers devices that use Sable right away. The internet sees it only once the domain's registrar or parent zone delegates it to your name servers; see [Delegation](delegation.md).
 
-Lookups run inside Sable, so they never appear in the query log or as a device in Insights. The assistant cannot read the query log or Insights; that is your household's browsing, and it stays on your server.
+Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
+
+## Optional tools
+
+Some tools reach further, so each stays hidden from assistants until you turn it on under **Integrations → MCP Server → Optional Tools**. The token still needs the grant in the table.
+
+| Option | Tools | Grant |
+| --- | --- | --- |
+| **Delete Zones** | `delete_zone`, for zones created through the MCP server only. The assistant must repeat the zone name to confirm | `zones.delete` |
+| **Block Lists** | `list_block_lists`, `add_block_list`, `remove_block_list`, `refresh_block_lists` | `blocking.read`, `blocking.write` to change |
+| **Insights Findings** | `list_findings`: what Insights noticed, such as new devices, traffic spikes, or failing updates, with its evidence. Findings you hid or turned off are left out | `logs.read` |
+| **Query Log Search** | `search_queries`: each device's DNS lookups, filtered by device, name, or blocked only | `logs.read` |
+
+A deleted zone cannot be restored from the console; only a backup brings it back. Zones created in the console, or before this option existed, can never be deleted through MCP.
+
+Insights findings and the query log describe what each device on your network does. Turning either on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. The built-in **MCP Client** group grants neither `zones.delete` nor `logs.read`, so add them to your own group if you want these tools.
+
+Assistants see a changed option the next time they connect.
 
 Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.example.com`). Values use zone-file syntax, such as `10 mail.example.com.` for MX. TXT text can be sent without quotes.
 

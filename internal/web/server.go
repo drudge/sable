@@ -303,6 +303,7 @@ func New(
 	mux.HandleFunc("GET /ui/integrations/unifi/status", server.unifiStatusPanel)
 	mux.HandleFunc("POST /ui/integrations/mcp/enabled", server.setMCPEnabled)
 	mux.HandleFunc("POST /ui/integrations/mcp/remove", server.removeMCP)
+	mux.HandleFunc("POST /ui/integrations/mcp/tools", server.setMCPTools)
 	mux.HandleFunc("POST /ui/integrations/sso/check", server.checkSSO)
 	mux.HandleFunc("POST /ui/integrations/sso/enabled", server.setSSOEnabled)
 	mux.HandleFunc("POST /ui/integrations/sso/wizard", server.runSSOWizard)

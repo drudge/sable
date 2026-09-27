@@ -1757,6 +1757,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .mcp-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .mcp-facts .integration-fact-address { grid-column: 1 / -1; }
 @container (max-width: 36rem) { .mcp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mcp-tools-options { display: grid; gap: .75rem; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }
@@ -3303,6 +3304,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-wizard-dialog input[type="checkbox"], .unifi-wizard-dialog input[type="radio"] {
 	width: 1rem; height: 1rem; flex: 0 0 1rem; padding: 0; accent-color: #3b82f6;
 }
+/* Switches keep their track on this page, where plain checkboxes are shrunk. */
+.integrations-page .setting-switch-row input[type="checkbox"] { width: 2.75rem; height: 1.5rem; flex: 0 0 2.75rem; }
 .integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 #unifi-status, #dynamic-dns-status { display: grid; gap: .6rem; }
 .unifi-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; color: var(--muted-foreground); font-size: .72rem; }
