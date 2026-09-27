@@ -2214,7 +2214,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 }
 
 /* Isotope control-plane pages. These mirror the React/shadcn source layout. */
-.cluster-layout { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(17rem, .9fr); align-items: start; gap: 1.5rem; }
+.cluster-layout { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(17rem, 1fr); align-items: start; gap: 1.5rem; }
 .cluster-main-column, .cluster-aside { display: grid; min-width: 0; align-content: start; gap: 1.25rem; }
 .cluster-live-status { display: grid; min-width: 0; gap: 1.25rem; }
 .cluster-status-card { overflow: hidden; }
