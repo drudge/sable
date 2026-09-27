@@ -2479,6 +2479,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 @media (max-width: 800px) { .cluster-identity, .cluster-sync-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cluster-sync-grid > div:nth-child(3) { border-left: 0; padding-left: 0; } }
 @media (max-width: 639px) { .cluster-metrics { grid-template-columns: 1fr; padding: 1rem; } }
 @media (max-width: 700px) { .cluster-identity, .cluster-sync-grid, .cluster-aside { grid-template-columns: 1fr; } .cluster-sync-grid > div { border-top: 1px solid var(--border); border-left: 0; padding: .55rem 0 0; } .cluster-sync-grid > div:first-child { border-top: 0; padding-top: 0; } .cluster-aside .warning-box { grid-column: auto; } .cluster-danger-card { align-items: stretch; flex-direction: column; } .cluster-danger-card .button { width: 100%; justify-content: center; } .cluster-node-meta { display: none; } .cluster-node-actions .button { width: 100%; justify-content: center; } .cluster-node-actions, .cluster-node-actions form { width: 100%; } .cluster-nodes-card > header { align-items: flex-start; flex-wrap: wrap; } }
+/* On a phone the columns stack, which left Rolling Updates below every node.
+   Flatten both columns into one list so it follows Cluster Status. */
+@media (max-width: 700px) {
+  .cluster-layout { display: flex; flex-direction: column; align-items: stretch; gap: 1.25rem; }
+  .cluster-main-column, .cluster-aside, .cluster-live-status { display: contents; }
+  .cluster-status-card { order: -2; }
+  #cluster-updates { order: -1; }
+}
 @media (max-width: 700px) { .cluster-settings-grid { grid-template-columns: 1fr; } .cluster-settings-field-full { grid-column: auto; } .cluster-certificate-choices { grid-template-columns: 1fr; } .cluster-certificate-choices > label > span { min-height: 3.25rem; grid-template-columns: auto 1fr; justify-items: start; text-align: left; } .cluster-certificate-choices small { display: none; } .cluster-certificate-advanced-content { grid-template-columns: 1fr; } }
 
 .isotope-control-page { gap: 1.5rem; }
