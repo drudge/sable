@@ -2714,8 +2714,10 @@
 	const setupDialogTabs = (root) => {
 	  if (!root?.matches?.("[data-dialog-tabs]") || root.dataset.dialogTabsReady === "true") return;
 	  root.dataset.dialogTabsReady = "true";
-	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")];
-	  const panels = [...root.querySelectorAll("[data-dialog-panel]")];
+	  // A panel may hold a tab set of its own; each set takes only its tabs.
+	  const own = (element) => element.closest("[data-dialog-tabs]") === root;
+	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")].filter(own);
+	  const panels = [...root.querySelectorAll("[data-dialog-panel]")].filter(own);
 	  connectTabSet(root, tabs, panels, "dialogTab", "dialogPanel");
 	  const select = (value, focus = false) => {
 		const selected = tabs.find((tab) => tab.dataset.dialogTab === value);
