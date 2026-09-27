@@ -484,6 +484,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar"></button>
 				</aside>
 				<div class="sidebar-scrim" data-sidebar-toggle aria-hidden="true"></div>
+				<div class="pull-refresh" data-pull-refresh aria-hidden="true">
+					@Icon("loader-circle")
+				</div>
 				<main class="main" id="main-content" tabindex="-1">
 					<header class="mobile-header" data-mobile-header>
 						<button type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">
