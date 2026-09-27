@@ -8,6 +8,26 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.11] - 2026-09-26
+
+Sable 1.5.0-beta.11 makes it clear how long a hidden Insights finding stays
+hidden, and keeps the Cluster page's side cards together.
+
+### Insights
+
+- Replace **Seen it?** at the end of a finding's drawer with **Hide Finding**
+  beside **Why Sable surfaced this**. It opens **For a Day**, **For a Week**,
+  and **That's Normal**, each with a line saying when the finding comes back.
+  **Dismiss** sounded permanent but lasted only a day, and the buttons sat
+  below the fold in a laptop-height window.
+- Close only the hide menu when you press Escape, and keep the drawer open.
+
+### Cluster
+
+- Show the **HTTPS required** warning above **How Clustering Works** and
+  **Local Node**, so the two cards sit side by side in a window about 700 to
+  1050px wide. The warning used to split them onto separate rows.
+
 ## [1.5.0-beta.10] - 2026-09-26
 
 Sable 1.5.0-beta.10 tidies the console. The sidebar fits a laptop screen and
