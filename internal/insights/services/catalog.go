@@ -97,6 +97,7 @@ var catalog = []catalogEntry{
 	{Service{"myq", "myQ", CategorySmartHome}, []string{"myq-cloud.com", "myqservices.com", "chamberlain.com"}},
 	{Service{"roomba", "iRobot", CategorySmartHome}, []string{"irobot.com", "irobotapi.com"}},
 	{Service{"ifttt", "IFTTT", CategorySmartHome}, []string{"ifttt.com"}},
+	{Service{"generac", "Generac", CategorySmartHome}, []string{"generaccloud.com", "mobilelinkgen.com"}},
 	{Service{"trmnl", "TRMNL", CategorySmartHome}, []string{"trmnl.app", "trmnl.com", "usetrmnl.com", "trmnl-screens.nyc3.digitaloceanspaces.com"}},
 
 	// Cameras and doorbells.
