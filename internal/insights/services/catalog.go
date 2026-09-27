@@ -197,6 +197,7 @@ var catalog = []catalogEntry{
 	{Service{"hp-printing", "HP printing", CategoryPlatform}, []string{"hpeprint.com", "hpsmart.com", "hpconnected.com"}},
 	{Service{"epson", "Epson", CategoryPlatform}, []string{"epson.com", "epsonconnect.com", "epson.net"}},
 	{Service{"brother", "Brother", CategoryPlatform}, []string{"brother.com", "brother-usa.com"}},
+	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"bambulab.com", "bambulab.cn", "bblmw.com"}},
 	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time.cloudflare.com"}},
 
 	// Finance.
