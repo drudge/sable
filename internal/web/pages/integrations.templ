@@ -665,7 +665,7 @@ templ RemoveMCPDialog() {
 }
 
 templ MCPSetupDialog(view MCPAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-auto-open="true">
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="mcp-setup-title">{ ifThen(view.Configured, "MCP Server Setup", "Set Up MCP Server") }</h2><p>Let AI assistants manage DNS with an API token</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
 		<div class="isotope-dialog-body">

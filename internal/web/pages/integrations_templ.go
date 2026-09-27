@@ -3057,7 +3057,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 			templ_7745c5c3_Var111 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 266, "<dialog class=\"custom-server-dialog isotope-form-dialog unifi-wizard-dialog\" id=\"mcp-setup-dialog\" aria-labelledby=\"mcp-setup-title\" data-dialog-auto-open=\"true\"><div class=\"dialog-header\"><h2 id=\"mcp-setup-title\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 266, "<dialog class=\"custom-server-dialog isotope-form-dialog unifi-wizard-dialog mcp-setup-dialog\" id=\"mcp-setup-dialog\" aria-labelledby=\"mcp-setup-title\" data-dialog-auto-open=\"true\"><div class=\"dialog-header\"><h2 id=\"mcp-setup-title\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
