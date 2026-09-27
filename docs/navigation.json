@@ -29,6 +29,7 @@
     "guides/dynamic-dns": "Dynamic DNS",
     "guides/unifi": "UniFi",
     "guides/glance": "Glance",
+    "guides/mcp": "MCP server",
     "guides/operations": "Operations",
     "guides/logging": "Logs & metrics",
     "guides/alerts": "Alerts",
@@ -75,7 +76,7 @@
     { "title": "Secure and integrate", "collections": [
       { "title": "Security", "pages": ["guides/encrypted-dns", "guides/certificates"] },
       { "title": "Identity and access", "pages": ["guides/access-control", "guides/passkeys", "guides/sso", "guides/api-tokens"] },
-      { "title": "Integrations", "pages": ["guides/dynamic-dns", "guides/unifi", "guides/glance"] }
+      { "title": "Integrations", "pages": ["guides/dynamic-dns", "guides/unifi", "guides/glance", "guides/mcp"] }
     ], "pages": [
       { "slug": "guides/encrypted-dns", "file": "docs/guides/encrypted-dns.md", "title": "Enable encrypted DNS", "description": "Serve DoT, DoH, and DoQ with trusted certificates and test each transport." },
       { "slug": "guides/certificates", "file": "docs/guides/certificates.md", "title": "Manage certificates", "description": "Choose imported, self-signed, or ACME-managed certificates and keep renewal healthy." },
@@ -85,7 +86,8 @@
       { "slug": "guides/api-tokens", "file": "docs/guides/api-tokens.md", "title": "Create an API token", "description": "Give an integration a revocable credential with only the API permissions it needs." },
       { "slug": "guides/dynamic-dns", "file": "docs/guides/dynamic-dns.md", "title": "Publish a changing public address", "description": "Keep external A and AAAA records synchronized with this deployment's public connection." },
       { "slug": "guides/unifi", "file": "docs/guides/unifi.md", "title": "Sync names from UniFi", "description": "Map controller networks to forward and reverse zones without overwriting hand-authored records." },
-      { "slug": "guides/glance", "file": "docs/guides/glance.md", "title": "Add a Glance DNS widget", "description": "Show Sable statistics in Glance using its Technitium-compatible DNS Stats integration." }
+      { "slug": "guides/glance", "file": "docs/guides/glance.md", "title": "Add a Glance DNS widget", "description": "Show Sable statistics in Glance using its Technitium-compatible DNS Stats integration." },
+      { "slug": "guides/mcp", "file": "docs/guides/mcp.md", "title": "Let an AI assistant manage records", "description": "Connect Claude, ChatGPT, Codex, or Cursor to Sable's MCP server to manage records, check lookups, and fix blocking." }
     ] },
     { "title": "Operate and recover", "pages": [
       { "slug": "guides/operations", "file": "docs/operations.md", "title": "Day-to-day operations", "description": "Check health, control the service, monitor failures, and preserve incident evidence.", "aliases": ["operations"] },

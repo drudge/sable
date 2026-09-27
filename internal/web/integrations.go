@@ -39,6 +39,7 @@ func (server *Server) SetUniFiController(controller unifiController) {
 func (server *Server) integrationsPage(writer http.ResponseWriter, request *http.Request) {
 	view := server.integrationsView(request, "", "")
 	view.DynamicDNS.Setup = request.URL.Query().Get("setup") == "dynamic-dns"
+	view.MCP.Setup = request.URL.Query().Get("setup") == "mcp"
 	if request.URL.Query().Get("setup") == "unifi" {
 		view.UniFi.Wizard = server.newUniFiWizard(request)
 	}
@@ -77,6 +78,13 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 	}
 	view.DynamicDNS = server.dynamicDNSView(request, console.TimeDisplay)
 	view.SSO = server.ssoView(request, nil)
+	mcpSettings := server.config.Current().Config.MCP
+	address, secure := server.mcpAddress(request.Context(), request)
+	view.MCP = pages.MCPAppView{
+		Configured: mcpSettings.Configured || mcpSettings.Enabled, Enabled: mcpSettings.Enabled,
+		Address: address, Secure: secure, SecurityDisabled: !server.securityEnabled,
+		Clustered: server.cluster != nil && server.cluster.Snapshot().Initialized,
+	}
 	if server.unifi == nil {
 		return view
 	}

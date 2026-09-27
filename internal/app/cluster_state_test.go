@@ -31,6 +31,7 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 	sourceConfiguration.Blocking.Domains = []string{"ads.example"}
 	sourceConfiguration.QueryLog.Enabled = false
 	sourceConfiguration.Security.PasskeysDisabled = true
+	sourceConfiguration.MCP.Enabled = true
 	sourceConfiguration.Cluster.AdvertiseURL = "https://ns1.example.test"
 	sourceConfiguration.OIDC = config.DefaultOIDC()
 	sourceConfiguration.OIDC.Enabled = true
@@ -117,6 +118,9 @@ func TestClusterStateReplicatesRuntimeConfigurationAndZones(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := targetManager.Current().Config
+	if !got.MCP.Enabled {
+		t.Fatal("replica did not take the primary's MCP setting")
+	}
 	if got.Resolver.Mode != sourceConfiguration.Resolver.Mode ||
 		!reflect.DeepEqual(got.Resolver.Forwarders, sourceConfiguration.Resolver.Forwarders) ||
 		!reflect.DeepEqual(got.Resolver.RootHints, sourceConfiguration.Resolver.RootHints) ||
@@ -489,5 +493,23 @@ func TestClusterStateReplicatesPrimaryConversion(t *testing.T) {
 	primary, replica := source.Current().Zones[0], target.Current().Zones[0]
 	if replica.Type != "primary" || replica.ID != primary.ID || !reflect.DeepEqual(replica.Records, primary.Records) || len(replica.PrimaryServers) != 0 {
 		t.Fatalf("replicated conversion = %+v", replica)
+	}
+}
+
+// A primary from before the MCP switch sends no setting, and the replica keeps
+// its own rather than reading the gap as "off".
+func TestReplicatedRuntimeConfigurationKeepsLocalMCPWhenPrimaryOmitsIt(t *testing.T) {
+	candidate := config.Defaults()
+	candidate.MCP.Enabled = true
+	source := replicatedRuntimeConfiguration(config.Defaults())
+	source.MCP = nil
+	applyReplicatedRuntimeConfiguration(&candidate, source)
+	if !candidate.MCP.Enabled {
+		t.Fatal("missing MCP setting turned the replica's endpoint off")
+	}
+	source.MCP = &config.MCP{}
+	applyReplicatedRuntimeConfiguration(&candidate, source)
+	if candidate.MCP.Enabled {
+		t.Fatal("primary's MCP setting was ignored")
 	}
 }

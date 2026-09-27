@@ -556,6 +556,25 @@ Three failed syncs in a row send a problem [alert](#alerts) of the
 `integrations` type, with the last error and the time of the last good sync.
 It clears once a sync works.
 
+## Integrations: MCP server
+
+Sable's MCP server at `/mcp` lets AI assistants read and change records, look
+names up, and manage the allow and block lists over the Model Context Protocol.
+It is off until you set it up from **Integrations → MCP Server**, which writes:
+
+```toml
+[mcp]
+configured = true
+enabled = true
+```
+
+**Pause** sets `enabled = false` and keeps `configured`; **Remove** clears both.
+While `enabled` is false, `/mcp` answers `404` to every request, including those
+with a valid API token. Turning it on grants nothing by itself: each assistant still
+needs an API token, and the token's groups decide what it may do. The setting
+follows the cluster primary. See
+[Let an AI assistant manage records](guides/mcp.md).
+
 ## Blocking
 
 ```toml

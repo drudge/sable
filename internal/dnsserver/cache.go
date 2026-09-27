@@ -530,6 +530,27 @@ func (cache *ResponseCache) Clear() int {
 	return removed
 }
 
+// RemoveName drops every cached answer for one owner name, whatever its type,
+// and reports how many it removed. Entries are sharded by name and type, so
+// each shard is checked.
+func (cache *ResponseCache) RemoveName(name string) int {
+	name = strings.ToLower(dns.Fqdn(strings.TrimSpace(name)))
+	removed := 0
+	for index := range cache.shards {
+		shard := &cache.shards[index]
+		shard.mu.Lock()
+		for key, element := range shard.entries {
+			if key.name == name {
+				delete(shard.entries, key)
+				shard.recency.Remove(element)
+				removed++
+			}
+		}
+		shard.mu.Unlock()
+	}
+	return removed
+}
+
 // Export returns all fresh entries and any expired entries still inside their
 // configured stale window.
 func (cache *ResponseCache) Export() ([]PersistedResponse, error) {

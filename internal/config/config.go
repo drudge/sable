@@ -130,10 +130,21 @@ type Config struct {
 	DynamicDNS   DynamicDNS   `toml:"dynamic_dns"`
 	UniFi        UniFi        `toml:"unifi"`
 	OIDC         OIDC         `toml:"oidc"`
+	MCP          MCP          `toml:"mcp"`
 	Security     Security     `toml:"security"`
 	Cluster      Cluster      `toml:"cluster"`
 	Updates      Updates      `toml:"updates"`
 	Reload       Reload       `toml:"config"`
+}
+
+// MCP controls the Model Context Protocol server through which AI
+// assistants read and change DNS with an API token. It stays off until an
+// operator sets it up, so no existing token gains a new use on upgrade.
+// Configured records that it was set up, so pausing it keeps the card's
+// Resume button instead of returning to setup.
+type MCP struct {
+	Configured bool `toml:"configured"`
+	Enabled    bool `toml:"enabled"`
 }
 
 // Updates holds this node's release channel. It is not replicated to peers.
@@ -1249,6 +1260,8 @@ func (configuration *Config) normalize() {
 	if configuration.EncryptedDNS.ACME.DirectoryURL == "" {
 		configuration.EncryptedDNS.ACME.DirectoryURL = defaultACMEDirectoryURL
 	}
+	// A hand-written enabled = true means the server was set up.
+	configuration.MCP.Configured = configuration.MCP.Configured || configuration.MCP.Enabled
 	if configuration.EncryptedDNS.ACME.StorageDirectory == "" {
 		configuration.EncryptedDNS.ACME.StorageDirectory = defaultACMEStorageDir
 	}

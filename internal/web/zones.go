@@ -612,7 +612,6 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		if err != nil {
 			return err
 		}
-		serial := nextSOASerial(0, time.Now())
 		zone := zonemodel.Zone{
 			Name: name, Type: zoneType, DefaultTTL: ttl,
 			TSIGKey: strings.TrimSpace(request.FormValue("tsig_key")),
@@ -620,7 +619,7 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		if (zoneType == "forwarder" || zoneType == "stub") && request.Form.Has("dnssec_validation_present") {
 			zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
 		}
-		soa := zonemodel.Record{Name: "@", Type: "SOA", TTL: ttl, Value: fmt.Sprintf("%s %s %d 3600 600 1209600 %d", dns.Fqdn(primaryNS), responsible, serial, ttl)}
+		soa := newZoneSOA(primaryNS, responsible, ttl, time.Now())
 		switch zoneType {
 		case "primary":
 			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)}}
@@ -712,6 +711,13 @@ func (server *Server) addZone(writer http.ResponseWriter, request *http.Request)
 		*zones = append(*zones, zone)
 		return nil
 	})
+}
+
+// newZoneSOA is the SOA record every new zone starts with.
+func newZoneSOA(primaryNS, responsible string, ttl uint32, now time.Time) zonemodel.Record {
+	return zonemodel.Record{Name: "@", Type: "SOA", TTL: ttl, Value: fmt.Sprintf(
+		"%s %s %d 3600 600 1209600 %d", dns.Fqdn(primaryNS), responsible, nextSOASerial(0, now), ttl,
+	)}
 }
 
 // aliasSourceZone resolves the zone an alias mirrors and reports the problem in

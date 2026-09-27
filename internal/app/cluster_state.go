@@ -126,6 +126,10 @@ type clusterRuntimeConfiguration struct {
 	// did. A primary that predates them sends none, which leaves this node's
 	// own as they are.
 	InsightFindings *config.InsightFindings `toml:"insight_findings,omitempty"`
+	// MCP follows the primary so the endpoint is on or off across the whole
+	// cluster. A primary that predates it sends none, which leaves this
+	// node's own setting as it is.
+	MCP *config.MCP `toml:"mcp,omitempty"`
 }
 
 // clusterAlerts is the alert state that follows the primary.
@@ -226,6 +230,8 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 	runtimeConfiguration.Alerts = replicator.captureAlerts(ctx, active.Alerts)
 	findings := active.Insights.Findings
 	runtimeConfiguration.InsightFindings = &findings
+	mcp := active.MCP
+	runtimeConfiguration.MCP = &mcp
 	configurationContents, err := toml.Marshal(runtimeConfiguration)
 	if err != nil {
 		return nil, fmt.Errorf("encode replicated runtime configuration: %w", err)
@@ -400,6 +406,7 @@ func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool 
 
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
 	findings := source.Insights.Findings
+	mcp := source.MCP
 	return clusterRuntimeConfiguration{
 		Resolver:         source.Resolver,
 		TSIGKeys:         source.TSIGKeys,
@@ -411,6 +418,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		PasskeysDisabled: source.Security.PasskeysDisabled,
 		Alerts:           &clusterAlerts{Settings: cloneAlertSettings(source.Alerts)},
 		InsightFindings:  &findings,
+		MCP:              &mcp,
 	}
 }
 
@@ -439,6 +447,9 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	}
 	if source.InsightFindings != nil {
 		candidate.Insights.Findings = *source.InsightFindings
+	}
+	if source.MCP != nil {
+		candidate.MCP = *source.MCP
 	}
 }
 

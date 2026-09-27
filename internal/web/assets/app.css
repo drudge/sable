@@ -1751,6 +1751,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+.mcp-client-tabs .dialog-tab-list { margin: 0; }
+.mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
+.mcp-client-tabs .field-help { margin: 0; }
+.mcp-client-tabs .dialog-tab { white-space: nowrap; }
+@media (max-width: 480px) { .mcp-client-tabs .dialog-tab-list.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .integration-fact-address { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
 .integration-fact-address .integration-fact-label { grid-column: 1; grid-row: 1; }
@@ -2821,9 +2826,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-card-title .nav-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 1.25rem; color: #f1ad47; }
 .about-code-block { position: relative; min-width: 0; }
 .about-code-block pre { max-height: none; padding-right: 2.75rem; background: color-mix(in oklch, var(--muted) 40%, transparent); font-size: .6875rem; }
-.about-copy-button { position: absolute; top: .25rem; right: .25rem; display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .375rem; background: transparent; color: var(--muted-foreground); }
+.about-copy-button { position: absolute; top: .4rem; right: .4rem; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; padding: 0; color: var(--muted-foreground); transition: background 120ms; }
 .about-copy-button:hover { background: var(--accent); color: var(--foreground); }
-.about-copy-button .nav-icon { width: .875rem; height: .875rem; }
+/* Center the icon the way the record copy buttons do: without this the
+   text-height icon wrappers sit up and to the left of the hover box. */
+.about-copy-button > span { align-items: center; justify-content: center; line-height: 0; }
+.about-copy-button:not(.is-copied) > .copy-icon-default, .about-copy-button.is-copied > .copy-icon-success { display: flex; }
+.about-copy-button.is-copied > .copy-icon-success { color: #22c55e; }
+.about-copy-button .nav-icon { width: .85rem; height: .85rem; flex-basis: .85rem; }
 .about-metrics-preview { display: grid; justify-items: start; gap: .75rem; }
 .about-metrics-preview pre { width: 100%; max-height: 14rem; font-size: .6875rem; }
 .about-metrics-preview pre:not(:empty) { display: block !important; }
@@ -3276,7 +3286,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-card-empty { justify-items: start; }
 .integration-card-empty p { max-width: 46rem; margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.55; }
 .integration-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
-.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-left: auto; }
 /* Outline destructive: present but not shouting next to the primary action. */
 .button.outline.destructive { border-color: color-mix(in srgb, var(--destructive) 55%, var(--border)); background: var(--background); color: var(--destructive); }
 .button.outline.destructive:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); opacity: 1; }
