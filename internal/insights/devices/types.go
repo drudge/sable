@@ -129,6 +129,30 @@ var serviceClues = map[string][]clue{
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
 	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
+	"mqtt": {{"smart-home", 3}},
+}
+
+// ClueLabels are the starts of host labels that are evidence of a device type
+// whoever runs the host. Smart home hardware hears from its maker's cloud
+// through an MQTT broker, such as mqtt.example.com or mqtt2.example.com, which
+// people and their apps rarely talk to directly.
+var ClueLabels = []string{"mqtt"}
+
+// mqttService stands for any MQTT broker. It is not in the service catalog,
+// because a broker says nothing about which company runs it.
+var mqttService = services.Service{ID: "mqtt", Name: "an MQTT server"}
+
+// mqttName reports a name with a host label that starts with "mqtt". The
+// registered domain itself does not count, so a site about MQTT, such as
+// mqtt.org, is not a broker.
+func mqttName(name string) bool {
+	labels := strings.Split(strings.TrimSuffix(strings.ToLower(name), "."), ".")
+	for _, label := range labels[:max(len(labels)-2, 0)] {
+		if strings.HasPrefix(label, "mqtt") {
+			return true
+		}
+	}
+	return false
 }
 
 // ServiceClueIDs lists the services whose use is evidence of a device type,
@@ -283,6 +307,10 @@ func Identify(list []Device, names map[string][]string) {
 				if service, found := services.Lookup(name); found && !seen[service.ID] {
 					seen[service.ID] = true
 					used = append(used, service)
+				}
+				if mqttName(name) && !seen[mqttService.ID] {
+					seen[mqttService.ID] = true
+					used = append(used, mqttService)
 				}
 			}
 		}
