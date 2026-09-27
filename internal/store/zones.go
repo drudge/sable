@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS sable_zones (
     catalog_group TEXT NOT NULL DEFAULT '',
     catalog_member_id TEXT NOT NULL DEFAULT '',
     catalog_change_owner TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
     tsig_key TEXT NOT NULL,
     dynamic_updates BOOLEAN NOT NULL,
     dnssec BOOLEAN NOT NULL,
@@ -168,6 +169,20 @@ func (store *Store) migrateZoneCatalogSchema(ctx context.Context) error {
 			"ALTER TABLE sable_zones ADD COLUMN "+column+" TEXT NOT NULL DEFAULT ''"); err != nil {
 			return fmt.Errorf("add zone %s: %w", column, err)
 		}
+	}
+	return nil
+}
+
+// migrateZoneSourceSchema adds the column that records what created a zone.
+// Zones from before it existed were all made by an operator, which is what
+// the empty default says.
+func (store *Store) migrateZoneSourceSchema(ctx context.Context) error {
+	exists, err := store.tableHasColumn(ctx, "sable_zones", "source")
+	if err != nil || exists {
+		return err
+	}
+	if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_zones ADD COLUMN source TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("add zone source: %w", err)
 	}
 	return nil
 }
@@ -333,7 +348,7 @@ func (store *Store) ListZones(ctx context.Context) ([]zone.Zone, error) {
 	rows, err := store.database.QueryContext(ctx, `
 SELECT id, name, zone_type, default_ttl, disabled, zone_transfer, transfer_acl,
        notify_targets, primary_servers, primary_protocol, alias_zone,
-       catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, tsig_key,
+       catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, source, tsig_key,
        dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
        nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
        key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
@@ -380,7 +395,7 @@ func scanZone(row rowScanner) (zone.Zone, error) {
 		&current.ID, &current.Name, &current.Type, &defaultTTL, &current.Disabled, &current.ZoneTransfer,
 		&transferACL, &notifyTargets, &primaryServers, &current.PrimaryProtocol, &current.AliasZone,
 		&current.CatalogZone, &current.CatalogGroup, &current.CatalogMemberID, &current.CatalogChangeOwner,
-		&current.TSIGKey,
+		&current.Source, &current.TSIGKey,
 		&current.DynamicUpdates, &current.DNSSEC, &current.DNSSECAlgorithm, &current.DNSSECDenial,
 		&nsec3Iterations, &current.NSEC3Salt, &zskLifetime, &kskLifetime,
 		&keyPrepublish, &keyRetireAfter, &parentDSKeyTag,
@@ -543,17 +558,17 @@ func (store *Store) insertZone(ctx context.Context, transaction *sql.Tx, current
 INSERT INTO sable_zones (
 	id, name, zone_type, default_ttl, disabled, zone_transfer, transfer_acl,
     notify_targets, primary_servers, primary_protocol, alias_zone,
-    catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, tsig_key,
+    catalog_zone, catalog_group, catalog_member_id, catalog_change_owner, source, tsig_key,
     dynamic_updates, dnssec, dnssec_algorithm, dnssec_denial,
     nsec3_iterations, nsec3_salt, zsk_lifetime_ns, ksk_lifetime_ns,
     key_prepublish_ns, key_retire_after_ns, parent_ds_key_tag,
     dnssec_validation_disabled, revision,
     created_at, updated_at
-) VALUES (`+store.placeholders(31)+`)`,
+) VALUES (`+store.placeholders(32)+`)`,
 		current.ID, current.Name, current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL,
 		notifyTargets, primaryServers, current.PrimaryProtocol, current.AliasZone,
 		current.CatalogZone, current.CatalogGroup, current.CatalogMemberID, current.CatalogChangeOwner,
-		current.TSIGKey,
+		current.Source, current.TSIGKey,
 		current.DynamicUpdates, current.DNSSEC, current.DNSSECAlgorithm, current.DNSSECDenial,
 		current.NSEC3Iterations, current.NSEC3Salt, current.ZSKLifetime.Duration.Nanoseconds(),
 		current.KSKLifetime.Duration.Nanoseconds(), current.KeyPrepublish.Duration.Nanoseconds(),
@@ -592,8 +607,8 @@ UPDATE sable_zones SET
     zsk_lifetime_ns = `+store.placeholder(21)+`, ksk_lifetime_ns = `+store.placeholder(22)+`,
     key_prepublish_ns = `+store.placeholder(23)+`, key_retire_after_ns = `+store.placeholder(24)+`,
     parent_ds_key_tag = `+store.placeholder(25)+`, dnssec_validation_disabled = `+store.placeholder(26)+`,
-    revision = `+store.placeholder(27)+`, updated_at = `+store.placeholder(28)+`
-WHERE name = `+store.placeholder(29),
+    revision = `+store.placeholder(27)+`, updated_at = `+store.placeholder(28)+`, source = `+store.placeholder(29)+`
+WHERE name = `+store.placeholder(30),
 		current.Type, current.DefaultTTL, current.Disabled, current.ZoneTransfer, transferACL, notifyTargets,
 		primaryServers, current.PrimaryProtocol, current.AliasZone,
 		current.CatalogZone, current.CatalogGroup, current.CatalogMemberID, current.CatalogChangeOwner,
@@ -601,7 +616,7 @@ WHERE name = `+store.placeholder(29),
 		current.DNSSECAlgorithm, current.DNSSECDenial, current.NSEC3Iterations, current.NSEC3Salt,
 		current.ZSKLifetime.Duration.Nanoseconds(), current.KSKLifetime.Duration.Nanoseconds(),
 		current.KeyPrepublish.Duration.Nanoseconds(), current.KeyRetireAfter.Duration.Nanoseconds(),
-		current.ParentDSKeyTag, current.DNSSECValidationDisabled, current.Revision, now, current.Name,
+		current.ParentDSKeyTag, current.DNSSECValidationDisabled, current.Revision, now, current.Source, current.Name,
 	)
 	if err != nil {
 		return fmt.Errorf("update zone %q: %w", current.Name, err)

@@ -604,3 +604,34 @@ func TestPrimaryConversionSurvivesRestartWithIdentityAndHistory(t *testing.T) {
 		t.Fatalf("history = %+v", history)
 	}
 }
+
+// The MCP server may delete only zones it created, so what created a zone
+// has to survive being saved, loaded, and edited.
+func TestZoneStoreKeepsZoneSource(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	storage, err := Open(ctx, "sqlite", filepath.Join(t.TempDir(), "zones.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+
+	created := testStoredZone(1)
+	created.Source = zone.SourceMCP
+	saved, err := storage.ReplaceZones(ctx, nil, []zone.Zone{created})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := storage.ListZones(ctx)
+	if err != nil || len(loaded) != 1 || loaded[0].Source != zone.SourceMCP {
+		t.Fatalf("loaded zones = %+v, %v", loaded, err)
+	}
+	edited := zone.Clone(saved)
+	edited[0].DefaultTTL = 600
+	if _, err := storage.ReplaceZones(ctx, saved, edited); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err = storage.ListZones(ctx); err != nil || loaded[0].Source != zone.SourceMCP || loaded[0].DefaultTTL != 600 {
+		t.Fatalf("edited zone = %+v, %v", loaded, err)
+	}
+}
