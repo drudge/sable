@@ -99,6 +99,7 @@ func cloneConfig(source Config) Config {
 		cloned.DynamicDNS.Publishers[index] = publisher
 		cloned.DynamicDNS.Publishers[index].Records = append([]DynamicDNSRecord(nil), publisher.Records...)
 	}
+	cloned.MCP.Tools = append([]string(nil), source.MCP.Tools...)
 	cloned.UniFi.Sources = append([]string(nil), source.UniFi.Sources...)
 	cloned.UniFi.Networks = append([]UniFiNetwork(nil), source.UniFi.Networks...)
 	cloned.OIDC.Scopes = append([]string(nil), source.OIDC.Scopes...)

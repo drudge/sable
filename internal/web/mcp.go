@@ -13,8 +13,11 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -115,7 +118,7 @@ func (server *Server) mcp(writer http.ResponseWriter, request *http.Request) {
 	case "ping":
 		result = struct{}{}
 	case "tools/list":
-		result = map[string]any{"tools": mcpToolList()}
+		result = map[string]any{"tools": mcpToolList(server.config.Current().Config.MCP)}
 	case "tools/call":
 		result, failure = server.callMCPTool(request, message.Params)
 	default:
@@ -162,10 +165,16 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 	if !found {
 		return nil, &mcpError{Code: mcpInvalidParams, Message: "unknown tool: " + input.Name}
 	}
+	// A client may still hold a tool list from before an option was turned
+	// off, so say so plainly instead of calling the tool unknown.
+	if reason := mcpToolOff(tool, server.config.Current().Config.MCP); reason != "" {
+		return mcpToolFailure(errors.New(reason)), nil
+	}
 	arguments := input.Arguments
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		arguments = []byte("{}")
 	}
+	server.recordMCPUse(request, tool.Name)
 	// Tool failures go back to the model as a result, not a protocol error, so
 	// it can read what went wrong and correct its next call.
 	output, err := tool.call(server, request, arguments)
@@ -181,6 +190,59 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 		"structuredContent": output,
 		"isError":           false,
 	}, nil
+}
+
+type mcpUseStore interface {
+	LoadMCPUse(context.Context) (store.MCPUse, error)
+	SaveMCPUse(context.Context, store.MCPUse) error
+}
+
+// recordMCPUse notes who last called a tool, with what, so the card can show
+// an assistant is really connected. A failure to save never fails the call.
+func (server *Server) recordMCPUse(request *http.Request, tool string) {
+	uses, ok := server.queries.(mcpUseStore)
+	if !ok {
+		return
+	}
+	username := ""
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
+		username = principal.Username
+	}
+	// Calls are counted by reading, adding one, and saving, so concurrent
+	// calls take turns rather than overwrite each other's count.
+	server.mcpUseMu.Lock()
+	defer server.mcpUseMu.Unlock()
+	use, err := uses.LoadMCPUse(request.Context())
+	if err != nil {
+		server.logger.Warn("load MCP use", "error", err)
+	}
+	use.RecordCall(time.Now(), username, mcpClientName(request.UserAgent()), tool)
+	if err := uses.SaveMCPUse(request.Context(), use); err != nil {
+		server.logger.Warn("record MCP use", "error", err)
+	}
+}
+
+func (server *Server) lastMCPUse(ctx context.Context) store.MCPUse {
+	uses, ok := server.queries.(mcpUseStore)
+	if !ok {
+		return store.MCPUse{}
+	}
+	use, err := uses.LoadMCPUse(ctx)
+	if err != nil {
+		server.logger.Warn("load MCP use", "error", err)
+	}
+	return use
+}
+
+// mcpClientName keeps the product from a User-Agent, such as claude-code from
+// "claude-code/2.1.0 (cli)", which is enough to tell assistants apart.
+func mcpClientName(userAgent string) string {
+	product, _, _ := strings.Cut(strings.TrimSpace(userAgent), " ")
+	product, _, _ = strings.Cut(product, "/")
+	if len(product) > 64 {
+		product = product[:64]
+	}
+	return product
 }
 
 func mcpToolFailure(err error) map[string]any {
@@ -245,10 +307,45 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
 
+// saveMCPSetup saves the setup wizard. The first save sets the server up
+// and turns it on; later saves change only the tools, so editing the setup
+// never resumes a paused server. Like the server itself it is
+// cluster-wide, so only the primary accepts it.
+func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Request) {
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	if err := request.ParseForm(); err != nil {
+		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
+		return
+	}
+	tools := mcpSelectedTools(request)
+	settingUp := !server.config.Current().Config.MCP.Configured
+	if err := server.updateMCP(request, func(settings *config.MCP) {
+		if !settings.Configured {
+			settings.Configured, settings.Enabled = true, true
+		}
+		settings.Tools = tools
+	}); err != nil {
+		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	details := "MCP tools: none"
+	if len(tools) > 0 {
+		details = "MCP tools: " + strings.Join(tools, ", ")
+	}
+	action, message := "integrations.mcp.configure", "MCP server saved. Assistants see changes the next time they connect."
+	if settingUp {
+		action, message = "integrations.mcp.setup", "MCP server set up."
+	}
+	writer.Header().Set("HX-Replace-Url", "/integrations")
+	server.logger.Info("MCP server saved", "set_up", settingUp, "tools", strings.Join(tools, ","), "client", requestClientIP(request))
+	server.recordControlPlaneAudit(request, action, details)
+	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
+}
+
 // removeMCP turns the server off and returns the card to setup. API tokens
 // are left alone: they belong to people, not to this integration.
 func (server *Server) removeMCP(writer http.ResponseWriter, request *http.Request) {
-	if err := server.updateMCP(request, func(settings *config.MCP) { *settings = config.MCP{} }); err != nil {
+	if err := server.updateMCP(request, func(settings *config.MCP) { *settings = config.MCP{Tools: config.DefaultMCPTools()} }); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}

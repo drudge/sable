@@ -15,6 +15,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/durationfmt"
+	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/web/pages"
 	"github.com/drudge/sable/internal/zone"
@@ -84,6 +85,16 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 		Configured: mcpSettings.Configured || mcpSettings.Enabled, Enabled: mcpSettings.Enabled,
 		Address: address, Secure: secure, SecurityDisabled: !server.securityEnabled,
 		Clustered: server.cluster != nil && server.cluster.Snapshot().Initialized,
+		Tools:     len(mcpToolList(mcpSettings)),
+		Sections:  mcpToolSectionViews(mcpSettings),
+		Group:     server.mcpGroupView(request, mcpSettings.Tools, mcpSettings.Group),
+	}
+	if use := server.lastMCPUse(request.Context()); !use.At.IsZero() {
+		display := requestTimeDisplay(request)
+		view.MCP.LastUsed = pages.FormatShortDateTime(use.At, display, false)
+		view.MCP.LastUsedBy = mcpUseSummary(use)
+		now := display.In(time.Now())
+		view.MCP.CallsToday = use.CallsSince(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()))
 	}
 	if server.unifi == nil {
 		return view
@@ -798,4 +809,20 @@ func zoneRecordSourceLabel(source string) string {
 	default:
 		return source
 	}
+}
+
+// mcpUseSummary says who last used the MCP server and with what, such as
+// "nick with claude-code, set_records".
+func mcpUseSummary(use store.MCPUse) string {
+	summary := use.Username
+	if summary == "" {
+		summary = "Someone"
+	}
+	if use.Client != "" {
+		summary += " with " + use.Client
+	}
+	if use.Tool != "" {
+		summary += ", " + use.Tool
+	}
+	return summary
 }

@@ -6,33 +6,40 @@ The assistant signs in with an [API token](api-tokens.md). The token's groups de
 
 ## What the assistant can do
 
-| Tool | What it does |
-| --- | --- |
-| `list_zones` | Lists the zones the token can read, with each zone's SOA serial and whether the token may change its records |
-| `list_records` | Lists one zone's records, optionally filtered by name and type |
-| `add_record` | Adds one record. Adding a record that already exists changes nothing |
-| `set_records` | Makes every record of one name and type match a list of values, adding and removing as needed. Repeating it changes nothing |
-| `update_record` | Changes one record's name, value, TTL, note, or whether it is served |
-| `delete_record` | Removes one record |
-| `create_zone` | Creates a Primary zone with an SOA and one apex NS record |
-| `lookup` | Resolves a name through Sable and says whether the answer came from a zone, a local name, blocking, the cache, or upstream |
-| `purge_cache` | Forgets this node's cached answers for one name |
-| `check_domain` | Says whether blocking stops a domain, and which rule and block list cause it |
-| `allow_domain` | Puts a domain on the allow list and takes it off the block list |
-| `block_domain` | Puts a domain on the block list and takes it off the allow list |
-| `remove_domain_rule` | Takes a domain off both lists, so block lists alone decide |
+You choose each tool in the first step of the setup wizard, and a token still needs the grant beside it. The everyday tools start on; the ones that reach further start off. Each section has **All**, **Read only**, and **None** to set several at once.
 
-Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot delete or reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It cannot add or remove block lists, or pause or turn off blocking.
+| Tool | Starts | What it does | Grant |
+| --- | --- | --- | --- |
+| `list_zones` | On | Lists the zones the token can read | `zones.read` |
+| `list_records` | On | Lists one zone's records, optionally by name and type | `zones.read` |
+| `add_record` | On | Adds one record | `zones.records.write` |
+| `set_records` | On | Makes a name's records of one type match a list of values | `zones.records.write` |
+| `update_record` | On | Changes one record | `zones.records.write` |
+| `delete_record` | On | Removes one record | `zones.records.write` |
+| `create_zone` | Off | Creates a Primary zone | `zones.create` |
+| `delete_zone` | Off | Deletes a zone and its records | `zones.delete` |
+| `check_domain` | On | Says whether blocking stops a domain, and why | `blocking.read` |
+| `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists | `blocking.write` |
+| `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
+| `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
+| `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
+| `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
+| `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
+| `search_queries` | Off | Each device's DNS lookups | `logs.read` |
 
-A new zone answers devices that use Sable right away. The internet sees it only once the domain's registrar or parent zone delegates it to your name servers; see [Delegation](delegation.md).
+`add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 
-Lookups run inside Sable, so they never appear in the query log or as a device in Insights. The assistant cannot read the query log or Insights; that is your household's browsing, and it stays on your server.
+`delete_zone` can delete any zone the token's groups may delete. The tool tells the assistant to ask you first, and the call must repeat the zone name. A deleted zone cannot be restored from the console; only a backup brings it back. To keep an assistant from deleting zones, leave the tool off or keep `zones.delete` out of its group. A new zone answers devices that use Sable right away; the internet sees it only once the domain's registrar or parent zone delegates it to your name servers. See [Delegation](delegation.md).
+
+Insights findings and the query log describe what each device on your network does. Turning either tool on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
+
+Assistants see a changed tool list the next time they connect.
 
 Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.example.com`). Values use zone-file syntax, such as `10 mail.example.com.` for MX. TXT text can be sent without quotes.
 
 ## Set up the MCP server
 
-The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The dialog shows the address to give your assistant, the grants its token needs, and ready-to-paste setup for Claude Code, Codex, and Cursor. Click **Turn On** to start serving.
+The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The wizard has three steps: **Tools**, to choose the tools; **Access**, which lists the grants those tools need, can create an API-only group with exactly those grants and add you to it, and can make your token; and **Connect**, with the address to give your assistant and ready-to-paste setup for Claude Code, Claude Desktop, ChatGPT, and Cursor. Click **Turn On** to start serving. Later, **Edit Setup** reopens the same wizard.
 
 While it is off or paused, `/mcp` refuses every request, even one with a valid token, so an API token made for something else cannot be put to this use by accident. **Pause** stops it and keeps the card set up; **Resume** starts it again. **Remove** turns it off and returns the card to setup; it leaves API tokens alone.
 
@@ -42,21 +49,13 @@ On a cluster, set it up at the primary. Every node follows the primary's setting
 
 ## Give the assistant its own token
 
-1. In **Administration → Groups**, add a group for the assistant. Give it the **API** grants it needs:
+The wizard's **Access** step lists the grants your chosen tools need. If you may manage users, it creates an API-only group with exactly those grants, for every zone, and can add you to it. Sable remembers that group: reopening **Edit Setup** shows it again, and offers **Update Group** only when the tools you chose no longer match its grants, listing just the grants that differ. It also lists your tokens that use the group, with **New Token** for another. Without `users.write`, ask an administrator for such a group.
 
-   | Grant | Lets the assistant |
-   | --- | --- |
-   | `zones.read` | List zones and records, and look up names |
-   | `zones.records.write` | Change records |
-   | `zones.create` | Create zones. This grant covers every zone, so leave it off a token meant for chosen zones |
-   | `blocking.read` | Check domains, and look up names |
-   | `blocking.write` | Change the allow and block lists |
-   | `settings.write` | Clear a name from the cache |
+To keep an assistant to chosen zones, make the group yourself in **Administration → Groups** instead. A zone an assistant creates stays out of reach of a group limited to chosen zones until you add that zone to it.
 
-   Limit the zone grants to the zones the assistant should manage; it cannot see any other zone. A zone it creates stays out of reach of a token limited to chosen zones until you add that zone to the group.
-2. Add the group to your account.
-3. In **Profile → API Tokens**, click **Create Token** and create one that selects only that group, with an expiry you are comfortable with.
-4. Store the token in your password manager or shell environment as `SABLE_API_TOKEN`.
+1. Let the Access step create the group and add you to it, or add your own group to your account in **Administration**.
+2. Click **Create Token** in the Access step, which makes a token for your account that uses only that group, with the server's default expiry. Or, to choose the expiry, use **Profile → API Tokens → Create Token**.
+3. Copy the token, which is shown once, and store it in your password manager or shell environment as `SABLE_API_TOKEN`.
 
 Use a separate token for each assistant or machine, so you can revoke one without breaking the others. A console session does not work at `/mcp`; the endpoint accepts API tokens only.
 
@@ -114,7 +113,7 @@ Web connectors in chatgpt.com and claude.ai are not supported yet. They connect 
 
 ## Check the connection
 
-Ask the assistant to list your zones. It should name only the zones the token's group allows, and mark as editable only those it may change. Then ask it to add and remove a throwaway TXT record in a test zone, and confirm both changes in the console.
+The **MCP Server** card counts the tools on offer and the tool calls it has answered today, and shows when an assistant last called one. Hover **Last used** to see who, with which app, and which tool. Ask the assistant to list your zones. It should name only the zones the token's group allows, and mark as editable only those it may change. Then ask it to add and remove a throwaway TXT record in a test zone, and confirm both changes in the console.
 
 ## Review what it changed
 

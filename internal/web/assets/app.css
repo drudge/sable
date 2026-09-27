@@ -1751,6 +1751,50 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+/* The address is long, so it takes its own row above the short facts, which
+   sit four across on a wide card and two by two on a narrow one. */
+.mcp-card-body { container-type: inline-size; }
+.mcp-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mcp-facts .integration-fact-address { grid-column: 1 / -1; }
+@container (max-width: 36rem) { .mcp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The wizard's tool list follows the group permission picker: a checkbox per
+   tool with the grant it needs pushed to the right, and no inner scrolling. */
+.mcp-tool-sections .permission-surface .permission-checks { max-height: none; overflow: visible; border-bottom: 0; padding-bottom: 0; }
+.mcp-tool-sections .permission-checks label { align-items: center; padding: .3rem .45rem; }
+.mcp-tool-sections .permission-checks input { margin: 0; }
+.mcp-tool-sections .mcp-tool-grant { margin-left: auto; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; }
+.mcp-tool-sections .permission-surface > header > .mcp-tool-section-title { display: flex; align-items: center; gap: .3rem; }
+/* The info button sits after the title at the left, so its tooltip opens
+   rightward instead of running off the dialog's edge. */
+.mcp-section-info { color: var(--muted-foreground); }
+.mcp-section-info .operational-metric-tooltip { right: auto; left: -.45rem; text-align: left; }
+.mcp-section-info .operational-metric-tooltip::before { right: auto; left: .85rem; transform: translate(-50%, 50%) rotate(45deg); }
+/* Keep the step bar close to the title and the list close to the bar. */
+.mcp-setup-dialog[open] { gap: .5rem; }
+.mcp-setup-form > .dialog-tab-panel { padding-top: .75rem; }
+/* Three steps whose markers are the dialog's tabs: the chosen step is
+   current, and every step before it, with the line after it, is complete. */
+.wizard-progress.mcp-wizard-progress { width: min(100%, 20rem); grid-template-columns: auto minmax(2rem, 1fr) auto minmax(2rem, 1fr) auto; justify-self: center; padding: 0 0 .4rem; }
+.mcp-wizard-progress > button[aria-selected="true"] { color: #3b82f6; }
+.mcp-wizard-progress > button[aria-selected="true"] > span { border-color: #3b82f6; background: rgb(59 130 246 / .12); }
+.mcp-wizard-progress > button:has(~ button[aria-selected="true"]) { color: #22c55e; }
+.mcp-wizard-progress > button:has(~ button[aria-selected="true"]) > span { border-color: #22c55e; background: rgb(34 197 94 / .12); }
+.mcp-wizard-progress > i:has(~ button[aria-selected="true"]) { background: #22c55e; }
+.table-badges.mcp-grant-summary { max-width: none; }
+.mcp-grant-summary code { font-size: .625rem; }
+.mcp-group-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+/* Buttons in the Access step size their icons like other console buttons;
+   the flex basis is set too, or the icon keeps its larger default width. */
+.mcp-group-form .button { display: inline-flex; align-items: center; gap: .45rem; }
+.mcp-group-form .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+#mcp-access-group.wizard-panel.compact, #mcp-access-token.wizard-panel.compact { gap: .75rem; }
+.mcp-access-token.is-waiting .wizard-heading { opacity: .6; }
+#mcp-access-group .wizard-heading small strong { color: var(--foreground); font-size: inherit; font-weight: 600; }
+.mcp-group-form .field-control { flex: 1 1 12rem; }
+/* The join box matches the name field's height and centers its contents. */
+.mcp-group-form .settings-check { display: inline-flex; box-sizing: border-box; height: 2.25rem; align-items: center; gap: .5rem; padding: 0 .75rem; font-size: .8125rem; }
+.mcp-group-form .settings-check input { margin: 0; }
+#mcp-group-result:empty { display: none; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }
@@ -3228,7 +3272,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.certificate-renew-button { width: 100%; }
 	.certificate-detail-grid { grid-template-columns: 1fr; }
   .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
-	.isotope-form-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog, .isotope-form-dialog.mcp-setup-dialog { width: calc(100% - 1rem); }
 	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
@@ -3297,6 +3341,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-wizard-dialog input[type="checkbox"], .unifi-wizard-dialog input[type="radio"] {
 	width: 1rem; height: 1rem; flex: 0 0 1rem; padding: 0; accent-color: #3b82f6;
 }
+/* Switches keep their track on this page, where plain checkboxes are shrunk. */
+.integrations-page .setting-switch-row input[type="checkbox"] { width: 2.75rem; height: 1.5rem; flex: 0 0 2.75rem; }
 .integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 #unifi-status, #dynamic-dns-status { display: grid; gap: .6rem; }
 .unifi-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; color: var(--muted-foreground); font-size: .72rem; }
@@ -3390,6 +3436,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-plan-records .admin-desktop-table { max-height: 18rem; overflow-y: auto; margin-top: .6rem; }
 .unifi-skipped ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.6; }
 .unifi-wizard-dialog { width: min(56rem, calc(100% - 3rem)); }
+.isotope-form-dialog.mcp-setup-dialog { width: min(48rem, calc(100% - 3rem)); }
+.mcp-setup-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100dvh - 2rem); }
+.mcp-setup-form { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.mcp-setup-form > .dialog-tab-panel { overflow-y: auto; }
 /* Only the step panel scrolls. Without bounding the form the dialog itself
    grows past its max-height and drags the footer off screen. */
 .unifi-wizard-dialog[open] { grid-template-rows: auto minmax(0, 1fr); }
@@ -3511,6 +3561,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.unifi-wizard-dialog .wizard-footer { margin: 0 -1rem -1rem; padding-inline: 1rem; }
 	.wizard-footer { align-items: stretch; flex-direction: column-reverse; }
 	.wizard-footer-advance { align-items: stretch; flex-direction: column-reverse; }
+	/* Two steps need only Back beside the main button; Cancel stays below. */
+	.mcp-setup-dialog .wizard-footer-advance { flex-direction: row; }
+	.mcp-setup-dialog .wizard-footer-advance .button { flex: 1 1 0; }
 	.wizard-footer .button { width: 100%; justify-content: center; }
 	.wizard-progress { grid-template-columns: auto 1fr auto 1fr auto 1fr auto; }
 	.field-grid.dynamic-dns-global-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -4362,3 +4415,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 @media (max-width: 480px) {
 	.alert-sends-groups { grid-template-columns: 1fr; }
 }
+.mcp-grant-coverage { display: flex; align-items: flex-start; gap: .55rem; margin: 0; }
+.mcp-grant-coverage-icon { display: none; }
+.mcp-grant-coverage[data-matched] .mcp-grant-coverage-icon { display: contents; }
+.mcp-grant-coverage-icon .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
+.dark .mcp-grant-coverage-icon .nav-icon { color: #22c55e; }

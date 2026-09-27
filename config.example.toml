@@ -274,9 +274,18 @@ secret_key_file = "data/sable.key"
 # in with an API token, and the token's groups decide what they may touch. Set
 # it up from Integrations -> MCP Server in the console. configured stays true
 # while it is paused.
+# tools lists the tools assistants are offered. These everyday tools are on
+# by default; create_zone, delete_zone, the tools that change block lists,
+# and search_queries wait to be added. A token still needs each tool's grant.
 [mcp]
 configured = false
 enabled = false
+tools = [
+  "list_zones", "list_records", "add_record", "set_records", "update_record",
+  "delete_record", "check_domain", "allow_domain", "block_domain",
+  "remove_domain_rule", "list_block_lists", "lookup", "purge_cache",
+  "list_findings",
+]
 
 # Console sign-in through an OpenID Connect provider. Set this up from
 # Integrations -> Single Sign-On in the console rather than by hand: the wizard

@@ -1512,7 +1512,9 @@ templ Icon(kind string) {
 				<path d="M15.686 15A14.5 14.5 0 0 1 12 22a14.5 14.5 0 0 1 0-20 10 10 0 1 0 9.542 13"></path><path d="M2 12h8.5"></path><path d="M20 6V4a2 2 0 1 0-4 0v2"></path><rect width="8" height="5" x="14" y="6" rx="1"></rect>
 			case "mcp-server":
 				// Hugeicons "mcp-server", MIT licensed; see third_party/hugeicons.
-				<path d="m3.5 11.75 8.172-8.171a2.828 2.828 0 1 1 4 4m0 0L9.5 13.75m6.172-6.171a2.828 2.828 0 0 1 4 4l-6.965 6.964a1 1 0 0 0 0 1.414L14 21.25"></path><path d="m17.5 9.75-6.172 6.171a2.829 2.829 0 0 1-4-4L13.5 5.749"></path>
+				// Scaled up a little, since its fine diagonal strokes read smaller
+				// than the other icons at the same size.
+				<g transform="translate(12 12) scale(1.14) translate(-12 -12)"><path d="m3.5 11.75 8.172-8.171a2.828 2.828 0 1 1 4 4m0 0L9.5 13.75m6.172-6.171a2.828 2.828 0 0 1 4 4l-6.965 6.964a1 1 0 0 0 0 1.414L14 21.25"></path><path d="m17.5 9.75-6.172 6.171a2.829 2.829 0 0 1-4-4L13.5 5.749"></path></g>
 			case "cloud-sync":
 				<path d="m17 18-1.535 1.605a5 5 0 0 1-8-1.5"></path><path d="M17 22v-4h-4m7.996-2.749A4.5 4.5 0 0 0 17.495 8h-1.79a7 7 0 1 0-12.709 5.607"></path><path d="M7 10v4h4"></path><path d="m7 14 1.535-1.605a5 5 0 0 1 8 1.5"></path>
 			case "database":

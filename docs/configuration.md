@@ -568,12 +568,34 @@ configured = true
 enabled = true
 ```
 
-**Pause** sets `enabled = false` and keeps `configured`; **Remove** clears both.
+**Pause** sets `enabled = false` and keeps `configured`; **Remove** clears both
+and returns `tools` to the everyday groups.
 While `enabled` is false, `/mcp` answers `404` to every request, including those
 with a valid API token. Turning it on grants nothing by itself: each assistant still
 needs an API token, and the token's groups decide what it may do. The setting
-follows the cluster primary. See
-[Let an AI assistant manage records](guides/mcp.md).
+follows the cluster primary.
+
+`group` names the API-only group the wizard's Access step created, so the
+wizard shows it again instead of offering to make another.
+
+`tools` lists the tools assistants are offered. It defaults to the everyday
+tools; the setup wizard's **Tools** step writes it:
+
+```toml
+[mcp]
+tools = ["list_zones", "list_records", "add_record", "set_records", "update_record",
+  "delete_record", "check_domain", "allow_domain", "block_domain",
+  "remove_domain_rule", "list_block_lists", "lookup", "purge_cache",
+  "list_findings"]
+```
+
+The rest start off: `create_zone`, `delete_zone`, `add_block_list`,
+`remove_block_list`, `refresh_block_lists`, and `search_queries`. See
+[Let an AI assistant manage records](guides/mcp.md) for each tool's grant.
+
+An empty list offers no tools. A token still needs each tool's grant.
+
+See [Let an AI assistant manage records](guides/mcp.md).
 
 ## Blocking
 

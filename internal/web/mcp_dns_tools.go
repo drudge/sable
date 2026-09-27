@@ -55,6 +55,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"name"}),
 		Annotations: mcpToolAnnotations{Title: "Look up a name", ReadOnlyHint: true, OpenWorldHint: true},
 		call:        (*Server).mcpLookup,
+		section:     "lookups",
+		grant:       "zones.read",
 	},
 	{
 		Name:  "purge_cache",
@@ -67,6 +69,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"name"}),
 		Annotations: mcpToolAnnotations{Title: "Forget a cached name", IdempotentHint: true},
 		call:        (*Server).mcpPurgeCache,
+		section:     "lookups",
+		grant:       "settings.write",
 	},
 	{
 		Name:  "check_domain",
@@ -79,6 +83,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Check whether a domain is blocked", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpCheckDomain,
+		section:     "blocking",
+		grant:       "blocking.read",
 	},
 	{
 		Name:  "allow_domain",
@@ -90,6 +96,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Allow a domain", IdempotentHint: true},
 		call:        (*Server).mcpAllowDomain,
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 	{
 		Name:  "block_domain",
@@ -101,6 +109,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Block a domain", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpBlockDomain,
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 	{
 		Name:  "remove_domain_rule",
@@ -112,6 +122,8 @@ var mcpDNSTools = []mcpTool{
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Remove a domain from the allow and block lists", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpRemoveDomainRule,
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 }
 

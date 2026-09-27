@@ -3,11 +3,14 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/miekg/dns"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +18,9 @@ import (
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/querylog"
+	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -61,7 +67,7 @@ func mcpTestZone(id, name, zoneType string) zonemodel.Zone {
 func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 	t.Helper()
 	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
-	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true}
+	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, Tools: config.DefaultMCPTools()}
 	configuration.zoneSnapshot.Zones = []zonemodel.Zone{
 		mcpTestZone("zone-example", "example.test", "primary"),
 		mcpTestZone("zone-other", "other.test", "primary"),
@@ -77,6 +83,7 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 			{Permission: auth.PermissionZonesCreate, Surface: auth.SurfaceAPI},
 			mcpZoneGrant(auth.PermissionZonesRead, "zone-example"),
 		}},
+		"sable_pat_logs":     {UserID: 7, Username: "analyst", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionLogsRead}},
 		"sable_pat_metrics":  {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
 		"sable_pat_blocking": {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
 		"sable_pat_scoped": {UserID: 3, Username: "deploy", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Grants: []auth.Grant{
@@ -88,13 +95,50 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		mcpTestStats{testStats: testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}}},
 		configuration, validatingTestZoneStore{configuration.zoneStore()}, "sqlite",
-		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil },
+		testQueryLog{}, &mcpTestQueries{}, func(context.Context) error { return nil },
 		authenticator, true, false, false,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return server, configuration
+}
+
+// mcpTestQueries keeps the last MCP use in memory the way the store keeps it
+// in its metadata table.
+type mcpTestQueries struct {
+	testQueryLog
+	mu     sync.Mutex
+	use    store.MCPUse
+	filter querylog.Filter
+}
+
+func (queries *mcpTestQueries) LoadMCPUse(context.Context) (store.MCPUse, error) {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	return queries.use, nil
+}
+
+// QueryEvents answers the query log search with two lookups from one device
+// and remembers the filter it was asked for.
+func (queries *mcpTestQueries) QueryEvents(_ context.Context, filter querylog.Filter) (querylog.Page, error) {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	queries.filter = filter
+	now := time.Now()
+	return querylog.Page{TotalEntries: 2, Entries: []querylog.Entry{
+		{ID: 2, Event: querylog.Event{OccurredAt: now, ClientIP: "10.99.7.20", Name: "ads.example", RecordType: dns.TypeA,
+			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Decision: querylog.Decision{PolicyRule: "ads.example"}}},
+		{ID: 1, Event: querylog.Event{OccurredAt: now.Add(-time.Minute), ClientIP: "10.99.7.20", Name: "www.example.com", RecordType: dns.TypeAAAA,
+			Source: querylog.SourceUpstream, Answer: "2001:db8::1", Duration: 1500 * time.Microsecond}},
+	}}, nil
+}
+
+func (queries *mcpTestQueries) SaveMCPUse(_ context.Context, use store.MCPUse) error {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	queries.use = use
+	return nil
 }
 
 type mcpTestReply struct {
@@ -192,7 +236,7 @@ func TestMCPHandshake(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,create_zone,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule" {
+	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings" {
 		t.Fatalf("tools = %v", names)
 	}
 
@@ -448,6 +492,7 @@ func TestMCPReplicaServesReadsOnly(t *testing.T) {
 func TestMCPCreateZone(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
+	addMCPTools(configuration, "create_zone", "delete_zone")
 
 	created, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "New.Test.", "default_ttl": 600})
 	if failure != "" || created["zone"] != "new.test" || created["message"] != "Zone created" {
@@ -484,7 +529,7 @@ func TestMCPCreateZone(t *testing.T) {
 func TestMCPIsOffUntilSetUp(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP = config.MCP{}
+	configuration.snapshot.Config.MCP = config.MCP{Tools: config.DefaultMCPTools()}
 	ping := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
 
 	if reply := postMCP(t, server, "sable_pat_admin", ping); reply.status != http.StatusNotFound || reply.body["error"] != mcpDisabledMessage {
@@ -579,4 +624,71 @@ func TestMCPAddressPrefersPrimaryHTTPS(t *testing.T) {
 	if address, secure := server.mcpAddress(request.Context(), request); address != "https://ns1.penree.example:5443/mcp" || !secure {
 		t.Fatalf("cluster address = %s secure=%t", address, secure)
 	}
+}
+
+func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
+	t.Parallel()
+	server, _ := newMCPTestServer(t)
+	card := func() string {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/integrations", nil)
+		response := httptest.NewRecorder()
+		if err := pages.MCPCard(server.integrationsView(request, "", "").MCP).Render(request.Context(), response); err != nil {
+			t.Fatal(err)
+		}
+		return response.Body.String()
+	}
+	before := card()
+	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList(config.MCP{Tools: config.DefaultMCPTools()})))) || !strings.Contains(before, ">Never<") {
+		t.Fatalf("card before any call lacks the tool count or Never")
+	}
+
+	// Listing tools is the client probing; only a tool call counts as use.
+	postMCP(t, server, "sable_pat_admin", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	if !strings.Contains(card(), ">Never<") {
+		t.Fatal("tools/list counted as use")
+	}
+
+	request := httptest.NewRequest(http.MethodPost, mcpPath, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_zones","arguments":{}}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer sable_pat_scoped")
+	request.Header.Set("User-Agent", "claude-code/2.1.0 (cli)")
+	server.httpServer.Handler.ServeHTTP(httptest.NewRecorder(), request)
+	after := card()
+	if strings.Contains(after, ">Never<") || !strings.Contains(after, "deploy with claude-code, list_zones") {
+		t.Fatalf("card after a call does not show the use")
+	}
+	if !strings.Contains(after, `Calls today</span><span class="integration-fact-value">1<`) {
+		t.Fatal("card does not count the call")
+	}
+	// Concurrent calls must each be counted, not overwrite one another.
+	var wait sync.WaitGroup
+	for range 5 {
+		wait.Go(func() {
+			postMCP(t, server, "sable_pat_scoped", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_zones","arguments":{}}}`)
+		})
+	}
+	wait.Wait()
+	if !strings.Contains(card(), `Calls today</span><span class="integration-fact-value">6<`) {
+		t.Fatal("concurrent calls were not all counted")
+	}
+}
+
+func TestMCPClientName(t *testing.T) {
+	t.Parallel()
+	for userAgent, want := range map[string]string{
+		"claude-code/2.1.0 (cli)": "claude-code",
+		"codex_cli_rs/0.40.0":     "codex_cli_rs",
+		"node":                    "node",
+		"":                        "",
+	} {
+		if got := mcpClientName(userAgent); got != want {
+			t.Errorf("mcpClientName(%q) = %q, want %q", userAgent, got, want)
+		}
+	}
+}
+
+// addMCPTools turns on tools beyond the defaults.
+func addMCPTools(configuration *editableTestConfiguration, groups ...string) {
+	configuration.snapshot.Config.MCP.Tools = append(configuration.snapshot.Config.MCP.Tools, groups...)
 }
