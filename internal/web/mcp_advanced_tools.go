@@ -25,11 +25,11 @@ const (
 	mcpMaximumQueryHours = 24 * 31
 )
 
-// mcpOptionalTools are offered only when their switch on the MCP Server card
-// is on. Each reaches further than records and blocking rules: deleting a
+// mcpAdvancedTools are offered only when their switch in the setup dialog is
+// on. Each reaches further than records and blocking rules: deleting a
 // zone cannot be undone from the console, lists change blocking for every
 // device, and Insights and the query log describe what each device does.
-var mcpOptionalTools = []mcpTool{
+var mcpAdvancedTools = []mcpTool{
 	{
 		Name:  "delete_zone",
 		Title: "Delete a zone",

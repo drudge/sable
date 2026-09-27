@@ -145,7 +145,7 @@ type Config struct {
 type MCP struct {
 	Configured bool `toml:"configured"`
 	Enabled    bool `toml:"enabled"`
-	// Optional tools reach further than records and blocking rules, so each
+	// Advanced tools reach further than records and blocking rules, so each
 	// stays hidden from assistants until an operator turns it on. A token
 	// still needs the matching grant to use one.
 	DeleteZones     bool `toml:"delete_zones"`

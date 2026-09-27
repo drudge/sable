@@ -27,7 +27,7 @@ type MCPAppView struct {
 	Setup            bool
 	Tools            int
 	CallsToday       int
-	// Optional tools the operator turned on.
+	// Advanced tools the operator turned on.
 	DeleteZones     bool
 	BlockLists      bool
 	InsightFindings bool
@@ -669,7 +669,7 @@ templ MCPCard(view MCPAppView) {
 	</section>
 }
 
-// MCPToolSwitch is one optional tool group, with the token grants it needs
+// MCPToolSwitch is one advanced tool group, with the token grants it needs
 // shown as badges.
 templ MCPToolSwitch(name, title, description string, requires []string, on bool) {
 	<label class="field-control switch-row setting-switch-row">
@@ -699,52 +699,13 @@ templ RemoveMCPDialog() {
 }
 
 templ MCPSetupDialog(view MCPAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-auto-open="true">
+	<dialog class="custom-server-dialog isotope-form-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-tabs data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="mcp-setup-title">Set Up MCP Server</h2><p>Let AI assistants manage DNS with an API token</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
-		<form hx-post="/ui/integrations/mcp/setup" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-		<div class="isotope-dialog-body">
-			<section class="wizard-panel compact">
-				<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
-				<div class="about-code-block">
-					<pre id="mcp-setup-address">{ view.Address }</pre>
-					<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@CopyIcons()</button>
-				</div>
-				if !view.Secure && !view.SecurityDisabled {
-					<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></p></div>
-				}
-			</section>
-			<section class="wizard-panel compact">
-				<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>API Token</strong><small>Give each assistant its own token so you can revoke one without breaking the others.</small></div></div>
-				if view.SecurityDisabled {
-					<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, and so can anyone else who reaches it.</span></p></div>
-				} else {
-					<p class="field-help">Add yourself to the built-in <strong>MCP Client</strong> group in <a class="inline-link" href="/administration?tab=users" target="_blank" rel="noopener">Administration</a>, then create a token in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a> that selects it. Store the token as <code>SABLE_API_TOKEN</code>.</p>
-				}
-			</section>
-			<section class="wizard-panel compact mcp-client-tabs" data-dialog-tabs>
-				<div class="wizard-heading compact"><span>@Icon("terminal")</span><div><strong>Connect Your Assistant</strong><small>Pick the app you use and paste its setup.</small></div></div>
-				<div class="dialog-tab-list four" role="tablist" aria-label="Assistant app">
-					<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="claude-code">Claude Code</button>
-					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="claude-desktop">Claude Desktop</button>
-					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="chatgpt">ChatGPT</button>
-					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="cursor">Cursor</button>
-				</div>
-				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-code">
-					@MCPClientSnippet("Claude Code", "mcp-setup-claude-code", mcpClaudeCodeSnippet(view.Address), "Run this in a terminal where SABLE_API_TOKEN is set.")
-				</div>
-				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-desktop" hidden>
-					@MCPClientSnippet("Claude Desktop", "mcp-setup-claude-desktop", mcpClaudeDesktopSnippet(view.Address), "Open Settings, Developer, Edit Config, add this to claude_desktop_config.json, put your token in place of the placeholder, and restart Claude. It uses Node.js to reach Sable from this computer; the Connectors screen cannot reach a server on your own network.")
-				</div>
-				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="chatgpt" hidden>
-					@MCPClientSnippet("ChatGPT", "mcp-setup-chatgpt", mcpCodexSnippet(view.Address), "Add this to ~/.codex/config.toml, or use Settings, MCP servers, Add server in the ChatGPT desktop app with Streamable HTTP. ChatGPT and Codex share that file. An app opened from the Dock may not see SABLE_API_TOKEN; if the server will not connect, swap the last line for http_headers = { Authorization = \"Bearer <your token>\" }.")
-				</div>
-				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="cursor" hidden>
-					@MCPClientSnippet("Cursor", "mcp-setup-cursor", mcpCursorSnippet(view.Address), "Add this to .cursor/mcp.json in your project, or to ~/.cursor/mcp.json to use it everywhere.")
-				</div>
-			</section>
-			<section class="wizard-panel compact">
-				<div class="wizard-heading compact"><span>@Icon("sliders")</span><div><strong>Optional Tools</strong><small>Off unless you turn them on. Assistants see changes the next time they connect.</small></div></div>
+		<div class="dialog-tab-list" role="tablist" aria-label="MCP server setup"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="tools">Advanced Tools</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="connect">Connect</button></div>
+		<form class="mcp-setup-form" hx-post="/ui/integrations/mcp/setup" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools">
+				<p class="field-help">Records, lookups, and blocking rules are always on. These reach further, so each stays off until you turn it on. Assistants see changes the next time they connect.</p>
 				<div class="mcp-tools-options">
 					@MCPToolSwitch("delete_zones", "Delete Zones", "Delete zones an assistant created through MCP.", []string{"zones.delete"}, view.DeleteZones)
 					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, view.BlockLists)
@@ -752,8 +713,45 @@ templ MCPSetupDialog(view MCPAppView) {
 					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, view.QueryLog)
 				</div>
 			</section>
-		</div>
-		<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button></div>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="connect" hidden>
+				<section class="wizard-panel compact">
+					<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
+					<div class="about-code-block">
+						<pre id="mcp-setup-address">{ view.Address }</pre>
+						<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@CopyIcons()</button>
+					</div>
+					if !view.Secure && !view.SecurityDisabled {
+						<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></p></div>
+					}
+				</section>
+				<section class="wizard-panel compact mcp-client-tabs" data-dialog-tabs>
+					<div class="wizard-heading compact"><span>@Icon("terminal")</span><div><strong>Connect Your Assistant</strong><small>Pick the app you use and paste its setup.</small></div></div>
+					if view.SecurityDisabled {
+						<p class="field-help">Sign-in is off on this server, so no token is needed.</p>
+					} else {
+						<p class="field-help">Each app reads a token from <code>SABLE_API_TOKEN</code>. Create one in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a> that uses the built-in <strong>MCP Client</strong> group.</p>
+					}
+					<div class="dialog-tab-list four" role="tablist" aria-label="Assistant app">
+						<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="claude-code">Claude Code</button>
+						<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="claude-desktop">Claude Desktop</button>
+						<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="chatgpt">ChatGPT</button>
+						<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="cursor">Cursor</button>
+					</div>
+					<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-code">
+						@MCPClientSnippet("Claude Code", "mcp-setup-claude-code", mcpClaudeCodeSnippet(view.Address), "Run this in a terminal where SABLE_API_TOKEN is set.")
+					</div>
+					<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-desktop" hidden>
+						@MCPClientSnippet("Claude Desktop", "mcp-setup-claude-desktop", mcpClaudeDesktopSnippet(view.Address), "Open Settings, Developer, Edit Config, add this to claude_desktop_config.json, put your token in place of the placeholder, and restart Claude. It uses Node.js to reach Sable from this computer; the Connectors screen cannot reach a server on your own network.")
+					</div>
+					<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="chatgpt" hidden>
+						@MCPClientSnippet("ChatGPT", "mcp-setup-chatgpt", mcpCodexSnippet(view.Address), "Add this to ~/.codex/config.toml, or use Settings, MCP servers, Add server in the ChatGPT desktop app with Streamable HTTP. ChatGPT and Codex share that file. An app opened from the Dock may not see SABLE_API_TOKEN; if the server will not connect, swap the last line for http_headers = { Authorization = \"Bearer <your token>\" }.")
+					</div>
+					<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="cursor" hidden>
+						@MCPClientSnippet("Cursor", "mcp-setup-cursor", mcpCursorSnippet(view.Address), "Add this to .cursor/mcp.json in your project, or to ~/.cursor/mcp.json to use it everywhere.")
+					</div>
+				</section>
+			</section>
+			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button></div>
 		</form>
 	</dialog>
 }

@@ -274,7 +274,7 @@ secret_key_file = "data/sable.key"
 # in with an API token, and the token's groups decide what they may touch. Set
 # it up from Integrations -> MCP Server in the console. configured stays true
 # while it is paused.
-# The optional tools stay hidden from assistants until turned on, and a token
+# The advanced tools stay hidden from assistants until turned on, and a token
 # still needs the matching grant: zones.delete, blocking.write, or logs.read.
 [mcp]
 configured = false

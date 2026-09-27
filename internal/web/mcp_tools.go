@@ -184,7 +184,7 @@ var mcpCreateZoneTool = mcpTool{
 
 // mcpAllTools is every tool Sable has, whether or not it is switched on.
 func mcpAllTools() []mcpTool {
-	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools, mcpOptionalTools)
+	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools, mcpAdvancedTools)
 }
 
 // mcpToolList is what assistants are offered with these settings.

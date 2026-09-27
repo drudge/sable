@@ -22,13 +22,13 @@ func mcpListedTools(t *testing.T, server *Server) []string {
 	return names
 }
 
-func TestMCPOptionalToolsStayHiddenUntilTurnedOn(t *testing.T) {
+func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	optional := []string{"delete_zone", "list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists", "list_findings", "search_queries"}
+	advanced := []string{"delete_zone", "list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists", "list_findings", "search_queries"}
 
 	listed := strings.Join(mcpListedTools(t, server), ",")
-	for _, name := range optional {
+	for _, name := range advanced {
 		if strings.Contains(listed, name) {
 			t.Fatalf("%s offered while its option is off: %s", name, listed)
 		}
@@ -141,7 +141,7 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	}
 }
 
-func TestMCPSetupDialogSavesOptionalTools(t *testing.T) {
+func TestMCPSetupDialogSavesAdvancedTools(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
 	save := func(form string) string {

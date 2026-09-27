@@ -3237,7 +3237,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.certificate-renew-button { width: 100%; }
 	.certificate-detail-grid { grid-template-columns: 1fr; }
   .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
-	.isotope-form-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog, .isotope-form-dialog.mcp-setup-dialog { width: calc(100% - 1rem); }
 	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
@@ -3401,7 +3401,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-plan-records .admin-desktop-table { max-height: 18rem; overflow-y: auto; margin-top: .6rem; }
 .unifi-skipped ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.6; }
 .unifi-wizard-dialog { width: min(56rem, calc(100% - 3rem)); }
-.unifi-wizard-dialog.mcp-setup-dialog { width: min(38rem, calc(100% - 3rem)); }
+.isotope-form-dialog.mcp-setup-dialog { width: min(38rem, calc(100% - 3rem)); }
+.mcp-setup-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100dvh - 2rem); }
+.mcp-setup-form { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.mcp-setup-form > .dialog-tab-panel { overflow-y: auto; }
 /* Only the step panel scrolls. Without bounding the form the dialog itself
    grows past its max-height and drags the footer off screen. */
 .unifi-wizard-dialog[open] { grid-template-rows: auto minmax(0, 1fr); }
@@ -3518,7 +3521,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.unifi-connection dl > div:first-child { border-top: 0; padding-top: 0; }
 	.unifi-auth-modes { grid-template-columns: 1fr; }
 	.unifi-zone-fields { grid-template-columns: 1fr; }
-	.unifi-wizard-dialog, .unifi-wizard-dialog.mcp-setup-dialog { width: calc(100% - 1rem); }
+	.unifi-wizard-dialog { width: calc(100% - 1rem); }
 	.unifi-wizard-dialog .wizard-progress { margin-inline: -1rem; padding-inline: 1rem; }
 	.unifi-wizard-dialog .wizard-footer { margin: 0 -1rem -1rem; padding-inline: 1rem; }
 	.wizard-footer { align-items: stretch; flex-direction: column-reverse; }

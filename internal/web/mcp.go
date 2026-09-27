@@ -308,7 +308,7 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 }
 
 // saveMCPSetup saves the setup dialog. The first save sets the server up
-// and turns it on; later saves change only the optional tools, so editing
+// and turns it on; later saves change only the advanced tools, so editing
 // the setup never resumes a paused server. Like the server itself it is
 // cluster-wide, so only the primary accepts it.
 func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Request) {
@@ -339,16 +339,16 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	slices.Sort(enabled)
-	details := "optional MCP tools: none"
+	details := "advanced MCP tools: none"
 	if len(enabled) > 0 {
-		details = "optional MCP tools: " + strings.Join(enabled, ", ")
+		details = "advanced MCP tools: " + strings.Join(enabled, ", ")
 	}
 	action, message := "integrations.mcp.configure", "MCP server saved. Assistants see changes the next time they connect."
 	if settingUp {
 		action, message = "integrations.mcp.setup", "MCP server set up."
 	}
 	writer.Header().Set("HX-Replace-Url", "/integrations")
-	server.logger.Info("MCP server saved", "set_up", settingUp, "optional_tools", strings.Join(enabled, ","), "client", requestClientIP(request))
+	server.logger.Info("MCP server saved", "set_up", settingUp, "advanced_tools", strings.Join(enabled, ","), "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, action, details)
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
