@@ -310,6 +310,16 @@ button { cursor: pointer; }
 
 .main { min-width: 0; flex: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 1rem; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
 .mobile-header { display: none; }
+/* Home Screen apps get no refresh gesture from iOS, so the console draws its
+   own: a chip that slides out from under the header with the finger and spins
+   once the pull is far enough to reload. It sits just below the header's layer
+   so it stays hidden until it clears it. */
+.pull-refresh { position: fixed; top: 0; left: 50%; z-index: 14; display: none; width: 2.5rem; height: 2.5rem; place-items: center; margin-left: -1.25rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .24); pointer-events: none; }
+.pull-refresh.is-active { display: grid; }
+.pull-refresh.is-settling { transition: transform 180ms ease, opacity 180ms ease; }
+.pull-refresh.is-ready, .pull-refresh.is-refreshing { color: var(--foreground); }
+.pull-refresh .nav-icon { width: 1.25rem; height: 1.25rem; }
+.pull-refresh.is-refreshing .nav-icon { animation: blocking-refresh-spin .8s linear infinite; }
 .content { width: 100%; padding: 1.5rem; }
 .dashboard-page { display: grid; gap: 1rem; }
 .dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: .5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }

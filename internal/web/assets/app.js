@@ -3851,6 +3851,106 @@
       });
     })();
 
+    // Safari gives pages pull to refresh, but a console added to the Home
+    // Screen opens without it. There the same gesture is drawn here: pulling
+    // down from the top of the page brings a chip down with the finger, and
+    // letting go once it has turned all the way reloads the page.
+    (() => {
+      const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+      if (!standalone) return;
+      // The chip travels half as far as the finger, like the page's own
+      // rubber band, and reloads once it has come this far down.
+      const trigger = 72;
+      const maximum = 112;
+      const restingOffset = -48;
+      let pull = null;
+      const indicator = () => document.querySelector("[data-pull-refresh]");
+      // The chip rests tucked under the bars stuck to the top of the page and
+      // slides out from beneath them, following them as the page bounces.
+      const anchor = () => Math.max(0, ...Array.from(
+        document.querySelectorAll("[data-mobile-header], .replica-read-only-banner"),
+        (bar) => bar.getBoundingClientRect().bottom,
+      ));
+      const place = (chip, travel) => {
+        const progress = Math.min(1, travel / trigger);
+        chip.style.opacity = String(progress);
+        chip.style.transform = `translate3d(0, ${anchor() + restingOffset + travel}px, 0) rotate(${progress * 270}deg)`;
+        chip.classList.toggle("is-ready", travel >= trigger);
+      };
+      const settle = (chip) => {
+        chip.classList.remove("is-ready");
+        chip.classList.add("is-settling");
+        place(chip, 0);
+        window.setTimeout(() => {
+          if (pull) return;
+          chip.classList.remove("is-active", "is-settling");
+          chip.style.removeProperty("opacity");
+          chip.style.removeProperty("transform");
+        }, 180);
+      };
+      // A finger that starts inside a list scrolled away from its own top is
+      // scrolling that list back up, not asking for a reload.
+      const insideScrolledArea = (target) => {
+        for (let element = target instanceof Element ? target : null; element && element !== document.body; element = element.parentElement) {
+          if (element.scrollTop > 0) return true;
+        }
+        return false;
+      };
+      const blocked = () => document.documentElement.classList.contains("sidebar-mobile-open") ||
+        document.querySelector("dialog[open]") !== null;
+      document.addEventListener("touchstart", (event) => {
+        pull = null;
+        const chip = indicator();
+        if (!chip || chip.classList.contains("is-refreshing") || event.touches.length !== 1) return;
+        if (window.scrollY > 0 || blocked() || insideScrolledArea(event.target)) return;
+        const touch = event.touches[0];
+        pull = { chip, startX: touch.clientX, startY: touch.clientY, travel: 0, decided: false };
+      }, { passive: true });
+      document.addEventListener("touchmove", (event) => {
+        if (!pull) return;
+        const touch = event.touches[0];
+        const dx = touch.clientX - pull.startX;
+        const dy = touch.clientY - pull.startY;
+        // The first real move decides the gesture: sideways swipes and upward
+        // scrolls are left alone for the rest of the touch.
+        if (!pull.decided) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          if (dy <= 0 || Math.abs(dx) > dy) { pull = null; return; }
+          pull.decided = true;
+          pull.chip.classList.remove("is-settling");
+          pull.chip.classList.add("is-active");
+        }
+        if (window.scrollY > 0) {
+          const { chip } = pull;
+          pull = null;
+          settle(chip);
+          return;
+        }
+        pull.travel = Math.min(maximum, Math.max(0, dy / 2));
+        place(pull.chip, pull.travel);
+      }, { passive: true });
+      const release = () => {
+        if (!pull) return;
+        const { chip, travel, decided } = pull;
+        pull = null;
+        if (!decided) return;
+        if (travel < trigger) { settle(chip); return; }
+        chip.classList.remove("is-ready");
+        chip.classList.add("is-settling", "is-refreshing");
+        chip.style.opacity = "1";
+        chip.style.transform = `translate3d(0, ${anchor() + restingOffset + trigger}px, 0) rotate(270deg)`;
+        // Let the spinner show before the page goes away.
+        window.setTimeout(() => window.location.reload(), 150);
+      };
+      document.addEventListener("touchend", release, { passive: true });
+      document.addEventListener("touchcancel", () => {
+        if (!pull) return;
+        const { chip, decided } = pull;
+        pull = null;
+        if (decided) settle(chip);
+      }, { passive: true });
+    })();
+
 	const routedDialogPath = (value) => new URL(value, window.location.origin).pathname;
 	const resetTokenDialog = (dialog) => {
 	  if (dialog?.id !== "create-token-dialog" || dialog.dataset.tokenCreated !== "true") return;
