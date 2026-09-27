@@ -199,10 +199,19 @@ func (server *Server) recordMCPUse(request *http.Request, tool string) {
 	if !ok {
 		return
 	}
-	use := store.MCPUse{At: time.Now().UTC(), Client: mcpClientName(request.UserAgent()), Tool: tool}
+	username := ""
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
-		use.Username = principal.Username
+		username = principal.Username
 	}
+	// Calls are counted by reading, adding one, and saving, so concurrent
+	// calls take turns rather than overwrite each other's count.
+	server.mcpUseMu.Lock()
+	defer server.mcpUseMu.Unlock()
+	use, err := uses.LoadMCPUse(request.Context())
+	if err != nil {
+		server.logger.Warn("load MCP use", "error", err)
+	}
+	use.RecordCall(time.Now(), username, mcpClientName(request.UserAgent()), tool)
 	if err := uses.SaveMCPUse(request.Context(), use); err != nil {
 		server.logger.Warn("record MCP use", "error", err)
 	}

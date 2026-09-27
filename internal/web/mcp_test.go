@@ -638,6 +638,20 @@ func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
 	if strings.Contains(after, ">Never<") || !strings.Contains(after, "deploy with claude-code, list_zones") {
 		t.Fatalf("card after a call does not show the use")
 	}
+	if !strings.Contains(after, `Calls today</span><span class="integration-fact-value">1<`) {
+		t.Fatal("card does not count the call")
+	}
+	// Concurrent calls must each be counted, not overwrite one another.
+	var wait sync.WaitGroup
+	for range 5 {
+		wait.Go(func() {
+			postMCP(t, server, "sable_pat_scoped", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_zones","arguments":{}}}`)
+		})
+	}
+	wait.Wait()
+	if !strings.Contains(card(), `Calls today</span><span class="integration-fact-value">6<`) {
+		t.Fatal("concurrent calls were not all counted")
+	}
 }
 
 func TestMCPClientName(t *testing.T) {

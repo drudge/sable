@@ -51,6 +51,7 @@ const (
 )
 
 type Server struct {
+	mcpUseMu      sync.Mutex
 	httpServer    *http.Server
 	listener      net.Listener
 	httpsListener net.Listener

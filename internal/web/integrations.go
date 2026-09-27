@@ -88,8 +88,11 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 		Tools:     len(mcpToolList()),
 	}
 	if use := server.lastMCPUse(request.Context()); !use.At.IsZero() {
-		view.MCP.LastUsed = pages.FormatShortDateTime(use.At, requestTimeDisplay(request), false)
+		display := requestTimeDisplay(request)
+		view.MCP.LastUsed = pages.FormatShortDateTime(use.At, display, false)
 		view.MCP.LastUsedBy = mcpUseSummary(use)
+		now := display.In(time.Now())
+		view.MCP.CallsToday = use.CallsSince(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()))
 	}
 	if server.unifi == nil {
 		return view

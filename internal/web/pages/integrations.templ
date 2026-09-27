@@ -26,6 +26,7 @@ type MCPAppView struct {
 	SecurityDisabled bool
 	Setup            bool
 	Tools            int
+	CallsToday       int
 	// LastUsed is empty until an assistant calls a tool; LastUsedBy says who
 	// and with which app.
 	LastUsed   string
@@ -630,7 +631,7 @@ templ MCPCard(view MCPAppView) {
 				<a class="button" href="/integrations?setup=mcp" data-replica-primary-action>@Icon("plus")<span>Set Up MCP Server</span></a>
 			</div>
 		} else {
-			<div class="integration-card-body">
+			<div class="integration-card-body mcp-card-body">
 				if view.SecurityDisabled {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Sign-in is off on this server</strong><span>Any program that can reach it can use these tools without a token.</span></div></div>
 				} else if !view.Secure {
@@ -644,6 +645,7 @@ templ MCPCard(view MCPAppView) {
 					</div>
 					<div><span class="integration-fact-label">Sign-in</span><span class="integration-fact-value">{ ifThen(view.SecurityDisabled, "None", "API token") }</span></div>
 					<div><span class="integration-fact-label">Tools</span><span class="integration-fact-value">{ strconv.Itoa(view.Tools) }</span></div>
+					<div><span class="integration-fact-label">Calls today</span><span class="integration-fact-value">{ strconv.Itoa(view.CallsToday) }</span></div>
 					<div title={ view.LastUsedBy }><span class="integration-fact-label">Last used</span><span class="integration-fact-value">{ ifThen(view.LastUsed == "", "Never", view.LastUsed) }</span></div>
 				</div>
 				<div class="integration-card-actions">
