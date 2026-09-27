@@ -40,6 +40,10 @@ The machine Sable runs on is marked **This server**, and the rest of its cluster
 
 Open a device to see its maker, apps, busiest domains, and first-time domains.
 
+### Find a device
+
+Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, or unnamed. The page's address keeps the search and filters, so they last through a range change or a reload.
+
 ### Name a device
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.
