@@ -87,7 +87,7 @@ var makerClues = map[string][]clue{
 // "camera" and "scanner" does not match "can".
 var nameClues = map[string][]clue{
 	"iphone": {{"phone", 5}}, "android": {{"phone", 3}}, "galaxy": {{"phone", 3}}, "pixel": {{"phone", 3}},
-	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}},
+	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}}, "remarkable": {{"tablet", 5}},
 	"macbook": {{"computer", 5}}, "laptop": {{"computer", 5}}, "thinkpad": {{"computer", 5}}, "notebook": {{"computer", 4}},
 	"imac": {{"computer", 5}}, "desktop": {{"computer", 5}}, "workstation": {{"computer", 5}}, "pc": {{"computer", 3}},
 	"surface": {{"computer", 3}}, "mbp": {{"computer", 4}}, "server": {{"server", 5}}, "nas": {{"storage", 5}},
@@ -113,7 +113,7 @@ var serviceClues = map[string][]clue{
 	"eufy": {{"camera", 3}}, "simplisafe": {{"camera", 2}}, "philips-hue": {{"lighting", 3}}, "sonos": {{"speaker", 3}},
 	"roku": {{"streaming-player", 3}}, "fire-tv": {{"streaming-player", 3}}, "chromecast": {{"streaming-player", 3}},
 	"lg-webos": {{"tv", 4}}, "vizio": {{"tv", 4}}, "xbox": {{"game-console", 2}}, "playstation": {{"game-console", 2}},
-	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}}, "bambu-lab": {{"printer", 3}},
+	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}}, "bambu-lab": {{"printer", 3}}, "remarkable": {{"tablet", 3}},
 	"synology": {{"storage", 3}}, "qnap": {{"storage", 3}}, "windows-update": {{"computer", 3}}, "android": {{"phone", 2}},
 	"alexa": {{"smart-speaker", 2}}, "ecobee": {{"thermostat", 3}}, "tuya": {{"smart-home", 2}},
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},

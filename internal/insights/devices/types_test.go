@@ -31,6 +31,8 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"an e-ink display on a smart-home chip", Device{Vendor: "Espressif"}, []string{"trmnl"}, "smart-home", ConfidenceHigh},
 		{"a generator on a cellular module", Device{}, []string{"generac"}, "smart-home", ConfidenceLow},
 		{"a 3D printer named for its model", Device{Name: "Nick's P2S"}, []string{"bambu-lab"}, "printer", ConfidenceLow},
+		{"an e-ink tablet by name and sync", Device{Name: "Remarkable 2", Vendor: "AMPAK"}, []string{"remarkable"}, "tablet", ConfidenceHigh},
+		{"an e-ink tablet's sync alone", Device{}, []string{"remarkable"}, "tablet", ConfidenceLow},
 		{"a weak lean", Device{Vendor: "Dell"}, nil, "computer", ConfidenceLow},
 		{"an operator's type wins", Device{Name: "dock-camera-02", Type: "doorbell"}, nil, "doorbell", ConfidenceSet},
 		{"no clues", Device{Name: "george"}, nil, "", ""},
