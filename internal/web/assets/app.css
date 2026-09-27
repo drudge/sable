@@ -2899,7 +2899,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-copy small { overflow-wrap: anywhere; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
 .update-release-dialog { width: min(42rem, calc(100vw - 2rem)); pointer-events: auto; }
 .update-release-dialog .release-notes-content { margin: 0; padding-right: .25rem; max-height: min(28rem, 60dvh); }
-.about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0; }
+/* The auto margin keeps the actions on the right when they wrap under the
+   summary, instead of hugging the left edge. */
+.about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0 0 0 auto; }
 .about-update-actions:empty { display: none; }
 .about-update-actions > form { margin: 0; }
 .about-update-check-pending { display: none; }
