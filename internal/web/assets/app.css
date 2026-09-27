@@ -1770,9 +1770,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .mcp-tool-title code { font-size: .625rem; }
 /* Read Only takes writes away from some groups; while it is on, say so in
    place rather than silently leaving their switches looking effective. */
-.mcp-tools-options small.mcp-read-only-note { display: none; color: var(--foreground); }
-.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-read-only-note { display: block; }
-.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-tool-writes .mcp-tool-title { opacity: .6; }
+.mcp-tools-options .mcp-read-only-note { display: none; margin-left: auto; }
+.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-read-only-note { display: inline-flex; }
+.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-tool-writes :is(.mcp-tool-title > strong, .table-badges, small) { opacity: .55; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }
