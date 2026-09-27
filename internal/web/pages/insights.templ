@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,9 +55,28 @@ type InsightsOverviewView struct {
 	DevicesUnavailable  bool
 	Devices             []InsightDeviceView
 	DeviceSummary       InsightDeviceSummaryView
+	// DeviceFilter narrows the Devices tab, whose type filter names its types
+	// from DeviceTypeOptions.
+	DeviceFilter      InsightDeviceFilterView
+	DeviceTypeOptions [][2]string
 	// Settings are Insights settings, which the bell opens. Nil hides the
 	// bell from operators who may not read the query log.
 	Settings *InsightSettingsView
+}
+
+// UnknownDeviceType is the Devices tab's type filter for devices whose icon
+// shows no type.
+const UnknownDeviceType = "unknown"
+
+// InsightDeviceFilterView narrows the Devices tab. The page URL keeps it, so
+// the list stays narrowed through a reload, a range change, and the refresh
+// after a device is renamed. An empty field narrows nothing.
+type InsightDeviceFilterView struct {
+	Search string
+	// Type is a device type or UnknownDeviceType.
+	Type string
+	// Show is "new", "named", or "unnamed".
+	Show string
 }
 
 // InsightDeviceView is one device with its traffic in the window.
@@ -516,10 +536,19 @@ templ insightsSkeleton(view InsightsOverviewView) {
 	</div>
 }
 
+// insightDevicesSkeleton holds the search's place too, so the rows do not
+// jump down when it arrives.
 templ insightDevicesSkeleton(rangeLabel string) {
 	<section class="card isotope-data-card insight-devices" role="status" aria-live="polite" aria-busy="true">
 		<span class="sr-only">Loading devices…</span>
 		<header class="isotope-data-header" aria-hidden="true"><div class="ranking-heading"><h2>Devices</h2><small>{ rangeLabel }</small></div></header>
+		<div class="log-search-bar insight-device-search-bar" aria-hidden="true">
+			<span class="insights-skeleton-block"></span>
+			<div class="insight-device-filter-selects">
+				<span class="insight-device-type-filter insights-skeleton-block"></span>
+				<span class="insights-skeleton-block"></span>
+			</div>
+		</div>
 		for range 6 {
 			<div class="insight-finding" aria-hidden="true">
 				<span class="insight-finding-icon insights-skeleton-block"></span>
@@ -1115,12 +1144,110 @@ templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, wind
 		}
 	</div>
 }
+
+// insightDeviceFilters narrow the list in place, since a network can have
+// hundreds of devices: by search, by the type each row's icon shows, and by
+// whether a device is new or has a name. They sit under the card's heading,
+// as Query Logs' search does.
+templ insightDeviceFilters(view InsightsOverviewView) {
+	<div class="log-search-bar insight-device-search-bar">
+		@SearchField("Search devices", "Search devices...", view.DeviceFilter.Search, "", templ.Attributes{"data-device-search": true})
+		<div class="insight-device-filter-selects">
+			<label class="insight-device-type-filter">
+				<span class="sr-only">Device type</span>
+				<select data-device-type-filter data-styled-select>
+					<option value="" selected?={ view.DeviceFilter.Type == "" }>All Types</option>
+					for _, choice := range insightDeviceTypeChoices(view) {
+						<option value={ choice[0] } selected?={ view.DeviceFilter.Type == choice[0] }>{ choice[1] }</option>
+					}
+				</select>
+				// The list shows each type with the icon its rows start with.
+				<template data-option-icon="">@Icon("layers")</template>
+				for _, choice := range insightDeviceTypeChoices(view) {
+					<template data-option-icon={ choice[0] }>@Icon(insightTypeIcon(choice[0]))</template>
+				}
+			</label>
+			<label>
+				<span class="sr-only">Show devices</span>
+				<select data-device-show-filter data-styled-select>
+					for _, choice := range insightDeviceShowChoices {
+						<option value={ choice[0] } selected?={ view.DeviceFilter.Show == choice[0] }>{ choice[1] }</option>
+					}
+				</select>
+			</label>
+		</div>
+	</div>
+}
+
+var insightDeviceShowChoices = [][2]string{{"", "All Devices"}, {"new", "New"}, {"named", "Named"}, {"unnamed", "Unnamed"}}
+
+// insightDeviceTypeChoices are the types the type filter offers: those its
+// devices show, in the type picker's order, then Unknown. A type chosen
+// before a range change left no device of it stays on offer, so the filter
+// still says what it is hiding.
+func insightDeviceTypeChoices(view InsightsOverviewView) [][2]string {
+	shown := map[string]bool{view.DeviceFilter.Type: true}
+	for _, device := range view.Devices {
+		shown[insightDeviceFilterType(device)] = true
+	}
+	choices := make([][2]string, 0, len(shown))
+	for _, option := range view.DeviceTypeOptions {
+		if shown[option[0]] {
+			choices = append(choices, option)
+		}
+	}
+	if shown[UnknownDeviceType] {
+		choices = append(choices, [2]string{UnknownDeviceType, "Unknown"})
+	}
+	return choices
+}
+
+// insightDeviceFilterAttributes carry what the filters match a row on. The
+// phone and desktop rows both carry them, so each list narrows itself.
+func insightDeviceFilterAttributes(device InsightDeviceView) templ.Attributes {
+	tags := ifThen(device.Named, "named", "unnamed")
+	if device.New {
+		tags = "new " + tags
+	}
+	return templ.Attributes{
+		"data-device-row": true, "data-device-text": insightDeviceSearchText(device),
+		"data-device-type": insightDeviceFilterType(device), "data-device-tags": tags,
+	}
+}
+
+// insightDeviceSearchText is what a search finds a device by: its name and
+// addresses, and the maker, name source, and type the page shows for it.
+func insightDeviceSearchText(device InsightDeviceView) string {
+	var words []string
+	// An unnamed device goes by one of its addresses, which follow.
+	if device.Named {
+		words = append(words, device.Label)
+	}
+	words = append(words, device.MAC, device.Vendor, device.NameSource, device.Server)
+	for _, address := range device.Addresses {
+		words = append(words, address.Address)
+	}
+	if insightDeviceShownType(device) != "" {
+		words = append(words, device.TypeLabel)
+	}
+	return strings.ToLower(strings.Join(slices.DeleteFunc(words, func(word string) bool { return word == "" }), " "))
+}
+
+// insightDeviceFilterType is the type a row's icon shows, which the type
+// filter matches.
+func insightDeviceFilterType(device InsightDeviceView) string {
+	if kind := insightDeviceShownType(device); kind != "" {
+		return kind
+	}
+	return UnknownDeviceType
+}
+
 templ InsightDevices(view InsightsOverviewView) {
-	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title">
+	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title" data-device-filter-root>
 		<header class="isotope-data-header">
 			<div class="ranking-heading"><h2 id="insight-devices-title">Devices</h2><small>{ view.RangeLabel }</small></div>
 			if len(view.Devices) > 0 {
-				<span class="count-badge">{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
+				<span class="count-badge" data-device-count={ fmt.Sprint(len(view.Devices)) }>{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
 			}
 		</header>
 		if view.DevicesUnavailable {
@@ -1136,9 +1263,10 @@ templ InsightDevices(view InsightsOverviewView) {
 				<p>Devices appear here once they send queries that Sable records in query history.</p>
 			</div>
 		} else {
-			<div class="admin-mobile-list insight-device-mobile">
+			@insightDeviceFilters(view)
+			<div class="admin-mobile-list insight-device-mobile" data-device-results>
 				for _, device := range view.Devices {
-					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>
+					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label } { insightDeviceFilterAttributes(device)... }>
 						@insightTypeTile(device)
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
@@ -1149,7 +1277,7 @@ templ InsightDevices(view InsightsOverviewView) {
 					</button>
 				}
 			</div>
-			<div class="admin-desktop-table">
+			<div class="admin-desktop-table" data-device-results>
 				<table class="isotope-table insight-device-table">
 					<caption class="sr-only">Devices with queries in this period</caption>
 					<thead>
@@ -1165,7 +1293,7 @@ templ InsightDevices(view InsightsOverviewView) {
 					</thead>
 					<tbody>
 						for _, device := range view.Devices {
-							<tr data-row-opener>
+							<tr data-row-opener { insightDeviceFilterAttributes(device)... }>
 								<th scope="row">
 									<span class="insight-device-heading">
 										@insightTypeTile(device)
@@ -1185,6 +1313,11 @@ templ InsightDevices(view InsightsOverviewView) {
 						}
 					</tbody>
 				</table>
+			</div>
+			<div class="insight-section-empty" hidden data-device-filter-empty>
+				@Icon("search")
+				<strong>No devices match</strong>
+				<button class="button outline compact" type="button" data-device-filter-clear>Clear Filters</button>
 			</div>
 			<footer class="insight-card-note">
 				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
@@ -1683,13 +1816,18 @@ templ insightTypeTile(device InsightDeviceView) {
 	<span class="insight-type-tile" role="img" aria-label={ insightTypeTitle(device) } title={ insightTypeTitle(device) }>@Icon(insightDeviceIcon(device))</span>
 }
 
-// insightDeviceIcon is the icon for what a device is. A guess Sable is unsure
-// of shows a plain device, so the icon never claims more than Sable knows.
+// insightDeviceIcon is the icon for what a device is.
 func insightDeviceIcon(device InsightDeviceView) string {
+	return insightTypeIcon(insightDeviceShownType(device))
+}
+
+// insightDeviceShownType is the type a device's icon shows. A guess Sable is
+// unsure of shows none, so the icon never claims more than Sable knows.
+func insightDeviceShownType(device InsightDeviceView) string {
 	if device.TypeConfidence == "low" {
-		return insightTypeIcon("")
+		return ""
 	}
-	return insightTypeIcon(device.Type)
+	return device.Type
 }
 
 // insightTypeTitle is a device's type in words, for the icon that shows it.

@@ -3084,6 +3084,48 @@
 	  if (total) total.textContent = `${hits.toLocaleString()} hits`;
 	  if (dialog.open && dialog.contains(document.activeElement)) announce(`${visible.toLocaleString()} results shown`);
 	};
+
+	// Insights narrows its Devices list in place. The page URL keeps the search
+	// and filters, so a reload, a range change, and the refresh after a rename
+	// render them back. The URL and the announcement wait for a pause in typing,
+	// since Safari limits how often a page may rewrite its URL.
+	const deviceFilterTimers = new WeakMap();
+	const applyDeviceFilter = (root, changed = false) => {
+	  if (!root) return;
+	  const search = root.querySelector("[data-device-search]")?.value.trim() || "";
+	  const type = root.querySelector("[data-device-type-filter]")?.value || "";
+	  const show = root.querySelector("[data-device-show-filter]")?.value || "";
+	  const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+	  let visible = 0;
+	  root.querySelectorAll("[data-device-row]").forEach((row) => {
+		const matches = terms.every((term) => row.dataset.deviceText.includes(term)) &&
+		  (!type || row.dataset.deviceType === type) &&
+		  (!show || row.dataset.deviceTags.split(" ").includes(show));
+		row.hidden = !matches;
+		// The phone and desktop lists hold the same devices, so count one.
+		if (matches && row.matches("tr")) visible++;
+	  });
+	  root.querySelectorAll("[data-device-results]").forEach((list) => { list.hidden = visible === 0; });
+	  const empty = root.querySelector("[data-device-filter-empty]");
+	  if (empty) empty.hidden = visible !== 0;
+	  const count = root.querySelector("[data-device-count]");
+	  if (count) {
+		const total = Number(count.dataset.deviceCount) || 0;
+		const noun = total === 1 ? "device" : "devices";
+		count.textContent = search || type || show ? `${visible.toLocaleString()} of ${total.toLocaleString()} ${noun}` : `${total.toLocaleString()} ${noun}`;
+	  }
+	  if (!changed) return;
+	  window.clearTimeout(deviceFilterTimers.get(root));
+	  deviceFilterTimers.set(root, window.setTimeout(() => {
+		const url = new URL(window.location.href);
+		for (const [parameter, value] of [["search", search], ["type", type], ["show", show]]) {
+		  if (value) url.searchParams.set(parameter, value);
+		  else url.searchParams.delete(parameter);
+		}
+		window.history.replaceState(window.history.state, "", url);
+		announce(`${visible.toLocaleString()} ${visible === 1 ? "device" : "devices"} shown`);
+	  }, 300));
+	};
 	let dialogLabelSequence = 0;
 	const setupDialogAccessibility = (dialog) => {
 	  if (!dialog || dialog.dataset.dialogA11yReady === "true") return;
@@ -3195,6 +3237,8 @@
 	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
 	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
 	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
+	  if (root.matches?.("[data-device-filter-root]")) applyDeviceFilter(root);
+	  root.querySelectorAll?.("[data-device-filter-root]").forEach((list) => applyDeviceFilter(list));
 	  if (root.matches?.('input[type="time"][data-styled-time]')) setupStyledTime(root);
 	  root.querySelectorAll?.('input[type="time"][data-styled-time]').forEach(setupStyledTime);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
@@ -5270,6 +5314,10 @@
 		updateTopStatsDialog(event.target.closest("[data-top-stats-dialog]"));
 		return;
 	  }
+	  if (event.target.matches("[data-device-search]")) {
+		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+		return;
+	  }
 	  if (event.target.matches("[data-zone-import-text]")) {
 		event.target.closest("form").querySelector("[data-zone-import-status]").textContent = "";
 		updateZoneImport(event.target.closest("form"));
@@ -5441,6 +5489,10 @@
 		event.target.closest("[data-zone-root]")?.querySelector("[data-record-search]")?.dispatchEvent(new Event("input", {bubbles: true}));
 		return;
 	  }
+	  if (event.target.matches("[data-device-type-filter], [data-device-show-filter]")) {
+		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+		return;
+	  }
 	  if (event.target.matches("[data-domain-import]") && event.target.files?.length) {
 		event.target.form?.requestSubmit();
 	  }
@@ -5456,6 +5508,22 @@
 		  input.dispatchEvent(new Event("change", {bubbles: true}));
 		  input.focus();
 		}
+		return;
+	  }
+	  const clearDevices = event.target.closest("[data-device-filter-clear]");
+	  if (clearDevices) {
+		const root = clearDevices.closest("[data-device-filter-root]");
+		root?.querySelectorAll("[data-device-type-filter], [data-device-show-filter]").forEach((select) => {
+		  select.value = "";
+		  select.sableSyncStyledSelect?.();
+		});
+		const search = root?.querySelector("[data-device-search]");
+		if (search) {
+		  search.value = "";
+		  syncSearchClear(search);
+		  search.focus();
+		}
+		applyDeviceFilter(root, true);
 		return;
 	  }
 	  const action = event.target.closest(".zone-import-menu button, .insight-hide-menu button");

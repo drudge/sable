@@ -4019,6 +4019,18 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
 .insights-tab-list .nav-icon { width: 1rem; height: 1rem; }
 .insights-tab-panel { display: grid; min-width: 0; gap: 1.5rem; }
 .insights-tab-panel[hidden] { display: none; }
+/* The Devices search sits under the card's heading, as Query Logs' does, with
+   the filters beside it. When the card is narrow the filters drop below. */
+.insight-device-filter-selects { display: flex; flex: none; gap: .5rem; }
+.insight-device-filter-selects > * { width: 8.75rem; }
+.insight-device-filter-selects > .insight-device-type-filter { width: 11rem; }
+.insight-device-search-bar .insights-skeleton-block { height: 2.25rem; border-radius: calc(var(--radius) - 2px); }
+.insight-device-search-bar > .insights-skeleton-block { min-width: 12rem; flex: 1; }
+@container (max-width: 36rem) {
+  .insight-device-search-bar { flex-wrap: wrap; row-gap: .5rem; padding-inline: 1rem; }
+  .insight-device-filter-selects { flex: 1 1 100%; }
+  .insight-device-filter-selects > *, .insight-device-filter-selects > .insight-device-type-filter { min-width: 0; flex: 1; width: auto; }
+}
 .insight-device-table tbody th { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; color: var(--foreground); font-size: .8125rem; font-weight: 400; text-align: left; }
 .insight-device-table td:last-child { width: 3rem; }
 .insight-device-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
