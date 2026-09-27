@@ -80,10 +80,13 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				<header>
 					<h2>Rolling Updates</h2>
 					if view.DisplayVersion() != "" {
-						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("current", view.UpToDate()) }>
+						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("installing", view.Rollout.Active()), templ.KV("current", view.UpToDate()) }>
 							if view.UpdateAvailable() {
 								@Icon("sparkles")
 								<span class="sr-only">Update available: </span>
+							} else if view.Rollout.Active() {
+								@Icon("download")
+								<span class="sr-only">Updating to </span>
 							} else if view.UpToDate() {
 								@Icon("check")
 								<span class="sr-only">Up to date: </span>

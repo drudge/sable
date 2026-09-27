@@ -98,3 +98,21 @@ func TestRollingUpdateCheckStaysVisibleWhileChecking(t *testing.T) {
 		t.Error("an installation still offered a release check")
 	}
 }
+
+// A running rollout marks its version as the one being installed, not the
+// one the cluster already runs.
+func TestRollingUpdateVersionShowsInstallTarget(t *testing.T) {
+	var html strings.Builder
+	view := ClusterUpdateView{Initialized: true, CanApply: true, Rollout: cluster.RolloutStatus{
+		ID: "rollout", Version: "1.2.0", Phase: "updating",
+		Nodes: []cluster.RolloutNode{{Name: "replica-2", Phase: "installing"}},
+	}}
+	if err := ClusterUpdatePanel(view, false).Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"cluster-update-version installing", "Updating to ", "v1.2.0"} {
+		if !strings.Contains(html.String(), expected) {
+			t.Errorf("rollout badge is missing %q", expected)
+		}
+	}
+}
