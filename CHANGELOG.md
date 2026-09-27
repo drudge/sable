@@ -8,6 +8,19 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.16] - 2026-09-27
+
+Sable 1.5.0-beta.16 makes the console behave better on iPhone.
+
+### Console
+
+- Pull down from the top of any page to reload it when Sable is added to the
+  Home Screen. iPhone only gives this gesture to Safari tabs, so the console
+  now draws its own spinner and reloads once you pull far enough.
+- Stop Safari zooming in when you tap a field on a phone or tablet. Fields on
+  touch screens now use 16px text, so the page stays put. Desktop fields are
+  unchanged.
+
 ## [1.5.0-beta.15] - 2026-09-27
 
 Sable 1.5.0-beta.15 lets you update the whole cluster from **About**.
