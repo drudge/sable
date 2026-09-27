@@ -131,7 +131,7 @@ var serviceClues = map[string][]clue{
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
 	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
-	"mqtt": {{"smart-home", 3}},
+	"mqtt": {{"smart-home", 3}}, "cloudflare-tunnel": {{"server", 2}},
 }
 
 // ClueLabels are the starts of host labels that are evidence of a device type

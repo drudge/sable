@@ -200,6 +200,7 @@ var catalog = []catalogEntry{
 	{Service{"brother", "Brother", CategoryPlatform}, []string{"brother.com", "brother-usa.com"}},
 	{Service{"remarkable", "reMarkable", CategoryPlatform}, []string{"device.cloud.remarkable.com", "tectonic.remarkable.com"}},
 	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"api.bambulab.com", "mqtt.bambulab.com"}},
+	{Service{"cloudflare-tunnel", "Cloudflare Tunnel", CategoryPlatform}, []string{"argotunnel.com"}},
 	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time.cloudflare.com"}},
 
 	// Finance.

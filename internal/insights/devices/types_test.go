@@ -41,6 +41,7 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"a 3D printer's cloud alone", Device{}, []string{"bambu-lab"}, "printer", ConfidenceLow},
 		{"a 3D printer on a radio module", Device{Vendor: "Quectel"}, []string{"bambu-lab"}, "printer", ConfidenceHigh},
 		{"a slicer on a computer", Device{Vendor: "Dell"}, []string{"bambu-lab"}, "", ""},
+		{"a tunnel on a Proxmox guest", Device{}, []string{"cloudflare-tunnel"}, "server", ConfidenceLow},
 		{"a module reaching a broker", Device{Vendor: "Espressif"}, []string{"mqtt"}, "smart-home", ConfidenceHigh},
 		{"UniFi's own gear", Device{Name: "Basement U7 Pro", Vendor: "Ubiquiti", UniFiType: "network"}, nil, "network", ConfidenceHigh},
 		{"an operator's type over UniFi's gear", Device{Vendor: "Ubiquiti", UniFiType: "network", Type: "storage"}, nil, "storage", ConfidenceSet},
