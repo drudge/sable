@@ -14,13 +14,6 @@ Sable 1.5.0-beta.13 lets you choose exactly which tools the MCP server offers,
 and makes the group and token an assistant needs as part of setup. It is the
 last beta before 1.5.0.
 
-### Upgrading from beta.12
-
-- `create_zone` is now off by default. In beta.12 it was always on. If your
-  assistant creates zones, turn it on in **Edit Setup → Tools**.
-- `list_block_lists` and `list_findings` are now on by default. A token still
-  needs `blocking.read` or `logs.read` to use them.
-
 ### MCP Server
 
 - Set up the MCP server in three steps: **Tools**, **Access**, and **Connect**.
@@ -30,18 +23,19 @@ last beta before 1.5.0.
   The choice is saved as `tools` under `[mcp]` in the config file.
 - Offer assistants only the tools you chose. An assistant holding an older
   list is told a tool is turned off.
+- Start with the everyday tools on: records, allowing and blocking domains,
+  `list_block_lists`, `lookup`, `purge_cache`, and `list_findings`.
 - Add tools that start off:
-  - `delete_zone` deletes a zone the MCP server created, such as a preview
-    zone. It refuses every other zone, and the assistant must repeat the zone
-    name to confirm.
+  - `create_zone` creates a Primary zone.
+  - `delete_zone` deletes a zone and its records. The assistant is told to ask
+    you first, and must repeat the zone name to confirm.
   - `add_block_list`, `remove_block_list`, and `refresh_block_lists` change
     and refresh block lists.
   - `search_queries` searches the query log by device, part of a name, or
     blocked lookups only, up to 200 at a time.
-- Add tools that start on:
-  - `list_block_lists` lists block lists and how many domains each adds.
-  - `list_findings` lists what Insights noticed, with its evidence. Findings
-    you hid or turned off are left out.
+- Add `list_block_lists`, which lists block lists and how many domains each
+  adds, and `list_findings`, which lists what Insights noticed with its
+  evidence. Findings you hid or turned off are left out.
 - `list_findings` and `search_queries` send what your devices do to the
   assistant's AI provider when called. Leave them off, or keep `logs.read` out
   of the token's group, if that matters to you.
