@@ -1314,8 +1314,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .toast-update .notification-actions .button { width: 100%; min-height: 2.25rem; justify-content: center; }
 .update-split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
 .update-split-button > [data-update-scope-action], .update-split-button > [data-update-scope-action] form { min-width: 0; margin: 0; }
-.toast-update .update-split-button > [data-update-scope-action] .button { border-top-right-radius: 0; border-bottom-right-radius: 0; padding-inline: .5rem; white-space: nowrap; }
-.toast-update .notification-actions .update-scope-trigger { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
+.update-split-button > [data-update-scope-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
+.toast-update .update-split-button > [data-update-scope-action] .button { padding-inline: .5rem; }
+.update-split-button .update-scope-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
 .update-scope-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
 .update-scope-menu form { margin: 0; }
 .update-scope-option { display: flex; align-items: center; gap: .75rem; width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem .5rem; color: inherit; text-align: left; }

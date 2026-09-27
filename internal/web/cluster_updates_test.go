@@ -192,40 +192,62 @@ func TestNotificationClusterChoiceRequiresCapabilityAndPermission(t *testing.T) 
 			if view.CanUpdateCluster != want || strings.Contains(response.Body.String(), `data-update-scope-trigger`) != want {
 				t.Fatalf("cluster choice = %t, want %t: %s", view.CanUpdateCluster, want, response.Body.String())
 			}
+			// About offers the same choice as the notification.
+			about := httptest.NewRecorder()
+			if err := pages.UpdatePanel(view).Render(request.Context(), about); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(about.Body.String(), `id="about-update-scope"`) != want {
+				t.Fatalf("About cluster choice = %t, want %t: %s", !want, want, about.Body.String())
+			}
 		})
 	}
 }
 
 func TestNotificationClusterUpdateStartsReviewedVersionAndOpensProgress(t *testing.T) {
-	for _, scenario := range []string{"success", "stale release", "preflight failure"} {
-		t.Run(scenario, func(t *testing.T) {
-			updater := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0", CheckedAt: time.Now()}}
-			server := updateTestServer(t, updater)
-			controller := &testRollingUpdateController{supported: true, role: cluster.RolePrimary}
-			server.SetClusterController(controller)
-			target := "1.2.0"
-			if scenario == "stale release" {
-				target = "1.1.0"
-			}
-			if scenario == "preflight failure" {
-				controller.startErr = errors.New("ns2 must be online and fully synchronized")
-			}
-			response := serveUpdateForm(server, "/ui/updates/cluster", url.Values{"notification": {"true"}, "version": {target}})
-			if scenario == "success" {
-				if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "/cluster" || len(controller.started) != 1 || controller.started[0] != target {
-					t.Fatalf("cluster start = %d, redirect %q, started %v", response.Code, response.Header().Get("HX-Redirect"), controller.started)
+	sources := []struct {
+		name  string
+		form  url.Values
+		panel string
+	}{
+		{"notification", url.Values{"notification": {"true"}}, `id="update-notification"`},
+		{"about", url.Values{"source": {"about"}}, `id="about-update"`},
+	}
+	for _, source := range sources {
+		for _, scenario := range []string{"success", "stale release", "preflight failure"} {
+			t.Run(source.name+"/"+scenario, func(t *testing.T) {
+				updater := &testUpdateController{status: update.Status{Available: true, LatestVersion: "1.2.0", CheckedAt: time.Now()}}
+				server := updateTestServer(t, updater)
+				controller := &testRollingUpdateController{supported: true, role: cluster.RolePrimary}
+				server.SetClusterController(controller)
+				target := "1.2.0"
+				if scenario == "stale release" {
+					target = "1.1.0"
 				}
-			} else {
-				if response.Code != http.StatusConflict || response.Header().Get("HX-Redirect") != "" || len(controller.started) != 0 || !strings.Contains(response.Body.String(), `id="update-notification"`) {
-					t.Fatalf("cluster rejection = %d %s", response.Code, response.Body.String())
+				if scenario == "preflight failure" {
+					controller.startErr = errors.New("ns2 must be online and fully synchronized")
 				}
-				if scenario == "preflight failure" && !strings.Contains(response.Body.String(), controller.startErr.Error()) {
-					t.Fatal("notification omitted the reason the rollout could not start")
+				form := url.Values{"version": {target}}
+				for key, values := range source.form {
+					form[key] = values
 				}
-			}
-			if updater.installs != 0 {
-				t.Fatal("cluster choice also triggered a separate node installation")
-			}
-		})
+				response := serveUpdateForm(server, "/ui/updates/cluster", form)
+				if scenario == "success" {
+					if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "/cluster" || len(controller.started) != 1 || controller.started[0] != target {
+						t.Fatalf("cluster start = %d, redirect %q, started %v", response.Code, response.Header().Get("HX-Redirect"), controller.started)
+					}
+				} else {
+					if response.Code != http.StatusConflict || response.Header().Get("HX-Redirect") != "" || len(controller.started) != 0 || !strings.Contains(response.Body.String(), source.panel) {
+						t.Fatalf("cluster rejection = %d %s", response.Code, response.Body.String())
+					}
+					if scenario == "preflight failure" && !strings.Contains(response.Body.String(), controller.startErr.Error()) {
+						t.Fatalf("%s omitted the reason the rollout could not start", source.name)
+					}
+				}
+				if updater.installs != 0 {
+					t.Fatal("cluster choice also triggered a separate node installation")
+				}
+			})
+		}
 	}
 }
