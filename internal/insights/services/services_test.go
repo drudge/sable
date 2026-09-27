@@ -31,6 +31,7 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 		{"tv.youtube.com", "youtube-tv"},
 		{"gateway.discord.gg", "discord"},
 		{"Mesu.Apple.com", "apple-updates"},
+		{"swscan.apple.com", "macos-updates"},
 		{"gsp-ssl.apple.com", "apple"},
 		{"api.netflix.com", "netflix"},
 		{"ws.ring.com", "ring"},

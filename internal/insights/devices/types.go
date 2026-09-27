@@ -131,6 +131,11 @@ var serviceClues = map[string][]clue{
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
 	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
+	"macos-updates": {{"computer", 3}},
+	// Work apps lean toward a computer, but phones run them too, so each counts
+	// for little alone.
+	"teams": {{"computer", 1}}, "slack": {{"computer", 1}}, "zoom": {{"computer", 1}}, "webex": {{"computer", 1}},
+	"microsoft-365": {{"computer", 1}}, "notion": {{"computer", 1}}, "1password": {{"computer", 1}},
 	"mqtt": {{"smart-home", 3}}, "cloudflare-tunnel": {{"server", 2}},
 }
 

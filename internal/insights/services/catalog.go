@@ -179,7 +179,8 @@ var catalog = []catalogEntry{
 
 	// Device platforms: the phone-home traffic of an operating system itself.
 	{Service{"apple", "Apple services", CategoryPlatform}, []string{"apple.com", "mzstatic.com", "apple-dns.net", "aaplimg.com", "cdn-apple.com", "itunes.apple.com"}},
-	{Service{"apple-updates", "Apple software updates", CategoryPlatform}, []string{"mesu.apple.com", "swdist.apple.com", "swscan.apple.com", "updates.cdn-apple.com", "gdmf.apple.com"}},
+	{Service{"apple-updates", "Apple software updates", CategoryPlatform}, []string{"mesu.apple.com", "updates.cdn-apple.com", "gdmf.apple.com"}},
+	{Service{"macos-updates", "macOS software updates", CategoryPlatform}, []string{"swdist.apple.com", "swscan.apple.com"}},
 	{Service{"windows-update", "Windows Update", CategoryPlatform}, []string{"windowsupdate.com", "update.microsoft.com", "delivery.mp.microsoft.com", "dl.delivery.mp.microsoft.com"}},
 	{Service{"microsoft", "Microsoft services", CategoryPlatform}, []string{"microsoft.com", "msftconnecttest.com", "msftncsi.com", "windows.com", "msn.com", "msedge.net"}},
 	{Service{"android", "Android", CategoryPlatform}, []string{"android.com", "android.clients.google.com", "play.googleapis.com", "connectivitycheck.gstatic.com"}},
