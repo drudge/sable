@@ -14,6 +14,13 @@ Sable 1.5.0-beta.13 lets you choose exactly which tools the MCP server offers,
 and makes the group and token an assistant needs as part of setup. It is the
 last beta before 1.5.0.
 
+### Upgrading from beta.12
+
+- `create_zone` is now off by default. In beta.12 it was always on. If your
+  assistant creates zones, turn it on in **Edit Setup → Tools**.
+- `list_block_lists` and `list_findings` now start on. A token still needs
+  `blocking.read` or `logs.read` to use them.
+
 ### MCP Server
 
 - Set up the MCP server in three steps: **Tools**, **Access**, and **Connect**.
