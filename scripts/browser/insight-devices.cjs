@@ -3,7 +3,8 @@ const {chromium} = require('playwright');
 
 // Narrows the Insights Devices list by search, type, and whether a device has
 // a name, clears it all, and checks the list stays narrowed through a range
-// change and a reload, and that the search fits a phone.
+// change and a reload, that the command palette can search it, and that the
+// search fits a phone.
 (async () => {
   const [baseURL, cookieName] = process.argv.slice(2);
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -72,6 +73,21 @@ const {chromium} = require('playwright');
     assert.equal(await search.inputValue(), '10.0.0.50', 'a reload keeps the search');
     assert.deepEqual(await shown(), ['10.0.0.50']);
 
+    // Search Devices in the command palette opens the list already searched,
+    // with the cursor in the search.
+    await page.goto(`${baseURL}/`);
+    await page.locator('[data-command-open]:visible').first().click();
+    const command = page.locator('#command-palette-input');
+    await command.fill('search dev');
+    await page.keyboard.press('Enter');
+    assert.equal(await command.getAttribute('placeholder'), 'Search devices…');
+    await command.fill('george');
+    await page.keyboard.press('Enter');
+    await page.waitForURL(url => url.pathname === '/insights' && url.searchParams.get('search') === 'george');
+    await page.waitForFunction(() => document.activeElement?.matches('[data-device-search]'));
+    assert.equal(await search.inputValue(), 'george');
+    assert.deepEqual(await shown(), ['george-laptop.corp.example']);
+
     // On a phone the filters drop below the search, and nothing runs off the
     // side of the page.
     await page.setViewportSize({width: 390, height: 844});
@@ -80,7 +96,7 @@ const {chromium} = require('playwright');
     assert.ok(type.y >= field.y + field.height, `the filters sit below the search: ${JSON.stringify({field, type})}`);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page does not scroll sideways');
     assert.deepEqual(errors, []);
-    console.log('PASS the Devices list narrows by search, type, and name, and keeps its filters through a range change and a reload');
+    console.log('PASS the Devices list narrows by search, type, and name, keeps its filters through a range change and a reload, and opens searched from the command palette');
   } finally {
     await browser.close();
   }

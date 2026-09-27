@@ -44,6 +44,8 @@ Open a device to see its maker, apps, busiest domains, and first-time domains.
 
 Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, or unnamed. The page's address keeps the search and filters, so they last through a range change or a reload.
 
+**Search Devices** in the command palette opens the list with your search already in place.
+
 ### Name a device
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.

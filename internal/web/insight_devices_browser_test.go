@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// Narrow the Insights Devices list by search and filters, and keep them
-// through a range change and a reload.
+// Narrow the Insights Devices list by search and filters, keep them through a
+// range change and a reload, and search it from the command palette.
 func TestBrowserInsightDeviceFilters(t *testing.T) {
 	app := newInsightsTestServer(t)
 	server := httptest.NewServer(app.httpServer.Handler)
