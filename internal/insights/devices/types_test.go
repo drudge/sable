@@ -28,6 +28,7 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"a strong name alone", Device{Name: "dock-camera-02"}, nil, "camera", ConfidenceMedium},
 		{"a maker alone", Device{Vendor: "Sonos"}, nil, "speaker", ConfidenceMedium},
 		{"services alone", Device{}, []string{"lg-webos"}, "tv", ConfidenceMedium},
+		{"an e-ink display on a smart-home chip", Device{Vendor: "Espressif"}, []string{"trmnl"}, "smart-home", ConfidenceHigh},
 		{"a weak lean", Device{Vendor: "Dell"}, nil, "computer", ConfidenceLow},
 		{"an operator's type wins", Device{Name: "dock-camera-02", Type: "doorbell"}, nil, "doorbell", ConfidenceSet},
 		{"no clues", Device{Name: "george"}, nil, "", ""},

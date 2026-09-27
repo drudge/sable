@@ -117,7 +117,7 @@ var serviceClues = map[string][]clue{
 	"synology": {{"storage", 3}}, "qnap": {{"storage", 3}}, "windows-update": {{"computer", 3}}, "android": {{"phone", 2}},
 	"alexa": {{"smart-speaker", 2}}, "ecobee": {{"thermostat", 3}}, "tuya": {{"smart-home", 2}},
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
-	"roomba": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
+	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
 }
 
