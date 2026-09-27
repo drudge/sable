@@ -37,6 +37,8 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/profile/password", true},
 		{http.MethodPost, "/ui/cache/flush", false},
 		{http.MethodPost, "/ui/query", false},
+		// MCP reads are POSTs too; its write tools refuse on a replica themselves.
+		{http.MethodPost, mcpPath, false},
 		// A release lookup is read-only even though it uses POST to carry the
 		// selected release channel.
 		{http.MethodPost, "/ui/updates/check", false},

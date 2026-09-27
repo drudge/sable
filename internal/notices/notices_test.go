@@ -8,7 +8,7 @@ import (
 func TestNoticesCoverTheConsoleGoAndCompiledModules(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"htmx", "Inter", "Lucide", "Simple Icons", "Go", "github.com/miekg/dns", "golang.org/x/net", "modernc.org/sqlite"} {
+	for _, name := range []string{"htmx", "Hugeicons", "Inter", "Lucide", "Simple Icons", "Go", "github.com/miekg/dns", "golang.org/x/net", "modernc.org/sqlite"} {
 		if _, found := Named(name); !found {
 			t.Errorf("no notice for %s", name)
 		}

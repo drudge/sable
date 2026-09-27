@@ -33,6 +33,7 @@ var platforms = []string{
 // change by hand, along with the files.
 var consoleNotices = []notice{
 	{Name: "htmx", License: "0BSD", URL: "https://htmx.org", Console: true, paths: []string{"third_party/htmx/LICENSE"}},
+	{Name: "Hugeicons", License: "MIT", URL: "https://hugeicons.com", Console: true, paths: []string{"third_party/hugeicons/LICENSE"}},
 	{Name: "Inter", License: "OFL-1.1", URL: "https://rsms.me/inter/", Console: true, paths: []string{"third_party/inter/LICENSE"}},
 	{Name: "Lucide", License: "ISC", URL: "https://lucide.dev", Console: true, paths: []string{"third_party/lucide/LICENSE"}},
 	{Name: "Simple Icons", License: "CC0-1.0", URL: "https://simpleicons.org", Console: true, paths: []string{"third_party/simple-icons/LICENSE"}},

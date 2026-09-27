@@ -11,6 +11,20 @@ type IntegrationsPageView struct {
 	DynamicDNS DynamicDNSAppView
 	UniFi   UniFiAppView
 	SSO     SSOAppView
+	MCP     MCPAppView
+}
+
+// MCPAppView describes the MCP Server card. Address is what an assistant
+// should be given: the cluster primary's HTTPS address when there is one,
+// because only the primary accepts changes.
+type MCPAppView struct {
+	Configured       bool
+	Enabled          bool
+	Address          string
+	Secure           bool
+	Clustered        bool
+	SecurityDisabled bool
+	Setup            bool
 }
 
 type DynamicDNSAppView struct {
@@ -265,11 +279,18 @@ templ IntegrationsContent(view IntegrationsPageView) {
 		if view.SSO.Available {
 			@SSOCard(view.SSO)
 		}
+		@MCPCard(view.MCP)
 		if view.UniFi.Available && view.UniFi.Configured {
 			@RemoveUniFiDialog()
 		}
 		if view.DynamicDNS.Configured {
 			@RemoveDynamicDNSDialog()
+		}
+		if view.MCP.Configured {
+			@RemoveMCPDialog()
+		}
+		if view.MCP.Setup {
+			@MCPSetupDialog(view.MCP)
 		}
 		if view.DynamicDNS.Setup {
 			@DynamicDNSSetupDialog(view.DynamicDNS)
@@ -584,6 +605,166 @@ templ SSOCard(view SSOAppView) {
 			</div>
 		}
 	</section>
+}
+
+templ MCPCard(view MCPAppView) {
+	<section class="card integration-card" id="mcp-card" tabindex="-1">
+		<header>
+			<div class="integration-card-identity">
+				<span class="integration-card-glyph">@Icon("mcp-server")</span>
+				<div>
+					<h2>MCP Server</h2>
+					<p>Lets Claude, ChatGPT, Cursor, and other AI assistants manage records and blocking with an API token.</p>
+				</div>
+			</div>
+			<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
+		</header>
+		if !view.Configured {
+			<div class="integration-card-body integration-card-empty">
+				<p>Give each assistant its own API token. The token's groups decide which zones and lists it can change, and nothing is reachable until you set this up.</p>
+				<a class="button" href="/integrations?setup=mcp" data-replica-primary-action>@Icon("plus")<span>Set Up MCP Server</span></a>
+			</div>
+		} else {
+			<div class="integration-card-body">
+				if view.SecurityDisabled {
+					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Sign-in is off on this server</strong><span>Any program that can reach it can use these tools without a token.</span></div></div>
+				} else if !view.Secure {
+					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>Tokens would cross the network unencrypted. Set up a certificate unless the assistant runs on this server.</span></div></div>
+				}
+				<div class="integration-facts">
+					<div class="integration-fact-address" title={ view.Address } aria-label={ "MCP address: " + view.Address }>
+						<span class="integration-fact-label">{ ifThen(view.Clustered, "MCP address (primary)", "MCP address") }</span>
+						@FactCopyButton("mcp-address", "Copy MCP address")
+						<span class="integration-fact-value"><code id="mcp-address">{ view.Address }</code></span>
+					</div>
+					<div><span class="integration-fact-label">Sign-in</span><span class="integration-fact-value">{ ifThen(view.SecurityDisabled, "None", "API token") }</span></div>
+				</div>
+				<div class="integration-card-actions">
+					<button class="button outline destructive" type="button" data-dialog-open="remove-mcp-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+					<div class="integration-card-actions-primary">
+						<a class="button outline" href="/integrations?setup=mcp">@Icon("settings-2")<span>View Setup</span></a>
+						if view.Enabled {
+							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="false"/><button class="button outline" type="submit" data-replica-primary-action>@Icon("pause")<span>Pause</span></button></form>
+						} else {
+							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/><button class="button" type="submit" data-replica-primary-action>@Icon("play")<span>Resume</span></button></form>
+						}
+					</div>
+				</div>
+			</div>
+		}
+	</section>
+}
+
+templ RemoveMCPDialog() {
+	<dialog class="custom-server-dialog confirmation-dialog" id="remove-mcp-dialog" aria-labelledby="remove-mcp-title">
+		<div class="dialog-header"><h2 id="remove-mcp-title">Remove MCP Server</h2><p>Stop serving AI assistants</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<div class="isotope-dialog-body"><p>Sable will turn the MCP server off and forget its setup. API tokens stay in place; revoke any you made for an assistant in Administration.</p></div>
+		<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><form hx-post="/ui/integrations/mcp/remove" hx-target="#integrations-content" hx-swap="outerHTML"><button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button></form></div>
+	</dialog>
+}
+
+templ MCPSetupDialog(view MCPAppView) {
+	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-auto-open="true">
+		<div class="dialog-header"><h2 id="mcp-setup-title">{ ifThen(view.Configured, "MCP Server Setup", "Set Up MCP Server") }</h2><p>Let AI assistants manage DNS with an API token</p></div>
+		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+		<div class="isotope-dialog-body">
+			<section class="wizard-panel compact">
+				<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
+				<div class="about-code-block">
+					<pre id="mcp-setup-address">{ view.Address }</pre>
+					<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@CopyIcons()</button>
+				</div>
+				if !view.Secure && !view.SecurityDisabled {
+					<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></p></div>
+				}
+			</section>
+			<section class="wizard-panel compact">
+				<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>API Token</strong><small>Give each assistant its own token so you can revoke one without breaking the others.</small></div></div>
+				if view.SecurityDisabled {
+					<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, and so can anyone else who reaches it.</span></p></div>
+				} else {
+					<p class="field-help">Create a token in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a>. Choose a group with the API grants the assistant needs: <code>zones.read</code> and <code>zones.records.write</code> to change records, and <code>blocking.read</code> and <code>blocking.write</code> to manage blocking. Store it as <code>SABLE_API_TOKEN</code>.</p>
+				}
+			</section>
+			<section class="wizard-panel compact mcp-client-tabs" data-dialog-tabs>
+				<div class="wizard-heading compact"><span>@Icon("terminal")</span><div><strong>Connect Your Assistant</strong><small>Pick the app you use and paste its setup.</small></div></div>
+				<div class="dialog-tab-list four" role="tablist" aria-label="Assistant app">
+					<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="claude-code">Claude Code</button>
+					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="claude-desktop">Claude Desktop</button>
+					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="chatgpt">ChatGPT</button>
+					<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="cursor">Cursor</button>
+				</div>
+				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-code">
+					@MCPClientSnippet("Claude Code", "mcp-setup-claude-code", mcpClaudeCodeSnippet(view.Address), "Run this in a terminal where SABLE_API_TOKEN is set.")
+				</div>
+				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="claude-desktop" hidden>
+					@MCPClientSnippet("Claude Desktop", "mcp-setup-claude-desktop", mcpClaudeDesktopSnippet(view.Address), "Open Settings, Developer, Edit Config, add this to claude_desktop_config.json, put your token in place of the placeholder, and restart Claude. It uses Node.js to reach Sable from this computer; the Connectors screen cannot reach a server on your own network.")
+				</div>
+				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="chatgpt" hidden>
+					@MCPClientSnippet("ChatGPT", "mcp-setup-chatgpt", mcpCodexSnippet(view.Address), "Add this to ~/.codex/config.toml, or use Settings, MCP servers, Add server in the ChatGPT desktop app with Streamable HTTP. ChatGPT and Codex share that file. An app opened from the Dock may not see SABLE_API_TOKEN; if the server will not connect, swap the last line for http_headers = { Authorization = \"Bearer <your token>\" }.")
+				</div>
+				<div class="dialog-tab-panel" role="tabpanel" data-dialog-panel="cursor" hidden>
+					@MCPClientSnippet("Cursor", "mcp-setup-cursor", mcpCursorSnippet(view.Address), "Add this to .cursor/mcp.json in your project, or to ~/.cursor/mcp.json to use it everywhere.")
+				</div>
+			</section>
+		</div>
+		if view.Configured {
+			<div class="dialog-footer"><a class="button" href="/integrations">Done</a></div>
+		} else {
+			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/><button class="button" type="submit">@Icon("check")<span>Turn On</span></button></form></div>
+		}
+	</dialog>
+}
+
+templ MCPClientSnippet(label, id, snippet, help string) {
+	<p class="field-help">{ help }</p>
+	<div class="about-code-block">
+		<pre id={ id }>{ snippet }</pre>
+		<button class="about-copy-button" type="button" data-copy-target={ id } aria-label={ "Copy " + label + " setup" } title="Copy">@CopyIcons()</button>
+	</div>
+}
+
+func mcpBadgeClass(view MCPAppView) string {
+	if view.Configured && view.Enabled {
+		return "status-badge success"
+	}
+	return "status-badge"
+}
+
+func mcpBadgeLabel(view MCPAppView) string {
+	switch {
+	case !view.Configured:
+		return "Not set up"
+	case view.Enabled:
+		return "Active"
+	default:
+		return "Paused"
+	}
+}
+
+func mcpAddressHelp(view MCPAppView) string {
+	if view.Clustered {
+		return "Give your assistant this address. It is the cluster primary, the only node that accepts changes."
+	}
+	return "Give your assistant this address."
+}
+
+func mcpClaudeCodeSnippet(address string) string {
+	return "claude mcp add --transport http sable " + address + " \\\n  --header \"Authorization: Bearer ${SABLE_API_TOKEN}\""
+}
+
+func mcpCodexSnippet(address string) string {
+	return "[mcp_servers.sable]\nurl = \"" + address + "\"\nbearer_token_env_var = \"SABLE_API_TOKEN\""
+}
+
+func mcpClaudeDesktopSnippet(address string) string {
+	return "{\n  \"mcpServers\": {\n    \"sable\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"mcp-remote\", \"" + address +
+		"\", \"--header\", \"Authorization:${SABLE_AUTH}\"],\n      \"env\": { \"SABLE_AUTH\": \"Bearer <your token>\" }\n    }\n  }\n}"
+}
+
+func mcpCursorSnippet(address string) string {
+	return "{\n  \"mcpServers\": {\n    \"sable\": {\n      \"url\": \"" + address + "\",\n      \"headers\": { \"Authorization\": \"Bearer ${env:SABLE_API_TOKEN}\" }\n    }\n  }\n}"
 }
 
 templ SSOMappingTable(view SSOAppView) {

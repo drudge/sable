@@ -186,6 +186,11 @@ func (server *Server) authenticateRequest(request *http.Request) (auth.Principal
 			return server.auth.AuthenticateToken(request.Context(), strings.TrimSpace(query.Get("token")))
 		}
 	}
+	// Assistants act through API tokens so their access follows the token's
+	// API grants, never a console session that happens to share the browser.
+	if request.URL.Path == mcpPath {
+		return auth.Principal{}, auth.ErrUnauthorized
+	}
 	cookie, err := request.Cookie(server.sessionCookieName())
 	if err != nil {
 		return auth.Principal{}, auth.ErrUnauthorized
@@ -509,7 +514,7 @@ func publicRequest(path string) bool {
 }
 
 func tokenRequest(path string) bool {
-	return path == "/metrics" || strings.HasPrefix(path, "/api/")
+	return path == "/metrics" || path == mcpPath || strings.HasPrefix(path, "/api/")
 }
 
 func safeMethod(method string) bool {
@@ -520,6 +525,11 @@ func (server *Server) authenticationFailure(writer http.ResponseWriter, request 
 	if request.URL.Path == technitiumStatsPath {
 		writeTechnitiumError(writer, status, http.StatusText(status))
 		return
+	}
+	if request.URL.Path == mcpPath && status == http.StatusUnauthorized {
+		// MCP clients read this header to learn that the server wants a
+		// bearer token rather than a browser session.
+		writer.Header().Set("WWW-Authenticate", `Bearer realm="sable"`)
 	}
 	if tokenRequest(request.URL.Path) {
 		writeJSON(writer, status, map[string]string{"error": http.StatusText(status)})
