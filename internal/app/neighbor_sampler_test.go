@@ -53,8 +53,8 @@ func TestUniFiIdentitiesNameTheControllersGear(t *testing.T) {
 	if len(identities) != 2 || identities[0] != want {
 		t.Fatalf("identities = %+v, want %+v first", identities, want)
 	}
-	// A UPS lends its name but is not network equipment.
-	if identities[1].Source != unifiIdentitySource || identities[1].Hostname != "UPS Tower" {
+	// A UPS is vouched for as a UPS, not network equipment.
+	if identities[1].Source != "unifi-ups" || identities[1].Hostname != "UPS Tower" {
 		t.Fatalf("UPS identity = %+v", identities[1])
 	}
 }

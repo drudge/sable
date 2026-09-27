@@ -41,6 +41,7 @@ var typeLabels = map[string]string{
 	"camera": "Camera", "doorbell": "Doorbell", "game-console": "Game console", "printer": "Printer",
 	"storage": "Network storage", "network": "Network equipment", "thermostat": "Thermostat",
 	"lighting": "Smart lighting", "smart-plug": "Smart plug", "smart-home": "Smart home device", "watch": "Watch",
+	"ups": "UPS",
 }
 
 // TypeLabel names a device type for people.
@@ -80,6 +81,7 @@ var makerClues = map[string][]clue{
 	"Microsoft": {{"computer", 2}}, "Realtek": {{"computer", 1}}, "AzureWave": {{"computer", 1}},
 	"Foxconn": {{"computer", 1}}, "Lite-On": {{"computer", 1}}, "Garmin": {{"watch", 3}},
 	"iRobot": {{"smart-home", 4}}, "Chamberlain": {{"smart-home", 4}}, "Belkin": {{"smart-plug", 2}},
+	"APC": {{"ups", 4}}, "CyberPower": {{"ups", 4}},
 }
 
 // moduleMakers build the radio modules inside single-purpose hardware. Their
@@ -112,7 +114,7 @@ var nameClues = map[string][]clue{
 	"ps4": {{"game-console", 5}}, "ps5": {{"game-console", 5}}, "nintendo": {{"game-console", 5}}, "watch": {{"watch", 4}},
 	"plug": {{"smart-plug", 4}}, "outlet": {{"smart-plug", 4}}, "bulb": {{"lighting", 4}}, "lamp": {{"lighting", 3}},
 	"hue": {{"lighting", 3}}, "router": {{"network", 5}}, "gateway": {{"network", 4}}, "ap": {{"network", 2}},
-	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}},
+	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}}, "ups": {{"ups", 5}},
 }
 
 // serviceClues are the apps whose use says what a device is. Apps anyone
@@ -385,6 +387,10 @@ func withArticle(label string) string {
 }
 
 func article(word string) string {
+	// An acronym is read letter by letter, and U reads "you".
+	if word == strings.ToUpper(word) && strings.HasPrefix(word, "U") {
+		return "a"
+	}
 	if word != "" && strings.ContainsRune("AEIOUaeiou", rune(word[0])) {
 		return "an"
 	}

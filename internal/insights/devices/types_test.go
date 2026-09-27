@@ -46,7 +46,10 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"an operator's type over UniFi's gear", Device{Vendor: "Ubiquiti", UniFiType: "network", Type: "storage"}, nil, "storage", ConfidenceSet},
 		{"a UniFi NAS by its name", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti"}, nil, "storage", ConfidenceMedium},
 		{"a UniFi NAS by UniFi's word", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti", UniFiType: "storage"}, nil, "storage", ConfidenceHigh},
-		{"a type UniFi names that Sable lacks", Device{Vendor: "Ubiquiti", UniFiType: "ups"}, nil, "network", ConfidenceLow},
+		{"a UniFi UPS by UniFi's word", Device{Name: "UPS Tower", Vendor: "Ubiquiti", UniFiType: "ups"}, nil, "ups", ConfidenceHigh},
+		{"a type UniFi names that Sable lacks", Device{Vendor: "Ubiquiti", UniFiType: "fridge"}, nil, "network", ConfidenceLow},
+		{"a UPS by its maker", Device{Vendor: "APC"}, nil, "ups", ConfidenceMedium},
+		{"a UPS by its name", Device{Name: "rack-ups", Vendor: "Ubiquiti"}, nil, "ups", ConfidenceMedium},
 		{"an e-ink tablet by name and sync", Device{Name: "Remarkable 2", Vendor: "AMPAK"}, []string{"remarkable"}, "tablet", ConfidenceHigh},
 		{"an e-ink tablet's sync alone", Device{}, []string{"remarkable"}, "tablet", ConfidenceLow},
 		{"a weak lean", Device{Vendor: "Dell"}, nil, "computer", ConfidenceLow},
@@ -112,6 +115,9 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 	}
 	if got := Classify(Device{UniFiType: "storage"}, nil).Reasons[0].Text; got != "UniFi says it is network storage" {
 		t.Fatalf("UniFi reason = %q", got)
+	}
+	if got := GuessText(Guess{Type: "ups", Confidence: ConfidenceLow}); got != "Maybe a UPS" {
+		t.Fatalf("GuessText = %q", got)
 	}
 	if got := GuessText(Guess{Type: "tv", Confidence: ConfidenceMedium}); got != "Probably a TV" {
 		t.Errorf("GuessText = %q", got)

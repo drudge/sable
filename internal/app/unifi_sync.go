@@ -615,8 +615,8 @@ func compareUniFiPlanRecords(left, right unifi.PlanRecord) int {
 
 // unifiIdentitySource labels identities learned from a UniFi controller.
 // Ubiquiti hardware whose type the controller vouches for, such as a switch
-// or a UNAS, is labeled unifi- and that type, so Insights can state it as a
-// fact.
+// a UPS, or a UNAS, is labeled unifi- and that type, so Insights can state it
+// as a fact.
 const unifiIdentitySource = "unifi"
 
 // unifiIdentities ties every address the controller reported to its host's

@@ -183,10 +183,10 @@ func TestInventoryReadsGearApartFromHosts(t *testing.T) {
 			t.Fatalf("gear leaked into the published hosts: %+v", host)
 		}
 	}
-	// A UPS is the controller's gear but carries power, not traffic.
+	// A UPS is filed under switches but carries power, not traffic.
 	types := []string{inventory.Gear[0].DeviceType(), inventory.Gear[1].DeviceType(), inventory.Gear[2].DeviceType()}
-	if !slices.Equal(types, []string{"network", "", "network"}) {
-		t.Fatalf("device types = %q, want the access point and gateway as network and the UPS as none", types)
+	if !slices.Equal(types, []string{"network", "ups", "network"}) {
+		t.Fatalf("device types = %q, want the access point and gateway as network and the UPS as a UPS", types)
 	}
 }
 

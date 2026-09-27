@@ -75,14 +75,15 @@ type Host struct {
 }
 
 // DeviceType is the Insights device type the controller vouches for:
-// "network" for its gateways, switches, and access points and "storage" for a
-// UniFi Drive. Its UPS units carry power, not traffic, and get none.
+// "network" for its gateways, switches, and access points, "ups" for its UPS
+// units, which carry power rather than traffic, and "storage" for a UniFi
+// Drive.
 func (host Host) DeviceType() string {
 	switch host.Kind {
 	case "gateway", "switch", "access point":
 		return "network"
-	case "storage":
-		return "storage"
+	case "ups", "storage":
+		return host.Kind
 	}
 	return ""
 }

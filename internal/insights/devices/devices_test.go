@@ -320,11 +320,12 @@ func TestBuildTypesWhatUniFiVouchesFor(t *testing.T) {
 	now := time.Date(2026, 9, 27, 19, 0, 0, 0, time.UTC)
 	built := Build(Input{
 		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
-			{Client: "10.0.7.108", Queries: 30}, {Client: "10.0.7.40", Queries: 20},
+			{Client: "10.0.7.108", Queries: 30}, {Client: "10.0.7.40", Queries: 20}, {Client: "10.0.7.41", Queries: 10},
 		}},
 		Identities: []querylog.ClientIdentity{
 			{Address: "10.0.7.108", MAC: "94:2a:6f:ae:4c:5c", Source: "unifi-network", Hostname: "Basement U7 Pro", LastSeen: now},
-			{Address: "10.0.7.40", MAC: "90:41:b2:9c:f8:a4", Source: identityUniFi, Hostname: "UPS Tower", LastSeen: now},
+			{Address: "10.0.7.40", MAC: "90:41:b2:9c:f8:a4", Source: "unifi-ups", Hostname: "UPS Tower", LastSeen: now},
+			{Address: "10.0.7.41", MAC: "90:41:b2:00:00:01", Source: identityUniFi, Hostname: "Garage Box", LastSeen: now},
 		},
 	})
 	Identify(built, nil)
@@ -335,7 +336,11 @@ func TestBuildTypesWhatUniFiVouchesFor(t *testing.T) {
 	if ap := byName["Basement U7 Pro"]; ap.UniFiType != "network" || ap.NameSource != SourceUniFi || ap.Guess.Type != "network" || ap.Guess.Confidence != ConfidenceHigh {
 		t.Fatalf("access point = %+v", ap)
 	}
-	if ups := byName["UPS Tower"]; ups.UniFiType != "" || ups.NameSource != SourceUniFi || ups.Guess.Confidence == ConfidenceHigh {
+	if ups := byName["UPS Tower"]; ups.UniFiType != "ups" || ups.Guess.Type != "ups" || ups.Guess.Confidence != ConfidenceHigh {
 		t.Fatalf("UPS = %+v", ups)
+	}
+	// A plain client of the controller is named by UniFi but not typed by it.
+	if client := byName["Garage Box"]; client.UniFiType != "" || client.NameSource != SourceUniFi || client.Guess.Confidence == ConfidenceHigh {
+		t.Fatalf("client = %+v", client)
 	}
 }
