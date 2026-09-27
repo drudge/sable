@@ -70,7 +70,7 @@ var makerClues = map[string][]clue{
 	"Sonos": {{"speaker", 4}}, "Roku": {{"streaming-player", 4}}, "Google Nest": {{"smart-home", 3}},
 	"ecobee": {{"thermostat", 4}}, "Philips Hue": {{"lighting", 4}}, "Sony PlayStation": {{"game-console", 4}},
 	"Nintendo": {{"game-console", 4}}, "Raspberry Pi": {{"server", 2}, {"computer", 1}},
-	"Espressif": {{"smart-plug", 2}, {"smart-home", 2}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
+	"Espressif": {{"smart-home", 3}, {"smart-plug", 1}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
 	"Brother": {{"printer", 3}}, "Epson": {{"printer", 3}}, "Canon": {{"printer", 2}}, "HP": {{"printer", 1}, {"computer", 1}},
 	"Synology": {{"storage", 4}}, "QNAP": {{"storage", 4}}, "Ubiquiti": {{"network", 3}}, "Cisco": {{"network", 2}},
 	"Netgear": {{"network", 2}}, "eero": {{"network", 3}}, "TP-Link": {{"network", 1}, {"smart-plug", 1}},
