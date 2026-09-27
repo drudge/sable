@@ -5913,7 +5913,7 @@ var insightTypeIcons = map[string]string{
 	"streaming-player": "cast", "smart-speaker": "speaker", "speaker": "speaker", "camera": "cctv",
 	"doorbell": "door-closed", "game-console": "gamepad-2", "printer": "printer", "storage": "hard-drive",
 	"network": "router", "thermostat": "thermometer", "lighting": "lamp-ceiling", "smart-plug": "plug-zap",
-	"smart-home": "house-wifi", "watch": "watch",
+	"smart-home": "house-wifi", "watch": "watch", "ups": "battery-charging",
 }
 
 // insightTypeIcon is the icon for a device type, and a plain device for one

@@ -46,10 +46,15 @@ func TestUniFiIdentitiesNameTheControllersGear(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	identities := unifiIdentities(unifi.Inventory{Gear: []unifi.Host{
-		{MAC: "0c:ea:14:f3:42:fc", Hostname: "Office U7 Pro", Address: netip.MustParseAddr("10.0.7.79")},
+		{MAC: "0c:ea:14:f3:42:fc", Hostname: "Office U7 Pro", Address: netip.MustParseAddr("10.0.7.79"), Kind: "access point"},
+		{MAC: "90:41:b2:9c:f8:a4", Hostname: "UPS Tower", Address: netip.MustParseAddr("10.0.7.40"), Kind: "ups"},
 	}}, now)
-	want := querylog.ClientIdentity{Address: "10.0.7.79", MAC: "0c:ea:14:f3:42:fc", Source: unifiIdentitySource, Hostname: "Office U7 Pro", SeenAt: now}
-	if len(identities) != 1 || identities[0] != want {
-		t.Fatalf("identities = %+v, want %+v", identities, want)
+	want := querylog.ClientIdentity{Address: "10.0.7.79", MAC: "0c:ea:14:f3:42:fc", Source: "unifi-network", Hostname: "Office U7 Pro", SeenAt: now}
+	if len(identities) != 2 || identities[0] != want {
+		t.Fatalf("identities = %+v, want %+v first", identities, want)
+	}
+	// A UPS is vouched for as a UPS, not network equipment.
+	if identities[1].Source != "unifi-ups" || identities[1].Hostname != "UPS Tower" {
+		t.Fatalf("UPS identity = %+v", identities[1])
 	}
 }

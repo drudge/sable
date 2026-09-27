@@ -41,6 +41,7 @@ var typeLabels = map[string]string{
 	"camera": "Camera", "doorbell": "Doorbell", "game-console": "Game console", "printer": "Printer",
 	"storage": "Network storage", "network": "Network equipment", "thermostat": "Thermostat",
 	"lighting": "Smart lighting", "smart-plug": "Smart plug", "smart-home": "Smart home device", "watch": "Watch",
+	"ups": "UPS",
 }
 
 // TypeLabel names a device type for people.
@@ -80,6 +81,7 @@ var makerClues = map[string][]clue{
 	"Microsoft": {{"computer", 2}}, "Realtek": {{"computer", 1}}, "AzureWave": {{"computer", 1}},
 	"Foxconn": {{"computer", 1}}, "Lite-On": {{"computer", 1}}, "Garmin": {{"watch", 3}},
 	"iRobot": {{"smart-home", 4}}, "Chamberlain": {{"smart-home", 4}}, "Belkin": {{"smart-plug", 2}},
+	"APC": {{"ups", 4}}, "CyberPower": {{"ups", 4}},
 }
 
 // moduleMakers build the radio modules inside single-purpose hardware. Their
@@ -101,7 +103,7 @@ var nameClues = map[string][]clue{
 	"macbook": {{"computer", 5}}, "laptop": {{"computer", 5}}, "thinkpad": {{"computer", 5}}, "notebook": {{"computer", 4}},
 	"imac": {{"computer", 5}}, "desktop": {{"computer", 5}}, "workstation": {{"computer", 5}}, "pc": {{"computer", 3}},
 	"surface": {{"computer", 3}}, "mbp": {{"computer", 4}}, "server": {{"server", 5}}, "nas": {{"storage", 5}},
-	"diskstation": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
+	"diskstation": {{"storage", 5}}, "unas": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
 	"laserjet": {{"printer", 5}}, "officejet": {{"printer", 5}}, "deskjet": {{"printer", 5}}, "press": {{"printer", 2}},
 	"camera": {{"camera", 5}}, "cam": {{"camera", 4}}, "ipcam": {{"camera", 5}}, "doorbell": {{"doorbell", 6}},
 	"thermostat": {{"thermostat", 6}}, "tv": {{"tv", 5}}, "television": {{"tv", 5}}, "bravia": {{"tv", 5}},
@@ -112,7 +114,7 @@ var nameClues = map[string][]clue{
 	"ps4": {{"game-console", 5}}, "ps5": {{"game-console", 5}}, "nintendo": {{"game-console", 5}}, "watch": {{"watch", 4}},
 	"plug": {{"smart-plug", 4}}, "outlet": {{"smart-plug", 4}}, "bulb": {{"lighting", 4}}, "lamp": {{"lighting", 3}},
 	"hue": {{"lighting", 3}}, "router": {{"network", 5}}, "gateway": {{"network", 4}}, "ap": {{"network", 2}},
-	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}},
+	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}}, "ups": {{"ups", 5}},
 }
 
 // serviceClues are the apps whose use says what a device is. Apps anyone
@@ -181,6 +183,14 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: kind, Confidence: ConfidenceSet, Reasons: []insights.Reason{reason},
 			Detected: Classify(detected, used).Type,
+		}
+	}
+	// What the UniFi controller says its own hardware is, such as a switch or
+	// a UNAS, is a fact, not a guess.
+	if label := TypeLabel(device.UniFiType); label != "" {
+		return Guess{
+			Type: device.UniFiType, Confidence: ConfidenceHigh, Detected: device.UniFiType,
+			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
 		}
 	}
 	type evidence struct {
@@ -327,9 +337,9 @@ func GuessText(guess Guess) string {
 	case ConfidenceSet, ConfidenceHigh:
 		return label
 	case ConfidenceMedium:
-		return "Probably " + article(label) + " " + inSentence(label)
+		return "Probably " + withArticle(label)
 	default:
-		return "Maybe " + article(label) + " " + inSentence(label)
+		return "Maybe " + withArticle(label)
 	}
 }
 
@@ -340,7 +350,7 @@ func describeDevice(device Device) string {
 	case device.Guess.Type != "" && device.Guess.Confidence != ConfidenceLow:
 		text := GuessText(device.Guess)
 		if device.Guess.Confidence == ConfidenceSet || device.Guess.Confidence == ConfidenceHigh {
-			text = article(text) + " " + inSentence(text)
+			text = withArticle(text)
 			text = strings.ToUpper(text[:1]) + text[1:]
 		}
 		if device.Vendor != "" {
@@ -363,7 +373,24 @@ func inSentence(label string) string {
 	return strings.ToLower(label)
 }
 
+// massLabels are the types that read as a mass noun, which takes no article:
+// "probably network equipment", not "a network equipment".
+var massLabels = map[string]bool{"Network equipment": true, "Network storage": true, "Smart lighting": true}
+
+// withArticle sets a type for the middle of a sentence with its article: "a
+// doorbell", "an iPad", or "network storage".
+func withArticle(label string) string {
+	if massLabels[label] {
+		return inSentence(label)
+	}
+	return article(label) + " " + inSentence(label)
+}
+
 func article(word string) string {
+	// An acronym is read letter by letter, and U reads "you".
+	if word == strings.ToUpper(word) && strings.HasPrefix(word, "U") {
+		return "a"
+	}
 	if word != "" && strings.ContainsRune("AEIOUaeiou", rune(word[0])) {
 		return "an"
 	}

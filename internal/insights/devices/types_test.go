@@ -42,6 +42,14 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"a 3D printer on a radio module", Device{Vendor: "Quectel"}, []string{"bambu-lab"}, "printer", ConfidenceHigh},
 		{"a slicer on a computer", Device{Vendor: "Dell"}, []string{"bambu-lab"}, "", ""},
 		{"a module reaching a broker", Device{Vendor: "Espressif"}, []string{"mqtt"}, "smart-home", ConfidenceHigh},
+		{"UniFi's own gear", Device{Name: "Basement U7 Pro", Vendor: "Ubiquiti", UniFiType: "network"}, nil, "network", ConfidenceHigh},
+		{"an operator's type over UniFi's gear", Device{Vendor: "Ubiquiti", UniFiType: "network", Type: "storage"}, nil, "storage", ConfidenceSet},
+		{"a UniFi NAS by its name", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti"}, nil, "storage", ConfidenceMedium},
+		{"a UniFi NAS by UniFi's word", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti", UniFiType: "storage"}, nil, "storage", ConfidenceHigh},
+		{"a UniFi UPS by UniFi's word", Device{Name: "UPS Tower", Vendor: "Ubiquiti", UniFiType: "ups"}, nil, "ups", ConfidenceHigh},
+		{"a type UniFi names that Sable lacks", Device{Vendor: "Ubiquiti", UniFiType: "fridge"}, nil, "network", ConfidenceLow},
+		{"a UPS by its maker", Device{Vendor: "APC"}, nil, "ups", ConfidenceMedium},
+		{"a UPS by its name", Device{Name: "rack-ups", Vendor: "Ubiquiti"}, nil, "ups", ConfidenceMedium},
 		{"an e-ink tablet by name and sync", Device{Name: "Remarkable 2", Vendor: "AMPAK"}, []string{"remarkable"}, "tablet", ConfidenceHigh},
 		{"an e-ink tablet's sync alone", Device{}, []string{"remarkable"}, "tablet", ConfidenceLow},
 		{"a weak lean", Device{Vendor: "Dell"}, nil, "computer", ConfidenceLow},
@@ -99,6 +107,18 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 		t.Errorf("GuessText = %q", got)
 	}
 	// An acronym keeps its capitals in the middle of a sentence.
+	if got := GuessText(Guess{Type: "storage", Confidence: ConfidenceMedium}); got != "Probably network storage" {
+		t.Fatalf("GuessText = %q", got)
+	}
+	if got := describeDevice(Device{Vendor: "Ubiquiti", Guess: Guess{Type: "network", Confidence: ConfidenceHigh}}); got != "Network equipment made by Ubiquiti. " {
+		t.Fatalf("describeDevice = %q", got)
+	}
+	if got := Classify(Device{UniFiType: "storage"}, nil).Reasons[0].Text; got != "UniFi says it is network storage" {
+		t.Fatalf("UniFi reason = %q", got)
+	}
+	if got := GuessText(Guess{Type: "ups", Confidence: ConfidenceLow}); got != "Maybe a UPS" {
+		t.Fatalf("GuessText = %q", got)
+	}
 	if got := GuessText(Guess{Type: "tv", Confidence: ConfidenceMedium}); got != "Probably a TV" {
 		t.Errorf("GuessText = %q", got)
 	}
