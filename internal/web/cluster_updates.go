@@ -50,7 +50,7 @@ func (server *Server) startClusterUpdate(writer http.ResponseWriter, request *ht
 }
 
 func (server *Server) renderClusterUpdateResult(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
-	if request.FormValue("notification") != "true" {
+	if request.FormValue("notification") != "true" && request.FormValue("source") != "about" {
 		server.renderClusterMutation(writer, request, status, message, errorMessage)
 		return
 	}
@@ -60,8 +60,9 @@ func (server *Server) renderClusterUpdateResult(writer http.ResponseWriter, requ
 		return
 	}
 	// The Cluster page already follows every node through installation and
-	// restart, including when the notification was opened on another page.
-	writer.Header().Set("HX-Redirect", "/cluster")
+	// restart. A rollout started from the notification or About lands on its
+	// Rolling Updates card.
+	writer.Header().Set("HX-Redirect", "/cluster#cluster-updates")
 	writer.WriteHeader(http.StatusOK)
 }
 

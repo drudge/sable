@@ -138,7 +138,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 									<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
 								}
 							} else if view.Supported && view.CanApply && view.Version != "" {
-								@clusterUpdateForm(view.Version, false) {
+								@clusterUpdateForm(view.Version, "cluster") {
 									<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")<span>Update all</span></button>
 								}
 							}
@@ -156,23 +156,51 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 	</div>
 }
 
-templ clusterUpdateForm(version string, fromNotification bool) {
+// clusterUpdateForm starts a rollout from the Cluster page, the update
+// notification, or About. A rollout started elsewhere lands on the Cluster
+// page, which follows it; a refusal redraws the control it came from.
+templ clusterUpdateForm(version string, source string) {
 	<form
 		hx-post="/ui/updates/cluster"
-		hx-target={ ifThen(fromNotification, "closest .toast-region", "#cluster-content") }
+		hx-target={ clusterUpdateTarget(source) }
 		hx-swap="outerHTML"
-		hx-disable={ ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#cluster-updates button, #cluster-updates input") }
+		hx-disable={ clusterUpdateDisable(source) }
 		hx-confirm={ "Install Sable v" + version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." }
 		data-confirm-title="Update the entire cluster?"
 		data-confirm-action="Start rolling update"
 		data-confirm-tone="neutral"
 	>
 		<input type="hidden" name="version" value={ version }/>
-		if fromNotification {
-			<input type="hidden" name="notification" value="true"/>
+		switch source {
+			case "notification":
+				<input type="hidden" name="notification" value="true"/>
+			case "about":
+				<input type="hidden" name="source" value="about"/>
 		}
 		{ children... }
 	</form>
+}
+
+func clusterUpdateTarget(source string) string {
+	switch source {
+	case "notification":
+		return "closest .toast-region"
+	case "about":
+		return "#about-update"
+	default:
+		return "#cluster-content"
+	}
+}
+
+func clusterUpdateDisable(source string) string {
+	switch source {
+	case "notification":
+		return "[data-update-version] button, [data-update-version] input"
+	case "about":
+		return "#about-update button, #about-update input"
+	default:
+		return "#cluster-updates button, #cluster-updates input"
+	}
 }
 
 func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {

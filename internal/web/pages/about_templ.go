@@ -971,6 +971,8 @@ func updateDetail(view UpdateView) string {
 		return view.Error
 	case view.Available && view.Blocked != "":
 		return view.Blocked
+	case view.Available && view.CanUpdateCluster:
+		return "Ready to install on this node or the whole cluster."
 	case view.Available:
 		return "Ready to install on this node."
 	case view.UpToDate:
