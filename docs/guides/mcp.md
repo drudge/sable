@@ -114,7 +114,7 @@ Web connectors in chatgpt.com and claude.ai are not supported yet. They connect 
 
 ## Check the connection
 
-Ask the assistant to list your zones. It should name only the zones the token's group allows, and mark as editable only those it may change. Then ask it to add and remove a throwaway TXT record in a test zone, and confirm both changes in the console.
+The **MCP Server** card counts the tools on offer and shows when an assistant last called one. Hover **Last used** to see who, with which app, and which tool. Ask the assistant to list your zones. It should name only the zones the token's group allows, and mark as editable only those it may change. Then ask it to add and remove a throwaway TXT record in a test zone, and confirm both changes in the console.
 
 ## Review what it changed
 

@@ -25,6 +25,11 @@ type MCPAppView struct {
 	Clustered        bool
 	SecurityDisabled bool
 	Setup            bool
+	Tools            int
+	// LastUsed is empty until an assistant calls a tool; LastUsedBy says who
+	// and with which app.
+	LastUsed   string
+	LastUsedBy string
 }
 
 type DynamicDNSAppView struct {
@@ -631,13 +636,15 @@ templ MCPCard(view MCPAppView) {
 				} else if !view.Secure {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>Tokens would cross the network unencrypted. Set up a certificate unless the assistant runs on this server.</span></div></div>
 				}
-				<div class="integration-facts">
+				<div class="integration-facts mcp-facts">
 					<div class="integration-fact-address" title={ view.Address } aria-label={ "MCP address: " + view.Address }>
 						<span class="integration-fact-label">{ ifThen(view.Clustered, "MCP address (primary)", "MCP address") }</span>
 						@FactCopyButton("mcp-address", "Copy MCP address")
 						<span class="integration-fact-value"><code id="mcp-address">{ view.Address }</code></span>
 					</div>
 					<div><span class="integration-fact-label">Sign-in</span><span class="integration-fact-value">{ ifThen(view.SecurityDisabled, "None", "API token") }</span></div>
+					<div><span class="integration-fact-label">Tools</span><span class="integration-fact-value">{ strconv.Itoa(view.Tools) }</span></div>
+					<div title={ view.LastUsedBy }><span class="integration-fact-label">Last used</span><span class="integration-fact-value">{ ifThen(view.LastUsed == "", "Never", view.LastUsed) }</span></div>
 				</div>
 				<div class="integration-card-actions">
 					<button class="button outline destructive" type="button" data-dialog-open="remove-mcp-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>

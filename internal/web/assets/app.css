@@ -1751,6 +1751,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+/* The address is long, so it takes its own row above the short facts. */
+.mcp-facts .integration-fact-address { grid-column: 1 / -1; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }

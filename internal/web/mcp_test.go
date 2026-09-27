@@ -3,11 +3,13 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -88,13 +92,34 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		mcpTestStats{testStats: testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}}},
 		configuration, validatingTestZoneStore{configuration.zoneStore()}, "sqlite",
-		testQueryLog{}, testQueryLog{}, func(context.Context) error { return nil },
+		testQueryLog{}, &mcpTestQueries{}, func(context.Context) error { return nil },
 		authenticator, true, false, false,
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return server, configuration
+}
+
+// mcpTestQueries keeps the last MCP use in memory the way the store keeps it
+// in its metadata table.
+type mcpTestQueries struct {
+	testQueryLog
+	mu  sync.Mutex
+	use store.MCPUse
+}
+
+func (queries *mcpTestQueries) LoadMCPUse(context.Context) (store.MCPUse, error) {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	return queries.use, nil
+}
+
+func (queries *mcpTestQueries) SaveMCPUse(_ context.Context, use store.MCPUse) error {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	queries.use = use
+	return nil
 }
 
 type mcpTestReply struct {
@@ -578,5 +603,53 @@ func TestMCPAddressPrefersPrimaryHTTPS(t *testing.T) {
 	}})
 	if address, secure := server.mcpAddress(request.Context(), request); address != "https://ns1.penree.example:5443/mcp" || !secure {
 		t.Fatalf("cluster address = %s secure=%t", address, secure)
+	}
+}
+
+func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
+	t.Parallel()
+	server, _ := newMCPTestServer(t)
+	card := func() string {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/integrations", nil)
+		response := httptest.NewRecorder()
+		if err := pages.MCPCard(server.integrationsView(request, "", "").MCP).Render(request.Context(), response); err != nil {
+			t.Fatal(err)
+		}
+		return response.Body.String()
+	}
+	before := card()
+	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList()))) || !strings.Contains(before, ">Never<") {
+		t.Fatalf("card before any call lacks the tool count or Never")
+	}
+
+	// Listing tools is the client probing; only a tool call counts as use.
+	postMCP(t, server, "sable_pat_admin", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	if !strings.Contains(card(), ">Never<") {
+		t.Fatal("tools/list counted as use")
+	}
+
+	request := httptest.NewRequest(http.MethodPost, mcpPath, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_zones","arguments":{}}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer sable_pat_scoped")
+	request.Header.Set("User-Agent", "claude-code/2.1.0 (cli)")
+	server.httpServer.Handler.ServeHTTP(httptest.NewRecorder(), request)
+	after := card()
+	if strings.Contains(after, ">Never<") || !strings.Contains(after, "deploy with claude-code, list_zones") {
+		t.Fatalf("card after a call does not show the use")
+	}
+}
+
+func TestMCPClientName(t *testing.T) {
+	t.Parallel()
+	for userAgent, want := range map[string]string{
+		"claude-code/2.1.0 (cli)": "claude-code",
+		"codex_cli_rs/0.40.0":     "codex_cli_rs",
+		"node":                    "node",
+		"":                        "",
+	} {
+		if got := mcpClientName(userAgent); got != want {
+			t.Errorf("mcpClientName(%q) = %q, want %q", userAgent, got, want)
+		}
 	}
 }

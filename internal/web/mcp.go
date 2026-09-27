@@ -13,8 +13,11 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -166,6 +169,7 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
 		arguments = []byte("{}")
 	}
+	server.recordMCPUse(request, tool.Name)
 	// Tool failures go back to the model as a result, not a protocol error, so
 	// it can read what went wrong and correct its next call.
 	output, err := tool.call(server, request, arguments)
@@ -181,6 +185,50 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 		"structuredContent": output,
 		"isError":           false,
 	}, nil
+}
+
+type mcpUseStore interface {
+	LoadMCPUse(context.Context) (store.MCPUse, error)
+	SaveMCPUse(context.Context, store.MCPUse) error
+}
+
+// recordMCPUse notes who last called a tool, with what, so the card can show
+// an assistant is really connected. A failure to save never fails the call.
+func (server *Server) recordMCPUse(request *http.Request, tool string) {
+	uses, ok := server.queries.(mcpUseStore)
+	if !ok {
+		return
+	}
+	use := store.MCPUse{At: time.Now().UTC(), Client: mcpClientName(request.UserAgent()), Tool: tool}
+	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
+		use.Username = principal.Username
+	}
+	if err := uses.SaveMCPUse(request.Context(), use); err != nil {
+		server.logger.Warn("record MCP use", "error", err)
+	}
+}
+
+func (server *Server) lastMCPUse(ctx context.Context) store.MCPUse {
+	uses, ok := server.queries.(mcpUseStore)
+	if !ok {
+		return store.MCPUse{}
+	}
+	use, err := uses.LoadMCPUse(ctx)
+	if err != nil {
+		server.logger.Warn("load MCP use", "error", err)
+	}
+	return use
+}
+
+// mcpClientName keeps the product from a User-Agent, such as claude-code from
+// "claude-code/2.1.0 (cli)", which is enough to tell assistants apart.
+func mcpClientName(userAgent string) string {
+	product, _, _ := strings.Cut(strings.TrimSpace(userAgent), " ")
+	product, _, _ = strings.Cut(product, "/")
+	if len(product) > 64 {
+		product = product[:64]
+	}
+	return product
 }
 
 func mcpToolFailure(err error) map[string]any {
