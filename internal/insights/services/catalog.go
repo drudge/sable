@@ -97,8 +97,8 @@ var catalog = []catalogEntry{
 	{Service{"myq", "myQ", CategorySmartHome}, []string{"myq-cloud.com", "myqservices.com", "chamberlain.com"}},
 	{Service{"roomba", "iRobot", CategorySmartHome}, []string{"irobot.com", "irobotapi.com"}},
 	{Service{"ifttt", "IFTTT", CategorySmartHome}, []string{"ifttt.com"}},
-	{Service{"generac", "Generac", CategorySmartHome}, []string{"generaccloud.com", "mobilelinkgen.com"}},
-	{Service{"trmnl", "TRMNL", CategorySmartHome}, []string{"trmnl.app", "trmnl.com", "usetrmnl.com", "trmnl-screens.nyc3.digitaloceanspaces.com"}},
+	{Service{"generac", "Generac", CategorySmartHome}, []string{"generaccloud.com"}},
+	{Service{"trmnl", "TRMNL", CategorySmartHome}, []string{"trmnl.app", "trmnl-screens.nyc3.digitaloceanspaces.com"}},
 
 	// Cameras and doorbells.
 	{Service{"ring", "Ring", CategoryCameras}, []string{"ring.com", "ring.devices.a2z.com"}},
@@ -198,7 +198,7 @@ var catalog = []catalogEntry{
 	{Service{"epson", "Epson", CategoryPlatform}, []string{"epson.com", "epsonconnect.com", "epson.net"}},
 	{Service{"brother", "Brother", CategoryPlatform}, []string{"brother.com", "brother-usa.com"}},
 	{Service{"remarkable", "reMarkable", CategoryPlatform}, []string{"device.cloud.remarkable.com", "tectonic.remarkable.com"}},
-	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"bambulab.com", "bambulab.cn", "bblmw.com"}},
+	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"api.bambulab.com", "mqtt.bambulab.com"}},
 	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time.cloudflare.com"}},
 
 	// Finance.
