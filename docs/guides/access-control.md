@@ -15,7 +15,6 @@ Sign in as an administrator. Keep at least one tested recovery administrator and
 | DNS Administrator | DNS administration with release-check access |
 | Operator | Operational access, including release checks |
 | Auditor | Read-oriented inspection, including release checks |
-| MCP Client | Records, zone creation, and blocking through the [MCP server](mcp.md), with API tokens only |
 
 Inspect the group's actual grants in **Administration** before assigning it. A group name is a convenience, not a substitute for verifying the permissions your workflow needs.
 
