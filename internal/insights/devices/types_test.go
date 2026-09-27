@@ -104,6 +104,15 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 		t.Errorf("GuessText = %q", got)
 	}
 	// An acronym keeps its capitals in the middle of a sentence.
+	if got := GuessText(Guess{Type: "storage", Confidence: ConfidenceMedium}); got != "Probably network storage" {
+		t.Fatalf("GuessText = %q", got)
+	}
+	if got := describeDevice(Device{Vendor: "Ubiquiti", Guess: Guess{Type: "network", Confidence: ConfidenceHigh}}); got != "Network equipment made by Ubiquiti. " {
+		t.Fatalf("describeDevice = %q", got)
+	}
+	if got := Classify(Device{UniFiType: "storage"}, nil).Reasons[0].Text; got != "UniFi says it is network storage" {
+		t.Fatalf("UniFi reason = %q", got)
+	}
 	if got := GuessText(Guess{Type: "tv", Confidence: ConfidenceMedium}); got != "Probably a TV" {
 		t.Errorf("GuessText = %q", got)
 	}

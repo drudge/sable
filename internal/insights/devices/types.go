@@ -188,7 +188,7 @@ func Classify(device Device, used []services.Service) Guess {
 	if label := TypeLabel(device.UniFiType); label != "" {
 		return Guess{
 			Type: device.UniFiType, Confidence: ConfidenceHigh, Detected: device.UniFiType,
-			Reasons: []insights.Reason{{Text: "UniFi says it is " + article(label) + " " + inSentence(label)}},
+			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
 		}
 	}
 	type evidence struct {
@@ -335,9 +335,9 @@ func GuessText(guess Guess) string {
 	case ConfidenceSet, ConfidenceHigh:
 		return label
 	case ConfidenceMedium:
-		return "Probably " + article(label) + " " + inSentence(label)
+		return "Probably " + withArticle(label)
 	default:
-		return "Maybe " + article(label) + " " + inSentence(label)
+		return "Maybe " + withArticle(label)
 	}
 }
 
@@ -348,7 +348,7 @@ func describeDevice(device Device) string {
 	case device.Guess.Type != "" && device.Guess.Confidence != ConfidenceLow:
 		text := GuessText(device.Guess)
 		if device.Guess.Confidence == ConfidenceSet || device.Guess.Confidence == ConfidenceHigh {
-			text = article(text) + " " + inSentence(text)
+			text = withArticle(text)
 			text = strings.ToUpper(text[:1]) + text[1:]
 		}
 		if device.Vendor != "" {
@@ -369,6 +369,19 @@ func inSentence(label string) string {
 		return label
 	}
 	return strings.ToLower(label)
+}
+
+// massLabels are the types that read as a mass noun, which takes no article:
+// "probably network equipment", not "a network equipment".
+var massLabels = map[string]bool{"Network equipment": true, "Network storage": true, "Smart lighting": true}
+
+// withArticle sets a type for the middle of a sentence with its article: "a
+// doorbell", "an iPad", or "network storage".
+func withArticle(label string) string {
+	if massLabels[label] {
+		return inSentence(label)
+	}
+	return article(label) + " " + inSentence(label)
 }
 
 func article(word string) string {
