@@ -236,7 +236,7 @@ func TestMCPHandshake(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,create_zone,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule" {
+	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule" {
 		t.Fatalf("tools = %v", names)
 	}
 
@@ -492,6 +492,7 @@ func TestMCPReplicaServesReadsOnly(t *testing.T) {
 func TestMCPCreateZone(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
+	configuration.snapshot.Config.MCP.ManageZones = true
 
 	created, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "New.Test.", "default_ttl": 600})
 	if failure != "" || created["zone"] != "new.test" || created["message"] != "Zone created" {

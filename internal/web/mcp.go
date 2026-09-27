@@ -167,8 +167,8 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 	}
 	// A client may still hold a tool list from before an option was turned
 	// off, so say so plainly instead of calling the tool unknown.
-	if tool.option != nil && !tool.option(server.config.Current().Config.MCP) {
-		return mcpToolFailure(fmt.Errorf("the %s tool is turned off in Sable under Integrations, MCP Server", tool.Name)), nil
+	if reason := mcpToolOff(tool, server.config.Current().Config.MCP); reason != "" {
+		return mcpToolFailure(errors.New(reason)), nil
 	}
 	arguments := input.Arguments
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
@@ -324,10 +324,10 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 		if !settings.Configured {
 			settings.Configured, settings.Enabled = true, true
 		}
-		settings.DeleteZones, settings.BlockLists = on("delete_zones"), on("block_lists")
-		settings.InsightFindings, settings.QueryLog = on("insight_findings"), on("query_log")
+		settings.ManageZones = on("manage_zones")
+		settings.BlockLists, settings.InsightFindings, settings.QueryLog = on("block_lists"), on("insight_findings"), on("query_log")
 		for name, value := range map[string]bool{
-			"delete_zones": settings.DeleteZones, "block_lists": settings.BlockLists,
+			"manage_zones": settings.ManageZones, "block_lists": settings.BlockLists,
 			"insight_findings": settings.InsightFindings, "query_log": settings.QueryLog,
 		} {
 			if value {

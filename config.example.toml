@@ -275,11 +275,12 @@ secret_key_file = "data/sable.key"
 # it up from Integrations -> MCP Server in the console. configured stays true
 # while it is paused.
 # The advanced tools stay hidden from assistants until turned on, and a token
-# still needs the matching grant: zones.delete, blocking.write, or logs.read.
+# still needs the matching grant: zones.create and zones.delete, blocking.write,
+# or logs.read.
 [mcp]
 configured = false
 enabled = false
-delete_zones = false
+manage_zones = false
 block_lists = false
 insight_findings = false
 query_log = false

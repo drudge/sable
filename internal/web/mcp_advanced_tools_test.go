@@ -25,7 +25,7 @@ func mcpListedTools(t *testing.T, server *Server) []string {
 func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	advanced := []string{"delete_zone", "list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists", "list_findings", "search_queries"}
+	advanced := []string{"create_zone", "delete_zone", "list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists", "list_findings", "search_queries"}
 
 	listed := strings.Join(mcpListedTools(t, server), ",")
 	for _, name := range advanced {
@@ -44,7 +44,7 @@ func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	if !strings.Contains(listed, "add_block_list") || strings.Contains(listed, "delete_zone") || strings.Contains(listed, "search_queries") {
 		t.Fatalf("with block lists on, tools = %s", listed)
 	}
-	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, DeleteZones: true, BlockLists: true, InsightFindings: true, QueryLog: true}
+	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, ManageZones: true, BlockLists: true, InsightFindings: true, QueryLog: true}
 	if got := len(mcpListedTools(t, server)); got != len(mcpAllTools()) {
 		t.Fatalf("with every option on, %d of %d tools offered", got, len(mcpAllTools()))
 	}
@@ -53,7 +53,7 @@ func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 func TestMCPDeleteZoneOnlyDeletesItsOwnZones(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP.DeleteZones = true
+	configuration.snapshot.Config.MCP.ManageZones = true
 
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "preview.test"}); failure != "" {
 		t.Fatalf("create_zone failed: %s", failure)

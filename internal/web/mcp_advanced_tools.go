@@ -42,7 +42,7 @@ var mcpAdvancedTools = []mcpTool{
 		}, []string{"zone", "confirm"}),
 		Annotations: mcpToolAnnotations{Title: "Delete a zone", DestructiveHint: true},
 		call:        (*Server).mcpDeleteZone,
-		option:      func(settings config.MCP) bool { return settings.DeleteZones },
+		option:      func(settings config.MCP) bool { return settings.ManageZones },
 	},
 	{
 		Name:  "list_block_lists",

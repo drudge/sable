@@ -36,7 +36,7 @@ type MCPAppView struct {
 	Tools            int
 	CallsToday       int
 	// Advanced tools the operator turned on.
-	DeleteZones     bool
+	ManageZones     bool
 	BlockLists      bool
 	InsightFindings bool
 	QueryLog        bool
@@ -3363,7 +3363,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = MCPToolSwitch("delete_zones", "Delete Zones", "Delete zones an assistant created through MCP.", []string{"zones.delete"}, view.DeleteZones).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = MCPToolSwitch("manage_zones", "Manage Zones", "Create zones, and delete zones an assistant created.", []string{"zones.create", "zones.delete"}, view.ManageZones).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -579,7 +579,7 @@ turn it on, and a token still needs the matching grant:
 
 | Key | Tools | Grant |
 | --- | --- | --- |
-| `delete_zones` | `delete_zone`, for zones created through MCP only | `zones.delete` |
+| `manage_zones` | `create_zone`, and `delete_zone` for zones created through MCP only | `zones.create`, `zones.delete` |
 | `block_lists` | `list_block_lists`, `add_block_list`, `remove_block_list`, `refresh_block_lists` | `blocking.read`, `blocking.write` |
 | `insight_findings` | `list_findings` | `logs.read` |
 | `query_log` | `search_queries` | `logs.read` |

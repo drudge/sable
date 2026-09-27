@@ -148,7 +148,7 @@ type MCP struct {
 	// Advanced tools reach further than records and blocking rules, so each
 	// stays hidden from assistants until an operator turns it on. A token
 	// still needs the matching grant to use one.
-	DeleteZones     bool `toml:"delete_zones"`
+	ManageZones     bool `toml:"manage_zones"`
 	BlockLists      bool `toml:"block_lists"`
 	InsightFindings bool `toml:"insight_findings"`
 	QueryLog        bool `toml:"query_log"`

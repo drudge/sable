@@ -180,6 +180,9 @@ var mcpCreateZoneTool = mcpTool{
 	}, []string{"name"}),
 	Annotations: mcpToolAnnotations{Title: "Create a Primary zone"},
 	call:        (*Server).mcpCreateZone,
+	// Creating a zone cannot be limited to chosen zones, so it sits with
+	// delete_zone behind the Manage Zones switch.
+	option: func(settings config.MCP) bool { return settings.ManageZones },
 }
 
 // mcpAllTools is every tool Sable has, whether or not it is switched on.
@@ -189,7 +192,15 @@ func mcpAllTools() []mcpTool {
 
 // mcpToolList is what assistants are offered with these settings.
 func mcpToolList(settings config.MCP) []mcpTool {
-	return slices.DeleteFunc(mcpAllTools(), func(tool mcpTool) bool { return tool.option != nil && !tool.option(settings) })
+	return slices.DeleteFunc(mcpAllTools(), func(tool mcpTool) bool { return mcpToolOff(tool, settings) != "" })
+}
+
+// mcpToolOff says why a tool is not offered, or nothing when it is.
+func mcpToolOff(tool mcpTool, settings config.MCP) string {
+	if tool.option != nil && !tool.option(settings) {
+		return fmt.Sprintf("the %s tool is turned off in Sable under Integrations, MCP Server", tool.Name)
+	}
+	return ""
 }
 
 func mcpToolByName(name string) (mcpTool, bool) {

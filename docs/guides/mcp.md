@@ -14,7 +14,6 @@ The assistant signs in with an [API token](api-tokens.md). The token's groups de
 | `set_records` | Makes every record of one name and type match a list of values, adding and removing as needed. Repeating it changes nothing |
 | `update_record` | Changes one record's name, value, TTL, note, or whether it is served |
 | `delete_record` | Removes one record |
-| `create_zone` | Creates a Primary zone with an SOA and one apex NS record |
 | `lookup` | Resolves a name through Sable and says whether the answer came from a zone, a local name, blocking, the cache, or upstream |
 | `purge_cache` | Forgets this node's cached answers for one name |
 | `check_domain` | Says whether blocking stops a domain, and which rule and block list cause it |
@@ -34,7 +33,7 @@ Some tools reach further, so each stays hidden from assistants until you turn it
 
 | Option | Tools | Grant |
 | --- | --- | --- |
-| **Delete Zones** | `delete_zone`, for zones created through the MCP server only. The assistant must repeat the zone name to confirm | `zones.delete` |
+| **Manage Zones** | `create_zone` creates a Primary zone with an SOA and one apex NS record. `delete_zone` deletes only zones created through the MCP server, and the assistant must repeat the zone name to confirm | `zones.create`, `zones.delete` |
 | **Block Lists** | `list_block_lists`, `add_block_list`, `remove_block_list`, `refresh_block_lists` | `blocking.read`, `blocking.write` to change |
 | **Insights Findings** | `list_findings`: what Insights noticed, such as new devices, traffic spikes, or failing updates, with its evidence. Findings you hid or turned off are left out | `logs.read` |
 | **Query Log Search** | `search_queries`: each device's DNS lookups, filtered by device, name, or blocked only | `logs.read` |
