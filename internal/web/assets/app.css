@@ -2826,9 +2826,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-card-title .nav-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 1.25rem; color: #f1ad47; }
 .about-code-block { position: relative; min-width: 0; }
 .about-code-block pre { max-height: none; padding-right: 2.75rem; background: color-mix(in oklch, var(--muted) 40%, transparent); font-size: .6875rem; }
-.about-copy-button { position: absolute; top: .25rem; right: .25rem; display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .375rem; background: transparent; color: var(--muted-foreground); }
+.about-copy-button { position: absolute; top: .4rem; right: .4rem; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; padding: 0; color: var(--muted-foreground); transition: background 120ms; }
 .about-copy-button:hover { background: var(--accent); color: var(--foreground); }
-.about-copy-button .nav-icon { width: .875rem; height: .875rem; }
+/* Center the icon the way the record copy buttons do: without this the
+   text-height icon wrappers sit up and to the left of the hover box. */
+.about-copy-button > span { align-items: center; justify-content: center; line-height: 0; }
+.about-copy-button:not(.is-copied) > .copy-icon-default, .about-copy-button.is-copied > .copy-icon-success { display: flex; }
+.about-copy-button.is-copied > .copy-icon-success { color: #22c55e; }
+.about-copy-button .nav-icon { width: .85rem; height: .85rem; flex-basis: .85rem; }
 .about-metrics-preview { display: grid; justify-items: start; gap: .75rem; }
 .about-metrics-preview pre { width: 100%; max-height: 14rem; font-size: .6875rem; }
 .about-metrics-preview pre:not(:empty) { display: block !important; }
