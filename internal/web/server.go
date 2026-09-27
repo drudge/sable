@@ -304,6 +304,8 @@ func New(
 	mux.HandleFunc("POST /ui/integrations/mcp/enabled", server.setMCPEnabled)
 	mux.HandleFunc("POST /ui/integrations/mcp/remove", server.removeMCP)
 	mux.HandleFunc("POST /ui/integrations/mcp/setup", server.saveMCPSetup)
+	mux.HandleFunc("POST /ui/integrations/mcp/group", server.saveMCPGroup)
+	mux.HandleFunc("POST /ui/integrations/mcp/token", server.createMCPToken)
 	mux.HandleFunc("POST /ui/integrations/sso/check", server.checkSSO)
 	mux.HandleFunc("POST /ui/integrations/sso/enabled", server.setSSOEnabled)
 	mux.HandleFunc("POST /ui/integrations/sso/wizard", server.runSSOWizard)

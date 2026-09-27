@@ -3417,10 +3417,70 @@
 	  if (!button) return;
 	  const surface = button.closest(".permission-surface");
 	  if (!surface) return;
-	  const checked = button.dataset.permissionSelect === "all";
+	  // "read" keeps only the choices marked as changing nothing.
+	  const choice = button.dataset.permissionSelect;
 	  surface.querySelectorAll('.permission-checks input[type="checkbox"]:not(:disabled)').forEach((input) => {
-		input.checked = checked;
+		input.checked = choice === "all" || (choice === "read" && input.dataset.readOnly === "true");
 	  });
+	  // Let anything summarizing these choices, such as the MCP wizard's
+	  // grant list, catch up.
+	  surface.querySelector('.permission-checks input[type="checkbox"]')?.dispatchEvent(new Event("change", {bubbles: true}));
+	});
+
+	// With tokens already made, the MCP wizard folds the token form behind
+	// New Token.
+	document.addEventListener("click", (event) => {
+	  const reveal = event.target.closest?.("[data-mcp-new-token] button");
+	  if (!reveal) return;
+	  const section = reveal.closest("#mcp-access-token");
+	  const form = section?.querySelector("[data-mcp-token-form]");
+	  if (!form) return;
+	  reveal.closest("[data-mcp-new-token]").hidden = true;
+	  form.hidden = false;
+	  form.querySelector("input")?.focus();
+	});
+
+	// The MCP setup wizard lists the grants its checked tools need and
+	// compares them with the group it made, offering Update Group when they
+	// differ. The server renders the same list and sentences on open.
+	document.addEventListener("change", (event) => {
+	  if (!event.target.matches?.('input[name="tools"][data-grant]')) return;
+	  const form = event.target.form;
+	  const summary = form?.querySelector("[data-mcp-grants]");
+	  if (!summary) return;
+	  const badges = (grants) => grants.map((grant) => {
+		const badge = document.createElement("span");
+		const code = document.createElement("code");
+		code.textContent = grant;
+		badge.append(code);
+		return badge;
+	  });
+	  const needed = [...new Set([...form.querySelectorAll('input[name="tools"][data-grant]:checked')].map((input) => input.dataset.grant))];
+	  summary.replaceChildren(...badges(needed));
+	  const section = form.querySelector("[data-mcp-group]");
+	  const coverage = section?.querySelector("[data-mcp-grant-coverage]");
+	  if (!coverage) return;
+	  const group = section.dataset.mcpGroup;
+	  const granted = (section.dataset.mcpGroupGrants || "").split(" ").filter(Boolean);
+	  const missing = needed.filter((grant) => !granted.includes(grant));
+	  const extra = granted.filter((grant) => !needed.includes(grant));
+	  let text = `${group} matches these grants.`;
+	  let differ = [];
+	  if (needed.length === 0) text = "Choose at least one tool.";
+	  else if (!group) text = "Create a group with these grants, then make a token that uses it.";
+	  else if (missing.length > 0) [text, differ] = [`${group} lacks these grants:`, missing];
+	  else if (extra.length > 0) [text, differ] = [`${group} also grants these, which the tools do not need:`, extra];
+	  const diff = section.querySelector("[data-mcp-grant-diff]");
+	  if (diff) {
+		diff.replaceChildren(...badges(differ));
+		diff.hidden = differ.length === 0;
+	  }
+	  const line = coverage.querySelector("[data-mcp-grant-coverage-text]") || coverage;
+	  line.textContent = text;
+	  const outOfStep = missing.length > 0 || extra.length > 0;
+	  coverage.toggleAttribute("data-matched", Boolean(group) && needed.length > 0 && !outOfStep);
+	  const update = section.querySelector("[data-mcp-group-update]");
+	  if (update) update.hidden = !(group && needed.length > 0 && outOfStep);
 	});
 
 	document.addEventListener("change", (event) => {
@@ -4585,6 +4645,12 @@
 		if (reopening) from.close();
 		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), reopening ? null : dialogOpen);
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
+		return;
+	  }
+	  // A wizard's Next and Back move between the steps of its own dialog.
+	  const dialogStep = event.target.closest("[data-dialog-step]");
+	  if (dialogStep) {
+		dialogStep.closest("[data-dialog-tabs]")?.sableSelectDialogTab?.(dialogStep.dataset.dialogStep, true);
 		return;
 	  }
 	  const dialogSwitch = event.target.closest("[data-dialog-switch]");

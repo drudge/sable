@@ -1,9 +1,9 @@
 package web
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,7 +25,7 @@ func mcpListedTools(t *testing.T, server *Server) []string {
 func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	advanced := []string{"create_zone", "delete_zone", "list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists", "list_findings", "search_queries"}
+	advanced := []string{"create_zone", "delete_zone", "add_block_list", "remove_block_list", "refresh_block_lists", "search_queries"}
 
 	listed := strings.Join(mcpListedTools(t, server), ",")
 	for _, name := range advanced {
@@ -39,12 +39,12 @@ func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 		t.Fatalf("disabled tool failure = %q", failure)
 	}
 
-	configuration.snapshot.Config.MCP.BlockLists = true
+	addMCPTools(configuration, "add_block_list", "remove_block_list", "refresh_block_lists")
 	listed = strings.Join(mcpListedTools(t, server), ",")
 	if !strings.Contains(listed, "add_block_list") || strings.Contains(listed, "delete_zone") || strings.Contains(listed, "search_queries") {
 		t.Fatalf("with block lists on, tools = %s", listed)
 	}
-	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, ManageZones: true, BlockLists: true, InsightFindings: true, QueryLog: true}
+	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, Tools: config.MCPTools}
 	if got := len(mcpListedTools(t, server)); got != len(mcpAllTools()) {
 		t.Fatalf("with every option on, %d of %d tools offered", got, len(mcpAllTools()))
 	}
@@ -53,7 +53,7 @@ func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 func TestMCPDeleteZoneOnlyDeletesItsOwnZones(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP.ManageZones = true
+	addMCPTools(configuration, "create_zone", "delete_zone")
 
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "preview.test"}); failure != "" {
 		t.Fatalf("create_zone failed: %s", failure)
@@ -83,7 +83,7 @@ func TestMCPDeleteZoneOnlyDeletesItsOwnZones(t *testing.T) {
 func TestMCPBlockListTools(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP.BlockLists = true
+	addMCPTools(configuration, "add_block_list", "remove_block_list", "refresh_block_lists")
 	configuration.snapshot.Config.Blocking.Lists = []config.BlockList{{Name: "Example Hosts", URL: "https://lists.example.test/hosts.txt", Format: "auto"}}
 
 	listed, failure := callMCPToolForTest(t, server, "sable_pat_blocking", "list_block_lists", map[string]any{})
@@ -112,8 +112,7 @@ func TestMCPBlockListTools(t *testing.T) {
 func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP.InsightFindings = true
-	configuration.snapshot.Config.MCP.QueryLog = true
+	addMCPTools(configuration, "list_findings", "search_queries")
 
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_findings", map[string]any{"range": "fortnight"}); failure != "" {
 		t.Fatalf("list_findings failed: %s", failure)
@@ -141,7 +140,7 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	}
 }
 
-func TestMCPSetupDialogSavesAdvancedTools(t *testing.T) {
+func TestMCPSetupWizardSavesTools(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
 	save := func(form string) string {
@@ -157,53 +156,57 @@ func TestMCPSetupDialogSavesAdvancedTools(t *testing.T) {
 		return response.Body.String()
 	}
 
-	// The first save sets the server up and turns it on with the chosen tools.
-	configuration.snapshot.Config.MCP = config.MCP{}
-	if body := save("block_lists=true&read_only=true"); !strings.Contains(body, "MCP server set up") {
+	// The first save sets the server up and turns it on with the chosen
+	// tools, kept in the console's order, unknown ones dropped.
+	configuration.snapshot.Config.MCP = config.MCP{Tools: config.DefaultMCPTools()}
+	if body := save("tools=add_block_list&tools=list_zones&tools=bogus"); !strings.Contains(body, "MCP server set up") {
 		t.Fatal("first save did not set the server up")
 	}
-	if got := configuration.snapshot.Config.MCP; !got.Configured || !got.Enabled || !got.BlockLists || !got.ReadOnly || got.QueryLog {
+	got := configuration.snapshot.Config.MCP
+	if !got.Configured || !got.Enabled || strings.Join(got.Tools, ",") != "list_zones,add_block_list" {
 		t.Fatalf("after setup = %+v", got)
 	}
 
 	// Editing a paused server changes its tools but leaves it paused.
 	configuration.snapshot.Config.MCP.Enabled = false
-	if body := save("query_log=true"); !strings.Contains(body, "MCP server saved") {
+	if body := save("tools=search_queries"); !strings.Contains(body, "MCP server saved") {
 		t.Fatal("edit did not confirm")
 	}
-	got := configuration.snapshot.Config.MCP
-	if got.Enabled || !got.Configured || got.BlockLists || got.ReadOnly || !got.QueryLog {
+	got = configuration.snapshot.Config.MCP
+	if got.Enabled || !got.Configured || strings.Join(got.Tools, ",") != "search_queries" {
 		t.Fatalf("after edit = %+v", got)
 	}
-	encoded, _ := json.Marshal(mcpToolList(got))
-	if !strings.Contains(string(encoded), "search_queries") || strings.Contains(string(encoded), "add_block_list") {
-		t.Fatal("saved options did not change the offered tools")
+	if offered := mcpToolList(got); len(offered) != 1 || offered[0].Name != "search_queries" {
+		t.Fatalf("offered tools = %v", offered)
 	}
 }
 
-func TestMCPReadOnlyHidesEveryWriteTool(t *testing.T) {
+// The wizard lists every tool once, in a known section, with its grant.
+func TestMCPToolSectionsListEveryTool(t *testing.T) {
 	t.Parallel()
-	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP = config.MCP{
-		Configured: true, Enabled: true, ReadOnly: true,
-		ManageZones: true, BlockLists: true, InsightFindings: true, QueryLog: true,
-	}
-	listed := mcpListedTools(t, server)
-	want := []string{"list_zones", "list_records", "lookup", "check_domain", "list_block_lists", "list_findings", "search_queries"}
-	if strings.Join(listed, ",") != strings.Join(want, ",") {
-		t.Fatalf("read-only tools = %v, want %v", listed, want)
-	}
-	for _, tool := range mcpToolList(configuration.snapshot.Config.MCP) {
-		if !tool.Annotations.ReadOnlyHint {
-			t.Fatalf("read-only mode offers %s", tool.Name)
+	var listed []string
+	for _, section := range mcpToolSectionViews(config.MCP{Tools: config.DefaultMCPTools()}) {
+		for _, tool := range section.Tools {
+			if tool.Grant == "" {
+				t.Errorf("%s has no grant", tool.Name)
+			}
+			if tool.On != slices.Contains(config.DefaultMCPTools(), tool.Name) {
+				t.Errorf("%s on = %t by default", tool.Name, tool.On)
+			}
+			listed = append(listed, tool.Name)
 		}
 	}
-	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "add_record", map[string]any{
-		"zone": "example.test", "name": "x", "type": "A", "value": "192.0.2.80",
-	}); !strings.Contains(failure, "read only") {
-		t.Fatalf("write in read-only mode = %q", failure)
+	if !slices.Equal(listed, config.MCPTools) {
+		t.Fatalf("wizard lists %v, config knows %v", listed, config.MCPTools)
 	}
-	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_zones", map[string]any{}); failure != "" {
-		t.Fatalf("read in read-only mode failed: %s", failure)
+	var defined []string
+	for _, tool := range mcpAllTools() {
+		defined = append(defined, tool.Name)
+	}
+	slices.Sort(defined)
+	known := slices.Clone(config.MCPTools)
+	slices.Sort(known)
+	if !slices.Equal(defined, known) {
+		t.Fatalf("defined tools %v, config knows %v", defined, known)
 	}
 }

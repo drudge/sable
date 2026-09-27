@@ -27,16 +27,62 @@ type MCPAppView struct {
 	Setup            bool
 	Tools            int
 	CallsToday       int
-	// Advanced tools the operator turned on.
-	ReadOnly        bool
-	ManageZones     bool
-	BlockLists      bool
-	InsightFindings bool
-	QueryLog        bool
+	Sections         []MCPToolSectionView
+	Group            MCPGroupView
 	// LastUsed is empty until an assistant calls a tool; LastUsedBy says who
 	// and with which app.
 	LastUsed   string
 	LastUsedBy string
+}
+
+// MCPGroupView is the Access step's group: the grants the chosen tools
+// need, and the group the wizard made for them, if it still exists.
+type MCPGroupView struct {
+	Needed      []string
+	Name        string
+	Grants      []string
+	Coverage    string
+	// CoverageGrants are the grants that differ from what the tools need.
+	CoverageGrants []string
+	NeedsUpdate bool
+	CanManage   bool
+	Result      string
+	ResultOK    bool
+	// InGroup says the operator belongs to the group, which a token needs
+	// before it can use it. Token and TokenExpires hold a token just made,
+	// shown once.
+	InGroup      bool
+	Token        string
+	TokenExpires string
+	TokenError   string
+	// Tokens are the operator's live tokens that use the group, so a
+	// return visit shows them instead of asking for another.
+	Tokens []MCPTokenView
+}
+
+// MCPTokenView is one of the operator's tokens that uses the MCP group.
+type MCPTokenView struct {
+	Name     string
+	LastUsed string
+	Expires  string
+}
+
+// MCPToolSectionView is one section of the setup wizard's tool list.
+type MCPToolSectionView struct {
+	Key         string
+	Title       string
+	Description string
+	Tools       []MCPToolView
+}
+
+// MCPToolView is one tool an operator can offer, with the grant it asks of a
+// token. ReadOnly marks tools that change nothing, for the Read only pick.
+type MCPToolView struct {
+	Name        string
+	Grant       string
+	Description string
+	ReadOnly    bool
+	On          bool
 }
 
 type DynamicDNSAppView struct {
@@ -626,15 +672,10 @@ templ MCPCard(view MCPAppView) {
 				<span class="integration-card-glyph">@Icon("mcp-server")</span>
 				<div>
 					<h2>MCP Server</h2>
-					<p>Lets Claude, ChatGPT, Cursor, and other AI assistants manage records and blocking with an API token.</p>
+					<p>Lets Claude, ChatGPT, and other AI assistants manage records and blocking with an API token.</p>
 				</div>
 			</div>
-			<span class="mcp-card-badges">
-				if view.Configured && view.ReadOnly {
-					<span class="status-badge">Read only</span>
-				}
-				<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
-			</span>
+			<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
 		</header>
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
@@ -675,30 +716,147 @@ templ MCPCard(view MCPAppView) {
 	</section>
 }
 
-// MCPToolSwitch is one advanced tool group, with the token grants it needs
-// shown as badges.
-// readOnlyNote, when set, appears while the Read Only switch is on, saying
-// what that switch takes away from this group.
-templ MCPToolSwitch(name, title, description string, requires []string, readOnlyNote string, on bool) {
-	<label class={ "switch-row setting-switch-row mcp-tool-row", templ.KV("mcp-tool-writes", readOnlyNote != "") }>
-		<span>
-			<span class="mcp-tool-title">
-				<strong>{ title }</strong>
-				if len(requires) > 0 {
-					<span class="table-badges" aria-label={ "Requires " + strings.Join(requires, ", ") }>
-						for _, permission := range requires {
-							<span><code>{ permission }</code></span>
-						}
-					</span>
+// MCPToolSection lists one area's tools like the group permission picker:
+// a checkbox per tool, the grant it needs beside it, and quick picks.
+templ MCPToolSection(section MCPToolSectionView) {
+	<section class="permission-surface mcp-tool-section">
+		<header>
+			<div class="mcp-tool-section-title">
+				<h3>{ section.Title }</h3>
+				<button class="operational-metric-info mcp-section-info" type="button" aria-label={ section.Title + ": " + section.Description }>
+					@Icon("info")
+					<span class="operational-metric-tooltip" role="tooltip" aria-hidden="true">{ section.Description }</span>
+				</button>
+			</div>
+			<div class="permission-bulk-actions" role="group" aria-label={ section.Title + " tool selection" }>
+				<button type="button" data-permission-select="all">All</button>
+				<button type="button" data-permission-select="read">Read only</button>
+				<button type="button" data-permission-select="none">None</button>
+			</div>
+		</header>
+		<div class="permission-checks">
+			for _, tool := range section.Tools {
+				<label title={ tool.Description }>
+					<input type="checkbox" name="tools" value={ tool.Name } checked?={ tool.On } data-read-only={ ifThen(tool.ReadOnly, "true", "false") } data-grant={ tool.Grant }/>
+					<span>{ tool.Name }</span>
+					<code class="mcp-tool-grant">{ tool.Grant }</code>
+				</label>
+			}
+		</div>
+	</section>
+}
+
+// MCPAccessStep shows what the chosen tools ask of a token, and the group
+// the wizard made for them or a form to make one.
+templ MCPAccessStep(view MCPAppView) {
+	<section class="wizard-panel compact">
+		<div class="wizard-heading compact"><span>@Icon("shield-check")</span><div><strong>Grants Needed</strong><small>What a token needs for the tools you chose.</small></div></div>
+		<div class="table-badges mcp-grant-summary" data-mcp-grants>
+			for _, grant := range view.Group.Needed {
+				<span><code>{ grant }</code></span>
+			}
+		</div>
+	</section>
+	if view.SecurityDisabled {
+		<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, so no group is needed.</span></p></div>
+	} else {
+		@MCPAccessGroup(view.Group)
+		@MCPAccessToken(view.Group, false)
+	}
+}
+
+// mcpGrantCoverage says how the group compares with the tools, with a green
+// check once they match. The wizard's script flips data-matched as tools change.
+templ mcpGrantCoverage(group MCPGroupView) {
+	<p class="field-help mcp-grant-coverage" data-mcp-grant-coverage data-matched?={ group.Name != "" && len(group.Needed) > 0 && !group.NeedsUpdate }>
+		<span class="mcp-grant-coverage-icon" aria-hidden="true">@Icon("check")</span>
+		<span data-mcp-grant-coverage-text>{ group.Coverage }</span>
+	</p>
+	<div class="table-badges mcp-grant-summary" data-mcp-grant-diff hidden?={ len(group.CoverageGrants) == 0 }>
+		for _, grant := range group.CoverageGrants {
+			<span><code>{ grant }</code></span>
+		}
+	</div>
+}
+
+// MCPAccessGroup is the Access step's group section. Saving a group swaps
+// in a fresh copy, so the wizard stays open. The wizard's script rewrites
+// the coverage line and shows Update Group as tools change.
+templ MCPAccessGroup(group MCPGroupView) {
+	<section class="wizard-panel compact" id="mcp-access-group" data-mcp-group={ group.Name } data-mcp-group-grants={ strings.Join(group.Grants, " ") }>
+		if group.Name != "" {
+			<div class="wizard-heading compact"><span>@Icon("users")</span><div><strong>Group</strong><small><strong>{ group.Name }</strong> · API only, for every zone</small></div></div>
+			@mcpGrantCoverage(group)
+			if group.CanManage {
+				<div class="mcp-group-form" data-mcp-group-update hidden?={ !group.NeedsUpdate }>
+					<button class="button outline" type="button" hx-post="/ui/integrations/mcp/group" hx-include="closest form" hx-target="#mcp-access-group" hx-swap="outerHTML" hx-disable="this">@Icon("refresh")<span>Update Group</span></button>
+				</div>
+			}
+		} else if group.CanManage {
+			<div class="wizard-heading compact"><span>@Icon("users")</span><div><strong>Group</strong><small>API only, with exactly these grants, for every zone.</small></div></div>
+			<div class="mcp-group-form">
+				<label class="field-control"><span>Group Name</span><input name="group_name" value="MCP Server" minlength="2" maxlength="64"/></label>
+				<label class="settings-check"><input type="checkbox" name="join" value="true" checked/><span>Add me to this group</span></label>
+				<button class="button outline" type="button" hx-post="/ui/integrations/mcp/group" hx-include="closest form" hx-target="#mcp-access-group" hx-swap="outerHTML" hx-disable="this">@Icon("plus")<span>Create Group</span></button>
+			</div>
+		} else {
+			<div class="wizard-heading compact"><span>@Icon("users")</span><div><strong>Group</strong></div></div>
+			<p class="field-help">Ask an administrator for an API-only group with these grants.</p>
+		}
+		if group.Result != "" {
+			if group.ResultOK {
+				<p class="field-help">{ group.Result }</p>
+			} else {
+				<div class="unifi-status error">@Icon("alert-triangle")<div><span>{ group.Result }</span></div></div>
+			}
+		}
+	</section>
+}
+
+// MCPAccessToken is the Access step's token section. It swaps on its own,
+// so a token shown once stays on screen while the group is updated. A new
+// group sends it out of band to open it.
+templ MCPAccessToken(group MCPGroupView, outOfBand bool) {
+	<section class={ "wizard-panel compact mcp-access-token", templ.KV("is-waiting", group.Name == "") } id="mcp-access-token" { mcpOutOfBand(outOfBand)... }>
+		if group.Token != "" {
+			<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong><small>Uses { group.Name }, so group changes apply to it right away.</small></div></div>
+			@APITokenResult(group.Token, group.TokenExpires, "")
+		} else if group.Name != "" && group.InGroup {
+			if len(group.Tokens) > 0 {
+				<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong><small>Yours that use { group.Name }. Group changes apply to them right away.</small></div></div>
+				for _, token := range group.Tokens {
+					<p class="field-help mcp-grant-coverage" data-matched>
+						<span class="mcp-grant-coverage-icon" aria-hidden="true">@Icon("check")</span>
+						<span><strong>{ token.Name }</strong> · Last used { token.LastUsed } · { token.Expires }</span>
+					</p>
 				}
-				if readOnlyNote != "" {
-					<span class="status-badge mcp-read-only-note">{ readOnlyNote }</span>
-				}
-			</span>
-			<small>{ description }</small>
-		</span>
-		<input type="checkbox" role="switch" name={ name } value="true" checked?={ on }/>
-	</label>
+				<div class="mcp-group-form" data-mcp-new-token>
+					<button class="button outline" type="button">@Icon("plus")<span>New Token</span></button>
+				</div>
+			} else {
+				<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong><small>Uses { group.Name }. Expires on the server's default schedule.</small></div></div>
+			}
+			<div class="mcp-group-form" data-mcp-token-form hidden?={ len(group.Tokens) > 0 }>
+				<label class="field-control"><span>Token Name</span><input name="token_name" value="MCP Server" minlength="1" maxlength="128"/></label>
+				<button class="button outline" type="button" hx-post="/ui/integrations/mcp/token" hx-include="closest form" hx-target="#mcp-access-token" hx-swap="outerHTML" hx-disable="this">@Icon("key")<span>Create Token</span></button>
+			</div>
+			if group.TokenError != "" {
+				<div class="unifi-status error">@Icon("alert-triangle")<div><span>{ group.TokenError }</span></div></div>
+			}
+		} else if group.Name != "" {
+			<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong></div></div>
+			<p class="field-help">Add yourself to { group.Name } in Administration, then make a token that uses it.</p>
+		} else {
+			<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong><small>Available once the group exists.</small></div></div>
+		}
+	</section>
+}
+
+func mcpOutOfBand(outOfBand bool) templ.Attributes {
+	if outOfBand {
+		return templ.Attributes{"hx-swap-oob": "true"}
+	}
+	return nil
 }
 
 templ RemoveMCPDialog() {
@@ -714,9 +872,25 @@ templ MCPSetupDialog(view MCPAppView) {
 	<dialog class="custom-server-dialog isotope-form-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-tabs data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="mcp-setup-title">Set Up MCP Server</h2><p>Let AI assistants manage DNS with an API token</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
-		<div class="dialog-tab-list" role="tablist" aria-label="MCP server setup"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="connect">Connect</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="tools">Advanced Tools</button></div>
+		<div class="wizard-progress mcp-wizard-progress" role="tablist" aria-label="Setup steps">
+			<button class="active" type="button" role="tab" aria-selected="true" data-dialog-tab="tools"><span>1</span><small>Tools</small></button>
+			<i></i>
+			<button type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="access"><span>2</span><small>Access</small></button>
+			<i></i>
+			<button type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="connect"><span>3</span><small>Connect</small></button>
+		</div>
 		<form class="mcp-setup-form" hx-post="/ui/integrations/mcp/setup" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="connect">
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools">
+				<div class="permission-surface-grid mcp-tool-sections">
+					for _, section := range view.Sections {
+						@MCPToolSection(section)
+					}
+				</div>
+			</section>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="access" hidden>
+				@MCPAccessStep(view)
+			</section>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="connect" hidden>
 				<section class="wizard-panel compact">
 					<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
 					<div class="about-code-block">
@@ -732,7 +906,7 @@ templ MCPSetupDialog(view MCPAppView) {
 					if view.SecurityDisabled {
 						<p class="field-help">Sign-in is off on this server, so no token is needed.</p>
 					} else {
-						<p class="field-help">Each app reads a token from <code>SABLE_API_TOKEN</code>. Create one in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a> that uses the built-in <strong>MCP Client</strong> group.</p>
+						<p class="field-help">Each app reads a token from <code>SABLE_API_TOKEN</code>. Create one in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a> that uses the group from Access.</p>
 					}
 					<div class="dialog-tab-list four" role="tablist" aria-label="Assistant app">
 						<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="claude-code">Claude Code</button>
@@ -754,19 +928,16 @@ templ MCPSetupDialog(view MCPAppView) {
 					</div>
 				</section>
 			</section>
-			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools" hidden>
-				<div class="mcp-tools-options">
-					@MCPToolSwitch("read_only", "Read Only", "Hide every tool that changes something, here and in the core tools. Assistants can still list, look up, check, and search.", nil, "", view.ReadOnly)
+			<div class="dialog-footer wizard-footer">
+				<a class="button outline" href="/integrations">Cancel</a>
+				<div class="wizard-footer-advance">
+					<button class="button outline" type="button" data-dialog-step="tools" data-dialog-save="access" hidden>@Icon("arrow-left")<span>Back</span></button>
+					<button class="button outline" type="button" data-dialog-step="access" data-dialog-save="connect" hidden>@Icon("arrow-left")<span>Back</span></button>
+					<button class="button" type="button" data-dialog-step="access" data-dialog-save="tools">@Icon("arrow-right")<span>Next</span></button>
+					<button class="button" type="button" data-dialog-step="connect" data-dialog-save="access" hidden>@Icon("arrow-right")<span>Next</span></button>
+					<button class="button" type="submit" data-dialog-save="connect" hidden>@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button>
 				</div>
-				<p class="field-help">Advanced tools are off until you turn them on, and tokens need the grants shown. Assistants see changes when they reconnect.</p>
-				<div class="mcp-tools-options">
-					@MCPToolSwitch("manage_zones", "Manage Zones", "Create zones, and delete zones an assistant created.", []string{"zones.create", "zones.delete"}, "Off in Read Only", view.ManageZones)
-					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, "Listing only", view.BlockLists)
-					@MCPToolSwitch("insight_findings", "Insights Findings", "Share what Insights noticed, with its evidence, with the AI provider.", []string{"logs.read"}, "", view.InsightFindings)
-					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, "", view.QueryLog)
-				</div>
-			</section>
-			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button></div>
+			</div>
 		</form>
 	</dialog>
 }

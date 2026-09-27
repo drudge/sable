@@ -67,7 +67,7 @@ func mcpTestZone(id, name, zoneType string) zonemodel.Zone {
 func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 	t.Helper()
 	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}}
-	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true}
+	configuration.snapshot.Config.MCP = config.MCP{Configured: true, Enabled: true, Tools: config.DefaultMCPTools()}
 	configuration.zoneSnapshot.Zones = []zonemodel.Zone{
 		mcpTestZone("zone-example", "example.test", "primary"),
 		mcpTestZone("zone-other", "other.test", "primary"),
@@ -236,7 +236,7 @@ func TestMCPHandshake(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule" {
+	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings" {
 		t.Fatalf("tools = %v", names)
 	}
 
@@ -492,7 +492,7 @@ func TestMCPReplicaServesReadsOnly(t *testing.T) {
 func TestMCPCreateZone(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP.ManageZones = true
+	addMCPTools(configuration, "create_zone", "delete_zone")
 
 	created, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "New.Test.", "default_ttl": 600})
 	if failure != "" || created["zone"] != "new.test" || created["message"] != "Zone created" {
@@ -529,7 +529,7 @@ func TestMCPCreateZone(t *testing.T) {
 func TestMCPIsOffUntilSetUp(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	configuration.snapshot.Config.MCP = config.MCP{}
+	configuration.snapshot.Config.MCP = config.MCP{Tools: config.DefaultMCPTools()}
 	ping := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
 
 	if reply := postMCP(t, server, "sable_pat_admin", ping); reply.status != http.StatusNotFound || reply.body["error"] != mcpDisabledMessage {
@@ -639,7 +639,7 @@ func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
 		return response.Body.String()
 	}
 	before := card()
-	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList(config.MCP{})))) || !strings.Contains(before, ">Never<") {
+	if !strings.Contains(before, fmt.Sprintf(">%d<", len(mcpToolList(config.MCP{Tools: config.DefaultMCPTools()})))) || !strings.Contains(before, ">Never<") {
 		t.Fatalf("card before any call lacks the tool count or Never")
 	}
 
@@ -686,4 +686,9 @@ func TestMCPClientName(t *testing.T) {
 			t.Errorf("mcpClientName(%q) = %q, want %q", userAgent, got, want)
 		}
 	}
+}
+
+// addMCPTools turns on tools beyond the defaults.
+func addMCPTools(configuration *editableTestConfiguration, groups ...string) {
+	configuration.snapshot.Config.MCP.Tools = append(configuration.snapshot.Config.MCP.Tools, groups...)
 }

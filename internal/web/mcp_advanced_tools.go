@@ -25,8 +25,8 @@ const (
 	mcpMaximumQueryHours = 24 * 31
 )
 
-// mcpAdvancedTools are offered only when their switch in the setup dialog is
-// on. Each reaches further than records and blocking rules: deleting a
+// mcpAdvancedTools belong to groups that are off until an operator turns
+// them on. Each reaches further than records and blocking rules: deleting a
 // zone cannot be undone from the console, lists change blocking for every
 // device, and Insights and the query log describe what each device does.
 var mcpAdvancedTools = []mcpTool{
@@ -42,7 +42,8 @@ var mcpAdvancedTools = []mcpTool{
 		}, []string{"zone", "confirm"}),
 		Annotations: mcpToolAnnotations{Title: "Delete a zone", DestructiveHint: true},
 		call:        (*Server).mcpDeleteZone,
-		option:      func(settings config.MCP) bool { return settings.ManageZones },
+		section:     "records",
+		grant:       "zones.delete",
 	},
 	{
 		Name:  "list_block_lists",
@@ -52,7 +53,8 @@ var mcpAdvancedTools = []mcpTool{
 		InputSchema: mcpObjectSchema(nil, nil),
 		Annotations: mcpToolAnnotations{Title: "List block lists", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListBlockLists,
-		option:      func(settings config.MCP) bool { return settings.BlockLists },
+		section:     "blocking",
+		grant:       "blocking.read",
 	},
 	{
 		Name:  "add_block_list",
@@ -65,7 +67,8 @@ var mcpAdvancedTools = []mcpTool{
 		}, []string{"url"}),
 		Annotations: mcpToolAnnotations{Title: "Add a block list", OpenWorldHint: true},
 		call:        (*Server).mcpAddBlockList,
-		option:      func(settings config.MCP) bool { return settings.BlockLists },
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 	{
 		Name:        "remove_block_list",
@@ -76,7 +79,8 @@ var mcpAdvancedTools = []mcpTool{
 		}, []string{"list"}),
 		Annotations: mcpToolAnnotations{Title: "Remove a block list", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpRemoveBlockList,
-		option:      func(settings config.MCP) bool { return settings.BlockLists },
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 	{
 		Name:        "refresh_block_lists",
@@ -85,7 +89,8 @@ var mcpAdvancedTools = []mcpTool{
 		InputSchema: mcpObjectSchema(nil, nil),
 		Annotations: mcpToolAnnotations{Title: "Refresh block lists", IdempotentHint: true, OpenWorldHint: true},
 		call:        (*Server).mcpRefreshBlockLists,
-		option:      func(settings config.MCP) bool { return settings.BlockLists },
+		section:     "blocking",
+		grant:       "blocking.write",
 	},
 	{
 		Name:  "list_findings",
@@ -101,7 +106,8 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "List Insights findings", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListFindings,
-		option:      func(settings config.MCP) bool { return settings.InsightFindings },
+		section:     "insights",
+		grant:       "logs.read",
 	},
 	{
 		Name:  "search_queries",
@@ -117,7 +123,8 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "Search the query log", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpSearchQueries,
-		option:      func(settings config.MCP) bool { return settings.QueryLog },
+		section:     "insights",
+		grant:       "logs.read",
 	},
 }
 

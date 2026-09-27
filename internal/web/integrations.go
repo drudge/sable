@@ -86,8 +86,8 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 		Address: address, Secure: secure, SecurityDisabled: !server.securityEnabled,
 		Clustered: server.cluster != nil && server.cluster.Snapshot().Initialized,
 		Tools:     len(mcpToolList(mcpSettings)),
-		ReadOnly:  mcpSettings.ReadOnly, ManageZones: mcpSettings.ManageZones, BlockLists: mcpSettings.BlockLists,
-		InsightFindings: mcpSettings.InsightFindings, QueryLog: mcpSettings.QueryLog,
+		Sections:  mcpToolSectionViews(mcpSettings),
+		Group:     server.mcpGroupView(request, mcpSettings.Tools, mcpSettings.Group),
 	}
 	if use := server.lastMCPUse(request.Context()); !use.At.IsZero() {
 		display := requestTimeDisplay(request)

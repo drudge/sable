@@ -145,16 +145,43 @@ type Config struct {
 type MCP struct {
 	Configured bool `toml:"configured"`
 	Enabled    bool `toml:"enabled"`
-	// Advanced tools reach further than records and blocking rules, so each
-	// stays hidden from assistants until an operator turns it on. A token
-	// still needs the matching grant to use one.
-	ManageZones     bool `toml:"manage_zones"`
-	BlockLists      bool `toml:"block_lists"`
-	InsightFindings bool `toml:"insight_findings"`
-	QueryLog        bool `toml:"query_log"`
-	// ReadOnly hides every tool that changes anything, advanced or not, so
-	// assistants can look but not touch.
-	ReadOnly bool `toml:"read_only"`
+	// Tools names the tools assistants are offered. The everyday tools are
+	// on by default; the ones that reach further are off until an operator
+	// adds them. A token still needs each tool's grant.
+	Tools []string `toml:"tools"`
+	// Group names the group the setup wizard made for these tools, so the
+	// wizard can show it again instead of offering to make another.
+	Group string `toml:"group,omitempty"`
+}
+
+// MCPTools are the tools an operator can offer, in the order the console
+// lists them.
+var MCPTools = []string{
+	"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record", "create_zone", "delete_zone",
+	"check_domain", "allow_domain", "block_domain", "remove_domain_rule",
+	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
+	"lookup", "purge_cache", "list_findings", "search_queries",
+}
+
+// DefaultMCPTools are the tools offered until an operator chooses: records,
+// allow and block rules, lookups, and the cache. Creating and deleting
+// zones, block lists, Insights, and the query log wait to be added.
+func DefaultMCPTools() []string {
+	return []string{
+		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
+		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_block_lists",
+		"lookup", "purge_cache", "list_findings",
+	}
+}
+
+func (settings MCP) validate() []error {
+	var result []error
+	for _, tool := range settings.Tools {
+		if !slices.Contains(MCPTools, tool) {
+			result = append(result, fmt.Errorf("mcp.tools: unknown tool %q", tool))
+		}
+	}
+	return result
 }
 
 // Updates holds this node's release channel. It is not replicated to peers.
@@ -574,6 +601,7 @@ func Defaults() Config {
 				RenewBefore: Duration{Duration: defaultACMERenewBefore},
 			},
 		},
+		MCP: MCP{Tools: DefaultMCPTools()},
 		DynamicDNS: DynamicDNS{
 			Interval: Duration{Duration: defaultDynamicDNSInterval},
 			IPv4URL:  defaultIPv4DiscoveryURL, IPv6URL: defaultIPv6DiscoveryURL,
@@ -962,6 +990,7 @@ func (configuration Config) Validate() error {
 		}
 	}
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
+	validationErrors = append(validationErrors, configuration.MCP.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
 	for _, problem := range configuration.Insights.Findings.Problems() {
@@ -1272,6 +1301,8 @@ func (configuration *Config) normalize() {
 	}
 	// A hand-written enabled = true means the server was set up.
 	configuration.MCP.Configured = configuration.MCP.Configured || configuration.MCP.Enabled
+	configuration.MCP.Tools = normalizeMCPTools(configuration.MCP.Tools)
+	configuration.MCP.Group = strings.TrimSpace(configuration.MCP.Group)
 	if configuration.EncryptedDNS.ACME.StorageDirectory == "" {
 		configuration.EncryptedDNS.ACME.StorageDirectory = defaultACMEStorageDir
 	}
@@ -1742,4 +1773,23 @@ func AbsolutePath(path string) (string, error) {
 		return "", fmt.Errorf("resolve configuration path: %w", err)
 	}
 	return absolute, nil
+}
+
+// normalizeMCPTools lowercases the tools and keeps them in the order the
+// console lists them, once each. Unknown names are kept so validation can
+// name them.
+func normalizeMCPTools(tools []string) []string {
+	result := make([]string, 0, len(tools))
+	for _, known := range MCPTools {
+		if slices.ContainsFunc(tools, func(tool string) bool { return strings.EqualFold(strings.TrimSpace(tool), known) }) {
+			result = append(result, known)
+		}
+	}
+	for _, tool := range tools {
+		tool = strings.ToLower(strings.TrimSpace(tool))
+		if tool != "" && !slices.Contains(MCPTools, tool) && !slices.Contains(result, tool) {
+			result = append(result, tool)
+		}
+	}
+	return result
 }

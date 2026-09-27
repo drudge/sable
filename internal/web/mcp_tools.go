@@ -16,6 +16,7 @@ import (
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -26,9 +27,10 @@ type mcpTool struct {
 	InputSchema map[string]any     `json:"inputSchema"`
 	Annotations mcpToolAnnotations `json:"annotations"`
 	call        func(*Server, *http.Request, json.RawMessage) (any, error)
-	// option names the Integrations switch that offers this tool. Tools
-	// without one are always offered while the server is on.
-	option func(config.MCP) bool
+	// section groups the tool in the setup wizard, and grant is the
+	// permission it asks of a token, shown beside it there.
+	section string
+	grant   string
 }
 
 type mcpToolAnnotations struct {
@@ -82,6 +84,8 @@ var mcpRecordTools = []mcpTool{
 		InputSchema: mcpObjectSchema(nil, nil),
 		Annotations: mcpToolAnnotations{Title: "List DNS zones", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListZones,
+		section:     "records",
+		grant:       "zones.read",
 	},
 	{
 		Name:  "list_records",
@@ -95,6 +99,8 @@ var mcpRecordTools = []mcpTool{
 		}, []string{"zone"}),
 		Annotations: mcpToolAnnotations{Title: "List DNS records", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListRecords,
+		section:     "records",
+		grant:       "zones.read",
 	},
 	{
 		Name:  "add_record",
@@ -111,6 +117,8 @@ var mcpRecordTools = []mcpTool{
 		}, []string{"zone", "name", "type", "value"}),
 		Annotations: mcpToolAnnotations{Title: "Add a DNS record", IdempotentHint: true},
 		call:        (*Server).mcpAddRecord,
+		section:     "records",
+		grant:       "zones.records.write",
 	},
 	{
 		Name:  "set_records",
@@ -131,6 +139,8 @@ var mcpRecordTools = []mcpTool{
 		}, []string{"zone", "name", "type", "values"}),
 		Annotations: mcpToolAnnotations{Title: "Set a DNS record set", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpSetRecords,
+		section:     "records",
+		grant:       "zones.records.write",
 	},
 	{
 		Name:  "update_record",
@@ -150,6 +160,8 @@ var mcpRecordTools = []mcpTool{
 		}, []string{"zone", "name", "type", "value"}),
 		Annotations: mcpToolAnnotations{Title: "Update a DNS record", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpUpdateRecord,
+		section:     "records",
+		grant:       "zones.records.write",
 	},
 	{
 		Name:        "delete_record",
@@ -163,6 +175,8 @@ var mcpRecordTools = []mcpTool{
 		}, []string{"zone", "name", "type", "value"}),
 		Annotations: mcpToolAnnotations{Title: "Delete a DNS record", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpDeleteRecord,
+		section:     "records",
+		grant:       "zones.records.write",
 	},
 }
 
@@ -180,9 +194,10 @@ var mcpCreateZoneTool = mcpTool{
 	}, []string{"name"}),
 	Annotations: mcpToolAnnotations{Title: "Create a Primary zone"},
 	call:        (*Server).mcpCreateZone,
-	// Creating a zone cannot be limited to chosen zones, so it sits with
-	// delete_zone behind the Manage Zones switch.
-	option: func(settings config.MCP) bool { return settings.ManageZones },
+	// Creating a zone cannot be limited to chosen zones, so like delete_zone
+	// it is off until an operator adds it.
+	section: "records",
+	grant:   "zones.create",
 }
 
 // mcpAllTools is every tool Sable has, whether or not it is switched on.
@@ -195,15 +210,10 @@ func mcpToolList(settings config.MCP) []mcpTool {
 	return slices.DeleteFunc(mcpAllTools(), func(tool mcpTool) bool { return mcpToolOff(tool, settings) != "" })
 }
 
-// mcpToolOff says why a tool is not offered, or nothing when it is. A tool
-// counts as changing something unless it is marked read-only, so Read Only
-// needs no list of its own.
+// mcpToolOff says why a tool is not offered, or nothing when it is.
 func mcpToolOff(tool mcpTool, settings config.MCP) string {
-	if tool.option != nil && !tool.option(settings) {
+	if !slices.Contains(settings.Tools, tool.Name) {
 		return fmt.Sprintf("the %s tool is turned off in Sable under Integrations, MCP Server", tool.Name)
-	}
-	if settings.ReadOnly && !tool.Annotations.ReadOnlyHint {
-		return fmt.Sprintf("Sable's MCP server is read only, so the %s tool is unavailable", tool.Name)
 	}
 	return ""
 }
@@ -869,4 +879,31 @@ func mcpZoneSerial(zone zonemodel.Zone) uint32 {
 		}
 	}
 	return 0
+}
+
+// mcpToolSections are the setup wizard's sections, in order.
+var mcpToolSections = []struct{ Key, Title, Description string }{
+	{"records", "Records & Zones", "Read and change records, and create and delete zones."},
+	{"blocking", "Blocking", "Allow and block domains, and manage block lists."},
+	{"lookups", "Lookups & Cache", "Resolve names through Sable, and forget cached answers."},
+	{"insights", "Insights & Logs", "Share what each device does with the AI provider."},
+}
+
+func mcpToolSectionViews(settings config.MCP) []pages.MCPToolSectionView {
+	views := make([]pages.MCPToolSectionView, 0, len(mcpToolSections))
+	for _, section := range mcpToolSections {
+		view := pages.MCPToolSectionView{Key: section.Key, Title: section.Title, Description: section.Description}
+		for _, name := range config.MCPTools {
+			tool, _ := mcpToolByName(name)
+			if tool.section != section.Key {
+				continue
+			}
+			view.Tools = append(view.Tools, pages.MCPToolView{
+				Name: tool.Name, Grant: tool.grant, Description: tool.Description,
+				ReadOnly: tool.Annotations.ReadOnlyHint, On: slices.Contains(settings.Tools, tool.Name),
+			})
+		}
+		views = append(views, view)
+	}
+	return views
 }

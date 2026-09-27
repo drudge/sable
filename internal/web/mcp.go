@@ -307,9 +307,9 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
 
-// saveMCPSetup saves the setup dialog. The first save sets the server up
-// and turns it on; later saves change only the advanced tools, so editing
-// the setup never resumes a paused server. Like the server itself it is
+// saveMCPSetup saves the setup wizard. The first save sets the server up
+// and turns it on; later saves change only the tools, so editing the setup
+// never resumes a paused server. Like the server itself it is
 // cluster-wide, so only the primary accepts it.
 func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
@@ -317,38 +317,27 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return
 	}
-	on := func(name string) bool { return request.FormValue(name) == "true" }
+	tools := mcpSelectedTools(request)
 	settingUp := !server.config.Current().Config.MCP.Configured
-	var enabled []string
 	if err := server.updateMCP(request, func(settings *config.MCP) {
 		if !settings.Configured {
 			settings.Configured, settings.Enabled = true, true
 		}
-		settings.ReadOnly, settings.ManageZones = on("read_only"), on("manage_zones")
-		settings.BlockLists, settings.InsightFindings, settings.QueryLog = on("block_lists"), on("insight_findings"), on("query_log")
-		for name, value := range map[string]bool{
-			"read_only": settings.ReadOnly, "manage_zones": settings.ManageZones, "block_lists": settings.BlockLists,
-			"insight_findings": settings.InsightFindings, "query_log": settings.QueryLog,
-		} {
-			if value {
-				enabled = append(enabled, name)
-			}
-		}
+		settings.Tools = tools
 	}); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	slices.Sort(enabled)
-	details := "advanced MCP tools: none"
-	if len(enabled) > 0 {
-		details = "advanced MCP tools: " + strings.Join(enabled, ", ")
+	details := "MCP tools: none"
+	if len(tools) > 0 {
+		details = "MCP tools: " + strings.Join(tools, ", ")
 	}
 	action, message := "integrations.mcp.configure", "MCP server saved. Assistants see changes the next time they connect."
 	if settingUp {
 		action, message = "integrations.mcp.setup", "MCP server set up."
 	}
 	writer.Header().Set("HX-Replace-Url", "/integrations")
-	server.logger.Info("MCP server saved", "set_up", settingUp, "advanced_tools", strings.Join(enabled, ","), "client", requestClientIP(request))
+	server.logger.Info("MCP server saved", "set_up", settingUp, "tools", strings.Join(tools, ","), "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, action, details)
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
@@ -356,7 +345,7 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 // removeMCP turns the server off and returns the card to setup. API tokens
 // are left alone: they belong to people, not to this integration.
 func (server *Server) removeMCP(writer http.ResponseWriter, request *http.Request) {
-	if err := server.updateMCP(request, func(settings *config.MCP) { *settings = config.MCP{} }); err != nil {
+	if err := server.updateMCP(request, func(settings *config.MCP) { *settings = config.MCP{Tools: config.DefaultMCPTools()} }); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
