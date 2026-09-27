@@ -579,7 +579,7 @@ func (server *Server) mcpCreateZone(request *http.Request, arguments json.RawMes
 		if findZone(*zones, name) != nil {
 			return fmt.Errorf("zone %s already exists", name)
 		}
-		*zones = append(*zones, zonemodel.Zone{Name: name, Type: "primary", DefaultTTL: ttl, Source: zonemodel.SourceMCP, Records: []zonemodel.Record{
+		*zones = append(*zones, zonemodel.Zone{Name: name, Type: "primary", DefaultTTL: ttl, Records: []zonemodel.Record{
 			newZoneSOA(primaryNS, responsible, ttl, time.Now()),
 			{Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)},
 		}})

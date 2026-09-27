@@ -86,13 +86,9 @@ type Zone struct {
 	// named catalog is the only one permitted to take this member over from the
 	// catalog that currently owns it.
 	CatalogChangeOwner string `json:"catalog_change_owner,omitempty"`
-	// Source names what created the zone when it was not an operator in the
-	// console. The MCP server marks the zones it creates, so an assistant may
-	// later delete those and nothing else.
-	Source         string `json:"source,omitempty"`
-	TSIGKey        string `json:"tsig_key,omitempty"`
-	DynamicUpdates bool   `json:"dynamic_updates,omitempty"`
-	DNSSEC         bool   `json:"dnssec,omitempty"`
+	TSIGKey            string `json:"tsig_key,omitempty"`
+	DynamicUpdates     bool   `json:"dynamic_updates,omitempty"`
+	DNSSEC             bool   `json:"dnssec,omitempty"`
 	// DNSSECValidationDisabled turns the zone subtree into a local negative
 	// trust anchor. Private forwarders commonly serve an unsigned split-horizon
 	// copy of a delegated name, which a validator can only report as bogus
@@ -129,9 +125,6 @@ type Record struct {
 
 // SourceUniFi marks records maintained by the UniFi host synchronizer.
 const SourceUniFi = "unifi"
-
-// SourceMCP marks zones the MCP server created.
-const SourceMCP = "mcp"
 
 // SourceAlias marks records an alias zone mirrors from its source zone. They
 // are replaced wholesale on every reconciliation, so nothing else may claim
@@ -238,7 +231,6 @@ func Normalize(zone *Zone) {
 	} else {
 		zone.AliasZone = ""
 	}
-	zone.Source = strings.ToLower(strings.TrimSpace(zone.Source))
 	zone.CatalogZone = normalizeDomain(zone.CatalogZone)
 	zone.CatalogGroup = strings.TrimSpace(zone.CatalogGroup)
 	zone.CatalogMemberID = strings.ToLower(strings.TrimSpace(zone.CatalogMemberID))

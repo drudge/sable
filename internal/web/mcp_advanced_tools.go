@@ -33,9 +33,9 @@ var mcpAdvancedTools = []mcpTool{
 	{
 		Name:  "delete_zone",
 		Title: "Delete a zone",
-		Description: "Delete a zone that was created through this MCP server, such as a preview or staging zone. " +
-			"Zones created any other way cannot be deleted here. A deleted zone cannot be restored from the " +
-			"console, so confirm must repeat the zone name.",
+		Description: "Delete a zone and every record in it. A deleted zone cannot be restored from the console. " +
+			"Before calling this, tell the user which zone will be deleted and ask them to confirm; then pass " +
+			"the zone name again as confirm.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"zone":    mcpString("Zone name, for example preview-42.example.com."),
 			"confirm": mcpString("The zone name again, exactly, to confirm the deletion."),
@@ -145,9 +145,6 @@ func (server *Server) mcpDeleteZone(request *http.Request, arguments json.RawMes
 	}
 	if !server.authorizeZoneRequest(request, auth.PermissionZonesDelete, current) {
 		return nil, fmt.Errorf("this token needs zones.delete to delete zone %s", current.Name)
-	}
-	if current.Source != zonemodel.SourceMCP {
-		return nil, fmt.Errorf("zone %s was not created through the MCP server, so it can only be deleted in the Sable console", current.Name)
 	}
 	if normalizeZoneName(input.Confirm) != current.Name {
 		return nil, fmt.Errorf("confirm must repeat the zone name %s exactly; a deleted zone cannot be restored from the console", current.Name)

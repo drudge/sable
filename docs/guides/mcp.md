@@ -17,7 +17,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `update_record` | On | Changes one record | `zones.records.write` |
 | `delete_record` | On | Removes one record | `zones.records.write` |
 | `create_zone` | Off | Creates a Primary zone | `zones.create` |
-| `delete_zone` | Off | Deletes a zone created through the MCP server | `zones.delete` |
+| `delete_zone` | Off | Deletes a zone and its records | `zones.delete` |
 | `check_domain` | On | Says whether blocking stops a domain, and why | `blocking.read` |
 | `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists | `blocking.write` |
 | `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
@@ -29,7 +29,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 
 `add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 
-`delete_zone` asks the assistant to repeat the zone name. A deleted zone cannot be restored from the console; only a backup brings it back. Zones created in the console can never be deleted through MCP. A new zone answers devices that use Sable right away; the internet sees it only once the domain's registrar or parent zone delegates it to your name servers. See [Delegation](delegation.md).
+`delete_zone` can delete any zone the token's groups may delete. The tool tells the assistant to ask you first, and the call must repeat the zone name. A deleted zone cannot be restored from the console; only a backup brings it back. To keep an assistant from deleting zones, leave the tool off or keep `zones.delete` out of its group. A new zone answers devices that use Sable right away; the internet sees it only once the domain's registrar or parent zone delegates it to your name servers. See [Delegation](delegation.md).
 
 Insights findings and the query log describe what each device on your network does. Turning either tool on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
 

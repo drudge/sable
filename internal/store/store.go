@@ -177,9 +177,6 @@ ON sable_server_log (occurred_at)`}
 	if err := store.migrateZoneAliasSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
-	if err := store.migrateZoneSourceSchema(ctx); err != nil {
-		return fmt.Errorf("migrate %s database: %w", store.driver, err)
-	}
 	if err := store.migrateZoneCatalogSchema(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}

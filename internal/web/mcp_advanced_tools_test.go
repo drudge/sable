@@ -9,7 +9,6 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
-	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 func mcpListedTools(t *testing.T, server *Server) []string {
@@ -50,7 +49,9 @@ func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	}
 }
 
-func TestMCPDeleteZoneOnlyDeletesItsOwnZones(t *testing.T) {
+// delete_zone reaches any zone the token may delete, but only when the
+// assistant repeats the zone name, which it should ask the user for first.
+func TestMCPDeleteZoneNeedsGrantAndConfirmation(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
 	addMCPTools(configuration, "create_zone", "delete_zone")
@@ -58,24 +59,19 @@ func TestMCPDeleteZoneOnlyDeletesItsOwnZones(t *testing.T) {
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "create_zone", map[string]any{"name": "preview.test"}); failure != "" {
 		t.Fatalf("create_zone failed: %s", failure)
 	}
-	if zone := findZone(configuration.zoneSnapshot.Zones, "preview.test"); zone == nil || zone.Source != zonemodel.SourceMCP {
-		t.Fatalf("created zone = %+v", zone)
-	}
-	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "example.test", "confirm": "example.test"}); !strings.Contains(failure, "only be deleted in the Sable console") {
-		t.Fatalf("delete of a console zone = %q", failure)
-	}
-	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "preview.test", "confirm": "preview"}); !strings.Contains(failure, "confirm must repeat") {
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "example.test", "confirm": "example"}); !strings.Contains(failure, "confirm must repeat") {
 		t.Fatalf("delete without confirmation = %q", failure)
 	}
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_scoped", "delete_zone", map[string]any{"zone": "example.test", "confirm": "example.test"}); !strings.Contains(failure, "zones.delete") {
 		t.Fatalf("delete without zones.delete = %q", failure)
 	}
-	deleted, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "preview.test", "confirm": "Preview.Test."})
-	if failure != "" || deleted["deleted"] != true || findZone(configuration.zoneSnapshot.Zones, "preview.test") != nil {
+	// A zone made in the console is fair game once the token may delete it.
+	deleted, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "example.test", "confirm": "Example.Test."})
+	if failure != "" || deleted["deleted"] != true || findZone(configuration.zoneSnapshot.Zones, "example.test") != nil {
 		t.Fatalf("delete_zone = %v %q", deleted, failure)
 	}
 	server.SetClusterController(testReplicaClusterController{})
-	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "example.test", "confirm": "example.test"}); failure != replicaWriteMessage {
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "delete_zone", map[string]any{"zone": "preview.test", "confirm": "preview.test"}); failure != replicaWriteMessage {
 		t.Fatalf("replica delete = %q", failure)
 	}
 }
