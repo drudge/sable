@@ -82,6 +82,16 @@ var makerClues = map[string][]clue{
 	"iRobot": {{"smart-home", 4}}, "Chamberlain": {{"smart-home", 4}}, "Belkin": {{"smart-plug", 2}},
 }
 
+// moduleMakers build the radio modules inside single-purpose hardware. Their
+// name alone says little about the device, but a device built on one runs no
+// browser or desktop app, so the services it talks to are its own: a Quectel
+// module reaching Bambu Lab is the printer, not a laptop running its slicer.
+var moduleMakers = map[string]bool{"Espressif": true, "Quectel": true, "Telit": true, "AMPAK": true, "Tuya": true}
+
+// moduleServiceWeight is what a module maker adds to each type the device's
+// services point to.
+const moduleServiceWeight = 2
+
 // nameClues are words in a device's name that say what it is. They are
 // matched against the words of the name, so "dock-camera-02" matches
 // "camera" and "scanner" does not match "can".
@@ -186,9 +196,21 @@ func Classify(device Device, used []services.Service) Guess {
 			}
 		}
 	}
+	moduleBacked := map[string]bool{}
 	for _, service := range used {
-		if clues, found := serviceClues[service.ID]; found {
-			add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		clues, found := serviceClues[service.ID]
+		if !found {
+			continue
+		}
+		add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		if !moduleMakers[device.Vendor] {
+			continue
+		}
+		for _, pointer := range clues {
+			if !moduleBacked[pointer.kind] {
+				moduleBacked[pointer.kind] = true
+				add("maker", []clue{{pointer.kind, moduleServiceWeight}}, insights.Reason{Text: "Made by " + device.Vendor})
+			}
 		}
 	}
 
