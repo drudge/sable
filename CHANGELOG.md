@@ -8,6 +8,57 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.13] - 2026-09-27
+
+Sable 1.5.0-beta.13 lets you choose exactly which tools the MCP server offers,
+and makes the group and token an assistant needs as part of setup. It is the
+last beta before 1.5.0.
+
+### Upgrading from beta.12
+
+- `create_zone` is now off by default. In beta.12 it was always on. If your
+  assistant creates zones, turn it on in **Edit Setup → Tools**.
+- `list_block_lists` and `list_findings` are now on by default. A token still
+  needs `blocking.read` or `logs.read` to use them.
+
+### MCP Server
+
+- Set up the MCP server in three steps: **Tools**, **Access**, and **Connect**.
+- List every tool in **Tools** with the grant it needs, in four sections:
+  **Records & Zones**, **Blocking**, **Lookups & Cache**, and
+  **Insights & Logs**. Each section has **All**, **Read only**, and **None**.
+  The choice is saved as `tools` under `[mcp]` in the config file.
+- Offer assistants only the tools you chose. An assistant holding an older
+  list is told a tool is turned off.
+- Add tools that start off:
+  - `delete_zone` deletes a zone the MCP server created, such as a preview
+    zone. It refuses every other zone, and the assistant must repeat the zone
+    name to confirm.
+  - `add_block_list`, `remove_block_list`, and `refresh_block_lists` change
+    and refresh block lists.
+  - `search_queries` searches the query log by device, part of a name, or
+    blocked lookups only, up to 200 at a time.
+- Add tools that start on:
+  - `list_block_lists` lists block lists and how many domains each adds.
+  - `list_findings` lists what Insights noticed, with its evidence. Findings
+    you hid or turned off are left out.
+- `list_findings` and `search_queries` send what your devices do to the
+  assistant's AI provider when called. Leave them off, or keep `logs.read` out
+  of the token's group, if that matters to you.
+- Show the grants your chosen tools need in **Access**. If you can manage
+  users, **Create Group** makes an API-only group with exactly those grants
+  for every zone, and can add you to it. Sable remembers the group. When your
+  tools change, it shows only the grants that differ, with **Update Group**.
+- Make a token that uses the group with **Create Token** in **Access**. The
+  token is shown once. Later visits list your tokens that use the group, with
+  **New Token** for another.
+- Show **Tools**, **Last used**, and **Calls today** on the card. Hover over
+  **Last used** to see who called which tool, from which app.
+
+### Console
+
+- Draw the MCP Server icon larger, so it matches the other integration icons.
+
 ## [1.5.0-beta.12] - 2026-09-26
 
 Sable 1.5.0-beta.12 adds an MCP server, so AI assistants such as Claude,
