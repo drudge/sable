@@ -70,3 +70,31 @@ func TestRollingUpdatePanelTellsThePageWhenToReload(t *testing.T) {
 		}
 	}
 }
+
+// The status poll redraws the panel every two seconds. A check in progress
+// keeps its button, shown as checking, instead of blinking out of the card.
+func TestRollingUpdateCheckStaysVisibleWhileChecking(t *testing.T) {
+	var html strings.Builder
+	view := ClusterUpdateView{
+		Initialized: true, Supported: true, CanApply: true,
+		Release: UpdateView{CanCheck: true, Checked: true, Busy: true, Phase: "checking"},
+		Rollout: cluster.RolloutStatus{ID: "rollout", Version: "1.2.0", Phase: "complete"},
+	}
+	if err := ClusterUpdatePanel(view, true).Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`id="cluster-update-check"`, `aria-busy="true"`, "disabled"} {
+		if !strings.Contains(html.String(), expected) {
+			t.Errorf("checking panel is missing %s", expected)
+		}
+	}
+
+	html.Reset()
+	view.Release.Phase = "installing"
+	if err := ClusterUpdatePanel(view, true).Render(context.Background(), &html); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html.String(), `id="cluster-update-check"`) {
+		t.Error("an installation still offered a release check")
+	}
+}

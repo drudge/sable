@@ -2894,9 +2894,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-actions:empty { display: none; }
 .about-update-actions > form { margin: 0; }
 .about-update-check-pending { display: none; }
-[data-update-check].htmx-request .about-update-check-idle { display: none; }
-[data-update-check].htmx-request .about-update-check-pending { display: inline; }
-[data-update-check].htmx-request .icon-refresh { animation: about-update-spin .65s linear infinite; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .about-update-check-idle { display: none; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .about-update-check-pending { display: inline; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .icon-refresh { animation: about-update-spin .65s linear infinite; }
 [data-update-check].htmx-request .about-update-menu { pointer-events: none; }
 /* Split control: the check runs on the left half, the release channel lives
    behind the caret so the row keeps one visible action. */
@@ -2931,7 +2931,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
 @keyframes about-update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check].htmx-request .icon-refresh { animation: none; }
+  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check]:is(.htmx-request, [aria-busy="true"]) .icon-refresh { animation: none; }
 }
 .about-footer { padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
 @media (max-width: 640px) {
@@ -3807,16 +3807,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cluster-update-content { display: grid; gap: 1rem; margin-top: .5rem; font-size: .8125rem; }
 .cluster-update-content > :is(p, ol) { margin: 0; }
 .cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
-.cluster-update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+/* Two equal columns at every width. A wrapping row stacked the buttons in the
+   narrow side column whenever a label ran a few pixels long, then unstacked
+   them when a shorter label, such as Checking…, took its place. */
+.cluster-update-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .cluster-update-actions:empty { display: none; }
-
-@media (max-width: 767px) {
-  .cluster-update-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cluster-update-actions > form { min-width: 0; }
-  .cluster-update-actions > :only-child { grid-column: 1 / -1; }
-  .cluster-update-actions > .button,
-  .cluster-update-actions > form .button { width: 100%; min-width: 0; white-space: nowrap; }
-}
+.cluster-update-actions > form { min-width: 0; }
+.cluster-update-actions > :only-child { grid-column: 1 / -1; }
+.cluster-update-actions > .button,
+.cluster-update-actions > form .button { width: 100%; min-width: 0; justify-content: center; padding-inline: .5rem; white-space: nowrap; }
 
 
 /* Insights */
