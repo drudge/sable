@@ -307,17 +307,23 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
 
-// setMCPTools turns the optional tools on or off. Like the server itself it
-// is cluster-wide, so only the primary accepts it.
-func (server *Server) setMCPTools(writer http.ResponseWriter, request *http.Request) {
+// saveMCPSetup saves the setup dialog. The first save sets the server up
+// and turns it on; later saves change only the optional tools, so editing
+// the setup never resumes a paused server. Like the server itself it is
+// cluster-wide, so only the primary accepts it.
+func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Request) {
 	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return
 	}
 	on := func(name string) bool { return request.FormValue(name) == "true" }
+	settingUp := !server.config.Current().Config.MCP.Configured
 	var enabled []string
 	if err := server.updateMCP(request, func(settings *config.MCP) {
+		if !settings.Configured {
+			settings.Configured, settings.Enabled = true, true
+		}
 		settings.DeleteZones, settings.BlockLists = on("delete_zones"), on("block_lists")
 		settings.InsightFindings, settings.QueryLog = on("insight_findings"), on("query_log")
 		for name, value := range map[string]bool{
@@ -337,10 +343,14 @@ func (server *Server) setMCPTools(writer http.ResponseWriter, request *http.Requ
 	if len(enabled) > 0 {
 		details = "optional MCP tools: " + strings.Join(enabled, ", ")
 	}
+	action, message := "integrations.mcp.configure", "MCP server saved. Assistants see changes the next time they connect."
+	if settingUp {
+		action, message = "integrations.mcp.setup", "MCP server set up."
+	}
 	writer.Header().Set("HX-Replace-Url", "/integrations")
-	server.logger.Info("MCP optional tools changed", "enabled", strings.Join(enabled, ","), "client", requestClientIP(request))
-	server.recordControlPlaneAudit(request, "integrations.mcp.tools", details)
-	server.renderIntegrationsMutation(writer, request, http.StatusOK, "Optional tools saved. Assistants see the change the next time they connect.", "")
+	server.logger.Info("MCP server saved", "set_up", settingUp, "optional_tools", strings.Join(enabled, ","), "client", requestClientIP(request))
+	server.recordControlPlaneAudit(request, action, details)
+	server.renderIntegrationsMutation(writer, request, http.StatusOK, message, "")
 }
 
 // removeMCP turns the server off and returns the card to setup. API tokens

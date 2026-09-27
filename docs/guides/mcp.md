@@ -30,7 +30,7 @@ Lookups run inside Sable, so they never appear in the query log or as a device i
 
 ## Optional tools
 
-Some tools reach further, so each stays hidden from assistants until you turn it on under **Integrations → MCP Server → Optional Tools**. The token still needs the grant in the table.
+Some tools reach further, so each stays hidden from assistants until you turn it on in **Optional Tools**, at the end of the setup dialog (**Integrations → MCP Server → Edit Setup**). The token still needs the grant in the table.
 
 | Option | Tools | Grant |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.e
 
 ## Set up the MCP server
 
-The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The dialog shows the address to give your assistant, the grants its token needs, and ready-to-paste setup for Claude Code, Codex, and Cursor. Click **Turn On** to start serving.
+The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The dialog shows the address to give your assistant, the grants its token needs, ready-to-paste setup for Claude Code, Claude Desktop, ChatGPT, and Cursor, and the optional tools. Click **Turn On** to start serving. Later, **Edit Setup** reopens the same dialog.
 
 While it is off or paused, `/mcp` refuses every request, even one with a valid token, so an API token made for something else cannot be put to this use by accident. **Pause** stops it and keeps the card set up; **Resume** starts it again. **Remove** turns it off and returns the card to setup; it leaves API tokens alone.
 

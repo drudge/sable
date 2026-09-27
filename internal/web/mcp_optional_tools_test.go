@@ -141,23 +141,42 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	}
 }
 
-func TestMCPOptionalToolsSaveFromTheCard(t *testing.T) {
+func TestMCPSetupDialogSavesOptionalTools(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	request := httptest.NewRequest(http.MethodPost, "/ui/integrations/mcp/tools", strings.NewReader("block_lists=true&query_log=true"))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("HX-Request", "true")
-	response := httptest.NewRecorder()
-	server.setMCPTools(response, request)
-	got := configuration.snapshot.Config.MCP
-	if response.Code != http.StatusOK || !got.BlockLists || !got.QueryLog || got.DeleteZones || got.InsightFindings || !got.Enabled {
-		t.Fatalf("saved options = %+v, status %d", got, response.Code)
+	save := func(form string) string {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/ui/integrations/mcp/setup", strings.NewReader(form))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		server.saveMCPSetup(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("save %q = %d", form, response.Code)
+		}
+		return response.Body.String()
 	}
-	if !strings.Contains(response.Body.String(), "Optional tools saved") {
-		t.Fatal("save did not confirm")
+
+	// The first save sets the server up and turns it on with the chosen tools.
+	configuration.snapshot.Config.MCP = config.MCP{}
+	if body := save("block_lists=true"); !strings.Contains(body, "MCP server set up") {
+		t.Fatal("first save did not set the server up")
+	}
+	if got := configuration.snapshot.Config.MCP; !got.Configured || !got.Enabled || !got.BlockLists || got.QueryLog {
+		t.Fatalf("after setup = %+v", got)
+	}
+
+	// Editing a paused server changes its tools but leaves it paused.
+	configuration.snapshot.Config.MCP.Enabled = false
+	if body := save("query_log=true"); !strings.Contains(body, "MCP server saved") {
+		t.Fatal("edit did not confirm")
+	}
+	got := configuration.snapshot.Config.MCP
+	if got.Enabled || !got.Configured || got.BlockLists || !got.QueryLog {
+		t.Fatalf("after edit = %+v", got)
 	}
 	encoded, _ := json.Marshal(mcpToolList(got))
-	if !strings.Contains(string(encoded), "search_queries") || strings.Contains(string(encoded), "delete_zone") {
+	if !strings.Contains(string(encoded), "search_queries") || strings.Contains(string(encoded), "add_block_list") {
 		t.Fatal("saved options did not change the offered tools")
 	}
 }

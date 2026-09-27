@@ -574,7 +574,7 @@ with a valid API token. Turning it on grants nothing by itself: each assistant s
 needs an API token, and the token's groups decide what it may do. The setting
 follows the cluster primary.
 
-**Optional Tools** turns on tools that reach further. Each is `false` until you
+**Optional Tools**, at the end of the setup dialog, turns on tools that reach further. Each is `false` until you
 turn it on, and a token still needs the matching grant:
 
 | Key | Tools | Grant |
