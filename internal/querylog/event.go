@@ -231,6 +231,12 @@ type ClientIdentity struct {
 	Source   string
 	Hostname string
 	SeenAt   time.Time
+	// Kind is the device type the source suggests, and KindConfidence how sure
+	// it is, from 0 to 100. KindSet marks a type the operator chose in that
+	// source, such as a device type set by hand in UniFi.
+	Kind           string
+	KindConfidence int
+	KindSet        bool
 	// FirstSeen and LastSeen are filled in when identities are read back.
 	FirstSeen time.Time
 	LastSeen  time.Time

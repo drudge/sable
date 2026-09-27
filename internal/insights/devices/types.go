@@ -157,6 +157,20 @@ func mqttName(name string) bool {
 	return false
 }
 
+// unifiGuessWeight is what UniFi's fingerprint counts for at a confidence
+// from 0 to 100. Below 30 it is noise.
+func unifiGuessWeight(confidence int) int {
+	switch {
+	case confidence >= 90:
+		return 4
+	case confidence >= 60:
+		return 3
+	case confidence >= 30:
+		return 2
+	}
+	return 0
+}
+
 // ServiceClueIDs lists the services whose use is evidence of a device type,
 // so a caller reads only the names that could matter.
 func ServiceClueIDs() []string {
@@ -193,6 +207,14 @@ func Classify(device Device, used []services.Service) Guess {
 			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
 		}
 	}
+	// A type the operator chose in UniFi is theirs, though Sable's own
+	// setting still outranks it.
+	if label := TypeLabel(device.UniFiGuess); label != "" && device.UniFiSet {
+		return Guess{
+			Type: device.UniFiGuess, Confidence: ConfidenceHigh, Detected: device.UniFiGuess,
+			Reasons: []insights.Reason{{Text: "You set it as " + withArticle(label) + " in UniFi"}},
+		}
+	}
 	type evidence struct {
 		score   int
 		sources map[string]bool
@@ -212,6 +234,10 @@ func Classify(device Device, used []services.Service) Guess {
 				entry.reasons = append(entry.reasons, reason)
 			}
 		}
+	}
+	// UniFi's fingerprinting counts for as much as it is sure of.
+	if weight := unifiGuessWeight(device.UniFiConfidence); TypeLabel(device.UniFiGuess) != "" && weight > 0 {
+		add("unifi", []clue{{device.UniFiGuess, weight}}, insights.Reason{Text: "UniFi thinks it is " + withArticle(TypeLabel(device.UniFiGuess))})
 	}
 	// Sable knows the machines it runs on, though one may be a laptop as well.
 	if device.Server != "" {
