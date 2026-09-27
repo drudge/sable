@@ -471,6 +471,40 @@ func TestInsightsDevicesGroupAddressesAndReportNewOnes(t *testing.T) {
 	}
 }
 
+// The Devices search and filters live in the page URL. A range change or the
+// refresh after a rename arrives without them, so they come back from the
+// page URL, and the new URL keeps them. Values the page never offers are
+// dropped rather than rendered.
+func TestInsightsDeviceFiltersSurviveARangeChange(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	get := func(current string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/ui/insights/overview?range=week", nil)
+		request.Header.Set("HX-Request", "true")
+		request.Header.Set("HX-Current-URL", current)
+		request.AddCookie(&http.Cookie{Name: server.sessionCookieName(), Value: "everything"})
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+	response := get("https://sable.example/insights?range=day&tab=devices&search=+george+&type=computer&show=named")
+	if got, want := response.Header().Get("HX-Replace-Url"), "/insights?range=week&search=george&show=named&tab=devices&type=computer"; got != want {
+		t.Errorf("range change HX-Replace-Url = %q, want %q", got, want)
+	}
+	body := response.Body.String()
+	for _, expected := range []string{
+		`placeholder="Search devices..." value="george"`, `<option value="computer" selected>Computer</option>`, `<option value="named" selected>Named</option>`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("devices tab is missing %q", expected)
+		}
+	}
+	response = get("https://sable.example/insights?range=day&tab=devices&type=toaster&show=everything&search=" + strings.Repeat("x", 300))
+	if got := response.Header().Get("HX-Replace-Url"); got != "/insights?range=week&search="+strings.Repeat("x", 100)+"&tab=devices" {
+		t.Errorf("HX-Replace-Url kept filters the page never offers: %q", got)
+	}
+}
+
 func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)

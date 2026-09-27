@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -75,12 +76,50 @@ func insightsTab(request *http.Request, console pages.DashboardView) string {
 	return "overview"
 }
 
-func insightsPageURL(window insightWindow, tab string) string {
+func insightsPageURL(window insightWindow, tab string, filter pages.InsightDeviceFilterView) string {
 	values := url.Values{"range": []string{window.Range}}
 	if tab != "overview" {
 		values.Set("tab", tab)
 	}
+	if filter.Search != "" {
+		values.Set("search", filter.Search)
+	}
+	if filter.Type != "" {
+		values.Set("type", filter.Type)
+	}
+	if filter.Show != "" {
+		values.Set("show", filter.Show)
+	}
 	return "/insights?" + values.Encode()
+}
+
+// insightsDeviceShows are the Devices tab's choices of which devices to show.
+var insightsDeviceShows = map[string]struct{}{"new": {}, "named": {}, "unnamed": {}}
+
+// maximumDeviceSearch bounds the search the Devices tab renders back.
+const maximumDeviceSearch = 100
+
+// insightDeviceFilter reads the Devices tab's search and filters. The page
+// keeps them in its URL, so a range change or a refresh, which arrive without
+// them, read them from the page URL htmx reports, as they do the tab.
+func insightDeviceFilter(request *http.Request) pages.InsightDeviceFilterView {
+	values := request.URL.Query()
+	if !values.Has("search") && !values.Has("type") && !values.Has("show") {
+		if current, err := url.Parse(request.Header.Get("HX-Current-URL")); err == nil {
+			values = current.Query()
+		}
+	}
+	filter := pages.InsightDeviceFilterView{Search: strings.TrimSpace(values.Get("search"))}
+	if len(filter.Search) > maximumDeviceSearch {
+		filter.Search = strings.ToValidUTF8(filter.Search[:maximumDeviceSearch], "")
+	}
+	if kind := values.Get("type"); kind == pages.UnknownDeviceType || slices.Contains(config.ClientTypes, kind) {
+		filter.Type = kind
+	}
+	if _, offered := insightsDeviceShows[values.Get("show")]; offered {
+		filter.Show = values.Get("show")
+	}
+	return filter
 }
 
 func insightsRoute(path string) bool {
@@ -155,7 +194,7 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	view := server.insightsOverview(request, console, window)
 	view.ActiveTab = insightsTab(request, console)
 	if request.Header.Get("HX-Request") == "true" {
-		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab))
+		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab, view.DeviceFilter))
 	}
 	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights overview", "error", err)
@@ -243,6 +282,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.DeviceSummary = insightDeviceSummary(view.Devices)
 			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 		}
+		view.DeviceFilter, view.DeviceTypeOptions = insightDeviceFilter(request), devices.TypeLabels()
 		view.TopApps = server.topAppRanking(request, window)
 	}
 	if console.CanBlocking {

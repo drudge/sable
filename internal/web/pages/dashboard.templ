@@ -605,6 +605,7 @@ templ CommandPalette(view DashboardView) {
 				if view.CanLogs {
 					@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "ssl runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
 					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
+					@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
 				}
 				if view.CanSettings {
 					@CommandSearchOption("command-action-search-cache", "Search DNS Cache", "Enter a domain without leaving the command palette", "search", "cached resolver responses browser", "/cache", "#cache-browser-dialog [data-cache-search]", "Search cached domains…", "")

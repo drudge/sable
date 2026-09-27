@@ -155,9 +155,9 @@ contract:
   integrations, settings sections, and quick actions separately; supports
   ranked fuzzy search plus Arrow/Home/End navigation; provides one-step
   operational commands such as timed blocking pauses; and keeps server-log,
-  query-log, DNS-cache,
-  blocking-policy, and per-zone record search terms in the palette before
-  opening the filtered destination. Query-log search can target either a
+  query-log, DNS-cache, blocking-policy, Insights device, and per-zone record
+  search terms in the palette before opening the filtered destination.
+  Query-log search can target either a
   domain or client IP, with Left/Right switching that mode while focus remains
   in the palette input. Run DNS Query accepts a domain in the palette, defaults
   to an A query, and uses the same arrow-key model for common record types.
