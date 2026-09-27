@@ -2954,10 +2954,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   .about-build-meta { display: grid; grid-template-columns: minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: .75rem; }
   .about-commit-suffix { display: none; }
   .about-update { align-items: stretch; }
-  .about-update-actions { width: 100%; }
-  .about-update-actions > form { min-width: 0; flex: 1 1 0; }
+  /* Equal columns, however many actions there are, so Release notes never
+     outgrows the main action beside it. */
+  .about-update-actions { display: grid; width: 100%; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
+  .about-update-actions > form { min-width: 0; }
   .about-update-actions > form > .button, .about-update-actions > form > .about-update-split { width: 100%; }
-  .about-update-actions > .button, .about-update-split { flex: 1 1 0; }
+  .about-update-split { flex: 1 1 0; }
   .about-update-actions > .button { justify-content: center; }
   .about-update-split > .button { flex: 1; justify-content: center; }
 }
