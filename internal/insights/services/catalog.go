@@ -98,6 +98,7 @@ var catalog = []catalogEntry{
 	{Service{"roomba", "iRobot", CategorySmartHome}, []string{"irobot.com", "irobotapi.com"}},
 	{Service{"ifttt", "IFTTT", CategorySmartHome}, []string{"ifttt.com"}},
 	{Service{"generac", "Generac", CategorySmartHome}, []string{"generaccloud.com"}},
+	{Service{"tidbyt", "Tidbyt", CategorySmartHome}, []string{"connect.tidbyt.com", "mqtt2.tidbyt.com"}},
 	{Service{"trmnl", "TRMNL", CategorySmartHome}, []string{"trmnl.app", "trmnl-screens.nyc3.digitaloceanspaces.com"}},
 
 	// Cameras and doorbells.

@@ -29,6 +29,7 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"a maker alone", Device{Vendor: "Sonos"}, nil, "speaker", ConfidenceMedium},
 		{"services alone", Device{}, []string{"lg-webos"}, "tv", ConfidenceMedium},
 		{"an e-ink display on a smart-home chip", Device{Vendor: "Espressif"}, []string{"trmnl"}, "smart-home", ConfidenceHigh},
+		{"a pixel clock on a smart-home chip", Device{Vendor: "Espressif"}, []string{"tidbyt"}, "smart-home", ConfidenceHigh},
 		{"a generator on a cellular module", Device{}, []string{"generac"}, "smart-home", ConfidenceLow},
 		{"a 3D printer on a cellular module", Device{Vendor: "Quectel"}, []string{"bambu-lab"}, "printer", ConfidenceLow},
 		{"an e-ink tablet by name and sync", Device{Name: "Remarkable 2", Vendor: "AMPAK"}, []string{"remarkable"}, "tablet", ConfidenceHigh},
