@@ -233,7 +233,7 @@ func TestNotificationClusterUpdateStartsReviewedVersionAndOpensProgress(t *testi
 				}
 				response := serveUpdateForm(server, "/ui/updates/cluster", form)
 				if scenario == "success" {
-					if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "/cluster" || len(controller.started) != 1 || controller.started[0] != target {
+					if response.Code != http.StatusOK || response.Header().Get("HX-Redirect") != "/cluster#cluster-updates" || len(controller.started) != 1 || controller.started[0] != target {
 						t.Fatalf("cluster start = %d, redirect %q, started %v", response.Code, response.Header().Get("HX-Redirect"), controller.started)
 					}
 				} else {

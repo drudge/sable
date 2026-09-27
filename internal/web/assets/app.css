@@ -3805,6 +3805,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cluster-update-status { font-size: .75rem; font-weight: 500; }
 
 .cluster-update-card { padding: 1.25rem; }
+/* A rollout started from About or the update notification lands here. */
+#cluster-updates { scroll-margin-top: 1rem; }
+@media (max-width: 767px) { #cluster-updates { scroll-margin-top: 4.5rem; } }
 .cluster-update-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .cluster-update-card > header h2 { margin: 0; font-size: 1rem; }
 .cluster-update-version { flex: 0 0 auto; gap: .3rem; white-space: nowrap; }

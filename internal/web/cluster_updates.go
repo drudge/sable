@@ -60,8 +60,9 @@ func (server *Server) renderClusterUpdateResult(writer http.ResponseWriter, requ
 		return
 	}
 	// The Cluster page already follows every node through installation and
-	// restart, including when a rollout starts from the notification or About.
-	writer.Header().Set("HX-Redirect", "/cluster")
+	// restart. A rollout started from the notification or About lands on its
+	// Rolling Updates card.
+	writer.Header().Set("HX-Redirect", "/cluster#cluster-updates")
 	writer.WriteHeader(http.StatusOK)
 }
 
