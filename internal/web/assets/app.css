@@ -3281,7 +3281,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-card-empty { justify-items: start; }
 .integration-card-empty p { max-width: 46rem; margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.55; }
 .integration-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
-.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-left: auto; }
 /* Outline destructive: present but not shouting next to the primary action. */
 .button.outline.destructive { border-color: color-mix(in srgb, var(--destructive) 55%, var(--border)); background: var(--background); color: var(--destructive); }
 .button.outline.destructive:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); opacity: 1; }
