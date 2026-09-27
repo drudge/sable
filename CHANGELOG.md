@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.14] - 2026-09-27
+
+Sable 1.5.0-beta.14 fixes the Rolling Updates card on the Cluster page.
+
+### Cluster
+
+- Keep **Release notes** and **Check again** side by side on **Rolling
+  Updates**. In a laptop-width window they stacked, then jumped back into one
+  row while a check ran.
+- Keep **Check again** on the card while a check runs, showing
+  **Checking…**. It used to vanish for a moment partway through.
+- Color the version amber, with a download icon, while a rolling update
+  installs it. It was grey, which read as the version the cluster already ran.
+- Widen the side column, so the version sits beside the **Rolling Updates**
+  title and its buttons have more room.
+- Show **Rolling Updates** right under **Cluster Status** on a phone, instead
+  of below every node.
+
 ## [1.5.0-beta.13] - 2026-09-27
 
 Sable 1.5.0-beta.13 lets you choose exactly which tools the MCP server offers,
