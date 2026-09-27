@@ -312,3 +312,30 @@ func TestChangesCompareDevicesWithTheirOwnWeek(t *testing.T) {
 		t.Fatalf("spike finding = %+v", findings[1])
 	}
 }
+
+// Only hardware the controller vouches for is typed, by hardware address, and
+// its name still comes from UniFi.
+func TestBuildTypesWhatUniFiVouchesFor(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 27, 19, 0, 0, 0, time.UTC)
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "10.0.7.108", Queries: 30}, {Client: "10.0.7.40", Queries: 20},
+		}},
+		Identities: []querylog.ClientIdentity{
+			{Address: "10.0.7.108", MAC: "94:2a:6f:ae:4c:5c", Source: "unifi-network", Hostname: "Basement U7 Pro", LastSeen: now},
+			{Address: "10.0.7.40", MAC: "90:41:b2:9c:f8:a4", Source: identityUniFi, Hostname: "UPS Tower", LastSeen: now},
+		},
+	})
+	Identify(built, nil)
+	byName := map[string]Device{}
+	for _, device := range built {
+		byName[device.Name] = device
+	}
+	if ap := byName["Basement U7 Pro"]; ap.UniFiType != "network" || ap.NameSource != SourceUniFi || ap.Guess.Type != "network" || ap.Guess.Confidence != ConfidenceHigh {
+		t.Fatalf("access point = %+v", ap)
+	}
+	if ups := byName["UPS Tower"]; ups.UniFiType != "" || ups.NameSource != SourceUniFi || ups.Guess.Confidence == ConfidenceHigh {
+		t.Fatalf("UPS = %+v", ups)
+	}
+}

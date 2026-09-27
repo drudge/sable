@@ -101,7 +101,7 @@ var nameClues = map[string][]clue{
 	"macbook": {{"computer", 5}}, "laptop": {{"computer", 5}}, "thinkpad": {{"computer", 5}}, "notebook": {{"computer", 4}},
 	"imac": {{"computer", 5}}, "desktop": {{"computer", 5}}, "workstation": {{"computer", 5}}, "pc": {{"computer", 3}},
 	"surface": {{"computer", 3}}, "mbp": {{"computer", 4}}, "server": {{"server", 5}}, "nas": {{"storage", 5}},
-	"diskstation": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
+	"diskstation": {{"storage", 5}}, "unas": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
 	"laserjet": {{"printer", 5}}, "officejet": {{"printer", 5}}, "deskjet": {{"printer", 5}}, "press": {{"printer", 2}},
 	"camera": {{"camera", 5}}, "cam": {{"camera", 4}}, "ipcam": {{"camera", 5}}, "doorbell": {{"doorbell", 6}},
 	"thermostat": {{"thermostat", 6}}, "tv": {{"tv", 5}}, "television": {{"tv", 5}}, "bravia": {{"tv", 5}},
@@ -181,6 +181,14 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: kind, Confidence: ConfidenceSet, Reasons: []insights.Reason{reason},
 			Detected: Classify(detected, used).Type,
+		}
+	}
+	// What the UniFi controller says its own hardware is, such as a switch or
+	// a UNAS, is a fact, not a guess.
+	if label := TypeLabel(device.UniFiType); label != "" {
+		return Guess{
+			Type: device.UniFiType, Confidence: ConfidenceHigh, Detected: device.UniFiType,
+			Reasons: []insights.Reason{{Text: "UniFi says it is " + article(label) + " " + inSentence(label)}},
 		}
 	}
 	type evidence struct {
