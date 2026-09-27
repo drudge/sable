@@ -41,3 +41,15 @@ func TestUniFiIdentitiesCoverEveryAddressOfAHost(t *testing.T) {
 		t.Fatalf("identities = %+v", identities)
 	}
 }
+
+func TestUniFiIdentitiesNameTheControllersGear(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	identities := unifiIdentities(unifi.Inventory{Gear: []unifi.Host{
+		{MAC: "0c:ea:14:f3:42:fc", Hostname: "Office U7 Pro", Address: netip.MustParseAddr("10.0.7.79")},
+	}}, now)
+	want := querylog.ClientIdentity{Address: "10.0.7.79", MAC: "0c:ea:14:f3:42:fc", Source: unifiIdentitySource, Hostname: "Office U7 Pro", SeenAt: now}
+	if len(identities) != 1 || identities[0] != want {
+		t.Fatalf("identities = %+v, want %+v", identities, want)
+	}
+}

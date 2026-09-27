@@ -39,7 +39,7 @@ type deviceInsightReader interface {
 	ClientNewDomainCount(context.Context, []string, time.Time, time.Time) (uint64, error)
 	ClientTopDomains(context.Context, []string, time.Time, time.Time, int) ([]querylog.ClientDomain, error)
 	ClientDomainHistory(context.Context, []string, int) ([]querylog.ClientDomain, error)
-	ClientNamesMatching(context.Context, time.Time, []string) (map[string][]string, error)
+	ClientNamesMatching(context.Context, time.Time, []string, []string) (map[string][]string, error)
 	ClientHourlyActivity(context.Context, time.Time, time.Time) (map[string]map[time.Time]uint64, error)
 	RepeatedLookups(context.Context, time.Time, time.Time) ([]querylog.LookupTimes, error)
 }
@@ -101,10 +101,11 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 }
 
 // deviceSignals reads, for each client address, the names it queried that say
-// what kind of device it is.
+// what kind of device it is: those of services with a type clue, and those
+// with a label that is a clue on its own, such as an MQTT broker's.
 func deviceSignals(reader deviceInsightReader) func(context.Context, time.Time, time.Time) (map[string][]string, error) {
 	return func(ctx context.Context, since, _ time.Time) (map[string][]string, error) {
-		return reader.ClientNamesMatching(ctx, since, deviceTypeSuffixes)
+		return reader.ClientNamesMatching(ctx, since, deviceTypeSuffixes, devices.ClueLabels)
 	}
 }
 

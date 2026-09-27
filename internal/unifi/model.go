@@ -1,5 +1,7 @@
 // Package unifi reads networks, DHCP reservations, and connected clients from
 // a UniFi controller so Sable can publish them as authoritative DNS records.
+// It also reads the controller's own devices, which name hardware in Insights
+// but are never published.
 package unifi
 
 import (
@@ -67,10 +69,14 @@ type Host struct {
 	Reserved  bool
 }
 
-// Inventory is one complete read of the controller.
+// Inventory is one complete read of the controller. Gear is the controller's
+// own adopted devices: its gateway, switches, and access points. It is kept
+// apart from Hosts because hosts are what the sync publishes as DNS records,
+// and naming the network's own hardware must not quietly add records.
 type Inventory struct {
 	Networks []Network
 	Hosts    []Host
+	Gear     []Host
 }
 
 // NetworkByID returns the named network, if the controller reported it.

@@ -8,6 +8,36 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.1-beta.1] - 2026-09-27
+
+Sable 1.5.1-beta.1 makes **Insights → Devices** easy to search and better at
+telling what each device is.
+
+### Insights
+
+- Search the **Devices** list by name, hardware address, IP address, maker,
+  or type, and filter it by device type or by **All Devices**, **New**,
+  **Named**, and **Unnamed**. The search and filters stay in the page address,
+  so they survive a range change, a rename, and a reload.
+- Add **Search Devices** to the command palette. It opens **Devices** with
+  your search already applied.
+- Name a UniFi controller's own gateway, switches, and access points. They
+  used to show only a hardware address. The UniFi sync still publishes DNS
+  records for clients only.
+- Recognize TRMNL and Tidbyt displays, Generac generators, Bambu Lab 3D
+  printers, and reMarkable tablets by the servers the devices themselves talk
+  to. Visiting these companies' websites doesn't count.
+- Count any MQTT server, which smart home gear uses to hear from its maker, as
+  a sign of a smart home device, so gear from a brand Sable doesn't know still
+  gets a guess.
+- Trust what a device talks to more when it is built on a radio module from
+  Espressif, Quectel, Telit, AMPAK, or Tuya, since such hardware runs no
+  browser or desktop app. A Bambu Lab printer now reads as a printer, while a
+  laptop running Bambu Studio does not.
+- Guess **Smart home device** for an Espressif device with no other clues. It
+  used to get no guess at all.
+- Show Quectel, Telit, and AMPAK by their short names under **Maker**.
+
 ## [1.5.0] - 2026-09-27
 
 Sable 1.5.0 adds three big features. **Insights** shows what changed on your

@@ -70,7 +70,7 @@ var makerClues = map[string][]clue{
 	"Sonos": {{"speaker", 4}}, "Roku": {{"streaming-player", 4}}, "Google Nest": {{"smart-home", 3}},
 	"ecobee": {{"thermostat", 4}}, "Philips Hue": {{"lighting", 4}}, "Sony PlayStation": {{"game-console", 4}},
 	"Nintendo": {{"game-console", 4}}, "Raspberry Pi": {{"server", 2}, {"computer", 1}},
-	"Espressif": {{"smart-plug", 2}, {"smart-home", 2}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
+	"Espressif": {{"smart-home", 3}, {"smart-plug", 1}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
 	"Brother": {{"printer", 3}}, "Epson": {{"printer", 3}}, "Canon": {{"printer", 2}}, "HP": {{"printer", 1}, {"computer", 1}},
 	"Synology": {{"storage", 4}}, "QNAP": {{"storage", 4}}, "Ubiquiti": {{"network", 3}}, "Cisco": {{"network", 2}},
 	"Netgear": {{"network", 2}}, "eero": {{"network", 3}}, "TP-Link": {{"network", 1}, {"smart-plug", 1}},
@@ -82,12 +82,22 @@ var makerClues = map[string][]clue{
 	"iRobot": {{"smart-home", 4}}, "Chamberlain": {{"smart-home", 4}}, "Belkin": {{"smart-plug", 2}},
 }
 
+// moduleMakers build the radio modules inside single-purpose hardware. Their
+// name alone says little about the device, but a device built on one runs no
+// browser or desktop app, so the services it talks to are its own: a Quectel
+// module reaching Bambu Lab is the printer, not a laptop running its slicer.
+var moduleMakers = map[string]bool{"Espressif": true, "Quectel": true, "Telit": true, "AMPAK": true, "Tuya": true}
+
+// moduleServiceWeight is what a module maker adds to each type the device's
+// services point to.
+const moduleServiceWeight = 2
+
 // nameClues are words in a device's name that say what it is. They are
 // matched against the words of the name, so "dock-camera-02" matches
 // "camera" and "scanner" does not match "can".
 var nameClues = map[string][]clue{
 	"iphone": {{"phone", 5}}, "android": {{"phone", 3}}, "galaxy": {{"phone", 3}}, "pixel": {{"phone", 3}},
-	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}},
+	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}}, "remarkable": {{"tablet", 5}},
 	"macbook": {{"computer", 5}}, "laptop": {{"computer", 5}}, "thinkpad": {{"computer", 5}}, "notebook": {{"computer", 4}},
 	"imac": {{"computer", 5}}, "desktop": {{"computer", 5}}, "workstation": {{"computer", 5}}, "pc": {{"computer", 3}},
 	"surface": {{"computer", 3}}, "mbp": {{"computer", 4}}, "server": {{"server", 5}}, "nas": {{"storage", 5}},
@@ -113,12 +123,36 @@ var serviceClues = map[string][]clue{
 	"eufy": {{"camera", 3}}, "simplisafe": {{"camera", 2}}, "philips-hue": {{"lighting", 3}}, "sonos": {{"speaker", 3}},
 	"roku": {{"streaming-player", 3}}, "fire-tv": {{"streaming-player", 3}}, "chromecast": {{"streaming-player", 3}},
 	"lg-webos": {{"tv", 4}}, "vizio": {{"tv", 4}}, "xbox": {{"game-console", 2}}, "playstation": {{"game-console", 2}},
-	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}},
+	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}}, "bambu-lab": {{"printer", 3}}, "remarkable": {{"tablet", 3}},
 	"synology": {{"storage", 3}}, "qnap": {{"storage", 3}}, "windows-update": {{"computer", 3}}, "android": {{"phone", 2}},
 	"alexa": {{"smart-speaker", 2}}, "ecobee": {{"thermostat", 3}}, "tuya": {{"smart-home", 2}},
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
-	"roomba": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
+	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
+	"mqtt": {{"smart-home", 3}},
+}
+
+// ClueLabels are the starts of host labels that are evidence of a device type
+// whoever runs the host. Smart home hardware hears from its maker's cloud
+// through an MQTT broker, such as mqtt.example.com or mqtt2.example.com, which
+// people and their apps rarely talk to directly.
+var ClueLabels = []string{"mqtt"}
+
+// mqttService stands for any MQTT broker. It is not in the service catalog,
+// because a broker says nothing about which company runs it.
+var mqttService = services.Service{ID: "mqtt", Name: "an MQTT server"}
+
+// mqttName reports a name with a host label that starts with "mqtt". The
+// registered domain itself does not count, so a site about MQTT, such as
+// mqtt.org, is not a broker.
+func mqttName(name string) bool {
+	labels := strings.Split(strings.TrimSuffix(strings.ToLower(name), "."), ".")
+	for _, label := range labels[:max(len(labels)-2, 0)] {
+		if strings.HasPrefix(label, "mqtt") {
+			return true
+		}
+	}
+	return false
 }
 
 // ServiceClueIDs lists the services whose use is evidence of a device type,
@@ -186,9 +220,21 @@ func Classify(device Device, used []services.Service) Guess {
 			}
 		}
 	}
+	moduleBacked := map[string]bool{}
 	for _, service := range used {
-		if clues, found := serviceClues[service.ID]; found {
-			add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		clues, found := serviceClues[service.ID]
+		if !found {
+			continue
+		}
+		add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		if !moduleMakers[device.Vendor] {
+			continue
+		}
+		for _, pointer := range clues {
+			if !moduleBacked[pointer.kind] {
+				moduleBacked[pointer.kind] = true
+				add("maker", []clue{{pointer.kind, moduleServiceWeight}}, insights.Reason{Text: "Made by " + device.Vendor})
+			}
 		}
 	}
 
@@ -261,6 +307,10 @@ func Identify(list []Device, names map[string][]string) {
 				if service, found := services.Lookup(name); found && !seen[service.ID] {
 					seen[service.ID] = true
 					used = append(used, service)
+				}
+				if mqttName(name) && !seen[mqttService.ID] {
+					seen[mqttService.ID] = true
+					used = append(used, mqttService)
 				}
 			}
 		}
