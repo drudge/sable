@@ -8,6 +8,42 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.12] - 2026-09-26
+
+Sable 1.5.0-beta.12 adds an MCP server, so AI assistants such as Claude,
+ChatGPT, Codex, and Cursor can manage your DNS with an API token, for example
+to point a name at a service they just deployed.
+
+### MCP Server
+
+- Add **Integrations → MCP Server**. It is off until you click
+  **Set Up MCP Server**, so no existing API token gains a new use on upgrade.
+  Once set up, the card offers **Pause**, **Resume**, and **Remove** like the
+  other integrations.
+- Show the address to give your assistant in the setup dialog, with tabs of
+  ready-to-paste setup for **Claude Code**, **Claude Desktop**, **ChatGPT**, and
+  **Cursor**. On a cluster the address is the primary's HTTPS address, because
+  only the primary accepts changes.
+- Let assistants list zones and records, add, update, and delete records,
+  replace a name's records in one step, and create Primary zones. Every change
+  is checked like a console edit, advances the SOA serial, notifies
+  secondaries, appears in the zone's **History**, and is audited with
+  `via=mcp`. Repeating a change does nothing.
+- Let assistants look a name up through Sable, forget one cached name, check
+  why a domain is blocked, and allow or block a domain.
+- Sign assistants in with API tokens only. The token's groups decide which
+  zones and lists it can see and change. Assistants cannot read the query log
+  or Insights, and their lookups never appear there.
+- Answer read tools on a replica and refuse changes there with the console's
+  replica message.
+
+### Console
+
+- Center the copy button on code blocks in **About**, alert previews, and the
+  MCP setup dialog, matching the record copy buttons.
+- Keep an integration card's main buttons on the right when it has no
+  **Remove** button beside them.
+
 ## [1.5.0-beta.11] - 2026-09-26
 
 Sable 1.5.0-beta.11 makes it clear how long a hidden Insights finding stays
