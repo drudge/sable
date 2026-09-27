@@ -981,22 +981,28 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 				if errorMessage != "" {
 					<div class="auth-error">{ errorMessage }</div>
 				}
-				if !setup && ssoLabel != "" {
-					<form class="auth-form auth-sso" method="post" action="/auth/oidc/start">
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<input type="hidden" name="return_to" value={ returnTo }/>
-						<button class="auth-sso-button" type="submit">
-							@Icon("key-round")
-							<span>Sign in with { ssoLabel }</span>
-						</button>
-					</form>
-				}
-    if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
-     <div class="auth-form auth-sso" data-passkey-capability data-passkeys data-return-to={ returnTo }>
-      <p class="auth-error" role="status" data-passkey-status></p>
-      <button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
-     </div>
-    }
+				// The passkey status sits above every alternate sign-in button, so
+				// a passkey error never lands under the OIDC button.
+				<div data-passkeys data-return-to={ returnTo }>
+					if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
+						<p class="auth-error" role="status" data-passkey-status></p>
+					}
+					if !setup && ssoLabel != "" {
+						<form class="auth-form auth-sso" method="post" action="/auth/oidc/start">
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<input type="hidden" name="return_to" value={ returnTo }/>
+							<button class="auth-sso-button" type="submit">
+								@Icon("key-round")
+								<span>Sign in with { ssoLabel }</span>
+							</button>
+						</form>
+					}
+					if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
+						<div class="auth-form auth-sso" data-passkey-capability>
+							<button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
+						</div>
+					}
+				</div>
     if !setup && ssoLabel != "" {
      <div class="auth-divider"><span>or</span></div>
     } else if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
