@@ -89,6 +89,7 @@ var brands = []struct{ prefix, brand string }{
 	{"samsung", "Samsung"}, {"sonos", "Sonos"}, {"sony interactive", "Sony PlayStation"}, {"sony", "Sony"},
 	{"synology", "Synology"}, {"qnap", "QNAP"}, {"tp-link", "TP-Link"}, {"tp link", "TP-Link"},
 	{"tuya", "Tuya"}, {"ubiquiti", "Ubiquiti"}, {"vizio", "Vizio"}, {"quectel", "Quectel"}, {"telit", "Telit"}, {"ampak", "AMPAK"},
+	{"american power conversion", "APC"}, {"cyberpower", "CyberPower"},
 	{"xiaomi", "Xiaomi"}, {"zte", "ZTE"}, {"texas instruments", "Texas Instruments"},
 	{"silicon laboratories", "Silicon Labs"}, {"azurewave", "AzureWave"}, {"hon hai", "Foxconn"},
 	{"universal global scientific", "USI"}, {"cloud network technology", "Foxconn"},
