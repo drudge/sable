@@ -145,7 +145,7 @@ func (client *Client) Inventory(ctx context.Context) (Inventory, error) {
 		return Inventory{}, err
 	}
 	hosts := placeHosts(networks, mergeHosts(reserved, active))
-	return Inventory{Networks: networks, Hosts: hosts}, nil
+	return Inventory{Networks: networks, Hosts: hosts, Gear: client.gear(ctx)}, nil
 }
 
 type networkPayload struct {
@@ -267,6 +267,36 @@ func (client *Client) activeHosts(ctx context.Context) ([]Host, error) {
 		}
 	}
 	return hosts, nil
+}
+
+type devicePayload struct {
+	MAC  string `json:"mac"`
+	Name string `json:"name"`
+	IP   string `json:"ip"`
+}
+
+// gear reads the controller's adopted devices, which its client list leaves
+// out. It is best effort: a controller that will not list its devices still
+// has clients worth publishing, so a failure here yields no gear rather than
+// failing the whole read.
+func (client *Client) gear(ctx context.Context) []Host {
+	var payload struct {
+		Data []devicePayload `json:"data"`
+	}
+	if err := client.get(ctx, "stat/device", &payload); err != nil {
+		return nil
+	}
+	gear := make([]Host, 0, len(payload.Data))
+	for _, entry := range payload.Data {
+		mac := strings.ToLower(strings.TrimSpace(entry.MAC))
+		name := strings.TrimSpace(entry.Name)
+		address, err := netip.ParseAddr(strings.TrimSpace(entry.IP))
+		if mac == "" || name == "" || err != nil || address.IsUnspecified() {
+			continue
+		}
+		gear = append(gear, Host{MAC: mac, Hostname: name, Address: address.Unmap()})
+	}
+	return gear
 }
 
 func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool) {

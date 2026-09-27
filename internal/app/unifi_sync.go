@@ -617,10 +617,11 @@ func compareUniFiPlanRecords(left, right unifi.PlanRecord) int {
 const unifiIdentitySource = "unifi"
 
 // unifiIdentities ties every address the controller reported to its host's
-// hardware address and name.
+// hardware address and name, for its clients and its own gear alike.
 func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.ClientIdentity {
-	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts))
-	for _, host := range inventory.Hosts {
+	hosts := slices.Concat(inventory.Hosts, inventory.Gear)
+	identities := make([]querylog.ClientIdentity, 0, len(hosts))
+	for _, host := range hosts {
 		addresses := append([]netip.Addr{host.Address}, host.IPv6...)
 		for _, address := range addresses {
 			if !address.IsValid() || host.MAC == "" {

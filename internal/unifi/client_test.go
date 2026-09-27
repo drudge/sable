@@ -30,6 +30,11 @@ const (
 		{"mac":"aa:bb:cc:dd:ee:04","ip":"192.168.30.51","network_id":"net-iot"},
 		{"mac":"aa:bb:cc:dd:ee:05","name":"Broken","ip":"not-an-address","network_id":"net-iot"}
 	]}`
+	deviceFixture = `{"data":[
+		{"mac":"AA:BB:CC:00:00:01","name":"Office AP","ip":"192.168.1.2","model":"U7PRO"},
+		{"mac":"aa:bb:cc:00:00:02","ip":"192.168.1.3","model":"USWED35"},
+		{"mac":"aa:bb:cc:00:00:03","name":"Pending","ip":"","model":"USWED35"}
+	]}`
 )
 
 func fixtureHandler(t *testing.T, authorize func(*http.Request) bool) http.Handler {
@@ -48,6 +53,7 @@ func fixtureHandler(t *testing.T, authorize func(*http.Request) bool) http.Handl
 	mux.Handle("GET /proxy/network/api/s/default/rest/networkconf", serve(networkFixture))
 	mux.Handle("GET /proxy/network/api/s/default/rest/user", serve(reservationFixture))
 	mux.Handle("GET /proxy/network/api/s/default/stat/sta", serve(activeFixture))
+	mux.Handle("GET /proxy/network/api/s/default/stat/device", serve(deviceFixture))
 	return mux
 }
 
@@ -146,6 +152,49 @@ func TestInventoryFiltersObservedIPv6(t *testing.T) {
 	printer := []netip.Addr{netip.MustParseAddr("2001:db8:0:1:aa:bb:cc:1")}
 	if !slices.Equal(byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer) {
 		t.Fatalf("printer IPv6 = %v, want the active lease's %v inherited by the winning reservation", byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer)
+	}
+}
+
+// The controller's own switches and access points are not clients, so only
+// its device list names them. They stay out of Hosts, which the sync
+// publishes, and a device with no name or no address names nothing.
+func TestInventoryReadsGearApartFromHosts(t *testing.T) {
+	server := httptest.NewTLSServer(fixtureHandler(t, func(*http.Request) bool { return true }))
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	want := []Host{{MAC: "aa:bb:cc:00:00:01", Hostname: "Office AP", Address: netip.MustParseAddr("192.168.1.2")}}
+	if !slices.EqualFunc(inventory.Gear, want, func(left, right Host) bool {
+		return left.MAC == right.MAC && left.Hostname == right.Hostname && left.Address == right.Address
+	}) {
+		t.Fatalf("gear = %+v, want %+v", inventory.Gear, want)
+	}
+	for _, host := range inventory.Hosts {
+		if host.MAC == "aa:bb:cc:00:00:01" {
+			t.Fatalf("gear leaked into the published hosts: %+v", host)
+		}
+	}
+}
+
+// A controller that will not list its devices still has clients to publish.
+func TestInventoryWithoutGearStillReadsHosts(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /proxy/network/api/s/default/stat/device", http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	mux.Handle("/", fixtureHandler(t, func(*http.Request) bool { return true }))
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	if len(inventory.Gear) != 0 || len(inventory.Hosts) != 2 {
+		t.Fatalf("gear = %+v, hosts = %d; want no gear and both hosts", inventory.Gear, len(inventory.Hosts))
 	}
 }
 
