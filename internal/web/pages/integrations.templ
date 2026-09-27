@@ -28,6 +28,7 @@ type MCPAppView struct {
 	Tools            int
 	CallsToday       int
 	// Advanced tools the operator turned on.
+	ReadOnly        bool
 	ManageZones     bool
 	BlockLists      bool
 	InsightFindings bool
@@ -628,7 +629,12 @@ templ MCPCard(view MCPAppView) {
 					<p>Lets Claude, ChatGPT, Cursor, and other AI assistants manage records and blocking with an API token.</p>
 				</div>
 			</div>
-			<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
+			<span class="mcp-card-badges">
+				if view.Configured && view.ReadOnly {
+					<span class="status-badge">Read only</span>
+				}
+				<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
+			</span>
 		</header>
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
@@ -671,18 +677,25 @@ templ MCPCard(view MCPAppView) {
 
 // MCPToolSwitch is one advanced tool group, with the token grants it needs
 // shown as badges.
-templ MCPToolSwitch(name, title, description string, requires []string, on bool) {
-	<label class="switch-row setting-switch-row mcp-tool-row">
+// readOnlyNote, when set, appears while the Read Only switch is on, saying
+// what that switch takes away from this group.
+templ MCPToolSwitch(name, title, description string, requires []string, readOnlyNote string, on bool) {
+	<label class={ "switch-row setting-switch-row mcp-tool-row", templ.KV("mcp-tool-writes", readOnlyNote != "") }>
 		<span>
 			<span class="mcp-tool-title">
 				<strong>{ title }</strong>
-				<span class="table-badges" aria-label={ "Requires " + strings.Join(requires, ", ") }>
-					for _, permission := range requires {
-						<span><code>{ permission }</code></span>
-					}
-				</span>
+				if len(requires) > 0 {
+					<span class="table-badges" aria-label={ "Requires " + strings.Join(requires, ", ") }>
+						for _, permission := range requires {
+							<span><code>{ permission }</code></span>
+						}
+					</span>
+				}
 			</span>
 			<small>{ description }</small>
+			if readOnlyNote != "" {
+				<small class="mcp-read-only-note">{ readOnlyNote }</small>
+			}
 		</span>
 		<input type="checkbox" role="switch" name={ name } value="true" checked?={ on }/>
 	</label>
@@ -742,12 +755,15 @@ templ MCPSetupDialog(view MCPAppView) {
 				</section>
 			</section>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools" hidden>
-				<p class="field-help">Off until you turn them on. Tokens need the grants shown. Assistants see changes when they reconnect.</p>
 				<div class="mcp-tools-options">
-					@MCPToolSwitch("manage_zones", "Manage Zones", "Create zones, and delete zones an assistant created.", []string{"zones.create", "zones.delete"}, view.ManageZones)
-					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, view.BlockLists)
-					@MCPToolSwitch("insight_findings", "Insights Findings", "Share what Insights noticed, with its evidence, with the AI provider.", []string{"logs.read"}, view.InsightFindings)
-					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, view.QueryLog)
+					@MCPToolSwitch("read_only", "Read Only", "Hide every tool that changes something, here and in the core tools. Assistants can still list, look up, check, and search.", nil, "", view.ReadOnly)
+				</div>
+				<p class="field-help">Advanced tools are off until you turn them on, and tokens need the grants shown. Assistants see changes when they reconnect.</p>
+				<div class="mcp-tools-options">
+					@MCPToolSwitch("manage_zones", "Manage Zones", "Create zones, and delete zones an assistant created.", []string{"zones.create", "zones.delete"}, "Off while Read Only is on.", view.ManageZones)
+					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, "Only listing works while Read Only is on.", view.BlockLists)
+					@MCPToolSwitch("insight_findings", "Insights Findings", "Share what Insights noticed, with its evidence, with the AI provider.", []string{"logs.read"}, "", view.InsightFindings)
+					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, "", view.QueryLog)
 				</div>
 			</section>
 			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button></div>

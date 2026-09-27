@@ -42,6 +42,8 @@ A deleted zone cannot be restored from the console; only a backup brings it back
 
 Insights findings and the query log describe what each device on your network does. Turning either on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. The built-in **MCP Client** group grants neither `zones.delete` nor `logs.read`, so add them to your own group if you want these tools.
 
+**Read Only**, on its own at the top of the same tab, hides every tool that changes something, core or advanced, so assistants can list, look up, check, and search but not touch. While it is on, the dialog marks Manage Zones as off and Block Lists as listing only, and the card shows a **Read only** badge. The other switches keep their settings for when you turn it off.
+
 Assistants see a changed option the next time they connect.
 
 Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.example.com`). Values use zone-file syntax, such as `10 mail.example.com.` for MX. TXT text can be sent without quotes.

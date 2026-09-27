@@ -152,6 +152,9 @@ type MCP struct {
 	BlockLists      bool `toml:"block_lists"`
 	InsightFindings bool `toml:"insight_findings"`
 	QueryLog        bool `toml:"query_log"`
+	// ReadOnly hides every tool that changes anything, advanced or not, so
+	// assistants can look but not touch.
+	ReadOnly bool `toml:"read_only"`
 }
 
 // Updates holds this node's release channel. It is not replicated to peers.

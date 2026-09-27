@@ -159,10 +159,10 @@ func TestMCPSetupDialogSavesAdvancedTools(t *testing.T) {
 
 	// The first save sets the server up and turns it on with the chosen tools.
 	configuration.snapshot.Config.MCP = config.MCP{}
-	if body := save("block_lists=true"); !strings.Contains(body, "MCP server set up") {
+	if body := save("block_lists=true&read_only=true"); !strings.Contains(body, "MCP server set up") {
 		t.Fatal("first save did not set the server up")
 	}
-	if got := configuration.snapshot.Config.MCP; !got.Configured || !got.Enabled || !got.BlockLists || got.QueryLog {
+	if got := configuration.snapshot.Config.MCP; !got.Configured || !got.Enabled || !got.BlockLists || !got.ReadOnly || got.QueryLog {
 		t.Fatalf("after setup = %+v", got)
 	}
 
@@ -172,11 +172,38 @@ func TestMCPSetupDialogSavesAdvancedTools(t *testing.T) {
 		t.Fatal("edit did not confirm")
 	}
 	got := configuration.snapshot.Config.MCP
-	if got.Enabled || !got.Configured || got.BlockLists || !got.QueryLog {
+	if got.Enabled || !got.Configured || got.BlockLists || got.ReadOnly || !got.QueryLog {
 		t.Fatalf("after edit = %+v", got)
 	}
 	encoded, _ := json.Marshal(mcpToolList(got))
 	if !strings.Contains(string(encoded), "search_queries") || strings.Contains(string(encoded), "add_block_list") {
 		t.Fatal("saved options did not change the offered tools")
+	}
+}
+
+func TestMCPReadOnlyHidesEveryWriteTool(t *testing.T) {
+	t.Parallel()
+	server, configuration := newMCPTestServer(t)
+	configuration.snapshot.Config.MCP = config.MCP{
+		Configured: true, Enabled: true, ReadOnly: true,
+		ManageZones: true, BlockLists: true, InsightFindings: true, QueryLog: true,
+	}
+	listed := mcpListedTools(t, server)
+	want := []string{"list_zones", "list_records", "lookup", "check_domain", "list_block_lists", "list_findings", "search_queries"}
+	if strings.Join(listed, ",") != strings.Join(want, ",") {
+		t.Fatalf("read-only tools = %v, want %v", listed, want)
+	}
+	for _, tool := range mcpToolList(configuration.snapshot.Config.MCP) {
+		if !tool.Annotations.ReadOnlyHint {
+			t.Fatalf("read-only mode offers %s", tool.Name)
+		}
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "add_record", map[string]any{
+		"zone": "example.test", "name": "x", "type": "A", "value": "192.0.2.80",
+	}); !strings.Contains(failure, "read only") {
+		t.Fatalf("write in read-only mode = %q", failure)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_zones", map[string]any{}); failure != "" {
+		t.Fatalf("read in read-only mode failed: %s", failure)
 	}
 }

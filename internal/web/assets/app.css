@@ -1759,6 +1759,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 @container (max-width: 36rem) { .mcp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* The advanced tools are one bordered list with a divider between rows, each
    a name with its grants beside it and a line saying what it does. */
+.mcp-card-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
 .mcp-tools-options { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
 .mcp-tools-options .mcp-tool-row { border: 0; border-radius: 0; padding: .65rem .85rem; }
 .mcp-tools-options .mcp-tool-row + .mcp-tool-row { border-top: 1px solid var(--border); }
@@ -1767,6 +1768,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .mcp-tool-title { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .mcp-tool-title strong { font-size: .8125rem; }
 .mcp-tool-title code { font-size: .625rem; }
+/* Read Only takes writes away from some groups; while it is on, say so in
+   place rather than silently leaving their switches looking effective. */
+.mcp-tools-options small.mcp-read-only-note { display: none; color: var(--foreground); }
+.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-read-only-note { display: block; }
+.mcp-setup-form:has(input[name="read_only"]:checked) .mcp-tool-writes .mcp-tool-title { opacity: .6; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }

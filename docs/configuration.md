@@ -584,6 +584,9 @@ turn it on, and a token still needs the matching grant:
 | `insight_findings` | `list_findings` | `logs.read` |
 | `query_log` | `search_queries` | `logs.read` |
 
+`read_only = true` hides every tool that changes something, whichever options
+are on.
+
 See [Let an AI assistant manage records](guides/mcp.md).
 
 ## Blocking

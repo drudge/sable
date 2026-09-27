@@ -195,10 +195,15 @@ func mcpToolList(settings config.MCP) []mcpTool {
 	return slices.DeleteFunc(mcpAllTools(), func(tool mcpTool) bool { return mcpToolOff(tool, settings) != "" })
 }
 
-// mcpToolOff says why a tool is not offered, or nothing when it is.
+// mcpToolOff says why a tool is not offered, or nothing when it is. A tool
+// counts as changing something unless it is marked read-only, so Read Only
+// needs no list of its own.
 func mcpToolOff(tool mcpTool, settings config.MCP) string {
 	if tool.option != nil && !tool.option(settings) {
 		return fmt.Sprintf("the %s tool is turned off in Sable under Integrations, MCP Server", tool.Name)
+	}
+	if settings.ReadOnly && !tool.Annotations.ReadOnlyHint {
+		return fmt.Sprintf("Sable's MCP server is read only, so the %s tool is unavailable", tool.Name)
 	}
 	return ""
 }

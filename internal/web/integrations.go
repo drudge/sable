@@ -84,9 +84,9 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 	view.MCP = pages.MCPAppView{
 		Configured: mcpSettings.Configured || mcpSettings.Enabled, Enabled: mcpSettings.Enabled,
 		Address: address, Secure: secure, SecurityDisabled: !server.securityEnabled,
-		Clustered:   server.cluster != nil && server.cluster.Snapshot().Initialized,
-		Tools:       len(mcpToolList(mcpSettings)),
-		ManageZones: mcpSettings.ManageZones, BlockLists: mcpSettings.BlockLists,
+		Clustered: server.cluster != nil && server.cluster.Snapshot().Initialized,
+		Tools:     len(mcpToolList(mcpSettings)),
+		ReadOnly:  mcpSettings.ReadOnly, ManageZones: mcpSettings.ManageZones, BlockLists: mcpSettings.BlockLists,
 		InsightFindings: mcpSettings.InsightFindings, QueryLog: mcpSettings.QueryLog,
 	}
 	if use := server.lastMCPUse(request.Context()); !use.At.IsZero() {

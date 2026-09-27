@@ -324,10 +324,10 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 		if !settings.Configured {
 			settings.Configured, settings.Enabled = true, true
 		}
-		settings.ManageZones = on("manage_zones")
+		settings.ReadOnly, settings.ManageZones = on("read_only"), on("manage_zones")
 		settings.BlockLists, settings.InsightFindings, settings.QueryLog = on("block_lists"), on("insight_findings"), on("query_log")
 		for name, value := range map[string]bool{
-			"manage_zones": settings.ManageZones, "block_lists": settings.BlockLists,
+			"read_only": settings.ReadOnly, "manage_zones": settings.ManageZones, "block_lists": settings.BlockLists,
 			"insight_findings": settings.InsightFindings, "query_log": settings.QueryLog,
 		} {
 			if value {
