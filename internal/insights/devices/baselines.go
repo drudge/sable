@@ -41,7 +41,7 @@ const Lookback = (routineDays + 1) * 24 * time.Hour
 var appliances = map[string]bool{
 	"camera": true, "doorbell": true, "thermostat": true, "lighting": true, "smart-plug": true,
 	"smart-home": true, "tv": true, "streaming-player": true, "smart-speaker": true, "speaker": true,
-	"printer": true, "storage": true, "network": true,
+	"printer": true, "storage": true, "network": true, "ups": true,
 }
 
 // hourSpan is a run of consecutive local hours, such as 2 AM to 5 AM.

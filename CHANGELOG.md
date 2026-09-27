@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.1-beta.2] - 2026-09-27
+
+Sable 1.5.1-beta.2 takes UniFi's word for what its own hardware is, and adds a
+UPS device type.
+
+### Insights
+
+- Show UniFi gateways, switches, and access points as **Network equipment**
+  and a UNAS as **Network storage**, with the reason "UniFi says it is …",
+  instead of guessing from the maker. In beta.1 they read as **Unsure**. A
+  type you set still wins. The next UniFi sync after updating fills this in.
+- Add a **UPS** device type with a battery icon. UniFi UPS units, APC and
+  CyberPower devices, and devices with "UPS" in their name get it.
+- Guess **Network storage** for a device with "UNAS" in its name when the
+  UniFi sync is off.
+- Write "Probably network storage" and "Network equipment made by Ubiquiti"
+  rather than "a network storage" and "A network equipment".
+
 ## [1.5.1-beta.1] - 2026-09-27
 
 Sable 1.5.1-beta.1 makes **Insights → Devices** easy to search and better at

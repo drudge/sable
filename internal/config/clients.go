@@ -33,7 +33,7 @@ type Client struct {
 var ClientTypes = []string{
 	"phone", "tablet", "computer", "server", "tv", "streaming-player", "smart-speaker", "speaker",
 	"camera", "doorbell", "game-console", "printer", "storage", "network", "thermostat", "lighting",
-	"smart-plug", "smart-home", "watch",
+	"smart-plug", "smart-home", "watch", "ups",
 }
 
 // Key is the identifier a client is matched and de-duplicated by.

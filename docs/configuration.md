@@ -726,7 +726,7 @@ be set alone. The Insights device drawer writes both, so most people never edit
 these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 `streaming-player`, `smart-speaker`, `speaker`, `camera`, `doorbell`,
 `game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
-`smart-plug`, `smart-home`, and `watch`.
+`smart-plug`, `smart-home`, `watch`, and `ups`.
 
 Insights findings worth a look are sent as alerts; see [Alerts](#alerts).
 

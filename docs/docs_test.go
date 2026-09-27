@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -67,6 +68,44 @@ func TestDocsNameTheLatestStableRelease(t *testing.T) {
 					}
 				}
 			}
+		}
+	}
+}
+
+// Notes for a stable release compare it with the stable release before it, so
+// they never talk about betas, commits, or pull requests. Beta notes can.
+func TestStableReleaseNotesStandOnTheirOwn(t *testing.T) {
+	changelog, err := os.ReadFile(filepath.Join("..", "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(changelog)
+	headings := regexp.MustCompile(`(?m)^## \[([^\]]+)\]`).FindAllStringSubmatchIndex(text, -1)
+	stable := regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+	prerelease := regexp.MustCompile(`\b\d+\.\d+\.\d+-(?:alpha|beta|rc)[0-9A-Za-z.]*|\b(?:beta|rc)\.\d+\b`)
+	hexadecimal := regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
+	pullRequest := regexp.MustCompile(`(?:^|[^\w&])#\d+\b|/pull/\d+`)
+	for index, heading := range headings {
+		version := text[heading[2]:heading[3]]
+		if !stable.MatchString(version) {
+			continue
+		}
+		end := len(text)
+		if index+1 < len(headings) {
+			end = headings[index+1][0]
+		}
+		section := text[heading[1]:end]
+		for _, match := range prerelease.FindAllString(section, -1) {
+			t.Errorf("%s notes mention the prerelease %q", version, match)
+		}
+		for _, match := range hexadecimal.FindAllString(section, -1) {
+			// A commit hash mixes digits and letters; plain numbers and words don't.
+			if strings.ContainsAny(match, "0123456789") && strings.ContainsAny(match, "abcdef") {
+				t.Errorf("%s notes mention what looks like the commit %q", version, match)
+			}
+		}
+		for _, match := range pullRequest.FindAllString(section, -1) {
+			t.Errorf("%s notes mention the pull request %q", version, match[strings.IndexAny(match, "#/"):])
 		}
 	}
 }

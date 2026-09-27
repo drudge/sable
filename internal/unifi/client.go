@@ -213,6 +213,18 @@ type clientPayload struct {
 	// IPv6Addresses is every IPv6 address the controller has observed on the
 	// client, link-local noise included. Only active clients carry it.
 	IPv6Addresses []string `json:"ipv6_addresses"`
+	// ProductLine names Ubiquiti's own hardware that joins as a client, such
+	// as "unifi-drive" for a UNAS.
+	ProductLine string `json:"product_line"`
+}
+
+// kind reads what a client is, when it is Ubiquiti hardware the controller
+// recognizes.
+func (payload clientPayload) kind() string {
+	if strings.EqualFold(strings.TrimSpace(payload.ProductLine), "unifi-drive") {
+		return "storage"
+	}
+	return ""
 }
 
 // networkID resolves the network an entry belongs to. The controller fills
@@ -270,9 +282,28 @@ func (client *Client) activeHosts(ctx context.Context) ([]Host, error) {
 }
 
 type devicePayload struct {
-	MAC  string `json:"mac"`
-	Name string `json:"name"`
-	IP   string `json:"ip"`
+	MAC       string `json:"mac"`
+	Name      string `json:"name"`
+	IP        string `json:"ip"`
+	Type      string `json:"type"`
+	ShortName string `json:"shortname"`
+}
+
+// kind reads what a device is. The controller files its UPS units under
+// switches, so the model's short name, such as UPS23, has to say so.
+func (payload devicePayload) kind() string {
+	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(payload.ShortName)), "UPS") {
+		return "ups"
+	}
+	switch strings.ToLower(strings.TrimSpace(payload.Type)) {
+	case "ugw", "udm", "uxg":
+		return "gateway"
+	case "usw":
+		return "switch"
+	case "uap":
+		return "access point"
+	}
+	return ""
 }
 
 // gear reads the controller's adopted devices, which its client list leaves
@@ -294,7 +325,7 @@ func (client *Client) gear(ctx context.Context) []Host {
 		if mac == "" || name == "" || err != nil || address.IsUnspecified() {
 			continue
 		}
-		gear = append(gear, Host{MAC: mac, Hostname: name, Address: address.Unmap()})
+		gear = append(gear, Host{MAC: mac, Hostname: name, Address: address.Unmap(), Kind: entry.kind()})
 	}
 	return gear
 }
@@ -318,6 +349,7 @@ func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool)
 		IPv6:      publishableIPv6(payload.IPv6Addresses),
 		NetworkID: payload.networkID(),
 		Reserved:  reserved,
+		Kind:      payload.kind(),
 	}, true
 }
 
