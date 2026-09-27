@@ -8,6 +8,25 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.0-beta.15] - 2026-09-27
+
+Sable 1.5.0-beta.15 lets you update the whole cluster from **About**.
+
+### About
+
+- Offer **This node** or **Entire cluster** on a primary's update button in
+  **About**, like the update notification. The two share one remembered
+  choice, so both offer whichever you picked last.
+- Say "Ready to install on this node or the whole cluster." when the cluster
+  can be updated.
+- Keep the update buttons on the right when they wrap under the summary, and
+  make **Release notes** and the update button the same width on a phone.
+
+### Cluster
+
+- Open the **Rolling Updates** card, not the top of the Cluster page, after
+  starting a cluster update from **About** or the update notification.
+
 ## [1.5.0-beta.14] - 2026-09-27
 
 Sable 1.5.0-beta.14 fixes the Rolling Updates card on the Cluster page.
