@@ -672,18 +672,17 @@ templ MCPCard(view MCPAppView) {
 // MCPToolSwitch is one advanced tool group, with the token grants it needs
 // shown as badges.
 templ MCPToolSwitch(name, title, description string, requires []string, on bool) {
-	<label class="field-control switch-row setting-switch-row">
+	<label class="switch-row setting-switch-row mcp-tool-row">
 		<span>
-			<strong>{ title }</strong>
-			<small>{ description }</small>
-			<span class="mcp-tool-requires">
-				<small>Requires</small>
-				<span class="table-badges">
+			<span class="mcp-tool-title">
+				<strong>{ title }</strong>
+				<span class="table-badges" aria-label={ "Requires " + strings.Join(requires, ", ") }>
 					for _, permission := range requires {
 						<span><code>{ permission }</code></span>
 					}
 				</span>
 			</span>
+			<small>{ description }</small>
 		</span>
 		<input type="checkbox" role="switch" name={ name } value="true" checked?={ on }/>
 	</label>
@@ -702,18 +701,9 @@ templ MCPSetupDialog(view MCPAppView) {
 	<dialog class="custom-server-dialog isotope-form-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-tabs data-dialog-auto-open="true">
 		<div class="dialog-header"><h2 id="mcp-setup-title">Set Up MCP Server</h2><p>Let AI assistants manage DNS with an API token</p></div>
 		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
-		<div class="dialog-tab-list" role="tablist" aria-label="MCP server setup"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="tools">Advanced Tools</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="connect">Connect</button></div>
+		<div class="dialog-tab-list" role="tablist" aria-label="MCP server setup"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="connect">Connect</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="tools">Advanced Tools</button></div>
 		<form class="mcp-setup-form" hx-post="/ui/integrations/mcp/setup" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools">
-				<p class="field-help">Records, lookups, and blocking rules are always on. These reach further, so each stays off until you turn it on. Assistants see changes the next time they connect.</p>
-				<div class="mcp-tools-options">
-					@MCPToolSwitch("delete_zones", "Delete Zones", "Delete zones an assistant created through MCP.", []string{"zones.delete"}, view.DeleteZones)
-					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, view.BlockLists)
-					@MCPToolSwitch("insight_findings", "Insights Findings", "Share what Insights noticed, with its evidence, with the AI provider.", []string{"logs.read"}, view.InsightFindings)
-					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, view.QueryLog)
-				</div>
-			</section>
-			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="connect" hidden>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="connect">
 				<section class="wizard-panel compact">
 					<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
 					<div class="about-code-block">
@@ -750,6 +740,15 @@ templ MCPSetupDialog(view MCPAppView) {
 						@MCPClientSnippet("Cursor", "mcp-setup-cursor", mcpCursorSnippet(view.Address), "Add this to .cursor/mcp.json in your project, or to ~/.cursor/mcp.json to use it everywhere.")
 					</div>
 				</section>
+			</section>
+			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools" hidden>
+				<p class="field-help">Off until you turn them on. Tokens need the grants shown. Assistants see changes when they reconnect.</p>
+				<div class="mcp-tools-options">
+					@MCPToolSwitch("delete_zones", "Delete Zones", "Delete zones an assistant created through MCP.", []string{"zones.delete"}, view.DeleteZones)
+					@MCPToolSwitch("block_lists", "Block Lists", "List, add, remove, and refresh block lists.", []string{"blocking.read", "blocking.write"}, view.BlockLists)
+					@MCPToolSwitch("insight_findings", "Insights Findings", "Share what Insights noticed, with its evidence, with the AI provider.", []string{"logs.read"}, view.InsightFindings)
+					@MCPToolSwitch("query_log", "Query Log Search", "Share each device's DNS lookups with the AI provider.", []string{"logs.read"}, view.QueryLog)
+				</div>
 			</section>
 			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button></div>
 		</form>

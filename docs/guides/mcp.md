@@ -49,7 +49,7 @@ Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.e
 
 ## Set up the MCP server
 
-The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The dialog has two tabs: **Advanced Tools**, to turn on the tools below, and **Connect**, with the address to give your assistant and ready-to-paste setup for Claude Code, Claude Desktop, ChatGPT, and Cursor. Click **Turn On** to start serving. Later, **Edit Setup** reopens the same dialog.
+The MCP server is off until you set it up. Open **Integrations → MCP Server** and click **Set Up MCP Server**. The dialog has two tabs: **Connect**, with the address to give your assistant and ready-to-paste setup for Claude Code, Claude Desktop, ChatGPT, and Cursor, and **Advanced Tools**, to turn on the tools below. Click **Turn On** to start serving. Later, **Edit Setup** reopens the same dialog.
 
 While it is off or paused, `/mcp` refuses every request, even one with a valid token, so an API token made for something else cannot be put to this use by accident. **Pause** stops it and keeps the card set up; **Resume** starts it again. **Remove** turns it off and returns the card to setup; it leaves API tokens alone.
 

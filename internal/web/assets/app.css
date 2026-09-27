@@ -1757,9 +1757,16 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .mcp-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .mcp-facts .integration-fact-address { grid-column: 1 / -1; }
 @container (max-width: 36rem) { .mcp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.mcp-tools-options { display: grid; gap: .75rem; }
-.mcp-tool-requires { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .2rem; }
-.mcp-tool-requires code { font-size: .625rem; }
+/* The advanced tools are one bordered list with a divider between rows, each
+   a name with its grants beside it and a line saying what it does. */
+.mcp-tools-options { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.mcp-tools-options .mcp-tool-row { border: 0; border-radius: 0; padding: .65rem .85rem; }
+.mcp-tools-options .mcp-tool-row + .mcp-tool-row { border-top: 1px solid var(--border); }
+.mcp-tools-options .mcp-tool-row > span { gap: .15rem; }
+.mcp-tools-options .mcp-tool-row small { color: var(--muted-foreground); font-size: .75rem; }
+.mcp-tool-title { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.mcp-tool-title strong { font-size: .8125rem; }
+.mcp-tool-title code { font-size: .625rem; }
 .mcp-client-tabs .dialog-tab-list { margin: 0; }
 .mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
 .mcp-client-tabs .field-help { margin: 0; }
