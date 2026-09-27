@@ -93,6 +93,11 @@ var BuiltInRoles = []RoleDefinition{
 		PermissionSettingsRead, PermissionZonesRead, PermissionBlockingRead, PermissionLogsRead, PermissionClusterRead,
 		PermissionUpdatesRead,
 	}},
+	// MCP Client covers every MCP server tool except purge_cache, whose
+	// settings.write would also let a token reload the whole configuration.
+	{Name: "MCP Client", Description: "Manage records, zones, and blocking through the MCP server with an API token", Permissions: []string{
+		PermissionZonesRead, PermissionZonesCreate, PermissionZonesRecords, PermissionBlockingRead, PermissionBlockingWrite,
+	}, Surfaces: []Surface{SurfaceAPI}},
 }
 
 type ManagedUser struct {

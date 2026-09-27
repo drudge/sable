@@ -684,7 +684,7 @@ templ MCPSetupDialog(view MCPAppView) {
 				if view.SecurityDisabled {
 					<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, and so can anyone else who reaches it.</span></p></div>
 				} else {
-					<p class="field-help">Create a token in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a>. Choose a group with the API grants the assistant needs: <code>zones.read</code> and <code>zones.records.write</code> to change records, and <code>blocking.read</code> and <code>blocking.write</code> to manage blocking. Store it as <code>SABLE_API_TOKEN</code>.</p>
+					<p class="field-help">Add yourself to the built-in <strong>MCP Client</strong> group in <a class="inline-link" href="/administration?tab=users" target="_blank" rel="noopener">Administration</a>, then create a token in <a class="inline-link" href="/profile?tab=tokens" target="_blank" rel="noopener">Profile → API Tokens</a> that selects it. Store the token as <code>SABLE_API_TOKEN</code>.</p>
 				}
 			</section>
 			<section class="wizard-panel compact mcp-client-tabs" data-dialog-tabs>

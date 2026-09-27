@@ -42,21 +42,21 @@ On a cluster, set it up at the primary. Every node follows the primary's setting
 
 ## Give the assistant its own token
 
-1. In **Administration → Groups**, add a group for the assistant. Give it the **API** grants it needs:
+Sable ships a built-in **MCP Client** group for this. It grants, through API tokens only, everything the tools need except clearing the cache:
 
-   | Grant | Lets the assistant |
-   | --- | --- |
-   | `zones.read` | List zones and records, and look up names |
-   | `zones.records.write` | Change records |
-   | `zones.create` | Create zones. This grant covers every zone, so leave it off a token meant for chosen zones |
-   | `blocking.read` | Check domains, and look up names |
-   | `blocking.write` | Change the allow and block lists |
-   | `settings.write` | Clear a name from the cache |
+| Grant | Lets the assistant |
+| --- | --- |
+| `zones.read` | List zones and records, and look up names |
+| `zones.records.write` | Change records |
+| `zones.create` | Create zones |
+| `blocking.read` | Check domains, and look up names |
+| `blocking.write` | Change the allow and block lists |
 
-   Limit the zone grants to the zones the assistant should manage; it cannot see any other zone. A zone it creates stays out of reach of a token limited to chosen zones until you add that zone to the group.
-2. Add the group to your account.
-3. In **Profile → API Tokens**, click **Create Token** and create one that selects only that group, with an expiry you are comfortable with.
-4. Store the token in your password manager or shell environment as `SABLE_API_TOKEN`.
+Its zone grants cover every zone. To keep an assistant to chosen zones, or to let it clear a name from the cache with `settings.write`, make your own group in **Administration → Groups** instead. A zone an assistant creates stays out of reach of a group limited to chosen zones until you add that zone to it.
+
+1. In **Administration**, add **MCP Client** (or your own group) to your account.
+2. In **Profile → API Tokens**, click **Create Token** and create one that selects only that group, with an expiry you are comfortable with.
+3. Store the token in your password manager or shell environment as `SABLE_API_TOKEN`.
 
 Use a separate token for each assistant or machine, so you can revoke one without breaking the others. A console session does not work at `/mcp`; the endpoint accepts API tokens only.
 

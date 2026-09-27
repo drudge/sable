@@ -3164,7 +3164,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "<p class=\"field-help\">Create a token in <a class=\"inline-link\" href=\"/profile?tab=tokens\" target=\"_blank\" rel=\"noopener\">Profile → API Tokens</a>. Choose a group with the API grants the assistant needs: <code>zones.read</code> and <code>zones.records.write</code> to change records, and <code>blocking.read</code> and <code>blocking.write</code> to manage blocking. Store it as <code>SABLE_API_TOKEN</code>.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 279, "<p class=\"field-help\">Add yourself to the built-in <strong>MCP Client</strong> group in <a class=\"inline-link\" href=\"/administration?tab=users\" target=\"_blank\" rel=\"noopener\">Administration</a>, then create a token in <a class=\"inline-link\" href=\"/profile?tab=tokens\" target=\"_blank\" rel=\"noopener\">Profile → API Tokens</a> that selects it. Store the token as <code>SABLE_API_TOKEN</code>.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
