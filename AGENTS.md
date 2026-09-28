@@ -84,6 +84,30 @@ The console is server-rendered templ with vendored htmx 4 and small, dependency-
 - htmx can process a swapped fragment at any time, so every `app.js` helper must be safe to run more than once. Content can also arrive without an htmx swap, so watch the page for added elements rather than only listening for htmx events.
 - `internal/web/assets/assets_test.go` pins some exact CSS and JS text. When you change one of those rules on purpose, update the test with it.
 
+### Design quality
+
+Every screen should look finished: polished, responsive, and consistent with the rest of the console. A new screen should look like it was always there.
+
+- **Follow the design system.** Isotope is the source of truth ([docs/ui.md](docs/ui.md)). Use its tokens in `app.css` (`--background`, `--card`, `--muted`, `--border`, `--ring`, and the rest) rather than hard-coded colors, along with the 4px spacing scale, the existing type sizes, and Lucide icons. Set DNS data such as names and addresses in monospace.
+- **Reuse before you build.** Start from the closest existing screen and copy its structure, spacing, copy style, and states. Use the shared templ components before writing markup:
+  - `SettingsCard`, `SettingsSaveButton`
+  - `DetailDrawer`, `DetailDrawerContent`
+  - `StatCard`, `RankedPanel`
+  - `SearchField`, `Toast`, `UpdateIndicator`
+  - `CopyButton`, `CopyLinkButton`, `ScrollFadeHint`, `Icon`
+
+  Use the shared classes too: `.button` (with `outline`, `compact`, and `destructive`), `.card`, `.status-badge`, `.count-badge`, and `.field-help`.
+
+  If a pattern shows up twice, make it a component and use it in both places. Add a parameter to a shared component instead of copying its markup.
+- **Give every control all its states:** hover, visible keyboard focus, pressed, disabled, and loading.
+  - A first load shows a skeleton shaped like the content, like `RankedPanelSkeleton`.
+  - A refresh shows `UpdateIndicator`.
+  - A button whose request is running is disabled (`hx-disable`) and shows a pending label, such as **Saving…**.
+- **Handle empty and error states.** An empty state says in one line why it's empty, like the Insights "Nothing needs your attention" card. An error says what went wrong and what to do next.
+- **Keep motion subtle.** Hover effects and state changes are quick transitions of about 150ms ease, matching the existing rules. Motion should explain a change, not decorate. Under `prefers-reduced-motion`, remove motion that isn't essential.
+- **Balance the layout.** Align to the 4px grid, keep rows from feeling cramped, and keep one clear primary action per area.
+- **Make it responsive.** Check every screen at 1218×787 (laptop) and 390×844 (phone), in light and dark, with no sideways scrolling. Safari lays some things out differently from Chrome, so check it for layout changes.
+
 ### Console conventions
 
 - **Help text:** one short sentence about one thing.
@@ -95,7 +119,6 @@ The console is server-rendered templ with vendored htmx 4 and small, dependency-
 - **Drawers with their own address:** reuse the routed drawers from `app.js` (`data-drawer-route`, `data-dialog-url`) and put `CopyLinkButton` in the drawer.
 - **Scrolling text boxes:** mark the box `data-scroll-fade`, wrap it in `.scroll-fade-frame`, and add `ScrollFadeHint`. It fades the edge that has more to read and shows a chevron, like the sidebar.
 - **Icons in flex buttons:** when CSS resizes a `.nav-icon` inside a flex button, set `flex-basis` to the same size (or `flex: none`), or Safari wraps the label.
-- **Check your layout** at 1218×787 (laptop) and 390×844 (phone), in light and dark. Safari lays some things out differently from Chrome, so check it for layout changes.
 
 ## The DNS data plane
 
