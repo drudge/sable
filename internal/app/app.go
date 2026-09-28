@@ -483,6 +483,13 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		auditLog: database, signIns: authentication != nil,
 	}.alertSources()...)
 	alertDispatcher.Add(clusterAlertSources(clusterService)...)
+	alertLeading := func() bool {
+		state := clusterService.Snapshot()
+		return !state.Initialized || state.LocalRole != cluster.RoleReplica
+	}
+	watches := newWatchSource(database, func() config.Config { return configurationManager.Current().Config },
+		clusterAlertNode(clusterService, configurationManager), alertLeading, clusterService.ReportedAlerts)
+	alertDispatcher.Add(watches.alertSources()...)
 	clusterService.SetLocalAlerts(alertDispatcher.Local)
 	// The lead hands replicas the addresses it has tied to hardware, since a
 	// replica may not see the network's hardware addresses itself.
@@ -526,10 +533,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	clusterService.StartMonitoring(runtimeContext)
 	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
 	runRuntimeWorker(func(context.Context) {
-		alertDispatcher.Run(runtimeContext, func() bool {
-			state := clusterService.Snapshot()
-			return !state.Initialized || state.LocalRole != cluster.RoleReplica
-		})
+		alertDispatcher.Run(runtimeContext, alertLeading)
 	})
 	runRuntimeWorker(func(context.Context) {
 		runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)

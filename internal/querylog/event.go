@@ -254,3 +254,13 @@ type Observer interface {
 	Enabled() bool
 	Record(Event)
 }
+
+// WatchedLookup is one logged query of a name under a watched domain.
+type WatchedLookup struct {
+	ID         int64
+	OccurredAt time.Time
+	ClientIP   string
+	// Name is the name looked up, in lower case without its trailing dot.
+	Name    string
+	Blocked bool
+}

@@ -53,6 +53,26 @@ type Alert struct {
 	Path       string    `json:"path"`
 	PathLabel  string    `json:"path_label"`
 	ObservedAt time.Time `json:"observed_at"`
+	// Watch is what a replica saw for a domain watch. The lead weighs it with
+	// what every other node saw and sends its own alert, so an alert that
+	// carries one is never sent itself.
+	Watch *WatchHit `json:"watch,omitempty"`
+}
+
+// WatchHit is one client's lookups of names a watch covers, seen by one node
+// in one reading of its query log.
+type WatchHit struct {
+	// Watch is the watch's ID.
+	Watch string `json:"watch"`
+	// Node names the node that saw the lookups.
+	Node   string `json:"node"`
+	Client string `json:"client"`
+	// Names are the names looked up, first seen first.
+	Names   []string  `json:"names"`
+	Count   int       `json:"count"`
+	Blocked int       `json:"blocked"`
+	First   time.Time `json:"first"`
+	Last    time.Time `json:"last"`
 }
 
 // Source reports the alerts that are news right now. An alert stays in the

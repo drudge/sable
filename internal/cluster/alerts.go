@@ -238,5 +238,10 @@ func mergeAlerts(found, earlier []alerts.Alert) []alerts.Alert {
 
 func cloneAlert(alert alerts.Alert) alerts.Alert {
 	alert.Reasons = slices.Clone(alert.Reasons)
+	if alert.Watch != nil {
+		hit := *alert.Watch
+		hit.Names = slices.Clone(hit.Names)
+		alert.Watch = &hit
+	}
 	return alert
 }

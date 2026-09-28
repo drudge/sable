@@ -52,7 +52,11 @@ func clusterAlertSources(view clusterAlertView) []alerts.Source {
 		&nodeOutageSource{cluster: view, outages: make(map[string]clusterOutage)},
 		rolloutAlertSource{cluster: view},
 		alerts.SourceFunc(func(_ context.Context, now time.Time) ([]alerts.Alert, error) {
-			return view.ReportedAlerts(now), nil
+			// A replica's watch hits are for the watch source to weigh with
+			// every other node's, not news to send as they are.
+			return slices.DeleteFunc(view.ReportedAlerts(now), func(alert alerts.Alert) bool {
+				return alert.Watch != nil || alert.Kind == watchHitKind
+			}), nil
 		}),
 		alerts.Place(&leadOutageSource{cluster: view}, alerts.OnReplicas),
 	}
