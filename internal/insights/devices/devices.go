@@ -175,7 +175,10 @@ func (given GivenNames) Address(address string) string {
 // was last seen with on the network, or else the one an IPv6 address was built
 // from, which fromAddress marks.
 func (given GivenNames) hardware(address string) (mac string, fromAddress, found bool) {
-	if identity, seen := given.identities[address]; seen {
+	// A link-local client reaches the server through one interface, so the
+	// query log names it with that zone, as in fe80::1%eth0, while the
+	// neighbor table and UniFi name the bare address.
+	if identity, seen := given.identities[withoutZone(address)]; seen {
 		return identity.MAC, false, true
 	}
 	mac, found = hardwareFromAddress(address)

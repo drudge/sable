@@ -365,3 +365,22 @@ func TestBuildCarriesUniFiFingerprints(t *testing.T) {
 		t.Fatalf("device = %+v", device)
 	}
 }
+
+// The query log names a link-local client with the zone it arrived on, and
+// the neighbor table names the bare address, so the two still match.
+func TestBuildTiesALinkLocalClientThroughItsZone(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 27, 19, 0, 0, 0, time.UTC)
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "fe80::14e5:f714:c078:8941%eth0", Queries: 40}, {Client: "10.0.7.80", Queries: 30},
+		}},
+		Identities: []querylog.ClientIdentity{
+			{Address: "fe80::14e5:f714:c078:8941", MAC: "66:ca:20:91:ab:fb", Source: identityNeighbor, LastSeen: now},
+			{Address: "10.0.7.80", MAC: "66:ca:20:91:ab:fb", Source: identityUniFi, Hostname: "Mac", LastSeen: now},
+		},
+	})
+	if len(built) != 1 || built[0].Name != "Mac" || len(built[0].Addresses) != 2 {
+		t.Fatalf("devices = %+v", built)
+	}
+}
