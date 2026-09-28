@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,5 +129,50 @@ func TestReleaseNotesRequireAnExactNonemptyCuratedSection(t *testing.T) {
 	}
 	if !strings.Contains(goReleaserConfig, "changelog:\n  disable: true") {
 		t.Fatal("release builds still generate commit lists")
+	}
+}
+
+// A script's policy hash matches the one the Content Security Policy spec
+// gives for its own example, which is what a browser checks the script
+// against.
+func TestScriptHashMatchesTheSpecExample(t *testing.T) {
+	if got := scriptHash([]byte("alert('Hello, world.');")); got != "sha256-qznLcsROx4GACP2dm0UCKCzCG+HiZ1guq6ZZDob/Tng=" {
+		t.Fatalf("scriptHash = %s", got)
+	}
+}
+
+// The hash dev and devDemo hand the console is of the script the pinned Air
+// really injects: its runner/proxy.js, embedded unchanged and wrapped in a bare
+// script tag. A newer Air that injects it differently fails here rather than
+// quietly stopping the page from reloading.
+func TestAirReloadScriptHashFollowsThePinnedAir(t *testing.T) {
+	ctx := context.Background()
+	hash, err := airReloadScriptHash(ctx)
+	if err != nil {
+		t.Skipf("Air %s is not available here: %v", airVersion, err)
+	}
+	output, err := exec.CommandContext(ctx, "go", "mod", "download", "-json", "github.com/air-verse/air@"+airVersion).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var module struct{ Dir string }
+	if err := json.Unmarshal(output, &module); err != nil {
+		t.Fatal(err)
+	}
+	proxy, err := os.ReadFile(filepath.Join(module.Dir, "runner", "proxy.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"//go:embed proxy.js", `"<script>" + ProxyScript + "</script>"`} {
+		if !strings.Contains(string(proxy), expected) {
+			t.Fatalf("Air %s no longer injects its reload script the same way: runner/proxy.go lacks %s", airVersion, expected)
+		}
+	}
+	script, err := os.ReadFile(filepath.Join(module.Dir, "runner", "proxy.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash != scriptHash(script) {
+		t.Fatalf("hash = %s, want %s", hash, scriptHash(script))
 	}
 }
