@@ -22,11 +22,12 @@ import (
 var syncTestTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 
 type stubConfiguration struct {
-	settings config.UniFi
+	settings    config.UniFi
+	insightsOff bool
 }
 
 func (stub *stubConfiguration) Current() config.Snapshot {
-	return config.Snapshot{Config: config.Config{UniFi: stub.settings}}
+	return config.Snapshot{Config: config.Config{UniFi: stub.settings, Insights: config.Insights{Enabled: !stub.insightsOff}}}
 }
 
 type stubZoneEditor struct {
@@ -671,5 +672,14 @@ func TestUniFiSyncFindsDevicesWithoutPublishing(t *testing.T) {
 		if !slices.Contains(identities, want) {
 			t.Fatalf("identities %v leave out the nameless client's %s", identities, want)
 		}
+	}
+
+	// With Insights off, the sync keeps nothing about devices.
+	read, identities = nil, nil
+	syncer.configuration = &stubConfiguration{settings: settings, insightsOff: true}
+	syncer.SyncNow()
+	syncer.runOnce(t.Context())
+	if read != nil || identities != nil {
+		t.Fatalf("with Insights off the sync recorded stations %+v and identities %v", read, identities)
 	}
 }

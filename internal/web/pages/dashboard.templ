@@ -38,6 +38,8 @@ type DashboardView struct {
 	BlockingEnabled      bool
 	HasRemoteBlockLists  bool
 	CanLogs              bool
+	// InsightsOff hides Insights everywhere while it is turned off.
+	InsightsOff          bool
 	CanMetrics           bool
 	CanCheckUpdates      bool
 	CheckUpdatesOnLogin bool
@@ -401,7 +403,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					<nav class="nav" id="primary-navigation" aria-label="Primary navigation" tabindex="-1">
 						<div class="nav-group">
 							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
-							if view.CanBlocking || view.CanLogs {
+							if (view.CanBlocking || view.CanLogs) && !view.InsightsOff {
 								@NavItem("Insights", "/insights", "lightbulb", activePage == "insights", false)
 							}
 							if view.CanZones {
@@ -550,7 +552,7 @@ templ CommandPalette(view DashboardView) {
 			<section class="command-palette-group" role="group" aria-labelledby="command-pages-title" data-command-group>
 				<h3 id="command-pages-title">Pages</h3>
 				@CommandOption("command-page-dashboard", "Dashboard", "Overview and query statistics", "dashboard", "Page", "home overview statistics metrics", "/", "", "", "", "")
-				if view.CanBlocking || view.CanLogs {
+				if (view.CanBlocking || view.CanLogs) && !view.InsightsOff {
 					@CommandOption("command-page-insights", "Insights", "Devices, changes, and blocking on your network", "lightbulb", "Page", "intelligence findings evidence analysis devices new device what changed quiet spike hardware address blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
 					if view.CanLogs {
 						@CommandOption("command-page-insights-apps", "App Insights", "Every app on your network, busiest first", "apps", "Page", "apps applications services top apps streaming social gaming", "", "/insights", "top-stats-apps-dialog", "", "")
@@ -605,7 +607,9 @@ templ CommandPalette(view DashboardView) {
 				if view.CanLogs {
 					@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "ssl runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
 					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
-					@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
+					if !view.InsightsOff {
+						@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
+					}
 				}
 				if view.CanSettings {
 					@CommandSearchOption("command-action-search-cache", "Search DNS Cache", "Enter a domain without leaving the command palette", "search", "cached resolver responses browser", "/cache", "#cache-browser-dialog [data-cache-search]", "Search cached domains…", "")
@@ -729,7 +733,7 @@ func settingsCommandDescription(tab string) string {
 func settingsCommandKeywords(tab string) string {
 	switch tab {
 	case "general":
-		return "settings configuration server identity listeners dns"
+		return "settings configuration server identity listeners dns insights privacy devices tracking delete data"
 	case "web-service":
 		return "settings configuration web service https sessions appearance display"
 	case "protocols":

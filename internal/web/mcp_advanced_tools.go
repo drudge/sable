@@ -377,6 +377,9 @@ func (server *Server) mcpListFindings(request *http.Request, arguments json.RawM
 	if !server.mcpHasPermission(request, auth.PermissionLogsRead) {
 		return nil, errors.New("this token needs logs.read to read Insights findings")
 	}
+	if !server.insightsEnabled() {
+		return nil, errInsightsOff
+	}
 	console := server.consoleView(request)
 	window := insightsWindow(strings.ToLower(strings.TrimSpace(input.Range)), time.Now())
 	analyzers, _, _ := server.insightAnalyzers(console, window)

@@ -638,7 +638,7 @@ func Defaults() Config {
 			Watch:    true,
 			Debounce: Duration{Duration: defaultReloadDebounce},
 		},
-		Insights: Insights{Findings: DefaultInsightFindings()},
+		Insights: Insights{Enabled: true, Findings: DefaultInsightFindings()},
 	}
 }
 

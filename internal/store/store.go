@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -22,6 +23,9 @@ import (
 type Store struct {
 	database *sql.DB
 	driver   string
+	// trackingOff stops client sightings and identities from being recorded
+	// while Insights is off.
+	trackingOff atomic.Bool
 }
 
 const maximumRecentQueryEvents = 1_000

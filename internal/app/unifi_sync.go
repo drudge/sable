@@ -289,12 +289,14 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		return unifi.Plan{}, 0, err
 	}
 	inventory.Stations = withoutGear(inventory)
-	if !preview && syncer.identities != nil {
+	insightsOn := syncer.configuration.Current().Config.Insights.Enabled
+	if !preview && syncer.identities != nil && insightsOn {
 		if err := syncer.identities(ctx, unifiIdentities(inventory, syncer.now())); err != nil {
 			syncer.logger.Warn("record UniFi client identities", "error", err)
 		}
 	}
-	if !preview && syncer.reading != nil {
+	// The reading is only for Insights, so it is kept only while Insights is on.
+	if !preview && syncer.reading != nil && insightsOn {
 		if err := syncer.reading(ctx, inventory, syncer.now()); err != nil {
 			syncer.logger.Warn("record UniFi reading", "error", err)
 		}

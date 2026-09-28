@@ -73,6 +73,9 @@ type clientDomainKey struct{ client, name string }
 // and client-domain pair in a batch. It runs in the query log writer's
 // transaction, never on the DNS request path.
 func (store *Store) writeClientSightings(ctx context.Context, transaction *sql.Tx, events []querylog.Event) error {
+	if !store.ClientTracking() {
+		return nil
+	}
 	clients := make(map[string]*sightingSpan)
 	pairs := make(map[clientDomainKey]*sightingSpan)
 	for _, event := range events {
@@ -515,7 +518,11 @@ func (store *Store) clientWindowIndex(ctx context.Context, clients []string, sin
 
 // RecordClientIdentities remembers which hardware address each client address
 // belonged to, so history can be tied to a device after its address changes.
+// With client tracking off it keeps nothing.
 func (store *Store) RecordClientIdentities(ctx context.Context, identities []querylog.ClientIdentity) error {
+	if !store.ClientTracking() {
+		return nil
+	}
 	rows := make([][]any, 0, len(identities))
 	for _, identity := range identities {
 		address := queryLogClientKey(identity.Address)

@@ -10,6 +10,10 @@ import (
 // Insights configures what Insights looks for and what it does with each kind
 // of finding it makes.
 type Insights struct {
+	// Enabled turns Insights on. Off, Sable stops recording which devices it
+	// sees and what hardware they are, stops looking for findings, and hides
+	// Insights. The query log and the dashboard keep working without it.
+	Enabled bool `toml:"enabled"`
 	// Findings sets, for each kind of finding, whether Insights shows it and
 	// sends it as an alert, only shows it, or leaves it out, and the limits
 	// that make one.

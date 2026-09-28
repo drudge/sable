@@ -49,8 +49,12 @@ CREATE TABLE IF NOT EXISTS sable_unifi_station_traffic (
 // RecordUniFiReading keeps the controller's latest networks and connected
 // stations in place of the last read's, and adds each station's traffic
 // counter to its hourly history. The UniFi sync calls it after each read, off
-// the DNS request path.
+// the DNS request path. Nothing is kept while client tracking is off.
 func (store *Store) RecordUniFiReading(ctx context.Context, inventory unifi.Inventory, readAt time.Time) error {
+	// With Insights off nothing about a device is kept.
+	if !store.ClientTracking() {
+		return nil
+	}
 	readAt = readAt.UTC().Truncate(time.Second)
 	transaction, err := store.database.BeginTx(ctx, nil)
 	if err != nil {

@@ -19,6 +19,7 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 		BlockingAllowTXTReport: true,
 		QueryLogEnabled:        true,
 		ServerLogEnabled:       true,
+		Insights:               SettingsInsightsView{Enabled: true, CanEdit: true},
 		UpdatePreferences: SettingsUpdatePreferencesView{
 			CanEdit:               true,
 			CanEditReleaseChannel: true,
@@ -53,8 +54,13 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 		}
 	}
 
-	if got := strings.Count(markup, `role="switch"`); got != 12 {
-		t.Fatalf("settings page rendered %d switches, want 12", got)
+	// Insights saves on its own, so its switch has no name to be swept up by
+	// Save Settings; turning it off asks first.
+	if !regexp.MustCompile(`<input type="checkbox" role="switch" checked data-insights-off="insights-off-dialog"`).MatchString(markup) {
+		t.Error("Insights did not render as a checked switch that asks before turning off")
+	}
+	if got := strings.Count(markup, `role="switch"`); got != 13 {
+		t.Fatalf("settings page rendered %d switches, want 13", got)
 	}
 	if regexp.MustCompile(`<input[^>]*role="switch"[^>]*name="keep_configuration"`).MatchString(markup) {
 		t.Fatal("restore option rendered as a switch instead of an action-scoped checkbox")

@@ -85,6 +85,7 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 			SignIns: configuration.Send.SignIns, SignInsAfter: configuration.SignIns.After,
 			SignInsWithin: alertSignInMinutes(configuration.SignIns.Within.Duration),
 			InsightKinds:  alertInsightKinds(server.config.Current().Config.Insights.Findings),
+			InsightsOff:   !server.config.Current().Config.Insights.Enabled,
 		},
 	}
 	if console.CanLogs {
@@ -763,6 +764,11 @@ func (server *Server) saveAlertGroups(writer http.ResponseWriter, request *http.
 		return
 	}
 	err = editor.Update(request.Context(), func(candidate *config.Config) error {
+		if !candidate.Insights.Enabled {
+			// The Insights group folds away while Insights is off, so the form
+			// says nothing about it and what was chosen stays for its return.
+			send.Insights = candidate.Alerts.Send.Insights
+		}
 		candidate.Alerts.Send = send
 		candidate.Alerts.SignIns = config.AlertSignIns{After: after, Within: config.Duration{Duration: time.Duration(within) * time.Minute}}
 		candidate.Insights.Findings = alertInsightModes(request.PostForm, candidate.Insights.Findings)

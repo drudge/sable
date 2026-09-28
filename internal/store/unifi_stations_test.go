@@ -75,3 +75,29 @@ func TestUniFiReadingIsEmptyBeforeAnyRead(t *testing.T) {
 		t.Fatalf("reading = %+v, %v, want nothing", reading, err)
 	}
 }
+
+// With Insights off nothing about devices is kept, and deleting Insights data
+// takes the UniFi readings with it.
+func TestUniFiReadingFollowsTheInsightsSwitch(t *testing.T) {
+	store := openIdentityStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	inventory := unifi.Inventory{Stations: []unifi.Station{{MAC: "aa:bb:cc:00:00:01", Address: netip.MustParseAddr("10.0.50.20"), Bytes: 5}}}
+	store.SetClientTracking(false)
+	if err := store.RecordUniFiReading(ctx, inventory, now); err != nil {
+		t.Fatal(err)
+	}
+	if reading, _ := store.UniFiReading(ctx, time.Time{}); !reading.ReadAt.IsZero() {
+		t.Fatalf("a reading was kept with tracking off: %+v", reading)
+	}
+	store.SetClientTracking(true)
+	if err := store.RecordUniFiReading(ctx, inventory, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteInsightData(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	if reading, _ := store.UniFiReading(ctx, time.Time{}); !reading.ReadAt.IsZero() || len(reading.Traffic) != 0 {
+		t.Fatalf("deleting Insights data left the UniFi reading: %+v", reading)
+	}
+}

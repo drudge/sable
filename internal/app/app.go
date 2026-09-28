@@ -83,6 +83,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	if err != nil {
 		return err
 	}
+	// Before the query log writer and the device workers start, so none of
+	// them keeps a sighting while Insights is off.
+	if err := switchInsights(ctx, database, true, initial.Insights.Enabled, time.Now()); err != nil {
+		return err
+	}
 	// Run is the process lifecycle boundary. If a worker outlives its shutdown
 	// deadline, leave its database open until process exit rather than close a
 	// dependency it may still be using. Incomplete shutdown is returned as an error.
@@ -315,6 +320,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		}
 		handler.Activate(candidateRuntime)
 		queryRecorder.SetEnabled(candidate.QueryLog.Enabled)
+		if err := switchInsights(reloadContext, database, active.Insights.Enabled, candidate.Insights.Enabled, time.Now()); err != nil {
+			return err
+		}
 		if err := queryRecorder.SetRetention(candidate.QueryLog.Retention.Duration); err != nil {
 			return err
 		}
@@ -366,6 +374,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	dnsProviderCredentials := dnsprovider.NewStore(secretVault)
 	stateReplicator := newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets)
 	stateReplicator.setDNSProviderCredentials(dnsProviderCredentials)
+	stateReplicator.setInsightData(database)
 	clusterCertificateFile, _ := initial.EncryptedDNSCertificatePaths(configurationDirectory)
 	clusterService, err = cluster.Open(cluster.Options{
 		HTTPSCertificateFile: clusterCertificateFile,
@@ -391,6 +400,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		return dynamicUpdater.Update(updateContext, request)
 	})
 
+	insightsEnabled := func() bool { return configurationManager.Current().Config.Insights.Enabled }
 	unifiSync := newUniFiSyncer(
 		configurationManager,
 		zoneManager,
@@ -405,7 +415,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	unifiSync.reading = database.RecordUniFiReading
 	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
 	runRuntimeWorker(func(context.Context) {
-		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)
+		runNeighborSampler(runtimeContext, insightsEnabled, neighbors.Read, database.RecordClientIdentities, logger)
 	})
 	runRuntimeWorker(func(context.Context) {
 		// One after the other: each reads through the whole query history.
@@ -490,6 +500,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	// replica may not see the network's hardware addresses itself.
 	clusterService.SetClientIdentities(cluster.ClientIdentities{
 		Read: database.ClientIdentities, Record: database.RecordClientIdentities, Lookback: devices.Lookback,
+		Enabled: insightsEnabled,
 	})
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
