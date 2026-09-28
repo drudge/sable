@@ -604,8 +604,8 @@ tools = ["list_zones", "list_records", "add_record", "set_records", "update_reco
 ```
 
 The rest start off: `create_zone`, `delete_zone`, `add_block_list`,
-`remove_block_list`, `refresh_block_lists`, `sync_dynamic_dns`, and
-`search_queries`. See
+`remove_block_list`, `refresh_block_lists`, `sync_dynamic_dns`,
+`search_queries`, and `search_server_logs`. See
 [Let an AI assistant manage records](guides/mcp.md) for each tool's grant.
 
 An empty list offers no tools. A token still needs each tool's grant.

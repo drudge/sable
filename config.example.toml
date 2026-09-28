@@ -280,7 +280,7 @@ secret_key_file = "data/sable.key"
 # while it is paused.
 # tools lists the tools assistants are offered. These everyday tools are on
 # by default; create_zone, delete_zone, the tools that change block lists,
-# sync_dynamic_dns, and search_queries wait to be added. A token still needs each tool's grant.
+# sync_dynamic_dns, search_queries, and search_server_logs wait to be added. A token still needs each tool's grant.
 [mcp]
 configured = false
 enabled = false
