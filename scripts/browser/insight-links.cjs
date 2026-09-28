@@ -56,7 +56,7 @@ const {chromium} = require('playwright');
     // A finding that is not on the page says so.
     await page.goto(`${baseURL}/insights/findings/000000000000?range=day`);
     await page.locator('#insight-finding-missing').waitFor();
-    await page.locator('#insight-finding-missing').getByText("This finding isn't in Insights").waitFor();
+    await page.locator('#insight-finding-missing').getByText("This finding isn't in Insights for the").waitFor();
 
     // A device's address opens on Devices with its drawer loaded.
     const deviceAddress = '/insights/devices/mac:3c:22:fb:01:02:03?range=day';
