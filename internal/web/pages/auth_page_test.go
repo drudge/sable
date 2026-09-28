@@ -59,6 +59,9 @@ func TestAuthPageGroupsAlternateSignInMethods(t *testing.T) {
 			if test.passkeys && !test.setup && strings.Index(html, `data-passkey-status`) > strings.Index(html, `data-passkey-action="login"`) {
 				t.Fatal("passkey status should appear above the passkey button")
 			}
+			if test.passkeys && test.sso != "" && !test.setup && strings.Index(html, `data-passkey-status`) > strings.Index(html, `action="/auth/oidc/start"`) {
+				t.Fatal("passkey status should appear above the OIDC button")
+			}
 		})
 	}
 }

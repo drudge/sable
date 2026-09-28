@@ -10,8 +10,8 @@ compatibility are not yet a published contract.
 
 ## [1.5.1-beta.2] - 2026-09-27
 
-Sable 1.5.1-beta.2 takes UniFi's word for what its own hardware is, and adds a
-UPS device type.
+Sable 1.5.1-beta.2 takes UniFi's word for what its own hardware is, adds a
+UPS device type, and moves passkey sign-in errors to where other errors show.
 
 ### Insights
 
@@ -25,6 +25,12 @@ UPS device type.
   UniFi sync is off.
 - Write "Probably network storage" and "Network equipment made by Ubiquiti"
   rather than "a network storage" and "A network equipment".
+
+### Sign-in
+
+- Show a failed passkey sign-in's error under the card's subtitle, above every
+  button, like a password or single sign-on error. With single sign-on on, it
+  used to appear between **Sign in with …** and the passkey button.
 
 ## [1.5.1-beta.1] - 2026-09-27
 
