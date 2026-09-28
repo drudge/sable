@@ -34,6 +34,7 @@ var appCategoryIcons = map[string]string{
 	services.CategoryCloud: "cloud", services.CategoryProductivity: "briefcase", services.CategoryDeveloper: "code",
 	services.CategoryAI: "sparkles", services.CategoryNews: "newspaper", services.CategorySearch: "search",
 	services.CategoryPlatform: "cpu", services.CategorySecurity: "shield-check", services.CategoryFinance: "wallet",
+	services.CategoryRemoteAccess: "globe-lock",
 }
 
 // AppIcon is an app's logo as a small app tile: the brand's mark, in white or
@@ -88,7 +89,7 @@ func AppIcon(id, category string) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(logo.Color)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 39, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 40, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -111,7 +112,7 @@ func AppIcon(id, category string) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(part.Path)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 43, Col: 25}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 44, Col: 25}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 					if templ_7745c5c3_Err != nil {
@@ -124,7 +125,7 @@ func AppIcon(id, category string) templ.Component {
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(part.Fill)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 43, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 44, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 					if templ_7745c5c3_Err != nil {
@@ -147,7 +148,7 @@ func AppIcon(id, category string) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(logo.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 47, Col: 23}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 48, Col: 23}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 				if templ_7745c5c3_Err != nil {
@@ -160,7 +161,7 @@ func AppIcon(id, category string) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(logo.Ink)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 47, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `app_icons.templ`, Line: 48, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 				if templ_7745c5c3_Err != nil {

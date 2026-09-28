@@ -82,6 +82,50 @@ func TestOpenMigratesExistingQueryLogForDecisions(t *testing.T) {
 	}
 }
 
+// Sightings recorded before sources could suggest a device type read back
+// with no suggestion.
+func TestOpenMigratesExistingClientIdentitiesForKinds(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "sable.db")
+	database, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := time.Now().UTC().Truncate(time.Second)
+	for _, statement := range []string{`CREATE TABLE sable_client_identity (
+		address TEXT NOT NULL,
+		mac TEXT NOT NULL,
+		source TEXT NOT NULL,
+		hostname TEXT NOT NULL DEFAULT '',
+		first_seen TIMESTAMP NOT NULL,
+		last_seen TIMESTAMP NOT NULL,
+		PRIMARY KEY (address, mac, source)
+	)`, `INSERT INTO sable_client_identity VALUES ('10.0.7.20', 'f4:ab:5c:0b:47:8a', 'unifi', 'Nick''s P2S', ?, ?)`} {
+		var args []any
+		if strings.HasPrefix(statement, "INSERT") {
+			args = []any{seen, seen}
+		}
+		if _, err := database.Exec(statement, args...); err != nil {
+			database.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	opened, err := Open(context.Background(), "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	identities, err := opened.ClientIdentities(context.Background(), seen.Add(-time.Hour))
+	if err != nil || len(identities) != 1 || identities[0].Hostname != "Nick's P2S" || identities[0].Kind != "" || identities[0].KindSet {
+		t.Fatalf("identities = %+v, %v", identities, err)
+	}
+}
+
 func TestBuiltInAPIAdministratorIsAPISurfaceOnly(t *testing.T) {
 	t.Parallel()
 

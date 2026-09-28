@@ -114,7 +114,7 @@ func TestInsightSettingsCoverEveryKindWithTheConfigurationsRanges(t *testing.T) 
 	}
 	every := []string{
 		devices.KindNewDevice, devices.KindWentQuiet, devices.KindTrafficSpike, devices.KindNewDestinations, devices.KindNewApp,
-		devices.KindUnusualHours, devices.KindCheckIn, devices.KindApplianceDrift,
+		devices.KindRemoteAccess, devices.KindUnusualHours, devices.KindCheckIn, devices.KindApplianceDrift,
 		blockinginsights.KindUpdateFailing, blockinginsights.KindPastBlock, blockinginsights.KindListUnreadable,
 		blockinginsights.KindLowUnique, blockinginsights.KindUniqueCoverage,
 	}

@@ -186,6 +186,32 @@ ON sable_server_log (occurred_at)`}
 	if err := store.seedAuthorization(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
+	if err := store.migrateClientIdentityKindSchema(ctx); err != nil {
+		return fmt.Errorf("migrate %s database: %w", store.driver, err)
+	}
+	return nil
+}
+
+// migrateClientIdentityKindSchema adds the device type a sighting's source
+// suggests to databases created before sources could suggest one. The
+// defaults leave every existing sighting without a suggestion.
+func (store *Store) migrateClientIdentityKindSchema(ctx context.Context) error {
+	for _, column := range []struct{ name, definition string }{
+		{"kind", "TEXT NOT NULL DEFAULT ''"},
+		{"kind_confidence", "INTEGER NOT NULL DEFAULT 0"},
+		{"kind_set", "BOOLEAN NOT NULL DEFAULT FALSE"},
+	} {
+		exists, err := store.tableHasColumn(ctx, "sable_client_identity", column.name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := store.database.ExecContext(ctx, "ALTER TABLE sable_client_identity ADD COLUMN "+column.name+" "+column.definition); err != nil {
+			return fmt.Errorf("add client identity %s: %w", column.name, err)
+		}
+	}
 	return nil
 }
 

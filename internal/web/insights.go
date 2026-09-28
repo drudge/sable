@@ -424,6 +424,8 @@ func insightFindingIcon(kind string) string {
 		return "line-chart"
 	case devices.KindWentQuiet:
 		return "power"
+	case devices.KindRemoteAccess:
+		return "globe-lock"
 	case devices.KindNewApp:
 		return "grid-2x2-plus"
 	case devices.KindUnusualHours:

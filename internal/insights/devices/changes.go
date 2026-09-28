@@ -64,6 +64,9 @@ type ChangesInput struct {
 	// RepeatedLookups are names only one client looked up many times in the
 	// last day, with every lookup's time.
 	RepeatedLookups []querylog.LookupTimes
+	// RemoteAccess lists, for each client address, the names of remote
+	// access tools it looked up in the window.
+	RemoteAccess map[string][]string
 	// Limits are the thresholds each change must pass. Zero ones take their
 	// defaults.
 	Limits Limits
@@ -84,7 +87,7 @@ func Changes(input ChangesInput) []insights.Finding {
 		find func(ChangesInput) []insights.Finding
 	}{
 		{KindWentQuiet, quietFindings}, {KindTrafficSpike, spikeFindings}, {KindUnusualHours, unusualHourFindings},
-		{KindCheckIn, checkInFindings}, {KindNewDevice, newDeviceFindings},
+		{KindCheckIn, checkInFindings}, {KindNewDevice, newDeviceFindings}, {KindRemoteAccess, remoteAccessFindings},
 	} {
 		if !input.Off[analysis.kind] {
 			findings = append(findings, analysis.find(input)...)
@@ -416,6 +419,9 @@ type Sources interface {
 	// DomainHistory lists every name a device has queried, with whether the
 	// list is complete.
 	DomainHistory(context.Context, Device) ([]insights.DomainEvidence, bool, error)
+	// RemoteAccess lists, for each client address, the names of remote access
+	// tools it looked up since a moment.
+	RemoteAccess(context.Context, time.Time) (map[string][]string, error)
 }
 
 // Analyzer reports what changed about the network's devices.
@@ -449,9 +455,14 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 		// A failed read only leaves check-ins out.
 		repeated, _ = analyzer.Sources.RepeatedLookups(ctx, report.Window.End.Add(-24*time.Hour))
 	}
+	var remote map[string][]string
+	if !off[KindRemoteAccess] {
+		// A failed read only leaves remote access out.
+		remote, _ = analyzer.Sources.RemoteAccess(ctx, report.Window.Start)
+	}
 	return Changes(ChangesInput{
 		Devices: report.Devices, WindowStart: report.Window.Start, Now: report.Window.End, SeenSince: report.SeenSince,
-		Limits: analyzer.Limits, Off: off,
+		Limits: analyzer.Limits, Off: off, RemoteAccess: remote,
 		NewDomains: func(device Device) []insights.DomainEvidence {
 			domains, err := analyzer.Sources.NewDomains(ctx, device, report.Window)
 			if err != nil {

@@ -203,6 +203,17 @@ snapshot from an older primary leaves a newer replica's alert and Insights
 settings as they are, so alerts keep working while a rolling update runs mixed
 versions.
 
+## Devices in a cluster
+
+Each node's Insights reads its own query log, but the addresses Insights ties
+to hardware come from the lead. The lead reads its host's neighbor table and
+the UniFi controller, and hands replicas what it learned: everything from the
+last two weeks when a replica first synchronizes and again every 12 hours, and
+the last 15 minutes' sightings once a minute. A replica in a container, or on
+a network where it cannot see client hardware addresses, then names devices
+and follows their rotating IPv6 addresses the way the lead does. A replica on
+an older release ignores what it is handed.
+
 ## Planned primary handoff
 
 Use a planned handoff for maintenance when both nodes are healthy:

@@ -31,6 +31,7 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 		{"tv.youtube.com", "youtube-tv"},
 		{"gateway.discord.gg", "discord"},
 		{"Mesu.Apple.com", "apple-updates"},
+		{"swscan.apple.com", "macos-updates"},
 		{"gsp-ssl.apple.com", "apple"},
 		{"api.netflix.com", "netflix"},
 		{"ws.ring.com", "ring"},
@@ -39,6 +40,7 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 		{"eu.tectonic.remarkable.com", "remarkable"},
 		{"us.mqtt.bambulab.com", "bambu-lab"},
 		{"mqtt2.tidbyt.com", "tidbyt"},
+		{"region1.v2.argotunnel.com", "cloudflare-tunnel"},
 		{"device-prod.generaccloud.com", "generac"},
 	} {
 		service, found := Lookup(test.name)
