@@ -120,6 +120,84 @@ func TestIterativeResolverMinimizesPastWildcardAnswersWithTheirOwnNameServers(t 
 	if last := questions[len(questions)-1]; last != "tenant-cd.edge.tenants.eu.example.com./A@udp://192.0.2.4:53" {
 		t.Fatalf("the full name was not asked last: %v", questions)
 	}
+	// Once the zone answered for tenants, it answers for the full name, so
+	// the labels between are not asked one by one.
+	if slices.Contains(questions, "edge.tenants.eu.example.com./NS@udp://192.0.2.4:53") {
+		t.Fatalf("minimization went on past an answer: %v", questions)
+	}
+}
+
+// Names a zone's servers said hold no delegation are remembered, so the next
+// lookup below them asks the zone for the full name straight away. Long alias
+// chains, and DNSSEC validation walking the same names again, would otherwise
+// repeat every step.
+func TestIterativeResolverRemembersNamesInsideAZone(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	var questions []string
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		questions = append(questions, fmt.Sprintf("%s/%s", question.Name, dns.TypeToString[question.Qtype]))
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "net.":
+			return referralResponse(request, "net.", "ns.net.", "192.0.2.2"), nil
+		case endpoint == "udp://192.0.2.2:53" && question.Name == "cloudflare.net.":
+			return referralResponse(request, "cloudflare.net.", "ns.cloudflare.net.", "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Qtype == dns.TypeNS:
+			return noDataResponse(request, "cloudflare.net."), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Qtype == dns.TypeA:
+			return addressResponse(request, "192.0.2.77"), nil
+		default:
+			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+		}
+	}
+	for _, name := range []string{"ingress.eu.example.com.cdn.cloudflare.net.", "other.eu.example.com.cdn.cloudflare.net."} {
+		questions = nil
+		request := new(dns.Msg)
+		request.SetQuestion(name, dns.TypeA)
+		if _, err := handler.resolveNetwork(request, runtime, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(questions, []string{"other.eu.example.com.cdn.cloudflare.net./A"}) {
+		t.Fatalf("the second lookup asked %v, want only the full name", questions)
+	}
+}
+
+// A server that timed out when it had time to answer is asked last for a
+// while; one squeezed by the lookup's own deadline is not held against.
+func TestIterativeResolverAsksServersThatJustFailedLast(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	var asked []string
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		asked = append(asked, endpoint)
+		if endpoint == "udp://192.0.2.10:53" {
+			return nil, context.DeadlineExceeded
+		}
+		return addressResponse(request, "192.0.2.80"), nil
+	}
+	servers := []string{"192.0.2.10:53", "192.0.2.11:53"}
+	firsts := make([]string, 0, 5)
+	for range 5 {
+		asked = nil
+		budget := &iterativeBudget{remaining: maximumIterativeQueries}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if _, err := handler.exchangeIterative(ctx, iterativeQuery("www.example.com.", dns.TypeA), servers, runtime, budget); err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+		firsts = append(firsts, asked[0])
+	}
+	// Rotation leads with each server in turn, so the failing one leads one of
+	// the first two lookups; after it fails, the other leads every lookup until
+	// its cooldown ends.
+	failedAt := slices.Index(firsts, "udp://192.0.2.10:53")
+	if failedAt < 0 || failedAt > 1 || slices.Contains(firsts[failedAt+1:], "udp://192.0.2.10:53") {
+		t.Fatalf("lookups led with %v, want the failed server last once it failed", firsts)
+	}
 }
 
 func TestIterativeResolverRejectsOutOfBailiwickGlue(t *testing.T) {

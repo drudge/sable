@@ -18,6 +18,10 @@ import (
 const (
 	maximumIterativeDepth   = 24
 	maximumIterativeQueries = 96
+	// The bounds on how long a name found inside a zone is remembered.
+	defaultNoCutTTL = 300
+	minimumNoCutTTL = 30
+	maximumNoCutTTL = 3600
 	// Delegations and name-server addresses are held no longer than a day even
 	// when the zone claims more, so a stale nameset cannot outlive a renumbering.
 	maximumDelegationTTL = uint32(24 * 60 * 60)
@@ -134,6 +138,57 @@ func (cache *delegationCache) set(zone string, servers []string, ttl uint32, now
 	cache.addressCache.set(zone, servers, ttl, now)
 }
 
+// zoneCutCache remembers names QNAME minimization found inside a zone rather
+// than delegated from it, keyed by the name and holding the zone. A later
+// lookup below such a name starts its minimization past it instead of asking
+// the zone's servers the same question again, which matters most for long
+// alias chains and for DNSSEC validation, which walks the same names again.
+type zoneCutCache struct{ *addressCache }
+
+func newZoneCutCache(capacity int) *zoneCutCache {
+	return &zoneCutCache{addressCache: newAddressCache(capacity)}
+}
+
+// record notes that name sits inside zone, with no delegation of its own.
+func (cache *zoneCutCache) record(name, zone string, ttl uint32, now time.Time) {
+	cache.set(name, []string{dns.Fqdn(zone)}, ttl, now)
+}
+
+// walked returns the deepest name at or above name known to sit inside zone,
+// or nothing when no such name is known.
+func (cache *zoneCutCache) walked(name, zone string, now time.Time) string {
+	zone = dns.Fqdn(zone)
+	name = normalizeName(name)
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	for current := name; current != ""; {
+		if dns.Fqdn(current) == zone {
+			break
+		}
+		if recorded, found := cache.lookupLocked(current, now); found && len(recorded) == 1 && recorded[0] == zone {
+			return dns.Fqdn(current)
+		}
+		separator := strings.IndexByte(current, '.')
+		if separator < 0 {
+			break
+		}
+		current = current[separator+1:]
+	}
+	return ""
+}
+
+// noCutTTL is how long a name found inside a zone is remembered: the zone's
+// negative-answer TTL when the response carries its SOA, within bounds.
+func noCutTTL(response *dns.Msg) uint32 {
+	ttl := uint32(defaultNoCutTTL)
+	for _, record := range response.Ns {
+		if soa, ok := record.(*dns.SOA); ok {
+			ttl = min(soa.Hdr.Ttl, soa.Minttl)
+		}
+	}
+	return min(max(ttl, minimumNoCutTTL), maximumNoCutTTL)
+}
+
 func normalizeRootHints(configured []string) ([]string, error) {
 	if len(configured) == 0 {
 		return append([]string(nil), defaultRootHints...), nil
@@ -209,11 +264,18 @@ func (handler *Handler) resolveIterativeQuestion(
 		closestZone, servers = zone, cachedServers
 	}
 	visited := make(map[string]struct{})
+	walked := runtime.walkedNames(cacheName, closestZone)
 
 	// Query only successive delegation names until the closest authority is
 	// reached. The final owner and record type are withheld from parent zones.
+minimizing:
 	for _, candidate := range minimizedDelegationNames(question.Name) {
 		if closestZone != "" && (candidate == dns.Fqdn(closestZone) || strings.HasSuffix(dns.Fqdn(closestZone), candidate)) {
+			continue
+		}
+		// A name already found inside the closest zone, and every name above
+		// it, needs no second look.
+		if walked != "" && dns.IsSubDomain(candidate, walked) {
 			continue
 		}
 		response, err := handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), servers, runtime, budget)
@@ -227,6 +289,15 @@ func (handler *Handler) resolveIterativeQuestion(
 		// an intermediate name, and that is an answer about this zone, not a
 		// referral away from it.
 		if !referral || len(response.Answer) > 0 || !belowZone(zone, closestZone) {
+			switch {
+			case aliasedAt(response, candidate):
+				// The zone answers for this name itself, so it answers for
+				// the full name too: ask it that now instead of label by label.
+				break minimizing
+			case response.Rcode == dns.RcodeSuccess && len(response.Answer) == 0:
+				// No delegation here, only more of the same zone.
+				runtime.recordWalked(candidate, closestZone, noCutTTL(response))
+			}
 			continue
 		}
 		if _, duplicate := visited[zone]; duplicate {
@@ -239,6 +310,7 @@ func (handler *Handler) resolveIterativeQuestion(
 		}
 		closestZone = zone
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
+		walked = runtime.walkedNames(cacheName, closestZone)
 	}
 
 	var cnameChain []dns.RR
@@ -281,6 +353,41 @@ func (handler *Handler) resolveIterativeQuestion(
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
 }
 
+// minimumFairTurn is the least time an authoritative server must have had
+// before a failure counts against it.
+const minimumFairTurn = 500 * time.Millisecond
+
+func attemptGotFairTurn(ctx context.Context) bool {
+	deadline, bounded := ctx.Deadline()
+	return !bounded || time.Until(deadline) >= minimumFairTurn
+}
+
+// aliasedAt reports an answer that makes name an alias, whether a CNAME the
+// zone holds or one a wildcard gave it.
+func aliasedAt(response *dns.Msg, name string) bool {
+	for _, record := range response.Answer {
+		if alias, ok := record.(*dns.CNAME); ok && normalizeName(alias.Hdr.Name) == normalizeName(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// walkedNames and recordWalked use the zone cut cache when this runtime has
+// one.
+func (runtime *Runtime) walkedNames(name, zone string) string {
+	if runtime.zoneCuts == nil {
+		return ""
+	}
+	return runtime.zoneCuts.walked(name, zone, time.Now())
+}
+
+func (runtime *Runtime) recordWalked(name, zone string, ttl uint32) {
+	if runtime.zoneCuts != nil {
+		runtime.zoneCuts.record(name, zone, ttl, time.Now())
+	}
+}
+
 // belowZone reports whether zone is strictly inside parent. An empty parent is
 // the root.
 func belowZone(zone, parent string) bool {
@@ -320,20 +427,34 @@ func (handler *Handler) exchangeIterative(
 		return nil, errors.New("delegation contains no reachable name-server addresses")
 	}
 	start := handler.upstreamIndex.Add(1) - 1
+	// A server that just timed out is asked last for a while, so one that is
+	// unreachable from here does not cost every lookup its share of the time.
+	ordered := handler.authorityHealth.order(servers, start)
 	var failures []error
-	for offset := range len(servers) {
+	for offset, server := range ordered {
+		// Out of time, no server gets a real turn, so none is tried or counted.
+		if err := ctx.Err(); err != nil {
+			failures = append(failures, fmt.Errorf("ran out of time before asking %s: %w", server, err))
+			break
+		}
 		if budget.remaining <= 0 {
 			return nil, errors.New("iterative resolution exceeded its query budget")
 		}
 		budget.remaining--
-		server := servers[(start+uint64(offset))%uint64(len(servers))]
 		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
+		fair := attemptGotFairTurn(attemptContext)
 		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
 		release()
 		if err != nil {
+			// A server is only held against when it had a fair turn: the
+			// lookup's last moments, split many ways, prove nothing about it.
+			if ctx.Err() == nil && fair {
+				handler.authorityHealth.markUnhealthy(server)
+			}
 			failures = append(failures, fmt.Errorf("%s: %w", server, err))
 			continue
 		}
+		handler.authorityHealth.markHealthy(server)
 		if response.Rcode == dns.RcodeServerFailure || response.Rcode == dns.RcodeRefused {
 			failures = append(failures, fmt.Errorf("%s returned %s", server, dns.RcodeToString[response.Rcode]))
 			continue
