@@ -880,7 +880,7 @@ templ MCPSetupDialog(view MCPAppView) {
 			<i></i>
 			<button type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="access"><span>2</span><small>Access</small></button>
 			<i></i>
-			<button type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="connect"><span>3</span><small>Connect</small></button>
+			<button type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="connect" data-mcp-grant-check><span>3</span><small>Connect</small></button>
 		</div>
 		<form class="mcp-setup-form" hx-post="/ui/integrations/mcp/setup" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="tools">
@@ -937,7 +937,7 @@ templ MCPSetupDialog(view MCPAppView) {
 					<button class="button outline" type="button" data-dialog-step="tools" data-dialog-save="access" hidden>@Icon("arrow-left")<span>Back</span></button>
 					<button class="button outline" type="button" data-dialog-step="access" data-dialog-save="connect" hidden>@Icon("arrow-left")<span>Back</span></button>
 					<button class="button" type="button" data-dialog-step="access" data-dialog-save="tools">@Icon("arrow-right")<span>Next</span></button>
-					<button class="button" type="button" data-dialog-step="connect" data-dialog-save="access" hidden>@Icon("arrow-right")<span>Next</span></button>
+					<button class="button" type="button" data-dialog-step="connect" data-dialog-save="access" data-mcp-grant-check hidden>@Icon("arrow-right")<span>Next</span></button>
 					<button class="button" type="submit" data-dialog-save="connect" hidden>@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button>
 				</div>
 			</div>
