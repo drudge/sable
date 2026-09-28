@@ -25,6 +25,12 @@ type InsightsOverviewView struct {
 	LogWindowQuery string
 	Loading        bool
 	LoadURL        string
+	// PageURL is the page's own address without a drawer open, where closing
+	// a drawer opened from a link returns.
+	PageURL string
+	// LinkedFinding is a finding a link opened that the Overview does not
+	// list, so its drawer is still there to open.
+	LinkedFinding *InsightFindingView
 	TimeDisplay    TimeDisplay
 	CanLogs        bool
 	CanBlocking    bool
@@ -232,8 +238,10 @@ type InsightHeadlineClause struct {
 	Rest      string
 	Monospace bool
 	Tone      string
-	// Dialog is the drawer of the finding, when the page shows the finding.
+	// Dialog is the drawer of the finding, when the page shows the finding,
+	// and Link is the finding's address.
 	Dialog string
+	Link   string
 }
 
 type InsightFindingView struct {
@@ -259,6 +267,8 @@ type InsightFindingView struct {
 	Domains          []InsightDeviceDomainView
 	// FindingID is the finding's stable identifier, which feedback is kept by.
 	FindingID string
+	// Link is the finding's own address, which opens its drawer.
+	Link string
 	// Chart pictures the evidence, for findings that have one.
 	Chart *insights.Chart
 }
@@ -346,7 +356,7 @@ templ insightsDocument(view InsightsOverviewView) {
 	}
 	@InsightsContent(view)
 	if view.CanLogs {
-		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title">
+		<dialog class="query-detail-dialog insight-device-dialog" id="insight-device-dialog" aria-labelledby="insight-device-title" { insightDrawerRoute(InsightDeviceRoute, "/ui/insights/device", "key", "insight-device-content", "insight-device-loading", view.PageURL)... }>
 			<div class="insight-device-content" id="insight-device-content">
 				@insightDeviceLoading()
 			</div>
@@ -356,7 +366,7 @@ templ insightsDocument(view InsightsOverviewView) {
 		<template id="insight-device-loading">
 			@insightDeviceLoading()
 		</template>
-		<dialog class="query-detail-dialog insight-device-dialog" id="insight-app-dialog" aria-labelledby="insight-app-title">
+		<dialog class="query-detail-dialog insight-device-dialog" id="insight-app-dialog" aria-labelledby="insight-app-title" { insightDrawerRoute(InsightAppRoute, "/ui/insights/app", "id", "insight-app-content", "insight-app-loading", view.PageURL)... }>
 			<div class="insight-device-content" id="insight-app-content">
 				@insightAppLoading()
 			</div>
@@ -364,6 +374,22 @@ templ insightsDocument(view InsightsOverviewView) {
 		<template id="insight-app-loading">
 			@insightAppLoading()
 		</template>
+	}
+	@insightMissingFinding(view)
+}
+
+// insightMissingFinding opens for a finding's link when the finding is not on
+// the page: it was resolved, hidden, or falls outside the range.
+templ insightMissingFinding(view InsightsOverviewView) {
+	@DetailDrawer(DetailDrawerView{
+		ID: "insight-finding-missing", TitleID: "insight-finding-missing-title", Eyebrow: "Finding", Title: "Not showing right now",
+		CloseLabel: "Close", Attributes: templ.Attributes{
+			"data-drawer-route": InsightFindingRoute, "data-drawer-fallback": "true", "data-dialog-base-url": insightsOverviewPath(view.Range),
+		},
+	}, insightDeviceCloseFooter()) {
+		<div class="query-detail-section-heading">
+			<p>This finding isn't in Insights for { strings.ToLower(view.RangeLabel) }. It may have cleared up or been hidden, or it happened outside this range.</p>
+		</div>
 	}
 }
 
@@ -381,6 +407,7 @@ templ InsightsContent(view InsightsOverviewView) {
 		if view.Loading {
 			hx-get={ templ.SafeURL(view.LoadURL) }
 			hx-trigger="load"
+			data-drawer-pending
 		} else {
 			hx-get={ templ.SafeURL("/ui/insights/overview?range=" + url.QueryEscape(view.Range)) }
 			hx-trigger="insightsChanged from:body"
@@ -475,7 +502,11 @@ templ insightsHeadline(headline InsightHeadlineView) {
 
 templ insightHeadlineSubject(clause InsightHeadlineClause) {
 	if clause.Subject != "" && clause.Dialog != "" {
-		<button type="button" class={ "insights-headline-subject", "tone-" + clause.Tone, templ.KV("mono", clause.Monospace) } data-dialog-open={ clause.Dialog }>{ clause.Subject }</button>
+		<button type="button" class={ "insights-headline-subject", "tone-" + clause.Tone, templ.KV("mono", clause.Monospace) } data-dialog-open={ clause.Dialog }
+			if clause.Link != "" {
+				data-dialog-url={ clause.Link }
+			}
+		>{ clause.Subject }</button>
 	} else if clause.Subject != "" {
 		<strong class={ "insights-headline-subject", "tone-" + clause.Tone, templ.KV("mono", clause.Monospace) }>{ clause.Subject }</strong>
 	}
@@ -625,7 +656,11 @@ templ InsightFindings(view InsightsOverviewView) {
 							<strong class={ templ.KV("mono", finding.SubjectMonospace) } title={ finding.Subject }>{ finding.Subject }</strong>
 							<p>{ finding.Summary }</p>
 						</div>
-						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }>
+						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }
+							if finding.Link != "" {
+								data-dialog-url={ finding.Link }
+							}
+						>
 							<span>Details</span>
 							@Icon("chevron-right")
 						</button>
@@ -658,12 +693,15 @@ templ InsightFindings(view InsightsOverviewView) {
 	for _, finding := range view.Findings {
 		@InsightEvidence(finding, view)
 	}
+	if view.LinkedFinding != nil {
+		@InsightEvidence(*view.LinkedFinding, view)
+	}
 }
 
 // InsightEvidence opens the facts behind one finding in the same drawer the
 // query log uses to explain a query.
 templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
-	@DetailDrawer(insightEvidenceHeader(finding), insightEvidenceFooter(finding, view)) {
+	@DetailDrawer(insightEvidenceHeader(finding, view.Range), insightEvidenceFooter(finding, view)) {
 		// The cards come first because they are the evidence itself; the one
 		// block after them says why that evidence matters.
 		if len(finding.Reasons) == 0 {
@@ -774,10 +812,13 @@ templ insightHideMenu(finding InsightFindingView) {
 	</details>
 }
 
-func insightEvidenceHeader(finding InsightFindingView) DetailDrawerView {
+func insightEvidenceHeader(finding InsightFindingView, rangeName string) DetailDrawerView {
 	header := DetailDrawerView{
 		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
 		CloseLabel: "Close details",
+	}
+	if finding.Link != "" {
+		header.Attributes = templ.Attributes{"data-dialog-url": finding.Link, "data-dialog-base-url": insightsOverviewPath(rangeName)}
 	}
 	if finding.SubjectSource != "" {
 		header.TitleAction = insightNameSource(finding.SubjectSource)
@@ -793,8 +834,11 @@ templ insightNameSource(source string) {
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions insight-drawer-actions">
+		if finding.Link != "" {
+			@CopyLinkButton(finding.Link)
+		}
 		if finding.DeviceKey != "" && view.CanLogs {
-			<button class="button outline" type="button" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(finding.DeviceKey, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content">
+			<button class="button outline" type="button" { drawerOpener(DeviceDrawerLink(finding.DeviceKey, view.Range))... }>
 				<span>Device Details</span>
 			</button>
 		}
@@ -1266,7 +1310,7 @@ templ InsightDevices(view InsightsOverviewView) {
 			@insightDeviceFilters(view)
 			<div class="admin-mobile-list insight-device-mobile" data-device-results>
 				for _, device := range view.Devices {
-					<button type="button" class="admin-mobile-row insight-device-mobile-row" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label } { insightDeviceFilterAttributes(device)... }>
+					<button type="button" class="admin-mobile-row insight-device-mobile-row" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label } { insightDeviceFilterAttributes(device)... }>
 						@insightTypeTile(device)
 						<div class="insight-device-mobile-copy">
 							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
@@ -1308,7 +1352,7 @@ templ InsightDevices(view InsightsOverviewView) {
 								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
 								<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
 								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
-								<td><button class="icon-button" type="button" data-dialog-open="insight-device-dialog" data-drawer-loading="insight-device-loading" hx-get={ insightDeviceURL(device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
+								<td><button class="icon-button" type="button" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
 							</tr>
 						}
 					</tbody>
@@ -1442,12 +1486,15 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 
 templ insightDeviceFooter(view InsightDeviceDrawerView) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
-	if len(view.Device.Addresses) == 1 {
+	if view.Device.Key != "" {
 		<div class="query-detail-policy-actions insight-drawer-actions">
-			<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
-				@Icon("logs")
-				<span>View Query Logs</span>
-			</a>
+			@CopyLinkButton(InsightDevicePath(view.Device.Key, view.Range))
+			if len(view.Device.Addresses) == 1 {
+				<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
+					@Icon("logs")
+					<span>View Query Logs</span>
+				</a>
+			}
 		</div>
 	}
 }
@@ -1458,14 +1505,73 @@ func insightDeviceURL(key, rangeName string) string {
 
 // DeviceDrawerLink opens a device's drawer on the Insights page.
 func DeviceDrawerLink(key, rangeName string) *DrawerLink {
-	return &DrawerLink{Dialog: "insight-device-dialog", Loading: "insight-device-loading", URL: insightDeviceURL(key, rangeName), Target: "insight-device-content"}
+	return &DrawerLink{
+		Dialog: "insight-device-dialog", Loading: "insight-device-loading", URL: insightDeviceURL(key, rangeName), Target: "insight-device-content",
+		Link: InsightDevicePath(key, rangeName),
+	}
 }
 
 // AppDrawerLink opens an app's drawer on the Insights page.
 func AppDrawerLink(id, rangeName string) *DrawerLink {
 	return &DrawerLink{
 		Dialog: "insight-app-dialog", Loading: "insight-app-loading", Target: "insight-app-content",
-		URL: "/ui/insights/app?" + url.Values{"id": []string{id}, "range": []string{rangeName}}.Encode(),
+		URL:  "/ui/insights/app?" + url.Values{"id": []string{id}, "range": []string{rangeName}}.Encode(),
+		Link: InsightAppPath(id, rangeName),
+	}
+}
+
+// The addresses of what Insights opens in a drawer. Each opens the Insights
+// page with that drawer open, so it can be bookmarked or shared.
+const (
+	InsightDeviceRoute  = "/insights/devices/"
+	InsightAppRoute     = "/insights/apps/"
+	InsightFindingRoute = "/insights/findings/"
+)
+
+// InsightDevicePath is the address of a device's drawer.
+func InsightDevicePath(key, rangeName string) string {
+	return InsightDeviceRoute + url.PathEscape(key) + insightsRangeQuery(rangeName)
+}
+
+// InsightAppPath is the address of an app's drawer.
+func InsightAppPath(id, rangeName string) string {
+	return InsightAppRoute + url.PathEscape(id) + insightsRangeQuery(rangeName)
+}
+
+// InsightFindingPath is the address of a finding's drawer, by the finding's
+// stable ID.
+func InsightFindingPath(findingID, rangeName string) string {
+	return InsightFindingRoute + insights.LinkID(findingID) + insightsRangeQuery(rangeName)
+}
+
+func insightsOverviewPath(rangeName string) string {
+	return "/insights" + insightsRangeQuery(rangeName)
+}
+
+func insightsRangeQuery(rangeName string) string {
+	if rangeName == "" {
+		return ""
+	}
+	return "?" + url.Values{"range": []string{rangeName}}.Encode()
+}
+
+// insightDrawerRoute lets a drawer that loads one record at a time open from
+// its address: a page at route plus an ID loads content?param=ID into the
+// target, starting from the loading template. Closing a drawer that was
+// opened from its address returns to base.
+func insightDrawerRoute(route, content, param, target, loading, base string) templ.Attributes {
+	return templ.Attributes{
+		"data-drawer-route": route, "data-drawer-content": content, "data-drawer-param": param,
+		"data-drawer-target": target, "data-drawer-template": loading, "data-dialog-base-url": base,
+	}
+}
+
+templ insightAppFooter(view InsightAppDrawerView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if view.App.ID != "" {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			@CopyLinkButton(InsightAppPath(view.App.ID, view.Range))
+		</div>
 	}
 }
 
@@ -1484,7 +1590,7 @@ templ insightAppLoading() {
 // domain links to exactly the queries it counts, and each device opens its
 // own drawer.
 templ InsightAppDrawer(view InsightAppDrawerView) {
-	@DetailDrawerContent(insightAppDrawerHeader(view), insightDeviceCloseFooter()) {
+	@DetailDrawerContent(insightAppDrawerHeader(view), insightAppFooter(view)) {
 		if view.Error != "" {
 			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
 		}

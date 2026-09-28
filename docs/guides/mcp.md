@@ -24,7 +24,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
-| `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
+| `list_findings` | On | What Insights noticed, with its evidence and a link to each finding | `logs.read` |
 | `search_queries` | Off | Each device's DNS lookups | `logs.read` |
 
 `add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -230,6 +231,11 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 	}
 	view.LogWindowQuery = report.window.logWindowQuery()
 	device, found := devices.Find(report.devices, key)
+	if address, byAddress := strings.CutPrefix(key, "ip:"); !found && byAddress {
+		// An address can join a device once Sable learns its hardware
+		// address, so an older link by address finds the device it joined.
+		device, found = deviceByAddress(report.devices, address)
+	}
 	if !found {
 		view.Missing = true
 		server.renderDeviceDrawerView(writer, request, view)
@@ -413,6 +419,16 @@ func (server *Server) deviceAddresses(ctx context.Context, key string) ([]string
 		return nil, err
 	}
 	return devices.AddressesOf(identities, mac), nil
+}
+
+// deviceByAddress finds the device an address belongs to.
+func deviceByAddress(list []devices.Device, address string) (devices.Device, bool) {
+	for _, device := range list {
+		if slices.ContainsFunc(device.Addresses, func(candidate devices.Address) bool { return candidate.Address == address }) {
+			return device, true
+		}
+	}
+	return devices.Device{}, false
 }
 
 func deviceKeyIdentifier(key string) string {

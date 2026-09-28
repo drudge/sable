@@ -94,7 +94,7 @@ func insightAlert(finding insights.Finding) alerts.Alert {
 	return alerts.Alert{
 		ID: finding.ID, Group: config.AlertGroupInsights, Kind: finding.Kind, Tone: tone,
 		Title: finding.Title, Subject: finding.Subject.Label, Headline: finding.Headline, Summary: finding.Summary,
-		Reasons: reasons, Path: "/insights", PathLabel: "Open Insights", ObservedAt: finding.ObservedAt,
+		Reasons: reasons, Path: pages.InsightFindingPath(finding.ID, "day"), PathLabel: "Open Finding", ObservedAt: finding.ObservedAt,
 	}
 }
 
