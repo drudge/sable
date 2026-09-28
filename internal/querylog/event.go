@@ -120,6 +120,9 @@ type Filter struct {
 	// but a link that arrives from a dashboard ranking already knows the whole
 	// value and must not sweep in 10.0.7.168 while asking for 10.0.7.16.
 	Exact bool
+	// ExactClient matches the client address whole while leaving the name a
+	// substring, for a caller that names one device but only part of a domain.
+	ExactClient bool
 	// Since and Until bound the window the page counts and reports. A zero
 	// time leaves that side of the window open.
 	Since time.Time

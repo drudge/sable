@@ -445,7 +445,7 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 		conditions = append(conditions, column+" "+operator+" "+store.placeholder(len(arguments)))
 	}
 	if value := strings.TrimSpace(filter.ClientIP); value != "" {
-		if filter.Exact {
+		if filter.Exact || filter.ExactClient {
 			addCondition("client_ip_key", "=", queryLogClientKey(value))
 		} else {
 			addCondition("client_ip_key", "LIKE", "%"+queryLogClientKey(value)+"%")
