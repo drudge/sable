@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 )
@@ -111,5 +112,59 @@ func TestMCPReleaseNotesStayUnderTheCap(t *testing.T) {
 	}
 	if notes, truncated := mcpReleaseNotes(update.Status{ReleaseNotes: "Short."}); notes != "Short." || truncated {
 		t.Fatalf("latest-only notes = %q %t", notes, truncated)
+	}
+}
+
+// get_stats counts from the dashboard's own buckets, so its numbers are the
+// dashboard's for the same range.
+func TestMCPGetStats(t *testing.T) {
+	t.Parallel()
+	server, _ := newMCPTestServer(t)
+	now := time.Now()
+	server.history.record(now, dnsserver.Stats{})
+	server.history.record(now, dnsserver.Stats{Queries: 10, Blocked: 3, NoError: 7, NXDomain: 3, CacheHits: 4, CacheMisses: 2})
+
+	stats, failure := callMCPToolForTest(t, server, "sable_pat_metrics", "get_stats", map[string]any{})
+	if failure != "" || stats["range"].(map[string]any)["name"] != "day" {
+		t.Fatalf("get_stats = %v %q", stats, failure)
+	}
+	cache := stats["cache"].(map[string]any)
+	if stats["queries"] != float64(10) || stats["blocked"] != float64(3) || stats["blocked_percent"] != float64(30) ||
+		cache["hits"] != float64(4) || cache["hit_ratio"] != 0.667 || stats["responses"].(map[string]any)["nxdomain"] != float64(3) {
+		t.Fatalf("counts = %v", stats)
+	}
+	// Who asked and what was blocked come from the query log.
+	if stats["top_blocked"] != nil || stats["clients"] != nil || !strings.Contains(stats["note"].(string), "logs.read") {
+		t.Fatalf("metrics.read alone = %v", stats)
+	}
+	full, _ := callMCPToolForTest(t, server, "sable_pat_admin", "get_stats", map[string]any{"range": "hour", "top": 1})
+	if blocked, _ := full["top_blocked"].([]any); full["clients"] == nil || len(blocked) > 1 {
+		t.Fatalf("with logs.read = %v", full)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_metrics", "get_stats", map[string]any{"range": "fortnight"}); !strings.Contains(failure, "range must be") {
+		t.Fatalf("unknown range = %q", failure)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_blocking", "get_stats", map[string]any{}); !strings.Contains(failure, "metrics.read") {
+		t.Fatalf("without metrics.read = %q", failure)
+	}
+}
+
+func TestMCPLatencyPercentiles(t *testing.T) {
+	t.Parallel()
+	bucket := func(bound time.Duration, count uint64) dnsserver.DNSLatencyBucket {
+		return dnsserver.DNSLatencyBucket{UpperBoundNanoseconds: uint64(bound), Count: count}
+	}
+	// 100 answers: 60 within 1 ms, 35 more within 10 ms, and 5 slower than
+	// the largest bound, split across two histograms.
+	histograms := []dnsserver.DNSLatencyHistogram{
+		{Count: 60, Buckets: []dnsserver.DNSLatencyBucket{bucket(time.Millisecond, 60), bucket(10*time.Millisecond, 60), bucket(2*time.Second, 60)}},
+		{Count: 40, Buckets: []dnsserver.DNSLatencyBucket{bucket(time.Millisecond, 0), bucket(10*time.Millisecond, 35), bucket(2*time.Second, 35)}},
+	}
+	got := mcpLatencyPercentiles(histograms)
+	if got["p50"] != 0.8 || got["p95"] != 10 || got["p99"] != 2000 {
+		t.Fatalf("percentiles = %v", got)
+	}
+	if mcpLatencyPercentiles(nil) != nil {
+		t.Fatal("no answers should give no percentiles")
 	}
 }

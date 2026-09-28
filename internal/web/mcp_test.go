@@ -237,7 +237,7 @@ func TestMCPHandshake(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings,get_version" {
+	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings,get_version,get_stats" {
 		t.Fatalf("tools = %v", names)
 	}
 

@@ -25,6 +25,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
+| `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
 | `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
 | `search_queries` | Off | Each device's DNS lookups | `logs.read` |
 
@@ -35,6 +36,8 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 Insights findings and the query log describe what each device on your network does. Turning either tool on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
 
 `get_version` follows the update channel in **About**. It uses the last saved release check unless the assistant passes `check`, and even then it asks GitHub at most once every 5 minutes. With `cluster.read`, it also lists what each node runs. It cannot install an update.
+
+`get_stats` gives the same query, blocking, cache, and response-code counts as the dashboard for the range asked. Where answers came from, upstream errors, DNSSEC results, and response times are counted only since the node started. It never says which device asked for what. The number of devices and the most blocked domains come from the query log, so they appear only when the token also has `logs.read`. On a cluster, the numbers are the connected node's.
 
 Assistants see a changed tool list the next time they connect.
 

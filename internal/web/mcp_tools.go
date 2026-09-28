@@ -886,7 +886,7 @@ var mcpToolSections = []struct{ Key, Title, Description string }{
 	{"records", "Records & Zones", "Read and change records, and create and delete zones."},
 	{"blocking", "Blocking", "Allow and block domains, and manage block lists."},
 	{"lookups", "Lookups & Cache", "Resolve names through Sable, and forget cached answers."},
-	{"server", "Server", "Check which version runs and whether a newer one is out."},
+	{"server", "Server", "Check the version, updates, and how DNS is doing."},
 	{"insights", "Insights & Logs", "Share what each device does with the AI provider."},
 }
 

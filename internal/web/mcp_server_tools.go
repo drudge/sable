@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 )
@@ -21,6 +25,8 @@ const (
 	mcpVersionCheckFloor = 5 * time.Minute
 	// mcpMaximumNotesBytes caps release notes rolled up across releases.
 	mcpMaximumNotesBytes = 8 << 10
+	mcpDefaultTopBlocked = 5
+	mcpMaximumTopBlocked = 25
 )
 
 // mcpServerTools report on the server itself: its version, how DNS is doing,
@@ -40,6 +46,28 @@ var mcpServerTools = []mcpTool{
 		call:        (*Server).mcpGetVersion,
 		section:     "server",
 		grant:       "updates.read",
+	},
+	{
+		Name:  "get_stats",
+		Title: "Get DNS statistics",
+		Description: "Give the dashboard's numbers for a period: queries, how many were blocked, cache hits, and " +
+			"response codes. It also gives what this node counted since it started: where answers came from, " +
+			"upstream errors, DNSSEC results, and response times. Counts only, never which device asked for what. " +
+			"Numbers are for the node the assistant is connected to.",
+		InputSchema: mcpObjectSchema(map[string]any{
+			"range": map[string]any{
+				"type": "string", "enum": []string{"hour", "day", "week", "month", "year"},
+				"description": "How far back to count, as on the dashboard. Defaults to day.",
+			},
+			"top": map[string]any{
+				"type": "integer", "minimum": 0, "maximum": mcpMaximumTopBlocked,
+				"description": "How many of the most blocked domains to list, 0 to 25. Defaults to 5. Needs logs.read.",
+			},
+		}, nil),
+		Annotations: mcpToolAnnotations{Title: "Get DNS statistics", ReadOnlyHint: true, IdempotentHint: true},
+		call:        (*Server).mcpGetStats,
+		section:     "server",
+		grant:       "metrics.read",
 	},
 }
 
@@ -175,4 +203,188 @@ func (server *Server) mcpNodeVersions(request *http.Request) []mcpNodeVersion {
 		nodes = append(nodes, mcpNodeVersion{Name: node.Name, Role: node.Role, Version: node.Version})
 	}
 	return nodes
+}
+
+type mcpStatsRange struct {
+	Name  string    `json:"name"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+}
+
+type mcpCacheStats struct {
+	Hits     uint64  `json:"hits"`
+	Misses   uint64  `json:"misses"`
+	HitRatio float64 `json:"hit_ratio"`
+	Entries  int     `json:"entries"`
+}
+
+type mcpResponseStats struct {
+	NoError  uint64 `json:"noerror"`
+	NXDomain uint64 `json:"nxdomain"`
+	ServFail uint64 `json:"servfail"`
+	Refused  uint64 `json:"refused"`
+}
+
+// mcpSinceStartStats are counters this process keeps only since it started,
+// which the dashboard's history does not break down by period.
+type mcpSinceStartStats struct {
+	StartedAt      time.Time          `json:"started_at"`
+	UptimeSeconds  int64              `json:"uptime_seconds"`
+	AnsweredBy     map[string]uint64  `json:"answered_by"`
+	UpstreamErrors uint64             `json:"upstream_errors"`
+	DNSSEC         map[string]uint64  `json:"dnssec"`
+	LatencyMS      map[string]float64 `json:"latency_ms,omitempty"`
+}
+
+func (server *Server) mcpGetStats(request *http.Request, arguments json.RawMessage) (any, error) {
+	input := struct {
+		Range string `json:"range"`
+		Top   *int   `json:"top"`
+	}{}
+	if err := decodeMCPArguments(arguments, &input); err != nil {
+		return nil, err
+	}
+	if !server.mcpHasPermission(request, auth.PermissionMetricsRead) {
+		return nil, errors.New("this token needs metrics.read to read DNS statistics")
+	}
+	rangeName := strings.ToLower(strings.TrimSpace(input.Range))
+	if rangeName == "" {
+		rangeName = "day"
+	}
+	duration, valid := chartDuration(rangeName)
+	if !valid {
+		return nil, fmt.Errorf("range must be hour, day, week, month, or year, not %q", input.Range)
+	}
+	top := mcpDefaultTopBlocked
+	if input.Top != nil {
+		top = min(max(*input.Top, 0), mcpMaximumTopBlocked)
+	}
+	now := time.Now()
+	current := server.stats.Stats()
+	server.history.record(now, current)
+	start := now.Add(-duration)
+	// The same buckets as the dashboard chart, so the numbers match it.
+	counted := chartStats(server.history.points(request.Context(), start, now))
+	result := map[string]any{
+		"node":    server.mcpNodeName(),
+		"range":   mcpStatsRange{Name: rangeName, Start: start.UTC(), End: now.UTC()},
+		"queries": counted.Queries, "blocked": counted.Blocked, "blocked_percent": mcpPercent(counted.Blocked, counted.Queries),
+		"cache": mcpCacheStats{
+			Hits: counted.CacheHits, Misses: counted.CacheMisses, Entries: current.CacheEntries,
+			HitRatio: mcpRatio(counted.CacheHits, counted.CacheHits+counted.CacheMisses),
+		},
+		"responses": mcpResponseStats{
+			NoError: counted.NoError, NXDomain: counted.NXDomain, ServFail: counted.ServerFailures, Refused: counted.Refused,
+		},
+		"since_start": mcpSinceStart(current, now),
+	}
+	// Who asked and what was blocked come from the query log, which the
+	// dashboard shows only to those who may read it.
+	reader, readable := server.queries.(queryInsightReader)
+	switch {
+	case !readable:
+	case !server.mcpHasPermission(request, auth.PermissionLogsRead):
+		result["note"] = "clients and top_blocked come from the query log and need logs.read."
+	default:
+		insights, _, err := server.insightCache.load(request.Context(), insightWindow{Range: "custom", Start: start, End: now}, reader.QueryLogInsights)
+		if err != nil {
+			server.logger.Warn("read query log for MCP statistics", "error", err)
+			break
+		}
+		result["clients"] = len(insights.Clients)
+		blocked := make([]mcpDomainCount, 0, top)
+		for _, domain := range rankedStats(insights.Blocked, nil, top) {
+			blocked = append(blocked, mcpDomainCount{Domain: domain.Name, Count: domain.Value})
+		}
+		result["top_blocked"] = blocked
+	}
+	return result, nil
+}
+
+type mcpDomainCount struct {
+	Domain string `json:"domain"`
+	Count  uint64 `json:"count"`
+}
+
+func mcpSinceStart(current dnsserver.Stats, now time.Time) mcpSinceStartStats {
+	stats := mcpSinceStartStats{
+		StartedAt: current.StartedAt.UTC(), UpstreamErrors: current.UpstreamErrors, AnsweredBy: map[string]uint64{},
+		DNSSEC: map[string]uint64{"secure": current.DNSSECSecure, "insecure": current.DNSSECInsecure, "bogus": current.DNSSECBogus},
+	}
+	if !current.StartedAt.IsZero() {
+		stats.UptimeSeconds = int64(now.Sub(current.StartedAt).Seconds())
+	}
+	for _, histogram := range current.Latency {
+		stats.AnsweredBy[histogram.Source] += histogram.Count
+	}
+	if latency := mcpLatencyPercentiles(current.Latency); latency != nil {
+		stats.LatencyMS = latency
+	}
+	return stats
+}
+
+// mcpLatencyPercentiles merges every response-time histogram and estimates
+// the median, 95th, and 99th percentiles the way Prometheus's
+// histogram_quantile does: linearly within the bucket the rank falls in.
+func mcpLatencyPercentiles(histograms []dnsserver.DNSLatencyHistogram) map[string]float64 {
+	var total uint64
+	var bounds []uint64
+	var cumulative []uint64
+	for _, histogram := range histograms {
+		total += histogram.Count
+		for index, bucket := range histogram.Buckets {
+			if index >= len(bounds) {
+				bounds = append(bounds, bucket.UpperBoundNanoseconds)
+				cumulative = append(cumulative, 0)
+			}
+			cumulative[index] += bucket.Count
+		}
+	}
+	if total == 0 || len(bounds) == 0 {
+		return nil
+	}
+	quantile := func(q float64) float64 {
+		rank := q * float64(total)
+		lower, below := 0.0, 0.0
+		for index, bound := range bounds {
+			if float64(cumulative[index]) >= rank {
+				inBucket := float64(cumulative[index]) - below
+				value := float64(bound)
+				if inBucket > 0 {
+					value = lower + (float64(bound)-lower)*(rank-below)/inBucket
+				}
+				return math.Round(value/1e5) / 10
+			}
+			lower, below = float64(bound), float64(cumulative[index])
+		}
+		// Slower than the largest bound: all that can be said is "at least".
+		return math.Round(float64(bounds[len(bounds)-1])/1e5) / 10
+	}
+	return map[string]float64{"p50": quantile(0.5), "p95": quantile(0.95), "p99": quantile(0.99)}
+}
+
+func mcpRatio(part, whole uint64) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return math.Round(float64(part)/float64(whole)*1000) / 1000
+}
+
+func mcpPercent(part, whole uint64) float64 {
+	return math.Round(mcpRatio(part, whole)*1000) / 10
+}
+
+// mcpNodeName names the node answering: its cluster name, or the host name
+// of a server on its own.
+func (server *Server) mcpNodeName() string {
+	if server.cluster != nil {
+		state := server.cluster.Snapshot()
+		for _, node := range state.Nodes {
+			if node.ID == state.NodeID && node.Name != "" {
+				return node.Name
+			}
+		}
+	}
+	name, _ := os.Hostname()
+	return name
 }
