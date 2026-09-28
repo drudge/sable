@@ -8,6 +8,52 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0-beta.3] - 2026-09-28
+
+Sable 1.6.0-beta.3 gives queries, Settings sections, and a new Check a Domain
+panel their own links, stops a stale UniFi reservation from renaming the device
+now on its address, and makes long release notes show that they scroll.
+
+### Upgrading from beta.2
+
+- The UniFi sync now skips a reservation for a device that isn't connected
+  while another connected device holds its address. On the first sync after
+  upgrading, the old name's records at that address are removed.
+
+### Links
+
+- Give each query in Query Logs its own link, with **Copy Link**. A query too
+  old to still be in the log says so, and searches Query Logs for its domain.
+- Domain watch alerts open the exact lookup that set them off, when the lead
+  logged it. A lookup only a replica saw opens the filtered search as before.
+- Link to a Settings section, such as `/settings?tab=alerts#watches`. The link
+  opens the tab, scrolls to the section, and outlines it for a moment.
+- Add a **Check a domain** box on the Blocking page, and a command palette
+  entry, that says whether a domain is blocked, allowed, not blocked, or
+  answered by one of your zones, and which rule and block lists decided it. It
+  has its own link, and **Allow** and **Block** buttons. A blocked query's
+  details link to it with **Why is this blocked?**
+  ([#249](https://github.com/drudge/sable/issues/249))
+
+### Insights
+
+- Stop a device's name from flipping between its current name and an old one.
+  A UniFi reservation left behind for a retired machine kept claiming the
+  address a new machine now uses, and published the old name there too.
+- Settle two sightings of one address at the same moment the same way every
+  time, so a name can't change from one page load to the next.
+
+### MCP
+
+- `search_queries` matches `client` as a whole address, as it promised, so
+  `10.0.7.13` no longer returns `10.0.7.133`. A new `exact` argument matches
+  `name` as a whole name.
+
+### Console
+
+- Fade release notes and the license dialogs at an edge with more to read, and
+  show a chevron below while more waits, like the sidebar.
+
 ## [1.6.0-beta.2] - 2026-09-28
 
 Sable 1.6.0-beta.2 lets AI assistants pick up new MCP tools without a restart,
