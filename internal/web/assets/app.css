@@ -185,6 +185,11 @@ button { cursor: pointer; }
 .scroll-fade-frame { position: relative; min-width: 0; }
 .scroll-fade-hint { position: absolute; top: calc(100% + .05rem); right: 0; left: 0; display: grid; place-items: center; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
 .scroll-fade-hint[data-visible="true"] { opacity: 1; }
+/* Phone dialogs sit their buttons close under the box, so the chevron gets a
+   little more room there. */
+@media (max-width: 767px) {
+  .scroll-fade-frame { margin-bottom: .5rem; }
+}
 .scroll-fade-hint .nav-icon { width: 1rem; height: 1rem; }
 .sidebar-nav-hint .nav-icon { width: 1rem; height: 1rem; transform: rotate(180deg); }
 /* Section labels sit close to the items they name, with more room above to
