@@ -176,3 +176,30 @@ func TestReplicaWithoutARecorderIgnoresSharedIdentities(t *testing.T) {
 	primary.gatherClientIdentitiesOnce(context.Background(), time.Now())
 	synchronize(t, replica, 2)
 }
+
+// With Insights off, the lead reads nothing to share and a replica keeps
+// nothing it is handed, so no node holds hardware addresses.
+func TestInsightsOffStopsIdentitySharing(t *testing.T) {
+	t.Parallel()
+	primary, replica := joinedClusterServices(t)
+	off := func() bool { return false }
+	lead := &identityStore{held: []querylog.ClientIdentity{{Address: "10.0.7.20", MAC: "f4:ab:5c:0b:47:8a", Source: "unifi", LastSeen: time.Now()}}}
+	sharing := lead.handler(time.Hour)
+	sharing.Enabled = off
+	primary.SetClientIdentities(sharing)
+	primary.gatherClientIdentitiesOnce(context.Background(), time.Now())
+	if got := lead.reads(); got != 0 {
+		t.Fatalf("the lead read its store %d times with Insights off", got)
+	}
+
+	follower := &identityStore{recorded: make(chan []querylog.ClientIdentity, 1)}
+	receiving := follower.handler(time.Hour)
+	receiving.Enabled = off
+	replica.SetClientIdentities(receiving)
+	replica.recordSharedIdentities(context.Background(), encodeSharedIdentities(lead.held))
+	select {
+	case identities := <-follower.recorded:
+		t.Fatalf("the replica recorded %v with Insights off", identities)
+	case <-time.After(50 * time.Millisecond):
+	}
+}

@@ -1,0 +1,90 @@
+package pages
+
+// SettingsInsightsView is the Insights switch at the top of Settings >
+// General, with what Insights holds right now.
+type SettingsInsightsView struct {
+	Enabled bool
+	CanEdit bool
+	// Data says what Insights holds, such as "46 addresses and 12 hardware
+	// addresses, back to Nov 20, 2025." Empty when it holds nothing.
+	Data    string
+	Message string
+	Error   string
+}
+
+templ SettingsInsights(view SettingsInsightsView) {
+	<div id="settings-insights">
+		@Toast(view.Message, "success")
+		@Toast(view.Error, "error")
+		@SettingsCard("lightbulb", "Insights", "Learn what's on your network and flag changes. All of it stays on this server.") {
+			<div class="isotope-card-content settings-insights">
+				if view.Enabled {
+					// Turning it off asks first, so the switch stays on until the
+					// dialog says otherwise.
+					<label class="field-control switch-row setting-switch-row" id="settings-insights-switch"><span><strong>Insights</strong><small>Record which devices use Sable and what hardware they are.</small></span><input type="checkbox" role="switch" checked data-insights-off="insights-off-dialog" disabled?={ !view.CanEdit } data-replica-primary-action/></label>
+				} else {
+					<label class="field-control switch-row setting-switch-row" id="settings-insights-switch"><span><strong>Insights</strong><small>Off. Sable records nothing about your devices.</small></span><input type="checkbox" role="switch" name="enabled" value="true" hx-post="/ui/settings/insights" hx-trigger="change" hx-target="#settings-insights" hx-swap="outerHTML" disabled?={ !view.CanEdit } data-replica-primary-action/></label>
+				}
+				if view.Data != "" {
+					<div class="settings-insights-data">
+						<p><strong>Device data:</strong> { view.Data }</p>
+						if view.CanEdit {
+							<button class="button outline destructive" type="button" data-dialog-open="insights-delete-dialog" data-replica-primary-action>@Icon("trash")<span>Delete Insights Data</span></button>
+						}
+					</div>
+				}
+			</div>
+		}
+	</div>
+}
+
+// SettingsInsightsDialogs asks before Insights is turned off, and before what
+// it collected is deleted.
+templ SettingsInsightsDialogs() {
+	<dialog class="custom-server-dialog confirmation-dialog" id="insights-off-dialog" aria-labelledby="insights-off-title">
+		<div class="dialog-header"><h2 id="insights-off-title">Turn Off Insights?</h2><p>Stop watching the devices on your network</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form data-insights-form hx-post="/ui/settings/insights" hx-target="#settings-insights" hx-swap="outerHTML" hx-disable="find button">
+			<input type="hidden" name="enabled" value="false"/>
+			<div class="isotope-dialog-body">
+				<p>Sable stops collecting device data and hides Insights. Dashboard names from UniFi and the neighbor table go away.</p>
+				<label class="settings-insights-delete"><input type="checkbox" name="delete" value="true" checked/><span>Also delete what Insights has collected</span></label>
+			</div>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit">Turn Off</button></footer>
+		</form>
+	</dialog>
+	<dialog class="custom-server-dialog confirmation-dialog" id="insights-delete-dialog" aria-labelledby="insights-delete-title">
+		<div class="dialog-header"><h2 id="insights-delete-title">Delete Insights Data?</h2><p>Forget what Insights has learned</p></div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		<form data-insights-form hx-post="/ui/settings/insights/delete" hx-target="#settings-insights" hx-swap="outerHTML" hx-disable="find button">
+			<div class="isotope-dialog-body">
+				<p>Sable forgets every device it has seen, the hardware behind each address, and the findings you hid. The query log stays.</p>
+			</div>
+			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit">@Icon("trash")<span>Delete Data</span></button></footer>
+		</form>
+	</dialog>
+}
+
+// InsightsOffPage stands in for Insights while it is turned off, and says
+// where to turn it back on.
+templ InsightsOffPage(console DashboardView) {
+	@AppDocument(console, documentTitle("Insights"), "insights", insightsOffDocument(console))
+}
+
+templ insightsOffDocument(console DashboardView) {
+	<div class="page-stack insights-off-page">
+		<header class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></header>
+		<section class="card">
+			<div class="cluster-empty-state">
+				<span class="cluster-empty-icon">@Icon("lightbulb")</span>
+				<h3>Insights Is Off</h3>
+				<p>Sable is not recording which devices use it, so there is nothing to show.</p>
+				if console.CanSettings {
+					<div class="cluster-empty-actions">
+						<a class="button" href="/settings?tab=general#settings-insights">@Icon("settings-2")<span>Open Settings</span></a>
+					</div>
+				}
+			</div>
+		</section>
+	</div>
+}

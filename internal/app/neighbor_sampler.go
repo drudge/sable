@@ -20,11 +20,13 @@ const (
 	neighborSampleInterval = time.Minute
 )
 
-// runNeighborSampler records the host's IP-to-hardware mappings once a minute.
-// It never touches the DNS request path: it reads a kernel table and writes a
-// small batch through the same store the query log uses.
+// runNeighborSampler records the host's IP-to-hardware mappings once a minute
+// while Insights is on. It never touches the DNS request path: it reads a
+// kernel table and writes a small batch through the same store the query log
+// uses. While Insights is off it leaves the table unread.
 func runNeighborSampler(
 	ctx context.Context,
+	enabled func() bool,
 	read func() ([]neighbors.Entry, error),
 	record func(context.Context, []querylog.ClientIdentity) error,
 	logger *slog.Logger,
@@ -33,6 +35,14 @@ func runNeighborSampler(
 	defer ticker.Stop()
 	reported := false
 	for {
+		if !enabled() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				continue
+			}
+		}
 		if err := sampleNeighbors(ctx, read, record, time.Now()); err != nil {
 			if errors.Is(err, neighbors.ErrUnsupported) {
 				logger.Info("neighbor table is not available; devices are named from UniFi, client names, and reverse DNS only")

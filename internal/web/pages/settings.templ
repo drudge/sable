@@ -11,6 +11,7 @@ type SettingsPageView struct {
  MaxConcurrent int
  MaxConcurrentPerClient int
 	Console             DashboardView
+	Insights            SettingsInsightsView
 	Revision            uint64
 	TimeFormat          string
 	TimeZone            string
@@ -156,6 +157,9 @@ templ SettingsContent(view SettingsPageView) {
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="alerts" hidden?={ view.ActiveTab != "alerts" }>@SettingsAlertsPanel(view.Alerts)</div>
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
+		if view.Insights.CanEdit {
+			@SettingsInsightsDialogs()
+		}
 		if view.Alerts.Available && view.Alerts.CanEdit {
 			@AlertDestinationDialog(view.Alerts.NewDestination)
 		}
@@ -179,6 +183,7 @@ templ SettingsGeneralPanel(view SettingsPageView) {
 		@SettingsCard("database", "Storage", "Persistent configuration and DNS data backend") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Database Driver</span><strong>{ view.DatabaseDriver }</strong></div><div class="read-only-field"><span>Data Source</span><strong>{ view.DatabaseDSN }</strong></div></div>
 		}
+		@SettingsInsights(view.Insights)
 		@SettingsUpdatePreferences(view.UpdatePreferences)
 		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
 	</div>

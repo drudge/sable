@@ -110,6 +110,11 @@ batch_size = 256
 flush_interval = "250ms"
 retention = "30d"
 
+# Insights records which devices use Sable and what hardware they are, and
+# flags changes. Set enabled = false to stop all of it and hide Insights.
+# [insights]
+# enabled = true
+#
 # What Insights does with each kind of finding. Each table is named for the
 # kind: went_quiet is devices.went-quiet. mode is "alert" to show it and send
 # each new one as an alert, "show" to only show it, or "off" to stop looking for

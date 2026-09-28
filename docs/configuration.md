@@ -726,6 +726,9 @@ event retention and rollup retention follow query-log retention together.
 ## Devices and Insights
 
 ```toml
+[insights]
+enabled = true
+
 [[clients]]
 name = "Front door"
 mac = "34:3e:a4:33:0c:c6"
@@ -742,6 +745,13 @@ these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 `streaming-player`, `smart-speaker`, `speaker`, `camera`, `doorbell`,
 `game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
 `smart-plug`, `smart-home`, `watch`, and `ups`.
+
+`[insights] enabled` turns Insights on, which is the default. Set it to `false`
+to stop Sable recording which devices it sees and what hardware they are, stop
+it looking for findings, and hide Insights. Turning it off keeps what Insights
+already collected; **Settings > General** also offers to delete it. See [Turn
+Insights off](guides/insights.md#turn-insights-off). Replicas follow the
+primary.
 
 Insights findings worth a look are sent as alerts; see [Alerts](#alerts).
 

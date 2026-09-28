@@ -113,6 +113,11 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_findings", map[string]any{"range": "fortnight"}); failure != "" {
 		t.Fatalf("list_findings failed: %s", failure)
 	}
+	configuration.snapshot.Config.Insights.Enabled = false
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_findings", map[string]any{}); failure != errInsightsOff.Error() {
+		t.Fatalf("list_findings with Insights off = %q", failure)
+	}
+	configuration.snapshot.Config.Insights.Enabled = true
 	for _, tool := range []string{"list_findings", "search_queries"} {
 		if _, failure := callMCPToolForTest(t, server, "sable_pat_blocking", tool, map[string]any{}); !strings.Contains(failure, "logs.read") {
 			t.Fatalf("%s without logs.read = %q", tool, failure)

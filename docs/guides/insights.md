@@ -92,6 +92,30 @@ Sable can send each new finding worth a look to your phone, a chat channel, a we
 
 The bell beside **Settings** shows whether Insights alerts are **On**, **Paused**, or **Off**. Hover over it to see why, or click it to open **Settings > Alerts**.
 
+## What Insights collects
+
+Insights keeps a few things beyond the query log, all in Sable's own database on this server:
+
+- **When each device was first and last seen,** overall and for each name it looked up.
+- **The hardware behind each address,** read once a minute from the server's neighbor table and, when [UniFi](unifi.md) is set up, from the controller. With a cluster, the node that leads hands these to the other nodes.
+- **The findings you hid or snoozed.**
+
+It does not touch the query log itself (that is **Settings > Logging**), the numbers on the dashboard, the names and types you gave devices, or the records UniFi publishes.
+
+## Turn Insights off
+
+Turn off **Insights** in **Settings > General** to stop all of it. Sable asks once, with **Also delete what Insights has collected** checked. While it is off:
+
+- Sable stops recording which devices it sees and what hardware they are, and stops looking for findings.
+- Insights leaves the sidebar and the command palette, and the Insights alerts in **Settings > Alerts** fold away.
+- The dashboard names clients only from the names you gave them, local hosts, and reverse DNS. Names from UniFi and the neighbor table go away.
+- The MCP `list_findings` tool says Insights is off.
+- In a cluster, every node follows the primary, and each deletes its own copy when the primary does.
+
+**Delete Insights Data** under the switch deletes what Insights holds without turning it off. Both are recorded in the audit log.
+
+Turning Insights back on starts fresh. It does not fill device history in from the query log still there, and for the first hour it treats devices it has not seen yet as ones that may have been there all along.
+
 ## Blocking
 
 The **Blocking** tab shows blocked queries, the clients and domains behind them, and how much each block list contributes that no other list covers.
