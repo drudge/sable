@@ -494,7 +494,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,
 		QNAMEMinimization: configuration.Resolver.QNAMEMinimization,
-		CacheMinimumTTL: configuration.Resolver.CacheMinimumTTL, CacheMaximumTTL: configuration.Resolver.CacheMaximumTTL,
+		CacheMinimumTTL:   configuration.Resolver.CacheMinimumTTL, CacheMaximumTTL: configuration.Resolver.CacheMaximumTTL,
 		CacheNegativeTTL: configuration.Resolver.CacheNegativeTTL, CacheFailureTTL: configuration.Resolver.CacheFailureTTL,
 		SaveCache:  configuration.Resolver.SaveCache,
 		ServeStale: configuration.Resolver.ServeStale, CacheStaleTTL: configuration.Resolver.CacheStaleTTL,
