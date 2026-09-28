@@ -83,6 +83,18 @@ var mcpServerTools = []mcpTool{
 		section:     "server",
 		grant:       "settings.read",
 	},
+	{
+		Name:  "sync_dynamic_dns",
+		Title: "Update Dynamic DNS now",
+		Description: "Look up this network's public addresses and update the Dynamic DNS records now instead of " +
+			"waiting for the next scheduled run. It returns at once; call get_dynamic_dns a few seconds later " +
+			"to see how it went.",
+		InputSchema: mcpObjectSchema(nil, nil),
+		Annotations: mcpToolAnnotations{Title: "Update Dynamic DNS now", IdempotentHint: true, OpenWorldHint: true},
+		call:        (*Server).mcpSyncDynamicDNS,
+		section:     "server",
+		grant:       "settings.write",
+	},
 }
 
 type mcpLatestRelease struct {
@@ -482,6 +494,33 @@ func (server *Server) mcpGetDynamicDNS(request *http.Request, arguments json.Raw
 		result["note"] = "Dynamic DNS is paused, so public records are not being updated."
 	}
 	return result, nil
+}
+
+func (server *Server) mcpSyncDynamicDNS(request *http.Request, arguments json.RawMessage) (any, error) {
+	if err := decodeMCPArguments(arguments, &struct{}{}); err != nil {
+		return nil, err
+	}
+	if !server.mcpHasPermission(request, auth.PermissionSettingsWrite) {
+		return nil, errors.New("this token needs settings.write to update Dynamic DNS")
+	}
+	if server.mcpReplica() {
+		return nil, errors.New("Dynamic DNS runs only on the cluster primary; connect to the primary to update it")
+	}
+	settings := server.config.Current().Config.DynamicDNS
+	switch {
+	case server.dynamicDNS == nil:
+		return nil, errors.New("Dynamic DNS is unavailable on this server")
+	case len(settings.ConfiguredPublishers()) == 0:
+		return nil, errors.New("Dynamic DNS is not set up; set it up in Sable under Integrations, Dynamic DNS")
+	case !settings.Runnable():
+		return nil, errors.New("Dynamic DNS is paused; resume it in Sable under Integrations, Dynamic DNS")
+	}
+	server.dynamicDNS.SyncNow()
+	server.recordControlPlaneAudit(request, "integrations.dynamic_dns.sync", "requested an immediate dynamic DNS publication via=mcp")
+	server.logger.Info("dynamic DNS publication requested", "client", requestClientIP(request), "via", "mcp")
+	return map[string]any{
+		"started": true, "message": "Dynamic DNS update started. Call get_dynamic_dns in a few seconds to see how it went.",
+	}, nil
 }
 
 func mcpPublicAddressView(current, previous string, changedAt time.Time) *mcpPublicAddress {

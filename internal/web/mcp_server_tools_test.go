@@ -217,3 +217,33 @@ func TestMCPGetDynamicDNS(t *testing.T) {
 		t.Fatalf("replica = %v", replica)
 	}
 }
+
+func TestMCPSyncDynamicDNS(t *testing.T) {
+	t.Parallel()
+	server, configuration := newMCPTestServer(t)
+	controller := &testDynamicDNSController{configured: true}
+	server.SetDynamicDNSController(controller)
+	addMCPTools(configuration, "sync_dynamic_dns")
+
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_operator", "sync_dynamic_dns", map[string]any{}); !strings.Contains(failure, "not set up") {
+		t.Fatalf("not set up = %q", failure)
+	}
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{Publishers: []config.DynamicDNSPublisher{{
+		Provider: "cloudflare", Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home", IPv4: true}},
+	}}}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_operator", "sync_dynamic_dns", map[string]any{}); !strings.Contains(failure, "paused") {
+		t.Fatalf("paused = %q", failure)
+	}
+	configuration.snapshot.Config.DynamicDNS.Enabled = true
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_settings", "sync_dynamic_dns", map[string]any{}); !strings.Contains(failure, "settings.write") {
+		t.Fatalf("without settings.write = %q", failure)
+	}
+	started, failure := callMCPToolForTest(t, server, "sable_pat_operator", "sync_dynamic_dns", map[string]any{})
+	if failure != "" || started["started"] != true || controller.syncs != 1 {
+		t.Fatalf("sync_dynamic_dns = %v %q, %d syncs", started, failure, controller.syncs)
+	}
+	server.SetClusterController(testReplicaClusterController{})
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_operator", "sync_dynamic_dns", map[string]any{}); !strings.Contains(failure, "primary") || controller.syncs != 1 {
+		t.Fatalf("replica = %q, %d syncs", failure, controller.syncs)
+	}
+}

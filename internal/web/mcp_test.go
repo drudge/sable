@@ -86,6 +86,7 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 		"sable_pat_logs":     {UserID: 7, Username: "analyst", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionLogsRead}},
 		"sable_pat_metrics":  {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
 		"sable_pat_settings": {UserID: 9, Username: "tinkerer", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead}},
+		"sable_pat_operator": {UserID: 10, Username: "operator", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead, auth.PermissionSettingsWrite}},
 		"sable_pat_updates":  {UserID: 8, Username: "watcher", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionUpdatesRead}},
 		"sable_pat_blocking": {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
 		"sable_pat_scoped": {UserID: 3, Username: "deploy", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Grants: []auth.Grant{
