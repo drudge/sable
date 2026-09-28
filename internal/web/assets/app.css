@@ -1020,6 +1020,10 @@ dialog[open]::backdrop {
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
+.confirmation-icon { display: grid; width: 2.5rem; height: 2.5rem; margin-bottom: .25rem; place-items: center; border-radius: .6rem; }
+.confirmation-icon .nav-icon { width: 1.25rem; height: 1.25rem; }
+.confirmation-icon.warning { background: color-mix(in oklch, #f59e0b 14%, transparent); color: #d97706; }
+.dark .confirmation-icon.warning { color: #f59e0b; }
 /* The dialog already pads its edges, so the body lines up with the title
    instead of padding again. A body inside a form keeps its gap to the footer. */
 .confirmation-dialog .isotope-dialog-body { overflow: visible; padding: 0; }

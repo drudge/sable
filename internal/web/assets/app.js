@@ -2542,6 +2542,16 @@
 		dialog.innerHTML = `<div class="dialog-header"><h2 id="sable-confirm-title"></h2><p id="sable-confirm-description"></p></div><footer class="dialog-footer"><button class="button outline" type="button" data-confirm-cancel>Cancel</button><button class="button" type="button" data-confirm-accept></button></footer>`;
 		dialog.querySelector("h2").textContent = options.title || "Confirm action";
 		dialog.querySelector("p").textContent = question;
+		if (options.cancel) dialog.querySelector("[data-confirm-cancel]").textContent = options.cancel;
+		// A warning leads with an amber triangle, the same one the console's
+		// notes use.
+		if (options.icon === "warning") {
+		  const icon = document.createElement("span");
+		  icon.className = "confirmation-icon warning";
+		  icon.setAttribute("aria-hidden", "true");
+		  icon.innerHTML = `<svg class="nav-icon icon-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"></path><path d="M12 9v4M12 17h.01"></path></svg>`;
+		  dialog.querySelector(".dialog-header").prepend(icon);
+		}
 		const accept = dialog.querySelector("[data-confirm-accept]");
 		// Red is reserved for actions that destroy or interrupt something.
 		if (options.tone !== "neutral") accept.classList.add("destructive");
@@ -2747,12 +2757,12 @@
 		if (focus) selected.focus();
 	  };
 	  tabs.forEach((tab) => {
-		tab.addEventListener("click", () => select(tab.dataset.dialogTab));
+		tab.addEventListener("click", () => mcpGrantGuard(tab, () => select(tab.dataset.dialogTab)));
 		tab.addEventListener("keydown", (event) => {
 		  const next = tabFromKey(tabs, tab, event);
 		  if (!next) return;
 		  event.preventDefault();
-		  select(next.dataset.dialogTab, true);
+		  mcpGrantGuard(next, () => select(next.dataset.dialogTab, true));
 		});
 	  });
 	  root.sableResetDialogTabs = () => select(tabs[0]?.dataset.dialogTab);
@@ -3497,6 +3507,35 @@
 	  form.querySelector("input")?.focus();
 	});
 
+	// mcpGrantGaps compares the MCP setup wizard's checked tools with the
+	// group it made: the grants the tools need, the ones the group lacks or
+	// adds, and the checked tools that lack their grant.
+	const mcpGrantGaps = (form) => {
+	  const checked = [...(form?.querySelectorAll('input[name="tools"][data-grant]:checked') || [])];
+	  const needed = [...new Set(checked.map((input) => input.dataset.grant))];
+	  const section = form?.querySelector("[data-mcp-group]");
+	  const group = section?.dataset.mcpGroup || "";
+	  const granted = (section?.dataset.mcpGroupGrants || "").split(" ").filter(Boolean);
+	  const missing = needed.filter((grant) => !granted.includes(grant));
+	  const extra = granted.filter((grant) => !needed.includes(grant));
+	  const tools = group ? checked.filter((input) => missing.includes(input.dataset.grant)).map((input) => input.value) : [];
+	  return {section, group, needed, missing, extra, tools, canUpdate: Boolean(section?.querySelector("[data-mcp-group-update]"))};
+	};
+	const listed = (items) => items.length < 3 ? items.join(" and ") : `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+	// Going on to Connect while the group lacks a tool's grant asks first:
+	// an assistant that calls that tool gets a permission error.
+	const mcpGrantGuard = (source, proceed) => {
+	  if (!source?.hasAttribute("data-mcp-grant-check")) return proceed();
+	  const gaps = mcpGrantGaps(source.closest("form") || source.closest("dialog")?.querySelector("form"));
+	  if (gaps.tools.length === 0) return proceed();
+	  const grants = gaps.missing.length === 1 ? "it" : "them";
+	  const calls = gaps.tools.length < 3 ? gaps.tools.join(" or ") : `${gaps.tools.slice(0, -1).join(", ")}, or ${gaps.tools.at(-1)}`;
+	  const fix = gaps.canUpdate ? `Use Update Group on this step to add ${grants}, or fix it later in Edit Setup.` : `Ask an administrator to add ${grants} to ${gaps.group}.`;
+	  confirmAction(`${gaps.group} lacks ${listed(gaps.missing)}, so an assistant that calls ${calls} gets a permission error. ${fix}`, {
+		title: gaps.tools.length === 1 ? "A tool won't work" : "Some tools won't work", action: "Continue Anyway", cancel: "Go Back", tone: "neutral", icon: "warning",
+	  }).then((accepted) => { if (accepted) proceed(); });
+	};
+
 	// The MCP setup wizard lists the grants its checked tools need and
 	// compares them with the group it made, offering Update Group when they
 	// differ. The server renders the same list and sentences on open.
@@ -3512,15 +3551,10 @@
 		badge.append(code);
 		return badge;
 	  });
-	  const needed = [...new Set([...form.querySelectorAll('input[name="tools"][data-grant]:checked')].map((input) => input.dataset.grant))];
+	  const {section, group, needed, missing, extra} = mcpGrantGaps(form);
 	  summary.replaceChildren(...badges(needed));
-	  const section = form.querySelector("[data-mcp-group]");
 	  const coverage = section?.querySelector("[data-mcp-grant-coverage]");
 	  if (!coverage) return;
-	  const group = section.dataset.mcpGroup;
-	  const granted = (section.dataset.mcpGroupGrants || "").split(" ").filter(Boolean);
-	  const missing = needed.filter((grant) => !granted.includes(grant));
-	  const extra = granted.filter((grant) => !needed.includes(grant));
 	  let text = `${group} matches these grants.`;
 	  let differ = [];
 	  if (needed.length === 0) text = "Choose at least one tool.";
@@ -4892,7 +4926,7 @@
 	  // A wizard's Next and Back move between the steps of its own dialog.
 	  const dialogStep = event.target.closest("[data-dialog-step]");
 	  if (dialogStep) {
-		dialogStep.closest("[data-dialog-tabs]")?.sableSelectDialogTab?.(dialogStep.dataset.dialogStep, true);
+		mcpGrantGuard(dialogStep, () => dialogStep.closest("[data-dialog-tabs]")?.sableSelectDialogTab?.(dialogStep.dataset.dialogStep, true));
 		return;
 	  }
 	  const dialogSwitch = event.target.closest("[data-dialog-switch]");
