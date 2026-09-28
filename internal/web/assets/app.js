@@ -3351,6 +3351,12 @@
 	  document.body.addEventListener("htmx:before:request", event => {
 	    const ctx = event.detail?.ctx;
 	    if (!ctx?.sourceElement?.matches("[data-live-refresh]")) return;
+	    // A panel left in the page after it closes stops polling until it
+	    // opens again.
+	    if (ctx.sourceElement.closest("dialog:not([open])")) {
+	      event.preventDefault();
+	      return;
+	    }
 	    const type = ctx.sourceEvent?.type;
 	    ctx.sableLiveRefresh = !type || type === "every" || type === "load";
 	  });
@@ -4833,7 +4839,7 @@
 	  }
 	  // A row whose record loads on demand opens through its own button, so a
 	  // click anywhere in the row does exactly what the button does.
-	  const openerRow = event.target.closest?.("tr[data-row-opener]");
+	  const openerRow = event.target.closest?.("[data-row-opener]");
 	  const openerInteractive = event.target.closest?.("button, a, input, select, textarea, label, summary");
 	  if (openerRow && !openerInteractive && !window.getSelection()?.toString()) {
 		openerRow.querySelector("[data-dialog-open]")?.click();

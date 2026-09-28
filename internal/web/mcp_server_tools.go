@@ -706,29 +706,38 @@ func mcpClusterSummary(nodes []mcpClusterNode) string {
 	return summary
 }
 
-// mcpNodeProblems lists each node's own open problems, worded for people:
-// this node's from its alert sources, and, on the primary, what each replica
-// last reported in its heartbeat.
+// mcpNodeProblems lists each node's own open problems, worded for people.
 func (server *Server) mcpNodeProblems(ctx context.Context, state cluster.State, now time.Time) map[string][]string {
 	found := make(map[string][]string)
+	for nodeID, list := range server.clusterNodeProblems(ctx, state, now) {
+		for _, alert := range list {
+			found[nodeID] = append(found[nodeID], alertProblemText(alert))
+		}
+	}
+	return found
+}
+
+// clusterNodeProblems gathers each node's own open problems: this node's from
+// its alert sources, and, on the primary, what each replica last reported in
+// its heartbeat. A problem worded the same way twice is listed once.
+func (server *Server) clusterNodeProblems(ctx context.Context, state cluster.State, now time.Time) map[string][]alerts.Alert {
+	found := make(map[string][]alerts.Alert)
 	add := func(nodeID string, list []alerts.Alert) {
 		for _, alert := range list {
 			if !alert.Problem {
 				continue
 			}
-			text := alert.Headline
-			if text == "" {
-				text = strings.TrimSpace(alert.Title + " " + alert.Subject)
+			text := alertProblemText(alert)
+			if slices.ContainsFunc(found[nodeID], func(known alerts.Alert) bool { return alertProblemText(known) == text }) {
+				continue
 			}
-			if !slices.Contains(found[nodeID], text) {
-				found[nodeID] = append(found[nodeID], text)
-			}
+			found[nodeID] = append(found[nodeID], alert)
 		}
 	}
 	if server.alerts != nil {
 		local, err := server.alerts.Local(ctx, now)
 		if err != nil {
-			server.logger.Warn("gather this node's alerts for MCP", "error", err)
+			server.logger.Warn("gather this node's alerts", "error", err)
 		}
 		add(state.NodeID, local)
 	}
@@ -740,6 +749,14 @@ func (server *Server) mcpNodeProblems(ctx context.Context, state cluster.State, 
 		}
 	}
 	return found
+}
+
+// alertProblemText is an alert in one sentence.
+func alertProblemText(alert alerts.Alert) string {
+	if alert.Headline != "" {
+		return alert.Headline
+	}
+	return strings.TrimSpace(alert.Title + " " + alert.Subject)
 }
 
 // mcpRollout reports a rolling update that is under way or ended in the last

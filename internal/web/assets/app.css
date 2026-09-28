@@ -597,6 +597,13 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .blocking-source-icon .nav-icon { width: 1.1rem; height: 1.1rem; }
 .blocking-source-row > div { display: grid; min-width: 0; gap: .15rem; }
 .blocking-source-row strong { font-size: .875rem; }
+/* A row's name opens its details panel, and so does the rest of the row. */
+.blocking-source-row[data-row-opener], .cluster-node-row[data-row-opener] { cursor: pointer; }
+.blocking-source-name, .cluster-node-name { justify-self: start; max-width: 100%; overflow: hidden; border: 0; background: none; padding: 0; color: var(--foreground); cursor: pointer; font: inherit; font-weight: 600; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.blocking-source-name { font-size: .875rem; }
+.cluster-node-name { font-size: .82rem; }
+.blocking-source-name:hover, .cluster-node-name:hover { text-decoration: underline; }
+.blocking-source-name:focus-visible, .cluster-node-name:focus-visible { border-radius: .2rem; outline: 2px solid var(--ring); outline-offset: 2px; }
 .blocking-source-row code { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .blocking-source-row small { color: var(--muted-foreground); font-size: .7rem; text-transform: capitalize; }
 .blocking-source-row small.blocklist-health-warning { display: flex; align-items: center; gap: .3rem; color: var(--destructive); text-transform: none; }
@@ -2301,6 +2308,16 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cluster-node-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .cluster-node-actions.split { width: 100%; justify-content: space-between; }
 .cluster-node-actions form { margin: 0; }
+/* A node's panel puts Promote and Remove on their own row, above Close and
+   Copy Link, so neither row wraps in a narrow panel. */
+.query-detail-footer:has(> .cluster-node-actions) { flex-wrap: wrap; }
+.query-detail-footer > .cluster-node-actions { order: -1; width: 100%; flex-wrap: nowrap; }
+.query-detail-footer > .cluster-node-actions .button { gap: .45rem; white-space: nowrap; }
+.query-detail-footer > .cluster-node-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.cluster-node-details { display: grid; gap: 1rem; }
+.cluster-node-details .cluster-node-portal { font-size: .8125rem; }
+.cluster-node-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
+.block-list-failure { margin-bottom: .75rem; }
 .cluster-remove-node { border-color: rgb(239 68 68 / .45); color: #ef4444; }
 .cluster-remove-node:hover { border-color: #ef4444; background: rgb(239 68 68 / .12); color: #ef4444; }
 .cluster-remove-node .nav-icon { width: .9rem; height: .9rem; }

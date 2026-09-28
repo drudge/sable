@@ -145,6 +145,30 @@ func (updater *Updater) Refresh(ctx context.Context, sources []RemoteSource, act
 	defer updater.updating.Store(false)
 
 	updater.health.retain(sources)
+	activated, err := updater.refresh(ctx, sources, true, activate)
+	if activated {
+		updater.lastUpdate.Store(updater.now().Unix())
+	}
+	return err
+}
+
+// RefreshSource downloads one source now, even while it is waiting out a
+// retry backoff, and recompiles with it. The other sources, their health, and
+// the time of the last full update are left alone.
+func (updater *Updater) RefreshSource(ctx context.Context, source RemoteSource, activate func(context.Context) error) error {
+	updater.updateMu.Lock()
+	defer updater.updateMu.Unlock()
+	updater.updating.Store(true)
+	defer updater.updating.Store(false)
+
+	_, err := updater.refresh(ctx, []RemoteSource{source}, false, activate)
+	return err
+}
+
+// refresh downloads the sources, swaps the successful downloads into place,
+// and recompiles. It reports whether the recompile ran. With honorBackoff, a
+// source waiting out a retry delay keeps its cached copy instead.
+func (updater *Updater) refresh(ctx context.Context, sources []RemoteSource, honorBackoff bool, activate func(context.Context) error) (bool, error) {
 	staged := make([]stagedBlockListFile, 0, len(sources))
 	defer func() {
 		for _, file := range staged {
@@ -154,7 +178,7 @@ func (updater *Updater) Refresh(ctx context.Context, sources []RemoteSource, act
 	}()
 	var downloadErrors []error
 	for _, source := range sources {
-		if health, found := updater.health.get(source.URL); found && health.InBackoff(updater.now()) {
+		if health, found := updater.health.get(source.URL); honorBackoff && found && health.InBackoff(updater.now()) {
 			if _, err := os.Stat(updater.targetPath(source)); err == nil {
 				continue
 			}
@@ -164,7 +188,7 @@ func (updater *Updater) Refresh(ctx context.Context, sources []RemoteSource, act
 			if _, statErr := os.Stat(updater.targetPath(source)); statErr != nil {
 				// Nothing cached to fall back to, so the compile would fail
 				// anyway. Abort before touching any other list.
-				return err
+				return false, err
 			}
 			downloadErrors = append(downloadErrors, err)
 			continue
@@ -172,40 +196,39 @@ func (updater *Updater) Refresh(ctx context.Context, sources []RemoteSource, act
 		staged = append(staged, stagedBlockListFile{temporary: temporary, target: target})
 	}
 	if len(staged) == 0 {
-		return errors.Join(downloadErrors...)
+		return false, errors.Join(downloadErrors...)
 	}
 	for index := range staged {
 		file := &staged[index]
 		if _, err := os.Stat(file.target); err == nil {
 			backup, err := os.CreateTemp(filepath.Dir(file.target), ".sable-blocklist-backup-*")
 			if err != nil {
-				return fmt.Errorf("prepare block list rollback: %w", err)
+				return false, fmt.Errorf("prepare block list rollback: %w", err)
 			}
 			file.backup = backup.Name()
 			if err := backup.Close(); err != nil {
-				return fmt.Errorf("prepare block list rollback: %w", err)
+				return false, fmt.Errorf("prepare block list rollback: %w", err)
 			}
 			if err := os.Remove(file.backup); err != nil {
-				return fmt.Errorf("prepare block list rollback: %w", err)
+				return false, fmt.Errorf("prepare block list rollback: %w", err)
 			}
 			if err := os.Rename(file.target, file.backup); err != nil {
-				return fmt.Errorf("preserve block list: %w", err)
+				return false, fmt.Errorf("preserve block list: %w", err)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("inspect block list: %w", err)
+			return false, fmt.Errorf("inspect block list: %w", err)
 		}
 		if err := os.Rename(file.temporary, file.target); err != nil {
 			updater.restore(staged[:index+1])
-			return fmt.Errorf("activate downloaded block list: %w", err)
+			return false, fmt.Errorf("activate downloaded block list: %w", err)
 		}
 		file.temporary = ""
 	}
 	if err := activate(ctx); err != nil {
 		updater.restore(staged)
-		return fmt.Errorf("activate updated block lists: %w", err)
+		return false, fmt.Errorf("activate updated block lists: %w", err)
 	}
-	updater.lastUpdate.Store(updater.now().Unix())
-	return errors.Join(downloadErrors...)
+	return true, errors.Join(downloadErrors...)
 }
 
 // targetPath resolves the on-disk cache file for a source.

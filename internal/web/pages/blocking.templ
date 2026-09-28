@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,6 +27,9 @@ type BlockingPageView struct {
 	ActiveTab string
 	Message string
 	Error string
+	// OutOfBand marks the page content sent alongside a panel's own response,
+	// so both update from one request.
+	OutOfBand bool
 }
 
 type BlockListSourceView struct {
@@ -70,11 +74,33 @@ var blockingTabs = []tabOption{
 }
 
 templ BlockingPage(view BlockingPageView) {
-	@AppDocument(view.Console, documentTitle(tabLabel(blockingTabs, view.ActiveTab), "DNS Blocking"), blockingNavigationPage(view), BlockingContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(blockingTabs, view.ActiveTab), "DNS Blocking"), blockingNavigationPage(view), blockingDocument(view))
+}
+
+// blockingDocument keeps the block list panel outside the page content, so
+// the page can refresh beneath it while it stays open.
+templ blockingDocument(view BlockingPageView) {
+	@BlockingContent(view)
+	<dialog class="query-detail-dialog block-list-dialog" id="block-list-dialog" aria-labelledby="block-list-title" { blockListDrawerRoute()... }>
+		<div class="block-list-content" id="block-list-content">
+			@blockListLoading()
+		</div>
+	</dialog>
+	<template id="block-list-loading">
+		@blockListLoading()
+	</template>
 }
 
 templ BlockingContent(view BlockingPageView) {
-	<div class="blocking-page page-stack" id="blocking-content" data-blocking-root data-title-base="DNS Blocking">
+	<div
+		class="blocking-page page-stack"
+		id="blocking-content"
+		data-blocking-root
+		data-title-base="DNS Blocking"
+		if view.OutOfBand {
+			hx-swap-oob="outerHTML"
+		}
+	>
 		<header class="page-heading"><h1>DNS Blocking</h1><p>Block unwanted domains using block lists and custom rules</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
@@ -144,10 +170,10 @@ templ BlockingStatus(view BlockingPageView) {
 }
 
 templ BlockListRow(list BlockListSourceView) {
-	<article class="blocking-source-row isotope-source-row">
+	<article class="blocking-source-row isotope-source-row" data-row-opener>
 		<span class="blocking-source-icon">@Icon("list")</span>
 		<div>
-			<strong>{ list.Name }</strong>
+			<button class="blocking-source-name" type="button" { drawerOpener(BlockListDrawerLink(list.Name))... } aria-label={ "View details for " + list.Name }>{ list.Name }</button>
 			<code title={ ifThen(list.URL != "", list.URL, list.ConfiguredPath) }>{ blockListLocation(list) }</code>
 			<small>{ strings.ToUpper(list.Format) } · { formatNumber(uint64(list.Accepted)) } domains · { formatNumber(uint64(list.Invalid)) } invalid</small>
 			if !list.Healthy {
@@ -252,3 +278,131 @@ func blockingStatusDescription(view BlockingPageView) string { if !view.Enabled 
 func pluralizeDomain(count int) string { if count == 1 { return "domain" }; return "domains" }
 func domainPolicyKind(allowed bool) string { if allowed { return "allowed" }; return "blocked" }
 func blockingNavigationPage(view BlockingPageView) string { if view.ActiveTab == "allowed" { return "allowed" }; return "blocked" }
+
+// BlockListRoute is where a block list's details panel lives. Each list's
+// address opens the Blocking page with its panel open.
+const BlockListRoute = "/blocked/lists/"
+
+// BlockListPath is the address of one block list's panel.
+func BlockListPath(name string) string { return BlockListRoute + url.PathEscape(name) }
+
+// BlockListDrawerLink opens a block list's panel on the Blocking page.
+func BlockListDrawerLink(name string) *DrawerLink {
+	return &DrawerLink{
+		Dialog: "block-list-dialog", Loading: "block-list-loading", Target: "block-list-content",
+		URL: "/ui/blocking/list?" + url.Values{"name": []string{name}}.Encode(), Link: BlockListPath(name),
+	}
+}
+
+func blockListDrawerRoute() templ.Attributes {
+	return insightDrawerRoute(BlockListRoute, "/ui/blocking/list", "name", "block-list-content", "block-list-loading", "/blocked")
+}
+
+// BlockListDrawerView is one block list's details panel.
+type BlockListDrawerView struct {
+	List BlockListSourceView
+	// Missing is set when no configured list has the requested name.
+	Missing bool
+	TimeDisplay TimeDisplay
+	CanRefresh bool
+	// LastUpdate is when the list last downloaded, or for a local file, when
+	// the file last changed.
+	LastUpdate time.Time
+	NextUpdate time.Time
+	// Retrying is set when NextUpdate is a retry after a failed download.
+	Retrying bool
+	ConsecutiveFailures int
+	LastError string
+	Message string
+	Error string
+}
+
+templ blockListLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: "Loading…", CloseLabel: "Close block list details"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading block list details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+// BlockListDrawer is one block list's details, loaded into the open panel.
+templ BlockListDrawer(view BlockListDrawerView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: ifThen(view.Missing, "Block list not found", view.List.Name), CloseLabel: "Close block list details"}, blockListFooter(view)) {
+		@Toast(view.Message, "success")
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
+		}
+		if view.Missing {
+			<div class="query-detail-section-heading"><p>No block list has this name. It may have been removed or renamed.</p></div>
+		} else {
+			<dl class="query-detail-grid">
+				<div class="query-detail-fact-wide insight-fact-full insight-fact-copyable">
+					<dt>{ ifThen(view.List.URL != "", "Source URL", "File") }</dt>
+					<dd>
+						<code id="block-list-source">{ ifThen(view.List.URL != "", view.List.URL, ifThen(view.List.Path != "", view.List.Path, view.List.ConfiguredPath)) }</code>
+						@FactCopyButton("block-list-source", ifThen(view.List.URL != "", "Copy source URL", "Copy file path"))
+					</dd>
+				</div>
+				<div class="query-detail-fact-wide"><dt>Format</dt><dd>{ blockListFormatLabel(view.List.Format) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Domains</dt><dd>{ formatNumber(uint64(view.List.Accepted)) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Lines read</dt><dd>{ formatNumber(uint64(view.List.Lines)) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Invalid lines</dt><dd>{ formatNumber(uint64(view.List.Invalid)) }</dd></div>
+			</dl>
+			<section class="query-detail-answer" aria-labelledby="block-list-updates">
+				<h3 id="block-list-updates">Updates</h3>
+				if view.ConsecutiveFailures > 0 {
+					<div class="query-error block-list-failure" role="status">
+						<strong>{ view.List.HealthSummary }</strong>
+						<span>{ ifThen(view.LastError != "", view.LastError, "The last update attempt failed.") }</span>
+					</div>
+				}
+				<dl class="query-detail-grid">
+					<div class="query-detail-fact-wide"><dt>{ ifThen(view.List.URL != "", "Last update", "File changed") }</dt><dd>{ blockListTime(view.LastUpdate, view.TimeDisplay, ifThen(view.List.URL != "", "Not since Sable started", "—")) }</dd></div>
+					if view.List.URL != "" {
+						<div class="query-detail-fact-wide"><dt>{ ifThen(view.Retrying, "Next retry", "Next update") }</dt><dd>{ blockListTime(view.NextUpdate, view.TimeDisplay, "Not scheduled") }</dd></div>
+						<div class="query-detail-fact-wide"><dt>Failures in a row</dt><dd>{ ifThen(view.ConsecutiveFailures == 0, "None", fmt.Sprint(view.ConsecutiveFailures)) }</dd></div>
+					} else {
+						<div class="query-detail-fact-wide"><dt>Next update</dt><dd>Local file, never downloaded</dd></div>
+					}
+				</dl>
+			</section>
+		}
+	}
+}
+
+templ blockListFooter(view BlockListDrawerView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if !view.Missing {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			@CopyLinkButton(BlockListPath(view.List.Name))
+			if view.CanRefresh && view.List.URL != "" {
+				<button class="button blocking-update-button block-list-refresh" id="block-list-refresh" type="button" hx-post="/ui/blocking/lists/refresh" hx-vals={ fmt.Sprintf("{\"name\":%q}", view.List.Name) } hx-target="#block-list-content" hx-swap="innerHTML" hx-disable="this">@Icon("refresh")<span class="update-label">Refresh This List</span></button>
+			}
+		</div>
+	}
+}
+
+func blockListTime(moment time.Time, display TimeDisplay, none string) string {
+	if moment.IsZero() {
+		return none
+	}
+	return FormatShortDateTime(moment, display, false)
+}
+
+func blockListFormatLabel(format string) string {
+	switch format {
+	case "", "auto":
+		return "Detected automatically"
+	case "hosts":
+		return "Hosts file"
+	case "domains":
+		return "One domain per line"
+	case "adblock":
+		return "AdBlock filter list"
+	default:
+		return format
+	}
+}
