@@ -237,3 +237,17 @@ func TestPreviewsCutSecretsShort(t *testing.T) {
 		t.Fatalf("the JSON preview is not indented:\n%s", body)
 	}
 }
+
+// A webhook's URL is its password, so a request that never got an answer
+// does not name it in the error the runtime log and the Alerts page show.
+func TestFailedPostsDoNotNameTheWebhookURL(t *testing.T) {
+	t.Parallel()
+	closed := httptest.NewServer(http.NotFoundHandler())
+	address := closed.URL
+	closed.Close()
+	destination := config.AlertDestination{Format: config.AlertFormatSlack, URL: address + "/services/T000/B000/XsecretWebhookToken"}
+	_, err := post(t, destination, Alert{ID: "a", Title: "Node down", Subject: "ns2", Headline: "ns2 stopped answering."})
+	if err == nil || strings.Contains(err.Error(), "XsecretWebhookToken") || !strings.HasPrefix(err.Error(), "post alert: ") {
+		t.Fatalf("error = %v", err)
+	}
+}

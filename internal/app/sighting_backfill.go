@@ -43,6 +43,11 @@ func compactQueryLogRollups(ctx context.Context, compact func(context.Context, t
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
+		// A tick and the shutdown can arrive together, and select picks
+		// between them at random, so check again before starting a pass.
+		if ctx.Err() != nil {
+			return
+		}
 		if err := compact(ctx, time.Now()); err != nil && ctx.Err() == nil {
 			logger.Warn("sum query log history into hours and days", "error", err)
 		}

@@ -16,14 +16,17 @@ type ReleaseStore interface {
 // ReleaseInfo contains display metadata only. Installation progress, restart
 // requests, reservations, and errors must never be restored from this cache.
 type ReleaseInfo struct {
-	Repository        string    `json:"repository"`
-	APIBaseURL        string    `json:"api_base_url"`
-	Version           string    `json:"version"`
-	URL               string    `json:"url"`
-	Notes             string    `json:"notes"`
-	PreRelease        bool      `json:"pre_release"`
-	IncludePreRelease bool      `json:"include_pre_release"`
-	CheckedAt         time.Time `json:"checked_at"`
+	Repository string `json:"repository"`
+	APIBaseURL string `json:"api_base_url"`
+	Version    string `json:"version"`
+	URL        string `json:"url"`
+	Notes      string `json:"notes"`
+	// Releases are the notes of every release between the running one and
+	// Version, which an older cache does not have.
+	Releases          []ReleaseNote `json:"releases,omitempty"`
+	PreRelease        bool          `json:"pre_release"`
+	IncludePreRelease bool          `json:"include_pre_release"`
+	CheckedAt         time.Time     `json:"checked_at"`
 }
 
 func (manager *Manager) restoreRelease() {
@@ -44,6 +47,13 @@ func (manager *Manager) restoreRelease() {
 	status := &manager.status
 	status.LatestVersion, status.ReleaseURL, status.ReleaseNotes = release.Version, release.URL, release.Notes
 	status.PreRelease, status.CheckedAt = release.PreRelease, release.CheckedAt
+	// Sable may have been updated since the check, so keep only the releases
+	// still ahead of it.
+	for _, note := range release.Releases {
+		if isNewer(note.Version, status.CurrentVersion) {
+			status.Releases = append(status.Releases, note)
+		}
+	}
 	status.Available = isNewer(release.Version, status.CurrentVersion)
 	if status.Available {
 		status.Blocked = blockedReason(Installable(manager.options.BinaryPath))
@@ -57,7 +67,7 @@ func (manager *Manager) saveRelease() {
 	status := manager.status
 	release := ReleaseInfo{
 		Repository: manager.options.Repository, APIBaseURL: manager.options.APIBaseURL,
-		Version: status.LatestVersion, URL: status.ReleaseURL, Notes: status.ReleaseNotes,
+		Version: status.LatestVersion, URL: status.ReleaseURL, Notes: status.ReleaseNotes, Releases: status.Releases,
 		PreRelease: status.PreRelease, IncludePreRelease: status.IncludePreRelease, CheckedAt: status.CheckedAt,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

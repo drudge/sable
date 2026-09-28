@@ -89,6 +89,10 @@ func (store *Store) ServerLogEntries(ctx context.Context, query serverlog.Query)
 		conditions = append(conditions, clause)
 	}
 	low, high := serverLogLevelBounds(query.Level)
+	if query.AtLeast {
+		// Every level more severe than the one named also matches.
+		high = nil
+	}
 	if low != nil {
 		addCondition("level >= "+store.placeholder(len(arguments)+1), *low)
 	}

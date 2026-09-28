@@ -4,8 +4,10 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestHandlerCapturesStructuredEntriesAndFilters(t *testing.T) {
@@ -101,5 +103,35 @@ func TestAttachedSinkReceivesAttributesAndAssignedIdentifiers(t *testing.T) {
 	}
 	if entry.Level != slog.LevelError || entry.Attributes["domain"] != "example.com" {
 		t.Fatalf("entry = %+v, want the error level and its attribute", entry)
+	}
+}
+
+func TestEntriesFilterByMinimumLevelAndTime(t *testing.T) {
+	t.Parallel()
+	buffer := New(10)
+	now := time.Now()
+	for _, entry := range []Entry{
+		{OccurredAt: now.Add(-2 * time.Hour), Level: slog.LevelError, Message: "old error"},
+		{OccurredAt: now.Add(-time.Minute), Level: slog.LevelInfo, Message: "info"},
+		{OccurredAt: now.Add(-time.Minute), Level: slog.LevelWarn, Message: "warn"},
+		{OccurredAt: now, Level: slog.LevelError + 4, Message: "new error"},
+	} {
+		buffer.Append(entry)
+	}
+	messages := func(entries []Entry) string {
+		var found []string
+		for _, entry := range entries {
+			found = append(found, entry.Message)
+		}
+		return strings.Join(found, ",")
+	}
+	if got := messages(buffer.Entries(Filter{Level: "warn", AtLeast: true})); got != "new error,warn,old error" {
+		t.Fatalf("at least warn = %s", got)
+	}
+	if got := messages(buffer.Entries(Filter{Level: "warn"})); got != "warn" {
+		t.Fatalf("exactly warn = %s", got)
+	}
+	if got := messages(buffer.Entries(Filter{Level: "warn", AtLeast: true, Since: now.Add(-time.Hour), Until: now.Add(-time.Second)})); got != "warn" {
+		t.Fatalf("at least warn in the last hour, before now = %s", got)
 	}
 }

@@ -599,11 +599,13 @@ tools; the setup wizard's **Tools** step writes it:
 tools = ["list_zones", "list_records", "add_record", "set_records", "update_record",
   "delete_record", "check_domain", "allow_domain", "block_domain",
   "remove_domain_rule", "list_block_lists", "lookup", "purge_cache",
-  "list_findings"]
+  "list_findings", "get_version", "get_stats", "get_dynamic_dns",
+  "get_cluster_status"]
 ```
 
 The rest start off: `create_zone`, `delete_zone`, `add_block_list`,
-`remove_block_list`, `refresh_block_lists`, and `search_queries`. See
+`remove_block_list`, `refresh_block_lists`, `sync_dynamic_dns`,
+`search_queries`, and `search_server_logs`. See
 [Let an AI assistant manage records](guides/mcp.md) for each tool's grant.
 
 An empty list offers no tools. A token still needs each tool's grant.

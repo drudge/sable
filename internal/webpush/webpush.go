@@ -133,6 +133,12 @@ func (sender Sender) Send(ctx context.Context, subscription Subscription, payloa
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		// A subscription's endpoint is private to the browser that made it,
+		// so a failed request does not name it.
+		var failed *url.Error
+		if errors.As(err, &failed) {
+			err = failed.Err
+		}
 		return fmt.Errorf("send push: %w", err)
 	}
 	defer response.Body.Close()

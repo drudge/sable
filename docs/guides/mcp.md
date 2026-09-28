@@ -26,12 +26,26 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
 | `search_queries` | Off | Each device's DNS lookups | `logs.read` |
+| `search_server_logs` | Off | Sable's runtime log, by level, text, and time | `logs.read` |
+| `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
+| `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
+| `get_dynamic_dns` | On | Your public addresses, the records Dynamic DNS keeps up to date, and its last error | `settings.read` |
+| `sync_dynamic_dns` | Off | Updates the Dynamic DNS records now | `settings.write` |
+| `get_cluster_status` | On | Which node leads, which are online and caught up, their versions and problems, and any rolling update | `cluster.read` |
 
 `add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 
 `delete_zone` can delete any zone the token's groups may delete. The tool tells the assistant to ask you first, and the call must repeat the zone name. A deleted zone cannot be restored from the console; only a backup brings it back. To keep an assistant from deleting zones, leave the tool off or keep `zones.delete` out of its group. A new zone answers devices that use Sable right away; the internet sees it only once the domain's registrar or parent zone delegates it to your name servers. See [Delegation](delegation.md).
 
-Insights findings and the query log describe what each device on your network does. Turning either tool on sends that to your assistant's AI provider whenever it calls the tool. Insights itself still runs entirely on your server. Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
+Insights findings, the query log, and the runtime log describe what each device on your network does. Turning any of those tools on sends that to your assistant's AI provider whenever it calls the tool. `search_server_logs` blanks anything in a log line that looks like a credential, and every credential Sable holds for Dynamic DNS, certificates, UniFi, and alerts. Its `level` is the least severe level to include, so `warn` also returns errors. It searches this node's log, from the saved history when **Persist Server Logs** is on in **Settings → Logging**, and otherwise from the recent entries Sable holds in memory. Insights itself still runs entirely on your server. Lookups run inside Sable, so they never appear in the query log or as a device in Insights.
+
+`get_version` follows the update channel in **About**. It uses the last saved release check unless the assistant passes `check`, and even then it asks GitHub at most once every 5 minutes. With `cluster.read`, it also lists what each node runs. It cannot install an update.
+
+`get_stats` gives the same query, blocking, cache, and response-code counts as the dashboard for the range asked. Where answers came from, upstream errors, DNSSEC results, and response times are counted only since the node started. It never says which device asked for what. The number of devices and the most blocked domains come from the query log, so they appear only when the token also has `logs.read`. On a cluster, the numbers are the connected node's.
+
+`get_dynamic_dns` sends your public IP addresses to your assistant's AI provider whenever it calls the tool. Leave it off if you would rather not share them. Provider errors are shown the way **Integrations** shows them, and any stored credential that appears in one is blanked. Dynamic DNS runs only on the cluster primary, so a replica answers with a note to ask the primary, and `sync_dynamic_dns` refuses there.
+
+`get_cluster_status` shows what the **Cluster** page shows, plus each node's open problems, such as a failing certificate renewal. It leaves out node addresses. A replica hears only from the primary, so ask the primary for the whole cluster. The assistant cannot promote, remove, or add nodes.
 
 Assistants see a changed tool list the next time they connect.
 

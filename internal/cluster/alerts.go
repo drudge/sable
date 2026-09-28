@@ -91,6 +91,27 @@ func (service *Service) ReportedAlerts(now time.Time) []alerts.Alert {
 	return found
 }
 
+// ReportedAlertsByNode is ReportedAlerts keyed by the ID of the replica that
+// reported each list, for showing each node's own problems beside it.
+func (service *Service) ReportedAlertsByNode(now time.Time) map[string][]alerts.Alert {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	found := make(map[string][]alerts.Alert)
+	if service.manifest == nil || service.manifest.PrimaryID != service.nodeID {
+		return found
+	}
+	for _, node := range service.manifest.Nodes {
+		report, reported := service.reportedAlerts[node.ID]
+		if node.ID == service.nodeID || !reported || now.Sub(report.received) >= alertReportFreshness {
+			continue
+		}
+		for _, alert := range report.list {
+			found[node.ID] = append(found[node.ID], cloneAlert(alert))
+		}
+	}
+	return found
+}
+
 // recordReportedAlerts keeps what a replica said about itself. It is called
 // with service.mu held. The list is read leniently, so fields a later release
 // added are passed over rather than refused. A list that cannot be read at
