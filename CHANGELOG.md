@@ -8,6 +8,117 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.1] - 2026-09-27
+
+Sable 1.5.1 fixes names that always failed in recursive mode, such as
+`auth.remarkable.com`, lets you search and filter the **Devices** list, and adds
+a **Remote access in use** finding for every device using a tunnel or remote
+control tool. It also recognizes more kinds of devices, names UniFi network
+gear, and looks up names it hasn't cached yet faster.
+
+### Upgrading from 1.5.0
+
+- The resolver timeout now defaults to 3 seconds, up from 2. Configuration files
+  keep the value they saved, so in recursive mode raise **Settings → Recursion →
+  Recursive Resolver → Resolution Timeout** to `3s` by hand. At 2 seconds, a
+  name with a long alias chain such as `auth.remarkable.com` can fail its first
+  try on an empty cache.
+- The new **Remote access in use** finding alerts by default. The first time
+  Insights runs, it reports every device already using a tunnel or remote
+  control tool. Mark each one normal once you know it's expected.
+- In a cluster, upgrade every replica too. A replica still on 1.5.0 ignores the
+  device names the lead shares and keeps naming devices on its own.
+- UniFi gear gets its name and type on the next UniFi sync after the upgrade,
+  not right away.
+- Some devices get a new type after the upgrade. A type you set by hand still
+  wins. A device that now reads as an appliance, such as UniFi gear or a UPS,
+  can start showing a "talking somewhere new" finding.
+
+### Devices
+
+- Use the device type UniFi already guessed. The surer UniFi is, the more its
+  guess counts, and a type you set by hand in UniFi shows as yours ("You set it
+  as a server in UniFi"). A type set in Sable still wins.
+- Name a UniFi controller's own gateway, switches, and access points, which used
+  to show only a hardware address, and show them as **Network equipment** and a
+  UniFi UNAS storage box as **Network storage**, with the reason "UniFi says it
+  is …", instead of guessing from the maker. A type you set still wins. The
+  UniFi sync still publishes DNS records for clients only.
+- With the UniFi sync off, guess **Network storage** for a device with "UNAS" in
+  its name.
+- Add a **UPS** device type with a battery icon. UniFi UPS units, CyberPower and
+  older APC devices, and devices with the word "UPS" in their name get it.
+- Recognize TRMNL and Tidbyt displays, Generac generators, Bambu Lab 3D
+  printers, and reMarkable tablets by the servers the devices themselves talk
+  to. Visiting these companies' websites doesn't count.
+- Tell smart gear from a computer running the same company's app, so a Bambu
+  Lab printer now reads as a printer, while a laptop running Bambu Studio does
+  not. What a device talks to counts for more when it is built on a radio module
+  from Espressif, Quectel, Telit, AMPAK, or Tuya, since such hardware runs no
+  browser or desktop app.
+- Count a lookup of any server named like `mqtt.example.com`, which smart home
+  gear uses to hear from its maker, as a sign of a smart home device, so gear
+  from a brand Sable doesn't know still gets a guess.
+- Guess **Smart home device** for an Espressif device with no other clues. It
+  used to get no guess at all.
+- Recognize computers better. A Mac's own software update check is a strong
+  sign, and common work apps (Teams, Slack, Zoom, Webex, Microsoft 365, Notion,
+  1Password) are a weak one, since phones run them too.
+- Show Quectel, Telit, and AMPAK by their short names under **Maker**.
+- Replicas now show the same device names and types as the lead and follow a
+  device's changing IPv6 addresses, even a replica in a container that can't see
+  hardware addresses.
+
+### Insights
+
+- Search the **Devices** list by name, hardware address, IP address, maker, or
+  type, and filter it by device type or by **All Devices**, **New**, **Named**,
+  and **Unnamed**. The search and filters stay in the page address, so they
+  survive a range change, a rename, and a reload.
+- Add **Search Devices** to the command palette. It opens **Devices** with your
+  search already applied.
+- Add a **Remote access in use** finding for every device using Cloudflare
+  Tunnel, ngrok, Tailscale, TeamViewer, or AnyDesk during the period, whether or
+  not it's new. Each device and tool is its own finding, so marking one normal
+  still shows a different tool on the same device.
+
+### Recursive resolver
+
+- Look up names that aren't cached yet faster, especially behind a long alias
+  chain or with DNSSEC validation on. Sable stops asking the same servers the
+  same questions, and tries a server that just timed out last for a while.
+- Let a slow recursive lookup keep running after Sable stops waiting for it, so
+  what it learns makes a later try fast.
+- Add a **QNAME Minimization** switch under **Settings → Recursion → Recursive
+  Resolver**. It stays on by default; turning it off asks every server for the
+  full name, as an escape hatch for a DNS provider that fails with minimized
+  questions.
+
+### Fixes
+
+- Fix names that always failed in recursive mode with "iterative resolution
+  encountered a referral loop", such as `auth.remarkable.com`, which kept
+  reMarkable tablets from signing in. Names hosted on Amazon Route 53 could hit
+  it. ([issue 228](https://github.com/drudge/sable/issues/228))
+- List each alias in a recursive answer once. Some servers, like Amazon
+  Route 53, send the next alias in a chain along with the first, so the same
+  CNAME could show up twice in an answer.
+- Tie a device that reaches Sable over an IPv6 link-local address, such as
+  `fe80::1%eth0`, to the hardware address the neighbor table or UniFi knows for
+  it. Unless that address was built from its hardware address, such a device
+  used to go unmatched.
+- Show a failed passkey sign-in's error under the sign-in card's subtitle, above
+  every button, like a password or single sign-on error. With single sign-on on,
+  it used to appear between **Sign in with …** and the passkey button.
+- Write "Probably network storage" and "Network equipment made by Ubiquiti"
+  rather than "a network storage" and "A network equipment".
+
+### Configuration
+
+- Add `qname_minimization` to `[resolver]`, `true` by default.
+- Add `remote_access` to `[insights.findings]`. Its `mode` defaults to
+  `"alert"`.
+
 ## [1.5.1-beta.3] - 2026-09-27
 
 Sable 1.5.1-beta.3 fixes names that failed in recursive mode, makes recursive
