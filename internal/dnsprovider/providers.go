@@ -336,6 +336,12 @@ func (provider *namecheapProvider) hosts(ctx context.Context, zone string) ([]na
 	}
 	response, err := provider.client.Do(request)
 	if err != nil {
+		// Namecheap takes the API key in the query, so a failed request must
+		// not name its URL.
+		var failed *url.Error
+		if errors.As(err, &failed) {
+			err = failed.Err
+		}
 		return nil, fmt.Errorf("get Namecheap hosts: %w", err)
 	}
 	defer response.Body.Close()

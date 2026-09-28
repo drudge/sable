@@ -44,8 +44,11 @@ type Status struct {
 	LatestVersion string
 	ReleaseURL    string
 	ReleaseNotes  string
-	AssetName     string
-	BinaryPath    string
+	// Releases are every release after the running one up to LatestVersion,
+	// newest first, so someone several releases behind sees all their notes.
+	Releases   []ReleaseNote
+	AssetName  string
+	BinaryPath string
 	// Progress is the most recent line the installer reported.
 	Progress string
 	Error    string
@@ -192,6 +195,13 @@ func (manager *Manager) checkInBackground(ctx context.Context, includePreRelease
 	return manager.finish(result, err), err
 }
 
+// CheckIfStale looks for a release unless a result on the same channel is
+// younger than fresh, so a caller that may ask often, such as an assistant,
+// cannot use up GitHub's unauthenticated quota.
+func (manager *Manager) CheckIfStale(ctx context.Context, includePreRelease bool, fresh time.Duration) (Status, error) {
+	return manager.checkInBackground(ctx, includePreRelease, fresh)
+}
+
 // Reserve prevents local checks and installations from racing a cluster rollout.
 func (manager *Manager) Reserve(id string) error {
 	manager.mutex.Lock()
@@ -291,6 +301,7 @@ func (manager *Manager) beginLocked(phase Phase, includePreRelease bool) error {
 		LatestVersion:     manager.status.LatestVersion,
 		ReleaseURL:        manager.status.ReleaseURL,
 		ReleaseNotes:      manager.status.ReleaseNotes,
+		Releases:          manager.status.Releases,
 		IncludePreRelease: includePreRelease,
 		CheckedAt:         manager.status.CheckedAt,
 	}
@@ -316,6 +327,7 @@ func (manager *Manager) finish(result Result, err error) Status {
 	status.LatestVersion = result.LatestVersion
 	status.ReleaseURL = result.ReleaseURL
 	status.ReleaseNotes = result.ReleaseNotes
+	status.Releases = result.Releases
 	status.AssetName = result.AssetName
 	status.BinaryPath = result.BinaryPath
 	status.PreRelease = result.PreRelease

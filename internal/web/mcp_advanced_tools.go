@@ -107,7 +107,7 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "List Insights findings", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListFindings,
-		section:     "insights",
+		section:     "lookups",
 		grant:       "logs.read",
 	},
 	{
@@ -124,7 +124,7 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "Search the query log", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpSearchQueries,
-		section:     "insights",
+		section:     "lookups",
 		grant:       "logs.read",
 	},
 }

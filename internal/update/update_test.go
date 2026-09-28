@@ -372,3 +372,42 @@ func (writer testWriter) Write(contents []byte) (int, error) {
 	writer.t.Log(strings.TrimRight(string(contents), "\n"))
 	return len(contents), nil
 }
+
+// Someone several releases behind gets the notes of every release they would
+// install, on their channel, and none they already run.
+func TestReleasesSinceRollsUpSkippedReleases(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	candidates := []release{
+		{TagName: "v1.3.0", Draft: true},
+		{TagName: "v1.2.0", Body: "1.2.0 notes"},
+		{TagName: "v1.1.1", Body: "1.1.1 notes"},
+		{TagName: "v1.1.0", Body: "1.1.0 notes"},
+		{TagName: "v1.1.0-rc.1", PreRelease: true, Body: "rc notes"},
+		{TagName: "v1.0.0"},
+		{TagName: "nightly"},
+	}
+	versions := func(notes []ReleaseNote) string {
+		var found []string
+		for _, note := range notes {
+			found = append(found, note.Version)
+		}
+		return strings.Join(found, ",")
+	}
+	for _, test := range []struct {
+		current    string
+		preRelease bool
+		candidates []release
+		want       string
+	}{
+		{current: "1.0.0", candidates: candidates, want: "1.2.0,1.1.1,1.1.0"},
+		{current: "1.0.0", preRelease: true, candidates: candidates, want: "1.2.0,1.1.1,1.1.0,1.1.0-rc.1"},
+		{current: "1.1.0", candidates: candidates, want: "1.2.0,1.1.1"},
+		// A failed listing still reports the latest release.
+		{current: "1.0.0", want: "1.2.0"},
+	} {
+		got := versions(releasesSince(test.candidates, candidates[1], test.current, test.preRelease))
+		if got != test.want {
+			t.Errorf("releasesSince(%s, pre-release %t) = %s, want %s", test.current, test.preRelease, got, test.want)
+		}
+	}
+}
