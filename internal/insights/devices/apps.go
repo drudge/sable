@@ -38,7 +38,8 @@ func newApps(history []insights.DomainEvidence, since time.Time) []newApp {
 	byService := make(map[string]*newApp)
 	for _, domain := range history {
 		service, found := services.Lookup(domain.Name)
-		if !found || service.Category == services.CategoryPlatform {
+		// Remote access has a finding of its own, made whether or not it is new.
+		if !found || service.Category == services.CategoryPlatform || service.Category == services.CategoryRemoteAccess {
 			continue
 		}
 		app := byService[service.ID]

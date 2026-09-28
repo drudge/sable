@@ -58,6 +58,12 @@ type Device struct {
 	// "network" for its own switches and access points or "storage" for a
 	// UNAS. It is a fact rather than a guess.
 	UniFiType string
+	// UniFiGuess is the type the UniFi controller's fingerprinting suggests,
+	// with UniFiConfidence from 0 to 100. UniFiSet marks a type the operator
+	// chose by hand in UniFi.
+	UniFiGuess      string
+	UniFiConfidence int
+	UniFiSet        bool
 	// NameNetwork is the network the operator's name was given to, when it
 	// names a whole network rather than this device.
 	NameNetwork string
@@ -141,6 +147,7 @@ type GivenNames struct {
 	operator   operatorNames
 	unifi      map[string]string
 	types      map[string]string
+	guesses    map[string]querylog.ClientIdentity
 }
 
 // NewGivenNames reads the operator's names and the UniFi names among the
@@ -151,6 +158,7 @@ func NewGivenNames(identities []querylog.ClientIdentity, clients []config.Client
 		operator:   newOperatorNames(clients),
 		unifi:      unifiNames(identities),
 		types:      unifiTypes(identities),
+		guesses:    unifiGuesses(identities),
 	}
 }
 
@@ -167,7 +175,10 @@ func (given GivenNames) Address(address string) string {
 // was last seen with on the network, or else the one an IPv6 address was built
 // from, which fromAddress marks.
 func (given GivenNames) hardware(address string) (mac string, fromAddress, found bool) {
-	if identity, seen := given.identities[address]; seen {
+	// A link-local client reaches the server through one interface, so the
+	// query log names it with that zone, as in fe80::1%eth0, while the
+	// neighbor table and UniFi name the bare address.
+	if identity, seen := given.identities[withoutZone(address)]; seen {
 		return identity.MAC, false, true
 	}
 	mac, found = hardwareFromAddress(address)
@@ -230,6 +241,8 @@ func Build(input Input) []Device {
 		device.Named = device.NameSource == SourceOperator
 		if device.MAC != "" {
 			device.UniFiType = given.types[device.MAC]
+			guess := given.guesses[device.MAC]
+			device.UniFiGuess, device.UniFiConfidence, device.UniFiSet = guess.Kind, guess.KindConfidence, guess.KindSet
 		}
 		device.Type = given.operator.own(*device, clientType)
 		device.NetworkType, device.TypeNetwork = given.operator.network(*device, clientType)
@@ -285,6 +298,22 @@ func AddressesOf(identities []querylog.ClientIdentity, mac string) []string {
 // clients or its own gear.
 func fromUniFi(source string) bool {
 	return source == identityUniFi || strings.HasPrefix(source, identityUniFiTyped)
+}
+
+// unifiGuesses keeps, for each hardware address, the most recent UniFi
+// sighting that suggested a device type.
+func unifiGuesses(identities []querylog.ClientIdentity) map[string]querylog.ClientIdentity {
+	guesses := make(map[string]querylog.ClientIdentity)
+	for _, identity := range identities {
+		if !fromUniFi(identity.Source) || identity.Kind == "" || identity.MAC == "" {
+			continue
+		}
+		if last, found := guesses[identity.MAC]; found && !identity.LastSeen.After(last.LastSeen) {
+			continue
+		}
+		guesses[identity.MAC] = identity
+	}
+	return guesses
 }
 
 // unifiTypes maps each hardware address to the type the controller vouches

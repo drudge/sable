@@ -776,6 +776,7 @@ most people never edit it by hand. A kind set to alert is sent only while
 | `traffic_spike` | Unusually busy | `factor`: times its daily average; 3.0, 1.5 to 100. `minimum_lookups`: lookups in the day; 500, 1 to 1,000,000. |
 | `new_destinations` | Talking to new places | `minimum_new_domains`: domains first queried in the selected period; 20, 1 to 10,000. |
 | `new_app` | Started using a new app | None |
+| `remote_access` | Remote access in use | None. Reported for each device and tool, new or not, until marked normal. |
 | `unusual_hours` | Active at an unusual hour | `minimum_lookups`: lookups in an hour it had not used for two weeks; 30, 1 to 100,000. |
 | `check_in` | Checks in on a schedule | `longest_interval`: most time between lookups; `"2h"`, 2 minutes to 2 hours. `shortest_span`: least time it keeps the schedule up; `"12h"`, 1 to 23 hours. |
 | `appliance_new_domains` | Appliance talking somewhere new | `minimum_new_domains`: domains it never used, in one day; 3, 1 to 1,000. |

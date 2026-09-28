@@ -109,6 +109,14 @@ var catalog = []catalogEntry{
 	{Service{"eufy", "eufy", CategoryCameras}, []string{"eufylife.com", "eufy.com"}},
 	{Service{"simplisafe", "SimpliSafe", CategoryCameras}, []string{"simplisafe.com"}},
 
+	// Remote access: tunnels and remote control, by the names their agents
+	// reach rather than their websites where the two differ.
+	{Service{"cloudflare-tunnel", "Cloudflare Tunnel", CategoryRemoteAccess}, []string{"argotunnel.com"}},
+	{Service{"ngrok", "ngrok", CategoryRemoteAccess}, []string{"ngrok-agent.com"}},
+	{Service{"tailscale", "Tailscale", CategoryRemoteAccess}, []string{"tailscale.com", "tailscale.io", "ts.net"}},
+	{Service{"teamviewer", "TeamViewer", CategoryRemoteAccess}, []string{"teamviewer.com"}},
+	{Service{"anydesk", "AnyDesk", CategoryRemoteAccess}, []string{"net.anydesk.com"}},
+
 	// Cloud storage and backup.
 	{Service{"icloud", "iCloud", CategoryCloud}, []string{"icloud.com", "icloud-content.com", "apple-cloudkit.com", "me.com"}},
 	{Service{"google-drive", "Google Drive", CategoryCloud}, []string{"drive.google.com", "docs.google.com", "drive.usercontent.google.com"}},
@@ -138,7 +146,6 @@ var catalog = []catalogEntry{
 	{Service{"1password", "1Password", CategorySecurity}, []string{"1password.com", "1password.ca", "1password.eu", "agilebits.com"}},
 	{Service{"bitwarden", "Bitwarden", CategorySecurity}, []string{"bitwarden.com", "bitwarden.net", "bitwarden.eu"}},
 	{Service{"lastpass", "LastPass", CategorySecurity}, []string{"lastpass.com", "lastpass.eu"}},
-	{Service{"tailscale", "Tailscale", CategorySecurity}, []string{"tailscale.com", "tailscale.io", "ts.net"}},
 	{Service{"nordvpn", "NordVPN", CategorySecurity}, []string{"nordvpn.com", "nordcdn.com", "nordvpn.net"}},
 	{Service{"expressvpn", "ExpressVPN", CategorySecurity}, []string{"expressvpn.com", "expressapisv2.net"}},
 	{Service{"proton", "Proton", CategorySecurity}, []string{"proton.me", "protonmail.com", "protonvpn.com", "protonmail.ch"}},
@@ -179,7 +186,8 @@ var catalog = []catalogEntry{
 
 	// Device platforms: the phone-home traffic of an operating system itself.
 	{Service{"apple", "Apple services", CategoryPlatform}, []string{"apple.com", "mzstatic.com", "apple-dns.net", "aaplimg.com", "cdn-apple.com", "itunes.apple.com"}},
-	{Service{"apple-updates", "Apple software updates", CategoryPlatform}, []string{"mesu.apple.com", "swdist.apple.com", "swscan.apple.com", "updates.cdn-apple.com", "gdmf.apple.com"}},
+	{Service{"apple-updates", "Apple software updates", CategoryPlatform}, []string{"mesu.apple.com", "updates.cdn-apple.com", "gdmf.apple.com"}},
+	{Service{"macos-updates", "macOS software updates", CategoryPlatform}, []string{"swdist.apple.com", "swscan.apple.com"}},
 	{Service{"windows-update", "Windows Update", CategoryPlatform}, []string{"windowsupdate.com", "update.microsoft.com", "delivery.mp.microsoft.com", "dl.delivery.mp.microsoft.com"}},
 	{Service{"microsoft", "Microsoft services", CategoryPlatform}, []string{"microsoft.com", "msftconnecttest.com", "msftncsi.com", "windows.com", "msn.com", "msedge.net"}},
 	{Service{"android", "Android", CategoryPlatform}, []string{"android.com", "android.clients.google.com", "play.googleapis.com", "connectivitycheck.gstatic.com"}},

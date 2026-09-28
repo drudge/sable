@@ -20,7 +20,7 @@ func TestInsightFindingIconsDraw(t *testing.T) {
 		blockinginsights.KindPastBlock, blockinginsights.KindUpdateFailing, blockinginsights.KindListUnreadable,
 		blockinginsights.KindLowUnique, blockinginsights.KindUniqueCoverage,
 		devices.KindNewDevice, devices.KindNewDestinations, devices.KindTrafficSpike, devices.KindWentQuiet,
-		devices.KindNewApp, devices.KindUnusualHours, devices.KindCheckIn, devices.KindApplianceDrift,
+		devices.KindNewApp, devices.KindRemoteAccess, devices.KindUnusualHours, devices.KindCheckIn, devices.KindApplianceDrift,
 	} {
 		var drawn strings.Builder
 		if err := pages.Icon(insightFindingIcon(kind)).Render(context.Background(), &drawn); err != nil {

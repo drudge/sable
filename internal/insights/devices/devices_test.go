@@ -344,3 +344,43 @@ func TestBuildTypesWhatUniFiVouchesFor(t *testing.T) {
 		t.Fatalf("client = %+v", client)
 	}
 }
+
+// UniFi's fingerprint follows the device's hardware address from its newest
+// UniFi sighting, even when the neighbor table saw the address more recently.
+func TestBuildCarriesUniFiFingerprints(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 27, 19, 0, 0, 0, time.UTC)
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{{Client: "10.0.7.88", Queries: 30}}},
+		Identities: []querylog.ClientIdentity{
+			{Address: "10.0.7.88", MAC: "bc:24:11:91:d5:a4", Source: identityUniFi, Hostname: "dokploy", Kind: "computer", KindConfidence: 30, LastSeen: now.Add(-time.Hour)},
+			{Address: "10.0.7.88", MAC: "bc:24:11:91:d5:a4", Source: identityUniFi, Hostname: "dokploy", Kind: "server", KindConfidence: 48, KindSet: true, LastSeen: now},
+			{Address: "10.0.7.88", MAC: "bc:24:11:91:d5:a4", Source: identityNeighbor, LastSeen: now.Add(time.Minute)},
+		},
+	})
+	Identify(built, nil)
+	device := built[0]
+	if device.UniFiGuess != "server" || device.UniFiConfidence != 48 || !device.UniFiSet || device.Guess.Type != "server" ||
+		device.Guess.Reasons[0].Text != "You set it as a server in UniFi" {
+		t.Fatalf("device = %+v", device)
+	}
+}
+
+// The query log names a link-local client with the zone it arrived on, and
+// the neighbor table names the bare address, so the two still match.
+func TestBuildTiesALinkLocalClientThroughItsZone(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 27, 19, 0, 0, 0, time.UTC)
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "fe80::14e5:f714:c078:8941%eth0", Queries: 40}, {Client: "10.0.7.80", Queries: 30},
+		}},
+		Identities: []querylog.ClientIdentity{
+			{Address: "fe80::14e5:f714:c078:8941", MAC: "66:ca:20:91:ab:fb", Source: identityNeighbor, LastSeen: now},
+			{Address: "10.0.7.80", MAC: "66:ca:20:91:ab:fb", Source: identityUniFi, Hostname: "Mac", LastSeen: now},
+		},
+	})
+	if len(built) != 1 || built[0].Name != "Mac" || len(built[0].Addresses) != 2 {
+		t.Fatalf("devices = %+v", built)
+	}
+}

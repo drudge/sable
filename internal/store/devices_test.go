@@ -268,3 +268,28 @@ func TestClientTopDomainsReadsTheShorterWay(t *testing.T) {
 		}
 	}
 }
+
+// A sighting keeps the device type its source suggested, and a later
+// suggestion replaces an earlier one, like the hostname.
+func TestClientIdentitiesKeepTheirSuggestedKind(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, nil)
+	ctx := context.Background()
+	for _, identity := range []querylog.ClientIdentity{
+		{Address: "10.0.7.183", MAC: "ba:3e:52:fe:54:79", Source: "unifi", Hostname: "Cait's iPhone", Kind: "tablet", KindConfidence: 40, SeenAt: now.Add(-2 * time.Hour)},
+		{Address: "10.0.7.183", MAC: "ba:3e:52:fe:54:79", Source: "unifi", Hostname: "Cait's iPhone", Kind: "phone", KindConfidence: 90, KindSet: true, SeenAt: now.Add(-time.Hour)},
+	} {
+		if err := opened.RecordClientIdentities(ctx, []querylog.ClientIdentity{identity}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	identities, err := opened.ClientIdentities(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(identities) != 1 || identities[0].Kind != "phone" || identities[0].KindConfidence != 90 || !identities[0].KindSet {
+		t.Fatalf("identities = %+v", identities)
+	}
+}

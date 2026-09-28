@@ -72,6 +72,12 @@ type Host struct {
 	// for a UniFi Drive, which the controller lists as a client. Other hosts
 	// have none.
 	Kind string
+	// Fingerprint is the device type the controller's fingerprinting
+	// suggests for a client, with FingerprintConfidence from 0 to 100.
+	// FingerprintSet marks a type the operator chose by hand in UniFi.
+	Fingerprint           string
+	FingerprintConfidence int
+	FingerprintSet        bool
 }
 
 // DeviceType is the Insights device type the controller vouches for:
@@ -140,6 +146,9 @@ func mergeHosts(reserved, active []Host) []Host {
 			if existing.Kind == "" {
 				existing.Kind = host.Kind
 			}
+			if existing.Fingerprint == "" {
+				existing.Fingerprint, existing.FingerprintConfidence, existing.FingerprintSet = host.Fingerprint, host.FingerprintConfidence, host.FingerprintSet
+			}
 			byMAC[host.MAC] = existing
 			continue
 		}
@@ -151,6 +160,9 @@ func mergeHosts(reserved, active []Host) []Host {
 		}
 		if found && host.Kind == "" {
 			host.Kind = existing.Kind
+		}
+		if found && host.Fingerprint == "" {
+			host.Fingerprint, host.FingerprintConfidence, host.FingerprintSet = existing.Fingerprint, existing.FingerprintConfidence, existing.FingerprintSet
 		}
 		byMAC[host.MAC] = host
 	}
