@@ -402,6 +402,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		logger,
 	)
 	unifiSync.identities = database.RecordClientIdentities
+	unifiSync.reading = database.RecordUniFiReading
 	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
 	runRuntimeWorker(func(context.Context) {
 		runNeighborSampler(runtimeContext, neighbors.Read, database.RecordClientIdentities, logger)

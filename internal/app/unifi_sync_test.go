@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/unifi"
 	"github.com/drudge/sable/internal/zone"
 )
@@ -616,5 +617,59 @@ func TestUniFiPreviewReportsPublishedRecordsWhenNothingChanges(t *testing.T) {
 	}
 	if !slices.Contains(names, "printer.default A") {
 		t.Fatalf("published set = %v, want the printer A record", names)
+	}
+}
+
+// With device finding on and no network mapped, the sync still reads the
+// controller for Insights, leaving the controller's own gear out, but touches
+// no zone, not even to retire synchronized reverse records.
+func TestUniFiSyncFindsDevicesWithoutPublishing(t *testing.T) {
+	reverse, err := zone.NewPrimary("1.168.192.in-addr.arpa", 300, "", "", syncTestTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reverse.Records = append(reverse.Records, zone.Record{Name: "10", Type: "PTR", Value: "printer.clients.example.net.", TTL: 300, Source: zone.SourceUniFi})
+	editor := &stubZoneEditor{zones: []zone.Zone{reverse}}
+	inventory := testInventory()
+	inventory.Gear = []unifi.Host{{MAC: "aa:ff", Hostname: "Office AP", Address: netip.MustParseAddr("192.168.1.2"), Kind: "access point"}}
+	inventory.Stations = []unifi.Station{
+		{MAC: "aa:02", Name: "Laptop", Address: netip.MustParseAddr("192.168.30.50")},
+		{MAC: "aa:03", Address: netip.MustParseAddr("192.168.30.51"), IPv6: []netip.Addr{netip.MustParseAddr("2001:db8::51")}},
+		{MAC: "aa:ff", Name: "Office AP", Address: netip.MustParseAddr("192.168.1.2")},
+	}
+	settings := testSettings()
+	if settings.Runnable() {
+		t.Fatal("a sync with nothing mapped and device finding off is runnable")
+	}
+	settings.FindDevices = true
+	syncer := newTestSyncer(t, settings, editor, &stubReader{inventory: inventory})
+	var read []unifi.Station
+	syncer.reading = func(_ context.Context, inventory unifi.Inventory, _ time.Time) error {
+		read = inventory.Stations
+		return nil
+	}
+	var identities []string
+	syncer.identities = func(_ context.Context, found []querylog.ClientIdentity) error {
+		for _, identity := range found {
+			identities = append(identities, identity.MAC+" "+identity.Address)
+		}
+		return nil
+	}
+
+	syncer.runOnce(t.Context())
+
+	if status := syncer.Status(); status.LastError != "" || status.LastSuccess.IsZero() {
+		t.Fatalf("status = %+v, want a successful sync", status)
+	}
+	if editor.updates != 0 || len(editor.zone(t, "1.168.192.in-addr.arpa").Records) != len(reverse.Records) {
+		t.Fatalf("a sync that publishes nothing changed zones (%d updates)", editor.updates)
+	}
+	if len(read) != 2 || read[0].MAC != "aa:02" || read[1].MAC != "aa:03" {
+		t.Fatalf("recorded stations %+v, want the two clients without the access point", read)
+	}
+	for _, want := range []string{"aa:03 192.168.30.51", "aa:03 2001:db8::51"} {
+		if !slices.Contains(identities, want) {
+			t.Fatalf("identities %v leave out the nameless client's %s", identities, want)
+		}
 	}
 }

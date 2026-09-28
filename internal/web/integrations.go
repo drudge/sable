@@ -314,6 +314,7 @@ func unifiSettingsFromWizard(wizard pages.UniFiWizardView, networks []pages.UniF
 		CAFile:        wizard.CAFile,
 		Insecure:      wizard.Insecure,
 		Interval:      config.Duration{Duration: 2 * time.Minute},
+		FindDevices:   wizard.FindDevices,
 	}
 	if parsed, err := durationfmt.Parse(wizard.Interval); err == nil && parsed > 0 {
 		settings.Interval = config.Duration{Duration: parsed}
@@ -353,7 +354,7 @@ func (server *Server) newUniFiWizard(request *http.Request) pages.UniFiWizardVie
 		ControllerURL: settings.ControllerURL, Site: settings.Site,
 		Interval: settings.Interval.String(), CAFile: settings.CAFile, Insecure: settings.Insecure,
 		SyncReservations: settings.SyncsReservations(), SyncActive: settings.SyncsActiveClients(),
-		AuthMode: "api-key",
+		FindDevices: settings.FindDevices, AuthMode: "api-key",
 	}
 	if settings.Site == "" {
 		wizard.Site = "default"
@@ -415,6 +416,7 @@ func (server *Server) unifiWizardFromRequest(request *http.Request) pages.UniFiW
 		settings := server.config.Current().Config.UniFi
 		wizard.SyncReservations = settings.SyncsReservations()
 		wizard.SyncActive = settings.SyncsActiveClients()
+		wizard.FindDevices = settings.FindDevices
 		if len(settings.Networks) == 0 {
 			wizard.SyncReservations, wizard.SyncActive = true, true
 		}
@@ -429,6 +431,11 @@ func (server *Server) unifiWizardFromRequest(request *http.Request) pages.UniFiW
 // entered so far. Discovery steps re-read the controller so the lists are never
 // stale.
 func (server *Server) unifiWizardBack(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView, target string) {
+	// With no network selected there are no zones to map, so the zones step
+	// was skipped on the way forward and is skipped on the way back.
+	if target == unifiStepZones && len(wizard.Selected) == 0 {
+		target = unifiStepNetworks
+	}
 	switch target {
 	case unifiStepNetworks, unifiStepZones:
 		inventory, err := server.unifi.Inventory(request.Context(), unifiSettingsFromWizard(wizard, nil))
@@ -478,6 +485,7 @@ func unifiWizardFromForm(request *http.Request) pages.UniFiWizardView {
 		Interval:         strings.TrimSpace(request.FormValue("interval")),
 		SyncReservations: request.FormValue("source_reservations") == "true",
 		SyncActive:       request.FormValue("source_active") == "true",
+		FindDevices:      request.FormValue("find_devices") == "true",
 		Selected:         request.Form["network"],
 	}
 	if wizard.Site == "" {
@@ -620,9 +628,15 @@ func (server *Server) unifiWizardZones(writer http.ResponseWriter, request *http
 		return
 	}
 	wizard.Networks = unifiWizardNetworks(inventory, server.config.Current().Config.UniFi, wizard)
+	if len(wizard.Selected) == 0 && wizard.FindDevices {
+		// Finding devices alone maps no zones, so it goes straight to review.
+		wizard.Networks = nil
+		server.renderUniFiReview(writer, request, wizard)
+		return
+	}
 	if len(wizard.Selected) == 0 {
 		wizard.Step = unifiStepNetworks
-		wizard.Error = "Select at least one network to synchronize."
+		wizard.Error = "Select at least one network to synchronize, or use UniFi only to find devices."
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
 		return
 	}
@@ -706,6 +720,11 @@ func unifiReverseZoneNamesFromLabel(label string) []string {
 func (server *Server) unifiWizardReview(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
 	wizard.Networks = make([]pages.UniFiWizardNetworkView, unifiFormNetworkCount(request))
 	unifiZoneChoicesFromForm(request, &wizard)
+	server.renderUniFiReview(writer, request, wizard)
+}
+
+// renderUniFiReview previews the mapping the wizard collected.
+func (server *Server) renderUniFiReview(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
 	wizard.ZoneOptions = server.primaryZoneNames()
 	server.applyUniFiPreviews(&wizard)
 	settings := unifiSettingsFromWizard(wizard, wizard.Networks)
@@ -781,8 +800,11 @@ func (server *Server) unifiWizardFinish(writer http.ResponseWriter, request *htt
 		return
 	}
 	server.unifi.SyncNow()
-	server.recordControlPlaneAudit(request, "integrations.unifi.configure",
-		fmt.Sprintf("enabled UniFi synchronization for %d networks", len(settings.ActiveNetworks())))
+	summary := fmt.Sprintf("enabled UniFi synchronization for %d networks", len(settings.ActiveNetworks()))
+	if !settings.Publishes() {
+		summary = "enabled UniFi to find devices without publishing records"
+	}
+	server.recordControlPlaneAudit(request, "integrations.unifi.configure", summary)
 	writer.Header().Set("HX-Replace-Url", "/integrations")
 	server.renderIntegrationsMutation(writer, request, http.StatusOK, "UniFi synchronization is set up. The first sync is running now.", "")
 }
