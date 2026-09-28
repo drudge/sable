@@ -82,6 +82,15 @@ func TestInsightsReportDevicesThatDontUseSable(t *testing.T) {
 	if !strings.Contains(drawer, "UniFi sees traffic, but no lookups reached Sable in 24 hours.") || !strings.Contains(drawer, "Not using Sable") {
 		t.Fatalf("the TV's drawer does not say it skips Sable: %s", drawer)
 	}
+	// The drawer offers the TV's own link, though it sent nothing, and the
+	// link opens the page that loads this drawer.
+	if !strings.Contains(drawer, `data-copy-url="/insights/devices/mac:52:54:00:aa:bb:01?range=day"`) {
+		t.Fatal("the silent TV's drawer offers no link to itself")
+	}
+	if linked := server.get(t, "everything", "/insights/devices/mac:52:54:00:aa:bb:01?range=day", false); linked.Code != http.StatusOK ||
+		!strings.Contains(linked.Body.String(), `data-drawer-content="/ui/insights/device"`) {
+		t.Fatalf("a link to the silent TV = %d", linked.Code)
+	}
 }
 
 // That's Normal on the rolled-up finding marks each device it lists, so the
