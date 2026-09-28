@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS sable_client_identity (
     mac TEXT NOT NULL,
     source TEXT NOT NULL,
     hostname TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT '',
+    kind_confidence INTEGER NOT NULL DEFAULT 0,
+    kind_set BOOLEAN NOT NULL DEFAULT FALSE,
     first_seen TIMESTAMP NOT NULL,
     last_seen TIMESTAMP NOT NULL,
     PRIMARY KEY (address, mac, source)
@@ -496,11 +499,11 @@ func (store *Store) RecordClientIdentities(ctx context.Context, identities []que
 			continue
 		}
 		seen := identity.SeenAt.UTC().Truncate(time.Second)
-		rows = append(rows, []any{address, mac, identity.Source, identity.Hostname, seen, seen})
+		rows = append(rows, []any{address, mac, identity.Source, identity.Hostname, identity.Kind, identity.KindConfidence, identity.KindSet, seen, seen})
 	}
 	for start := 0; start < len(rows); start += clientSightingInsertRows {
 		if err := store.upsertSpans(ctx, store.database, "sable_client_identity",
-			[]string{"address", "mac", "source"}, []string{"hostname"}, rows[start:min(start+clientSightingInsertRows, len(rows))]); err != nil {
+			[]string{"address", "mac", "source"}, []string{"hostname", "kind", "kind_confidence", "kind_set"}, rows[start:min(start+clientSightingInsertRows, len(rows))]); err != nil {
 			return err
 		}
 	}
@@ -511,7 +514,7 @@ func (store *Store) RecordClientIdentities(ctx context.Context, identities []que
 // or after since, most recent first.
 func (store *Store) ClientIdentities(ctx context.Context, since time.Time) ([]querylog.ClientIdentity, error) {
 	rows, err := store.database.QueryContext(ctx, `
-SELECT address, mac, source, hostname, first_seen, last_seen
+SELECT address, mac, source, hostname, kind, kind_confidence, kind_set, first_seen, last_seen
 FROM sable_client_identity
 WHERE last_seen >= `+store.placeholder(1)+`
 ORDER BY last_seen DESC, address ASC`, since.UTC())
@@ -523,7 +526,8 @@ ORDER BY last_seen DESC, address ASC`, since.UTC())
 	for rows.Next() {
 		var identity querylog.ClientIdentity
 		var first, last any
-		if err := rows.Scan(&identity.Address, &identity.MAC, &identity.Source, &identity.Hostname, &first, &last); err != nil {
+		if err := rows.Scan(&identity.Address, &identity.MAC, &identity.Source, &identity.Hostname,
+			&identity.Kind, &identity.KindConfidence, &identity.KindSet, &first, &last); err != nil {
 			return nil, fmt.Errorf("scan client identity: %w", err)
 		}
 		span, err := scanSpan(first, last)

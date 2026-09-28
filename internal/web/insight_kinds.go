@@ -117,6 +117,11 @@ func insightSettingGroups() []insightSettingGroup {
 				mode:        func(findings *config.InsightFindings) *string { return &findings.NewApp.Mode },
 			},
 			{
+				kind: devices.KindRemoteAccess, key: "remote_access", title: "Remote access in use",
+				description: "A device uses a tunnel or remote control tool, new or not.",
+				mode:        func(findings *config.InsightFindings) *string { return &findings.RemoteAccess.Mode },
+			},
+			{
 				kind: devices.KindUnusualHours, key: "unusual_hours", title: "Active at an unusual hour",
 				description: "A device is busy at an hour it has not used in two weeks.",
 				mode:        func(findings *config.InsightFindings) *string { return &findings.UnusualHours.Mode },

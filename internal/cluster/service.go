@@ -170,6 +170,12 @@ type Service struct {
 	// reportedAlerts is what each replica last said about itself, kept while
 	// this node is the primary.
 	reportedAlerts map[string]reportedAlerts
+	// clientIdentities reads and records address-to-hardware sightings.
+	// identityShare is what the lead gathered to hand replicas, and
+	// identityRecording keeps a replica writing one handed batch at a time.
+	clientIdentities  ClientIdentities
+	identityShare     identitySharer
+	identityRecording identityRecorder
 }
 
 func Open(options Options) (*Service, error) {
@@ -466,6 +472,7 @@ func (service *Service) Remove(_ context.Context, nodeID string) error {
 	service.manifest = candidate
 	delete(service.telemetry, nodeID)
 	delete(service.reportedAlerts, nodeID)
+	service.identityShare.forget(nodeID)
 	return nil
 }
 

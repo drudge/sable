@@ -131,7 +131,12 @@ var serviceClues = map[string][]clue{
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
 	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
-	"mqtt": {{"smart-home", 3}},
+	"macos-updates": {{"computer", 3}},
+	// Work apps lean toward a computer, but phones run them too, so each counts
+	// for little alone.
+	"teams": {{"computer", 1}}, "slack": {{"computer", 1}}, "zoom": {{"computer", 1}}, "webex": {{"computer", 1}},
+	"microsoft-365": {{"computer", 1}}, "notion": {{"computer", 1}}, "1password": {{"computer", 1}},
+	"mqtt": {{"smart-home", 3}}, "cloudflare-tunnel": {{"server", 2}},
 }
 
 // ClueLabels are the starts of host labels that are evidence of a device type
@@ -155,6 +160,20 @@ func mqttName(name string) bool {
 		}
 	}
 	return false
+}
+
+// unifiGuessWeight is what UniFi's fingerprint counts for at a confidence
+// from 0 to 100. Below 30 it is noise.
+func unifiGuessWeight(confidence int) int {
+	switch {
+	case confidence >= 90:
+		return 4
+	case confidence >= 60:
+		return 3
+	case confidence >= 30:
+		return 2
+	}
+	return 0
 }
 
 // ServiceClueIDs lists the services whose use is evidence of a device type,
@@ -193,6 +212,14 @@ func Classify(device Device, used []services.Service) Guess {
 			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
 		}
 	}
+	// A type the operator chose in UniFi is theirs, though Sable's own
+	// setting still outranks it.
+	if label := TypeLabel(device.UniFiGuess); label != "" && device.UniFiSet {
+		return Guess{
+			Type: device.UniFiGuess, Confidence: ConfidenceHigh, Detected: device.UniFiGuess,
+			Reasons: []insights.Reason{{Text: "You set it as " + withArticle(label) + " in UniFi"}},
+		}
+	}
 	type evidence struct {
 		score   int
 		sources map[string]bool
@@ -212,6 +239,10 @@ func Classify(device Device, used []services.Service) Guess {
 				entry.reasons = append(entry.reasons, reason)
 			}
 		}
+	}
+	// UniFi's fingerprinting counts for as much as it is sure of.
+	if weight := unifiGuessWeight(device.UniFiConfidence); TypeLabel(device.UniFiGuess) != "" && weight > 0 {
+		add("unifi", []clue{{device.UniFiGuess, weight}}, insights.Reason{Text: "UniFi thinks it is " + withArticle(TypeLabel(device.UniFiGuess))})
 	}
 	// Sable knows the machines it runs on, though one may be a laptop as well.
 	if device.Server != "" {

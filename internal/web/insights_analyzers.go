@@ -14,6 +14,7 @@ import (
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
@@ -202,6 +203,17 @@ func (sources *deviceSources) DomainHistory(ctx context.Context, device devices.
 		return nil, false, err
 	}
 	return domainEvidence(device, history), len(history) < insightsDomainHistoryLimit, nil
+}
+
+// remoteAccessSuffixes are the domains of every remote access tool.
+var remoteAccessSuffixes = services.Suffixes(services.InCategory(services.CategoryRemoteAccess))
+
+func (sources *deviceSources) RemoteAccess(ctx context.Context, since time.Time) (map[string][]string, error) {
+	found, err := sources.reader.ClientNamesMatching(ctx, since, remoteAccessSuffixes, nil)
+	if err != nil {
+		sources.server.logger.Warn("read remote access lookups", "error", err)
+	}
+	return found, err
 }
 
 func (sources *deviceSources) HourlyActivity(ctx context.Context, since time.Time) (map[string]map[time.Time]uint64, error) {

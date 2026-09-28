@@ -223,6 +223,9 @@ func (sources *countingSources) HourlyActivity(context.Context, time.Time) (map[
 func (*countingSources) DomainHistory(context.Context, Device) ([]insights.DomainEvidence, bool, error) {
 	return nil, false, nil
 }
+func (*countingSources) RemoteAccess(context.Context, time.Time) (map[string][]string, error) {
+	return nil, nil
+}
 
 // The reads only some kinds need are skipped when those kinds are all off.
 func TestAnalyzerSkipsReadsForKindsThatAreOff(t *testing.T) {

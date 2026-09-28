@@ -216,6 +216,40 @@ type clientPayload struct {
 	// ProductLine names Ubiquiti's own hardware that joins as a client, such
 	// as "unifi-drive" for a UNAS.
 	ProductLine string `json:"product_line"`
+	// DeviceCategory is the controller's fingerprint category for the client,
+	// Confidence how sure it is from 0 to 100, and FingerprintOverride whether
+	// the operator chose the device type by hand.
+	DeviceCategory      *int `json:"dev_cat"`
+	Confidence          int  `json:"confidence"`
+	FingerprintOverride bool `json:"fingerprint_override"`
+}
+
+// fingerprintTypes are the controller's fingerprint categories whose meaning
+// is plain, as Insights device types. Ubiquiti does not publish the list, so
+// it holds only the categories whose members on a real network all agreed; a
+// category it lacks suggests nothing.
+var fingerprintTypes = map[int]string{
+	1: "computer", 9: "camera", 20: "streaming-player", 31: "tv", 44: "phone", 45: "watch",
+	46: "computer", 48: "storage", 51: "smart-home", 52: "smart-speaker", 53: "lighting",
+	57: "camera", 73: "speaker", 77: "smart-home", 144: "smart-home", 146: "printer",
+	182: "server", 183: "smart-home",
+}
+
+// broadFingerprints are categories the controller uses for many kinds of
+// device, such as 51 for most smart home gear, doorbells and cameras
+// included. They hint at a type but cannot carry an operator's choice.
+var broadFingerprints = map[int]bool{51: true}
+
+// fingerprint reads the device type the controller suggests for a client.
+func (payload clientPayload) fingerprint() (kind string, confidence int, set bool) {
+	if payload.DeviceCategory == nil {
+		return "", 0, false
+	}
+	kind = fingerprintTypes[*payload.DeviceCategory]
+	if kind == "" {
+		return "", 0, false
+	}
+	return kind, min(max(payload.Confidence, 0), 100), payload.FingerprintOverride && !broadFingerprints[*payload.DeviceCategory]
 }
 
 // kind reads what a client is, when it is Ubiquiti hardware the controller
@@ -342,7 +376,7 @@ func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool)
 	if SanitizeLabel(name) == "" {
 		return Host{}, false
 	}
-	return Host{
+	host := Host{
 		MAC:       strings.ToLower(strings.TrimSpace(payload.MAC)),
 		Hostname:  name,
 		Address:   address.Unmap(),
@@ -350,7 +384,9 @@ func (payload clientPayload) host(rawAddress string, reserved bool) (Host, bool)
 		NetworkID: payload.networkID(),
 		Reserved:  reserved,
 		Kind:      payload.kind(),
-	}, true
+	}
+	host.Fingerprint, host.FingerprintConfidence, host.FingerprintSet = payload.fingerprint()
+	return host, true
 }
 
 // publishableIPv6 keeps the observed IPv6 addresses worth naming: global

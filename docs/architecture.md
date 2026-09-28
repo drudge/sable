@@ -205,8 +205,10 @@ apps it starts using, and names only it looks up on a steady schedule.
 the domains each service owns, leaving shared infrastructure unnamed rather than
 guessing. `insights/vendors` names a device's maker from the IEEE registry
 embedded in the binary. Device types are guessed from the maker, the device's
-name, and the services it talks to, each clue weighted, and a guess carries its
-confidence and only the reasons that support it. Analyzers read through small
+name, the services it talks to, and a UniFi controller's fingerprint, each clue
+weighted, and a guess carries its confidence and only the reasons that support
+it. What the controller says of Ubiquiti's own hardware, and a type the
+operator set by hand in UniFi, are taken as stated rather than weighed. Analyzers read through small
 source interfaces that the console implements over its caches and stores, so
 the analysis never depends on HTTP handling.
 

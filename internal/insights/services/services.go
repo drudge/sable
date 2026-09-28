@@ -32,6 +32,10 @@ const (
 	CategoryPlatform     = "Device platform"
 	CategorySecurity     = "Security"
 	CategoryFinance      = "Finance"
+	// CategoryRemoteAccess is tunnels and remote control tools, which can let
+	// someone reach the network from outside. Insights treats a device that
+	// starts using one as worth a look.
+	CategoryRemoteAccess = "Remote access"
 )
 
 // Service is one app or service people would recognize by name.
@@ -65,6 +69,17 @@ func All() []Service {
 		all = append(all, entry.service)
 	}
 	return all
+}
+
+// InCategory lists the IDs of the services in a category, in catalog order.
+func InCategory(category string) []string {
+	ids := make([]string, 0)
+	for _, entry := range catalog {
+		if entry.service.Category == category {
+			ids = append(ids, entry.service.ID)
+		}
+	}
+	return ids
 }
 
 // Find returns a service by its ID.

@@ -637,6 +637,7 @@ func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.Client
 				identities = append(identities, querylog.ClientIdentity{
 					Address: address.Unmap().WithZone("").String(), MAC: host.MAC,
 					Source: source, Hostname: host.Hostname, SeenAt: now,
+					Kind: host.Fingerprint, KindConfidence: host.FingerprintConfidence, KindSet: host.FingerprintSet,
 				})
 			}
 		}

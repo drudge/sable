@@ -24,6 +24,8 @@ func TestChangesReportAppsADeviceStartedUsing(t *testing.T) {
 			{Name: "www.youtube.com", FirstSeen: testNow.Add(-30 * day)},
 			// Operating system traffic never counts as a new app.
 			{Name: "mesu.apple.com", FirstSeen: testNow.Add(-time.Hour)},
+			// Remote access has a finding of its own.
+			{Name: "region1.v2.argotunnel.com", FirstSeen: testNow.Add(-time.Hour)},
 		},
 		tv.Key:        {{Name: "api.example.net", FirstSeen: testNow.Add(-time.Hour)}},
 		truncated.Key: {{Name: "netflix.com", FirstSeen: testNow.Add(-time.Hour)}},

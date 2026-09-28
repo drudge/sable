@@ -3,6 +3,7 @@ package devices
 import (
 	"net"
 	"net/netip"
+	"strings"
 )
 
 // hardwareFromAddress reads the hardware address an IPv6 address was built
@@ -62,4 +63,10 @@ func (device Device) PrivacyAddressesOnly() bool {
 		}
 	}
 	return true
+}
+
+// withoutZone drops an address's zone, as in fe80::1%eth0.
+func withoutZone(address string) string {
+	host, _, _ := strings.Cut(address, "%")
+	return host
 }

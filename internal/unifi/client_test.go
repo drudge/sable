@@ -386,3 +386,33 @@ func TestUniFiDriveClientsAreStorage(t *testing.T) {
 		t.Fatalf("an ordinary client got type %q", printer.DeviceType())
 	}
 }
+
+// The controller's fingerprint suggests a type with its confidence, and a
+// type the operator chose in UniFi carries through, except for a broad
+// category that covers too many kinds of device to stand for a choice.
+func TestClientFingerprintsSuggestTypes(t *testing.T) {
+	t.Parallel()
+	category := func(value int) *int { return &value }
+	for _, test := range []struct {
+		name       string
+		payload    clientPayload
+		kind       string
+		confidence int
+		set        bool
+	}{
+		{"a phone", clientPayload{DeviceCategory: category(44), Confidence: 30}, "phone", 30, false},
+		{"a chosen server", clientPayload{DeviceCategory: category(182), Confidence: 48, FingerprintOverride: true}, "server", 48, true},
+		{"a broad choice", clientPayload{DeviceCategory: category(51), Confidence: 99, FingerprintOverride: true}, "smart-home", 99, false},
+		{"an unknown category", clientPayload{DeviceCategory: category(119), Confidence: 99, FingerprintOverride: true}, "", 0, false},
+		{"no fingerprint", clientPayload{Confidence: 99}, "", 0, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.payload.MAC, test.payload.Hostname = "aa:bb:cc:dd:ee:10", "device"
+			host, ok := test.payload.host("192.168.1.20", false)
+			if !ok || host.Fingerprint != test.kind || host.FingerprintConfidence != test.confidence || host.FingerprintSet != test.set {
+				t.Fatalf("host = %+v", host)
+			}
+		})
+	}
+}
