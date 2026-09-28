@@ -327,7 +327,11 @@ minimizing:
 			return nil, err
 		}
 		if target, cname := cnameTarget(response, current); cname != nil && current.Qtype != dns.TypeCNAME && !answerContainsType(response, current.Qtype) {
-			cnameChain = append(cnameChain, response.Answer...)
+			// Keep only this alias and its signatures. A server may add the
+			// next links of the chain, as Amazon Route 53 does within its own
+			// zone, but the target is looked up next and brings them itself,
+			// so keeping them here would list them twice.
+			cnameChain = append(cnameChain, aliasRecords(response, current.Name)...)
 			targetResponse, resolveErr := handler.resolveIterativeQuestion(ctx, dns.Question{Name: target, Qtype: current.Qtype, Qclass: current.Qclass}, runtime, budget, depth+1)
 			if resolveErr != nil {
 				return nil, resolveErr
@@ -366,6 +370,27 @@ const minimumFairTurn = 500 * time.Millisecond
 func attemptGotFairTurn(ctx context.Context) bool {
 	deadline, bounded := ctx.Deadline()
 	return !bounded || time.Until(deadline) >= minimumFairTurn
+}
+
+// aliasRecords returns the CNAME an answer gives name, with the RRSIGs that
+// sign it.
+func aliasRecords(response *dns.Msg, name string) []dns.RR {
+	owner := normalizeName(name)
+	records := make([]dns.RR, 0, 2)
+	for _, record := range response.Answer {
+		if normalizeName(record.Header().Name) != owner {
+			continue
+		}
+		switch current := record.(type) {
+		case *dns.CNAME:
+			records = append(records, record)
+		case *dns.RRSIG:
+			if current.TypeCovered == dns.TypeCNAME {
+				records = append(records, record)
+			}
+		}
+	}
+	return records
 }
 
 // aliasedAt reports an answer that makes name an alias, whether a CNAME the
