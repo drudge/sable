@@ -177,13 +177,13 @@ templ SettingsTab(tab tabOption, active string, disabled bool) {
 
 templ SettingsGeneralPanel(view SettingsPageView) {
 	<div class="settings-panel-stack">
-		@SettingsInsights(view.Insights)
 		@SettingsCard("server", "Server Identity", "Configure the DNS server's identity and listening endpoints") {
 			<div class="isotope-card-content"><label class="field-control"><span>Local End Points</span><textarea name="dns_listen" form="settings-form" rows="3" spellcheck="false" required>{ view.DNSListen }</textarea><small>Network interface addresses and ports to listen on (one per line, format: IP:port).</small></label></div>
 		}
 		@SettingsCard("database", "Storage", "Persistent configuration and DNS data backend") {
 			<div class="isotope-card-content field-grid two"><div class="read-only-field"><span>Database Driver</span><strong>{ view.DatabaseDriver }</strong></div><div class="read-only-field"><span>Data Source</span><strong>{ view.DatabaseDSN }</strong></div></div>
 		}
+		@SettingsInsights(view.Insights)
 		@SettingsUpdatePreferences(view.UpdatePreferences)
 		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
 	</div>

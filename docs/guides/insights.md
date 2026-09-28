@@ -104,7 +104,7 @@ It does not touch the query log itself (that is **Settings > Logging**), the num
 
 ## Turn Insights off
 
-Turn off **Insights** at the top of **Settings > General** to stop all of it. Sable asks once, with **Also delete what Insights has collected** checked. While it is off:
+Turn off **Insights** in **Settings > General** to stop all of it. Sable asks once, with **Also delete what Insights has collected** checked. While it is off:
 
 - Sable stops recording which devices it sees and what hardware they are, and stops looking for findings.
 - Insights leaves the sidebar and the command palette, and the Insights alerts in **Settings > Alerts** fold away.

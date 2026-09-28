@@ -49,15 +49,15 @@ func (server insightsTestServer) auditDetails(t *testing.T) []string {
 	return details
 }
 
-// The switch sits at the top of Settings > General with what Insights holds,
-// and saves on its own rather than with Save Settings.
-func TestSettingsGeneralLeadsWithTheInsightsSwitch(t *testing.T) {
+// The switch sits in Settings > General, above Software Updates, with what
+// Insights holds, and saves on its own rather than with Save Settings.
+func TestSettingsGeneralHoldsTheInsightsSwitch(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)
 	page := server.get(t, "everything", "/settings?tab=general", false).Body.String()
 	card := strings.Index(page, `id="settings-insights"`)
-	if card < 0 || card > strings.Index(page, "Server Identity") {
-		t.Fatal("the Insights card is not at the top of General")
+	if card < strings.Index(page, "Persistent configuration and DNS data backend") || card > strings.Index(page, "Update preferences for this node") {
+		t.Fatal("the Insights card is not between Storage and Software Updates")
 	}
 	for _, expected := range []string{
 		`data-insights-off="insights-off-dialog"`,
