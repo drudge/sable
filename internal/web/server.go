@@ -52,6 +52,7 @@ const (
 
 type Server struct {
 	mcpUseMu      sync.Mutex
+	mcpStreams    mcpStreams
 	httpServer    *http.Server
 	listener      net.Listener
 	httpsListener net.Listener
@@ -469,7 +470,7 @@ func New(
 	mux.HandleFunc("DELETE /api/v1/cluster/membership", server.leaveClusterAPI)
 	mux.HandleFunc("DELETE /api/v1/cluster", server.deleteClusterAPI)
 	mux.HandleFunc("POST "+mcpPath, server.mcp)
-	mux.HandleFunc("GET "+mcpPath, mcpMethodNotAllowed)
+	mux.HandleFunc("GET "+mcpPath, server.mcpEvents)
 	mux.HandleFunc("DELETE "+mcpPath, mcpMethodNotAllowed)
 	mux.HandleFunc("GET /metrics", server.metrics)
 	mux.HandleFunc("GET "+technitiumStatsPath, server.technitiumStats)

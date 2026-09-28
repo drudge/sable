@@ -47,7 +47,7 @@ Insights findings, the query log, and the runtime log describe what each device 
 
 `get_cluster_status` shows what the **Cluster** page shows, plus each node's open problems, such as a failing certificate renewal. It leaves out node addresses. A replica hears only from the primary, so ask the primary for the whole cluster. The assistant cannot promote, remove, or add nodes.
 
-Assistants see a changed tool list the next time they connect.
+When you change the tools in **Edit Setup**, or upgrade to a version with new ones, Sable tells connected assistants to fetch the list again, so the new tools appear without restarting them. Claude Code, and Claude Desktop through `mcp-remote`, act on this. A Claude Code session running inside the Claude Desktop app does not yet; start a new session there. After a restart that takes longer than about a minute, `mcp-remote` stops listening for changes until Claude Desktop restarts.
 
 Record names can be relative (`www`), the apex (`@`), or fully qualified (`www.example.com`). Values use zone-file syntax, such as `10 mail.example.com.` for MX. TXT text can be sent without quotes.
 
@@ -84,7 +84,7 @@ claude mcp add --transport http sable https://dns.example.net/mcp \
   --header "Authorization: Bearer ${SABLE_API_TOKEN}"
 ```
 
-**Claude Desktop** reaches Sable through the `mcp-remote` bridge, which needs Node.js. Open **Settings → Developer → Edit Config** and add this to `claude_desktop_config.json`, then restart Claude:
+**Claude Desktop** reaches Sable through the `mcp-remote` bridge, which needs Node.js. **Settings → Developer → Edit Config** shows where `claude_desktop_config.json` is. Quit Claude, add this to the file, then open Claude again:
 
 ```json
 {
@@ -98,7 +98,7 @@ claude mcp add --transport http sable https://dns.example.net/mcp \
 }
 ```
 
-That file holds the token in plain text, so protect it like a password. Claude Desktop's **Connectors** screen will not work for a server on your own network: those connections come from Anthropic's cloud, not your computer.
+Claude Desktop rewrites the file from its own copy while it runs, so an edit made while it is open can be lost. The file holds the token in plain text, so protect it like a password. Claude Desktop's **Connectors** screen will not work for a server on your own network: those connections come from Anthropic's cloud, not your computer.
 
 **ChatGPT desktop and Codex** share `~/.codex/config.toml` and connect from your computer. Add this to the file, or in the ChatGPT desktop app use **Settings → MCP servers → Add server** with **Streamable HTTP**:
 
@@ -143,6 +143,7 @@ Most assistants ask before calling a tool that changes something. Keep that appr
 | 404 | The MCP server is off or paused in Integrations |
 | 403 | A browser sent the request from another site |
 | 415 | The request was not JSON |
+| 406 | A `GET` did not accept `text/event-stream` |
 | `zone … was not found` | The zone does not exist, or the token's groups cannot read it |
 | `may read zone … but not change its records` | The group lacks `zones.records.write` for that zone |
 | `this token needs …` | The group lacks the named grant |

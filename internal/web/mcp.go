@@ -23,7 +23,8 @@ import (
 
 // mcpPath serves the Model Context Protocol over Streamable HTTP. The server
 // is stateless: every POST carries one JSON-RPC message and receives one JSON
-// reply, so there is no session to resume and no event stream to hold open.
+// reply, so there is no session to resume. A GET opens a stream that only
+// tells the assistant when the tool list changes (see mcpEvents).
 const mcpPath = "/mcp"
 
 const (
@@ -145,7 +146,7 @@ func mcpInitialize(params json.RawMessage) (any, *mcpError) {
 	}
 	return map[string]any{
 		"protocolVersion": protocol,
-		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
+		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 		"serverInfo": map[string]any{
 			"name": "sable", "title": "Sable DNS", "version": version.Current().Release,
 		},
@@ -332,7 +333,7 @@ func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Req
 	if len(tools) > 0 {
 		details = "MCP tools: " + strings.Join(tools, ", ")
 	}
-	action, message := "integrations.mcp.configure", "MCP server saved. Assistants see changes the next time they connect."
+	action, message := "integrations.mcp.configure", "MCP server saved. Connected assistants are told the tools changed."
 	if settingUp {
 		action, message = "integrations.mcp.setup", "MCP server set up."
 	}
@@ -431,7 +432,9 @@ func (server *Server) httpsIdentity(ctx context.Context, configuration config.Co
 	return "", ""
 }
 
+// mcpMethodNotAllowed refuses DELETE: without sessions there is nothing for
+// a client to end.
 func mcpMethodNotAllowed(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Allow", http.MethodPost)
-	writeJSON(writer, http.StatusMethodNotAllowed, map[string]string{"error": "Sable's MCP endpoint accepts POST only"})
+	writer.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+	writeJSON(writer, http.StatusMethodNotAllowed, map[string]string{"error": "Sable's MCP endpoint accepts GET and POST only"})
 }

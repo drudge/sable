@@ -224,6 +224,9 @@ func TestMCPHandshake(t *testing.T) {
 	if info := result["serverInfo"].(map[string]any); info["name"] != "sable" {
 		t.Fatalf("serverInfo = %v", info)
 	}
+	if tools := result["capabilities"].(map[string]any)["tools"].(map[string]any); tools["listChanged"] != true {
+		t.Fatalf("tools capability = %v, want listChanged", tools)
+	}
 
 	unknownVersion := postMCP(t, server, "sable_pat_admin", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1999-01-01"}}`)
 	if got := unknownVersion.body["result"].(map[string]any)["protocolVersion"]; got != mcpLatestProtocol {
@@ -297,12 +300,12 @@ func TestMCPRefusesBrowserRequests(t *testing.T) {
 		t.Fatalf("json with charset status = %d", status)
 	}
 
-	request := httptest.NewRequest(http.MethodGet, mcpPath, nil)
+	request := httptest.NewRequest(http.MethodDelete, mcpPath, nil)
 	request.Header.Set("Authorization", "Bearer sable_pat_admin")
 	response := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(response, request)
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET status = %d", response.Code)
+	if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET, POST" {
+		t.Fatalf("DELETE status = %d, Allow = %q", response.Code, response.Header().Get("Allow"))
 	}
 }
 

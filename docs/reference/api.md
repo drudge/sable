@@ -52,15 +52,16 @@ To automate record changes, use the supported [RFC 2136 dynamic-update workflow]
 
 ## MCP
 
-`POST /mcp` is Sable's MCP server: the [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP for AI assistants. [Let an AI assistant manage records](../guides/mcp.md) explains setup for each client.
+`/mcp` is Sable's MCP server: the [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP for AI assistants. [Let an AI assistant manage records](../guides/mcp.md) explains setup for each client.
 
 | Property | Behavior |
 | --- | --- |
 | Availability | Off until set up in **Integrations → MCP Server**. While `[mcp] enabled` is false, an authenticated request gets `404` |
 | Authentication | API token in `Authorization: Bearer` only; a console session is refused. A missing or rejected token returns `401` with `WWW-Authenticate: Bearer` |
-| Transport | One JSON-RPC message per `POST` with `Content-Type: application/json`, answered with one JSON response. Notifications return `202`. There is no session ID and no event stream; `GET` and `DELETE` return `405`. Batches are refused |
+| Transport | One JSON-RPC message per `POST` with `Content-Type: application/json`, answered with one JSON response. Notifications return `202`. There is no session ID, so `DELETE` returns `405`. Batches are refused |
+| Change stream | `GET` with `Accept: text/event-stream` opens a server-sent event stream; any other `Accept` gets `406`. It opens with `retry: 30000` and `notifications/tools/list_changed`, sends that notification again whenever a configuration change, local or replicated, changes what `tools/list` returns, and sends a comment every 25 seconds to keep it open. It carries nothing else. A token may hold 8 streams and the server 64; a new stream past either limit closes the oldest one it competes with. Streams close after an hour, when Sable stops, and when the client leaves |
 | Protocol versions | `2025-11-25`, `2025-06-18`, and `2025-03-26` |
-| Methods | `initialize`, `ping`, `tools/list`, and `tools/call` |
+| Methods | `initialize`, `ping`, `tools/list`, and `tools/call`. `initialize` reports `tools.listChanged: true` |
 | Tools | Each offered only while it is in `[mcp] tools`. On by default: `list_zones`, `list_records`, `add_record`, `set_records`, `update_record`, `delete_record`, `check_domain`, `allow_domain`, `block_domain`, `remove_domain_rule`, `list_block_lists`, `lookup`, `purge_cache`, `get_version`, `get_stats`, `get_dynamic_dns`, `get_cluster_status`, and `list_findings`. Off by default: `create_zone`, `delete_zone`, `add_block_list`, `remove_block_list`, `refresh_block_lists`, `sync_dynamic_dns`, `search_queries`, and `search_server_logs` |
 | Authorization | Record reads need `zones.read` and record changes need `zones.records.write`, each checked against the zone; a zone the token cannot read is reported as not found. `create_zone` needs `zones.create` across all zones. `lookup` needs `zones.read`, `blocking.read`, or `settings.read`. `purge_cache` needs `settings.write`. `check_domain` and `list_block_lists` need `blocking.read`, and the list changes need `blocking.write`. `delete_zone` needs `zones.delete` for the zone and must repeat the zone name. `get_version` needs `updates.read`, and lists each node's version only with `cluster.read`; its `check` argument asks GitHub at most once every 5 minutes. `get_stats` needs `metrics.read`, and adds the client count and most blocked domains only with `logs.read`. `get_dynamic_dns` needs `settings.read`, and `sync_dynamic_dns` needs `settings.write`. `get_cluster_status` needs `cluster.read`. `list_findings`, `search_queries`, and `search_server_logs` need `logs.read` |
 | Cluster | A replica serves the read tools and `purge_cache`, which clears only that node, and refuses every other change; send changes to the primary. `get_dynamic_dns` on a replica says to ask the primary |
