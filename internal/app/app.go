@@ -485,6 +485,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	}.alertSources()...)
 	alertDispatcher.Add(clusterAlertSources(clusterService)...)
 	clusterService.SetLocalAlerts(alertDispatcher.Local)
+	clusterService.SetLocalLookups(database.ClientLastLookups)
 	// The lead hands replicas the addresses it has tied to hardware, since a
 	// replica may not see the network's hardware addresses itself.
 	clusterService.SetClientIdentities(cluster.ClientIdentities{

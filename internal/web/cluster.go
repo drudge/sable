@@ -586,7 +586,8 @@ func (server *Server) clusterSyncAPI(writer http.ResponseWriter, request *http.R
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
+	// A replica's lookups make a heartbeat larger than a form.
+	request.Body = http.MaxBytesReader(writer, request.Body, cluster.MaximumHeartbeatBytes)
 	var heartbeat cluster.Heartbeat
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()

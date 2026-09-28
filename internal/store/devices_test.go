@@ -293,3 +293,23 @@ func TestClientIdentitiesKeepTheirSuggestedKind(t *testing.T) {
 		t.Fatalf("identities = %+v", identities)
 	}
 }
+
+// Each client address's last lookup is read from its sighting, and one that
+// last asked before the cutoff is left out.
+func TestClientLastLookups(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(now.Add(-50*time.Minute), "10.0.0.5", "mail.example.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-10*time.Minute), "10.0.0.5", "ads.example.", querylog.SourceBlocked),
+		blockingEvent(now.Add(-30*time.Minute), "FD00::5", "mail.example.com.", querylog.SourceCache),
+		blockingEvent(now.Add(-3*time.Hour), "10.0.0.9", "mail.example.com.", querylog.SourceCache),
+	})
+	last, err := opened.ClientLastLookups(context.Background(), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(last) != 2 || !last["10.0.0.5"].Equal(now.Add(-10*time.Minute)) || !last["fd00::5"].Equal(now.Add(-30*time.Minute)) {
+		t.Fatalf("last lookups = %v, want both recent addresses at their latest query", last)
+	}
+}

@@ -332,6 +332,31 @@ func (store *Store) clientSightings(ctx context.Context) (map[string]sightingSpa
 	return spans, rows.Err()
 }
 
+// ClientLastLookups returns, for each client address that sent a query at or
+// after since, when it last did.
+func (store *Store) ClientLastLookups(ctx context.Context, since time.Time) (map[string]time.Time, error) {
+	rows, err := store.database.QueryContext(ctx,
+		"SELECT client_key, last_seen FROM sable_client_seen WHERE last_seen >= "+store.placeholder(1), since.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("read client last lookups: %w", err)
+	}
+	defer rows.Close()
+	last := make(map[string]time.Time)
+	for rows.Next() {
+		var client string
+		var moment any
+		if err := rows.Scan(&client, &moment); err != nil {
+			return nil, fmt.Errorf("scan client last lookup: %w", err)
+		}
+		seen, err := databaseTime(moment)
+		if err != nil {
+			return nil, fmt.Errorf("read client last lookup: %w", err)
+		}
+		last[client] = seen.UTC()
+	}
+	return last, rows.Err()
+}
+
 func scanSpan(first, last any) (sightingSpan, error) {
 	firstSeen, err := databaseTime(first)
 	if err != nil {
