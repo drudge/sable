@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/alerts"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 )
@@ -133,5 +135,92 @@ func TestBlockListPanel(t *testing.T) {
 	}
 	if response := postDetailsPanelForm(server, "/ui/blocking/lists/refresh", url.Values{"name": {"Local Rules"}}); response.Code != http.StatusNotFound {
 		t.Fatalf("refreshing a local file = %d", response.Code)
+	}
+}
+
+// testClusterPageController can render the Cluster page as well as report
+// what a lead knows.
+type testClusterPageController struct {
+	testMCPLeadClusterController
+}
+
+func (testClusterPageController) LocalConfiguration() cluster.LocalConfiguration {
+	return cluster.LocalConfiguration{}
+}
+
+// A node's address opens the Cluster page with its panel, which shows the
+// problems the node reported, where it answers DNS, and its actions.
+func TestClusterNodePanel(t *testing.T) {
+	t.Parallel()
+
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}, baseDirectory: t.TempDir()}
+	server := newDetailsPanelTestServer(t, configuration)
+	state := cluster.State{
+		Initialized: true, Mode: "primary-replica", ClusterID: "cluster-1", NodeID: "node-1", PrimaryID: "node-1", LocalRole: cluster.RolePrimary,
+		Nodes: []cluster.Node{
+			{ID: "node-1", Name: "ns1", Role: cluster.RolePrimary, State: cluster.StateOnline, SyncState: cluster.SyncCurrent},
+			{ID: "node-2", Name: "ns2", Role: cluster.RoleReplica, State: cluster.StateOnline, SyncState: cluster.SyncCurrent,
+				AdvertiseURL: "https://ns2.example.test:5380", Addresses: []string{"192.0.2.2", "[2001:db8::2]:53"}},
+		},
+	}
+	server.SetClusterController(testClusterPageController{testMCPLeadClusterController{
+		testMCPClusterController: testMCPClusterController{state: state},
+		reported: map[string][]alerts.Alert{"node-2": {
+			{ID: "certificates.renewal", Problem: true, Title: "Certificate renewal failing", Subject: "ns2", Headline: "Certificate renewal is failing on ns2."},
+			{ID: "backups.done", Headline: "A backup finished."},
+		}},
+	}})
+
+	page := serveRequest(server, http.MethodGet, "/cluster/nodes/ns2")
+	if page.Code != http.StatusOK {
+		t.Fatalf("node address = %d", page.Code)
+	}
+	expectContains(t, "node address", page.Body.String(),
+		`id="cluster-node-dialog"`, `data-drawer-content="/ui/cluster/node" data-drawer-param="name" data-drawer-route="/cluster/nodes/"`,
+		`data-dialog-base-url="/cluster"`, `data-dialog-url="/cluster/nodes/ns2"`,
+	)
+
+	for _, key := range []string{"ns2", "node-2"} {
+		panel := serveRequest(server, http.MethodGet, "/ui/cluster/node?name="+key).Body.String()
+		expectContains(t, "panel for "+key, panel,
+			"Certificate renewal failing</strong>", "Certificate renewal is failing on ns2.", "node-2", "https://ns2.example.test:5380",
+			"192.0.2.2", "[2001:db8::2]:53", `data-copy-url="/cluster/nodes/ns2"`,
+			`hx-post="/ui/cluster/nodes/node-2/remove"`, `hx-replace-url="/cluster"`, "Promote to Primary",
+		)
+		if strings.Contains(panel, "A backup finished.") {
+			t.Errorf("panel for %s lists news that is not a problem", key)
+		}
+	}
+	local := serveRequest(server, http.MethodGet, "/ui/cluster/node?name=ns1").Body.String()
+	expectContains(t, "local node panel", local, "This node", "Alerts are not running on this node")
+	if strings.Contains(local, "Remove Replica") {
+		t.Error("the primary's own panel offers Remove Replica")
+	}
+	details := serveRequest(server, http.MethodGet, "/ui/cluster/node?name=ns2&part=details").Body.String()
+	if !strings.HasPrefix(strings.TrimSpace(details), `<div class="cluster-node-details" id="cluster-node-details"`) || strings.Contains(details, "Copy Link") {
+		t.Errorf("details refresh = %s", details)
+	}
+	if missing := serveRequest(server, http.MethodGet, "/ui/cluster/node?name=ns9").Body.String(); !strings.Contains(missing, "Node not found") {
+		t.Errorf("missing node panel = %s", missing)
+	}
+
+	// A replica hears only from the primary, so it cannot say what another
+	// replica's problems are.
+	replica := state
+	replica.NodeID, replica.LocalRole = "node-2", cluster.RoleReplica
+	server.SetClusterController(testClusterPageController{testMCPLeadClusterController{testMCPClusterController: testMCPClusterController{state: replica}}})
+	if panel := serveRequest(server, http.MethodGet, "/ui/cluster/node?name=ns1").Body.String(); !strings.Contains(panel, "Only the primary hears") {
+		t.Errorf("replica's panel for the primary = %s", panel)
+	}
+}
+
+// Two nodes with one name are told apart by ID in their addresses.
+func TestClusterNodeLinkFallsBackToIDForSharedNames(t *testing.T) {
+	t.Parallel()
+	nodes := []cluster.Node{{ID: "node-1", Name: "dns"}, {ID: "node-2", Name: "dns"}, {ID: "node-3", Name: "ns 3"}}
+	for index, want := range []string{"/cluster/nodes/node-1", "/cluster/nodes/node-2", "/cluster/nodes/ns%203"} {
+		if got := clusterNodeLink(nodes[index], nodes); got != want {
+			t.Errorf("clusterNodeLink(%s) = %s, want %s", nodes[index].ID, got, want)
+		}
 	}
 }

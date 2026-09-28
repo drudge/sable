@@ -1,9 +1,10 @@
 const assert = require('node:assert/strict');
 const {chromium} = require('playwright');
 
-// Block lists open their panels at their own addresses. Back closes a panel
-// and Forward opens it, a link opened fresh opens its panel, and Refresh
-// updates the panel and the page beneath it.
+// Block lists and cluster nodes open their panels at their own addresses.
+// Back closes a panel and Forward opens it, a link opened fresh opens its
+// panel, a panel stays open while the page refreshes beneath it, and a
+// panel's action returns to the page.
 (async () => {
   const [baseURL] = process.argv.slice(2);
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -55,8 +56,35 @@ const {chromium} = require('playwright');
     await page.goto(`${baseURL}/blocked/lists/Gone`);
     await list.getByRole('heading', {name: 'Block list not found'}).waitFor();
 
+    // A node's address opens its panel, which outlasts the live status
+    // refreshing beneath it and keeps its own details current.
+    await page.goto(`${baseURL}/cluster/nodes/ns2`);
+    const node = page.locator('#cluster-node-dialog');
+    await node.getByRole('heading', {name: 'ns2'}).waitFor();
+    await node.getByText('Certificate renewal is failing on ns2.').waitFor();
+    const refreshed = page.waitForResponse(response => new URL(response.url()).searchParams.get('part') === 'details');
+    await page.waitForResponse(response => new URL(response.url()).pathname === '/ui/cluster/status');
+    await refreshed;
+    await page.waitForTimeout(300);
+    assert.equal(await node.isVisible(), true, 'the panel stays open while the page refreshes');
+    await node.getByText('Certificate renewal is failing on ns2.').waitFor();
+
+    // Remove from the panel asks first, then returns to the Cluster page.
+    await node.getByRole('button', {name: 'Remove Replica'}).click();
+    const confirm = page.locator('dialog.confirmation-dialog');
+    await confirm.getByRole('button', {name: 'Remove Replica'}).click();
+    await page.getByText('Cluster replica removed').waitFor();
+    await waitForAddress('/cluster');
+    await node.waitFor({state: 'hidden'});
+
+    // A closed panel stops polling.
+    let polls = 0;
+    page.on('request', request => { if (new URL(request.url()).searchParams.get('part') === 'details') polls++; });
+    await page.waitForTimeout(6000);
+    assert.equal(polls, 0, 'a closed panel does not poll');
+
     assert.deepEqual(errors, []);
-    console.log('PASS block lists open at their own addresses');
+    console.log('PASS block lists and cluster nodes open at their own addresses');
   } finally {
     await browser.close();
   }

@@ -755,7 +755,7 @@ func populateClusterStateView(view *pages.ClusterPageView, state cluster.State) 
 			CurrentGeneration: node.CurrentGeneration, AppliedGeneration: node.AppliedGeneration, Lag: node.Lag,
 			LastContact: clusterRelativeTime(node.LastContact, state.ObservedAt), LastSync: clusterRelativeTime(node.LastSync, state.ObservedAt),
 			LastContactAt: clusterTimestamp(node.LastContact, view.Console.TimeDisplay), LastSyncAt: clusterTimestamp(node.LastSync, view.Console.TimeDisplay),
-			Local: node.ID == state.NodeID,
+			Local: node.ID == state.NodeID, Link: clusterNodeLink(node, state.Nodes),
 		})
 	}
 }

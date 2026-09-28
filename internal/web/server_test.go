@@ -998,6 +998,8 @@ func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
 		{http.MethodGet, "/api/v1/cluster", auth.PermissionClusterRead},
 		{http.MethodGet, "/api/v1/cluster/nodes/node-1", auth.PermissionClusterRead},
 		{http.MethodGet, "/ui/cluster/status", auth.PermissionClusterRead},
+		{http.MethodGet, "/cluster/nodes/ns2", auth.PermissionClusterRead},
+		{http.MethodGet, "/ui/cluster/node?name=ns2", auth.PermissionClusterRead},
 		{http.MethodPost, "/ui/cluster/initialize", auth.PermissionClusterWrite},
 		{http.MethodPost, "/ui/cluster/settings", auth.PermissionClusterWrite},
 		{http.MethodPost, "/ui/cluster/restart", auth.PermissionClusterWrite},

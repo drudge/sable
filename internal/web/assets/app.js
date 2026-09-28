@@ -3341,6 +3341,12 @@
 	  document.body.addEventListener("htmx:before:request", event => {
 	    const ctx = event.detail?.ctx;
 	    if (!ctx?.sourceElement?.matches("[data-live-refresh]")) return;
+	    // A panel left in the page after it closes stops polling until it
+	    // opens again.
+	    if (ctx.sourceElement.closest("dialog:not([open])")) {
+	      event.preventDefault();
+	      return;
+	    }
 	    const type = ctx.sourceEvent?.type;
 	    ctx.sableLiveRefresh = !type || type === "every" || type === "load";
 	  });
