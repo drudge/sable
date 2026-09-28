@@ -87,6 +87,7 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 		"sable_pat_metrics":  {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
 		"sable_pat_settings": {UserID: 9, Username: "tinkerer", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead}},
 		"sable_pat_operator": {UserID: 10, Username: "operator", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead, auth.PermissionSettingsWrite}},
+		"sable_pat_cluster":  {UserID: 11, Username: "watchman", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionClusterRead}},
 		"sable_pat_updates":  {UserID: 8, Username: "watcher", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionUpdatesRead}},
 		"sable_pat_blocking": {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
 		"sable_pat_scoped": {UserID: 3, Username: "deploy", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Grants: []auth.Grant{
@@ -239,7 +240,7 @@ func TestMCPHandshake(t *testing.T) {
 	for _, tool := range tools {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings,get_version,get_stats,get_dynamic_dns" {
+	if strings.Join(names, ",") != "list_zones,list_records,add_record,set_records,update_record,delete_record,lookup,purge_cache,check_domain,allow_domain,block_domain,remove_domain_rule,list_block_lists,list_findings,get_version,get_stats,get_dynamic_dns,get_cluster_status" {
 		t.Fatalf("tools = %v", names)
 	}
 

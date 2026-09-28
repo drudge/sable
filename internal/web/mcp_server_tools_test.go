@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/alerts"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsprovider"
@@ -245,5 +246,88 @@ func TestMCPSyncDynamicDNS(t *testing.T) {
 	server.SetClusterController(testReplicaClusterController{})
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_operator", "sync_dynamic_dns", map[string]any{}); !strings.Contains(failure, "primary") || controller.syncs != 1 {
 		t.Fatalf("replica = %q, %d syncs", failure, controller.syncs)
+	}
+}
+
+// testMCPLeadClusterController is a lead with a rolling update and a
+// replica that reported a problem.
+type testMCPLeadClusterController struct {
+	testMCPClusterController
+	rollout  cluster.RolloutStatus
+	reported map[string][]alerts.Alert
+}
+
+func (controller testMCPLeadClusterController) RollingUpdatesSupported() bool { return true }
+
+func (controller testMCPLeadClusterController) RolloutStatus() cluster.RolloutStatus {
+	return controller.rollout
+}
+
+func (testMCPLeadClusterController) StartRollout(context.Context, string) error { return nil }
+
+func (testMCPLeadClusterController) StopRollout() error { return nil }
+
+func (controller testMCPLeadClusterController) ReportedAlertsByNode(time.Time) map[string][]alerts.Alert {
+	return controller.reported
+}
+
+func TestMCPGetClusterStatus(t *testing.T) {
+	t.Parallel()
+	server, _ := newMCPTestServer(t)
+
+	alone, failure := callMCPToolForTest(t, server, "sable_pat_cluster", "get_cluster_status", map[string]any{})
+	if failure != "" || alone["mode"] != "not-configured" || alone["summary"] != "This server is not in a cluster." {
+		t.Fatalf("standalone = %v %q", alone, failure)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_metrics", "get_cluster_status", map[string]any{}); !strings.Contains(failure, "cluster.read") {
+		t.Fatalf("without cluster.read = %q", failure)
+	}
+
+	now := time.Now()
+	state := cluster.State{
+		Initialized: true, Mode: "primary-replica", ClusterID: "cluster-1", ClusterDomain: "cluster.example.net",
+		Generation: 1842, NodeID: "node-1", PrimaryID: "node-1", LocalRole: cluster.RolePrimary,
+		Nodes: []cluster.Node{
+			{ID: "node-1", Name: "ns1", Role: cluster.RolePrimary, State: cluster.StateOnline, Version: "1.5.1",
+				Addresses: []string{"192.0.2.1"}, AppliedGeneration: 1842, SyncState: cluster.SyncCurrent, LastContact: now},
+			{ID: "node-2", Name: "ns2", Role: cluster.RoleReplica, State: cluster.StateOnline, Version: "1.5.1",
+				AppliedGeneration: 1839, Lag: 3, SyncState: "behind", LastContact: now},
+		},
+	}
+	server.SetClusterController(testMCPLeadClusterController{
+		testMCPClusterController: testMCPClusterController{state: state},
+		rollout: cluster.RolloutStatus{
+			ID: "rollout-1", ClusterID: "cluster-1", PrimaryID: "node-1", Version: "1.5.2", Phase: "updating",
+			Nodes: []cluster.RolloutNode{{ID: "node-2", Name: "ns2", Phase: "restarting"}, {ID: "node-1", Name: "ns1", Phase: "pending"}},
+		},
+		reported: map[string][]alerts.Alert{"node-2": {
+			{ID: "certificates.renewal", Problem: true, Headline: "Certificate renewal is failing on ns2."},
+			{ID: "backups.done", Headline: "A backup finished."},
+		}},
+	})
+	status, failure := callMCPToolForTest(t, server, "sable_pat_cluster", "get_cluster_status", map[string]any{})
+	nodes, _ := status["nodes"].([]any)
+	if failure != "" || status["primary"] != "ns1" || status["local_node"] != "ns1" || len(nodes) != 2 ||
+		status["summary"] != "2 nodes, 2 online, 1 behind, 1 with problems" {
+		t.Fatalf("get_cluster_status = %v %q", status, failure)
+	}
+	replica := nodes[1].(map[string]any)
+	if problems, _ := replica["problems"].([]any); replica["lag"] != float64(3) || len(problems) != 1 || replica["addresses"] != nil {
+		t.Fatalf("replica = %v", replica)
+	}
+	if rollout, _ := status["rollout"].(map[string]any); rollout["version"] != "1.5.2" || rollout["active"] != true {
+		t.Fatalf("rollout = %v", status["rollout"])
+	}
+
+	one, failure := callMCPToolForTest(t, server, "sable_pat_cluster", "get_cluster_status", map[string]any{"node": "NS2"})
+	if nodes, _ := one["nodes"].([]any); failure != "" || len(nodes) != 1 || nodes[0].(map[string]any)["name"] != "ns2" {
+		t.Fatalf("one node = %v %q", one, failure)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_cluster", "get_cluster_status", map[string]any{"node": "ns9"}); !strings.Contains(failure, "ns1, ns2") {
+		t.Fatalf("unknown node = %q", failure)
+	}
+	server.SetClusterController(testReplicaClusterController{})
+	if replica, _ := callMCPToolForTest(t, server, "sable_pat_cluster", "get_cluster_status", map[string]any{}); !strings.Contains(replica["note"].(string), "primary") {
+		t.Fatalf("replica = %v", replica)
 	}
 }

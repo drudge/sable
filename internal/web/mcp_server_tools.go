@@ -8,11 +8,14 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/drudge/sable/internal/alerts"
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
@@ -94,6 +97,21 @@ var mcpServerTools = []mcpTool{
 		call:        (*Server).mcpSyncDynamicDNS,
 		section:     "server",
 		grant:       "settings.write",
+	},
+	{
+		Name:  "get_cluster_status",
+		Title: "Get cluster status",
+		Description: "Say how the cluster is doing: which node leads, which nodes are online, whether each has " +
+			"caught up with the latest changes, what version each runs, each node's open problems, and any " +
+			"rolling update under way. A node is online when its last heartbeat is under 5 seconds old; lag is " +
+			"how many changes it has yet to apply.",
+		InputSchema: mcpObjectSchema(map[string]any{
+			"node": mcpString("Optional node name or ID, to report on that node alone."),
+		}, nil),
+		Annotations: mcpToolAnnotations{Title: "Get cluster status", ReadOnlyHint: true, IdempotentHint: true},
+		call:        (*Server).mcpGetClusterStatus,
+		section:     "server",
+		grant:       "cluster.read",
 	},
 }
 
@@ -575,4 +593,187 @@ func redactKnownSecrets(text string, secrets ...string) string {
 		}
 	}
 	return text
+}
+
+type mcpClusterNode struct {
+	Name              string     `json:"name"`
+	Role              string     `json:"role"`
+	State             string     `json:"state"`
+	Version           string     `json:"version,omitempty"`
+	UpSince           *time.Time `json:"up_since,omitempty"`
+	LastContact       *time.Time `json:"last_contact,omitempty"`
+	LastSync          *time.Time `json:"last_sync,omitempty"`
+	AppliedGeneration uint64     `json:"applied_generation"`
+	Lag               uint64     `json:"lag"`
+	SyncState         string     `json:"sync_state"`
+	Problems          []string   `json:"problems,omitempty"`
+}
+
+type mcpRollout struct {
+	Version    string           `json:"version"`
+	Phase      string           `json:"phase"`
+	Active     bool             `json:"active"`
+	Error      string           `json:"error,omitempty"`
+	FailedNode string           `json:"failed_node,omitempty"`
+	Nodes      []mcpRolloutNode `json:"nodes"`
+	StartedAt  *time.Time       `json:"started_at,omitempty"`
+	FinishedAt *time.Time       `json:"finished_at,omitempty"`
+}
+
+type mcpRolloutNode struct {
+	Name  string `json:"name"`
+	Phase string `json:"phase"`
+}
+
+// mcpRolloutNews is how long a finished rolling update is still reported.
+const mcpRolloutNews = 24 * time.Hour
+
+func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.RawMessage) (any, error) {
+	var input struct {
+		Node string `json:"node"`
+	}
+	if err := decodeMCPArguments(arguments, &input); err != nil {
+		return nil, err
+	}
+	if !server.mcpHasPermission(request, auth.PermissionClusterRead) {
+		return nil, errors.New("this token needs cluster.read to read the cluster")
+	}
+	if server.cluster == nil {
+		return map[string]any{"mode": "not-configured", "summary": "This server is not in a cluster."}, nil
+	}
+	state := server.cluster.Snapshot()
+	if !state.Initialized {
+		return map[string]any{"mode": state.Mode, "summary": "This server is not in a cluster."}, nil
+	}
+	now := time.Now()
+	problems := server.mcpNodeProblems(request.Context(), state, now)
+	names := make(map[string]string, len(state.Nodes))
+	nodes := make([]mcpClusterNode, 0, len(state.Nodes))
+	for _, node := range state.Nodes {
+		names[node.ID] = node.Name
+		nodes = append(nodes, mcpClusterNode{
+			Name: node.Name, Role: node.Role, State: node.State, Version: node.Version,
+			UpSince: mcpTime(node.UpSince), LastContact: mcpTime(node.LastContact), LastSync: mcpTime(node.LastSync),
+			AppliedGeneration: node.AppliedGeneration, Lag: node.Lag, SyncState: node.SyncState, Problems: problems[node.ID],
+		})
+	}
+	result := map[string]any{
+		"mode": state.Mode, "cluster_domain": state.ClusterDomain, "generation": state.Generation,
+		"local_node": names[state.NodeID], "primary": names[state.PrimaryID], "summary": mcpClusterSummary(nodes),
+		"rollout": server.mcpRollout(state, names, now),
+	}
+	if target := strings.TrimSpace(input.Node); target != "" {
+		index := slices.IndexFunc(state.Nodes, func(node cluster.Node) bool {
+			return strings.EqualFold(node.Name, target) || node.ID == target
+		})
+		if index < 0 {
+			known := make([]string, 0, len(nodes))
+			for _, node := range nodes {
+				known = append(known, node.Name)
+			}
+			return nil, fmt.Errorf("no node is named %s; the nodes are %s", target, strings.Join(known, ", "))
+		}
+		nodes = nodes[index : index+1]
+	}
+	result["nodes"] = nodes
+	if state.LocalRole == cluster.RoleReplica {
+		result["note"] = "This node is a replica, so it hears only from the primary. Connect to the primary " +
+			"for every node's heartbeat, lag, and problems."
+	}
+	return result, nil
+}
+
+func mcpClusterSummary(nodes []mcpClusterNode) string {
+	online, behind, troubled := 0, 0, 0
+	for _, node := range nodes {
+		if node.State == cluster.StateOnline {
+			online++
+		}
+		if node.Lag > 0 {
+			behind++
+		}
+		if len(node.Problems) > 0 {
+			troubled++
+		}
+	}
+	summary := fmt.Sprintf("%d nodes, %d online", len(nodes), online)
+	if behind > 0 {
+		summary += fmt.Sprintf(", %d behind", behind)
+	}
+	if troubled > 0 {
+		summary += fmt.Sprintf(", %d with problems", troubled)
+	}
+	return summary
+}
+
+// mcpNodeProblems lists each node's own open problems, worded for people:
+// this node's from its alert sources, and, on the primary, what each replica
+// last reported in its heartbeat.
+func (server *Server) mcpNodeProblems(ctx context.Context, state cluster.State, now time.Time) map[string][]string {
+	found := make(map[string][]string)
+	add := func(nodeID string, list []alerts.Alert) {
+		for _, alert := range list {
+			if !alert.Problem {
+				continue
+			}
+			text := alert.Headline
+			if text == "" {
+				text = strings.TrimSpace(alert.Title + " " + alert.Subject)
+			}
+			if !slices.Contains(found[nodeID], text) {
+				found[nodeID] = append(found[nodeID], text)
+			}
+		}
+	}
+	if server.alerts != nil {
+		local, err := server.alerts.Local(ctx, now)
+		if err != nil {
+			server.logger.Warn("gather this node's alerts for MCP", "error", err)
+		}
+		add(state.NodeID, local)
+	}
+	if reporter, ok := server.cluster.(interface {
+		ReportedAlertsByNode(time.Time) map[string][]alerts.Alert
+	}); ok {
+		for nodeID, list := range reporter.ReportedAlertsByNode(now) {
+			add(nodeID, list)
+		}
+	}
+	return found
+}
+
+// mcpRollout reports a rolling update that is under way or ended in the last
+// day, or nothing.
+func (server *Server) mcpRollout(state cluster.State, names map[string]string, now time.Time) *mcpRollout {
+	controller, ok := server.cluster.(clusterUpdateController)
+	if !ok {
+		return nil
+	}
+	rollout := controller.RolloutStatus()
+	if rollout.ID == "" || rollout.ClusterID != state.ClusterID || rollout.PrimaryID != state.PrimaryID {
+		return nil
+	}
+	if !rollout.Active() && (rollout.FinishedAt.IsZero() || now.Sub(rollout.FinishedAt) > mcpRolloutNews) {
+		return nil
+	}
+	view := &mcpRollout{
+		Version: rollout.Version, Phase: rollout.Phase, Active: rollout.Active(), Error: rollout.Error,
+		FailedNode: names[rollout.FailedNode], StartedAt: mcpTime(rollout.StartedAt), FinishedAt: mcpTime(rollout.FinishedAt),
+		Nodes: make([]mcpRolloutNode, 0, len(rollout.Nodes)),
+	}
+	if view.FailedNode == "" {
+		view.FailedNode = rollout.FailedNode
+	}
+	for _, node := range rollout.Nodes {
+		view.Nodes = append(view.Nodes, mcpRolloutNode{Name: node.Name, Phase: node.Phase})
+	}
+	return view
+}
+
+func mcpTime(at time.Time) *time.Time {
+	if at.IsZero() {
+		return nil
+	}
+	at = at.UTC()
+	return &at
 }

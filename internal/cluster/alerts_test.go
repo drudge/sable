@@ -168,8 +168,14 @@ func TestReplicaAlertsReachTheLeadThroughTheHeartbeat(t *testing.T) {
 		got.Headline != want.Headline || !slices.Equal(got.Reasons, want.Reasons) || got.Problem != want.Problem {
 		t.Fatalf("the lead holds %+v, want %+v", got, want)
 	}
+	if byNode := primary.ReportedAlertsByNode(time.Now()); len(byNode) != 1 || !slices.Equal(alertIDs(byNode[replica.nodeID]), []string{failed.ID}) {
+		t.Fatalf("the lead holds %v by node, want the replica's alert under its ID", byNode)
+	}
 	if held := replica.ReportedAlerts(time.Now()); len(held) != 0 {
 		t.Fatalf("a replica returned reported alerts %v", alertIDs(held))
+	}
+	if held := replica.ReportedAlertsByNode(time.Now()); len(held) != 0 {
+		t.Fatalf("a replica returned reported alerts by node %v", held)
 	}
 	if stale := primary.ReportedAlerts(time.Now().Add(alertReportFreshness)); len(stale) != 0 {
 		t.Fatalf("the lead kept a list three minutes old: %v", alertIDs(stale))

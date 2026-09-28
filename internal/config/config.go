@@ -161,7 +161,7 @@ var MCPTools = []string{
 	"check_domain", "allow_domain", "block_domain", "remove_domain_rule",
 	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
 	"lookup", "purge_cache",
-	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns",
+	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns", "get_cluster_status",
 	"list_findings", "search_queries",
 }
 
@@ -174,7 +174,7 @@ func DefaultMCPTools() []string {
 		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
 		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_block_lists",
 		"lookup", "purge_cache",
-		"get_version", "get_stats", "get_dynamic_dns",
+		"get_version", "get_stats", "get_dynamic_dns", "get_cluster_status",
 		"list_findings",
 	}
 }
