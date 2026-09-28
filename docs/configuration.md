@@ -599,7 +599,7 @@ tools; the setup wizard's **Tools** step writes it:
 tools = ["list_zones", "list_records", "add_record", "set_records", "update_record",
   "delete_record", "check_domain", "allow_domain", "block_domain",
   "remove_domain_rule", "list_block_lists", "lookup", "purge_cache",
-  "list_findings"]
+  "get_version", "list_findings"]
 ```
 
 The rest start off: `create_zone`, `delete_zone`, `add_block_list`,

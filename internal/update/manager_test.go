@@ -177,6 +177,11 @@ func TestManagerRefusesToInstallWhereItCannotWrite(t *testing.T) {
 
 type countingReleaseTransport struct{ calls atomic.Int32 }
 
+// stableCheckRequests is how many requests a stable check that finds a newer
+// release makes: one for the latest release, and one listing recent releases
+// for the notes of any it skips.
+const stableCheckRequests = 2
+
 func (transport *countingReleaseTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	transport.calls.Add(1)
 	return http.DefaultTransport.RoundTrip(request)
@@ -192,7 +197,7 @@ func TestAutomaticChecksCacheAcrossSessionsAndPreserveReleaseNotes(t *testing.T)
 		checks.Go(func() { _, _ = manager.CheckAutomatically(context.Background(), false) })
 	}
 	checks.Wait()
-	if transport.calls.Load() != 1 {
+	if transport.calls.Load() != stableCheckRequests {
 		t.Fatalf("concurrent metadata requests = %d", transport.calls.Load())
 	}
 	for range 3 {
@@ -200,7 +205,7 @@ func TestAutomaticChecksCacheAcrossSessionsAndPreserveReleaseNotes(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	if transport.calls.Load() != 1 {
+	if transport.calls.Load() != stableCheckRequests {
 		t.Fatal("cached check contacted GitHub")
 	}
 	if status := manager.Status(); !status.Available || status.ReleaseNotes != "### Improvements\n\n- More reliable updates." {
@@ -212,13 +217,13 @@ func TestAutomaticChecksCacheAcrossSessionsAndPreserveReleaseNotes(t *testing.T)
 	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
-	if transport.calls.Load() != 2 {
+	if transport.calls.Load() != 2*stableCheckRequests {
 		t.Fatal("expired result was not refreshed")
 	}
 	if _, err := manager.Check(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
-	if transport.calls.Load() != 3 {
+	if transport.calls.Load() != 3*stableCheckRequests {
 		t.Fatal("manual check did not bypass cache")
 	}
 }
@@ -254,13 +259,13 @@ func TestScheduledChecksSkipTheSignInCache(t *testing.T) {
 	if _, err := manager.CheckOnSchedule(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
-	if transport.calls.Load() != 2 {
+	if transport.calls.Load() != 2*stableCheckRequests {
 		t.Fatalf("metadata requests = %d, want the scheduled check to ask again", transport.calls.Load())
 	}
 	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
-	if transport.calls.Load() != 2 {
+	if transport.calls.Load() != 2*stableCheckRequests {
 		t.Fatal("a sign-in right after a scheduled check asked GitHub again")
 	}
 	if status := manager.Status(); !status.Available || status.LatestVersion != "1.1.0" {

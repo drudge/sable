@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestDevelopmentBuildCannotCheckOrReplaceItsExecutable(t *testing.T) {
 			if err := manager.Install(false); !errors.Is(err, ErrDevelopmentBuild) {
 				t.Fatal("development manager accepted an installation")
 			}
-			if manager.Status() != initial {
+			if !reflect.DeepEqual(manager.Status(), initial) {
 				t.Fatalf("rejected operation changed the development status: %+v", manager.Status())
 			}
 			if requests.Load() != 0 {
