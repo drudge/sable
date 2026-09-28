@@ -2781,6 +2781,13 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .setting-switch-row input[type=checkbox]:checked::after { transform: translateX(1.25rem); }
 .setting-switch-row:has(input:disabled) { cursor: not-allowed; opacity: .58; }
 .setting-switch-row input[type=checkbox]:disabled { cursor: not-allowed; }
+.settings-insights { display: grid; gap: .75rem; }
+.settings-insights-data { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.settings-insights-data p { margin: 0; color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
+.settings-insights-data strong { color: var(--foreground); font-weight: 600; }
+.settings-insights-data .button { display: inline-flex; align-items: center; gap: .4rem; }
+.isotope-dialog-body > .settings-insights-delete { display: flex; align-items: center; gap: .55rem; font-size: .85rem; font-weight: 400; cursor: pointer; }
+.isotope-dialog-body > .settings-insights-delete input { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; accent-color: var(--primary); }
 .protocol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .protocol-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .protocol-setting { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }

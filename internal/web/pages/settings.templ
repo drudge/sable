@@ -11,6 +11,7 @@ type SettingsPageView struct {
  MaxConcurrent int
  MaxConcurrentPerClient int
 	Console             DashboardView
+	Insights            SettingsInsightsView
 	Revision            uint64
 	TimeFormat          string
 	TimeZone            string
@@ -156,6 +157,9 @@ templ SettingsContent(view SettingsPageView) {
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="alerts" hidden?={ view.ActiveTab != "alerts" }>@SettingsAlertsPanel(view.Alerts)</div>
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="backup" hidden?={ view.ActiveTab != "backup" }>@SettingsBackupPanel(view.Backup)</div>
 		@AddTSIGKeyDialog(view)
+		if view.Insights.CanEdit {
+			@SettingsInsightsDialogs()
+		}
 		if view.Alerts.Available && view.Alerts.CanEdit {
 			@AlertDestinationDialog(view.Alerts.NewDestination)
 		}
@@ -173,6 +177,7 @@ templ SettingsTab(tab tabOption, active string, disabled bool) {
 
 templ SettingsGeneralPanel(view SettingsPageView) {
 	<div class="settings-panel-stack">
+		@SettingsInsights(view.Insights)
 		@SettingsCard("server", "Server Identity", "Configure the DNS server's identity and listening endpoints") {
 			<div class="isotope-card-content"><label class="field-control"><span>Local End Points</span><textarea name="dns_listen" form="settings-form" rows="3" spellcheck="false" required>{ view.DNSListen }</textarea><small>Network interface addresses and ports to listen on (one per line, format: IP:port).</small></label></div>
 		}
