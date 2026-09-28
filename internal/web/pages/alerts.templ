@@ -93,6 +93,8 @@ type AlertGroupsView struct {
 	// InsightSettings opens Insights settings, for the limits and what shows
 	// in Insights. Empty for an operator who cannot open them.
 	InsightSettings string
+	// InsightsOff folds the Insights group away while Insights is off.
+	InsightsOff bool
 }
 
 // AlertInsightKindView is one kind of finding and whether it alerts. Its
@@ -420,7 +422,9 @@ templ alertsGroupsCard(view AlertsView) {
 	<section class="card settings-source-card alerts-groups-card">
 		<header><h2>@Icon("list-checks")<span>Alert Types</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
 		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@alertInsightKinds(view)
+			if !view.Groups.InsightsOff {
+				@alertInsightKinds(view)
+			}
 			@alertGroupSwitch("cluster", "Cluster", "A node going down and coming back up, and update rollouts.", view.Groups.Cluster, view.CanEdit)
 			@alertGroupSwitch("updates", "Sable Updates", "A new release of Sable.", view.Groups.Updates, view.CanEdit)
 			@alertGroupSwitch("integrations", "Integrations", "UniFi sync and dynamic DNS.", view.Groups.Integrations, view.CanEdit)

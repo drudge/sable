@@ -284,7 +284,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
-	if !preview && syncer.identities != nil {
+	if !preview && syncer.identities != nil && syncer.configuration.Current().Config.Insights.Enabled {
 		if err := syncer.identities(ctx, unifiIdentities(inventory, syncer.now())); err != nil {
 			syncer.logger.Warn("record UniFi client identities", "error", err)
 		}
