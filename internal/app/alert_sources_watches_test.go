@@ -286,3 +286,25 @@ func TestTheLeadNeverSendsAReplicasWatchHits(t *testing.T) {
 		t.Fatalf("sent = %+v", sent)
 	}
 }
+
+// With Insights off Sable records no hardware, so a watch knows a client by
+// its address alone: one picked by hardware address no longer matches, and
+// one picked by address still does.
+func TestWithInsightsOffAWatchKnowsClientsByAddress(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	log := &fakeWatchLog{identities: emmasIdentities()}
+	configuration := watchTestConfig(config.AlertWatch{})()
+	configuration.Insights.Enabled = false
+	configuration.Alerts.Watches[0].Devices = append(configuration.Alerts.Watches[0].Devices, "10.0.7.30")
+	source := newWatchSource(log, func() config.Config { return configuration }, alertTestNode(false), leading(true), nil)
+	if _, err := source.Alerts(ctx, alertTestNow); err != nil {
+		t.Fatal(err)
+	}
+	log.add(alertTestNow.Add(time.Second), "10.0.7.20", "discord.com", false)
+	log.add(alertTestNow.Add(2*time.Second), "10.0.7.30", "discord.com", false)
+	found, err := source.Alerts(ctx, alertTestNow.Add(time.Minute))
+	if err != nil || len(found) != 1 || found[0].Subject != "10.0.7.30" || !strings.HasPrefix(found[0].ID, "watches:kids:ip:10.0.7.30:") {
+		t.Fatalf("alerts = %+v, %v", found, err)
+	}
+}

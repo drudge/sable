@@ -32,6 +32,9 @@ type AlertWatchFormView struct {
 	// when CanPickDevices is false, and watches then pick by address alone.
 	Devices        []AlertWatchDeviceChoice
 	CanPickDevices bool
+	// InsightsOff says why there are no devices to pick: with Insights off,
+	// Sable keeps none.
+	InsightsOff bool
 	// Addresses are the addresses and networks picked, one per line.
 	Addresses string
 	// Result is "any", "allowed", or "blocked".
@@ -176,6 +179,9 @@ templ AlertWatchForm(form AlertWatchFormView) {
 						<span>{ ifThen(form.CanPickDevices && len(form.Devices) > 0, "Addresses or Networks (Optional)", "Addresses or Networks") }</span>
 						<textarea name="addresses" rows="2" placeholder={ "10.0.7.20\n10.0.8.0/24" } autocomplete="off" spellcheck="false">{ form.Addresses }</textarea>
 						<small>One per line, such as an address or a network like 10.0.7.0/24.</small>
+						if form.InsightsOff {
+							<small>Insights is off, so watches pick devices by address or network.</small>
+						}
 					</label>
 				</div>
 			</fieldset>

@@ -60,7 +60,7 @@ Problems, such as a node going down or a backup failing, go out at high priority
 A watch alerts when a device looks up a domain you pick, such as a game on a child's tablet or a site you know is bad. Select **Add Watch** under **Watches**:
 
 - **Domains** are one per line. Names under each one count too, so `discord.com` also covers `gateway.discord.com`, as blocking rules do.
-- **Devices** is **Any Device**, or **Only These Devices**: pick them from the devices Insights knows, or type addresses and networks such as `10.0.7.20` or `10.0.7.0/24`. A device picked from the list is followed across address changes.
+- **Devices** is **Any Device**, or **Only These Devices**: pick them from the devices Insights knows, or type addresses and networks such as `10.0.7.20` or `10.0.7.0/24`. A device picked from the list is followed across address changes. With Insights off, Sable keeps no devices, so watches pick them by address and network only.
 - **When** alerts on lookups that were **Allowed or Blocked**, **Only When Allowed**, or **Only When Blocked**.
 - **Quiet For** is how long the same device stays quiet for that watch after an alert: 15 minutes, 1 hour (the default), 6 hours, or 24 hours.
 

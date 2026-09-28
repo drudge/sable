@@ -427,11 +427,18 @@ func (source *watchSource) identities(ctx context.Context, now time.Time) (devic
 	if !at.IsZero() && now.Sub(at) < watchIdentityRefresh {
 		return given, nil
 	}
-	identities, err := source.reader.ClientIdentities(ctx, now.Add(-devices.Lookback))
-	if err != nil {
-		return given, err
+	configuration := source.configuration()
+	// With Insights off Sable records no hardware, so clients are known by
+	// address alone, and watches pick them by address and network.
+	var identities []querylog.ClientIdentity
+	if configuration.Insights.Enabled {
+		var err error
+		identities, err = source.reader.ClientIdentities(ctx, now.Add(-devices.Lookback))
+		if err != nil {
+			return given, err
+		}
 	}
-	given = devices.NewGivenNames(identities, source.configuration().Clients)
+	given = devices.NewGivenNames(identities, configuration.Clients)
 	source.mu.Lock()
 	source.given, source.givenAt = given, now
 	source.mu.Unlock()

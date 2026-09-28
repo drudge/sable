@@ -104,6 +104,7 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 	view.WatchLimit = len(configuration.Watches) >= config.MaximumAlertWatches
 	if view.CanEdit {
 		view.NewWatch = alertWatchFormView(config.AlertWatch{Enabled: true}, known, console.CanLogs)
+		view.NewWatch.InsightsOff = !server.insightsEnabled()
 	}
 	subscriptions, push := server.alertBrowserSubscriptions(ctx)
 	view.Push = push

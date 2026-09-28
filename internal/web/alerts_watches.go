@@ -64,7 +64,9 @@ func (known alertWatchDevices) label(entry string) string {
 // address and network only.
 func (server *Server) watchDevices(ctx context.Context, console pages.DashboardView) alertWatchDevices {
 	known := alertWatchDevices{byKey: make(map[string]devices.Device)}
-	if !console.CanLogs {
+	// With Insights off Sable keeps no devices, so watches pick by address
+	// and network alone.
+	if !console.CanLogs || !server.insightsEnabled() {
 		return known
 	}
 	reader, ok := server.queries.(deviceInsightReader)
@@ -265,7 +267,9 @@ func (server *Server) alertWatchFormPanel(writer http.ResponseWriter, request *h
 	}
 	known := server.watchDevices(request.Context(), console)
 	writeFragmentStatus(writer, http.StatusOK)
-	if err := pages.AlertWatchForm(alertWatchFormView(watch, known, console.CanLogs)).Render(request.Context(), writer); err != nil {
+	form := alertWatchFormView(watch, known, console.CanLogs)
+	form.InsightsOff = !server.insightsEnabled()
+	if err := pages.AlertWatchForm(form).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render alert watch form", "error", err)
 	}
 }
@@ -276,7 +280,7 @@ func (server *Server) alertWatchFormPanel(writer http.ResponseWriter, request *h
 func (server *Server) watchDeviceForClient(ctx context.Context, console pages.DashboardView, client string) string {
 	client = strings.TrimSpace(client)
 	reader, ok := server.queries.(deviceInsightReader)
-	if !console.CanLogs || !ok {
+	if !console.CanLogs || !ok || !server.insightsEnabled() {
 		return client
 	}
 	identities, err := reader.ClientIdentities(ctx, time.Now().Add(-devices.Lookback))

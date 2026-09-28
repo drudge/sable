@@ -903,7 +903,8 @@ sets `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself.
 Each `[[alerts.watches]]` entry alerts when a device looks up one of its
 `domains` or a name under one. `devices` limits it to Insights devices
 (`mac:` or `ip:` keys, as Insights names them), addresses, or networks; leave
-it out to watch every device. `result` is `"any"` (the default), `"allowed"`,
+it out to watch every device. With `[insights] enabled = false` Sable records
+no hardware, so only addresses and networks match. `result` is `"any"` (the default), `"allowed"`,
 or `"blocked"`. After an alert, the same device stays quiet for that watch for
 `quiet`, from 1 minute to 24 hours and an hour by default. `enabled = false`
 keeps a watch without alerting. `id` names it in its alerts, so renaming it

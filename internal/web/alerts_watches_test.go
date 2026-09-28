@@ -192,3 +192,20 @@ func TestChangingWatchesNeedsSettingsWrite(t *testing.T) {
 		t.Fatalf("an operator without settings write changed the watch to %+v", watch)
 	}
 }
+
+// With Insights off Sable keeps no devices, so a watch picks devices by
+// address and network, and a Watch link keeps the client's address.
+func TestWithInsightsOffWatchesPickByAddress(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	server.setInsights(t, false)
+	form := server.get(t, "everything", "/ui/settings/alerts/watches/form?client=fd00::5&domain=discord.com", true).Body.String()
+	if strings.Contains(form, `name="device"`) || !strings.Contains(form, "Insights is off, so watches pick devices by address or network.") ||
+		!strings.Contains(form, ">fd00::5</textarea>") {
+		t.Fatalf("the form = %s", form)
+	}
+	response := server.saveWatch(t, url.Values{"domains": {"discord.com"}, "any_device": {"false"}, "addresses": {"fd00::5"}})
+	if response.Code != http.StatusOK || !slices.Equal(server.onlyWatch(t).Devices, []string{"fd00::5"}) {
+		t.Fatalf("saving = %d %+v", response.Code, server.alertsConfig().Watches)
+	}
+}
