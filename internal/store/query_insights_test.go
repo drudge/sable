@@ -117,6 +117,17 @@ func TestQueryEventsMatchesTheRankingItLinksFrom(t *testing.T) {
 	if loose.TotalEntries != 3 {
 		t.Fatalf("substring search total = %d, want 3", loose.TotalEntries)
 	}
+
+	// ExactClient matches the whole address and still finds part of a name.
+	named, err := opened.QueryEvents(context.Background(), querylog.Filter{
+		ClientIP: "10.0.7.16", ExactClient: true, Name: "example", Since: now.Add(-time.Hour), Until: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named.TotalEntries != 2 {
+		t.Fatalf("exact client with part of a name total = %d, want 2", named.TotalEntries)
+	}
 }
 
 func TestQueryEventsExactDomainIgnoresSubdomains(t *testing.T) {
