@@ -230,12 +230,23 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 	}
 	view.LogWindowQuery = report.window.logWindowQuery()
 	device, found := devices.Find(report.devices, key)
+	var coverage devices.Coverage
+	if reader, ok := server.queries.(coverageInsightReader); ok {
+		coverage = (&coverageSources{server: server, reader: reader, now: window.End}).silent(request.Context())
+	}
+	silent, isSilent := devices.Find(silentDevices(coverage), key)
+	if !found && isSilent {
+		device, found = silent, true
+	}
 	if !found {
 		view.Missing = true
 		server.renderDeviceDrawerView(writer, request, view)
 		return
 	}
 	view.Device = insightDeviceView(device, report)
+	if isSilent {
+		view.Device.NotUsingSable = silentDeviceLine(coverage)
+	}
 	view.Device.TypeOptions = devices.TypeLabels()
 	// A device without a type of its own takes its network's, if the operator
 	// gave that one, rather than Sable's guess.

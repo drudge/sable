@@ -45,6 +45,13 @@ func (server *Server) insightAnalyzers(console pages.DashboardView, window insig
 			deviceData = &deviceSources{server: server, reader: reader, window: window}
 			analyzers = append(analyzers, devices.Analyzer{Sources: deviceData, Limits: insightDeviceLimits(settings), Off: off})
 		}
+		if reader, ok := server.queries.(coverageInsightReader); ok {
+			coverage := &coverageSources{server: server, reader: reader, now: window.End}
+			if deviceData != nil {
+				deviceData.coverage = coverage
+			}
+			analyzers = append(analyzers, devices.CoverageAnalyzer{Sources: coverage, Limits: insightDeviceLimits(settings), Off: off})
+		}
 	}
 	analyzers = append(analyzers, blockinginsights.Analyzer{Sources: blocking, Limits: insightBlockingLimits(settings), Off: off})
 	return analyzers, blocking, deviceData
@@ -162,6 +169,9 @@ type deviceSources struct {
 	server *Server
 	reader deviceInsightReader
 	window insightWindow
+	// coverage finds the devices that don't use Sable, which the Devices tab
+	// lists beside the ones that do.
+	coverage *coverageSources
 
 	loaded bool
 	report deviceReport

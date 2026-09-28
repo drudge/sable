@@ -34,6 +34,9 @@ type Limits struct {
 	// ApplianceNewDomains is how many first-time domains in one day make an
 	// appliance worth a look.
 	ApplianceNewDomains uint64
+	// SilentWindow is how long UniFi must show a device online and busy with
+	// no lookup reaching Sable before it counts as not using Sable.
+	SilentWindow time.Duration
 }
 
 // DefaultLimits are the limits Insights uses unless an operator sets others.
@@ -43,6 +46,7 @@ func DefaultLimits() Limits {
 	return Limits{
 		QuietDailyLookups: 50, SpikeFactor: 3, SpikeLookups: 500, NewDomains: 20, UnusualHourLookups: 30,
 		CheckInInterval: 2 * time.Hour, CheckInSpan: 12 * time.Hour, ApplianceNewDomains: 3,
+		SilentWindow: 24 * time.Hour,
 	}
 }
 
@@ -68,6 +72,9 @@ func (limits Limits) withDefaults() Limits {
 	}
 	if limits.CheckInSpan == 0 {
 		limits.CheckInSpan = defaults.CheckInSpan
+	}
+	if limits.SilentWindow == 0 {
+		limits.SilentWindow = defaults.SilentWindow
 	}
 	return limits
 }
