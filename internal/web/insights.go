@@ -60,6 +60,10 @@ const maximumOverviewFindings = 10
 // htmx reports.
 func insightsTab(request *http.Request, console pages.DashboardView) string {
 	tab := request.URL.Query().Get("tab")
+	// A device's own address opens on Devices, behind its drawer.
+	if tab == "" && request.PathValue("key") != "" {
+		tab = "devices"
+	}
 	if tab == "" {
 		if current, err := url.Parse(request.Header.Get("HX-Current-URL")); err == nil {
 			tab = current.Query().Get("tab")
@@ -123,7 +127,28 @@ func insightDeviceFilter(request *http.Request) pages.InsightDeviceFilterView {
 }
 
 func insightsRoute(path string) bool {
-	return path == "/insights" || strings.HasPrefix(path, "/ui/insights/")
+	return path == "/insights" || strings.HasPrefix(path, "/insights/") || strings.HasPrefix(path, "/ui/insights/")
+}
+
+// insightsDrawerOpen reports whether the page htmx is working on is the
+// address of a drawer, such as a device's, rather than Insights itself.
+func insightsDrawerOpen(request *http.Request) bool {
+	current, err := url.Parse(request.Header.Get("HX-Current-URL"))
+	return err == nil && strings.HasPrefix(current.Path, "/insights/")
+}
+
+// linkedFinding is the link ID of the finding whose address the page is at,
+// if it is at one.
+func linkedFinding(request *http.Request) string {
+	current, err := url.Parse(request.Header.Get("HX-Current-URL"))
+	if err != nil {
+		return ""
+	}
+	id, found := strings.CutPrefix(current.Path, pages.InsightFindingRoute)
+	if !found || strings.Contains(id, "/") {
+		return ""
+	}
+	return id
 }
 
 func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Request) {
@@ -138,6 +163,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	server.warmInsights(console, window)
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
+		PageURL: insightsPageURL(window, tab, insightDeviceFilter(request)),
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 		Settings: server.insightSettingsPageView(console),
@@ -193,7 +219,9 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	server.warmInsights(console, window)
 	view := server.insightsOverview(request, console, window)
 	view.ActiveTab = insightsTab(request, console)
-	if request.Header.Get("HX-Request") == "true" {
+	// At a drawer's address the page keeps it, so the drawer can open once
+	// this arrives.
+	if request.Header.Get("HX-Request") == "true" && !insightsDrawerOpen(request) {
 		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab, view.DeviceFilter))
 	}
 	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
@@ -237,12 +265,12 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	findings = insightModesOf(snapshot.Config.Insights.Findings).shown(findings)
 	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
 	view.CanHideFindings = canRemember && console.CanWriteSettings
+	var hidden []insights.Finding
 	if canRemember {
 		feedback, err := feedbackStore.InsightFeedback(request.Context(), time.Now())
 		if err != nil {
 			server.logger.Warn("read insight feedback", "error", err)
 		}
-		var hidden []insights.Finding
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
 	}
@@ -252,8 +280,21 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	if console.CanLogs {
 		given = server.givenClientNames(request.Context(), window.Start)
 	}
-	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config)
+	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config, window.Range)
 	view.Headline = insightHeadline(findings, view.Findings)
+	// A link can open a finding further down than the Overview lists, and
+	// one the page cannot show says why.
+	if linked := linkedFinding(request); linked != "" {
+		index := slices.IndexFunc(findings, func(finding insights.Finding) bool { return insights.LinkID(finding.ID) == linked })
+		switch {
+		case index >= maximumOverviewFindings:
+			extra := server.insightFindingViews(findings[index:index+1], given, snapshot.Config, window.Range)[0]
+			extra.ID = "insight-finding-linked"
+			view.LinkedFinding = &extra
+		case index < 0:
+			view.LinkedMissing = insightLinkedMissing(linked, window.Range, view.HiddenFindings, view.CanHideFindings)
+		}
+	}
 	view.CheckedSummary = insightsCheckedSummary(console, window)
 
 	// The page's own sections show the material the analyzers examined; the
@@ -297,6 +338,25 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	return view
 }
 
+// insightsLongerRanges is the next longer range to look for a finding in.
+var insightsLongerRanges = map[string][2]string{"day": {"week", "Last 7 Days"}, "week": {"month", "Last 30 Days"}, "month": {"year", "Last Year"}}
+
+// insightLinkedMissing explains a finding's link that the page cannot open:
+// the operator hid the finding, or the range does not reach it.
+func insightLinkedMissing(linked, rangeName string, hidden []pages.InsightHiddenFindingView, canShowAgain bool) *pages.InsightLinkedMissingView {
+	for _, finding := range hidden {
+		if insights.LinkID(finding.FindingID) == linked {
+			return &pages.InsightLinkedMissingView{Hidden: &finding, CanShowAgain: canShowAgain}
+		}
+	}
+	missing := &pages.InsightLinkedMissingView{}
+	if longer, found := insightsLongerRanges[rangeName]; found {
+		missing.Wider, missing.WiderLabel = longer[0], longer[1]
+		missing.WiderLink = pages.InsightFindingRoute + linked + "?" + url.Values{"range": []string{longer[0]}}.Encode()
+	}
+	return missing
+}
+
 // insightHeadline says what stands out, one clause per finding with news. A
 // clause that starts with its finding's subject is split after it, so the
 // page can set the subject apart, and a finding the page shows opens from it.
@@ -310,7 +370,7 @@ func insightHeadline(findings []insights.Finding, views []pages.InsightFindingVi
 		}
 		for _, view := range views {
 			if view.FindingID == finding.ID {
-				clause.Dialog = view.ID
+				clause.Dialog, clause.Link = view.ID, view.Link
 			}
 		}
 		headline.Clauses = append(headline.Clauses, clause)
@@ -362,11 +422,11 @@ func (server *Server) pastBlocks(ctx context.Context, reader blockingInsightRead
 	return blocks
 }
 
-func (server *Server) insightFindingViews(findings []insights.Finding, given devices.GivenNames, configuration config.Config) []pages.InsightFindingView {
+func (server *Server) insightFindingViews(findings []insights.Finding, given devices.GivenNames, configuration config.Config, rangeName string) []pages.InsightFindingView {
 	views := make([]pages.InsightFindingView, 0, len(findings))
 	for index, finding := range findings {
 		view := pages.InsightFindingView{
-			ID: "insight-finding-" + strconv.Itoa(index+1), FindingID: finding.ID,
+			ID: "insight-finding-" + strconv.Itoa(index+1), FindingID: finding.ID, Link: pages.InsightFindingPath(finding.ID, rangeName),
 			Kind: finding.Kind, Tone: string(finding.Tone), Icon: insightFindingIcon(finding.Kind),
 			Title: finding.Title, Subject: finding.Subject.Label, SubjectMonospace: finding.Subject.Monospace,
 			SubjectSource: finding.Subject.LabelSource,

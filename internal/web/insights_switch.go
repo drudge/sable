@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
@@ -26,15 +27,16 @@ func (server *Server) insightsEnabled() bool {
 }
 
 // whileInsightsOn serves an Insights route only while Insights is on. The
-// page itself says Insights is off and where to turn it on; anything else,
-// such as a panel a stale page asks for, is simply not there.
+// page itself, and a link to a finding, device, or app on it, says Insights is
+// off and where to turn it on; anything else, such as a panel a stale page
+// asks for, is simply not there.
 func (server *Server) whileInsightsOn(next http.HandlerFunc) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		if server.insightsEnabled() {
 			next(writer, request)
 			return
 		}
-		if request.URL.Path != "/insights" {
+		if strings.HasPrefix(request.URL.Path, "/ui/") {
 			http.Error(writer, errInsightsOff.Error(), http.StatusNotFound)
 			return
 		}

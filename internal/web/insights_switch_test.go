@@ -110,6 +110,12 @@ func TestTurningInsightsOffHidesItAndDeletesWhenAsked(t *testing.T) {
 			t.Errorf("Insights is off but the page still has %q", gone)
 		}
 	}
+	// A link to a finding, device, or app says the same.
+	for _, link := range []string{"/insights/devices/" + insightsTestLaptop, "/insights/apps/netflix", "/insights/findings/0123456789ab"} {
+		if response := server.get(t, "everything", link, false); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Insights Is Off") {
+			t.Errorf("GET %s while off = %d without the off page", link, response.Code)
+		}
+	}
 	for _, target := range []string{"/ui/insights/overview", "/ui/insights/settings"} {
 		if response := server.get(t, "everything", target, true); response.Code != http.StatusNotFound {
 			t.Errorf("GET %s while off = %d, want 404", target, response.Code)

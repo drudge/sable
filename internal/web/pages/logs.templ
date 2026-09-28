@@ -335,12 +335,15 @@ type DetailDrawerView struct {
 	TitleEditor templ.Component
 	// Leading sits before the title, such as an icon for what the record is.
 	Leading templ.Component
+	// Attributes go on the dialog itself, such as the address it has while
+	// it is open.
+	Attributes templ.Attributes
 }
 
 // DetailDrawer renders the drawer shell. The body is passed as children and the
 // footer actions as a component.
 templ DetailDrawer(view DetailDrawerView, footer templ.Component) {
-	<dialog class="query-detail-dialog" id={ view.ID } aria-labelledby={ view.TitleID }>
+	<dialog class="query-detail-dialog" id={ view.ID } aria-labelledby={ view.TitleID } { view.Attributes... }>
 		@DetailDrawerContent(view, footer) {
 			{ children... }
 		}

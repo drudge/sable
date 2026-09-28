@@ -74,3 +74,17 @@ func TestHeadlinesNameWhatStandsOut(t *testing.T) {
 		t.Errorf("Headlines of nothing = %d named and %d more", len(named), more)
 	}
 }
+
+func TestLinkIDIsShortStableAndDistinct(t *testing.T) {
+	t.Parallel()
+	first := LinkID("devices.new-app/device:mac:3c:22:fb:01:02:03")
+	if len(first) != 12 || strings.Trim(first, "0123456789abcdef") != "" {
+		t.Fatalf("LinkID = %q", first)
+	}
+	if again := LinkID("devices.new-app/device:mac:3c:22:fb:01:02:03"); again != first {
+		t.Fatalf("LinkID changed: %q then %q", first, again)
+	}
+	if other := LinkID("devices.new-app/device:mac:3c:22:fb:01:02:04"); other == first {
+		t.Fatal("two findings share a link")
+	}
+}
