@@ -299,8 +299,13 @@ type Handler struct {
 	upstreamHealth       *upstreamHealthTracker
 	// authorityHealth is upstreamHealth for the authoritative servers
 	// iterative resolution asks.
-	authorityHealth   *upstreamHealthTracker
-	inflight          *inflightGroup
+	authorityHealth *upstreamHealthTracker
+	inflight        *inflightGroup
+	// detached holds recursive lookups still running after the client that
+	// started them stopped waiting, so a retry joins one instead of starting
+	// over.
+	detachedMu        sync.Mutex
+	detached          map[inflightKey]*detachedLookup
 	zoneTransfer      zoneTransferFunc
 	zoneRefresh       zoneRefreshFunc
 	journalMu         sync.RWMutex
@@ -2942,14 +2947,14 @@ func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns
 	networkContext, cancelNetwork := context.WithTimeout(ctx, runtime.timeout)
 	if runtime.dnssec == nil {
 		defer cancelNetwork()
-		response, err := handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
+		response, err := handler.resolveNetworkWaiting(networkContext, request, runtime, forwarders)
 		if response != nil {
 			response.AuthenticatedData = false
 		}
 		return response, validationIndeterminate, err
 	}
 	upstreamRequest := dnssecUpstreamRequest(request)
-	response, err := handler.resolveNetworkContext(networkContext, upstreamRequest, runtime, forwarders)
+	response, err := handler.resolveNetworkWaiting(networkContext, upstreamRequest, runtime, forwarders)
 	cancelNetwork()
 	if err != nil {
 		return nil, validationIndeterminate, err

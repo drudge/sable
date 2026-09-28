@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -562,5 +563,64 @@ func TestAddressCacheReusesResolvedNameServer(t *testing.T) {
 	addresses[0] = "mutated"
 	if again, _ := cache.get("ns1.shared.example.", now.Add(time.Minute)); again[0] != "192.0.2.1:53" {
 		t.Fatal("caller mutated the cached slice")
+	}
+}
+
+// A cold recursive lookup can outlast what a client waits. It keeps running
+// after the client gives up, and a retry meanwhile waits on the same lookup
+// rather than starting over, so the retry gets the answer.
+func TestRecursiveLookupFinishesForARetry(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Mode = "recursive"
+	configuration.Forwarders = nil
+	configuration.RootHints = []string{"192.0.2.1:53"}
+	configuration.Timeout = 50 * time.Millisecond
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	release := make(chan struct{})
+	var mu sync.Mutex
+	asked, cancelledWhileAnswering := 0, false
+	handler.upstreamExchange = func(ctx context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		mu.Lock()
+		asked++
+		mu.Unlock()
+		// The authority is slow: it answers only once released.
+		<-release
+		mu.Lock()
+		cancelledWhileAnswering = cancelledWhileAnswering || ctx.Err() != nil
+		mu.Unlock()
+		return addressResponse(request, "192.0.2.44"), nil
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("com.", dns.TypeA)
+
+	if _, _, err := handler.resolveUpstream(request, runtime, nil); err == nil {
+		t.Fatal("the first client got an answer before the authority gave one")
+	}
+	retry := make(chan *dns.Msg, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		response, err := handler.resolveNetworkWaiting(ctx, request, runtime, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		retry <- response
+	}()
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	response := <-retry
+	if response == nil || len(response.Answer) != 1 {
+		t.Fatalf("retry got %v", response)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if asked != 1 || cancelledWhileAnswering {
+		t.Fatalf("the authority was asked %d times, cancelled while answering %t; want one lookup that ran to the end", asked, cancelledWhileAnswering)
 	}
 }

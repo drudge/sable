@@ -630,3 +630,68 @@ func iterativeTerminal(response *dns.Msg) bool {
 	}
 	return false
 }
+
+// detachedLookup is a recursive lookup that runs to its own deadline, apart
+// from the clients waiting on it.
+type detachedLookup struct {
+	done     chan struct{}
+	response *dns.Msg
+	err      error
+}
+
+// recursiveFinishBudget is how long a recursive lookup may keep working after
+// its client stopped waiting. A cold chain through several providers can take
+// several seconds, more than a client waits, and finishing it fills the
+// delegation caches so the client's retry is answered in a moment.
+func recursiveFinishBudget(runtime *Runtime) time.Duration {
+	return max(4*runtime.timeout, 8*time.Second)
+}
+
+// resolveNetworkWaiting resolves a request, waiting no longer than wait
+// allows. In recursive mode the lookup itself runs on apart from the wait, up
+// to recursiveFinishBudget, and a second client asking the same question
+// meanwhile waits on the same lookup. Forwarded lookups are left to wait as
+// they always have: an upstream resolver keeps working for itself.
+func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
+	if len(forwarders) > 0 || runtime.mode != "recursive" || len(request.Question) != 1 {
+		return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+	}
+	key := coalesceKey(request)
+	key.runtime = runtime
+	handler.detachedMu.Lock()
+	lookup, running := handler.detached[key]
+	if !running {
+		// Detached lookups are bounded like the requests that start them, so
+		// a flood of names that never resolve cannot pile up work.
+		if len(handler.detached) >= runtime.maxConcurrent || !handler.startBackground() {
+			handler.detachedMu.Unlock()
+			return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+		}
+		if handler.detached == nil {
+			handler.detached = make(map[inflightKey]*detachedLookup)
+		}
+		lookup = &detachedLookup{done: make(chan struct{})}
+		handler.detached[key] = lookup
+		request = request.Copy()
+		go func() {
+			defer handler.backgroundWG.Done()
+			ctx, cancel := context.WithTimeout(handler.backgroundContext, recursiveFinishBudget(runtime))
+			lookup.response, lookup.err = handler.resolveNetworkContext(ctx, request, runtime, nil)
+			cancel()
+			handler.detachedMu.Lock()
+			delete(handler.detached, key)
+			handler.detachedMu.Unlock()
+			close(lookup.done)
+		}()
+	}
+	handler.detachedMu.Unlock()
+	select {
+	case <-lookup.done:
+		if lookup.response == nil {
+			return nil, lookup.err
+		}
+		return lookup.response.Copy(), lookup.err
+	case <-wait.Done():
+		return nil, fmt.Errorf("recursive resolution is still running and will finish for a retry: %w", wait.Err())
+	}
+}
