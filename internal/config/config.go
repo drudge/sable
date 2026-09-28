@@ -33,7 +33,7 @@ const (
 	defaultDatabaseDSN            = "data/sable.db"
 	defaultMaxConcurrent          = 1024
 	defaultMaxConcurrentPerClient = 64
-	defaultResolverTimeout        = 2 * time.Second
+	defaultResolverTimeout        = 3 * time.Second
 	defaultResolverRetries        = 2
 	defaultResolverRetryWait      = 1500 * time.Millisecond
 	defaultShutdownTimeout        = 15 * time.Second

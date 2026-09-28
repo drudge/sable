@@ -133,6 +133,13 @@ only as an escape hatch for a DNS provider that fails on minimized questions;
 every server is then asked for the full name. **Settings → Recursive Resolver
 → QNAME Minimization** sets it too.
 
+`timeout` defaults to 3 seconds. In recursive mode it covers finding the answer
+from the root down, and a name that aliases through several DNS providers can
+take close to that on an empty cache; DNSSEC validation afterward has its own,
+longer budget. A lookup that outlasts `timeout` still runs to completion in the
+background, so a retry is answered from it. Files written before 1.5.1 saved
+the old 2-second default, so raise it by hand in recursive mode.
+
 `timeout` is the budget for the whole query, not for one upstream. In forward
 mode it is split evenly across the forwarders that have not been tried yet, so a
 forwarder that stops answering cannot spend the entire budget on its own retries
@@ -147,7 +154,7 @@ To use upstream recursive services instead:
 [resolver]
 mode = "forward"
 forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
-timeout = "2s"
+timeout = "3s"
 cache_size = 65536
 cache_minimum_ttl = 10
 cache_maximum_ttl = 604800
