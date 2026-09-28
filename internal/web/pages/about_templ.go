@@ -427,7 +427,7 @@ func thirdPartyLicensesDialog(all []notices.Notice) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</button><div class=\"release-notes-content license-content third-party-licenses\"><section aria-labelledby=\"third-party-licenses-console\"><h3 id=\"third-party-licenses-console\">Web console</h3>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</button><div class=\"release-notes-content license-content third-party-licenses\" data-scroll-fade><section aria-labelledby=\"third-party-licenses-console\"><h3 id=\"third-party-licenses-console\">Web console</h3>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

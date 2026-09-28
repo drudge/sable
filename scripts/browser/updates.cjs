@@ -47,6 +47,19 @@ async function assertDismissAlignment(regions, viewport) {
     await page.locator('#about-update').getByRole('button', {name: 'Release notes', exact: true}).click();
     assert.equal(await page.locator('#update-release-notes-dialog .release-notes-content').innerHTML(), await notesDialog.locator('.release-notes-content').innerHTML(), 'About and notification use the same notes dialog content');
     await page.locator('#update-release-notes-dialog').getByRole('button', {name: 'Done', exact: true}).click();
+    // Short notes don't fade. Long ones fade at the bottom until scrolled
+    // there, then at the top.
+    const aboutNotes = page.locator('#update-release-notes-dialog .release-notes-content');
+    assert.equal(await aboutNotes.getAttribute('data-scroll-fade-bottom'), 'false', 'short notes do not fade');
+    await aboutNotes.evaluate(element => { element.innerHTML = Array.from({length: 60}, (_, index) => `<p>Change ${index + 1}</p>`).join(''); });
+    await page.locator('#about-update').getByRole('button', {name: 'Release notes', exact: true}).click();
+    const fades = () => aboutNotes.evaluate(element => `${element.dataset.scrollFadeTop}/${element.dataset.scrollFadeBottom}`);
+    await page.waitForFunction(() => document.querySelector('#update-release-notes-dialog .release-notes-content').dataset.scrollFadeBottom === 'true');
+    assert.equal(await fades(), 'false/true', 'long notes fade only at the bottom at first');
+    await aboutNotes.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await page.waitForFunction(() => document.querySelector('#update-release-notes-dialog .release-notes-content').dataset.scrollFadeBottom === 'false');
+    assert.equal(await fades(), 'true/false', 'scrolled to the end, only the top fades');
+    await page.locator('#update-release-notes-dialog').getByRole('button', {name: 'Done', exact: true}).click();
     if (process.env.SABLE_UPDATE_SCREENSHOTS) {
       await fs.mkdir(process.env.SABLE_UPDATE_SCREENSHOTS, {recursive: true});
       await page.screenshot({path: `${process.env.SABLE_UPDATE_SCREENSHOTS}/notification-mobile.png`, fullPage: true});

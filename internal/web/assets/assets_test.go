@@ -240,8 +240,9 @@ func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
 	}
 	sharedStyles, _, _ := strings.Cut(stylesheet, "@media (max-width: 767px)")
 	for _, expected := range []string{
-		`.nav[data-scroll-fade-bottom="true"]`,
-		`.nav[data-scroll-fade-top="true"]`,
+		// The sidebar shares its fades with every box marked data-scroll-fade.
+		"\n[data-scroll-fade-bottom=\"true\"] {",
+		"\n[data-scroll-fade-top=\"true\"] {",
 		`.sidebar-nav-hint[data-visible="true"] { opacity: 1; }`,
 	} {
 		if !strings.Contains(sharedStyles, expected) {

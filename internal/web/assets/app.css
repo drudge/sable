@@ -173,9 +173,10 @@ button { cursor: pointer; }
    the list waits below, at every size. Scroll padding the height of a fade
    keeps the current page, or a focused item, clear of the fades. */
 .nav { min-height: 0; height: 100%; flex: none; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 2.75rem; padding: 0 0.5rem 0.5rem; }
-.nav[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
-.nav[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
-.nav[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
+/* The same fades mark any box with data-scroll-fade, such as release notes. */
+[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
+[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
+[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
 .sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end center; padding-bottom: .25rem; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
 .sidebar-nav-hint[data-visible="true"] { opacity: 1; }
 .sidebar-nav-hint .nav-icon { width: 1rem; height: 1rem; transform: rotate(180deg); }
