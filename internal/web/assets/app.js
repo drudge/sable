@@ -3794,6 +3794,8 @@
 	  const hasMoreBelow = scrollable && element.scrollTop + element.clientHeight < element.scrollHeight - 2;
 	  element.dataset.scrollFadeTop = String(hasMoreAbove);
 	  element.dataset.scrollFadeBottom = String(hasMoreBelow);
+	  const hint = element.parentElement?.querySelector(":scope > .scroll-fade-hint");
+	  if (hint) hint.dataset.visible = String(hasMoreBelow);
 	  return hasMoreBelow;
 	};
 	const updateSidebarNavScrollHint = () => {

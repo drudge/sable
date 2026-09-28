@@ -56,9 +56,12 @@ async function assertDismissAlignment(regions, viewport) {
     const fades = () => aboutNotes.evaluate(element => `${element.dataset.scrollFadeTop}/${element.dataset.scrollFadeBottom}`);
     await page.waitForFunction(() => document.querySelector('#update-release-notes-dialog .release-notes-content').dataset.scrollFadeBottom === 'true');
     assert.equal(await fades(), 'false/true', 'long notes fade only at the bottom at first');
+    const hint = page.locator('#update-release-notes-dialog .scroll-fade-hint');
+    assert.equal(await hint.getAttribute('data-visible'), 'true', 'a chevron says more waits below');
     await aboutNotes.evaluate(element => { element.scrollTop = element.scrollHeight; });
     await page.waitForFunction(() => document.querySelector('#update-release-notes-dialog .release-notes-content').dataset.scrollFadeBottom === 'false');
     assert.equal(await fades(), 'true/false', 'scrolled to the end, only the top fades');
+    assert.equal(await hint.getAttribute('data-visible'), 'false', 'the chevron goes at the end');
     await page.locator('#update-release-notes-dialog').getByRole('button', {name: 'Done', exact: true}).click();
     if (process.env.SABLE_UPDATE_SCREENSHOTS) {
       await fs.mkdir(process.env.SABLE_UPDATE_SCREENSHOTS, {recursive: true});

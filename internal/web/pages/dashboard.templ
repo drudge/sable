@@ -1050,8 +1050,11 @@ templ mitLicenseDialog(thirdParty bool) {
 			<p>Sable is free and open source software.</p>
 		</div>
 		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="release-notes-content license-content" data-scroll-fade>
-			<pre>{ mitLicenseText }</pre>
+		<div class="scroll-fade-frame">
+			<div class="release-notes-content license-content" data-scroll-fade>
+				<pre>{ mitLicenseText }</pre>
+			</div>
+			@ScrollFadeHint()
 		</div>
 		<div class="dialog-footer">
 			if thirdParty {
@@ -1892,6 +1895,13 @@ templ CopyableText(id string, text string, kind string) {
 // FactCopyButton sits in the corner of a fact card and copies the card's value.
 templ FactCopyButton(target string, label string) {
 	<button class="fact-copy" type="button" data-copy-target={ target } aria-label={ label } title={ label }>@CopyIcons()</button>
+}
+
+// ScrollFadeHint is the chevron under a box marked data-scroll-fade, shown
+// while more waits below, like the sidebar's. It sits beside the box in a
+// scroll-fade-frame so it stays put while the box scrolls.
+templ ScrollFadeHint() {
+	<span class="scroll-fade-hint" aria-hidden="true">@Icon("chevron-down")</span>
 }
 
 // CopyLinkButton copies the full address of a page in the console, such as the
