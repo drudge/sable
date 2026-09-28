@@ -227,7 +227,7 @@ func TestTrustAnchorAlertsOnlyOnceUpdatesStayBroken(t *testing.T) {
 	keysAlert := func(summary string, reasons ...string) wantAlert {
 		return wantAlert{
 			id: "server.dnssec-trust-anchors:node-1", group: config.AlertGroupServer, kind: "server.dnssec-trust-anchors",
-			title: "DNSSEC key updates failing", subject: "ns1", path: "/settings?tab=recursion",
+			title: "DNSSEC key updates failing", subject: "ns1", path: "/settings?tab=recursion#recursive-resolver",
 			problem: true, tone: alerts.ToneAttention, summary: summary, reasons: reasons,
 		}
 	}
@@ -289,7 +289,7 @@ func TestBackupAlertsWhenTheLatestBackupFailedOrOneFinished(t *testing.T) {
 	failed := func(summary string, reasons ...string) wantAlert {
 		return wantAlert{
 			id: "backups.failed:node-1", group: config.AlertGroupBackups, kind: "backups.failed", title: "Backup failed",
-			subject: "ns1", path: "/settings?tab=backup", problem: true, tone: alerts.ToneAttention,
+			subject: "ns1", path: "/settings?tab=backup#scheduled-local-backups", problem: true, tone: alerts.ToneAttention,
 			summary: summary, reasons: reasons, observedAt: alertTestNow.Add(-time.Minute),
 		}
 	}
@@ -297,7 +297,7 @@ func TestBackupAlertsWhenTheLatestBackupFailedOrOneFinished(t *testing.T) {
 		return wantAlert{
 			id:    "backups.finished:node-1:" + strconv.FormatInt(finishedAt.Unix(), 10),
 			group: config.AlertGroupBackups, kind: "backups.finished", title: "Backup finished", subject: "ns1",
-			path: "/settings?tab=backup", tone: alerts.TonePositive,
+			path: "/settings?tab=backup#scheduled-local-backups", tone: alerts.TonePositive,
 			summary: "The scheduled backup on ns1 finished and was saved in /srv/backups.", reasons: reasons,
 			observedAt: finishedAt,
 		}

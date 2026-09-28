@@ -101,7 +101,8 @@ func TestAWatchAlertsOncePerDeviceInItsQuietWindow(t *testing.T) {
 	checkAlerts(t, found, []wantAlert{{
 		id: "watches:kids:mac:aa:bb:cc:dd:ee:ff:" + itoa(first.Unix()), group: config.AlertGroupWatches, kind: watchAlertKind,
 		title: "Kids' games", subject: "Emma's iPad", tone: alerts.ToneAttention,
-		path:    "/logs?client_ip=10.0.7.20&match=exact&name=gateway.discord.com&start=" + url.QueryEscape(first.Add(-time.Minute).Format(time.RFC3339)) + "&tab=queries",
+		// The alert links to the first lookup.
+		path:    "/logs/queries/2?name=gateway.discord.com",
 		summary: "Emma's iPad looked up gateway.discord.com and 1 other name 2 times in under a minute. 1 was blocked.",
 		reasons: []string{"Looked up gateway.discord.com and discord.com", "1 lookup blocked", "From 10.0.7.20 and 2001:db8::20"},
 	}})
@@ -183,11 +184,52 @@ func TestAWatchCountsLookupsOnEveryNodeOnce(t *testing.T) {
 		alert.Reasons[len(alert.Reasons)-1] != "Seen by ns1 and ns2" {
 		t.Fatalf("alert = %+v", alert)
 	}
+	// The replica logged the first lookup, but its rows are in its own log,
+	// so the alert links to the first one the lead logged.
+	if alert.Path != "/logs/queries/1?name=discord.com" {
+		t.Fatalf("alert path = %q, want the lead's first lookup", alert.Path)
+	}
 	// The replica repeats its list each minute; the same hits never open a
 	// second alert.
 	again, err := lead.Alerts(ctx, now.Add(time.Minute))
 	if err != nil || len(again) != 1 || again[0].ID != alert.ID {
 		t.Fatalf("repeated report = %+v, %v", again, err)
+	}
+}
+
+// Lookups only a replica logged can't be linked to one by one from the
+// lead, so the alert searches Query Logs for them instead.
+func TestAWatchSeenOnlyByAReplicaSearchesQueryLogs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	configuration := watchTestConfig(config.AlertWatch{})
+	replicaLog := &fakeWatchLog{identities: emmasIdentities()}
+	replicaNode := func() alertNode { return alertNode{ID: "node-2", Name: "ns2", Clustered: true} }
+	replica := newWatchSource(replicaLog, configuration, replicaNode, leading(false), nil)
+	hits := alerts.Place(watchReplicaHits{replica}, alerts.OnEachNode)
+	var reported []alerts.Alert
+	lead := newWatchSource(&fakeWatchLog{identities: emmasIdentities()}, configuration, alertTestNode(true), leading(true),
+		func(time.Time) []alerts.Alert { return reported })
+	if _, err := hits.Alerts(ctx, alertTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lead.Alerts(ctx, alertTestNow); err != nil {
+		t.Fatal(err)
+	}
+	first := alertTestNow.Add(5 * time.Second)
+	replicaLog.add(first, "10.0.7.20", "discord.com", false)
+	now := alertTestNow.Add(time.Minute)
+	var err error
+	if reported, err = hits.Alerts(ctx, now); err != nil || len(reported) != 1 || reported[0].Watch.FirstQuery == 0 {
+		t.Fatalf("replica report = %+v, %v", reported, err)
+	}
+	found, err := lead.Alerts(ctx, now)
+	if err != nil || len(found) != 1 {
+		t.Fatalf("lead alerts = %+v, %v", found, err)
+	}
+	want := "/logs?client_ip=10.0.7.20&match=exact&name=discord.com&start=" + url.QueryEscape(first.Add(-time.Minute).Format(time.RFC3339)) + "&tab=queries"
+	if found[0].Path != want {
+		t.Fatalf("alert path = %q, want %q", found[0].Path, want)
 	}
 }
 

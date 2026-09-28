@@ -1,0 +1,186 @@
+package pages
+
+import (
+	"net/url"
+	"strings"
+)
+
+// CheckDomainRoute is where the Check a domain panel lives. Each domain's
+// address opens the Blocking page with the panel checking it.
+const CheckDomainRoute = "/blocked/check/"
+
+// CheckDomainPath is the address of the panel checking one domain.
+func CheckDomainPath(domain string) string {
+	return CheckDomainRoute + url.PathEscape(strings.TrimSuffix(domain, "."))
+}
+
+// CheckDomainVerdict is what blocking does with a domain.
+type CheckDomainVerdict string
+
+const (
+	CheckDomainBlocked CheckDomainVerdict = "blocked"
+	CheckDomainAllowed CheckDomainVerdict = "allowed"
+	// CheckDomainOpen is a domain nothing blocks or allows.
+	CheckDomainOpen CheckDomainVerdict = "open"
+	// CheckDomainOff is any domain while blocking is off or paused.
+	CheckDomainOff CheckDomainVerdict = "off"
+	// CheckDomainZone is a domain Sable answers from its own zone.
+	CheckDomainZone CheckDomainVerdict = "zone"
+)
+
+// CheckDomainView is the Check a domain panel. Before a domain is checked,
+// it asks for one.
+type CheckDomainView struct {
+	// Input is the domain as it was asked about.
+	Input   string
+	Checked bool
+	// Domain is Input as blocking reads it.
+	Domain      string
+	Verdict     CheckDomainVerdict
+	Explanation string
+	Rule        string
+	// Lists are the block lists the rule is on.
+	Lists       []string
+	OnAllowList bool
+	OnBlockList bool
+	Zone        string
+	// CanWrite offers Allow and Block.
+	CanWrite bool
+	Message  string
+	Error    string
+}
+
+// checkDomainSearch sits at the top of the Blocking page. A domain entered
+// opens the panel checking it, at its address.
+templ checkDomainSearch() {
+	<form class="blocking-check-search" data-drawer-navigate="domain" data-drawer-dialog="check-domain-dialog" role="search">
+		@SearchField("Check a domain", "Check a domain…", "", "", templ.Attributes{"name": "domain", "id": "blocking-check-input", "autocapitalize": "off", "spellcheck": "false", "enterkeyhint": "go"})
+	</form>
+}
+
+func checkDomainDrawerRoute() templ.Attributes {
+	return insightDrawerRoute(CheckDomainRoute, "/ui/blocking/check", "domain", "check-domain-content", "check-domain-loading", "/blocked")
+}
+
+// checkDomainDialog is the panel's shell on the Blocking page.
+templ checkDomainDialog() {
+	<dialog class="query-detail-dialog check-domain-dialog" id="check-domain-dialog" aria-labelledby="check-domain-title" { checkDomainDrawerRoute()... }>
+		<div class="query-detail-content" id="check-domain-content">
+			@CheckDomainDrawer(CheckDomainView{})
+		</div>
+	</dialog>
+	<template id="check-domain-loading">
+		@checkDomainLoading()
+	</template>
+}
+
+templ checkDomainLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "check-domain-dialog", TitleID: "check-domain-title", Eyebrow: "Check a Domain", Title: "Checking…", CloseLabel: "Close domain check"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Checking the domain…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+// CheckDomainDrawer says whether blocking stops a domain, and why.
+templ CheckDomainDrawer(view CheckDomainView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "check-domain-dialog", TitleID: "check-domain-title", Eyebrow: "Check a Domain", Title: ifThen(view.Checked, view.Domain, "Which domain?"), CloseLabel: "Close domain check"}, checkDomainFooter(view)) {
+		// Checking another domain gives the panel that domain's address.
+		<form class="check-domain-form" data-drawer-navigate="domain" role="search">
+			@SearchField("Domain to check", "ads.example.com", ifThen(view.Checked, view.Domain, view.Input), "", templ.Attributes{"name": "domain", "id": "check-domain-input", "autocapitalize": "off", "spellcheck": "false", "data-drawer-focus": true})
+			<button class="button" type="submit">Check</button>
+		</form>
+		@Toast(view.Message, "success")
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Could not check that</strong><span>{ view.Error }</span></div>
+		}
+		if view.Checked {
+			<section class="check-domain-result" aria-labelledby="check-domain-verdict">
+				<div class="query-detail-result"><span id="check-domain-verdict" class={ checkDomainVerdictClass(view.Verdict) }>{ checkDomainVerdictLabel(view.Verdict) }</span></div>
+				<p>{ view.Explanation }</p>
+			</section>
+			<dl class="query-detail-grid">
+				if view.Zone != "" {
+					<div class="query-detail-fact-wide"><dt>Answered by zone</dt><dd><a class="inline-link" href={ templ.SafeURL("/zones/" + url.PathEscape(view.Zone)) }>{ view.Zone }</a></dd></div>
+				}
+				if view.Rule != "" {
+					<div class="query-detail-fact-wide insight-fact-full"><dt>Matching rule</dt><dd><code>{ view.Rule }</code></dd></div>
+				}
+				<div class="query-detail-fact-wide"><dt>On the allow list</dt><dd>{ ifThen(view.OnAllowList, "Yes", "No") }</dd></div>
+				<div class="query-detail-fact-wide"><dt>On the block list</dt><dd>{ ifThen(view.OnBlockList, "Yes", "No") }</dd></div>
+			</dl>
+			if len(view.Lists) > 0 {
+				<section class="query-detail-answer" aria-labelledby="check-domain-lists">
+					<h3 id="check-domain-lists">Block lists</h3>
+					<div class="check-domain-lists">
+						for _, list := range view.Lists {
+							<button class="button outline compact" type="button" { drawerOpener(BlockListDrawerLink(list))... } aria-label={ "View details for " + list }>@Icon("list")<span>{ list }</span></button>
+						}
+					</div>
+				</section>
+			}
+			<p class="check-domain-note">This is the answer for a typical device. Devices in <a class="inline-link" href="/settings?tab=blocking#bypass-clients">Bypass Clients</a> are never blocked.</p>
+		}
+	}
+}
+
+templ checkDomainFooter(view CheckDomainView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if view.Checked {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			@CopyLinkButton(CheckDomainPath(view.Domain))
+			// One way out of each answer: a blocked domain can be allowed,
+			// and any other blocked.
+			if view.CanWrite && view.Zone == "" {
+				if view.Verdict == CheckDomainBlocked {
+					@checkDomainRuleButton(view.Domain, "allow")
+				} else if !view.OnBlockList {
+					@checkDomainRuleButton(view.Domain, "block")
+				}
+			}
+		</div>
+	}
+}
+
+templ checkDomainRuleButton(domain, action string) {
+	<form hx-post="/ui/blocking/check/rule" hx-target="#check-domain-content" hx-swap="innerHTML" hx-disable="find button">
+		<input type="hidden" name="domain" value={ domain }/>
+		<input type="hidden" name="action" value={ action }/>
+		if action == "block" {
+			<button class="button outline destructive" type="submit" data-replica-primary-action>@Icon("shield-x")<span>Block</span></button>
+		} else {
+			<button class="button" type="submit" data-replica-primary-action>@Icon("shield-check")<span>Allow</span></button>
+		}
+	</form>
+}
+
+func checkDomainVerdictLabel(verdict CheckDomainVerdict) string {
+	switch verdict {
+	case CheckDomainBlocked:
+		return "Blocked"
+	case CheckDomainAllowed:
+		return "Allowed"
+	case CheckDomainZone:
+		return "Answered by your zone"
+	case CheckDomainOff:
+		return "Not blocked right now"
+	default:
+		return "Not blocked"
+	}
+}
+
+func checkDomainVerdictClass(verdict CheckDomainVerdict) string {
+	switch verdict {
+	case CheckDomainBlocked:
+		return "source-pill source-blocked"
+	case CheckDomainZone:
+		return "source-pill source-authoritative"
+	case CheckDomainOff:
+		return "source-pill"
+	default:
+		return "rcode success"
+	}
+}

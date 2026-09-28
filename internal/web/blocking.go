@@ -208,6 +208,7 @@ func blockingMutationAction(path string) string {
 		"/ui/blocking/pause":          "blocking.pause",
 		"/ui/blocking/resume":         "blocking.resume",
 		"/ui/blocking/query-domain":   "blocking.query_log_policy",
+		"/ui/blocking/check/rule":     "blocking.check_policy",
 	}
 	if action := actions[path]; action != "" {
 		return action

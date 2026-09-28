@@ -133,13 +133,13 @@ func requiredPermission(request *http.Request) string {
 			return auth.PermissionZonesExport
 		}
 		return auth.PermissionZonesRead
-	case path == "/blocked" || strings.HasPrefix(path, pages.BlockListRoute) || strings.HasPrefix(path, "/ui/blocking") ||
+	case path == "/blocked" || strings.HasPrefix(path, pages.BlockListRoute) || strings.HasPrefix(path, pages.CheckDomainRoute) || strings.HasPrefix(path, "/ui/blocking") ||
 		strings.HasPrefix(path, "/api/v1/blocking") || path == "/api/v1/policy":
 		if write {
 			return auth.PermissionBlockingWrite
 		}
 		return auth.PermissionBlockingRead
-	case path == "/logs" || strings.HasPrefix(path, "/ui/query-log") ||
+	case path == "/logs" || strings.HasPrefix(path, pages.QueryRoute) || strings.HasPrefix(path, "/ui/query-log") ||
 		strings.HasPrefix(path, "/ui/logs/") || strings.HasPrefix(path, "/api/v1/query-log") ||
 		strings.HasPrefix(path, "/api/v1/logs/"):
 		return auth.PermissionLogsRead

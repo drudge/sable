@@ -291,7 +291,7 @@ func (source trustAnchorAlertSource) Alerts(_ context.Context, now time.Time) ([
 		ID: "server.dnssec-trust-anchors:" + node.key(), Group: config.AlertGroupServer, Kind: "server.dnssec-trust-anchors",
 		Problem: true, Tone: alerts.ToneAttention, Title: "DNSSEC key updates failing", Subject: node.Name,
 		Headline: node.Name + " cannot update its DNSSEC root keys", Summary: summary, Reasons: reasons,
-		Path: "/settings?tab=recursion", PathLabel: "Open Recursion Settings", ObservedAt: observed,
+		Path: "/settings?tab=recursion#recursive-resolver", PathLabel: "Open Recursion Settings", ObservedAt: observed,
 	}}, nil
 }
 
@@ -332,7 +332,7 @@ func (source backupAlertSource) Alerts(_ context.Context, now time.Time) ([]aler
 			ID: "backups.failed:" + node.key(), Group: config.AlertGroupBackups, Kind: "backups.failed",
 			Problem: true, Tone: alerts.ToneAttention, Title: "Backup failed", Subject: node.Name,
 			Headline: "The scheduled backup on " + node.Name + " failed", Summary: summary, Reasons: reasons,
-			Path: "/settings?tab=backup", PathLabel: "Open Backup Settings", ObservedAt: observed,
+			Path: "/settings?tab=backup#scheduled-local-backups", PathLabel: "Open Backup Settings", ObservedAt: observed,
 		})
 	}
 	if finished {
@@ -346,7 +346,7 @@ func (source backupAlertSource) Alerts(_ context.Context, now time.Time) ([]aler
 			Group: config.AlertGroupBackups, Kind: "backups.finished", Tone: alerts.TonePositive,
 			Title: "Backup finished", Subject: node.Name, Headline: node.Name + " finished a scheduled backup",
 			Summary: fmt.Sprintf("The scheduled backup on %s finished and was saved in %s.", node.Name, schedule.ResolvedDirectory),
-			Reasons: reasons, Path: "/settings?tab=backup", PathLabel: "Open Backup Settings", ObservedAt: schedule.LastSuccess,
+			Reasons: reasons, Path: "/settings?tab=backup#scheduled-local-backups", PathLabel: "Open Backup Settings", ObservedAt: schedule.LastSuccess,
 		})
 	}
 	return found, nil

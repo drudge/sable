@@ -155,6 +155,30 @@ func TestQueryEventsExactDomainIgnoresSubdomains(t *testing.T) {
 	}
 }
 
+func TestQueryEventReadsOneRowByID(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, []querylog.Event{
+		{OccurredAt: now, ClientIP: "10.0.7.16", Name: "first.example.", RecordType: dns.TypeA, Class: dns.ClassINET, Source: querylog.SourceCache, Protocol: "UDP"},
+		{OccurredAt: now, ClientIP: "10.0.7.17", Name: "second.example.", RecordType: dns.TypeAAAA, Class: dns.ClassINET, Source: querylog.SourceBlocked, Protocol: "TCP"},
+	})
+	page, err := opened.QueryEvents(context.Background(), querylog.Filter{Name: "second.example"})
+	if err != nil || len(page.Entries) != 1 {
+		t.Fatalf("QueryEvents = %+v, %v", page, err)
+	}
+	entry, found, err := opened.QueryEvent(context.Background(), page.Entries[0].ID)
+	if err != nil || !found {
+		t.Fatalf("QueryEvent found = %v, err = %v", found, err)
+	}
+	if entry.Name != "second.example." || entry.ClientIP != "10.0.7.17" || entry.Source != querylog.SourceBlocked {
+		t.Fatalf("QueryEvent = %+v, want the second row", entry)
+	}
+	if _, found, err := opened.QueryEvent(context.Background(), page.Entries[0].ID+100); err != nil || found {
+		t.Fatalf("missing row found = %v, err = %v", found, err)
+	}
+}
+
 func TestQueryLogInsightsMergesLegacyBoundaryRowsWithRollups(t *testing.T) {
 	t.Parallel()
 

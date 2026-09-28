@@ -75,7 +75,7 @@ func AlertWatchLink(domain, client, device string) string {
 // alertsWatchesCard lists the domain watches. Each switches on and off from
 // its row; Add and Edit open the watch dialog.
 templ alertsWatchesCard(view AlertsView) {
-	<section class="card settings-source-card settings-action-card alerts-watches-card">
+	<section class="card settings-source-card settings-action-card alerts-watches-card" id="watches" data-settings-card>
 		<header>
 			<div><h2>@Icon("eye")<span>Watches</span></h2><p>Alert when a device looks up a domain you pick.</p></div>
 			if view.CanEdit && !view.WatchLimit {

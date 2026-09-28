@@ -73,6 +73,10 @@ type WatchHit struct {
 	Blocked int       `json:"blocked"`
 	First   time.Time `json:"first"`
 	Last    time.Time `json:"last"`
+	// FirstQuery is the query log row of the first lookup. A row's ID only
+	// means something in the log of the node that wrote it, so it never
+	// leaves that node.
+	FirstQuery int64 `json:"-"`
 }
 
 // Source reports the alerts that are news right now. An alert stays in the

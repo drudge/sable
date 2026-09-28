@@ -4111,6 +4111,9 @@
 	  resetTokenDialog(dialog);
 	  setupRoutedDialog(dialog);
 	  setupDialogTabs(dialog);
+	  // A drawer opened before it has a record, such as Check a Domain asking
+	  // for a domain, has no address for the page to keep it in step with.
+	  if (dialog.dataset.drawerRoute) dialog.sableUnrouted = !pushURL && drawerRecord(dialog, window.location.pathname) === null;
 	  if (!dialog.open) {
 		dialog.sableResetDialogTabs?.();
 		dialog.showModal();
@@ -4130,6 +4133,13 @@
 	const showQueryDetail = (row) => {
 	  const dialog = document.getElementById("query-detail-dialog");
 	  if (!row || !dialog) return;
+	  // The panel may hold a query an address loaded, or the stand-in for one
+	  // that aged out; a row fills the blank panel.
+	  const content = dialog.querySelector("#query-detail-content");
+	  const blank = document.getElementById("query-detail-blank");
+	  if (content && blank?.content && !content.querySelector("[data-query-detail-source]")) {
+		content.replaceChildren(blank.content.cloneNode(true));
+	  }
 	  const values = {
 		name: row.dataset.queryDetailName,
 		time: row.dataset.queryDetailTime,
@@ -4196,7 +4206,25 @@
 	  }
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
-	  showRoutedDialog(dialog, false, document.activeElement);
+	  const why = dialog.querySelector("[data-query-detail-why]");
+	  if (why) {
+		why.href = `/blocked/check/${encodeURIComponent(domain.replace(/\.$/, ""))}`;
+		why.hidden = source !== "blocked" || !domain;
+	  }
+	  // The row fills the panel at once, and the address still changes to
+	  // the query's own, so it can be shared or reopened.
+	  const link = row.dataset.queryDetailLink || "";
+	  const copyLink = dialog.querySelector("[data-query-detail-copy-link]");
+	  if (copyLink) {
+		copyLink.dataset.copyUrl = link;
+		copyLink.hidden = !link;
+	  }
+	  if (link) {
+		const target = new URL(link, window.location.origin);
+		dialog.dataset.dialogUrl = target.pathname + target.search;
+		dialog.dataset.drawerShown = target.pathname;
+	  }
+	  showRoutedDialog(dialog, Boolean(link), document.activeElement);
 	};
 	// A drawer that shows one record at a time, such as a device, has an
 	// address for each record: its route followed by the record's ID.
@@ -4220,8 +4248,13 @@
 	  if (loading?.content) target.replaceChildren(loading.content.cloneNode(true));
 	  const content = new URL(dialog.dataset.drawerContent, window.location.origin);
 	  content.searchParams.set(dialog.dataset.drawerParam || "id", id);
-	  const range = new URLSearchParams(window.location.search).get("range");
-	  if (range) content.searchParams.set("range", range);
+	  // The range, and anything else the drawer names, carries over from the
+	  // page's address.
+	  const current = new URLSearchParams(window.location.search);
+	  ["range", ...(dialog.dataset.drawerForward || "").split(",")].forEach((name) => {
+		const value = name && current.get(name);
+		if (value) content.searchParams.set(name, value);
+	  });
 	  htmx.ajax("GET", content.pathname + content.search, {target: `#${target.id}`, swap: "innerHTML"});
 	};
 	const syncRoutedDialogs = () => {
@@ -4239,7 +4272,7 @@
 	  const kept = new Set();
 	  for (let dialog = active; dialog && !kept.has(dialog); dialog = dialog.sableUnder) kept.add(dialog);
 	  dialogs.forEach((dialog) => {
-		if (!kept.has(dialog) && dialog.open) dialog.close();
+		if (!kept.has(dialog) && dialog.open && !dialog.sableUnrouted) dialog.close();
 	  });
 	  if (!active) return;
 	  if (active.dataset.drawerRoute) {
@@ -4779,6 +4812,53 @@
 		});
 	  }
 	};
+	// A link to a Settings card, such as /settings?tab=alerts#watches, opens
+	// the card's tab, scrolls to it, and outlines it for a moment. Each
+	// address does this once, not again whenever the card redraws.
+	let linkedCardShown = "";
+	const showLinkedCard = () => {
+	  const hash = window.location.hash;
+	  if (!hash || hash === linkedCardShown) return;
+	  let card = null;
+	  try {
+		card = document.getElementById(decodeURIComponent(hash.slice(1)));
+	  } catch (_) {
+		return;
+	  }
+	  if (!card?.matches("[data-settings-card]")) return;
+	  linkedCardShown = hash;
+	  const panel = card.closest("[data-isotope-panel]");
+	  if (panel?.hidden) {
+		panel.closest("[data-isotope-tabs]")?.querySelector(`[data-isotope-tab="${CSS.escape(panel.dataset.isotopePanel)}"]`)?.click();
+	  }
+	  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	  card.scrollIntoView({block: "start", behavior: smooth ? "smooth" : "auto"});
+	  card.classList.add("is-linked");
+	  window.setTimeout(() => card.classList.remove("is-linked"), 2000);
+	};
+	window.addEventListener("hashchange", showLinkedCard);
+	// A search for a drawer's record, such as the Blocking page's Check a
+	// domain box or the box in that drawer, opens the record it names at that
+	// record's address. The first one opened from the page
+	// adds to history and the rest replace it, so closing returns to the
+	// page.
+	document.body.addEventListener("submit", (event) => {
+	  const form = event.target.closest?.("form[data-drawer-navigate]");
+	  if (!form) return;
+	  event.preventDefault();
+	  const dialog = form.closest("dialog[data-drawer-route]") || document.getElementById(form.dataset.drawerDialog || "");
+	  const value = String(new FormData(form).get(form.dataset.drawerNavigate) || "").trim();
+	  if (!dialog || !value) return;
+	  const path = dialog.dataset.drawerRoute + encodeURIComponent(value);
+	  if (drawerRecord(dialog, window.location.pathname) !== null) {
+		window.history.replaceState(window.history.state, "", path);
+	  } else {
+		window.history.pushState({sableDialog: dialog.id}, "", path);
+	  }
+	  // Checking the same record again loads it again.
+	  delete dialog.dataset.drawerShown;
+	  syncRoutedDialogs();
+	});
 	window.addEventListener("popstate", syncRoutedDialogs);
 	// Back and Forward between a page and a drawer opened over it stay on the
 	// page: the drawer opens or closes. htmx would otherwise reload the page
@@ -4809,10 +4889,18 @@
 	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
 	  ctx.target.replaceChildren(loading.content.cloneNode(true));
 	});
-	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
+	document.body.addEventListener("htmx:after:swap", () => {
+	  syncRoutedDialogs();
+	  openAutomaticDialogs();
+	  // A drawer that loads asking for something, such as the domain to
+	  // check, puts the cursor where it is asked.
+	  const field = document.querySelector("dialog[open] [data-drawer-focus]");
+	  if (field && !field.value && document.activeElement !== field) field.focus();
+	});
 	syncRoutedDialogs();
 	openAutomaticDialogs();
 	setupCommandPalette();
+	showLinkedCard();
 
 	const legacyCopyText = (value) => {
 	  const fallback = document.createElement("textarea");

@@ -149,7 +149,10 @@ func (source *watchSource) Alerts(ctx context.Context, now time.Time) ([]alerts.
 	if source.reported != nil {
 		for _, alert := range source.reported(now) {
 			if alert.Kind == watchHitKind && alert.Watch != nil {
-				hits[alert.ID] = *alert.Watch
+				hit := *alert.Watch
+				// A replica's rows are in its own log, not this one.
+				hit.FirstQuery = 0
+				hits[alert.ID] = hit
 			}
 		}
 	}
@@ -191,6 +194,11 @@ type watchCandidate struct {
 	names   []string
 	clients []string
 	nodes   []string
+	// query is the first lookup this node logged, and queryName the name it
+	// looked up, for the alert to link to.
+	query     int64
+	queryAt   time.Time
+	queryName string
 }
 
 // open starts a quiet window, with its alert, for each watch and device that
@@ -231,7 +239,11 @@ func (source *watchSource) open(watches []config.AlertWatch, hits map[string]ale
 			order = append(order, key)
 		}
 		if window, open := source.windows[key]; open && hit.First.Before(window.end) {
-			hit.First = window.end
+			// Its first lookup belongs to the window before.
+			hit.First, hit.FirstQuery = window.end, 0
+		}
+		if hit.FirstQuery > 0 && len(hit.Names) > 0 && (candidate.query == 0 || hit.First.Before(candidate.queryAt)) {
+			candidate.query, candidate.queryAt, candidate.queryName = hit.FirstQuery, hit.First, hit.Names[0]
 		}
 		candidate.first = minTime(candidate.first, hit.First)
 		candidate.last = maxTime(candidate.last, hit.Last)
@@ -288,7 +300,7 @@ func watchAlert(candidate watchCandidate, clustered bool) alerts.Alert {
 		ID:    "watches:" + candidate.watch.ID + ":" + candidate.device + ":" + strconv.FormatInt(candidate.first.Unix(), 10),
 		Group: config.AlertGroupWatches, Kind: watchAlertKind, Tone: alerts.ToneAttention,
 		Title: candidate.watch.Label(), Subject: candidate.name, Headline: headline, Summary: summary, Reasons: reasons,
-		Path: watchLogPath(candidate.clients[0], candidate.names[0], candidate.first), PathLabel: "Open in Query Logs",
+		Path: watchLogPath(candidate), PathLabel: "Open in Query Logs",
 		ObservedAt: candidate.first,
 	}
 }
@@ -319,9 +331,14 @@ func firstNames(names []string) []string {
 	return names[:watchNamesShown]
 }
 
-// watchLogPath opens Query Logs on the client's lookups of the name, from a
-// minute before the first.
-func watchLogPath(client, name string, first time.Time) string {
+// watchLogPath opens the first lookup this node logged. Lookups only another
+// node logged open Query Logs on the client's lookups of the name instead,
+// from a minute before the first, since each node keeps its own log.
+func watchLogPath(candidate watchCandidate) string {
+	if candidate.query > 0 {
+		return "/logs/queries/" + strconv.FormatInt(candidate.query, 10) + "?" + url.Values{"name": []string{candidate.queryName}}.Encode()
+	}
+	client, name, first := candidate.clients[0], candidate.names[0], candidate.first
 	values := url.Values{}
 	values.Set("tab", "queries")
 	values.Set("client_ip", client)
@@ -393,7 +410,7 @@ func (source *watchSource) read(ctx context.Context, now time.Time) ([]watchRead
 			key := watch.ID + "\x00" + lookup.ClientIP
 			hit, found := grouped[key]
 			if !found {
-				hit = &alerts.WatchHit{Watch: watch.ID, Node: node.Name, Client: lookup.ClientIP, First: lookup.OccurredAt, Last: lookup.OccurredAt}
+				hit = &alerts.WatchHit{Watch: watch.ID, Node: node.Name, Client: lookup.ClientIP, First: lookup.OccurredAt, Last: lookup.OccurredAt, FirstQuery: lookup.ID}
 				grouped[key] = hit
 				order = append(order, key)
 			}

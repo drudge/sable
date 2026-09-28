@@ -298,6 +298,7 @@ func New(
 	mux.HandleFunc("GET /cache", server.cachePage)
 	mux.HandleFunc("GET /blocked", server.blockingPage)
 	mux.HandleFunc("GET "+pages.BlockListRoute+"{name}", server.blockingPage)
+	mux.HandleFunc("GET "+pages.CheckDomainRoute+"{domain}", server.blockingPage)
 	mux.HandleFunc("GET /integrations", server.integrationsPage)
 	mux.HandleFunc("POST /ui/integrations/dynamic-dns/save", server.saveDynamicDNS)
 	mux.HandleFunc("POST /ui/integrations/dynamic-dns/sync", server.syncDynamicDNSNow)
@@ -320,6 +321,7 @@ func New(
 	mux.HandleFunc("POST /ui/integrations/sso/remove", server.removeSSO)
 	mux.HandleFunc("GET /dns-client", server.dnsClientPage)
 	mux.HandleFunc("GET /logs", server.logsPage)
+	mux.HandleFunc("GET "+pages.QueryRoute+"{id}", server.logsPage)
 	mux.HandleFunc("GET /settings", server.settingsPage)
 	mux.HandleFunc("POST /ui/settings", server.updateSettings)
 	mux.HandleFunc("POST /ui/settings/updates", server.updatePreferences)
@@ -402,6 +404,7 @@ func New(
 	mux.HandleFunc("GET /ui/query-log", server.recentQueryLog)
 	mux.HandleFunc("GET /ui/logs/runtime", server.runtimeLogsPanel)
 	mux.HandleFunc("GET /ui/logs/queries", server.queryLogsPanel)
+	mux.HandleFunc("GET /ui/logs/query", server.queryDetailPanel)
 	mux.HandleFunc("POST /ui/query", server.query)
 	mux.HandleFunc("POST /ui/cache/purge", server.purgeCacheUI)
 	mux.HandleFunc("GET /ui/cache/status", server.cacheStatus)
@@ -436,6 +439,8 @@ func New(
 	mux.HandleFunc("POST /ui/blocking/lists/update", server.updateBlockLists)
 	mux.HandleFunc("POST /ui/blocking/lists/refresh", server.refreshBlockList)
 	mux.HandleFunc("GET /ui/blocking/list", server.blockListPanel)
+	mux.HandleFunc("GET /ui/blocking/check", server.checkDomainPanel)
+	mux.HandleFunc("POST /ui/blocking/check/rule", server.checkDomainRule)
 	mux.HandleFunc("POST /ui/blocking/toggle", server.toggleBlocking)
 	mux.HandleFunc("POST /ui/blocking/pause", server.pauseBlocking)
 	mux.HandleFunc("POST /ui/blocking/resume", server.resumeBlocking)
@@ -1727,6 +1732,7 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 			status = strconv.Itoa(entry.ResponseCode)
 		}
 		views = append(views, pages.QueryLogEntryView{
+			ID:         entry.ID,
 			OccurredAt: pages.FormatClock(entry.OccurredAt, display, true),
 			ClientIP:   entry.ClientIP,
 			Name:       entry.Name,
