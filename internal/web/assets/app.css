@@ -1020,6 +1020,10 @@ dialog[open]::backdrop {
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
+/* The dialog already pads its edges, so the body lines up with the title
+   instead of padding again. A body inside a form keeps its gap to the footer. */
+.confirmation-dialog .isotope-dialog-body { overflow: visible; padding: 0; }
+.confirmation-dialog > form { display: grid; gap: 1rem; }
 /* The rankings dialog borrows the shared dialog chrome but lays its own rows
    out edge to edge, so it has to land after the base rules to keep them. */
 .top-stats-dialog { width: min(54rem, calc(100vw - 2rem)); max-width: 54rem; max-height: 85vh; padding: 0; overflow: hidden; }
