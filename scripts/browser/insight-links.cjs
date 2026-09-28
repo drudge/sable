@@ -56,7 +56,8 @@ const {chromium} = require('playwright');
     // A finding that is not on the page says so.
     await page.goto(`${baseURL}/insights/findings/000000000000?range=day`);
     await page.locator('#insight-finding-missing').waitFor();
-    await page.locator('#insight-finding-missing').getByText("This finding isn't in Insights for the").waitFor();
+    await page.locator('#insight-finding-missing').getByText('Not in the last 24 hours').waitFor();
+    await page.locator('#insight-finding-missing').getByRole('link', {name: 'Try Last 7 Days'}).waitFor();
 
     // A device's address opens on Devices with its drawer loaded.
     const deviceAddress = '/insights/devices/mac:3c:22:fb:01:02:03?range=day';
@@ -88,6 +89,23 @@ const {chromium} = require('playwright');
     await page.goBack();
     await app.waitFor({state: 'hidden'});
     await waitForAddress('/insights?range=day');
+
+    // A hidden finding's link says so, and Show Again opens the finding.
+    await page.goto(`${baseURL}/insights?range=day`);
+    await page.locator('#insight-findings').waitFor();
+    const hideFrom = page.locator('.insight-evidence-button').first();
+    const hiddenAddress = await hideFrom.getAttribute('data-dialog-url');
+    const hiding = page.locator(`#${await hideFrom.getAttribute('data-dialog-open')}`);
+    await hideFrom.click();
+    await hiding.locator('.insight-hide-menu > summary').click();
+    await hiding.getByRole('button', {name: /For a Week/}).click();
+    await hiding.waitFor({state: 'hidden'});
+    await page.goto(baseURL + hiddenAddress);
+    const standIn = page.locator('#insight-finding-missing');
+    await standIn.getByText('You hid this finding').waitFor();
+    await standIn.getByRole('button', {name: 'Show Again'}).click();
+    await page.locator(`dialog[data-dialog-url="${hiddenAddress}"]`).waitFor();
+    assert.equal(here(), hiddenAddress, 'the finding opens at its own address');
 
     assert.deepEqual(errors, []);
     console.log('PASS findings, devices, and apps open at their own addresses');

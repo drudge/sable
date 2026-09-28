@@ -265,12 +265,12 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	findings = insightModesOf(snapshot.Config.Insights.Findings).shown(findings)
 	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
 	view.CanHideFindings = canRemember && console.CanWriteSettings
+	var hidden []insights.Finding
 	if canRemember {
 		feedback, err := feedbackStore.InsightFeedback(request.Context(), time.Now())
 		if err != nil {
 			server.logger.Warn("read insight feedback", "error", err)
 		}
-		var hidden []insights.Finding
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
 	}
@@ -282,15 +282,17 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	}
 	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config, window.Range)
 	view.Headline = insightHeadline(findings, view.Findings)
-	// A link can open a finding further down than the Overview lists.
+	// A link can open a finding further down than the Overview lists, and
+	// one the page cannot show says why.
 	if linked := linkedFinding(request); linked != "" {
-		for index, finding := range findings {
-			if index >= maximumOverviewFindings && insights.LinkID(finding.ID) == linked {
-				extra := server.insightFindingViews([]insights.Finding{finding}, given, snapshot.Config, window.Range)[0]
-				extra.ID = "insight-finding-linked"
-				view.LinkedFinding = &extra
-				break
-			}
+		index := slices.IndexFunc(findings, func(finding insights.Finding) bool { return insights.LinkID(finding.ID) == linked })
+		switch {
+		case index >= maximumOverviewFindings:
+			extra := server.insightFindingViews(findings[index:index+1], given, snapshot.Config, window.Range)[0]
+			extra.ID = "insight-finding-linked"
+			view.LinkedFinding = &extra
+		case index < 0:
+			view.LinkedMissing = insightLinkedMissing(linked, window.Range, view.HiddenFindings, view.CanHideFindings)
 		}
 	}
 	view.CheckedSummary = insightsCheckedSummary(console, window)
@@ -334,6 +336,25 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		}
 	}
 	return view
+}
+
+// insightsLongerRanges is the next longer range to look for a finding in.
+var insightsLongerRanges = map[string][2]string{"day": {"week", "Last 7 Days"}, "week": {"month", "Last 30 Days"}, "month": {"year", "Last Year"}}
+
+// insightLinkedMissing explains a finding's link that the page cannot open:
+// the operator hid the finding, or the range does not reach it.
+func insightLinkedMissing(linked, rangeName string, hidden []pages.InsightHiddenFindingView, canShowAgain bool) *pages.InsightLinkedMissingView {
+	for _, finding := range hidden {
+		if insights.LinkID(finding.FindingID) == linked {
+			return &pages.InsightLinkedMissingView{Hidden: &finding, CanShowAgain: canShowAgain}
+		}
+	}
+	missing := &pages.InsightLinkedMissingView{}
+	if longer, found := insightsLongerRanges[rangeName]; found {
+		missing.Wider, missing.WiderLabel = longer[0], longer[1]
+		missing.WiderLink = pages.InsightFindingRoute + linked + "?" + url.Values{"range": []string{longer[0]}}.Encode()
+	}
+	return missing
 }
 
 // insightHeadline says what stands out, one clause per finding with news. A

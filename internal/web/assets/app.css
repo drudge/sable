@@ -3885,6 +3885,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .dark .insight-findings-empty > span { color: #22c55e; }
 .insight-findings-empty > span .nav-icon { width: 1.15rem; height: 1.15rem; }
 .insight-findings-empty strong, .insight-section-empty strong { font-size: .875rem; }
+/* A finding's link that cannot open is neither good nor bad news. */
+.insight-link-missing { min-height: 16rem; }
+.insight-link-missing > span, .dark .insight-link-missing > span { background: var(--muted); color: var(--muted-foreground); }
 .insight-findings-empty p, .insight-section-empty p { max-width: 30rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .insight-section-empty > .nav-icon { width: 1.25rem; height: 1.25rem; margin-bottom: .35rem; color: var(--muted-foreground); }
 .insight-section-empty .button { margin-top: .5rem; }

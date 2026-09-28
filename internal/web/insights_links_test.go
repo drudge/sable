@@ -4,6 +4,7 @@ import (
 	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -28,11 +29,8 @@ func TestInsightsLinksOpenThePageBehindTheirDrawers(t *testing.T) {
 			`data-drawer-content="/ui/insights/app" data-drawer-param="id" data-drawer-route="/insights/apps/"`,
 			`data-dialog-base-url="/insights?range=week"`,
 		}},
-		// A finding's drawer comes with the Overview, and the page offers a
-		// stand-in for when the finding is not in it.
-		{"/insights/findings/0123456789ab?range=day", "overview", []string{
-			"data-drawer-pending", `id="insight-finding-missing"`, `data-drawer-fallback="true" data-drawer-route="/insights/findings/"`,
-		}},
+		// A finding's drawer comes with the Overview, which the page waits for.
+		{"/insights/findings/0123456789ab?range=day", "overview", []string{"data-drawer-pending"}},
 	} {
 		response := server.get(t, "everything", test.path, false)
 		if response.Code != http.StatusOK {
@@ -77,6 +75,56 @@ func TestInsightsOverviewKeepsADrawersAddress(t *testing.T) {
 		if !strings.Contains(html.UnescapeString(body), `data-copy-url="`+detail[2]+`"`) {
 			t.Errorf("finding drawer %s cannot copy its link", detail[1])
 		}
+	}
+}
+
+// A finding's link the page cannot open says why: the range does not reach
+// it, with the next longer range to try, or the operator hid it, with the way
+// to show it again.
+func TestInsightsExplainAFindingLinkTheyCannotOpen(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	overview := func(current string) string {
+		request := httptest.NewRequest(http.MethodGet, "/ui/insights/overview?range=day", nil)
+		request.AddCookie(&http.Cookie{Name: server.sessionCookieName(), Value: "everything"})
+		request.Header.Set("HX-Request", "true")
+		request.Header.Set("HX-Current-URL", "http://sable.test"+current)
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return html.UnescapeString(response.Body.String())
+	}
+	if plain := overview("/insights?range=day"); strings.Contains(plain, "insight-finding-missing") {
+		t.Fatal("the Overview offered a stand-in without a finding's link")
+	}
+	gone := overview("/insights/findings/0123456789ab?range=day")
+	for _, expected := range []string{
+		`id="insight-finding-missing"`, `data-drawer-fallback="true" data-drawer-route="/insights/findings/"`,
+		"Not in the last 24 hours", `href="/insights/findings/0123456789ab?range=week">Try Last 7 Days</a>`, `href="/insights?range=day">Open Insights</a>`,
+	} {
+		if !strings.Contains(gone, expected) {
+			t.Errorf("a gone finding's stand-in is missing %s", expected)
+		}
+	}
+
+	id := regexp.MustCompile(`<input type="hidden" name="id" value="([^"]+)"`).FindStringSubmatch(overview("/insights?range=day"))
+	if id == nil {
+		t.Fatal("no finding to hide")
+	}
+	link := "/insights/findings/" + insights.LinkID(id[1]) + "?range=day"
+	if shown := overview(link); strings.Contains(shown, `id="insight-finding-missing"`) || !strings.Contains(shown, `data-dialog-url="`+link+`"`) {
+		t.Fatal("a finding on the page did not open as itself")
+	}
+	if response := server.post(t, "everything", "/ui/insights/feedback", url.Values{"id": {id[1]}, "action": {"snooze"}, "label": {"Hidden finding"}}); response.Code >= 300 {
+		t.Fatalf("hide = %d", response.Code)
+	}
+	hidden := overview(link)
+	for _, expected := range []string{"Hidden finding", "You hid this finding", "Hidden until ", "It comes back then if it still applies.", "Show Again", `value="` + id[1] + `"`} {
+		if !strings.Contains(hidden, expected) {
+			t.Errorf("a hidden finding's stand-in is missing %s", expected)
+		}
+	}
+	if strings.Contains(hidden, "Try Last") {
+		t.Error("a hidden finding offered a longer range")
 	}
 }
 

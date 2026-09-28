@@ -29,8 +29,10 @@ type InsightsOverviewView struct {
 	// a drawer opened from a link returns.
 	PageURL string
 	// LinkedFinding is a finding a link opened that the Overview does not
-	// list, so its drawer is still there to open.
+	// list, so its drawer is still there to open. LinkedMissing stands in for
+	// one the page cannot show at all.
 	LinkedFinding *InsightFindingView
+	LinkedMissing *InsightLinkedMissingView
 	TimeDisplay    TimeDisplay
 	CanLogs        bool
 	CanBlocking    bool
@@ -273,6 +275,17 @@ type InsightFindingView struct {
 	Chart *insights.Chart
 }
 
+// InsightLinkedMissingView explains a finding's link the page cannot open:
+// the finding is hidden, or it is not in the range, in which case Wider is the
+// next longer range to look in, if there is one.
+type InsightLinkedMissingView struct {
+	Hidden       *InsightHiddenFindingView
+	Wider        string
+	WiderLabel   string
+	WiderLink    string
+	CanShowAgain bool
+}
+
 // InsightHiddenFindingView is a finding an operator hid, and until when.
 type InsightHiddenFindingView struct {
 	FindingID string
@@ -375,22 +388,66 @@ templ insightsDocument(view InsightsOverviewView) {
 			@insightAppLoading()
 		</template>
 	}
-	@insightMissingFinding(view)
 }
 
-// insightMissingFinding opens for a finding's link when the finding is not on
-// the page: it was resolved, hidden, or falls outside the range.
-templ insightMissingFinding(view InsightsOverviewView) {
-	@DetailDrawer(DetailDrawerView{
+// insightMissingFinding opens for a finding's link when the page cannot show
+// the finding: it is hidden, or it is not in the range. It says which, and
+// offers the way back to it.
+templ insightMissingFinding(view InsightsOverviewView, missing InsightLinkedMissingView) {
+	@DetailDrawer(insightMissingHeader(view, missing), insightMissingFooter(view, missing)) {
+		if missing.Hidden != nil {
+			<div class="insight-findings-empty insight-link-missing">
+				<span>@Icon("eye-off")</span>
+				<strong>You hid this finding</strong>
+				<p>{ insightHiddenExplanation(*missing.Hidden) }</p>
+			</div>
+		} else {
+			<div class="insight-findings-empty insight-link-missing">
+				<span>@Icon("search")</span>
+				<strong>Not in the { strings.ToLower(view.RangeLabel) }</strong>
+				<p>It may have cleared up, or it happened earlier.{ ifThen(missing.Wider != "", " A longer range may still show it.", "") }</p>
+			</div>
+		}
+	}
+}
+
+func insightMissingHeader(view InsightsOverviewView, missing InsightLinkedMissingView) DetailDrawerView {
+	header := DetailDrawerView{
 		ID: "insight-finding-missing", TitleID: "insight-finding-missing-title", Eyebrow: "Finding", Title: "Not showing right now",
 		CloseLabel: "Close", Attributes: templ.Attributes{
 			"data-drawer-route": InsightFindingRoute, "data-drawer-fallback": "true", "data-dialog-base-url": insightsOverviewPath(view.Range),
 		},
-	}, insightDeviceCloseFooter()) {
-		<div class="query-detail-section-heading">
-			<p>This finding isn't in Insights for the { strings.ToLower(view.RangeLabel) }. It may have cleared up or been hidden, or it happened outside this range.</p>
-		</div>
 	}
+	if missing.Hidden != nil {
+		header.Eyebrow, header.Title = "Hidden finding", missing.Hidden.Label
+	}
+	return header
+}
+
+func insightHiddenExplanation(hidden InsightHiddenFindingView) string {
+	if strings.HasPrefix(hidden.Status, "Hidden until ") {
+		return hidden.Status + ". It comes back then if it still applies."
+	}
+	return "You marked it normal, so it stays hidden until you show it again."
+}
+
+templ insightMissingFooter(view InsightsOverviewView, missing InsightLinkedMissingView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	<div class="query-detail-policy-actions insight-drawer-actions">
+		if missing.Hidden != nil {
+			if missing.CanShowAgain {
+				<form hx-post="/ui/insights/feedback/remove" hx-swap="none">
+					<input type="hidden" name="id" value={ missing.Hidden.FindingID }/>
+					<button class="button" type="submit" data-replica-primary-action>@Icon("eye")<span>Show Again</span></button>
+				</form>
+			}
+		} else {
+			<a class="button outline" href={ templ.SafeURL(insightsOverviewPath(view.Range)) }>Open Insights</a>
+			if missing.WiderLink != "" {
+				<a class="button" href={ templ.SafeURL(missing.WiderLink) }>Try { missing.WiderLabel }</a>
+			}
+		}
+	</div>
 }
 
 // InsightsContent is the whole Insights page below the navigation, including
@@ -695,6 +752,9 @@ templ InsightFindings(view InsightsOverviewView) {
 	}
 	if view.LinkedFinding != nil {
 		@InsightEvidence(*view.LinkedFinding, view)
+	}
+	if view.LinkedMissing != nil {
+		@insightMissingFinding(view, *view.LinkedMissing)
 	}
 }
 
