@@ -98,7 +98,10 @@ const {chromium} = require('playwright');
     const hiding = page.locator(`#${await hideFrom.getAttribute('data-dialog-open')}`);
     await hideFrom.click();
     await hiding.locator('.insight-hide-menu > summary').click();
+    // Hiding saves in the background, so the link waits until it is saved.
+    const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/ui/insights/feedback' && response.ok());
     await hiding.getByRole('button', {name: /For a Week/}).click();
+    await saved;
     await hiding.waitFor({state: 'hidden'});
     await page.goto(baseURL + hiddenAddress);
     const standIn = page.locator('#insight-finding-missing');
