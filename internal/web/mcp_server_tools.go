@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
@@ -68,6 +69,19 @@ var mcpServerTools = []mcpTool{
 		call:        (*Server).mcpGetStats,
 		section:     "server",
 		grant:       "metrics.read",
+	},
+	{
+		Name:  "get_dynamic_dns",
+		Title: "Get Dynamic DNS status",
+		Description: "Say whether Dynamic DNS is keeping public records pointed at this network: the current and " +
+			"previous public addresses and when they changed, which records it keeps up to date, when it last " +
+			"succeeded, and its last error. running is true while an update is under way. Check it first when " +
+			"home cannot be reached from outside.",
+		InputSchema: mcpObjectSchema(nil, nil),
+		Annotations: mcpToolAnnotations{Title: "Get Dynamic DNS status", ReadOnlyHint: true, IdempotentHint: true},
+		call:        (*Server).mcpGetDynamicDNS,
+		section:     "server",
+		grant:       "settings.read",
 	},
 }
 
@@ -387,4 +401,139 @@ func (server *Server) mcpNodeName() string {
 	}
 	name, _ := os.Hostname()
 	return name
+}
+
+type mcpPublicAddress struct {
+	Current   string     `json:"current"`
+	Previous  string     `json:"previous,omitempty"`
+	ChangedAt *time.Time `json:"changed_at,omitempty"`
+}
+
+type mcpDynamicDNSRecord struct {
+	Provider string `json:"provider"`
+	Zone     string `json:"zone"`
+	Name     string `json:"name"`
+	IPv4     bool   `json:"ipv4"`
+	IPv6     bool   `json:"ipv6"`
+	TTL      uint32 `json:"ttl,omitempty"`
+}
+
+func (server *Server) mcpGetDynamicDNS(request *http.Request, arguments json.RawMessage) (any, error) {
+	if err := decodeMCPArguments(arguments, &struct{}{}); err != nil {
+		return nil, err
+	}
+	if !server.mcpHasPermission(request, auth.PermissionSettingsRead) {
+		return nil, errors.New("this token needs settings.read to read Dynamic DNS")
+	}
+	settings := server.config.Current().Config.DynamicDNS
+	publishers := settings.ConfiguredPublishers()
+	records := []mcpDynamicDNSRecord{}
+	for _, publisher := range publishers {
+		for _, record := range publisher.Records {
+			records = append(records, mcpDynamicDNSRecord{
+				Provider: publisher.Provider, Zone: record.Zone, Name: record.Name, IPv4: record.IPv4, IPv6: record.IPv6, TTL: record.TTL,
+			})
+		}
+	}
+	result := map[string]any{"configured": len(publishers) > 0, "enabled": settings.Runnable(), "records": records}
+	providers := settings.ProviderNames()
+	if len(providers) == 1 {
+		result["provider"] = providers[0]
+	} else if len(providers) > 1 {
+		result["providers"] = providers
+	}
+	switch {
+	case server.dynamicDNS == nil:
+		result["running"] = false
+		result["note"] = "Dynamic DNS is unavailable on this server."
+		return result, nil
+	case len(publishers) == 0:
+		result["running"] = false
+		result["note"] = "Dynamic DNS is not set up. Set it up in Sable under Integrations, Dynamic DNS."
+		return result, nil
+	case server.mcpReplica():
+		// Only the primary publishes, so a replica's view is not the answer.
+		result["running"] = false
+		result["note"] = "Dynamic DNS runs only on the cluster primary. Connect to the primary to see its status."
+		return result, nil
+	}
+	status := server.dynamicDNS.Status(request.Context())
+	result["running"] = status.Running
+	result["credentials_configured"] = status.CredentialsConfigured
+	if address := mcpPublicAddressView(status.IPv4, status.PreviousIPv4, status.IPv4ChangedAt); address != nil {
+		result["ipv4"] = address
+	}
+	if address := mcpPublicAddressView(status.IPv6, status.PreviousIPv6, status.IPv6ChangedAt); address != nil {
+		result["ipv6"] = address
+	}
+	for key, at := range map[string]time.Time{
+		"last_attempt": status.LastAttempt, "last_success": status.LastSuccess,
+		"last_published": status.LastPublished, "next_attempt": status.NextAttempt,
+	} {
+		if !at.IsZero() {
+			result[key] = at.UTC()
+		}
+	}
+	result["consecutive_failures"] = status.ConsecutiveFailures
+	if status.LastError != "" {
+		result["last_error"] = server.mcpDynamicDNSError(request.Context(), providers, status.LastError)
+	}
+	if !settings.Enabled {
+		result["note"] = "Dynamic DNS is paused, so public records are not being updated."
+	}
+	return result, nil
+}
+
+func mcpPublicAddressView(current, previous string, changedAt time.Time) *mcpPublicAddress {
+	if current == "" && previous == "" {
+		return nil
+	}
+	view := &mcpPublicAddress{Current: current, Previous: previous}
+	if !changedAt.IsZero() {
+		changed := changedAt.UTC()
+		view.ChangedAt = &changed
+	}
+	return view
+}
+
+// mcpDynamicDNSError words a provider error the way the Integrations page
+// does, which hides fields that look like credentials, then blanks every
+// stored credential wherever it still appears, since a provider may echo one
+// back in a message of its own.
+func (server *Server) mcpDynamicDNSError(ctx context.Context, providers []string, raw string) string {
+	provider := ""
+	if len(providers) == 1 {
+		provider = providers[0]
+	}
+	summary, _ := dynamicDNSErrorDisplay(provider, raw)
+	for _, name := range providers {
+		credentials, found := server.dynamicDNS.StoredCredentials(ctx, name)
+		if !found {
+			continue
+		}
+		summary = redactKnownSecrets(summary, dynamicDNSSecretValues(credentials)...)
+	}
+	return summary
+}
+
+// dynamicDNSSecretValues are the credentials that must never be shown. Names
+// such as the TSIG key name, the zone ID, and the endpoint are not secret.
+func dynamicDNSSecretValues(credentials dnsprovider.Credentials) []string {
+	return []string{
+		credentials.APIToken, credentials.APIKey, credentials.Secret, credentials.TSIGSecret,
+		credentials.SecretAccessKey, credentials.SessionToken, credentials.ApplicationSecret,
+		credentials.ConsumerKey, credentials.AccessKeyID, credentials.ApplicationKey,
+	}
+}
+
+// redactKnownSecrets blanks each secret wherever it appears in text. Very
+// short values are left alone, since blanking them would garble the text
+// without hiding anything worth guessing.
+func redactKnownSecrets(text string, secrets ...string) string {
+	for _, secret := range secrets {
+		if secret = strings.TrimSpace(secret); len(secret) >= 6 {
+			text = strings.ReplaceAll(text, secret, "[redacted]")
+		}
+	}
+	return text
 }

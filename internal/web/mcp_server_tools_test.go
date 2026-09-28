@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 )
@@ -166,5 +169,51 @@ func TestMCPLatencyPercentiles(t *testing.T) {
 	}
 	if mcpLatencyPercentiles(nil) != nil {
 		t.Fatal("no answers should give no percentiles")
+	}
+}
+
+func TestMCPGetDynamicDNS(t *testing.T) {
+	t.Parallel()
+	server, configuration := newMCPTestServer(t)
+	server.SetDynamicDNSController(&testDynamicDNSController{})
+
+	off, failure := callMCPToolForTest(t, server, "sable_pat_settings", "get_dynamic_dns", map[string]any{})
+	if failure != "" || off["configured"] != false || !strings.Contains(off["note"].(string), "not set up") {
+		t.Fatalf("not set up = %v %q", off, failure)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_metrics", "get_dynamic_dns", map[string]any{}); !strings.Contains(failure, "settings.read") {
+		t.Fatalf("without settings.read = %q", failure)
+	}
+
+	const token = "cf-token-8f3kq92LmZ"
+	changed := time.Date(2026, 9, 27, 14, 2, 10, 0, time.UTC)
+	configuration.snapshot.Config.DynamicDNS = config.DynamicDNS{Enabled: true, Publishers: []config.DynamicDNSPublisher{{
+		Provider: "cloudflare", Records: []config.DynamicDNSRecord{{Zone: "example.com", Name: "home", IPv4: true, IPv6: true, TTL: 300}},
+	}}}
+	server.SetDynamicDNSController(&testDynamicDNSController{
+		configured: true, credentials: dnsprovider.Credentials{APIToken: token},
+		status: dynamicdns.Status{
+			CredentialsConfigured: true, IPv4: "203.0.113.44", PreviousIPv4: "198.51.100.7", IPv4ChangedAt: changed,
+			LastAttempt: changed.Add(time.Hour), ConsecutiveFailures: 6,
+			// A provider that echoes the credential back, both in a field
+			// that looks like one and in plain text.
+			LastError: "authentication error: token=" + token + " rejected; " + token + " lacks Zone.DNS edit",
+		},
+	})
+	status, failure := callMCPToolForTest(t, server, "sable_pat_settings", "get_dynamic_dns", map[string]any{})
+	ipv4, _ := status["ipv4"].(map[string]any)
+	records, _ := status["records"].([]any)
+	if failure != "" || status["provider"] != "cloudflare" || ipv4["current"] != "203.0.113.44" || ipv4["previous"] != "198.51.100.7" ||
+		len(records) != 1 || status["consecutive_failures"] != float64(6) || status["ipv6"] != nil {
+		t.Fatalf("get_dynamic_dns = %v %q", status, failure)
+	}
+	if lastError, _ := status["last_error"].(string); strings.Contains(lastError, token) || !strings.Contains(lastError, "Zone.DNS edit") {
+		t.Fatalf("last_error = %q", lastError)
+	}
+
+	server.SetClusterController(testReplicaClusterController{})
+	replica, _ := callMCPToolForTest(t, server, "sable_pat_settings", "get_dynamic_dns", map[string]any{})
+	if replica["running"] != false || replica["ipv4"] != nil || !strings.Contains(replica["note"].(string), "primary") {
+		t.Fatalf("replica = %v", replica)
 	}
 }

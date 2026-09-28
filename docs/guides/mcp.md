@@ -26,6 +26,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
 | `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
+| `get_dynamic_dns` | On | Your public addresses, the records Dynamic DNS keeps up to date, and its last error | `settings.read` |
 | `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
 | `search_queries` | Off | Each device's DNS lookups | `logs.read` |
 
@@ -38,6 +39,8 @@ Insights findings and the query log describe what each device on your network do
 `get_version` follows the update channel in **About**. It uses the last saved release check unless the assistant passes `check`, and even then it asks GitHub at most once every 5 minutes. With `cluster.read`, it also lists what each node runs. It cannot install an update.
 
 `get_stats` gives the same query, blocking, cache, and response-code counts as the dashboard for the range asked. Where answers came from, upstream errors, DNSSEC results, and response times are counted only since the node started. It never says which device asked for what. The number of devices and the most blocked domains come from the query log, so they appear only when the token also has `logs.read`. On a cluster, the numbers are the connected node's.
+
+`get_dynamic_dns` sends your public IP addresses to your assistant's AI provider whenever it calls the tool. Leave it off if you would rather not share them. Provider errors are shown the way **Integrations** shows them, and any stored credential that appears in one is blanked. Dynamic DNS runs only on the cluster primary, so a replica answers with a note to ask the primary.
 
 Assistants see a changed tool list the next time they connect.
 
