@@ -558,6 +558,13 @@ lists every such skip.
 UniFi consoles ship a self-signed certificate. Point `tls_ca_file` at its issuer
 to pin it, or set `tls_insecure` to accept it unverified on a trusted network.
 
+**Finding devices.** Every sync also reads each connected client's traffic,
+named or not, and the DNS servers each network's DHCP hands out, so
+[Insights](guides/insights.md#devices-that-dont-use-sable) can point out devices
+that never ask Sable anything. `find_devices = true`, the wizard's **Use UniFi
+to find devices** checkbox, runs the sync with no network mapped at all: it
+reads the controller for Insights and writes no records.
+
 Synchronization runs only on a cluster's writable node. Replicas receive the
 records through normal zone replication instead of contacting the controller
 themselves. The `[unifi]` section and the controller credentials still travel to
@@ -762,8 +769,9 @@ without its area: `went_quiet` is `devices.went-quiet`, the `kind` webhooks
 see. `mode` is `"alert"` to show findings of that kind in Insights and send
 each new one as an alert, `"show"` to show them without alerting, or `"off"` to
 stop Insights looking for them at all. By default every kind that is news
-alerts, and the three that describe block list coverage are only shown. Those
-three are never news, so they take `"show"` or `"off"`. A limit left out, or
+alerts, and the three that describe block list coverage and the one that says
+a network sends lookups through its gateway are only shown. Those four are
+never news, so they take `"show"` or `"off"`. A limit left out, or
 set to 0, keeps its default, so a table only needs what it changes. Insights
 Settings, opened from **Settings** at the top of Insights, sets all of this, so
 most people never edit it by hand. A kind set to alert is sent only while
@@ -780,6 +788,9 @@ most people never edit it by hand. A kind set to alert is sent only while
 | `unusual_hours` | Active at an unusual hour | `minimum_lookups`: lookups in an hour it had not used for two weeks; 30, 1 to 100,000. |
 | `check_in` | Checks in on a schedule | `longest_interval`: most time between lookups; `"2h"`, 2 minutes to 2 hours. `shortest_span`: least time it keeps the schedule up; `"12h"`, 1 to 23 hours. |
 | `appliance_new_domains` | Appliance talking somewhere new | `minimum_new_domains`: domains it never used, in one day; 3, 1 to 1,000. |
+| `not_using_sable` | Not using Sable | `hours`: how long UniFi must show a device online and busy with no lookup; 24, 1 to 168. |
+| `network_other_dns` | Network hands out other DNS | None |
+| `network_via_gateway` | Network sends lookups through the gateway | None. `"show"` or `"off"`. |
 | `update_failing` | Block list updates are failing | `missed_updates`: update intervals without a download; 2, 1 to 100. |
 | `past_block` | Possible past blocking issue | None |
 | `list_unreadable` | Block list left out of the comparison | None. `"show"` or `"off"`. |
