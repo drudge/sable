@@ -497,6 +497,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		Read: database.ClientIdentities, Record: database.RecordClientIdentities, Lookback: devices.Lookback,
 	})
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
+	webServer.SetWatchStatus(watches.LastAlert)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment
 		// with security switched off has no provider and no sign-in button.

@@ -1,0 +1,205 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+)
+
+// AlertWatchView is one domain watch as the Watches card lists it.
+type AlertWatchView struct {
+	ID    string
+	Label string
+	// Domains names a few domains, or counts many.
+	Domains string
+	// Devices names the devices it covers, or says "Any device".
+	Devices string
+	// Result says which lookups it alerts on, such as "Allowed or blocked".
+	Result  string
+	Enabled bool
+	// LastAlert says when it last alerted, such as "Last triggered 2h ago".
+	LastAlert string
+}
+
+// AlertWatchFormView is the Add or Edit Watch dialog.
+type AlertWatchFormView struct {
+	// ID is empty for a new watch.
+	ID   string
+	Name string
+	// Domains are one per line.
+	Domains   string
+	AnyDevice bool
+	// Devices are the devices Insights knows, each picked or not. It is empty
+	// when CanPickDevices is false, and watches then pick by address alone.
+	Devices        []AlertWatchDeviceChoice
+	CanPickDevices bool
+	// Addresses are the addresses and networks picked, one per line.
+	Addresses string
+	// Result is "any", "allowed", or "blocked".
+	Result       string
+	Quiet        string
+	QuietChoices []AlertWatchChoice
+}
+
+// AlertWatchDeviceChoice is one device a watch can pick.
+type AlertWatchDeviceChoice struct {
+	Key    string
+	Label  string
+	Detail string
+	Picked bool
+}
+
+// AlertWatchChoice is one option of a select.
+type AlertWatchChoice struct {
+	Value string
+	Label string
+}
+
+// AlertWatchLink opens Settings > Alerts with the Add Watch dialog open on a
+// domain, for the device with an Insights key or the device behind a client
+// address.
+func AlertWatchLink(domain, client, device string) string {
+	values := url.Values{}
+	values.Set("tab", "alerts")
+	values.Set("watch_domain", domain)
+	if device != "" {
+		values.Set("watch_device", device)
+	} else if client != "" {
+		values.Set("watch_client", client)
+	}
+	return "/settings?" + values.Encode()
+}
+
+// alertsWatchesCard lists the domain watches. Each switches on and off from
+// its row; Add and Edit open the watch dialog.
+templ alertsWatchesCard(view AlertsView) {
+	<section class="card settings-source-card settings-action-card alerts-watches-card">
+		<header>
+			<div><h2>@Icon("eye")<span>Watches</span></h2><p>Alert when a device looks up a domain you pick.</p></div>
+			if view.CanEdit && !view.WatchLimit {
+				<button class="button compact" id="alert-watch-add" type="button" hx-get="/ui/settings/alerts/watches/form" hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" data-replica-primary-action>@Icon("plus")<span>Add Watch</span></button>
+			}
+		</header>
+		<div class="isotope-card-content">
+			if view.WatchesQueryLogOff {
+				<p class="alert-browser-note alert-watch-note">@Icon("info")<span>The query log is off, so watches cannot see lookups. Turn it on in Logging.</span></p>
+			}
+			if len(view.Watches) == 0 {
+				<div class="alerts-empty">@Icon("eye")<h3>No watches yet</h3><p>Pick domains, such as a game or a site you know is bad, and hear when a device looks one up.</p></div>
+			} else {
+				<div class="alert-destination-list alert-watch-list">
+					for _, watch := range view.Watches {
+						@alertWatchRow(watch, view.CanEdit)
+					}
+				</div>
+			}
+			if view.WatchLimit && view.CanEdit {
+				<p class="alert-browser-note alert-watch-note">Sable keeps up to 50 watches. Remove one to add another.</p>
+			}
+		</div>
+	</section>
+}
+
+// alertWatchRow is one watch: what it watches, for which devices, when it
+// last alerted, its switch, and its actions.
+templ alertWatchRow(watch AlertWatchView, canEdit bool) {
+	<article class={ "alert-destination-row alert-watch-row", templ.KV("off", !watch.Enabled) } id={ "alert-watch-" + watch.ID }>
+		<span class="alert-destination-icon">@Icon("eye")</span>
+		<div class="alert-destination-detail">
+			<strong>{ watch.Label }</strong>
+			if watch.Domains != watch.Label {
+				<small><code class="alert-destination-address">{ watch.Domains }</code></small>
+			}
+			<small>{ watch.Devices }<span class="alert-destination-separator" aria-hidden="true">·</span>{ watch.Result }</small>
+			<small>{ ifThen(watch.Enabled, watch.LastAlert, "Off") }</small>
+		</div>
+		<div class="alert-destination-actions alert-watch-actions">
+			<label class="alert-watch-switch">
+				<span class="sr-only">{ "Watch " + watch.Label }</span>
+				<input id={ "alert-watch-enabled-" + watch.ID } type="checkbox" role="switch" name="enabled" value="true" checked?={ watch.Enabled } disabled?={ !canEdit } hx-post="/ui/settings/alerts/watches/enabled" hx-trigger="change" hx-vals={ fmt.Sprintf(`{"id":%q}`, watch.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action/>
+			</label>
+			if canEdit {
+				<button class="button outline compact" id={ "alert-watch-edit-" + watch.ID } type="button" hx-get={ "/ui/settings/alerts/watches/form?id=" + watch.ID } hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" aria-label={ "Edit " + watch.Label } data-replica-primary-action>@Icon("pencil")<span>Edit</span></button>
+				<button class="button outline compact destructive" id={ "alert-watch-remove-" + watch.ID } type="button" hx-post="/ui/settings/alerts/watches/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, watch.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ "Remove " + watch.Label + "? Sable stops watching its domains." } data-confirm-title="Remove watch?" data-confirm-action="Remove" aria-label={ "Remove " + watch.Label } data-alert-watch-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+			}
+		</div>
+	</article>
+}
+
+// AlertWatchDialog holds the Add and Edit Watch form. It opens on an empty
+// form; Add Watch, each Edit button, and a Watch link load a fresh one first.
+templ AlertWatchDialog(view AlertsView) {
+	<dialog class="custom-server-dialog isotope-form-dialog alert-destination-dialog alert-watch-dialog" id="alert-watch-dialog" aria-labelledby="alert-watch-title">
+		<div class="alert-destination-content" id="alert-watch-content">
+			@AlertWatchForm(view.NewWatch)
+		</div>
+	</dialog>
+	if view.OpenWatch != "" {
+		<span hidden hx-get={ view.OpenWatch } hx-trigger="load" hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" data-alert-watch-open></span>
+	}
+}
+
+// AlertWatchForm is the watch dialog's form. Saving swaps the whole panel and
+// closes the dialog; a problem shows here instead, leaving what was typed
+// alone.
+templ AlertWatchForm(form AlertWatchFormView) {
+	<form class="alert-destination-form alert-watch-form" hx-post="/ui/settings/alerts/watches/save" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-alert-watch-form>
+		<div class="dialog-header">
+			<h2 id="alert-watch-title">{ ifThen(form.ID == "", "Add Watch", "Edit Watch") }</h2>
+			<p>Sable checks for new lookups about once a minute.</p>
+		</div>
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		if form.ID != "" {
+			<input type="hidden" name="id" value={ form.ID }/>
+		}
+		<div class="isotope-dialog-body alert-destination-body">
+			<div class="alert-destination-notice" id="alert-watch-notice"></div>
+			<label class="field-control"><span>Name (Optional)</span><input name="name" value={ form.Name } placeholder="Kids' games" maxlength="64" autocomplete="off"/><small>What the alert and the list call it. Leave it blank to use the first domain.</small></label>
+			<label class="field-control"><span>Domains</span><textarea name="domains" rows="3" placeholder={ "roblox.com\ndiscord.com" } autocomplete="off" spellcheck="false" required>{ form.Domains }</textarea><small>One per line. Names under each domain count too.</small></label>
+			<fieldset class="field-control alert-sends alert-watch-devices">
+				<legend>Devices</legend>
+				<div class="alert-sends-choice">
+					<label><input type="radio" name="any_device" value="true" checked?={ form.AnyDevice }/><span>Any Device</span></label>
+					<label><input type="radio" name="any_device" value="false" checked?={ !form.AnyDevice }/><span>Only These Devices</span></label>
+				</div>
+				<div class="alert-watch-device-pick">
+					if form.CanPickDevices && len(form.Devices) > 0 {
+						<div class="alert-watch-device-list" role="group" aria-label="Devices to watch">
+							for _, device := range form.Devices {
+								<label>
+									<input type="checkbox" name="device" value={ device.Key } checked?={ device.Picked }/>
+									<span><strong>{ device.Label }</strong><small>{ device.Detail }</small></span>
+								</label>
+							}
+						</div>
+					}
+					<label class="field-control">
+						<span>{ ifThen(form.CanPickDevices && len(form.Devices) > 0, "Addresses or Networks (Optional)", "Addresses or Networks") }</span>
+						<textarea name="addresses" rows="2" placeholder={ "10.0.7.20\n10.0.8.0/24" } autocomplete="off" spellcheck="false">{ form.Addresses }</textarea>
+						<small>One per line, such as an address or a network like 10.0.7.0/24.</small>
+					</label>
+				</div>
+			</fieldset>
+			<fieldset class="field-control alert-sends alert-watch-result">
+				<legend>When</legend>
+				<div class="alert-sends-choice">
+					<label><input type="radio" name="result" value="any" checked?={ form.Result == "any" }/><span>Allowed or Blocked</span></label>
+					<label><input type="radio" name="result" value="allowed" checked?={ form.Result == "allowed" }/><span>Only When Allowed</span></label>
+					<label><input type="radio" name="result" value="blocked" checked?={ form.Result == "blocked" }/><span>Only When Blocked</span></label>
+				</div>
+			</fieldset>
+			<label class="field-control">
+				<span>Quiet For</span>
+				<select name="quiet" data-styled-select>
+					for _, choice := range form.QuietChoices {
+						<option value={ choice.Value } selected?={ choice.Value == form.Quiet }>{ choice.Label }</option>
+					}
+				</select>
+				<small>After an alert, the same device stays quiet this long for this watch.</small>
+			</label>
+		</div>
+		<div class="dialog-footer">
+			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+			<button class="button" type="submit" data-replica-primary-action>Save</button>
+		</div>
+	</form>
+}

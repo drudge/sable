@@ -2775,12 +2775,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .switch-row > span { display: grid; gap: .2rem; }
 .switch-row input[type=checkbox] { width: 2.25rem; height: 1.25rem; flex: 0 0 2.25rem; accent-color: var(--primary); }
 .setting-switch-row { cursor: pointer; }
-.setting-switch-row input[type=checkbox] { position: relative; width: 2.75rem; height: 1.5rem; flex-basis: 2.75rem; appearance: none; border: 1px solid var(--input); border-radius: 999px; background: var(--muted); padding: 0; cursor: pointer; transition: border-color 150ms, background 150ms; }
-.setting-switch-row input[type=checkbox]::after { position: absolute; top: .1875rem; left: .1875rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--background); box-shadow: 0 1px 3px rgb(0 0 0 / .28); content: ""; transition: transform 150ms; }
-.setting-switch-row input[type=checkbox]:checked { border-color: var(--primary); background: var(--primary); }
-.setting-switch-row input[type=checkbox]:checked::after { transform: translateX(1.25rem); }
+.setting-switch-row input[type=checkbox], .alert-watch-switch input[type=checkbox] { position: relative; width: 2.75rem; height: 1.5rem; flex-basis: 2.75rem; appearance: none; border: 1px solid var(--input); border-radius: 999px; background: var(--muted); padding: 0; cursor: pointer; transition: border-color 150ms, background 150ms; }
+.setting-switch-row input[type=checkbox]::after, .alert-watch-switch input[type=checkbox]::after { position: absolute; top: .1875rem; left: .1875rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--background); box-shadow: 0 1px 3px rgb(0 0 0 / .28); content: ""; transition: transform 150ms; }
+.setting-switch-row input[type=checkbox]:checked, .alert-watch-switch input[type=checkbox]:checked { border-color: var(--primary); background: var(--primary); }
+.setting-switch-row input[type=checkbox]:checked::after, .alert-watch-switch input[type=checkbox]:checked::after { transform: translateX(1.25rem); }
 .setting-switch-row:has(input:disabled) { cursor: not-allowed; opacity: .58; }
-.setting-switch-row input[type=checkbox]:disabled { cursor: not-allowed; }
+.setting-switch-row input[type=checkbox]:disabled, .alert-watch-switch input[type=checkbox]:disabled { cursor: not-allowed; }
 .protocol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .protocol-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .protocol-setting { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
@@ -3994,6 +3994,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .insight-row-value > strong { min-width: 0; font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
 /* The copy button sits above the row-wide link so both stay usable. */
 .insight-row-value > button { position: relative; z-index: 1; }
+.insight-row-value > .insight-row-watch { position: relative; z-index: 1; display: grid; width: 1.25rem; height: 1.25rem; flex: 0 0 1.25rem; place-items: center; border-radius: calc(var(--radius) - 4px); color: var(--muted-foreground); }
+.insight-row-value > .insight-row-watch:hover { background: var(--muted); color: var(--foreground); }
+.insight-row-value > .insight-row-watch .nav-icon { width: .8rem; height: .8rem; flex-basis: .8rem; }
 .insight-row-value > button.is-copied .copy-icon-success { color: #22c55e; }
 .insight-list-copy small { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .insight-list-link, .insight-list-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -4460,6 +4463,23 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 @media (max-width: 480px) {
 	.alert-sends-groups { grid-template-columns: 1fr; }
 }
+
+/* Watches: a row per watch with its switch beside Edit and Remove, and a
+   dialog whose device list scrolls on its own when a network has many. */
+.alert-watch-note { display: flex; align-items: flex-start; gap: .45rem; margin-bottom: .75rem; }
+.alert-watch-note .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; }
+.alert-watch-note:last-child { margin: .75rem 0 0; }
+.alert-watch-row.off .alert-destination-icon { opacity: .55; }
+.alert-watch-actions { align-items: center; }
+.alert-watch-switch { display: inline-flex; margin-right: .25rem; cursor: pointer; }
+.alert-watch-device-pick { display: grid; gap: .75rem; margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; }
+.alert-watch-devices:has(input[name="any_device"][value="true"]:checked) .alert-watch-device-pick { display: none; }
+.alert-watch-device-list { display: grid; max-height: 12rem; overflow-y: auto; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-watch-device-list label { display: flex; align-items: center; gap: .6rem; border-top: 1px solid var(--border); padding: .45rem .65rem; font-size: .8125rem; font-weight: 400; cursor: pointer; }
+.alert-watch-device-list label:first-child { border-top: 0; }
+.alert-watch-device-list label > span { display: grid; min-width: 0; }
+.alert-watch-device-list strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.alert-watch-device-list small { overflow: hidden; color: var(--muted-foreground); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
 .mcp-grant-coverage { display: flex; align-items: flex-start; gap: .55rem; margin: 0; }
 .mcp-grant-coverage-icon { display: none; }
 .mcp-grant-coverage[data-matched] .mcp-grant-coverage-icon { display: contents; }

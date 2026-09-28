@@ -158,6 +158,7 @@ templ SettingsContent(view SettingsPageView) {
 		@AddTSIGKeyDialog(view)
 		if view.Alerts.Available && view.Alerts.CanEdit {
 			@AlertDestinationDialog(view.Alerts.NewDestination)
+			@AlertWatchDialog(view.Alerts)
 		}
 		@RunLocalBackupDialog()
 		@LocalBackupRestoreDialog()

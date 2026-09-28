@@ -159,6 +159,8 @@ type InsightDeviceDrawerView struct {
 	LogWindowQuery string
 	TimeDisplay    TimeDisplay
 	CanName        bool
+	// CanWatch offers a watch on each of the device's domains.
+	CanWatch bool
 	// Editing shows the name field in place of the drawer's title, and
 	// EditingType the type picker in place of the type.
 	Editing        bool
@@ -706,7 +708,7 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		if len(finding.Domains) > 0 {
 			<section class="query-detail-answer insight-evidence-domains" aria-labelledby={ finding.ID + "-domains" }>
 				<h3 id={ finding.ID + "-domains" }>First-time domains</h3>
-				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs)
+				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs, "")
 			</section>
 		}
 		if len(finding.Reasons) > 0 || finding.Method != "" {
@@ -1133,13 +1135,16 @@ func insightQueryURL(query InsightQueryView, window string) string {
 	return link
 }
 
-templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool) {
+// A list for one device can offer a watch on each domain for that device:
+// watchDevice is the device's key, or empty for no watch.
+templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, window string, display TimeDisplay, canLogs bool, watchDevice string) {
 	<div class="insight-client-list">
 		for index, domain := range domains {
 			@InsightListRow(InsightListRowView{
 				ID: fmt.Sprintf("%s-%d", idPrefix, index), Value: domain.Name, Detail: insightDomainDetail(domain, display),
 				Count: ifThen(domain.Queries > 0, formatNumber(domain.Queries), ""), CopyLabel: "Copy domain",
 				Href: ifThen(canLogs && domain.ClientIP != "", insightQueryURL(InsightQueryView{Name: domain.Name, ClientIP: domain.ClientIP}, window), ""),
+				Watch: ifThen(watchDevice != "", AlertWatchLink(domain.Name, "", watchDevice), ""),
 			})
 		}
 	</div>
@@ -1427,13 +1432,13 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 			if len(view.TopDomains) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-device-top">
 					<h3 id="insight-device-top">Most queried domains</h3>
-					@insightDomainList("insight-device-top", view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true)
+					@insightDomainList("insight-device-top", view.TopDomains, view.LogWindowQuery, view.TimeDisplay, true, ifThen(view.CanWatch, view.Device.Key, ""))
 				</section>
 			}
 			if len(view.NewDomains) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-device-new">
 					<h3 id="insight-device-new">First-time domains</h3>
-					@insightDomainList("insight-device-new", view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true)
+					@insightDomainList("insight-device-new", view.NewDomains, view.LogWindowQuery, view.TimeDisplay, true, ifThen(view.CanWatch, view.Device.Key, ""))
 				</section>
 			}
 		}
@@ -1596,6 +1601,9 @@ type InsightListRowView struct {
 	Href      string
 	// CopyLabel names the copy button; a row without one has no button.
 	CopyLabel string
+	// Watch opens the Add Watch dialog on the row's domain, beside the copy
+	// button.
+	Watch string
 	// Plain sets the value in the body face, for names that are not DNS data.
 	Plain bool
 	// Drawer opens a drawer from the row, in place of a query log link.
@@ -1617,6 +1625,9 @@ templ InsightListRow(row InsightListRowView) {
 				<strong id={ row.ID }>{ row.Value }</strong>
 				if row.CopyLabel != "" {
 					@CopyButton(row.ID, row.CopyLabel)
+				}
+				if row.Watch != "" {
+					<a class="insight-row-watch" href={ templ.SafeURL(row.Watch) } aria-label={ "Watch " + row.Value } title="Watch this domain">@Icon("eye")</a>
 				}
 			</span>
 			if row.Detail != "" {

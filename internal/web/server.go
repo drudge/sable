@@ -96,6 +96,8 @@ type Server struct {
 	pushKeys     pushKeySource
 	alerts       *alerts.Dispatcher
 	alertSecrets *alerts.SecretStore
+	// watchLastAlert reports when each domain watch last alerted.
+	watchLastAlert func() map[string]time.Time
 	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
 	// page. appCache counts what the app ranking reads apart from the
 	// dashboard's insightCache, because Insights answers from a recent count
@@ -324,6 +326,10 @@ func New(
 	mux.HandleFunc("POST /ui/settings/alerts/destinations/preview", server.previewAlertDestination)
 	mux.HandleFunc("POST /ui/settings/alerts/paused", server.setAlertsPaused)
 	mux.HandleFunc("POST /ui/settings/alerts/groups", server.saveAlertGroups)
+	mux.HandleFunc("GET /ui/settings/alerts/watches/form", server.alertWatchFormPanel)
+	mux.HandleFunc("POST /ui/settings/alerts/watches/save", server.saveAlertWatch)
+	mux.HandleFunc("POST /ui/settings/alerts/watches/remove", server.removeAlertWatch)
+	mux.HandleFunc("POST /ui/settings/alerts/watches/enabled", server.setAlertWatchEnabled)
 	mux.HandleFunc("GET /ui/settings/alerts/browsers/key", server.alertBrowserPushKey)
 	mux.HandleFunc("POST /ui/settings/alerts/browsers", server.addAlertBrowser)
 	mux.HandleFunc("POST /ui/settings/alerts/browsers/remove", server.removeAlertBrowser)

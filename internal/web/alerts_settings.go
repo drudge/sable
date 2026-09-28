@@ -82,7 +82,7 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 		Groups: pages.AlertGroupsView{
 			Insights: configuration.Send.Insights, Cluster: configuration.Send.Cluster, Updates: configuration.Send.Updates,
 			Integrations: configuration.Send.Integrations, Backups: configuration.Send.Backups, Server: configuration.Send.Server,
-			SignIns: configuration.Send.SignIns, SignInsAfter: configuration.SignIns.After,
+			SignIns: configuration.Send.SignIns, Watches: configuration.Send.Watches, SignInsAfter: configuration.SignIns.After,
 			SignInsWithin: alertSignInMinutes(configuration.SignIns.Within.Duration),
 			InsightKinds:  alertInsightKinds(server.config.Current().Config.Insights.Findings),
 		},
@@ -92,6 +92,17 @@ func (server *Server) alertsView(ctx context.Context, console pages.DashboardVie
 	}
 	if !view.Available {
 		return view
+	}
+	snapshot := server.config.Current().Config
+	var known alertWatchDevices
+	if len(configuration.Watches) > 0 || view.CanEdit {
+		known = server.watchDevices(ctx, console)
+	}
+	view.Watches = server.alertWatchViews(configuration.Watches, known, time.Now())
+	view.WatchesQueryLogOff = !snapshot.QueryLog.Enabled
+	view.WatchLimit = len(configuration.Watches) >= config.MaximumAlertWatches
+	if view.CanEdit {
+		view.NewWatch = alertWatchFormView(config.AlertWatch{Enabled: true}, known, console.CanLogs)
 	}
 	subscriptions, push := server.alertBrowserSubscriptions(ctx)
 	view.Push = push
@@ -742,7 +753,7 @@ func (server *Server) saveAlertGroups(writer http.ResponseWriter, request *http.
 	send := config.AlertSwitches{
 		Insights: on(config.AlertGroupInsights), Cluster: on(config.AlertGroupCluster), Updates: on(config.AlertGroupUpdates),
 		Integrations: on(config.AlertGroupIntegrations), Backups: strings.TrimSpace(request.FormValue(config.AlertGroupBackups)),
-		Server: on(config.AlertGroupServer), SignIns: on(config.AlertGroupSignIns),
+		Server: on(config.AlertGroupServer), SignIns: on(config.AlertGroupSignIns), Watches: on(config.AlertGroupWatches),
 	}
 	switch send.Backups {
 	case config.AlertBackupsFailures, config.AlertBackupsAll, config.AlertBackupsOff:
