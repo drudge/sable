@@ -4087,6 +4087,9 @@
 	  resetTokenDialog(dialog);
 	  setupRoutedDialog(dialog);
 	  setupDialogTabs(dialog);
+	  // A drawer opened before it has a record, such as Check a Domain asking
+	  // for a domain, has no address for the page to keep it in step with.
+	  if (dialog.dataset.drawerRoute) dialog.sableUnrouted = !pushURL && drawerRecord(dialog, window.location.pathname) === null;
 	  if (!dialog.open) {
 		dialog.sableResetDialogTabs?.();
 		dialog.showModal();
@@ -4240,7 +4243,7 @@
 	  const kept = new Set();
 	  for (let dialog = active; dialog && !kept.has(dialog); dialog = dialog.sableUnder) kept.add(dialog);
 	  dialogs.forEach((dialog) => {
-		if (!kept.has(dialog) && dialog.open) dialog.close();
+		if (!kept.has(dialog) && dialog.open && !dialog.sableUnrouted) dialog.close();
 	  });
 	  if (!active) return;
 	  if (active.dataset.drawerRoute) {
@@ -4805,6 +4808,28 @@
 	  window.setTimeout(() => card.classList.remove("is-linked"), 2000);
 	};
 	window.addEventListener("hashchange", showLinkedCard);
+	// A search for a drawer's record, such as the Blocking page's Check a
+	// domain box or the box in that drawer, opens the record it names at that
+	// record's address. The first one opened from the page
+	// adds to history and the rest replace it, so closing returns to the
+	// page.
+	document.body.addEventListener("submit", (event) => {
+	  const form = event.target.closest?.("form[data-drawer-navigate]");
+	  if (!form) return;
+	  event.preventDefault();
+	  const dialog = form.closest("dialog[data-drawer-route]") || document.getElementById(form.dataset.drawerDialog || "");
+	  const value = String(new FormData(form).get(form.dataset.drawerNavigate) || "").trim();
+	  if (!dialog || !value) return;
+	  const path = dialog.dataset.drawerRoute + encodeURIComponent(value);
+	  if (drawerRecord(dialog, window.location.pathname) !== null) {
+		window.history.replaceState(window.history.state, "", path);
+	  } else {
+		window.history.pushState({sableDialog: dialog.id}, "", path);
+	  }
+	  // Checking the same record again loads it again.
+	  delete dialog.dataset.drawerShown;
+	  syncRoutedDialogs();
+	});
 	window.addEventListener("popstate", syncRoutedDialogs);
 	// Back and Forward between a page and a drawer opened over it stay on the
 	// page: the drawer opens or closes. htmx would otherwise reload the page
@@ -4835,7 +4860,14 @@
 	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
 	  ctx.target.replaceChildren(loading.content.cloneNode(true));
 	});
-	document.body.addEventListener("htmx:after:swap", () => { syncRoutedDialogs(); openAutomaticDialogs(); });
+	document.body.addEventListener("htmx:after:swap", () => {
+	  syncRoutedDialogs();
+	  openAutomaticDialogs();
+	  // A drawer that loads asking for something, such as the domain to
+	  // check, puts the cursor where it is asked.
+	  const field = document.querySelector("dialog[open] [data-drawer-focus]");
+	  if (field && !field.value && document.activeElement !== field) field.focus();
+	});
 	syncRoutedDialogs();
 	openAutomaticDialogs();
 	setupCommandPalette();

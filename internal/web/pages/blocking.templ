@@ -81,6 +81,7 @@ templ BlockingPage(view BlockingPageView) {
 // the page can refresh beneath it while it stays open.
 templ blockingDocument(view BlockingPageView) {
 	@BlockingContent(view)
+	@checkDomainDialog()
 	<dialog class="query-detail-dialog block-list-dialog" id="block-list-dialog" aria-labelledby="block-list-title" { blockListDrawerRoute()... }>
 		<div class="block-list-content" id="block-list-content">
 			@blockListLoading()
@@ -109,6 +110,7 @@ templ BlockingContent(view BlockingPageView) {
 		</template>
 		<div class="blocking-layout isotope-blocking-layout">
 			<div class="blocking-main-column">
+				@checkDomainSearch()
 				@BlockingStatus(view)
 				<section class="blocking-workspace">
 					<div class="blocking-tabs" role="tablist" aria-label="Blocking configuration">

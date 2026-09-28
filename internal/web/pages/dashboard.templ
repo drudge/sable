@@ -660,6 +660,9 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-action-import-zone", "Import Zone", "Open the zone file import workflow", "upload", "Action", "upload bind file records origin", "", "/zones", "import-new-zone-dialog", "", "")
 					@CommandOption("command-action-import-catalog", "Import from Catalog", "Import catalog members from another DNS server", "layers", "Action", "catalog migration technitium transfer secondary primary zones", "", "/zones/import-catalog", "catalog-import-dialog", "", "")
 				}
+				if view.CanBlocking {
+					@CommandOption("command-action-check-domain", "Check a Domain", "See whether blocking stops a domain, and why", "shield-question", "Action", "why blocked test explain policy lookup allowed", "", "/blocked", "check-domain-dialog", "", "")
+				}
 				if view.CanWriteBlocking && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-block-domain", "Block Domain", "Add a custom blocked domain", "shield-x", "Action", "deny blacklist policy", "", "/blocked?tab=domains", "add-blocked-domain-dialog", "", "")
 					@CommandOption("command-action-allow-domain", "Allow Domain", "Add a blocking policy exception", "shield-check", "Action", "permit whitelist exception", "", "/blocked?tab=allowed", "add-allowed-domain-dialog", "", "")
@@ -1546,6 +1549,8 @@ templ Icon(kind string) {
 				<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"></path><path d="m9 12 2 2 4-4"></path>
 			case "shield-x":
 				<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"></path><path d="m9.5 9.5 5 5m0-5-5 5"></path>
+			case "shield-question":
+				<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"></path><path d="M9.6 9.5a2.5 2.5 0 0 1 4.85.85c0 1.65-2.45 2.15-2.45 2.15"></path><path d="M12 15.5h.01"></path>
 			case "shield":
 				<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"></path>
 			case "shield-off":

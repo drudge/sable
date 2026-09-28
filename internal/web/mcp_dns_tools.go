@@ -25,7 +25,7 @@ type mcpCacheNamePurger interface {
 	PurgeCacheName(string) int
 }
 
-type mcpDomainPolicyChecker interface {
+type domainPolicyChecker interface {
 	DomainPolicy(string) dnsserver.DomainPolicy
 }
 
@@ -233,68 +233,33 @@ func (server *Server) mcpCheckDomain(request *http.Request, arguments json.RawMe
 	if !server.mcpHasPermission(request, auth.PermissionBlockingRead) {
 		return nil, errors.New("this token needs blocking.read to check blocking")
 	}
-	domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(input.Domain), "."))
-	if err != nil || strings.HasPrefix(domain, "*.") {
-		return nil, errors.New("domain must be a single name, for example ads.example.com")
+	check, err := server.checkDomain(request, input.Domain)
+	if err != nil {
+		return nil, err
 	}
-	checker, ok := server.stats.(mcpDomainPolicyChecker)
-	if !ok {
-		return nil, errors.New("blocking is unavailable on this server")
-	}
-	policy := checker.DomainPolicy(domain)
-	lists := server.config.Current().Config.Blocking
 	output := map[string]any{
-		"domain":        domain,
-		"blocked":       policy.Decision == querylog.PolicyBlocked,
-		"decision":      string(policy.Decision),
-		"on_allow_list": slices.Contains(lists.AllowedDomains, domain),
-		"on_block_list": slices.Contains(lists.Domains, domain),
-		"explanation":   mcpPolicyExplanation(policy, server.mcpBlockingPausedUntil()),
+		"domain":        check.Domain,
+		"blocked":       check.Policy.Decision == querylog.PolicyBlocked,
+		"decision":      string(check.Policy.Decision),
+		"on_allow_list": check.OnAllowList,
+		"on_block_list": check.OnBlockList,
+		"explanation":   check.Explanation(func(moment time.Time) string { return moment.Format(time.RFC3339) }),
 	}
-	if policy.Rule != "" {
-		output["rule"] = policy.Rule
+	if check.Policy.Rule != "" {
+		output["rule"] = check.Policy.Rule
 	}
-	if len(policy.Sources) > 0 {
-		output["block_lists"] = policy.Sources
+	if len(check.Policy.Sources) > 0 {
+		output["block_lists"] = check.Policy.Sources
 	}
-	if zone := server.mcpServingZone(request, domain); zone != "" {
-		output["answered_by_zone"] = zone
-		output["explanation"] = "Sable answers this name from its zone " + zone + ", so blocking does not apply to it."
+	if check.Zone != "" {
+		output["answered_by_zone"] = check.Zone
 	}
 	return output, nil
 }
 
-func mcpPolicyExplanation(policy dnsserver.DomainPolicy, pausedUntil time.Time) string {
-	switch policy.Decision {
-	case querylog.PolicyDisabled:
-		return "Blocking is turned off, so nothing is blocked."
-	case querylog.PolicyPaused:
-		if !pausedUntil.IsZero() {
-			return "Blocking is paused until " + pausedUntil.Format(time.RFC3339) + ", so nothing is blocked."
-		}
-		return "Blocking is paused, so nothing is blocked."
-	case querylog.PolicyAllowed:
-		return "The allow list entry " + policy.Rule + " lets this domain through."
-	case querylog.PolicyBlocked:
-		if len(policy.Sources) > 0 {
-			return "Blocked because " + policy.Rule + " is on " + strings.Join(policy.Sources, ", ") + "."
-		}
-		return "Blocked because " + policy.Rule + " is blocked."
-	default:
-		return "Nothing blocks this domain."
-	}
-}
-
-func (server *Server) mcpBlockingPausedUntil() time.Time {
-	if pauser, ok := server.stats.(blockingPauser); ok {
-		return pauser.BlockingPausedUntil()
-	}
-	return time.Time{}
-}
-
-// mcpServingZone names the enabled zone that answers a domain before blocking
-// is consulted. A zone the token cannot read is not named.
-func (server *Server) mcpServingZone(request *http.Request, domain string) string {
+// servingZone names the enabled zone that answers a domain before blocking
+// is consulted. A zone the operator or token cannot read is not named.
+func (server *Server) servingZone(request *http.Request, domain string) string {
 	best := ""
 	for _, current := range server.zones.Current().Zones {
 		// Forwarder and stub zones send queries on, so blocking still applies.
@@ -313,39 +278,47 @@ func (server *Server) mcpServingZone(request *http.Request, domain string) strin
 }
 
 func (server *Server) mcpAllowDomain(request *http.Request, arguments json.RawMessage) (any, error) {
-	return server.mcpChangeDomainRule(request, arguments, "blocking.allowed_domain.add", func(policy *config.Blocking, domain string) (bool, string) {
-		added := mcpAddPolicyEntry(&policy.AllowedDomains, domain)
-		unblocked := mcpRemovePolicyEntry(&policy.Domains, domain)
-		switch {
-		case added && unblocked:
-			return true, domain + " is now allowed and was taken off the block list"
-		case added:
-			return true, domain + " is now allowed"
-		case unblocked:
-			return true, domain + " was already allowed and was taken off the block list"
-		}
-		return false, domain + " was already allowed"
-	})
+	return server.mcpChangeDomainRule(request, arguments, "blocking.allowed_domain.add", allowDomainRule)
 }
 
 func (server *Server) mcpBlockDomain(request *http.Request, arguments json.RawMessage) (any, error) {
-	return server.mcpChangeDomainRule(request, arguments, "blocking.blocked_domain.add", func(policy *config.Blocking, domain string) (bool, string) {
-		if strings.HasPrefix(domain, "*.") {
-			// Block list entries already cover every name beneath them.
-			domain = strings.TrimPrefix(domain, "*.")
-		}
-		added := mcpAddPolicyEntry(&policy.Domains, domain)
-		disallowed := mcpRemovePolicyEntry(&policy.AllowedDomains, domain)
-		switch {
-		case added && disallowed:
-			return true, domain + " is now blocked and was taken off the allow list"
-		case added:
-			return true, domain + " is now blocked"
-		case disallowed:
-			return true, domain + " was already on the block list and was taken off the allow list"
-		}
-		return false, domain + " was already blocked"
-	})
+	return server.mcpChangeDomainRule(request, arguments, "blocking.blocked_domain.add", blockDomainRule)
+}
+
+// allowDomainRule puts a domain on the allow list and takes it off the
+// block list.
+func allowDomainRule(policy *config.Blocking, domain string) (bool, string) {
+	added := mcpAddPolicyEntry(&policy.AllowedDomains, domain)
+	unblocked := mcpRemovePolicyEntry(&policy.Domains, domain)
+	switch {
+	case added && unblocked:
+		return true, domain + " is now allowed and was taken off the block list"
+	case added:
+		return true, domain + " is now allowed"
+	case unblocked:
+		return true, domain + " was already allowed and was taken off the block list"
+	}
+	return false, domain + " was already allowed"
+}
+
+// blockDomainRule puts a domain on the block list and takes it off the
+// allow list.
+func blockDomainRule(policy *config.Blocking, domain string) (bool, string) {
+	if strings.HasPrefix(domain, "*.") {
+		// Block list entries already cover every name beneath them.
+		domain = strings.TrimPrefix(domain, "*.")
+	}
+	added := mcpAddPolicyEntry(&policy.Domains, domain)
+	disallowed := mcpRemovePolicyEntry(&policy.AllowedDomains, domain)
+	switch {
+	case added && disallowed:
+		return true, domain + " is now blocked and was taken off the allow list"
+	case added:
+		return true, domain + " is now blocked"
+	case disallowed:
+		return true, domain + " was already on the block list and was taken off the allow list"
+	}
+	return false, domain + " was already blocked"
 }
 
 func (server *Server) mcpRemoveDomainRule(request *http.Request, arguments json.RawMessage) (any, error) {
@@ -385,13 +358,25 @@ func (server *Server) mcpChangeDomainRule(
 	if server.mcpReplica() {
 		return nil, errors.New(replicaWriteMessage)
 	}
-	domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(input.Domain), "."))
+	return server.changeDomainRule(request, input.Domain, action, "mcp", change)
+}
+
+// changeDomainRule makes one change to the allow and block lists, for MCP or
+// the console, which via names. The caller has checked the request may.
+func (server *Server) changeDomainRule(
+	request *http.Request,
+	raw string,
+	action string,
+	via string,
+	change func(*config.Blocking, string) (bool, string),
+) (mcpDomainRuleChange, error) {
+	domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(raw), "."))
 	if err != nil {
-		return nil, fmt.Errorf("domain is invalid: %w", err)
+		return mcpDomainRuleChange{}, fmt.Errorf("domain is invalid: %w", err)
 	}
 	editor, ok := server.config.(blockingEditor)
 	if !ok {
-		return nil, errors.New("this configuration source is read-only")
+		return mcpDomainRuleChange{}, errors.New("this configuration source is read-only")
 	}
 	preview := server.config.Current().Config.Blocking
 	preview.Domains = slices.Clone(preview.Domains)
@@ -403,14 +388,14 @@ func (server *Server) mcpChangeDomainRule(
 			return nil
 		})
 	}
-	attributes := []any{"operation", action, "domain", domain, "client", requestClientIP(request), "via", "mcp"}
+	attributes := []any{"operation", action, "domain", domain, "client", requestClientIP(request), "via", via}
 	if err != nil {
 		server.logger.Warn("blocking operation failed", append(attributes, "error", err)...)
-		return nil, err
+		return mcpDomainRuleChange{}, err
 	}
 	if changed {
 		server.logger.Info("blocking operation completed", attributes...)
-		server.recordControlPlaneAudit(request, action, message+" via=mcp")
+		server.recordControlPlaneAudit(request, action, message+" via="+via)
 	}
 	return mcpDomainRuleChange{Domain: domain, Changed: changed, Message: message}, nil
 }
