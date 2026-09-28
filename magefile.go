@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -309,12 +310,53 @@ func BenchmarkCompare(ctx context.Context) error {
 
 // Dev starts the pinned Air live-development workflow.
 func Dev(ctx context.Context) error {
-	return run(ctx, nil, "go", "run", "github.com/air-verse/air@"+airVersion, "-c", ".air.toml")
+	return runAir(ctx, ".air.toml")
 }
 
 // DevDemo starts Air against the disposable, seeded Vandelay UI fixture.
 func DevDemo(ctx context.Context) error {
-	return run(ctx, nil, "go", "run", "github.com/air-verse/air@"+airVersion, "-c", ".air-demo.toml")
+	return runAir(ctx, ".air-demo.toml")
+}
+
+// runAir starts the pinned Air with a configuration. Air's proxy adds an
+// inline script to each page that reloads it after a rebuild, and the
+// console's Content Security Policy blocks inline scripts, so the servers Air
+// runs are given that one script's hash to allow. Without the hash, Air still
+// rebuilds on save; the page just doesn't reload itself.
+func runAir(ctx context.Context, configuration string) error {
+	var environment []string
+	if hash, err := airReloadScriptHash(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "The page won't reload itself after a rebuild: %v\n", err)
+	} else {
+		environment = append(environment, "SABLE_DEV_SCRIPT_HASHES="+hash)
+	}
+	return run(ctx, environment, "go", "run", "github.com/air-verse/air@"+airVersion, "-c", configuration)
+}
+
+// airReloadScriptHash is the Content Security Policy hash of the live reload
+// script the pinned Air's proxy puts in each page. Air embeds
+// runner/proxy.js unchanged, so the hash follows airVersion.
+func airReloadScriptHash(ctx context.Context) (string, error) {
+	output, err := exec.CommandContext(ctx, "go", "mod", "download", "-json", "github.com/air-verse/air@"+airVersion).Output()
+	if err != nil {
+		return "", fmt.Errorf("find Air %s: %w", airVersion, err)
+	}
+	var module struct{ Dir string }
+	if err := json.Unmarshal(output, &module); err != nil || module.Dir == "" {
+		return "", fmt.Errorf("find Air %s: no module directory", airVersion)
+	}
+	script, err := os.ReadFile(filepath.Join(module.Dir, "runner", "proxy.js"))
+	if err != nil {
+		return "", fmt.Errorf("read Air's reload script: %w", err)
+	}
+	return scriptHash(script), nil
+}
+
+// scriptHash is the Content Security Policy source for an inline script with
+// exactly this text.
+func scriptHash(script []byte) string {
+	sum := sha256.Sum256(script)
+	return "sha256-" + base64.StdEncoding.EncodeToString(sum[:])
 }
 
 // ReleaseCheck validates Sable's generated GoReleaser configuration.
