@@ -242,11 +242,13 @@ type clientIdentityReader interface {
 }
 
 // givenClientNames reads the names the operator and UniFi gave the devices seen
-// since a moment. Without hardware sightings, only the names the operator gave
-// an address or network apply.
+// since a moment. Without hardware sightings, or with Insights off, only the
+// names the operator gave an address or network apply.
 func (server *Server) givenClientNames(ctx context.Context, since time.Time) devices.GivenNames {
 	var identities []querylog.ClientIdentity
-	if reader, ok := server.queries.(clientIdentityReader); ok {
+	// Hardware sightings are Insights data, so while Insights is off names
+	// come only from the operator, even from sightings kept from before.
+	if reader, ok := server.queries.(clientIdentityReader); ok && server.insightsEnabled() {
 		var err error
 		if identities, err = reader.ClientIdentities(ctx, since); err != nil {
 			server.logger.Warn("read client identities", "error", err)

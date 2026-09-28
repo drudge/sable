@@ -4776,6 +4776,14 @@
 		showRoutedDialog(dialog, false, uploadBackupRestore);
 		return;
 	  }
+	  // Turning Insights off asks first, so the switch stays on until the
+	  // dialog's Turn Off says otherwise.
+	  const insightsOff = event.target.closest("[data-insights-off]");
+	  if (insightsOff) {
+		event.preventDefault();
+		showRoutedDialog(document.getElementById(insightsOff.dataset.insightsOff), false, insightsOff);
+		return;
+	  }
 	  const dialogOpen = event.target.closest("[data-dialog-open]");
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
@@ -5078,6 +5086,8 @@
 	  if (localRun && ctx.response?.status < 400) localRun.closest("dialog")?.close();
 	  const uploadedRestore = ctx?.sourceElement?.closest?.("[data-upload-backup-restore-form]");
 	  if (uploadedRestore && ctx.response?.status < 400) uploadedRestore.closest("dialog")?.close();
+	  const insightsForm = ctx?.sourceElement?.closest?.("[data-insights-form]");
+	  if (insightsForm && ctx.response?.status < 400) insightsForm.closest("dialog")?.close();
 	});
 
 	// Read the unencrypted envelope header so a file identifies itself before

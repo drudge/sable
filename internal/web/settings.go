@@ -553,6 +553,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		view.ACMEProviderEndpoint = status.ProviderEndpoint
 		view.ACMETSIGAlgorithm = status.TSIGAlgorithm
 	}
+	view.Insights = server.settingsInsightsView(request.Context(), view.Console, "", "")
 	return view
 }
 
