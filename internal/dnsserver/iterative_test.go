@@ -243,6 +243,71 @@ func TestIterativeResolverAsksServersThatJustFailedLast(t *testing.T) {
 	}
 }
 
+// Route 53 answers an alias with the next link of the chain too when both
+// are in its zone. The target is looked up next and brings that link itself,
+// so each alias appears in the answer once, still with its signature.
+func TestIterativeResolverListsEachAliasOnce(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	cname := func(owner, target string) dns.RR {
+		return &dns.CNAME{Hdr: dns.RR_Header{Name: owner, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}, Target: target}
+	}
+	signature := func(owner string) dns.RR {
+		return &dns.RRSIG{Hdr: dns.RR_Header{Name: owner, Rrtype: dns.TypeRRSIG, Class: dns.ClassINET, Ttl: 60}, TypeCovered: dns.TypeCNAME, SignerName: "example.com."}
+	}
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "com.":
+			return referralResponse(request, "com.", "ns.com.", "192.0.2.2"), nil
+		case endpoint == "udp://192.0.2.2:53" && question.Name == "example.com.":
+			return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "tenant-cd.example.com." && question.Qtype == dns.TypeA:
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Authoritative = true
+			response.Answer = []dns.RR{
+				cname("tenant-cd.example.com.", "tenant.example.com."), signature("tenant-cd.example.com."),
+				cname("tenant.example.com.", "edge.example.net."), signature("tenant.example.com."),
+			}
+			return response, nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "tenant.example.com." && question.Qtype == dns.TypeA:
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Authoritative = true
+			response.Answer = []dns.RR{cname("tenant.example.com.", "edge.example.net."), signature("tenant.example.com.")}
+			return response, nil
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "net.":
+			return referralResponse(request, "net.", "ns.net.", "192.0.2.4"), nil
+		case endpoint == "udp://192.0.2.4:53" && question.Name == "example.net.":
+			return referralResponse(request, "example.net.", "ns.example.net.", "192.0.2.5"), nil
+		case endpoint == "udp://192.0.2.5:53" && question.Name == "edge.example.net." && question.Qtype == dns.TypeA:
+			return addressResponse(request, "192.0.2.88"), nil
+		default:
+			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+		}
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("tenant-cd.example.com.", dns.TypeA)
+	response, err := handler.resolveNetwork(request, runtime, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owners := make([]string, 0, len(response.Answer))
+	for _, record := range response.Answer {
+		owners = append(owners, record.Header().Name+"/"+dns.TypeToString[record.Header().Rrtype])
+	}
+	want := []string{
+		"tenant-cd.example.com./CNAME", "tenant-cd.example.com./RRSIG",
+		"tenant.example.com./CNAME", "tenant.example.com./RRSIG",
+		"edge.example.net./A",
+	}
+	if !slices.Equal(owners, want) {
+		t.Fatalf("answer = %v, want %v", owners, want)
+	}
+}
+
 func TestIterativeResolverRejectsOutOfBailiwickGlue(t *testing.T) {
 	t.Parallel()
 	runtime := recursiveTestRuntime(t)
