@@ -16,6 +16,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	"github.com/drudge/sable/internal/querylog"
+	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -106,7 +107,7 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "List Insights findings", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpListFindings,
-		section:     "insights",
+		section:     "lookups",
 		grant:       "logs.read",
 	},
 	{
@@ -123,7 +124,7 @@ var mcpAdvancedTools = []mcpTool{
 		}, nil),
 		Annotations: mcpToolAnnotations{Title: "Search the query log", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpSearchQueries,
-		section:     "insights",
+		section:     "lookups",
 		grant:       "logs.read",
 	},
 }
@@ -358,6 +359,8 @@ type mcpFinding struct {
 	Explanations []string          `json:"possible_explanations,omitempty"`
 	Method       string            `json:"method,omitempty"`
 	ObservedAt   *time.Time        `json:"observed_at,omitempty"`
+	// URL opens the finding in the console.
+	URL string `json:"url"`
 }
 
 type mcpCount struct {
@@ -396,9 +399,12 @@ func (server *Server) mcpListFindings(request *http.Request, arguments json.RawM
 		findings, _ = insights.Hide(findings, feedback, time.Now())
 	}
 	given := server.givenClientNames(request.Context(), window.Start)
+	base := strings.TrimRight(server.config.Current().Config.AdvertisedBaseURL(), "/")
 	views := make([]mcpFinding, 0, len(findings))
 	for _, finding := range findings {
-		views = append(views, mcpFindingView(finding, given.Address))
+		view := mcpFindingView(finding, given.Address)
+		view.URL = base + pages.InsightFindingPath(finding.ID, window.Range)
+		views = append(views, view)
 	}
 	return map[string]any{
 		"range": window.Label, "start": window.Start, "end": window.End, "findings": views,

@@ -11,6 +11,8 @@ package insights
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"slices"
@@ -205,6 +207,14 @@ type ScheduleChart struct {
 // NewID builds a finding's stable identifier from its kind and subject.
 func NewID(kind string, subject Subject) string {
 	return kind + "/" + subject.key()
+}
+
+// LinkID is the short name a finding's link uses. A finding's ID carries
+// slashes and colons, and the same finding keeps the same link for as long as
+// its ID stays the same.
+func LinkID(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:6])
 }
 
 // Window is the period an analysis covers.

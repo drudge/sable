@@ -202,7 +202,7 @@ var mcpCreateZoneTool = mcpTool{
 
 // mcpAllTools is every tool Sable has, whether or not it is switched on.
 func mcpAllTools() []mcpTool {
-	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools, mcpAdvancedTools)
+	return slices.Concat(mcpRecordTools, []mcpTool{mcpCreateZoneTool}, mcpDNSTools, mcpAdvancedTools, mcpServerTools, []mcpTool{mcpServerLogTool})
 }
 
 // mcpToolList is what assistants are offered with these settings.
@@ -885,8 +885,8 @@ func mcpZoneSerial(zone zonemodel.Zone) uint32 {
 var mcpToolSections = []struct{ Key, Title, Description string }{
 	{"records", "Records & Zones", "Read and change records, and create and delete zones."},
 	{"blocking", "Blocking", "Allow and block domains, and manage block lists."},
-	{"lookups", "Lookups & Cache", "Resolve names through Sable, and forget cached answers."},
-	{"insights", "Insights & Logs", "Share what each device does with the AI provider."},
+	{"lookups", "Lookups & Logs", "Resolve names through Sable, forget cached answers, and share what each device does with the AI provider."},
+	{"server", "Server", "Check the version, how DNS is doing, Dynamic DNS, and the cluster, and update Dynamic DNS now."},
 }
 
 func mcpToolSectionViews(settings config.MCP) []pages.MCPToolSectionView {

@@ -23,7 +23,13 @@ type Entry struct {
 type Filter struct {
 	Search string
 	Level  string
-	Limit  int
+	// AtLeast makes Level the least severe level to include, so warn also
+	// matches errors, instead of the only one.
+	AtLeast bool
+	// Since and Until bound when entries occurred; zero leaves that end open.
+	Since time.Time
+	Until time.Time
+	Limit int
 }
 
 // Query browses persisted entries. The live buffer answers Filter; anything
@@ -34,8 +40,10 @@ type Query struct {
 	PageSize int
 	Search   string
 	Level    string
-	Since    time.Time
-	Until    time.Time
+	// AtLeast makes Level the least severe level to include, as in Filter.
+	AtLeast bool
+	Since   time.Time
+	Until   time.Time
 }
 
 type Page struct {
@@ -120,7 +128,10 @@ func (buffer *Buffer) Entries(filter Filter) []Entry {
 	result := make([]Entry, 0, min(limit, len(buffer.entries)))
 	for index := len(buffer.entries) - 1; index >= 0 && len(result) < limit; index-- {
 		entry := buffer.entries[index]
-		if level != "" && level != "ALL" && levelName(entry.Level) != level {
+		if !levelMatches(entry.Level, level, filter.AtLeast) {
+			continue
+		}
+		if (!filter.Since.IsZero() && entry.OccurredAt.Before(filter.Since)) || (!filter.Until.IsZero() && entry.OccurredAt.After(filter.Until)) {
 			continue
 		}
 		if search != "" && !entryContains(entry, search) {
@@ -153,6 +164,36 @@ func cloneEntry(entry Entry) Entry {
 		entry.Attributes[key] = value
 	}
 	return entry
+}
+
+// levelMatches reports whether an entry's level passes a filter's: the same
+// level, or with atLeast that level or a more severe one.
+func levelMatches(entry slog.Level, name string, atLeast bool) bool {
+	if name == "" || name == "ALL" {
+		return true
+	}
+	if !atLeast {
+		return levelName(entry) == name
+	}
+	minimum, known := LevelOf(name)
+	return !known || entry >= minimum
+}
+
+// LevelOf reads a level name the console and API use: debug, info, warn, or
+// error, in any case.
+func LevelOf(name string) (slog.Level, bool) {
+	switch strings.ToUpper(strings.TrimSpace(name)) {
+	case "DEBUG":
+		return slog.LevelDebug, true
+	case "INFO":
+		return slog.LevelInfo, true
+	case "WARN", "WARNING":
+		return slog.LevelWarn, true
+	case "ERROR":
+		return slog.LevelError, true
+	default:
+		return 0, false
+	}
 }
 
 func levelName(level slog.Level) string {

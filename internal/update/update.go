@@ -74,6 +74,9 @@ type Result struct {
 	Tag            string
 	ReleaseURL     string
 	ReleaseNotes   string
+	// Releases are every release after the running one up to the latest,
+	// newest first, when the latest is newer.
+	Releases       []ReleaseNote
 	AssetName      string
 	BinaryPath     string
 	PreRelease     bool
@@ -107,7 +110,7 @@ func Apply(ctx context.Context, options Options) (Result, error) {
 	if version.Current().Development() {
 		return Result{CurrentVersion: current}, ErrDevelopmentBuild
 	}
-	selected, err := resolveRelease(ctx, options)
+	selected, candidates, err := resolveRelease(ctx, options)
 	if err != nil {
 		return Result{}, err
 	}
@@ -123,6 +126,14 @@ func Apply(ctx context.Context, options Options) (Result, error) {
 	if strings.TrimSpace(options.Version) == "" && !isNewer(releaseVersion, current) {
 		result.UpToDate = true
 		return result, nil
+	}
+	if strings.TrimSpace(options.Version) == "" {
+		if candidates == nil {
+			// The stable channel asked only for the latest release. Listing
+			// the rest is a courtesy, so a failure keeps the latest's notes.
+			candidates, _ = fetchReleases(ctx, options)
+		}
+		result.Releases = releasesSince(candidates, selected, current, options.PreRelease)
 	}
 	if options.CheckOnly {
 		return result, nil

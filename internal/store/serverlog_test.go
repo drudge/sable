@@ -127,22 +127,28 @@ func TestServerLogEntriesFilterByLevelName(t *testing.T) {
 	}
 
 	for _, testCase := range []struct {
-		level string
-		want  int
+		level   string
+		atLeast bool
+		want    int
 	}{
-		{"debug", 1},
-		{"info", 2},
-		{"warn", 1},
-		{"error", 2},
-		{"all", 6},
-		{"", 6},
+		{"debug", false, 1},
+		{"info", false, 2},
+		{"warn", false, 1},
+		{"error", false, 2},
+		{"all", false, 6},
+		{"", false, 6},
+		// At least a level takes every more severe one too.
+		{"debug", true, 6},
+		{"info", true, 5},
+		{"warn", true, 3},
+		{"error", true, 2},
 	} {
-		page, err := opened.ServerLogEntries(context.Background(), serverlog.Query{Level: testCase.level})
+		page, err := opened.ServerLogEntries(context.Background(), serverlog.Query{Level: testCase.level, AtLeast: testCase.atLeast})
 		if err != nil {
 			t.Fatalf("ServerLogEntries(%q) error = %v", testCase.level, err)
 		}
 		if page.TotalEntries != testCase.want {
-			t.Fatalf("level %q matched %d entries, want %d", testCase.level, page.TotalEntries, testCase.want)
+			t.Fatalf("level %q (at least %t) matched %d entries, want %d", testCase.level, testCase.atLeast, page.TotalEntries, testCase.want)
 		}
 	}
 }

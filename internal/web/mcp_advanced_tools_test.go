@@ -24,7 +24,7 @@ func mcpListedTools(t *testing.T, server *Server) []string {
 func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	advanced := []string{"create_zone", "delete_zone", "add_block_list", "remove_block_list", "refresh_block_lists", "search_queries"}
+	advanced := []string{"create_zone", "delete_zone", "add_block_list", "remove_block_list", "refresh_block_lists", "search_queries", "sync_dynamic_dns", "search_server_logs"}
 
 	listed := strings.Join(mcpListedTools(t, server), ",")
 	for _, name := range advanced {

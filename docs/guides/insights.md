@@ -74,6 +74,12 @@ Sable checks every address tied to a device before calling it silent: the ones U
 
 Change how long a device must stay silent in [Insights Settings](#choose-what-insights-shows-and-alerts). Sable needs a day of UniFi readings before it can tell traffic across the whole window, so a new setup reports nothing for the first day.
 
+## Share a finding, device, or app
+
+Each finding, device, and app has its own address while its drawer is open, such as `/insights/devices/mac:3c:22:fb:01:02:03?range=week`. Use **Copy Link** in the drawer to copy it, bookmark it, or send it to someone who can open Insights. The link keeps the time range. Browser **Back** closes the drawer, and **Forward** opens it again.
+
+A link to a finding opens it only while Insights still shows it. If the finding has cleared up, been hidden, or falls outside the range, the drawer says so. A link to a device's IP address opens the device that address belongs to now, even after Sable learns its hardware address.
+
 ## Hide what you have seen
 
 Use **Hide Finding** beside **Why Sable surfaced this** in a finding's drawer, then choose how long to hide it:
@@ -102,7 +108,7 @@ You can also set these in `sable.toml`; see [Devices and Insights](../configurat
 
 ## Get alerts
 
-Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
+Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Each alert's **Open Finding** button opens that finding in Insights. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
 
 The bell beside **Settings** shows whether Insights alerts are **On**, **Paused**, or **Off**. Hover over it to see why, or click it to open **Settings > Alerts**.
 

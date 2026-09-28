@@ -1781,6 +1781,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* The wizard's tool list follows the group permission picker: a checkbox per
    tool with the grant it needs pushed to the right, and no inner scrolling. */
 .mcp-tool-sections .permission-surface .permission-checks { max-height: none; overflow: visible; border-bottom: 0; padding-bottom: 0; }
+/* Rows sit flush, their padding keeping them apart, so both rows of sections
+   fit a laptop window without scrolling. */
+.mcp-tool-sections .permission-checks { gap: 0; }
 .mcp-tool-sections .permission-checks label { align-items: center; padding: .3rem .45rem; }
 .mcp-tool-sections .permission-checks input { margin: 0; }
 .mcp-tool-sections .mcp-tool-grant { margin-left: auto; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; }
@@ -3315,6 +3318,16 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
+	/* A phone has no room for a title and the quick picks side by side, so the
+	   picks go under the title, lined up with it. */
+	.mcp-tool-sections .permission-surface > header { flex-direction: column; align-items: flex-start; gap: .35rem; }
+	.mcp-tool-sections .permission-bulk-actions { margin-left: -.35rem; }
+	/* The dialog's own padding is enough on a phone. Without the step panel's
+	   and some of the cards' padding, tool names such as get_cluster_status fit
+	   on one line. */
+	.mcp-setup-form > .dialog-tab-panel { padding-inline: 0; }
+	.mcp-tool-sections .permission-surface { padding-inline: .75rem; }
+	.mcp-tool-sections .permission-checks label { padding-inline: .3rem; }
 	.user-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.user-edit-dialog > .dialog-header { padding-inline: 1rem; }
 	.dialog-tab-list { margin-inline: 1rem; }
@@ -3895,6 +3908,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .dark .insight-findings-empty > span { color: #22c55e; }
 .insight-findings-empty > span .nav-icon { width: 1.15rem; height: 1.15rem; }
 .insight-findings-empty strong, .insight-section-empty strong { font-size: .875rem; }
+/* A finding's link that cannot open is neither good nor bad news. */
+.insight-link-missing { min-height: 16rem; }
+.insight-link-missing > span, .dark .insight-link-missing > span { background: var(--muted); color: var(--muted-foreground); }
 .insight-findings-empty p, .insight-section-empty p { max-width: 30rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .insight-section-empty > .nav-icon { width: 1.25rem; height: 1.25rem; margin-bottom: .35rem; color: var(--muted-foreground); }
 .insight-section-empty .button { margin-top: .5rem; }
