@@ -25,6 +25,9 @@ const {chromium} = require('playwright');
     // A finding opens at its address; Back closes it and Forward opens it.
     await page.goto(`${baseURL}/insights?range=day`);
     await page.locator('#insight-findings').waitFor();
+    // Back and Forward open and close drawers without reloading the page.
+    await page.evaluate(() => { window.sableSamePage = true; });
+    const samePage = async step => assert.equal(await page.evaluate(() => window.sableSamePage === true), true, `${step} kept the page`);
     const details = page.locator('.insight-evidence-button').first();
     const findingAddress = await details.getAttribute('data-dialog-url');
     const finding = page.locator(`#${await details.getAttribute('data-dialog-open')}`);
@@ -37,11 +40,15 @@ const {chromium} = require('playwright');
     await page.goBack();
     await finding.waitFor({state: 'hidden'});
     assert.equal(here(), '/insights?range=day');
+    await page.waitForTimeout(300);
+    await samePage('Back');
     await page.goForward();
     await finding.waitFor();
     await finding.locator('.dialog-close').click();
     await finding.waitFor({state: 'hidden'});
     await waitForAddress('/insights?range=day');
+    await page.waitForTimeout(300);
+    await samePage('Closing the drawer');
 
     // The same address opened fresh opens the finding once the Overview
     // arrives, and closing it leaves Insights at its own address.

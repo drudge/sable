@@ -4696,6 +4696,17 @@
 	  }
 	};
 	window.addEventListener("popstate", syncRoutedDialogs);
+	// Back and Forward between a page and a drawer opened over it stay on the
+	// page: the drawer opens or closes. htmx would otherwise reload the page
+	// for the entry it recorded when the page loaded.
+	document.addEventListener("htmx:before:history:restore", (event) => {
+	  const path = new URL(event.detail?.path || window.location.href, window.location.origin).pathname;
+	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url], dialog[data-drawer-route]")];
+	  const routed = dialogs.some((dialog) =>
+		[dialog.dataset.dialogUrl, dialog.dataset.dialogBaseUrl].some((address) => address && routedDialogPath(address) === path) ||
+		drawerRecord(dialog, path) !== null);
+	  if (routed) event.preventDefault();
+	});
 	// The dashboard rankings refresh themselves on a timer. Replacing that block
 	// while an operator has a "View all" list open would close it out from under
 	// them, so the poll is dropped for that cycle and the next one catches up.
