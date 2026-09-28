@@ -4060,7 +4060,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "</a><div class=\"wizard-progress mcp-wizard-progress\" role=\"tablist\" aria-label=\"Setup steps\"><button class=\"active\" type=\"button\" role=\"tab\" aria-selected=\"true\" data-dialog-tab=\"tools\"><span>1</span><small>Tools</small></button> <i></i> <button type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\" data-dialog-tab=\"access\"><span>2</span><small>Access</small></button> <i></i> <button type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\" data-dialog-tab=\"connect\"><span>3</span><small>Connect</small></button></div><form class=\"mcp-setup-form\" hx-post=\"/ui/integrations/mcp/setup\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\"><section class=\"dialog-tab-panel\" role=\"tabpanel\" data-dialog-panel=\"tools\"><div class=\"permission-surface-grid mcp-tool-sections\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "</a><div class=\"wizard-progress mcp-wizard-progress\" role=\"tablist\" aria-label=\"Setup steps\"><button class=\"active\" type=\"button\" role=\"tab\" aria-selected=\"true\" data-dialog-tab=\"tools\"><span>1</span><small>Tools</small></button> <i></i> <button type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\" data-dialog-tab=\"access\"><span>2</span><small>Access</small></button> <i></i> <button type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\" data-dialog-tab=\"connect\" data-mcp-grant-check><span>3</span><small>Connect</small></button></div><form class=\"mcp-setup-form\" hx-post=\"/ui/integrations/mcp/setup\" hx-target=\"#integrations-content\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\"><section class=\"dialog-tab-panel\" role=\"tabpanel\" data-dialog-panel=\"tools\"><div class=\"permission-surface-grid mcp-tool-sections\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4217,7 +4217,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "<span>Next</span></button> <button class=\"button\" type=\"button\" data-dialog-step=\"connect\" data-dialog-save=\"access\" hidden>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "<span>Next</span></button> <button class=\"button\" type=\"button\" data-dialog-step=\"connect\" data-dialog-save=\"access\" data-mcp-grant-check hidden>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
