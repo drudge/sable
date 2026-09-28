@@ -1,0 +1,58 @@
+package web
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/drudge/sable/internal/config"
+)
+
+func getDetailsPanel(server *Server, path string, fragment bool) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	if fragment {
+		request.Header.Set("HX-Request", "true")
+	}
+	response := httptest.NewRecorder()
+	server.httpServer.Handler.ServeHTTP(response, request)
+	return response
+}
+
+// A query's address opens Query Logs with its details panel, which loads the
+// query by its ID. One that has aged out gets a stand-in that searches for
+// its domain.
+func TestQueryLinkOpensItsDetails(t *testing.T) {
+	t.Parallel()
+	configuration := &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults(), Revision: 1}, baseDirectory: t.TempDir()}
+	server := newDetailsPanelTestServer(t, configuration)
+
+	page := getDetailsPanel(server, "/logs/queries/1?name=example.com", false)
+	if page.Code != http.StatusOK {
+		t.Fatalf("query page status = %d", page.Code)
+	}
+	expectContains(t, "query page", page.Body.String(),
+		`data-active-tab="queries"`, `id="query-detail-dialog"`, `data-drawer-route="/logs/queries/"`,
+		`data-drawer-content="/ui/logs/query"`, `data-query-detail-link="/logs/queries/1?name=example.com"`)
+
+	found := getDetailsPanel(server, "/ui/logs/query?id=1&name=example.com", true).Body.String()
+	expectContains(t, "loaded query", found,
+		`data-query-detail-value="name">example.com</h2>`, `<code data-query-detail-value="client">192.0.2.1</code>`,
+		`class="source-pill source-cache" data-query-detail-source>Cached</span>`, "Cache hit",
+		`data-copy-url="/logs/queries/1?name=example.com"`, `data-query-detail-policy="block"`)
+	if strings.Contains(found, "no longer in the log") {
+		t.Error("a query still in the log opened as aged out")
+	}
+
+	missing := getDetailsPanel(server, "/ui/logs/query?id=99&name=example.com", true).Body.String()
+	expectContains(t, "aged-out query", missing,
+		"This query is no longer in the log", "Newer queries for example.com may still be there.",
+		`href="/logs?name=example.com&amp;tab=queries"`, "Search Query Logs")
+	if strings.Contains(missing, "data-query-detail-source") {
+		t.Error("the aged-out stand-in shows query facts")
+	}
+	// Without a domain in its address there is nothing to search for.
+	if bare := getDetailsPanel(server, "/ui/logs/query?id=99", true).Body.String(); strings.Contains(bare, "Search Query Logs") {
+		t.Error("the stand-in offers a search with no domain to search for")
+	}
+}

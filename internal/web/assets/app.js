@@ -4106,6 +4106,13 @@
 	const showQueryDetail = (row) => {
 	  const dialog = document.getElementById("query-detail-dialog");
 	  if (!row || !dialog) return;
+	  // The panel may hold a query an address loaded, or the stand-in for one
+	  // that aged out; a row fills the blank panel.
+	  const content = dialog.querySelector("#query-detail-content");
+	  const blank = document.getElementById("query-detail-blank");
+	  if (content && blank?.content && !content.querySelector("[data-query-detail-source]")) {
+		content.replaceChildren(blank.content.cloneNode(true));
+	  }
 	  const values = {
 		name: row.dataset.queryDetailName,
 		time: row.dataset.queryDetailTime,
@@ -4172,7 +4179,20 @@
 	  }
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
-	  showRoutedDialog(dialog, false, document.activeElement);
+	  // The row fills the panel at once, and the address still changes to
+	  // the query's own, so it can be shared or reopened.
+	  const link = row.dataset.queryDetailLink || "";
+	  const copyLink = dialog.querySelector("[data-query-detail-copy-link]");
+	  if (copyLink) {
+		copyLink.dataset.copyUrl = link;
+		copyLink.hidden = !link;
+	  }
+	  if (link) {
+		const target = new URL(link, window.location.origin);
+		dialog.dataset.dialogUrl = target.pathname + target.search;
+		dialog.dataset.drawerShown = target.pathname;
+	  }
+	  showRoutedDialog(dialog, Boolean(link), document.activeElement);
 	};
 	// A drawer that shows one record at a time, such as a device, has an
 	// address for each record: its route followed by the record's ID.
@@ -4196,8 +4216,13 @@
 	  if (loading?.content) target.replaceChildren(loading.content.cloneNode(true));
 	  const content = new URL(dialog.dataset.drawerContent, window.location.origin);
 	  content.searchParams.set(dialog.dataset.drawerParam || "id", id);
-	  const range = new URLSearchParams(window.location.search).get("range");
-	  if (range) content.searchParams.set("range", range);
+	  // The range, and anything else the drawer names, carries over from the
+	  // page's address.
+	  const current = new URLSearchParams(window.location.search);
+	  ["range", ...(dialog.dataset.drawerForward || "").split(",")].forEach((name) => {
+		const value = name && current.get(name);
+		if (value) content.searchParams.set(name, value);
+	  });
 	  htmx.ajax("GET", content.pathname + content.search, {target: `#${target.id}`, swap: "innerHTML"});
 	};
 	const syncRoutedDialogs = () => {

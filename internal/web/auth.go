@@ -139,7 +139,7 @@ func requiredPermission(request *http.Request) string {
 			return auth.PermissionBlockingWrite
 		}
 		return auth.PermissionBlockingRead
-	case path == "/logs" || strings.HasPrefix(path, "/ui/query-log") ||
+	case path == "/logs" || strings.HasPrefix(path, pages.QueryRoute) || strings.HasPrefix(path, "/ui/query-log") ||
 		strings.HasPrefix(path, "/ui/logs/") || strings.HasPrefix(path, "/api/v1/query-log") ||
 		strings.HasPrefix(path, "/api/v1/logs/"):
 		return auth.PermissionLogsRead

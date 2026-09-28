@@ -320,6 +320,7 @@ func New(
 	mux.HandleFunc("POST /ui/integrations/sso/remove", server.removeSSO)
 	mux.HandleFunc("GET /dns-client", server.dnsClientPage)
 	mux.HandleFunc("GET /logs", server.logsPage)
+	mux.HandleFunc("GET "+pages.QueryRoute+"{id}", server.logsPage)
 	mux.HandleFunc("GET /settings", server.settingsPage)
 	mux.HandleFunc("POST /ui/settings", server.updateSettings)
 	mux.HandleFunc("POST /ui/settings/updates", server.updatePreferences)
@@ -402,6 +403,7 @@ func New(
 	mux.HandleFunc("GET /ui/query-log", server.recentQueryLog)
 	mux.HandleFunc("GET /ui/logs/runtime", server.runtimeLogsPanel)
 	mux.HandleFunc("GET /ui/logs/queries", server.queryLogsPanel)
+	mux.HandleFunc("GET /ui/logs/query", server.queryDetailPanel)
 	mux.HandleFunc("POST /ui/query", server.query)
 	mux.HandleFunc("POST /ui/cache/purge", server.purgeCacheUI)
 	mux.HandleFunc("GET /ui/cache/status", server.cacheStatus)
@@ -1727,6 +1729,7 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 			status = strconv.Itoa(entry.ResponseCode)
 		}
 		views = append(views, pages.QueryLogEntryView{
+			ID:         entry.ID,
 			OccurredAt: pages.FormatClock(entry.OccurredAt, display, true),
 			ClientIP:   entry.ClientIP,
 			Name:       entry.Name,

@@ -333,6 +333,8 @@ var rootResolverOptions = []ResolverOption{
 }
 
 type QueryLogEntryView struct {
+	// ID is the query's row in this node's query log.
+	ID         int64
 	OccurredAt string
 	ClientIP   string
 	Name       string

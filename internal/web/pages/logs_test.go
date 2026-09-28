@@ -51,19 +51,34 @@ func TestQueryLogPanelRendersOneReusableDetailDrawer(t *testing.T) {
 			{OccurredAt: "Aug 28, 1:01 PM", ClientIP: "10.0.0.3", Name: "two.example", RecordType: "AAAA", Status: "NXDOMAIN", Source: "upstream", Protocol: "TCP", Duration: "2ms"},
 		},
 	}
+	view.Entries[0].ID = 42
 	panel := renderComponent(t, QueryLogsPanel(view))
 	for _, expected := range []string{
 		`data-query-detail-row`, `data-query-detail-duration="120µs"`, `data-query-detail-answers="192.0.2.1"`,
-		`aria-label="View details for one.example"`, `id="query-detail-dialog"`, "Query details",
-		`data-query-detail-policy="block"`, `data-query-detail-policy="allow"`,
+		`aria-label="View details for one.example"`,
 		`data-query-detail-explain-available="true"`, `data-query-detail-cache-label="Cache hit"`,
-		`id="query-detail-explain-title"`, `data-query-decision-step="resolver"`, "Why this answer?",
+		`data-query-detail-link="/logs/queries/42?name=one.example"`,
 	} {
 		if !strings.Contains(panel, expected) {
-			t.Errorf("query log detail markup does not contain %q", expected)
+			t.Errorf("query log row markup does not contain %q", expected)
 		}
 	}
-	if dialogs := strings.Count(panel, `id="query-detail-dialog"`); dialogs != 1 {
+	// The panel sits outside the log, which refreshes beneath it.
+	if strings.Contains(panel, `id="query-detail-dialog"`) {
+		t.Error("the query log panel carries the details panel, which its refresh would replace")
+	}
+	page := renderComponent(t, logsDocument(LogsPageView{ActiveTab: "queries", Queries: view}))
+	for _, expected := range []string{
+		`id="query-detail-dialog"`, "Query details", `data-drawer-route="/logs/queries/"`, `data-drawer-forward="name"`,
+		`data-query-detail-policy="block"`, `data-query-detail-policy="allow"`, `data-query-detail-copy-link`,
+		`id="query-detail-explain-title"`, `data-query-decision-step="resolver"`, "Why this answer?",
+		`<template id="query-detail-blank">`, `<template id="query-detail-loading">`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("query details panel does not contain %q", expected)
+		}
+	}
+	if dialogs := strings.Count(page, `id="query-detail-dialog"`); dialogs != 1 {
 		t.Errorf("query detail dialog count = %d, want one reusable dialog", dialogs)
 	}
 }

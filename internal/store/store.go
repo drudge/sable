@@ -560,6 +560,23 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	}, nil
 }
 
+// QueryEvent returns the query log row with the given ID, and whether it is
+// still in the log.
+func (store *Store) QueryEvent(ctx context.Context, id int64) (querylog.Entry, bool, error) {
+	rows, err := store.database.QueryContext(ctx, `
+	SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
+	FROM sable_query_log WHERE id = `+store.placeholder(1), id)
+	if err != nil {
+		return querylog.Entry{}, false, fmt.Errorf("query event: %w", err)
+	}
+	defer rows.Close()
+	entries, err := scanQueryEvents(rows, 1)
+	if err != nil || len(entries) == 0 {
+		return querylog.Entry{}, false, err
+	}
+	return entries[0], true, nil
+}
+
 func queryLogWhere(conditions []string) string {
 	if len(conditions) == 0 {
 		return ""

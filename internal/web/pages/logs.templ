@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -85,7 +86,14 @@ var logsTabs = []tabOption{
 }
 
 templ LogsPage(view LogsPageView) {
-	@AppDocument(view.Console, documentTitle(tabLabel(logsTabs, view.ActiveTab), "Logs"), "logs", LogsContent(view))
+	@AppDocument(view.Console, documentTitle(tabLabel(logsTabs, view.ActiveTab), "Logs"), "logs", logsDocument(view))
+}
+
+// logsDocument keeps the query details panel outside the query log, so the
+// log can refresh beneath it and the panel opens even when no rows show.
+templ logsDocument(view LogsPageView) {
+	@LogsContent(view)
+	@QueryDetailDialog(view.Queries.CanBlocking, view.Queries.CanWatch, queryFilterURL(view.Queries))
 }
 
 templ LogsContent(view LogsPageView) {
@@ -214,7 +222,6 @@ templ QueryLogsPanel(view QueryLogsView) {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
 			</tbody></table></div>
-			@QueryDetailDialog(view.CanBlocking, view.CanWatch)
 		}
 		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size data-styled-select aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 	</section>
@@ -256,6 +263,10 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		data-query-detail-resolver-label={ entry.Decision.Resolver }
 		data-query-detail-resolver-detail={ entry.Decision.ResolverDetail }
 		data-query-detail-dnssec-label={ entry.Decision.DNSSEC }
+		if entry.ID > 0 {
+			data-query-detail-id={ strconv.FormatInt(entry.ID, 10) }
+			data-query-detail-link={ QueryPath(entry.ID, entry.Name) }
+		}
 	>
 		// The client and the protocol ride under the timestamp, and the answers
 		// under the domain, so the narrow layout can drop those columns without
@@ -276,54 +287,186 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 	</tr>
 }
 
-templ QueryDetailDialog(canBlocking, canWatch bool) {
-	@DetailDrawer(DetailDrawerView{
-		ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "—", CloseLabel: "Close query details",
-		TitleAttributes: templ.Attributes{"data-query-detail-value": "name"},
-	}, queryDetailFooter(canBlocking, canWatch)) {
-		<div class="query-detail-result" aria-label="Query result">
-			<span class="source-pill" data-query-detail-source>—</span>
-			<span class="rcode" data-query-detail-status>—</span>
+// QueryRoute is where one query's details panel lives. Each query's address
+// opens Query Logs with its panel open.
+const QueryRoute = "/logs/queries/"
+
+// QueryPath is the address of one query's panel. It carries the domain, so
+// the page beneath shows its queries, and a query that has aged out of the
+// log can still offer a search for them.
+func QueryPath(id int64, name string) string {
+	path := QueryRoute + strconv.FormatInt(id, 10)
+	if name = strings.TrimSuffix(name, "."); name != "" {
+		path += "?" + url.Values{"name": []string{name}}.Encode()
+	}
+	return path
+}
+
+// QueryDetailView is one query in its details panel. Without Loaded, the
+// panel is blank, for the page's script to fill from the row that opened it.
+type QueryDetailView struct {
+	Entry QueryLogEntryView
+	// Loaded is set when Entry was read by the query's address.
+	Loaded bool
+	// Missing is set when the address names a query no longer in the log.
+	// Name is the domain the address carried, if any.
+	Missing bool
+	Name    string
+	CanBlocking bool
+	CanWatch    bool
+}
+
+// QueryDetailDialog is the query details panel. A row fills it in place, so
+// it opens at once; an address loads the query from the server instead.
+templ QueryDetailDialog(canBlocking, canWatch bool, base string) {
+	<dialog class="query-detail-dialog" id="query-detail-dialog" aria-labelledby="query-detail-title" { queryDrawerRoute(base)... }>
+		<div class="query-detail-content" id="query-detail-content">
+			@QueryDetail(QueryDetailView{CanBlocking: canBlocking, CanWatch: canWatch})
 		</div>
-		<dl class="query-detail-grid">
-			<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">—</dd></div>
-			<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">—</code></dd></div>
-			<div><dt>Query type</dt><dd data-query-detail-value="type">—</dd></div>
-			<div><dt>Protocol</dt><dd data-query-detail-value="protocol">—</dd></div>
-			<div><dt>Duration</dt><dd data-query-detail-value="duration">—</dd></div>
-		</dl>
-		<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
-			<h3 id="query-detail-answer-title">Answer</h3>
-			<div data-query-detail-answers><span>—</span></div>
-		</section>
-		<section class="query-detail-explain" aria-labelledby="query-detail-explain-title">
-			<div class="query-detail-section-heading"><h3 id="query-detail-explain-title">Why this answer?</h3><p data-query-detail-explain-summary></p></div>
-			<ol class="query-decision-path" data-query-detail-explain-path>
-				@QueryDecisionStep("policy", "Policy")
-				@QueryDecisionStep("cache", "Cache")
-				@QueryDecisionStep("resolver", "Resolver")
-				@QueryDecisionStep("dnssec", "DNSSEC")
-			</ol>
-			<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden>Decision details were not recorded for this older query.</p>
-		</section>
+	</dialog>
+	<template id="query-detail-blank">
+		@QueryDetail(QueryDetailView{CanBlocking: canBlocking, CanWatch: canWatch})
+	</template>
+	<template id="query-detail-loading">
+		@queryDetailLoading()
+	</template>
+}
+
+func queryDrawerRoute(base string) templ.Attributes {
+	attributes := insightDrawerRoute(QueryRoute, "/ui/logs/query", "id", "query-detail-content", "query-detail-loading", base)
+	attributes["data-drawer-forward"] = "name"
+	return attributes
+}
+
+templ queryDetailLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "Loading…", CloseLabel: "Close query details"}, insightDeviceCloseFooter()) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading query details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
 	}
 }
 
-templ queryDetailFooter(canBlocking, canWatch bool) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
-	if canBlocking || canWatch {
-		<div class="query-detail-policy-actions" data-query-detail-policy-actions>
-			if canWatch {
-				// The page's script points it at the open query's domain and
-				// client.
-				<a class="button outline" href="/settings?tab=alerts" data-query-detail-watch>@Icon("eye")<span>Watch</span></a>
-			}
-			if canBlocking {
-				<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
-				<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
-			}
+// QueryDetail is the inside of the query details panel. The page's script
+// fills a blank one through its data-query-detail hooks, so a loaded one
+// keeps every hook for the next row to fill.
+templ QueryDetail(view QueryDetailView) {
+	if view.Missing {
+		@queryMissing(view)
+	} else {
+		{{ entry := view.Entry }}
+		@DetailDrawerContent(DetailDrawerView{
+			ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: queryDetailText(entry.Name), CloseLabel: "Close query details",
+			TitleAttributes: templ.Attributes{"data-query-detail-value": "name"},
+		}, queryDetailFooter(view)) {
+			<div class="query-detail-result" aria-label="Query result">
+				<span class={ queryDetailSourceClass(entry.Source) } data-query-detail-source>{ ifThen(view.Loaded, logSourceLabel(entry.Source), "—") }</span>
+				<span class={ "rcode " + ifThen(view.Loaded, rcodeClass(entry.Status), "") } data-query-detail-status>{ ifThen(view.Loaded, rcodeDisplay(entry.Status), "—") }</span>
+			</div>
+			<dl class="query-detail-grid">
+				<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">{ queryDetailText(entry.OccurredAt) }</dd></div>
+				<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">{ queryDetailText(entry.ClientIP) }</code></dd></div>
+				<div><dt>Query type</dt><dd data-query-detail-value="type">{ queryDetailText(entry.RecordType) }</dd></div>
+				<div><dt>Protocol</dt><dd data-query-detail-value="protocol">{ queryDetailText(entry.Protocol) }</dd></div>
+				<div><dt>Duration</dt><dd data-query-detail-value="duration">{ queryDetailText(entry.Duration) }</dd></div>
+			</dl>
+			<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
+				<h3 id="query-detail-answer-title">Answer</h3>
+				<div data-query-detail-answers>
+					if hasAnswers(entry.Answers) {
+						for _, answer := range entry.Answers {
+							if answer != "" {
+								<code>{ answer }</code>
+							}
+						}
+					} else {
+						<span>—</span>
+					}
+				</div>
+			</section>
+			<section class="query-detail-explain" aria-labelledby="query-detail-explain-title">
+				<div class="query-detail-section-heading"><h3 id="query-detail-explain-title">Why this answer?</h3><p data-query-detail-explain-summary hidden?={ view.Loaded && !entry.Decision.Available }>{ ifThen(entry.Decision.Summary != "", entry.Decision.Summary, "See how Sable handled this query.") }</p></div>
+				<ol class="query-decision-path" data-query-detail-explain-path hidden?={ view.Loaded && !entry.Decision.Available }>
+					@QueryDecisionStep("policy", "Policy", entry.Decision.Policy, entry.Decision.PolicyDetail)
+					@QueryDecisionStep("cache", "Cache", entry.Decision.Cache, "")
+					@QueryDecisionStep("resolver", "Resolver", entry.Decision.Resolver, entry.Decision.ResolverDetail)
+					@QueryDecisionStep("dnssec", "DNSSEC", entry.Decision.DNSSEC, "")
+				</ol>
+				<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden?={ !view.Loaded || entry.Decision.Available }>Decision details were not recorded for this older query.</p>
+			</section>
+		}
+	}
+}
+
+// queryMissing opens for a query's address when the query is no longer in
+// the log. It offers a search for the domain the address carried.
+templ queryMissing(view QueryDetailView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "Not showing right now", CloseLabel: "Close query details"}, queryMissingFooter(view)) {
+		<div class="insight-findings-empty insight-link-missing">
+			<span>@Icon("search")</span>
+			<strong>This query is no longer in the log</strong>
+			<p>Sable only keeps queries for a while, so it may have aged out.{ ifThen(view.Name != "", " Newer queries for "+view.Name+" may still be there.", "") }</p>
 		</div>
 	}
+}
+
+templ queryMissingFooter(view QueryDetailView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	if view.Name != "" {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			<a class="button" href={ templ.SafeURL(queryDomainSearchURL(view.Name)) }>@Icon("search")<span>Search Query Logs</span></a>
+		</div>
+	}
+}
+
+func queryDomainSearchURL(name string) string {
+	return "/logs?" + url.Values{"tab": []string{"queries"}, "name": []string{name}}.Encode()
+}
+
+func queryDetailText(value string) string { return ifThen(value != "", value, "—") }
+
+func queryDetailSourceClass(source string) string {
+	switch source {
+	case "authoritative", "upstream", "cache", "blocked", "local", "error":
+		return "source-pill source-" + source
+	}
+	return "source-pill"
+}
+
+// queryWatchURL opens Settings with a watch on the query's domain, from its
+// client.
+func queryWatchURL(entry QueryLogEntryView) string {
+	values := url.Values{"tab": []string{"alerts"}}
+	if entry.Name != "" {
+		values.Set("watch_domain", entry.Name)
+	}
+	if entry.ClientIP != "" {
+		values.Set("watch_client", entry.ClientIP)
+	}
+	return "/settings?" + values.Encode()
+}
+
+templ queryDetailFooter(view QueryDetailView) {
+	<button class="button outline" type="button" data-dialog-close>Close</button>
+	<div class="query-detail-policy-actions" data-query-detail-policy-actions>
+		// The page's script points these at the open query.
+		@queryCopyLinkButton(ifThen(view.Loaded, QueryPath(view.Entry.ID, view.Entry.Name), ""))
+		if view.CanWatch {
+			<a class="button outline" href={ templ.SafeURL(queryWatchURL(view.Entry)) } data-query-detail-watch aria-label={ "Watch " + view.Entry.Name }>@Icon("eye")<span>Watch</span></a>
+		}
+		if view.CanBlocking {
+			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
+			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+		}
+	</div>
+}
+
+// queryCopyLinkButton is CopyLinkButton with the hook the page's script uses
+// to point it at the open query.
+templ queryCopyLinkButton(link string) {
+	<button class="button outline copy-link-button" type="button" data-copy-url={ link } data-query-detail-copy-link hidden?={ link == "" }>@Icon("link")<span data-copy-label>Copy Link</span></button>
 }
 
 // DetailDrawerView describes the side drawer that explains one record: a query
@@ -383,8 +526,8 @@ templ DetailDrawerContent(view DetailDrawerView, footer templ.Component) {
 	</footer>
 }
 
-templ QueryDecisionStep(name, title string) {
-	<li data-query-decision-step={ name }><span class="query-decision-marker" aria-hidden="true"></span><div><span class="query-decision-kind">{ title }</span><strong data-query-decision-label></strong><span data-query-decision-detail hidden></span></div></li>
+templ QueryDecisionStep(name, title, label, detail string) {
+	<li data-query-decision-step={ name } hidden?={ label == "" }><span class="query-decision-marker" aria-hidden="true"></span><div><span class="query-decision-kind">{ title }</span><strong data-query-decision-label>{ label }</strong><span data-query-decision-detail hidden?={ detail == "" }>{ detail }</span></div></li>
 }
 
 templ QueryPolicyAction(domain, action, icon, label string) {

@@ -41,6 +41,10 @@ func (server *Server) runtimeLogHistory() (serverLogPager, bool) {
 
 func (server *Server) logsPage(writer http.ResponseWriter, request *http.Request) {
 	activeTab := request.URL.Query().Get("tab")
+	// A query's address opens Query Logs beneath its details panel.
+	if request.PathValue("id") != "" {
+		activeTab = "queries"
+	}
 	if activeTab != "queries" {
 		activeTab = "server"
 	}
@@ -173,6 +177,49 @@ func runtimeLevelName(level interface{ String() string }) string {
 		name = before
 	}
 	return name
+}
+
+type queryEventReader interface {
+	QueryEvent(context.Context, int64) (querylog.Entry, bool, error)
+}
+
+// queryDetailPanel fills the details panel for one query, opened by its
+// address. A query no longer in the log gets a stand-in that searches for
+// its domain.
+func (server *Server) queryDetailPanel(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	view, err := server.queryDetailView(request)
+	if err != nil {
+		server.logger.Error("read query", "error", err)
+		writer.WriteHeader(http.StatusInternalServerError)
+	}
+	if err := pages.QueryDetail(view).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render query details", "error", err)
+	}
+}
+
+func (server *Server) queryDetailView(request *http.Request) (pages.QueryDetailView, error) {
+	console := server.consoleView(request)
+	view := pages.QueryDetailView{
+		Name:        strings.TrimSuffix(strings.TrimSpace(request.URL.Query().Get("name")), "."),
+		CanBlocking: console.CanBlocking,
+		CanWatch:    server.alerts != nil && console.CanWriteSettings,
+		Missing:     true,
+	}
+	id := parsePositiveInt64(request.URL.Query().Get("id"))
+	reader, ok := server.queries.(queryEventReader)
+	if id == 0 || !ok {
+		return view, nil
+	}
+	entry, found, err := reader.QueryEvent(request.Context(), id)
+	if err != nil || !found {
+		return view, err
+	}
+	view.Missing, view.Loaded = false, true
+	display := requestTimeDisplay(request)
+	view.Entry = queryLogEntryViews([]querylog.Entry{entry}, display)[0]
+	view.Entry.OccurredAt = pages.FormatShortDateTime(entry.OccurredAt, display, true)
+	return view, nil
 }
 
 func (server *Server) queryLogsPanel(writer http.ResponseWriter, request *http.Request) {

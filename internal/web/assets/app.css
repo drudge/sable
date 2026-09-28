@@ -4131,6 +4131,8 @@ svg.app-icon { display: block; border-radius: .5rem; }
 .query-detail-header > .insight-type-tile .nav-icon { width: 1.25rem; height: 1.25rem; }
 .insight-device-mobile-copy small { font-variant-numeric: tabular-nums; }
 .insight-device-content { display: contents; }
+/* The query panel's content is swapped whole, by a row or by an address. */
+.query-detail-content { display: contents; }
 /* Visually hidden labels are absolutely positioned; anchoring them to the
    scrolling body keeps them from making the whole drawer scrollable. */
 .insight-device-dialog .query-detail-body { position: relative; }

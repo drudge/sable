@@ -182,6 +182,14 @@ func (log testQueryLog) QueryLogInsights(ctx context.Context, _, _ time.Time) (q
 	return insightsFrom(entries), nil
 }
 
+func (log testQueryLog) QueryEvent(ctx context.Context, id int64) (querylog.Entry, bool, error) {
+	entries, err := log.RecentQueryEvents(ctx, 1)
+	if err != nil || id != entries[0].ID {
+		return querylog.Entry{}, false, err
+	}
+	return entries[0], true, nil
+}
+
 func (log testQueryLog) QueryEvents(ctx context.Context, filter querylog.Filter) (querylog.Page, error) {
 	entries, err := log.RecentQueryEvents(ctx, filter.PageSize)
 	if err != nil {
