@@ -8,6 +8,66 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.1-beta.3] - 2026-09-27
+
+Sable 1.5.1-beta.3 fixes names that failed in recursive mode, makes recursive
+lookups faster, and teaches Insights more about each device, including every
+device using remote access.
+
+### Upgrading from beta.2
+
+- The resolver timeout now defaults to 3 seconds, up from 2. Configuration
+  files keep the value they saved, so in recursive mode raise **Settings →
+  Recursive Resolver → Resolution Timeout** to `3s` by hand. At 2 seconds, a
+  name like `auth.remarkable.com` answers on the second try instead of the
+  first on an empty cache.
+- The new **Remote access in use** finding alerts by default. The first time
+  Insights runs, it reports every device already using a tunnel or remote
+  control tool. Mark each one normal once you know it's expected.
+
+### Recursive resolver
+
+- Fix names that always failed in recursive mode with "iterative resolution
+  encountered a referral loop", such as `auth.remarkable.com`, which kept
+  reMarkable tablets from signing in. Amazon Route 53 lists its own name
+  servers beside every answer, and QNAME minimization took them for a
+  referral back into the same zone. ([#228](https://github.com/drudge/sable/issues/228))
+- Add a **QNAME Minimization** switch under **Settings → Recursive Resolver**,
+  and `qname_minimization` under `[resolver]`. It stays on by default; turning
+  it off asks every server for the full name, as an escape hatch for a DNS
+  provider that fails with minimized questions.
+- Resolve cold names faster. Sable remembers which names sit inside a zone,
+  so a long alias chain and DNSSEC validation stop asking the same servers the
+  same questions, and a server that just timed out is tried last for a while.
+- Let a recursive lookup finish after the device stops waiting for it, so the
+  device's retry gets the answer instead of starting over.
+
+### Insights
+
+- Use UniFi's own device fingerprints. A type UniFi is sure of counts as
+  strong evidence, and a type you set by hand in UniFi shows as yours ("You set
+  it as a server in UniFi"). A type set in Sable still wins.
+- Add a **Remote access in use** finding for every device using Cloudflare
+  Tunnel, ngrok, Tailscale, TeamViewer, or AnyDesk during the period, whether
+  or not it's new. Each device and tool is its own finding, so marking one
+  normal still shows a different tool on the same device.
+- Count common work apps (Teams, Slack, Zoom, Webex, Microsoft 365, Notion,
+  1Password) a little toward **Computer**, since phones run them too, and a
+  Mac's own software update check a lot.
+- Tie a device that reaches Sable over an IPv6 link-local address, such as
+  `fe80::1%eth0`, to its hardware. Every such device used to show as unknown.
+
+### Cluster
+
+- Share the lead's device matches with every replica. A replica in a
+  container, which can't see hardware addresses, and every replica, which
+  never runs the UniFi sync, now name devices and follow their changing IPv6
+  addresses the way the lead does. A replica on an older release ignores them.
+
+### Dependencies
+
+- Update the CBOR library passkeys rely on and the SQLite driver.
+
 ## [1.5.1-beta.2] - 2026-09-27
 
 Sable 1.5.1-beta.2 takes UniFi's word for what its own hardware is, adds a
