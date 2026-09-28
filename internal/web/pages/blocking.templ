@@ -136,7 +136,7 @@ templ BlockingContent(view BlockingPageView) {
 			<aside class="blocking-aside isotope-blocking-aside">
 				<section class="card blocking-guidance"><h2>How DNS Blocking Works</h2>@BlockingGuide("red", "Block Lists", "Subscribe to curated lists that automatically block ads, trackers, and malware")@BlockingGuide("red", "Custom Blocked Domains", "Manually add specific domains you want to block")@BlockingGuide("green", "Allowed Domains", "Override blocks for domains you need to access")</section>
 				<section class="card blocking-guidance popular-lists"><h2>Popular Block Lists</h2>@BlockingGuide("green", "Steven Black's Hosts", "Ads, malware, fakenews")@BlockingGuide("green", "OISD", "Comprehensive blocking")@BlockingGuide("green", "AdGuard DNS Filter", "Ads and tracking")</section>
-				<div class="tip-box"><strong>Tip:</strong> Block lists update automatically every { fmt.Sprint(view.UpdateHours) } hours. Change this in <a href="/settings?tab=blocking">Settings → Blocking</a>.</div>
+				<div class="tip-box"><strong>Tip:</strong> Block lists update automatically every { fmt.Sprint(view.UpdateHours) } hours. Change this in <a href="/settings?tab=blocking#block-list-updates">Settings → Blocking</a>.</div>
 			</aside>
 		</div>
 		@AddBlockListDialog(view.Lists)

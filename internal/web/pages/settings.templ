@@ -971,19 +971,31 @@ templ BackupUploadMeter() {
 	</div>
 }
 
+// SettingsCard is one card of Settings. Its id comes from its title, so a
+// link such as /settings?tab=blocking#block-list-updates opens it.
 templ SettingsCard(icon, title, description string) {
-	<section class="card settings-source-card">
+	<section class="card settings-source-card" id={ SettingsCardID(title) } data-settings-card>
 		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
 		{ children... }
 	</section>
 }
+// SettingsCardID is the id a Settings card is linked by: its title in lower
+// case, with a hyphen between words. "Block List Updates" is
+// block-list-updates.
+func SettingsCardID(title string) string {
+	words := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	})
+	return strings.Join(words, "-")
+}
+
 templ SettingsSaveButton(tab string) { <div class="settings-panel-save"><button class="button" type="submit" name="settings_tab" value={ tab }>Save Settings</button></div> }
 
 // SettingsDangerCard marks a card whose action cannot be casually undone. The
 // restore card looks different from the download card on purpose: one produces
 // a file, the other replaces every user and secret on the node.
 templ SettingsDangerCard(icon, title, description string) {
-	<section class="card settings-source-card settings-danger-card">
+	<section class="card settings-source-card settings-danger-card" id={ SettingsCardID(title) } data-settings-card>
 		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
 		{ children... }
 	</section>

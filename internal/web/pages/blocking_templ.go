@@ -337,7 +337,7 @@ func BlockingContent(view BlockingPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, " hours. Change this in <a href=\"/settings?tab=blocking\">Settings → Blocking</a>.</div></aside></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, " hours. Change this in <a href=\"/settings?tab=blocking#block-list-updates\">Settings → Blocking</a>.</div></aside></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

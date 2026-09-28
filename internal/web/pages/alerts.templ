@@ -335,7 +335,7 @@ func alertsStateSummary(view AlertsView) string {
 
 // alertsDestinationsCard lists where alerts go.
 templ alertsDestinationsCard(view AlertsView) {
-	<section class="card settings-source-card settings-action-card alerts-destinations-card">
+	<section class="card settings-source-card settings-action-card alerts-destinations-card" id="destinations" data-settings-card>
 		<header>
 			<div><h2>@Icon("send")<span>Destinations</span></h2><p>Where Sable sends alerts. Their URLs and keys stay in the encrypted vault.</p></div>
 			if view.CanEdit {
@@ -433,7 +433,7 @@ func browserCount(count int) string {
 
 // alertsGroupsCard turns whole groups of alerts on or off. It saves on its own.
 templ alertsGroupsCard(view AlertsView) {
-	<section class="card settings-source-card alerts-groups-card">
+	<section class="card settings-source-card alerts-groups-card" id="alert-types" data-settings-card>
 		<header><h2>@Icon("list-checks")<span>Alert Types</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
 		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			if !view.Groups.InsightsOff {

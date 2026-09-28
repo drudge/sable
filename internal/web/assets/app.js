@@ -4780,6 +4780,31 @@
 		});
 	  }
 	};
+	// A link to a Settings card, such as /settings?tab=alerts#watches, opens
+	// the card's tab, scrolls to it, and outlines it for a moment. Each
+	// address does this once, not again whenever the card redraws.
+	let linkedCardShown = "";
+	const showLinkedCard = () => {
+	  const hash = window.location.hash;
+	  if (!hash || hash === linkedCardShown) return;
+	  let card = null;
+	  try {
+		card = document.getElementById(decodeURIComponent(hash.slice(1)));
+	  } catch (_) {
+		return;
+	  }
+	  if (!card?.matches("[data-settings-card]")) return;
+	  linkedCardShown = hash;
+	  const panel = card.closest("[data-isotope-panel]");
+	  if (panel?.hidden) {
+		panel.closest("[data-isotope-tabs]")?.querySelector(`[data-isotope-tab="${CSS.escape(panel.dataset.isotopePanel)}"]`)?.click();
+	  }
+	  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	  card.scrollIntoView({block: "start", behavior: smooth ? "smooth" : "auto"});
+	  card.classList.add("is-linked");
+	  window.setTimeout(() => card.classList.remove("is-linked"), 2000);
+	};
+	window.addEventListener("hashchange", showLinkedCard);
 	window.addEventListener("popstate", syncRoutedDialogs);
 	// Back and Forward between a page and a drawer opened over it stay on the
 	// page: the drawer opens or closes. htmx would otherwise reload the page
@@ -4814,6 +4839,7 @@
 	syncRoutedDialogs();
 	openAutomaticDialogs();
 	setupCommandPalette();
+	showLinkedCard();
 
 	const legacyCopyText = (value) => {
 	  const fallback = document.createElement("textarea");

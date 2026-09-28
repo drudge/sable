@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -54,5 +55,29 @@ func TestQueryLinkOpensItsDetails(t *testing.T) {
 	// Without a domain in its address there is nothing to search for.
 	if bare := getDetailsPanel(server, "/ui/logs/query?id=99", true).Body.String(); strings.Contains(bare, "Search Query Logs") {
 		t.Error("the stand-in offers a search with no domain to search for")
+	}
+}
+
+// Every Settings card has its own id, made from its title, so a link can
+// open it; no two share one.
+func TestSettingsCardsHaveLinkableIDs(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	page := server.get(t, "everything", "/settings?tab=alerts", false).Body.String()
+	ids := regexp.MustCompile(`id="([^"]+)" data-settings-card`).FindAllStringSubmatch(page, -1)
+	seen := make(map[string]bool, len(ids))
+	for _, match := range ids {
+		if seen[match[1]] {
+			t.Errorf("two Settings cards are #%s", match[1])
+		}
+		seen[match[1]] = true
+	}
+	for _, id := range []string{"block-list-updates", "bypass-clients", "public-tls-certificate", "destinations", "alert-types", "watches"} {
+		if !seen[id] {
+			t.Errorf("no Settings card is #%s; have %v", id, seen)
+		}
+	}
+	if count := strings.Count(page, `id="watches"`); count != 1 {
+		t.Errorf("#watches appears %d times on the page", count)
 	}
 }
