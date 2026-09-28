@@ -268,8 +268,14 @@ func (handler *Handler) resolveIterativeQuestion(
 
 	// Query only successive delegation names until the closest authority is
 	// reached. The final owner and record type are withheld from parent zones.
+	candidates := minimizedDelegationNames(question.Name)
+	if !runtime.qnameMinimization {
+		// Every server is asked for the full name, and referrals are followed
+		// as they come.
+		candidates = nil
+	}
 minimizing:
-	for _, candidate := range minimizedDelegationNames(question.Name) {
+	for _, candidate := range candidates {
 		if closestZone != "" && (candidate == dns.Fqdn(closestZone) || strings.HasSuffix(dns.Fqdn(closestZone), candidate)) {
 			continue
 		}

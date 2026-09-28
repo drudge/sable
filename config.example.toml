@@ -46,6 +46,9 @@ cache_prefetch_sample_interval = "5m"
 cache_prefetch_hits_per_hour = 30
 dnssec_validation = true
 dnssec_trust_anchor_updates = true
+# Recursive mode asks each zone only for the next label of a name (RFC 9156).
+# Turn off only if a DNS provider fails with minimized questions.
+qname_minimization = true
 # Empty trust anchors use Sable's bundled IANA root KSK set. Custom anchors
 # accept an owner followed by DS or DNSKEY RDATA.
 # dnssec_trust_anchors = [". DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"]

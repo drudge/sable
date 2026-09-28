@@ -127,6 +127,12 @@ authorities, and validates the result through the same DNSSEC pipeline used by
 forwarded responses. Optional `root_hints` entries use `IP:port` syntax.
 Conditional routes and forwarder zones continue to override direct recursion.
 
+`qname_minimization`, on by default, is what keeps the full name from parent
+zones: each zone is asked only for the next label (RFC 9156). Set it to `false`
+only as an escape hatch for a DNS provider that fails on minimized questions;
+every server is then asked for the full name. **Settings → Recursive Resolver
+→ QNAME Minimization** sets it too.
+
 `timeout` is the budget for the whole query, not for one upstream. In forward
 mode it is split evenly across the forwarders that have not been tried yet, so a
 forwarder that stops answering cannot spend the entire budget on its own retries

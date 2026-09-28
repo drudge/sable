@@ -12,6 +12,7 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 	markup := renderComponent(t, SettingsContent(SettingsPageView{
 		PasskeysEnabled:        true,
 		DNSSECValidation:       true,
+		QNAMEMinimization:      true,
 		TrustAnchorUpdates:     true,
 		SaveCache:              true,
 		ServeStale:             true,
@@ -37,6 +38,7 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 		"pre_release",
 		"passkeys_enabled",
 		"dnssec_validation",
+		"qname_minimization",
 		"trust_anchor_updates",
 		"save_cache",
 		"serve_stale",
@@ -51,8 +53,8 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 		}
 	}
 
-	if got := strings.Count(markup, `role="switch"`); got != 11 {
-		t.Fatalf("settings page rendered %d switches, want 11", got)
+	if got := strings.Count(markup, `role="switch"`); got != 12 {
+		t.Fatalf("settings page rendered %d switches, want 12", got)
 	}
 	if regexp.MustCompile(`<input[^>]*role="switch"[^>]*name="keep_configuration"`).MatchString(markup) {
 		t.Fatal("restore option rendered as a switch instead of an action-scoped checkbox")

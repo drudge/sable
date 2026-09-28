@@ -127,6 +127,48 @@ func TestIterativeResolverMinimizesPastWildcardAnswersWithTheirOwnNameServers(t 
 	}
 }
 
+// With QNAME minimization off, every server is asked for the full name and
+// referrals are followed as they come.
+func TestIterativeResolverAsksTheFullNameWithMinimizationOff(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Mode = "recursive"
+	configuration.Forwarders = nil
+	configuration.RootHints = []string{"192.0.2.1:53"}
+	configuration.DisableQNAMEMinimization = true
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	var questions []string
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		questions = append(questions, fmt.Sprintf("%s/%s@%s", question.Name, dns.TypeToString[question.Qtype], endpoint))
+		switch endpoint {
+		case "udp://192.0.2.1:53":
+			return referralResponse(request, "com.", "ns.com.", "192.0.2.2"), nil
+		case "udp://192.0.2.2:53":
+			return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
+		default:
+			return addressResponse(request, "192.0.2.44"), nil
+		}
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("www.example.com.", dns.TypeA)
+	if _, err := handler.resolveNetwork(request, runtime, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"www.example.com./A@udp://192.0.2.1:53",
+		"www.example.com./A@udp://192.0.2.2:53",
+		"www.example.com./A@udp://192.0.2.3:53",
+	}
+	if !slices.Equal(questions, want) {
+		t.Fatalf("questions = %v, want %v", questions, want)
+	}
+}
+
 // Names a zone's servers said hold no delegation are remembered, so the next
 // lookup below them asks the zone for the full name straight away. Long alias
 // chains, and DNSSEC validation walking the same names again, would otherwise

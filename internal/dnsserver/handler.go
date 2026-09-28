@@ -34,6 +34,7 @@ type Runtime struct {
 	mode                   string
 	forwarders             []string
 	rootHints              []string
+	qnameMinimization      bool
 	delegations            *delegationCache
 	zoneCuts               *zoneCutCache
 	nameServers            *addressCache
@@ -81,13 +82,16 @@ type tsigKey struct {
 }
 
 type RuntimeConfig struct {
-	MaxConcurrent            int
-	MaxConcurrentPerClient   int
-	Recursion                string
-	RecursionClients         []string
-	Mode                     string
-	Forwarders               []string
-	RootHints                []string
+	MaxConcurrent          int
+	MaxConcurrentPerClient int
+	Recursion              string
+	RecursionClients       []string
+	Mode                   string
+	Forwarders             []string
+	RootHints              []string
+	// DisableQNAMEMinimization has iterative resolution ask every server for
+	// the full name. Minimization is on unless this is set.
+	DisableQNAMEMinimization bool
 	Routes                   []ForwardingRoute
 	Timeout                  time.Duration
 	Retries                  int
@@ -670,30 +674,31 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 	}
 	return &Runtime{
 		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
-		recursion:       recursion,
-		mode:            mode,
-		forwarders:      append([]string(nil), configuration.Forwarders...),
-		rootHints:       rootHints,
-		delegations:     newDelegationCache(4096),
-		zoneCuts:        newZoneCutCache(4096),
-		nameServers:     newAddressCache(4096),
-		baseRoutes:      cloneForwardingRoutes(configuration.Routes),
-		routes:          routes,
-		upstreams:       upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
-		timeout:         configuration.Timeout,
-		retries:         cmp.Or(configuration.Retries, defaultRuntimeRetries),
-		retryTimeout:    cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
-		staleMaxWait:    configuration.CacheStaleMaxWait,
-		blocked:         blocked,
-		blockedOwners:   configuration.BlockedDomainOwnerSets,
-		allowedExact:    allowedExact,
-		allowedWildcard: allowedWildcard,
-		blocking:        configuration.Blocking,
-		blockType:       blockingType,
-		blockTTL:        configuration.BlockingTTL,
-		blockAddrs:      blockAddresses,
-		bypass:          bypass,
-		blockTXT:        configuration.AllowTXTReport,
+		recursion:         recursion,
+		mode:              mode,
+		forwarders:        append([]string(nil), configuration.Forwarders...),
+		rootHints:         rootHints,
+		qnameMinimization: !configuration.DisableQNAMEMinimization,
+		delegations:       newDelegationCache(4096),
+		zoneCuts:          newZoneCutCache(4096),
+		nameServers:       newAddressCache(4096),
+		baseRoutes:        cloneForwardingRoutes(configuration.Routes),
+		routes:            routes,
+		upstreams:         upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
+		timeout:           configuration.Timeout,
+		retries:           cmp.Or(configuration.Retries, defaultRuntimeRetries),
+		retryTimeout:      cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
+		staleMaxWait:      configuration.CacheStaleMaxWait,
+		blocked:           blocked,
+		blockedOwners:     configuration.BlockedDomainOwnerSets,
+		allowedExact:      allowedExact,
+		allowedWildcard:   allowedWildcard,
+		blocking:          configuration.Blocking,
+		blockType:         blockingType,
+		blockTTL:          configuration.BlockingTTL,
+		blockAddrs:        blockAddresses,
+		bypass:            bypass,
+		blockTXT:          configuration.AllowTXTReport,
 		cache: NewResponseCacheWithOptions(configuration.CacheSize, CacheOptions{
 			MinimumTTL: configuration.CacheMinimumTTL, MaximumTTL: configuration.CacheMaximumTTL,
 			NegativeTTL: configuration.CacheNegativeTTL, FailureTTL: configuration.CacheFailureTTL,
