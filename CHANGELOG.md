@@ -8,6 +8,47 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0-beta.2] - 2026-09-28
+
+Sable 1.6.0-beta.2 lets AI assistants pick up new MCP tools without a restart,
+adds details panels with their own links for block lists and cluster nodes, and
+warns in the MCP setup when a tool won't work.
+
+### Upgrading from beta.1
+
+- Restart Claude Desktop once after upgrading every node. Its MCP connection
+  started against beta.1, which didn't offer tool updates, so it won't listen
+  for them until it reconnects. After that, tool changes reach it on their own.
+
+### MCP
+
+- Tell connected assistants when the tool list changes, so new tools show up
+  without restarting them. This covers turning tools on or off in the setup
+  wizard and upgrading Sable to a version with new tools. Claude Desktop (through
+  `mcp-remote`) and Claude Code both refresh. A Claude Code session running
+  inside the Claude Desktop app still needs a new session. If a node stays down
+  for more than about a minute, Claude Desktop stops listening until it
+  restarts. ([#253](https://github.com/drudge/sable/issues/253))
+- Warn before the setup wizard's **Connect** step when the group lacks a grant a
+  chosen tool needs. The warning names the grants and the tools that won't work,
+  and points to **Update Group**, or to an administrator for someone who can't
+  change groups.
+
+### Blocking
+
+- Open a block list's details from its name on the Blocking page, with its own
+  link and **Copy Link**. The panel shows the full source, domain and line
+  counts, the last and next update, failures in a row, and the whole last
+  error. **Refresh This List** updates just that list.
+  ([#251](https://github.com/drudge/sable/issues/251))
+
+### Cluster
+
+- Open a node's details from its name on the Cluster page, with its own link.
+  The panel shows the node's open problems, its ID, and its addresses, and
+  keeps **Promote** and **Remove**.
+  ([#251](https://github.com/drudge/sable/issues/251))
+
 ## [1.6.0-beta.1] - 2026-09-28
 
 Sable 1.6.0-beta.1 can alert when a device looks up a domain you pick, points
