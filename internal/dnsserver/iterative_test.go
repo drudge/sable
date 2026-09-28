@@ -69,6 +69,59 @@ func TestIterativeResolverMinimizesQNameAndFollowsReferrals(t *testing.T) {
 	}
 }
 
+// Route 53 answers an intermediate name under a wildcard with the wildcard's
+// CNAME, even when the name only exists because a longer name below it does,
+// and lists its own zone's name servers beside the answer. Minimizing past
+// such a name must neither follow that CNAME nor take the name servers for a
+// referral back into the same zone.
+func TestIterativeResolverMinimizesPastWildcardAnswersWithTheirOwnNameServers(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	var questions []string
+	wildcard := func(request *dns.Msg) *dns.Msg {
+		response := new(dns.Msg)
+		response.SetReply(request)
+		response.Authoritative = true
+		response.Answer = []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: request.Question[0].Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 60}, Target: "pvsty8.pivot.example.net."}}
+		response.Ns = []dns.RR{&dns.NS{Hdr: dns.RR_Header{Name: "eu.example.com.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 172800}, Ns: "ns.eu.example.com."}}
+		return response
+	}
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		questions = append(questions, fmt.Sprintf("%s/%s@%s", question.Name, dns.TypeToString[question.Qtype], endpoint))
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "com.":
+			return referralResponse(request, "com.", "ns.com.", "192.0.2.2"), nil
+		case endpoint == "udp://192.0.2.2:53" && question.Name == "example.com.":
+			return referralResponse(request, "example.com.", "ns.example.com.", "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "eu.example.com.":
+			return referralResponse(request, "eu.example.com.", "ns.eu.example.com.", "192.0.2.4"), nil
+		case endpoint == "udp://192.0.2.4:53" && (question.Name == "tenants.eu.example.com." || question.Name == "edge.tenants.eu.example.com."):
+			return wildcard(request), nil
+		case endpoint == "udp://192.0.2.4:53" && question.Name == "tenant-cd.edge.tenants.eu.example.com." && question.Qtype == dns.TypeA:
+			response := wildcard(request)
+			response.Answer[0].(*dns.CNAME).Target = "tenant.eu.example.com."
+			response.Answer = append(response.Answer, &dns.A{Hdr: dns.RR_Header{Name: "tenant.eu.example.com.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: []byte{192, 0, 2, 99}})
+			return response, nil
+		default:
+			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+		}
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("tenant-cd.edge.tenants.eu.example.com.", dns.TypeA)
+	response, err := handler.resolveNetwork(request, runtime, nil)
+	if err != nil {
+		t.Fatalf("resolve: %v (asked %v)", err, questions)
+	}
+	if len(response.Answer) != 2 || response.Answer[1].String() != "tenant.eu.example.com.\t60\tIN\tA\t192.0.2.99" {
+		t.Fatalf("answer = %v", response.Answer)
+	}
+	if last := questions[len(questions)-1]; last != "tenant-cd.edge.tenants.eu.example.com./A@udp://192.0.2.4:53" {
+		t.Fatalf("the full name was not asked last: %v", questions)
+	}
+}
+
 func TestIterativeResolverRejectsOutOfBailiwickGlue(t *testing.T) {
 	t.Parallel()
 	runtime := recursiveTestRuntime(t)

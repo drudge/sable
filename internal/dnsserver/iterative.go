@@ -221,7 +221,12 @@ func (handler *Handler) resolveIterativeQuestion(
 			return nil, err
 		}
 		zone, names, referral := referralFrom(response, question.Name)
-		if !referral {
+		// Only a delegation below the servers already reached moves the search
+		// on. Some servers, such as Amazon Route 53, list their own zone's name
+		// servers beside every answer, including a wildcard CNAME they give for
+		// an intermediate name, and that is an answer about this zone, not a
+		// referral away from it.
+		if !referral || len(response.Answer) > 0 || !belowZone(zone, closestZone) {
 			continue
 		}
 		if _, duplicate := visited[zone]; duplicate {
@@ -274,6 +279,13 @@ func (handler *Handler) resolveIterativeQuestion(
 		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
+}
+
+// belowZone reports whether zone is strictly inside parent. An empty parent is
+// the root.
+func belowZone(zone, parent string) bool {
+	zone, parent = dns.Fqdn(zone), dns.Fqdn(parent)
+	return zone != parent && dns.IsSubDomain(parent, zone)
 }
 
 func iterativeQuery(name string, recordType uint16) *dns.Msg {
