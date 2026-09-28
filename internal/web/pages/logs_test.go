@@ -73,6 +73,7 @@ func TestQueryLogPanelRendersOneReusableDetailDrawer(t *testing.T) {
 		`data-query-detail-policy="block"`, `data-query-detail-policy="allow"`, `data-query-detail-copy-link`,
 		`id="query-detail-explain-title"`, `data-query-decision-step="resolver"`, "Why this answer?",
 		`<template id="query-detail-blank">`, `<template id="query-detail-loading">`,
+		`data-query-detail-why hidden`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("query details panel does not contain %q", expected)
@@ -135,5 +136,16 @@ func TestRuntimeLogFollowsUntilPaged(t *testing.T) {
 	}
 	if url := runtimeExportURL(view); strings.Contains(url, "live=") {
 		t.Errorf("export URL %q carries the follow flag", url)
+	}
+}
+
+// A blocked query asks why it was blocked, which the Check a Domain panel
+// answers.
+func TestBlockedQueryLinksToItsCheck(t *testing.T) {
+	t.Parallel()
+	view := QueryDetailView{Loaded: true, Entry: QueryLogEntryView{ID: 7, Name: "ads.example.", Source: "blocked", Status: "NXDOMAIN"}}
+	panel := renderComponent(t, QueryDetail(view))
+	if !strings.Contains(panel, `href="/blocked/check/ads.example" data-query-detail-why>`) {
+		t.Errorf("a blocked query does not link to its check: %s", panel)
 	}
 }

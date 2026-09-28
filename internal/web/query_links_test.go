@@ -41,6 +41,10 @@ func TestQueryLinkOpensItsDetails(t *testing.T) {
 		`data-query-detail-value="name">example.com</h2>`, `<code data-query-detail-value="client">192.0.2.1</code>`,
 		`class="source-pill source-cache" data-query-detail-source>Cached</span>`, "Cache hit",
 		`data-copy-url="/logs/queries/1?name=example.com"`, `data-query-detail-policy="block"`)
+	// Only a blocked query asks why it was blocked.
+	if !strings.Contains(found, `href="/blocked/check/example.com" data-query-detail-why hidden`) {
+		t.Error("a cached query shows Why is this blocked?, or links it to the wrong check")
+	}
 	if strings.Contains(found, "no longer in the log") {
 		t.Error("a query still in the log opened as aged out")
 	}

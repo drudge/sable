@@ -4182,6 +4182,11 @@
 	  }
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
+	  const why = dialog.querySelector("[data-query-detail-why]");
+	  if (why) {
+		why.href = `/blocked/check/${encodeURIComponent(domain.replace(/\.$/, ""))}`;
+		why.hidden = source !== "blocked" || !domain;
+	  }
 	  // The row fills the panel at once, and the address still changes to
 	  // the query's own, so it can be shared or reopened.
 	  const link = row.dataset.queryDetailLink || "";

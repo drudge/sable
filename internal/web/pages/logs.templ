@@ -395,6 +395,9 @@ templ QueryDetail(view QueryDetailView) {
 					@QueryDecisionStep("dnssec", "DNSSEC", entry.Decision.DNSSEC, "")
 				</ol>
 				<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden?={ !view.Loaded || entry.Decision.Available }>Decision details were not recorded for this older query.</p>
+				// The page's script points it at the open query's domain, and
+				// shows it only for a blocked query.
+				<a class="inline-link query-detail-why" href={ templ.SafeURL(CheckDomainPath(entry.Name)) } data-query-detail-why hidden?={ !view.Loaded || entry.Source != "blocked" }>@Icon("shield-question")<span>Why is this blocked?</span></a>
 			</section>
 		}
 	}
