@@ -42,7 +42,18 @@ type AlertsView struct {
 	BrowserDestination bool
 	// NewDestination is the empty form the Add Destination dialog opens with.
 	NewDestination AlertDestinationFormView
-	Message        string
+	// Watches are the domain watches, in the order they were added.
+	// WatchesQueryLogOff is set while the query log, which they read, is off,
+	// and WatchLimit once no more can be added.
+	Watches            []AlertWatchView
+	WatchesQueryLogOff bool
+	WatchLimit         bool
+	// NewWatch is the empty form the Add Watch dialog opens with, and
+	// OpenWatch the form to load into it as the page opens, when a Watch link
+	// from Query Logs or a device led here.
+	NewWatch  AlertWatchFormView
+	OpenWatch string
+	Message   string
 	Error          string
 }
 
@@ -83,6 +94,7 @@ type AlertGroupsView struct {
 	Backups string
 	Server  bool
 	SignIns bool
+	Watches bool
 	// SignInsAfter failed sign-ins within SignInsWithin minutes send one
 	// alert.
 	SignInsAfter  int
@@ -190,6 +202,7 @@ func (preview AlertPreview) Text() string {
 var alertGroupLabels = map[string]string{
 	"insights": "Insights Findings", "cluster": "Cluster", "updates": "Sable Updates", "integrations": "Integrations",
 	"backups": "Backups", "server": "Server Health", "sign_ins": "Failed Sign-Ins",
+	"watches": "Domain Watches",
 }
 
 // AlertGroupLabel names an alert group the way the console shows it.
@@ -243,6 +256,7 @@ templ SettingsAlertsPanel(view AlertsView) {
 			@alertsStatusCard(view)
 			@alertsDestinationsCard(view)
 			@alertsGroupsCard(view)
+			@alertsWatchesCard(view)
 		}
 	</div>
 }
@@ -437,6 +451,7 @@ templ alertsGroupsCard(view AlertsView) {
 				</div>
 			</div>
 			@alertGroupSwitch("server", "Server Health", "Certificate renewals, secondary zones, and DNSSEC keys.", view.Groups.Server, view.CanEdit)
+			@alertGroupSwitch("watches", "Domain Watches", "A device looking up a domain you picked in Watches below.", view.Groups.Watches, view.CanEdit)
 			<div class="alert-sign-ins">
 				@alertGroupSwitch("sign_ins", "Failed Sign-Ins", "Several failed sign-ins on one node in a short time. Off unless you turn it on.", view.Groups.SignIns, view.CanEdit)
 				<div class="alert-sign-in-limit" role="group" aria-label="When failed sign-ins send an alert">

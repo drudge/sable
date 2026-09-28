@@ -195,6 +195,8 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 		Start: logTimeField(filter.Since, display), End: logTimeField(filter.Until, display),
 		Exact: filter.Exact,
 		Live:  liveRequested(raw, true), FiltersOpen: raw.Get("filters") == "1",
+		// Only operators who can change alert settings can add a watch.
+		CanWatch: server.alerts != nil && server.consoleView(request).CanWriteSettings,
 	}
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {

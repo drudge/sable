@@ -162,6 +162,7 @@ templ SettingsContent(view SettingsPageView) {
 		}
 		if view.Alerts.Available && view.Alerts.CanEdit {
 			@AlertDestinationDialog(view.Alerts.NewDestination)
+			@AlertWatchDialog(view.Alerts)
 		}
 		@RunLocalBackupDialog()
 		@LocalBackupRestoreDialog()

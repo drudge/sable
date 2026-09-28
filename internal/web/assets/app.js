@@ -1796,19 +1796,31 @@
     if (!dialog || !ctx.response || ctx.response.status >= 400) return;
     showRoutedDialog(dialog, false, ctx.sourceElement);
   });
+  // A Watch link from Query Logs or a device opens Settings with the Add
+  // Watch dialog loading. Once it opens, the link's details leave the address,
+  // so a reload does not open it again.
+  document.addEventListener("htmx:after:swap", (event) => {
+    const source = event.detail?.ctx?.sourceElement;
+    if (!source?.matches?.("[data-alert-watch-open]")) return;
+    const address = new URL(window.location.href);
+    ["watch_domain", "watch_device", "watch_client"].forEach((key) => address.searchParams.delete(key));
+    window.history.replaceState(window.history.state, "", address);
+    source.remove();
+  });
   // Saving a destination swaps the whole Alerts panel, the button that opened
   // the dialog included. The dialog closes and forgets what was typed, and
   // focus goes to that button's replacement, which keeps its id.
   document.addEventListener("htmx:after:swap", (event) => {
     const ctx = event.detail?.ctx;
     const form = ctx?.sourceElement;
-    if (!form?.matches?.("[data-alert-destination-form]") || !ctx.response || ctx.response.status >= 400) return;
+    if (!form?.matches?.("[data-alert-destination-form], [data-alert-watch-form]") || !ctx.response || ctx.response.status >= 400) return;
     const dialog = form.closest("dialog");
     const opener = dialog?.sableReturnFocus;
     if (dialog) dialog.sableReturnFocus = null;
     form.reset();
     dialog?.close();
-    document.getElementById(opener?.id || "alert-destination-add")?.focus();
+    const fallback = form.matches("[data-alert-watch-form]") ? "alert-watch-add" : "alert-destination-add";
+    document.getElementById(opener?.id || fallback)?.focus();
   });
   // Every other change on the Alerts panel swaps it too, the control that
   // made the change included. Focus goes to that control's replacement, which
@@ -1822,16 +1834,17 @@
     const ctx = event.detail?.ctx;
     const source = ctx?.sourceElement;
     if (!source?.closest?.("#alerts-panel") || source.hasAttribute("data-dialog-load")) return;
-    const removal = source.matches("[data-alert-destination-remove], [data-alert-browser-remove]");
+    const removal = source.matches("[data-alert-destination-remove], [data-alert-browser-remove], [data-alert-watch-remove]");
     const focused = document.activeElement?.closest?.("#alerts-panel") ? document.activeElement.id : "";
-    ctx.sableAlertsFocus = {removal, id: removal ? "alert-destination-add" : focused || ctx.request?.submitter?.id || source.id};
+    const add = source.matches("[data-alert-watch-remove]") ? "alert-watch-add" : "alert-destination-add";
+    ctx.sableAlertsFocus = {removal, add, id: removal ? add : focused || ctx.request?.submitter?.id || source.id};
   });
   document.addEventListener("htmx:after:swap", (event) => {
     const focus = event.detail?.ctx?.sableAlertsFocus;
     if (!focus || (!focus.removal && document.activeElement && document.activeElement !== document.body)) return;
     const replacement = document.getElementById(focus.id);
     replacement?.focus();
-    if (!replacement || document.activeElement !== replacement) document.getElementById("alert-destination-add")?.focus();
+    if (!replacement || document.activeElement !== replacement) document.getElementById(focus.add)?.focus();
   });
 
   const UPDATE_CHECK_RETRY_MS = 2000;
@@ -4110,6 +4123,13 @@
 	  dialog.querySelectorAll("[data-query-detail-domain]").forEach((input) => { input.value = domain; });
 	  const policyActions = dialog.querySelector("[data-query-detail-policy-actions]");
 	  if (policyActions) policyActions.hidden = !domain;
+	  const watchAction = dialog.querySelector("[data-query-detail-watch]");
+	  if (watchAction) {
+		const watch = new URLSearchParams({tab: "alerts", watch_domain: domain});
+		if (row.dataset.queryDetailClient) watch.set("watch_client", row.dataset.queryDetailClient);
+		watchAction.href = `/settings?${watch}`;
+		watchAction.setAttribute("aria-label", `Watch ${domain}`);
+	  }
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
 	  showRoutedDialog(dialog, false, document.activeElement);

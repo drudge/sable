@@ -66,6 +66,8 @@ type QueryLogsView struct {
 	NewestID     int64
 	FiltersOpen  bool
 	CanBlocking  bool
+	// CanWatch offers a watch on a query's domain from its details.
+	CanWatch     bool
 	CopyText     string
 	FirstURL     string
 	PreviousURL  string
@@ -212,7 +214,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
 			</tbody></table></div>
-			@QueryDetailDialog(view.CanBlocking)
+			@QueryDetailDialog(view.CanBlocking, view.CanWatch)
 		}
 		<footer class="logs-pagination"><div><span>Rows per page</span><select name="page_size" data-query-page-size data-styled-select aria-label="Rows per page"><option selected?={ view.PageSize == 25 }>25</option><option selected?={ view.PageSize == 50 }>50</option><option selected?={ view.PageSize == 100 }>100</option><option selected?={ view.PageSize == 250 }>250</option></select></div><span>{ queryPageSummary(view) }</span><nav aria-label="Query log pages"><button class="icon-button" hx-get={ view.FirstURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="First page">@Icon("chevrons-left")</button><button class="icon-button" hx-get={ view.PreviousURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page <= 1 } aria-label="Previous page">@Icon("chevron-left")</button><button class="icon-button" hx-get={ view.NextURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Next page">@Icon("chevron-right")</button><button class="icon-button" hx-get={ view.LastURL } hx-target="#query-logs-panel" hx-swap="outerHTML" disabled?={ view.Page >= view.TotalPages } aria-label="Last page">@Icon("chevrons-right")</button></nav></footer>
 	</section>
@@ -274,11 +276,11 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 	</tr>
 }
 
-templ QueryDetailDialog(canBlocking bool) {
+templ QueryDetailDialog(canBlocking, canWatch bool) {
 	@DetailDrawer(DetailDrawerView{
 		ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "—", CloseLabel: "Close query details",
 		TitleAttributes: templ.Attributes{"data-query-detail-value": "name"},
-	}, queryDetailFooter(canBlocking)) {
+	}, queryDetailFooter(canBlocking, canWatch)) {
 		<div class="query-detail-result" aria-label="Query result">
 			<span class="source-pill" data-query-detail-source>—</span>
 			<span class="rcode" data-query-detail-status>—</span>
@@ -307,12 +309,19 @@ templ QueryDetailDialog(canBlocking bool) {
 	}
 }
 
-templ queryDetailFooter(canBlocking bool) {
+templ queryDetailFooter(canBlocking, canWatch bool) {
 	<button class="button outline" type="button" data-dialog-close>Close</button>
-	if canBlocking {
+	if canBlocking || canWatch {
 		<div class="query-detail-policy-actions" data-query-detail-policy-actions>
-			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
-			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+			if canWatch {
+				// The page's script points it at the open query's domain and
+				// client.
+				<a class="button outline" href="/settings?tab=alerts" data-query-detail-watch>@Icon("eye")<span>Watch</span></a>
+			}
+			if canBlocking {
+				<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
+				<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+			}
 		</div>
 	}
 }
