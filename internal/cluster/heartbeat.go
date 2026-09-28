@@ -48,6 +48,10 @@ type Heartbeat struct {
 	// the primary refuses heartbeat fields it does not know: an alert that
 	// gains a field in a later release still reaches an older primary.
 	Alerts json.RawMessage `json:"alerts,omitempty"`
+	// Lookups is, for each client address that asked the replica something
+	// lately, when it last did, as a JSON object of Unix seconds. It is
+	// carried only to a primary that advertised it takes them.
+	Lookups json.RawMessage `json:"lookups,omitempty"`
 }
 
 type SyncConfiguration struct {
@@ -64,6 +68,7 @@ type SyncConfiguration struct {
 	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
 	UpdateProtocol int            `json:"update_protocol,omitempty"`
 	AlertProtocol  int            `json:"alert_protocol,omitempty"`
+	LookupProtocol int            `json:"lookup_protocol,omitempty"`
 	// ClientIdentities is a batch of the lead's client identities as a JSON
 	// list, handed to a replica once a minute. A replica that does not know
 	// the field passes over it.
@@ -87,6 +92,7 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 			defer close(done)
 			var gathering sync.WaitGroup
 			gathering.Go(func() { service.gatherLocalAlerts(monitorContext) })
+			gathering.Go(func() { service.gatherLocalLookups(monitorContext) })
 			gathering.Go(func() { service.gatherClientIdentities(monitorContext) })
 			service.monitorPrimary(monitorContext)
 			gathering.Wait()
@@ -157,8 +163,11 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	if heartbeat.Alerts != nil && localIsPrimary {
 		service.recordReportedAlerts(heartbeat.NodeID, heartbeat.Alerts, now)
 	}
+	if heartbeat.Lookups != nil && localIsPrimary {
+		service.recordReportedLookups(heartbeat.NodeID, heartbeat.Lookups, now)
+	}
 	observed := heartbeat
-	observed.Alerts = nil
+	observed.Alerts, observed.Lookups = nil, nil
 	service.telemetry[heartbeat.NodeID] = nodeTelemetry{heartbeat: observed, received: now}
 	if service.logger != nil && (!previouslyObserved || previous.heartbeat.AppliedGeneration != heartbeat.AppliedGeneration) {
 		syncState := "behind"
@@ -184,6 +193,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	configuration := joinConfiguration(service.manifest, stateSnapshot)
 	if localIsPrimary {
 		configuration.AlertProtocol = alertProtocolVersion
+		configuration.LookupProtocol = lookupProtocolVersion
 		if service.clientIdentities.Read != nil {
 			configuration.ClientIdentities = service.identityShare.due(heartbeat.NodeID, now)
 		}
@@ -294,9 +304,12 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		StateDigest:       service.manifest.StateDigest,
 		UpSince:           service.startedAt, SentAt: time.Now(),
 	}
-	var alertRevision uint64
+	var alertRevision, lookupRevision uint64
 	if found && service.alertPrimaryID == primary.ID {
 		heartbeat.Alerts, alertRevision = service.alertReport.pending(primary.ID, heartbeat.SentAt)
+	}
+	if found && service.lookupPrimaryID == primary.ID {
+		heartbeat.Lookups, lookupRevision = service.lookupReport.pending(primary.ID, heartbeat.SentAt)
 	}
 	statusKey := service.manifest.StatusKey
 	service.mu.RUnlock()
@@ -342,6 +355,9 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		// The primary kept the list once it accepted the heartbeat, whatever
 		// becomes of the rest of this synchronization.
 		service.alertReport.delivered(primary.ID, alertRevision, heartbeat.SentAt)
+	}
+	if heartbeat.Lookups != nil {
+		service.lookupReport.delivered(primary.ID, lookupRevision, heartbeat.SentAt)
 	}
 	var configuration SyncConfiguration
 	if err := json.NewDecoder(io.LimitReader(response.Body, maximumSyncBytes)).Decode(&configuration); err != nil {
@@ -399,6 +415,10 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	service.alertPrimaryID = ""
 	if configuration.AlertProtocol == alertProtocolVersion && configuration.PrimaryID == primary.ID {
 		service.alertPrimaryID = primary.ID
+	}
+	service.lookupPrimaryID = ""
+	if configuration.LookupProtocol == lookupProtocolVersion && configuration.PrimaryID == primary.ID {
+		service.lookupPrimaryID = primary.ID
 	}
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{

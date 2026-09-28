@@ -254,6 +254,9 @@ sources = ["reservations", "active"]
 # the risk with tls_insecure.
 tls_ca_file = ""
 tls_insecure = false
+# Read the controller's clients for Insights even with no network mapped
+# below, so Sable can point out devices that never use it for DNS.
+find_devices = false
 
 # One mapping per UniFi network. Records land in the mapped zone and are owned
 # by the synchronizer, so hand-authored records in the same zone are never

@@ -12,6 +12,8 @@ On a cluster, run setup on the primary. Replicas receive records through Sable r
 
 Open **Integrations → UniFi Host Sync** and connect to the controller. Select reservations, active clients, or both. When both describe one device, the reservation wins.
 
+To use UniFi only so [Insights](insights.md#devices-that-dont-use-sable) can find devices that don't use Sable, check **Use UniFi to find devices, even if Sable doesn't publish their names** and select no network. The wizard skips the zones step and publishes nothing.
+
 The wizard lists networks and previews the records before saving. Credentials go to Sable's encrypted vault, not TOML. Review skipped or normalized device names so you know what users will actually resolve.
 
 ## 2. Map networks to zones

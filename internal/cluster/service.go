@@ -170,6 +170,15 @@ type Service struct {
 	// reportedAlerts is what each replica last said about itself, kept while
 	// this node is the primary.
 	reportedAlerts map[string]reportedAlerts
+	// localLookups reads which client addresses asked this node something,
+	// and lookupReport keeps that for the heartbeat while this node is a
+	// replica. lookupPrimaryID names the primary that advertised it takes
+	// them, and reportedLookups is what each replica last said, kept while
+	// this node is the primary.
+	localLookups    LocalLookups
+	lookupReport    lookupReporter
+	lookupPrimaryID string
+	reportedLookups map[string]reportedLookups
 	// clientIdentities reads and records address-to-hardware sightings.
 	// identityShare is what the lead gathered to hand replicas, and
 	// identityRecording keeps a replica writing one handed batch at a time.
@@ -223,7 +232,7 @@ func Open(options Options) (*Service, error) {
 		version:             options.Version, startedAt: options.StartedAt,
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
 		baseHTTPClient: baseHTTPClient, memberClients: make(map[string]*http.Client), replicator: options.Replicator,
-		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts),
+		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts), reportedLookups: make(map[string]reportedLookups),
 	}
 	if service.nodeName == "" {
 		service.nodeName = nodeID[:8]
@@ -440,6 +449,7 @@ func (service *Service) Promote(_ context.Context, nodeID string) error {
 	service.manifest = candidate
 	clear(service.telemetry)
 	clear(service.reportedAlerts)
+	clear(service.reportedLookups)
 	return nil
 }
 
@@ -472,6 +482,7 @@ func (service *Service) Remove(_ context.Context, nodeID string) error {
 	service.manifest = candidate
 	delete(service.telemetry, nodeID)
 	delete(service.reportedAlerts, nodeID)
+	delete(service.reportedLookups, nodeID)
 	service.identityShare.forget(nodeID)
 	return nil
 }
@@ -551,6 +562,7 @@ func (service *Service) clearLocalMembership() error {
 	service.lastSuccessfulSync = time.Time{}
 	clear(service.telemetry)
 	clear(service.reportedAlerts)
+	clear(service.reportedLookups)
 	return nil
 }
 

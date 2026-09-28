@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -73,29 +74,40 @@ func writeControllerJSON(writer http.ResponseWriter, data any) {
 func controllerNetworks() []map[string]any {
 	payload := make([]map[string]any, 0, len(unifiNetworks))
 	for _, network := range unifiNetworks {
-		payload = append(payload, map[string]any{
+		entry := map[string]any{
 			"_id": network.ID, "name": network.Name, "purpose": network.Purpose,
 			"enabled": true, "ip_subnet": network.Subnet,
-		})
+			"dhcpd_enabled": true, "dhcpd_dns_enabled": len(network.DNS) > 0,
+		}
+		for index, server := range network.DNS {
+			entry[fmt.Sprintf("dhcpd_dns_%d", index+1)] = server
+		}
+		payload = append(payload, entry)
 	}
 	return payload
 }
 
 // controllerClients renders the fixture as either the reservation list or the
 // connected-client list, which are separate endpoints on a real controller.
+// Connected clients carry the traffic counters a real controller reports.
 func controllerClients(reserved bool) []map[string]any {
-	payload := make([]map[string]any, 0, len(unifiHosts))
-	for _, host := range unifiHosts {
+	payload := make([]map[string]any, 0, len(unifiHosts)+len(silentStations))
+	now := time.Now()
+	for _, host := range slices.Concat(unifiHosts, silentStations) {
 		if host.Reserved != reserved {
 			continue
 		}
-		entry := map[string]any{
-			"mac": host.MAC, "name": host.Name, "hostname": host.Name,
-			"ip": host.Address, "network_id": host.NetworkID,
+		entry := map[string]any{"mac": host.MAC, "ip": host.Address, "network_id": host.NetworkID}
+		if host.Name != "" {
+			entry["name"], entry["hostname"] = host.Name, host.Name
 		}
 		if host.Reserved {
 			entry["fixed_ip"] = host.Address
 			entry["use_fixedip"] = true
+		} else {
+			uptime, bytes := stationTraffic(host, now)
+			entry["last_seen"], entry["uptime"] = now.Unix(), int64(uptime/time.Second)
+			entry["tx_bytes"], entry["rx_bytes"] = bytes/4, bytes-bytes/4
 		}
 		payload = append(payload, entry)
 	}

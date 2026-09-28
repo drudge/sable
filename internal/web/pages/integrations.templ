@@ -285,6 +285,9 @@ type UniFiWizardView struct {
 	Interval              string
 	SyncReservations      bool
 	SyncActive            bool
+	// FindDevices reads the controller's clients for Insights even with no
+	// network selected for publishing.
+	FindDevices           bool
 	CredentialsConfigured bool
 	Selected              []string
 	Networks              []UniFiWizardNetworkView
@@ -1298,6 +1301,10 @@ templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
 			<label class="field-control checkbox"><input type="checkbox" name="source_active" value="true" checked?={ wizard.SyncActive }/><span>Connected clients</span></label>
 			<label class="field-control"><span>Sync Interval</span><input name="interval" value={ wizard.Interval } placeholder="2m" required/><small>Duration of at least 30s; fixed y, mo, w, and d units are supported.</small></label>
 		</div>
+		<div class="wizard-heading compact"><span>@Icon("sparkles")</span><div><strong>Insights</strong><small>Point out devices that never use Sable for DNS.</small></div></div>
+		<div class="field-grid two">
+			<label class="field-control checkbox"><input type="checkbox" name="find_devices" value="true" checked?={ wizard.FindDevices }/><span>Use UniFi to find devices, even if Sable doesn't publish their names</span><small>With this on, you can skip choosing networks above.</small></label>
+		</div>
 	</section>
 }
 
@@ -1371,31 +1378,39 @@ templ UniFiWizardReviewStep(wizard UniFiWizardView) {
 	}
 	<section class="wizard-panel compact">
 		<div class="wizard-heading compact"><span>@Icon("list")</span><div><strong>Review</strong><small>This is exactly what the first synchronization will do.</small></div></div>
-		<div class="integration-facts">
-			<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span></div>
-			<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span></div>
-			<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span></div>
-			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span></div>
-		</div>
-		if len(wizard.Plan.CreatedZones) > 0 {
-			<div class="cluster-dialog-note compact">@Icon("plus")<p><strong>Zones Sable will create</strong><span>{ strings.Join(wizard.Plan.CreatedZones, ", ") }</span></p></div>
+		if len(wizard.Networks) == 0 {
+			<div class="cluster-dialog-note compact">@Icon("info")<p><strong>Sable won't publish any records</strong><span>It reads UniFi's clients so Insights can point out devices that never use Sable for DNS.</span></p></div>
+		} else {
+			@unifiReviewPlan(wizard)
 		}
-		if wizard.Plan.Empty {
-			<div class="cluster-dialog-note compact">@Icon("info")<p><strong>Nothing to change</strong><span>Every record these networks produce already exists.</span></p></div>
-		}
-		@UniFiPlanRecords("Records to add", wizard.Plan.Added)
-		@UniFiPlanRecords("Records to update", wizard.Plan.Updated)
-		@UniFiPlanRecords("Records to remove", wizard.Plan.Removed)
-		@UniFiPlanRecords("Everything this mapping publishes", wizard.Plan.Publishing)
-		if len(wizard.Plan.Skipped) > 0 {
-			<details class="unifi-skipped"><summary>{ fmt.Sprintf("%d entries produced no record", len(wizard.Plan.Skipped)) }</summary><ul>
-				for _, entry := range wizard.Plan.Skipped {
-					<li>{ entry }</li>
-				}
-			</ul></details>
-		}
-		<div class="cluster-dialog-note">@Icon("info")<p><strong>Records Sable publishes are marked as UniFi-owned</strong><span>Synchronization only ever changes records it owns, so anything you add by hand in these zones is left alone.</span></p></div>
 	</section>
+}
+
+templ unifiReviewPlan(wizard UniFiWizardView) {
+	<div class="integration-facts">
+		<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span></div>
+		<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span></div>
+		<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span></div>
+		<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span></div>
+	</div>
+	if len(wizard.Plan.CreatedZones) > 0 {
+		<div class="cluster-dialog-note compact">@Icon("plus")<p><strong>Zones Sable will create</strong><span>{ strings.Join(wizard.Plan.CreatedZones, ", ") }</span></p></div>
+	}
+	if wizard.Plan.Empty {
+		<div class="cluster-dialog-note compact">@Icon("info")<p><strong>Nothing to change</strong><span>Every record these networks produce already exists.</span></p></div>
+	}
+	@UniFiPlanRecords("Records to add", wizard.Plan.Added)
+	@UniFiPlanRecords("Records to update", wizard.Plan.Updated)
+	@UniFiPlanRecords("Records to remove", wizard.Plan.Removed)
+	@UniFiPlanRecords("Everything this mapping publishes", wizard.Plan.Publishing)
+	if len(wizard.Plan.Skipped) > 0 {
+		<details class="unifi-skipped"><summary>{ fmt.Sprintf("%d entries produced no record", len(wizard.Plan.Skipped)) }</summary><ul>
+			for _, entry := range wizard.Plan.Skipped {
+				<li>{ entry }</li>
+			}
+		</ul></details>
+	}
+	<div class="cluster-dialog-note">@Icon("info")<p><strong>Records Sable publishes are marked as UniFi-owned</strong><span>Synchronization only ever changes records it owns, so anything you add by hand in these zones is left alone.</span></p></div>
 }
 
 templ UniFiPlanRecords(title string, records []UniFiPlanRecordView) {
@@ -1441,6 +1456,9 @@ templ UniFiWizardCarriedPublishing(wizard UniFiWizardView) {
 	}
 	if wizard.SyncActive {
 		<input type="hidden" name="source_active" value="true"/>
+	}
+	if wizard.FindDevices {
+		<input type="hidden" name="find_devices" value="true"/>
 	}
 }
 

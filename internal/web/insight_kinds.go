@@ -172,6 +172,28 @@ func insightSettingGroups() []insightSettingGroup {
 					},
 				}},
 			},
+			{
+				kind: devices.KindNotUsingSable, key: "not_using_sable", title: "Not using Sable",
+				description: "UniFi shows a device online and busy, but it never asks Sable anything.",
+				mode:        func(findings *config.InsightFindings) *string { return &findings.NotUsingSable.Mode },
+				limits: []insightLimitSetting{{
+					key: "hours", label: "Hours without a lookup", help: "Online and busy the whole time.",
+					unit: "hours", minimum: 1, maximum: 168, whole: true,
+					get: func(findings config.InsightFindings) float64 { return count(findings.NotUsingSable.Hours) },
+					set: func(findings *config.InsightFindings, value float64) { findings.NotUsingSable.Hours = int(value) },
+				}},
+			},
+			{
+				kind: devices.KindNetworkOtherDNS, key: "network_other_dns", title: "Network hands out other DNS",
+				description: "A UniFi network's DHCP gives devices a DNS server that isn't Sable.",
+				mode:        func(findings *config.InsightFindings) *string { return &findings.NetworkOtherDNS.Mode },
+			},
+			{
+				kind: devices.KindNetworkViaGateway, key: "network_via_gateway", title: "Network sends lookups through the gateway",
+				description: "Devices ask the gateway, so Sable sees their lookups as the gateway's.",
+				note:        "It describes how a network is set up rather than news, so it never alerts.",
+				mode:        func(findings *config.InsightFindings) *string { return &findings.NetworkViaGateway.Mode },
+			},
 		}},
 		{id: "blocking", title: "Blocking", kinds: []insightKindSetting{
 			{
@@ -275,6 +297,7 @@ func insightDeviceLimits(findings config.InsightFindings) devices.Limits {
 		CheckInInterval:     findings.CheckIn.LongestInterval.Duration,
 		CheckInSpan:         findings.CheckIn.ShortestSpan.Duration,
 		ApplianceNewDomains: whole(findings.ApplianceNewDomains.MinimumNewDomains),
+		SilentWindow:        time.Duration(max(findings.NotUsingSable.Hours, 0)) * time.Hour,
 	}
 }
 

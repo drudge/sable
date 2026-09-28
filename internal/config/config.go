@@ -459,6 +459,11 @@ type UniFi struct {
 	CAFile        string         `toml:"tls_ca_file"`
 	Insecure      bool           `toml:"tls_insecure"`
 	Networks      []UniFiNetwork `toml:"networks"`
+
+	// FindDevices reads the controller's clients for Insights even when no
+	// network is mapped to a zone, so Sable can tell which devices never ask
+	// it anything without publishing their names.
+	FindDevices bool `toml:"find_devices"`
 }
 
 // UniFiNetwork maps one UniFi network onto a Sable zone. The identifier is the
@@ -502,10 +507,14 @@ func (unifi UniFi) ActiveNetworks() []UniFiNetwork {
 }
 
 // Runnable reports whether the synchronizer has enough configuration to do
-// anything at all.
+// anything at all: a network to publish, or devices to find.
 func (unifi UniFi) Runnable() bool {
-	return unifi.Enabled && unifi.ControllerURL != "" && len(unifi.ActiveNetworks()) > 0
+	return unifi.Enabled && unifi.ControllerURL != "" && (unifi.Publishes() || unifi.FindDevices)
 }
+
+// Publishes reports whether the synchronizer writes records, which it does
+// once at least one network is mapped to a zone.
+func (unifi UniFi) Publishes() bool { return len(unifi.ActiveNetworks()) > 0 }
 
 type Security struct {
 	PasskeysDisabled bool     `toml:"passkeys_disabled"`

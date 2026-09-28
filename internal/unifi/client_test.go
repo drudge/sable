@@ -9,12 +9,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const (
 	networkFixture = `{"data":[
-		{"_id":"net-lan","name":"Default","purpose":"corporate","ip_subnet":"192.168.1.1/24"},
-		{"_id":"net-iot","name":"IoT VLAN","purpose":"vlan-only","ip_subnet":"192.168.30.1/24"},
+		{"_id":"net-lan","name":"Default","purpose":"corporate","ip_subnet":"192.168.1.1/24","dhcpd_enabled":true,"dhcpd_dns_enabled":false,"dhcpd_dns_1":"9.9.9.9"},
+		{"_id":"net-iot","name":"IoT VLAN","purpose":"vlan-only","ip_subnet":"192.168.30.1/24","dhcpd_enabled":true,"dhcpd_dns_enabled":true,"dhcpd_dns_1":"1.1.1.1","dhcpd_dns_2":"","dhcpd_dns_3":"bogus","dhcpd_dns_4":"192.168.1.53"},
 		{"_id":"net-off","name":"Disabled","enabled":false,"ip_subnet":"192.168.9.1/24"},
 		{"_id":"","name":"Nameless","ip_subnet":"192.168.8.1/24"},
 		{"_id":"net-none","name":"No Subnet","purpose":"vlan-only"},
@@ -27,7 +28,8 @@ const (
 	activeFixture = `{"data":[
 		{"mac":"aa:bb:cc:dd:ee:01","name":"Printer","ip":"192.168.1.99","network_id":"net-lan","ipv6_addresses":["2001:db8:0:1:aa:bb:cc:1","fe80::9"]},
 		{"mac":"aa:bb:cc:dd:ee:03","hostname":"Laptop","ip":"192.168.30.50","network_id":"net-iot","ipv6_addresses":["fd00::5","fe80::1","2001:db8:0:1:1:2:3:4","2001:db8:0:1:1:2:3:4","::ffff:192.0.2.1","ff02::1","::","bogus"]},
-		{"mac":"aa:bb:cc:dd:ee:04","ip":"192.168.30.51","network_id":"net-iot"},
+		{"mac":"aa:bb:cc:dd:ee:04","ip":"192.168.30.51","network_id":"net-iot","last_seen":1790000000,"uptime":"86400","tx_bytes":1.5e6,"rx_bytes":500000,"is_wired":false},
+		{"mac":"AA:BB:CC:DD:EE:06","ip":"192.168.1.60","is_wired":true,"uptime":7200,"tx_bytes":10,"rx_bytes":10,"wired-tx_bytes":4000,"wired-rx_bytes":6000,"last_seen":"soon"},
 		{"mac":"aa:bb:cc:dd:ee:05","name":"Broken","ip":"not-an-address","network_id":"net-iot"}
 	]}`
 	deviceFixture = `{"data":[
@@ -414,5 +416,68 @@ func TestClientFingerprintsSuggestTypes(t *testing.T) {
 				t.Fatalf("host = %+v", host)
 			}
 		})
+	}
+}
+
+// Every connected client is a station, named or not, with the traffic the
+// controller counted since it connected. A counter written as a float or a
+// string still reads, one that cannot be read is zero, and a client without
+// a usable address is left out.
+func TestInventoryReadsStationsWithTraffic(t *testing.T) {
+	server := httptest.NewTLSServer(fixtureHandler(t, func(*http.Request) bool { return true }))
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	byMAC := make(map[string]Station, len(inventory.Stations))
+	for _, station := range inventory.Stations {
+		byMAC[station.MAC] = station
+	}
+	if len(inventory.Stations) != 4 {
+		t.Fatalf("read %d stations, want 4 (the malformed client is left out): %+v", len(inventory.Stations), inventory.Stations)
+	}
+	nameless := byMAC["aa:bb:cc:dd:ee:04"]
+	if nameless.Name != "" || nameless.NetworkID != "net-iot" || nameless.Uptime != 24*time.Hour || nameless.Bytes != 2_000_000 {
+		t.Fatalf("nameless station = %+v, want no name on net-iot, up a day, 2 MB moved", nameless)
+	}
+	if !nameless.LastSeen.Equal(time.Unix(1790000000, 0)) {
+		t.Fatalf("nameless last seen = %s, want the controller's", nameless.LastSeen)
+	}
+	wired := byMAC["aa:bb:cc:dd:ee:06"]
+	if !wired.Wired || wired.Bytes != 10_000 || !wired.LastSeen.IsZero() || wired.NetworkID != "net-lan" {
+		t.Fatalf("wired station = %+v, want its wired counters, no readable last seen, and the network covering its address", wired)
+	}
+	laptop := byMAC["aa:bb:cc:dd:ee:03"]
+	if laptop.Name != "Laptop" || len(laptop.Addresses()) != 3 {
+		t.Fatalf("laptop station = %+v, want its hostname and one IPv4 plus two IPv6 addresses", laptop)
+	}
+}
+
+// A network's DHCP hands out the gateway unless the operator listed DNS
+// servers, and says nothing Sable can trust when the controller does not run
+// its DHCP.
+func TestNetworksReadHandedOutDNS(t *testing.T) {
+	server := httptest.NewTLSServer(fixtureHandler(t, func(*http.Request) bool { return true }))
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	lan, _ := inventory.NetworkByID("net-lan")
+	servers, known := lan.HandedOutDNS()
+	if !known || !slices.Equal(servers, []netip.Addr{netip.MustParseAddr("192.168.1.1")}) {
+		t.Fatalf("default network hands out %v (known %t), want its gateway 192.168.1.1", servers, known)
+	}
+	iot, _ := inventory.NetworkByID("net-iot")
+	servers, known = iot.HandedOutDNS()
+	want := []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("192.168.1.53")}
+	if !known || !slices.Equal(servers, want) {
+		t.Fatalf("IoT network hands out %v (known %t), want %v", servers, known, want)
+	}
+	if _, known := (Network{Gateway: netip.MustParseAddr("10.0.0.1")}).HandedOutDNS(); known {
+		t.Fatal("a network whose DHCP the controller does not run claims to know its DNS servers")
 	}
 }

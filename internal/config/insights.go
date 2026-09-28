@@ -60,6 +60,8 @@ const (
 	maximumInsightApplianceNewDomains = 1_000
 	defaultInsightMissedUpdates       = 2
 	maximumInsightMissedUpdates       = 100
+	defaultInsightSilentHours         = 24
+	maximumInsightSilentHours         = 7 * 24
 )
 
 // InsightFindings holds one table for each kind of finding, named for the
@@ -75,8 +77,13 @@ type InsightFindings struct {
 	UnusualHours        InsightUnusualHours        `toml:"unusual_hours"`
 	CheckIn             InsightCheckIn             `toml:"check_in"`
 	ApplianceNewDomains InsightApplianceNewDomains `toml:"appliance_new_domains"`
-	UpdateFailing       InsightUpdateFailing       `toml:"update_failing"`
-	PastBlock           InsightFinding             `toml:"past_block"`
+	NotUsingSable       InsightNotUsingSable       `toml:"not_using_sable"`
+	NetworkOtherDNS     InsightFinding             `toml:"network_other_dns"`
+	// NetworkViaGateway describes how a network reaches Sable, which is never
+	// news, so it is shown or left out but never sent as an alert.
+	NetworkViaGateway InsightFinding       `toml:"network_via_gateway"`
+	UpdateFailing     InsightUpdateFailing `toml:"update_failing"`
+	PastBlock         InsightFinding       `toml:"past_block"`
 	// ListUnreadable, LowUniqueCoverage, and UniqueCoverage describe how the
 	// block lists compare. That is never news, so they are shown or left out
 	// but never sent as alerts.
@@ -146,6 +153,15 @@ type InsightApplianceNewDomains struct {
 	MinimumNewDomains int `toml:"minimum_new_domains"`
 }
 
+// InsightNotUsingSable reports devices UniFi shows online and busy that sent
+// Sable no lookup at all.
+type InsightNotUsingSable struct {
+	Mode string `toml:"mode"`
+	// Hours is how long a device must be online and busy with no lookup
+	// before it is reported.
+	Hours int `toml:"hours"`
+}
+
 // InsightUpdateFailing reports a block list that stopped downloading.
 type InsightUpdateFailing struct {
 	Mode string `toml:"mode"`
@@ -172,6 +188,9 @@ func DefaultInsightFindings() InsightFindings {
 			ShortestSpan:    Duration{Duration: defaultInsightCheckInSpan},
 		},
 		ApplianceNewDomains: InsightApplianceNewDomains{Mode: InsightModeAlert, MinimumNewDomains: defaultInsightApplianceNewDomains},
+		NotUsingSable:       InsightNotUsingSable{Mode: InsightModeAlert, Hours: defaultInsightSilentHours},
+		NetworkOtherDNS:     InsightFinding{Mode: InsightModeAlert},
+		NetworkViaGateway:   InsightFinding{Mode: InsightModeShow},
 		UpdateFailing:       InsightUpdateFailing{Mode: InsightModeAlert, MissedUpdates: defaultInsightMissedUpdates},
 		PastBlock:           InsightFinding{Mode: InsightModeAlert},
 		ListUnreadable:      InsightFinding{Mode: InsightModeShow},
@@ -199,6 +218,9 @@ func (configuration *Config) normalizeInsights() {
 		{&findings.UnusualHours.Mode, defaults.UnusualHours.Mode},
 		{&findings.CheckIn.Mode, defaults.CheckIn.Mode},
 		{&findings.ApplianceNewDomains.Mode, defaults.ApplianceNewDomains.Mode},
+		{&findings.NotUsingSable.Mode, defaults.NotUsingSable.Mode},
+		{&findings.NetworkOtherDNS.Mode, defaults.NetworkOtherDNS.Mode},
+		{&findings.NetworkViaGateway.Mode, defaults.NetworkViaGateway.Mode},
 		{&findings.UpdateFailing.Mode, defaults.UpdateFailing.Mode},
 		{&findings.PastBlock.Mode, defaults.PastBlock.Mode},
 		{&findings.ListUnreadable.Mode, defaults.ListUnreadable.Mode},
@@ -219,6 +241,7 @@ func (configuration *Config) normalizeInsights() {
 		{&findings.NewDestinations.MinimumNewDomains, defaults.NewDestinations.MinimumNewDomains},
 		{&findings.UnusualHours.MinimumLookups, defaults.UnusualHours.MinimumLookups},
 		{&findings.ApplianceNewDomains.MinimumNewDomains, defaults.ApplianceNewDomains.MinimumNewDomains},
+		{&findings.NotUsingSable.Hours, defaults.NotUsingSable.Hours},
 		{&findings.UpdateFailing.MissedUpdates, defaults.UpdateFailing.MissedUpdates},
 	} {
 		if *limit.value == 0 {
@@ -302,6 +325,10 @@ func (findings InsightFindings) Problems() []InsightSettingProblem {
 	}
 	mode("appliance_new_domains.mode", findings.ApplianceNewDomains.Mode)
 	count("appliance_new_domains.minimum_new_domains", findings.ApplianceNewDomains.MinimumNewDomains, maximumInsightApplianceNewDomains)
+	mode("not_using_sable.mode", findings.NotUsingSable.Mode)
+	count("not_using_sable.hours", findings.NotUsingSable.Hours, maximumInsightSilentHours)
+	mode("network_other_dns.mode", findings.NetworkOtherDNS.Mode)
+	shownMode("network_via_gateway.mode", findings.NetworkViaGateway.Mode)
 	mode("update_failing.mode", findings.UpdateFailing.Mode)
 	count("update_failing.missed_updates", findings.UpdateFailing.MissedUpdates, maximumInsightMissedUpdates)
 	mode("past_block.mode", findings.PastBlock.Mode)

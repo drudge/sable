@@ -412,6 +412,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		logger,
 	)
 	unifiSync.identities = database.RecordClientIdentities
+	unifiSync.reading = database.RecordUniFiReading
 	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
 	runRuntimeWorker(func(context.Context) {
 		runNeighborSampler(runtimeContext, insightsEnabled, neighbors.Read, database.RecordClientIdentities, logger)
@@ -494,6 +495,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	}.alertSources()...)
 	alertDispatcher.Add(clusterAlertSources(clusterService)...)
 	clusterService.SetLocalAlerts(alertDispatcher.Local)
+	clusterService.SetLocalLookups(database.ClientLastLookups)
 	// The lead hands replicas the addresses it has tied to hardware, since a
 	// replica may not see the network's hardware addresses itself.
 	clusterService.SetClientIdentities(cluster.ClientIdentities{

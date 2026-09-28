@@ -159,6 +159,15 @@ type Finding struct {
 	// Chart pictures the evidence, for a finding whose shape says more than
 	// its numbers.
 	Chart *Chart
+	// Members are the subjects a rolled-up finding lists. Saying one is
+	// normal is kept by the member's own identifier, so the finding comes
+	// back only for a subject not already said to be normal.
+	Members []Subject
+}
+
+// MemberID identifies one member of a rolled-up finding.
+func (finding Finding) MemberID(member Subject) string {
+	return NewID(finding.Kind, member)
 }
 
 // Chart is a picture of a finding's evidence. One of its parts is set.

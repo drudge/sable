@@ -16,6 +16,7 @@ const insightDataDeletedKey = "insights_data_deleted_at"
 // alerts of every group were already sent, not anything about a device.
 var insightDataTables = []string{
 	"sable_client_seen", "sable_client_domain_seen", "sable_client_identity", "sable_insight_feedback",
+	"sable_unifi_network", "sable_unifi_station", "sable_unifi_station_traffic",
 }
 
 // InsightData is what Insights holds about the network right now.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/unifi"
 )
 
 const (
@@ -54,6 +56,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	}
 	if err := backing.WriteQueryEvents(ctx, seedDeviceHistory(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo device history: %w", err)
+	}
+	if err := seedUniFiTraffic(ctx, backing); err != nil {
+		return err
 	}
 	buckets, totals := seedChartHistory(random, now)
 	if err := backing.RecordQueryStats(ctx, buckets, totals); err != nil {
@@ -441,6 +446,28 @@ func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) e
 		since.UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return fmt.Errorf("backdate demo source recording: %w", err)
+	}
+	return nil
+}
+
+// seedUniFiTraffic writes the day of hourly traffic readings the UniFi sync
+// would have kept for the silent clients, so Insights can show that they
+// moved traffic across the whole day without waiting a day for the sync to
+// watch it.
+func seedUniFiTraffic(ctx context.Context, backing *store.Store) error {
+	for hours := 26; hours >= 1; hours-- {
+		at := demoStarted.Add(-time.Duration(hours) * time.Hour)
+		inventory := unifi.Inventory{}
+		for _, host := range silentStations {
+			uptime, bytes := stationTraffic(host, at)
+			inventory.Stations = append(inventory.Stations, unifi.Station{
+				MAC: host.MAC, Name: host.Name, Address: netip.MustParseAddr(host.Address), NetworkID: host.NetworkID,
+				Uptime: uptime, Bytes: bytes, LastSeen: at,
+			})
+		}
+		if err := backing.RecordUniFiReading(ctx, inventory, at); err != nil {
+			return fmt.Errorf("write demo UniFi traffic: %w", err)
+		}
 	}
 	return nil
 }

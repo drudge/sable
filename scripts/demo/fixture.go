@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"time"
 
 	"github.com/drudge/sable/internal/querylog"
@@ -27,13 +28,21 @@ type unifiNetwork struct {
 	// zone means the network is discovered but deliberately not published,
 	// which is how the guest network behaves.
 	Zone string
+	// DNS is what the network's DHCP hands out for DNS.
+	DNS []string
 }
 
+// vandelayResolvers are the addresses the Queens nodes advertise, which every
+// network's DHCP hands out.
+var vandelayResolvers = []string{"10.20.10.53", "10.20.10.54"}
+
 var unifiNetworks = []unifiNetwork{
-	{ID: corporateNetworkID, Name: "Corporate", Purpose: "corporate", Subnet: "10.20.10.1/24", Zone: "corp.vandelay.com"},
-	{ID: warehouseNetworkID, Name: "Warehouse", Purpose: "vlan-only", Subnet: "10.20.20.1/24", Zone: "warehouse.vandelay.com"},
-	{ID: iotNetworkID, Name: "IoT", Purpose: "vlan-only", Subnet: "10.20.30.1/24", Zone: "iot.vandelay.com"},
-	{ID: guestNetworkID, Name: "Guest", Purpose: "guest", Subnet: "10.20.40.1/24"},
+	{ID: corporateNetworkID, Name: "Corporate", Purpose: "corporate", Subnet: "10.20.10.1/24", Zone: "corp.vandelay.com", DNS: vandelayResolvers},
+	{ID: warehouseNetworkID, Name: "Warehouse", Purpose: "vlan-only", Subnet: "10.20.20.1/24", Zone: "warehouse.vandelay.com", DNS: vandelayResolvers},
+	{ID: iotNetworkID, Name: "IoT", Purpose: "vlan-only", Subnet: "10.20.30.1/24", Zone: "iot.vandelay.com", DNS: vandelayResolvers},
+	// Someone added Cloudflare as a backup for visitors, so some of their
+	// lookups skip Sable.
+	{ID: guestNetworkID, Name: "Guest", Purpose: "guest", Subnet: "10.20.40.1/24", DNS: []string{"10.20.10.53", "1.1.1.1"}},
 }
 
 // unifiHost is one device the mock controller reports. Reserved hosts appear
@@ -81,6 +90,45 @@ var unifiHosts = []unifiHost{
 	{"dc:a6:32:77:33:f2", "roof-weather-station", "10.20.30.119", iotNetworkID, false},
 	{"a4:cf:12:88:44:01", "vendor-laptop", "10.20.40.104", guestNetworkID, false},
 	{"a4:cf:12:88:44:02", "kruger-visitor", "10.20.40.111", guestNetworkID, false},
+}
+
+// silentStations are connected clients that never ask Sable anything, which
+// Insights reports as devices that don't use Sable. They are connected for
+// days and stream steadily, but none of them is in the query history.
+var silentStations = []unifiHost{
+	// The lobby Roku has Google's DNS built in.
+	{"b0:a7:37:33:0c:d1", "lobby-roku", "10.20.30.60", iotNetworkID, false},
+	{"8c:79:f5:33:0c:d2", "conference-room-tv", "10.20.30.61", iotNetworkID, false},
+	// Bania's laptop runs a VPN that carries its lookups elsewhere.
+	{"3c:22:fb:55:11:d8", "bania-macbook", "10.20.10.170", corporateNetworkID, false},
+	// A visitor's phone with a private address and no name, using the
+	// guest network's Cloudflare fallback.
+	{"da:a1:19:88:44:09", "", "10.20.40.130", guestNetworkID, false},
+}
+
+// Connected clients have been online since a little before the demo started,
+// the silent ones for longer, each moving a steady stream of traffic.
+const (
+	stationUptime      = 2 * 24 * time.Hour
+	silentUptime       = 3 * 24 * time.Hour
+	stationBytesPerSec = 5_000
+	silentBytesPerSec  = 25_000
+)
+
+// demoStarted anchors every client's connection, so the mock controller's
+// counters and the traffic history the seed writes describe one connection.
+var demoStarted = time.Now().Truncate(time.Minute)
+
+// stationTraffic is how long a client has been connected and what it has moved
+// at a moment.
+func stationTraffic(host unifiHost, at time.Time) (time.Duration, uint64) {
+	uptime, rate := stationUptime, uint64(stationBytesPerSec)
+	if slices.Contains(silentStations, host) {
+		uptime, rate = silentUptime, silentBytesPerSec
+	}
+	connected := demoStarted.Add(-uptime)
+	elapsed := max(at.Sub(connected), 0)
+	return elapsed, uint64(elapsed/time.Second) * rate
 }
 
 // blockedDomains are the hand-written entries on the Blocked tab.

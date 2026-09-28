@@ -236,12 +236,29 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 		// address, so an older link by address finds the device it joined.
 		device, found = deviceByAddress(report.devices, address)
 	}
+	var coverage devices.Coverage
+	if reader, ok := server.queries.(coverageInsightReader); ok {
+		coverage = (&coverageSources{server: server, reader: reader, now: window.End}).silent(request.Context())
+	}
+	// A device that sent nothing in the period is still in the drawer when
+	// it is one that doesn't use Sable.
+	lookup := key
+	if found {
+		lookup = device.Key
+	}
+	silent, isSilent := devices.Find(silentDevices(coverage), lookup)
+	if !found && isSilent {
+		device, found = silent, true
+	}
 	if !found {
 		view.Missing = true
 		server.renderDeviceDrawerView(writer, request, view)
 		return
 	}
 	view.Device = insightDeviceView(device, report)
+	if isSilent {
+		view.Device.NotUsingSable = silentDeviceLine(coverage)
+	}
 	view.Device.TypeOptions = devices.TypeLabels()
 	// A device without a type of its own takes its network's, if the operator
 	// gave that one, rather than Sable's guess.

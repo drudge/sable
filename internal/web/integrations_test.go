@@ -582,6 +582,47 @@ func TestUniFiWizardRequiresASelectedNetwork(t *testing.T) {
 	}
 }
 
+// Using UniFi only to find devices needs no network, so the wizard skips the
+// zones step, says nothing will be published, and saves no mapping.
+func TestUniFiWizardFindsDevicesWithoutANetwork(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{inventory: testUniFiInventory()}
+	server, configuration := newIntegrationsTestServer(t, controller)
+	form := url.Values{
+		"wizard_step": {"networks"}, "controller_url": {"https://192.168.1.1"}, "site": {"default"},
+		"auth_mode": {"api-key"}, "interval": {"2m"}, "sources_present": {"true"}, "source_active": {"true"},
+		"find_devices": {"true"},
+	}
+
+	review := postIntegrations(server, "/ui/integrations/unifi/wizard", form)
+	if review.Code != http.StatusOK || !strings.Contains(review.Body.String(), "Sable won't publish any records") ||
+		!strings.Contains(review.Body.String(), `name="find_devices" value="true"`) {
+		t.Fatalf("networks step = %d %s", review.Code, review.Body.String())
+	}
+	if strings.Contains(review.Body.String(), "Nothing to change") {
+		t.Error("a review that publishes nothing claims the records already exist")
+	}
+
+	back := url.Values{}
+	for key, values := range form {
+		back[key] = values
+	}
+	back.Set("wizard_step", "review")
+	back.Set("wizard_target", "zones")
+	if returned := postIntegrations(server, "/ui/integrations/unifi/wizard", back); !strings.Contains(returned.Body.String(), `name="network"`) {
+		t.Fatalf("going back from review did not skip the empty zones step: %s", returned.Body.String())
+	}
+
+	form.Set("wizard_step", "review")
+	if enabled := postIntegrations(server, "/ui/integrations/unifi/wizard", form); enabled.Code != http.StatusOK {
+		t.Fatalf("finish step = %d %s", enabled.Code, enabled.Body.String())
+	}
+	settings := configuration.snapshot.Config.UniFi
+	if !settings.Enabled || !settings.FindDevices || len(settings.Networks) != 0 || !settings.Runnable() {
+		t.Fatalf("saved settings = %+v, want device finding on with no mapping", settings)
+	}
+}
+
 // Two networks sharing one zone need the network in their names, and the
 // wizard must say so before writing anything.
 func TestUniFiWizardRejectsCollidingZoneMapping(t *testing.T) {

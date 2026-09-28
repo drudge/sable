@@ -83,7 +83,7 @@ type InsightDeviceFilterView struct {
 	Search string
 	// Type is a device type or UnknownDeviceType.
 	Type string
-	// Show is "new", "named", or "unnamed".
+	// Show is "new", "named", "unnamed", or "not-using-sable".
 	Show string
 }
 
@@ -133,6 +133,10 @@ type InsightDeviceView struct {
 	// NameNetwork is the network the operator's name was given to, when it
 	// names a whole network rather than this device.
 	NameNetwork string
+	// NotUsingSable says why the device counts as not using Sable, such as
+	// "UniFi sees traffic, but no lookups reached Sable in 24 hours." It is
+	// empty for a device that uses Sable.
+	NotUsingSable string
 }
 
 // InsightDeviceAddressView is one client address of a device and its own
@@ -273,6 +277,15 @@ type InsightFindingView struct {
 	Link string
 	// Chart pictures the evidence, for findings that have one.
 	Chart *insights.Chart
+	// Members are what a rolled-up finding lists, which saying it is normal
+	// marks one by one.
+	Members []InsightMemberView
+}
+
+// InsightMemberView is one subject a rolled-up finding lists.
+type InsightMemberView struct {
+	ID    string
+	Label string
 }
 
 // InsightLinkedMissingView explains a finding's link the page cannot open:
@@ -848,6 +861,15 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 	}
 }
 
+// canFollow reports whether the operator may open a finding's destination:
+// the Devices tab needs the query log, and the other pages blocking settings.
+func (view InsightsOverviewView) canFollow(finding InsightFindingView) bool {
+	if strings.HasPrefix(finding.Destination, "/insights") {
+		return view.CanLogs
+	}
+	return view.CanBlocking
+}
+
 // canHide reports whether the operator may hide a finding from its drawer.
 func (view InsightsOverviewView) canHide(finding InsightFindingView) bool {
 	return view.CanHideFindings && finding.FindingID != ""
@@ -867,7 +889,15 @@ templ insightHideMenu(finding InsightFindingView) {
 			<span>Hide for Everyone</span>
 			<button type="submit" name="action" value="dismiss" data-dialog-close><strong>For a Day</strong><small>Back tomorrow if it still applies.</small></button>
 			<button type="submit" name="action" value="snooze" data-dialog-close><strong>For a Week</strong><small>Back in a week if it still applies.</small></button>
-			<button type="submit" name="action" value="normal" data-dialog-close><strong>That's Normal</strong><small>Hidden until you show it again.</small></button>
+			if len(finding.Members) > 0 {
+				<button type="submit" name="action" value="normal" data-dialog-close><strong>That's Normal</strong><small>For these { fmt.Sprint(len(finding.Members)) }. A new one brings it back.</small></button>
+			} else {
+				<button type="submit" name="action" value="normal" data-dialog-close><strong>That's Normal</strong><small>Hidden until you show it again.</small></button>
+			}
+			for _, member := range finding.Members {
+				<input type="hidden" name="member" value={ member.ID }/>
+				<input type="hidden" name="member_label" value={ member.Label }/>
+			}
 		</form>
 	</details>
 }
@@ -902,7 +932,7 @@ templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewVie
 				<span>Device Details</span>
 			</button>
 		}
-		if finding.Destination != "" && view.CanBlocking {
+		if finding.Destination != "" && view.canFollow(finding) {
 			<a class="button outline" href={ templ.SafeURL(finding.Destination) }>
 				<span>{ finding.DestinationLabel }</span>
 			</a>
@@ -1283,7 +1313,7 @@ templ insightDeviceFilters(view InsightsOverviewView) {
 	</div>
 }
 
-var insightDeviceShowChoices = [][2]string{{"", "All Devices"}, {"new", "New"}, {"named", "Named"}, {"unnamed", "Unnamed"}}
+var insightDeviceShowChoices = [][2]string{{"", "All Devices"}, {"new", "New"}, {"named", "Named"}, {"unnamed", "Unnamed"}, {"not-using-sable", "Not Using Sable"}}
 
 // insightDeviceTypeChoices are the types the type filter offers: those its
 // devices show, in the type picker's order, then Unknown. A type chosen
@@ -1312,6 +1342,9 @@ func insightDeviceFilterAttributes(device InsightDeviceView) templ.Attributes {
 	tags := ifThen(device.Named, "named", "unnamed")
 	if device.New {
 		tags = "new " + tags
+	}
+	if device.NotUsingSable != "" {
+		tags += " not-using-sable"
 	}
 	return templ.Attributes{
 		"data-device-row": true, "data-device-text": insightDeviceSearchText(device),
@@ -1448,6 +1481,9 @@ templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 	if device.PrivateMAC {
 		<span class="status-badge" title="The device uses a randomized hardware address on this network">Private address</span>
 	}
+	if device.NotUsingSable != "" {
+		<span class="status-badge warning" title={ device.NotUsingSable }>Not using Sable</span>
+	}
 }
 
 templ insightDeviceLoading() {
@@ -1475,8 +1511,11 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 		if view.Missing {
 			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
 		} else if view.Device.Key != "" {
-			if view.Device.New || view.Device.PrivateMAC || view.Device.Server != "" || view.Device.NameNetwork != "" {
+			if view.Device.New || view.Device.PrivateMAC || view.Device.Server != "" || view.Device.NameNetwork != "" || view.Device.NotUsingSable != "" {
 				<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device, false)</div>
+			}
+			if view.Device.NotUsingSable != "" {
+				<div class="tip-box insight-notes" role="note"><p>{ view.Device.NotUsingSable }</p></div>
 			}
 			<dl class="query-detail-grid">
 				if view.Device.MAC != "" {

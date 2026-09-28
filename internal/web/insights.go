@@ -98,7 +98,7 @@ func insightsPageURL(window insightWindow, tab string, filter pages.InsightDevic
 }
 
 // insightsDeviceShows are the Devices tab's choices of which devices to show.
-var insightsDeviceShows = map[string]struct{}{"new": {}, "named": {}, "unnamed": {}}
+var insightsDeviceShows = map[string]struct{}{"new": {}, "named": {}, "unnamed": {}, devices.NotUsingSableShow: {}}
 
 // maximumDeviceSearch bounds the search the Devices tab renders back.
 const maximumDeviceSearch = 100
@@ -273,6 +273,9 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		}
 		findings, hidden = insights.Hide(findings, feedback, time.Now())
 		view.HiddenFindings = insightHiddenViews(hidden, feedback, console.TimeDisplay)
+		if deviceData != nil && deviceData.coverage != nil {
+			view.HiddenFindings = append(view.HiddenFindings, expectedSilentViews(deviceData.coverage.silent(request.Context()))...)
+		}
 	}
 	// Client addresses, and so the names of their devices, are shown only to
 	// operators who can read the query log.
@@ -320,6 +323,9 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.DevicesUnavailable = true
 		} else {
 			view.Devices = insightDeviceViews(report)
+			if deviceData.coverage != nil {
+				view.Devices = withSilentDevices(view.Devices, deviceData.coverage.silent(request.Context()), report)
+			}
 			view.DeviceSummary = insightDeviceSummary(view.Devices)
 			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 		}
@@ -434,6 +440,9 @@ func (server *Server) insightFindingViews(findings []insights.Finding, given dev
 			Destination: finding.Destination, DestinationLabel: finding.DestinationLabel,
 			Chart: finding.Chart,
 		}
+		for _, member := range finding.Members {
+			view.Members = append(view.Members, pages.InsightMemberView{ID: finding.MemberID(member), Label: member.Label})
+		}
 		for _, fact := range finding.Facts {
 			view.Facts = append(view.Facts, pages.InsightFactView{Label: fact.Label, Value: fact.Value, Time: fact.Time, Monospace: fact.Monospace})
 		}
@@ -494,6 +503,12 @@ func insightFindingIcon(kind string) string {
 		return "timer"
 	case devices.KindApplianceDrift:
 		return "globe-lock"
+	case devices.KindNotUsingSable:
+		return "shield-off"
+	case devices.KindNetworkOtherDNS:
+		return "router"
+	case devices.KindNetworkViaGateway:
+		return "arrow-left-right"
 	default:
 		return "info"
 	}

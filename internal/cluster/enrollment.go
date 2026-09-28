@@ -82,6 +82,9 @@ type JoinConfiguration struct {
 	// AlertProtocol is set only on synchronization, by a primary that takes
 	// replicas' own alerts in their heartbeats.
 	AlertProtocol int `json:"alert_protocol,omitempty"`
+	// LookupProtocol is set only on synchronization, by a primary that takes
+	// replicas' lookups in their heartbeats.
+	LookupProtocol int `json:"lookup_protocol,omitempty"`
 	// ClientIdentities is set only on synchronization, by a primary handing a
 	// replica its client identities.
 	ClientIdentities json.RawMessage `json:"client_identities,omitempty"`
