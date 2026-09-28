@@ -110,8 +110,8 @@ templ BlockingContent(view BlockingPageView) {
 		</template>
 		<div class="blocking-layout isotope-blocking-layout">
 			<div class="blocking-main-column">
-				@checkDomainSearch()
 				@BlockingStatus(view)
+				@checkDomainSearch()
 				<section class="blocking-workspace">
 					<div class="blocking-tabs" role="tablist" aria-label="Blocking configuration">
 						for _, tab := range blockingTabs {
