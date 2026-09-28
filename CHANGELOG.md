@@ -8,6 +8,86 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0-beta.1] - 2026-09-28
+
+Sable 1.6.0-beta.1 can alert when a device looks up a domain you pick, points
+out devices that skip Sable for DNS, lets you turn Insights off completely,
+gives Insights findings, devices, and apps their own links, and adds MCP tools
+for checking on the server itself.
+
+### Upgrading from 1.5.1
+
+- An MCP setup that already saved its tool list keeps that list, so the new
+  tools that start on don't appear until you tick them in **Integrations →
+  MCP Server → Edit Setup**. New setups get them.
+- Domain watches are a new alert type. A destination set to send only some
+  alert types needs **Domain Watches** added to get them; one that sends
+  everything gets them already.
+- Upgrade every node in a cluster. A replica on 1.5.1 doesn't report its
+  lookups to the lead, so watch alerts miss what it saw, and the lead holds
+  back the "devices that don't use Sable" finding until every replica can
+  report.
+
+### Alerts
+
+- Watch domains and get an alert when a device looks one up. Set watches up in
+  **Settings → Alerts → Watches**, or use **Watch** in a query's details in
+  Query Logs or beside a domain in a device's details in Insights. A watch can
+  cover any device or chosen devices, addresses, or networks, only allowed or
+  only blocked lookups, and waits a quiet time per device (an hour by default)
+  before alerting again. A device that asks more than one node alerts once.
+  ([#239](https://github.com/drudge/sable/issues/239))
+- Keep webhook URLs and API keys out of error messages. A failed Slack,
+  Discord, ntfy, or browser push send used to show its URL, token included,
+  on the Alerts page and in the server log, and so did a failed Namecheap
+  request.
+
+### Insights
+
+- Add a switch in **Settings → General** that turns Insights off completely.
+  Off stops recording which devices Sable sees and what hardware they are,
+  stops looking for findings, and hides Insights. Turning it off can also
+  delete what Insights collected, and **Delete Insights Data** does that on its
+  own. The query log keeps working either way. Turning it back on starts fresh.
+  ([#238](https://github.com/drudge/sable/issues/238))
+- Point out devices that don't use Sable for DNS. With UniFi connected, a new
+  finding lists devices that stayed connected and moved traffic but never asked
+  Sable anything, and another names networks whose DHCP hands out a different
+  DNS server. **Not Using Sable** on the Devices tab lists them. A network that
+  reaches Sable through its gateway is recognized, not blamed. To use this
+  without publishing names from UniFi, turn on **Use UniFi to find devices,
+  even if Sable doesn't publish their names** in the UniFi setup.
+  ([#241](https://github.com/drudge/sable/issues/241))
+- Give each finding, device, and app its own link, such as
+  `/insights/devices/mac:3c:22:fb:01:02:03?range=week`. Use **Copy Link** in
+  its details to share it. Back closes the details and Forward opens them
+  again. A link to a finding that isn't showing says whether you hid it, with
+  **Show Again**, or offers a longer range. Insights alerts now open their
+  finding. ([#242](https://github.com/drudge/sable/issues/242))
+
+### MCP
+
+- Add tools for checking on the server: `get_version` (the running version,
+  whether a newer one is out, and its release notes), `get_stats` (the
+  dashboard's numbers for a time range), `get_dynamic_dns`, and
+  `get_cluster_status` start on. `sync_dynamic_dns` (run a Dynamic DNS update
+  now) and `search_server_logs` start off. They sit in a new **Server** section
+  of the setup wizard, and the Lookups and Insights sections are now one
+  **Lookups & Logs** section.
+- `search_server_logs` blanks passwords, tokens, and other credentials Sable
+  holds before sending a log line to the assistant.
+- `list_findings` returns a link to each finding.
+
+### Console
+
+- Close a zone record without reloading the zone page.
+- Draw every checkbox the same way, and line confirmation dialog text up with
+  its title.
+
+### Dependencies
+
+- Update the passkey library and the QUIC library.
+
 ## [1.5.1] - 2026-09-27
 
 Sable 1.5.1 fixes names that always failed in recursive mode, such as
