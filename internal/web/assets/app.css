@@ -173,11 +173,24 @@ button { cursor: pointer; }
    the list waits below, at every size. Scroll padding the height of a fade
    keeps the current page, or a focused item, clear of the fades. */
 .nav { min-height: 0; height: 100%; flex: none; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 2.75rem; padding: 0 0.5rem 0.5rem; }
-.nav[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
-.nav[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
-.nav[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
+/* The same fades mark any box with data-scroll-fade, such as release notes. */
+[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
+[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
+[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
 .sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end center; padding-bottom: .25rem; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
 .sidebar-nav-hint[data-visible="true"] { opacity: 1; }
+/* A box marked data-scroll-fade gets the same chevron from a frame around it,
+   so the chevron stays put while the box scrolls. It sits in the gap just
+   under the box rather than over the last line it is fading. */
+.scroll-fade-frame { position: relative; min-width: 0; }
+.scroll-fade-hint { position: absolute; top: calc(100% + .05rem); right: 0; left: 0; display: grid; place-items: center; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
+.scroll-fade-hint[data-visible="true"] { opacity: 1; }
+/* Phone dialogs sit their buttons close under the box, so the chevron gets a
+   little more room there. */
+@media (max-width: 767px) {
+  .scroll-fade-frame { margin-bottom: .5rem; }
+}
+.scroll-fade-hint .nav-icon { width: 1rem; height: 1rem; }
 .sidebar-nav-hint .nav-icon { width: 1rem; height: 1rem; transform: rotate(180deg); }
 /* Section labels sit close to the items they name, with more room above to
    set their group apart. Tight spacing keeps the whole list in view on a

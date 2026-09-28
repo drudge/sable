@@ -3786,19 +3786,43 @@
 	  return { hide };
 	})();
 
+	// A scrolling box fades at an edge with more to read past it, so a list
+	// or text that runs on says so without a scrollbar.
+	const updateScrollFade = (element) => {
+	  const scrollable = element.scrollHeight > element.clientHeight + 2;
+	  const hasMoreAbove = scrollable && element.scrollTop > 2;
+	  const hasMoreBelow = scrollable && element.scrollTop + element.clientHeight < element.scrollHeight - 2;
+	  element.dataset.scrollFadeTop = String(hasMoreAbove);
+	  element.dataset.scrollFadeBottom = String(hasMoreBelow);
+	  const hint = element.parentElement?.querySelector(":scope > .scroll-fade-hint");
+	  if (hint) hint.dataset.visible = String(hasMoreBelow);
+	  return hasMoreBelow;
+	};
 	const updateSidebarNavScrollHint = () => {
 	  const nav = document.querySelector(".nav");
 	  const hint = document.querySelector(".sidebar-nav-hint");
 	  if (!nav || !hint) return;
-	  const scrollable = nav.scrollHeight > nav.clientHeight + 2;
-	  const atStart = nav.scrollTop <= 2;
-	  const atEnd = nav.scrollTop + nav.clientHeight >= nav.scrollHeight - 2;
-	  const hasMoreBelow = scrollable && !atEnd;
-	  const hasMoreAbove = scrollable && !atStart;
-	  nav.dataset.scrollFadeTop = String(hasMoreAbove);
-	  nav.dataset.scrollFadeBottom = String(hasMoreBelow);
-	  hint.dataset.visible = String(hasMoreBelow);
+	  hint.dataset.visible = String(updateScrollFade(nav));
 };
+	// Other boxes that fade, such as release notes, measure when they scroll
+	// and whenever their size changes, which includes their dialog opening.
+	const scrollFadeSizes = window.ResizeObserver ? new ResizeObserver((entries) => entries.forEach((entry) => updateScrollFade(entry.target))) : null;
+	const watchScrollFades = (root = document) => {
+	  const found = [...(root.querySelectorAll?.("[data-scroll-fade]") || [])];
+	  if (root.matches?.("[data-scroll-fade]")) found.push(root);
+	  found.forEach((element) => {
+		if (element.dataset.scrollFadeWatched === "true") return;
+		element.dataset.scrollFadeWatched = "true";
+		element.addEventListener("scroll", () => updateScrollFade(element), { passive: true });
+		scrollFadeSizes?.observe(element);
+		updateScrollFade(element);
+	  });
+	};
+	watchScrollFades();
+	// Panels arrive by htmx swaps and by the page's own inserts alike.
+	new MutationObserver((changes) => changes.forEach((change) => change.addedNodes.forEach((node) => {
+	  if (node.nodeType === Node.ELEMENT_NODE) watchScrollFades(node);
+	}))).observe(document.body, { childList: true, subtree: true });
 	// The page the sidebar marks as current stays in sight. A list too tall
 	// for the window scrolls to it, clear of the fades its scroll padding
 	// leaves room for at either edge.

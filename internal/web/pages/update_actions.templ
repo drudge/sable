@@ -104,8 +104,11 @@ templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
 		<dialog class="custom-server-dialog update-release-dialog" id={ dialogID } aria-labelledby={ dialogID + "-title" }>
 			<div class="dialog-header"><h2 id={ dialogID + "-title" }>Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
 			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-			<div class="release-notes-content">
-				@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
+			<div class="scroll-fade-frame">
+				<div class="release-notes-content" data-scroll-fade>
+					@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
+				</div>
+				@ScrollFadeHint()
 			</div>
 			<div class="dialog-footer">
 				if view.ReleaseURL != "" {
