@@ -885,6 +885,7 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		Recursion:                  configuration.Resolver.Recursion,
 		RecursionClients:           configuration.Resolver.RecursionClients,
 		RootHints:                  configuration.Resolver.RootHints,
+		DisableQNAMEMinimization:   !configuration.Resolver.QNAMEMinimization,
 		Routes:                     routes,
 		Timeout:                    configuration.Resolver.Timeout.Duration,
 		Retries:                    configuration.Resolver.Retries,

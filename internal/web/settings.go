@@ -258,6 +258,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		candidate.Resolver.CachePrefetchSample.Duration = cachePrefetchSample
 		candidate.Resolver.CachePrefetchHitsPerHour = cachePrefetchHits
 		candidate.Resolver.DNSSECValidation = request.FormValue("dnssec_validation") == "true"
+		candidate.Resolver.QNAMEMinimization = request.FormValue("qname_minimization") == "true"
 		candidate.Resolver.DNSSECTrustAnchorUpdates = request.FormValue("trust_anchor_updates") == "true"
 		candidate.EncryptedDNS.DoTListen = formLines(request.FormValue("dot_listen"))
 		candidate.EncryptedDNS.DoHListen = formLines(request.FormValue("doh_listen"))
@@ -492,7 +493,8 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,
-		CacheMinimumTTL: configuration.Resolver.CacheMinimumTTL, CacheMaximumTTL: configuration.Resolver.CacheMaximumTTL,
+		QNAMEMinimization: configuration.Resolver.QNAMEMinimization,
+		CacheMinimumTTL:   configuration.Resolver.CacheMinimumTTL, CacheMaximumTTL: configuration.Resolver.CacheMaximumTTL,
 		CacheNegativeTTL: configuration.Resolver.CacheNegativeTTL, CacheFailureTTL: configuration.Resolver.CacheFailureTTL,
 		SaveCache:  configuration.Resolver.SaveCache,
 		ServeStale: configuration.Resolver.ServeStale, CacheStaleTTL: configuration.Resolver.CacheStaleTTL,

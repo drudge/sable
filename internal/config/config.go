@@ -33,7 +33,7 @@ const (
 	defaultDatabaseDSN            = "data/sable.db"
 	defaultMaxConcurrent          = 1024
 	defaultMaxConcurrentPerClient = 64
-	defaultResolverTimeout        = 2 * time.Second
+	defaultResolverTimeout        = 3 * time.Second
 	defaultResolverRetries        = 2
 	defaultResolverRetryWait      = 1500 * time.Millisecond
 	defaultShutdownTimeout        = 15 * time.Second
@@ -227,13 +227,18 @@ type Database struct {
 }
 
 type Resolver struct {
-	MaxConcurrent              int            `toml:"max_concurrent"`
-	MaxConcurrentPerClient     int            `toml:"max_concurrent_per_client"`
-	Recursion                  string         `toml:"recursion"`
-	RecursionClients           []string       `toml:"recursion_clients"`
-	Mode                       string         `toml:"mode"`
-	Forwarders                 []string       `toml:"forwarders"`
-	RootHints                  []string       `toml:"root_hints"`
+	MaxConcurrent          int      `toml:"max_concurrent"`
+	MaxConcurrentPerClient int      `toml:"max_concurrent_per_client"`
+	Recursion              string   `toml:"recursion"`
+	RecursionClients       []string `toml:"recursion_clients"`
+	Mode                   string   `toml:"mode"`
+	Forwarders             []string `toml:"forwarders"`
+	RootHints              []string `toml:"root_hints"`
+	// QNAMEMinimization has recursive mode ask each zone only for the next
+	// label (RFC 9156), so parent zones never see the full name. It is on by
+	// default; turning it off is an escape hatch for a DNS provider that
+	// mishandles minimized questions.
+	QNAMEMinimization          bool           `toml:"qname_minimization"`
 	Routes                     []ForwardRoute `toml:"routes"`
 	Hosts                      []HostOverride `toml:"hosts"`
 	Timeout                    Duration       `toml:"timeout"`
@@ -558,6 +563,7 @@ func Defaults() Config {
 			CachePrefetchSample:      Duration{Duration: defaultCachePrefetchSample},
 			CachePrefetchHitsPerHour: defaultCachePrefetchHits,
 			DNSSECValidation:         true,
+			QNAMEMinimization:        true,
 			DNSSECTrustAnchorUpdates: true,
 		},
 		Blocking: Blocking{

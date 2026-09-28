@@ -66,6 +66,10 @@ domains = ["Example.COM.", "example.com", " ads.example "]
 	if !loaded.Resolver.DNSSECTrustAnchorUpdates {
 		t.Fatal("DNSSECTrustAnchorUpdates = false, want RFC 5011 updates by default")
 	}
+	// A file from before the switch existed keeps minimizing.
+	if !loaded.Resolver.QNAMEMinimization {
+		t.Fatal("QNAMEMinimization = false, want QNAME minimization by default")
+	}
 	want := []string{"ads.example", "example.com"}
 	if strings.Join(loaded.Blocking.Domains, ",") != strings.Join(want, ",") {
 		t.Fatalf("Domains = %v, want %v", loaded.Blocking.Domains, want)

@@ -19,8 +19,9 @@ forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
 # root_hints = ["198.41.0.4:53", "170.247.170.2:53"]
 # The budget for the whole query. In forward mode it is divided evenly among the
 # forwarders that have not been tried yet, so one stalled upstream cannot spend
-# the pool's time and leave the rest of it unreachable.
-timeout = "2s"
+# the pool's time and leave the rest of it unreachable. In recursive mode a
+# cold alias chain through several DNS providers can need close to 3s.
+timeout = "3s"
 # Attempts per upstream before failover, and how long each attempt waits. A
 # dropped UDP packet on a lossy path is retried instead of failing the query.
 # An upstream only gets a second attempt if its share of timeout has room for
@@ -46,6 +47,9 @@ cache_prefetch_sample_interval = "5m"
 cache_prefetch_hits_per_hour = 30
 dnssec_validation = true
 dnssec_trust_anchor_updates = true
+# Recursive mode asks each zone only for the next label of a name (RFC 9156).
+# Turn off only if a DNS provider fails with minimized questions.
+qname_minimization = true
 # Empty trust anchors use Sable's bundled IANA root KSK set. Custom anchors
 # accept an owner followed by DS or DNSKEY RDATA.
 # dnssec_trust_anchors = [". DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"]

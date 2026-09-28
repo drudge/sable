@@ -34,7 +34,9 @@ type Runtime struct {
 	mode                   string
 	forwarders             []string
 	rootHints              []string
+	qnameMinimization      bool
 	delegations            *delegationCache
+	zoneCuts               *zoneCutCache
 	nameServers            *addressCache
 	baseRoutes             []ForwardingRoute
 	routes                 map[string][]string
@@ -80,13 +82,16 @@ type tsigKey struct {
 }
 
 type RuntimeConfig struct {
-	MaxConcurrent            int
-	MaxConcurrentPerClient   int
-	Recursion                string
-	RecursionClients         []string
-	Mode                     string
-	Forwarders               []string
-	RootHints                []string
+	MaxConcurrent          int
+	MaxConcurrentPerClient int
+	Recursion              string
+	RecursionClients       []string
+	Mode                   string
+	Forwarders             []string
+	RootHints              []string
+	// DisableQNAMEMinimization has iterative resolution ask every server for
+	// the full name. Minimization is on unless this is set.
+	DisableQNAMEMinimization bool
 	Routes                   []ForwardingRoute
 	Timeout                  time.Duration
 	Retries                  int
@@ -292,19 +297,27 @@ type Handler struct {
 	upstreamExchange     upstreamExchangeFunc
 	forwarderConnections *forwarderPool
 	upstreamHealth       *upstreamHealthTracker
-	inflight             *inflightGroup
-	zoneTransfer         zoneTransferFunc
-	zoneRefresh          zoneRefreshFunc
-	journalMu            sync.RWMutex
-	zoneJournals         map[string][]zoneDelta
-	expiredMu            sync.Mutex
-	expiredZones         atomic.Pointer[map[string]struct{}]
-	notifications        chan ZoneNotification
-	zoneUpdater          atomic.Pointer[zoneUpdaterHolder]
-	zoneUpdateAuditor    atomic.Pointer[zoneUpdateAuditorHolder]
-	logger               atomic.Pointer[slog.Logger]
-	failureLog           *failureLogLimiter
-	latency              dnsLatencyHistograms
+	// authorityHealth is upstreamHealth for the authoritative servers
+	// iterative resolution asks.
+	authorityHealth *upstreamHealthTracker
+	inflight        *inflightGroup
+	// detached holds recursive lookups still running after the client that
+	// started them stopped waiting, so a retry joins one instead of starting
+	// over.
+	detachedMu        sync.Mutex
+	detached          map[inflightKey]*detachedLookup
+	zoneTransfer      zoneTransferFunc
+	zoneRefresh       zoneRefreshFunc
+	journalMu         sync.RWMutex
+	zoneJournals      map[string][]zoneDelta
+	expiredMu         sync.Mutex
+	expiredZones      atomic.Pointer[map[string]struct{}]
+	notifications     chan ZoneNotification
+	zoneUpdater       atomic.Pointer[zoneUpdaterHolder]
+	zoneUpdateAuditor atomic.Pointer[zoneUpdateAuditorHolder]
+	logger            atomic.Pointer[slog.Logger]
+	failureLog        *failureLogLimiter
+	latency           dnsLatencyHistograms
 }
 
 type ZoneNotification struct {
@@ -666,29 +679,31 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 	}
 	return &Runtime{
 		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
-		recursion:       recursion,
-		mode:            mode,
-		forwarders:      append([]string(nil), configuration.Forwarders...),
-		rootHints:       rootHints,
-		delegations:     newDelegationCache(4096),
-		nameServers:     newAddressCache(4096),
-		baseRoutes:      cloneForwardingRoutes(configuration.Routes),
-		routes:          routes,
-		upstreams:       upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
-		timeout:         configuration.Timeout,
-		retries:         cmp.Or(configuration.Retries, defaultRuntimeRetries),
-		retryTimeout:    cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
-		staleMaxWait:    configuration.CacheStaleMaxWait,
-		blocked:         blocked,
-		blockedOwners:   configuration.BlockedDomainOwnerSets,
-		allowedExact:    allowedExact,
-		allowedWildcard: allowedWildcard,
-		blocking:        configuration.Blocking,
-		blockType:       blockingType,
-		blockTTL:        configuration.BlockingTTL,
-		blockAddrs:      blockAddresses,
-		bypass:          bypass,
-		blockTXT:        configuration.AllowTXTReport,
+		recursion:         recursion,
+		mode:              mode,
+		forwarders:        append([]string(nil), configuration.Forwarders...),
+		rootHints:         rootHints,
+		qnameMinimization: !configuration.DisableQNAMEMinimization,
+		delegations:       newDelegationCache(4096),
+		zoneCuts:          newZoneCutCache(4096),
+		nameServers:       newAddressCache(4096),
+		baseRoutes:        cloneForwardingRoutes(configuration.Routes),
+		routes:            routes,
+		upstreams:         upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
+		timeout:           configuration.Timeout,
+		retries:           cmp.Or(configuration.Retries, defaultRuntimeRetries),
+		retryTimeout:      cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
+		staleMaxWait:      configuration.CacheStaleMaxWait,
+		blocked:           blocked,
+		blockedOwners:     configuration.BlockedDomainOwnerSets,
+		allowedExact:      allowedExact,
+		allowedWildcard:   allowedWildcard,
+		blocking:          configuration.Blocking,
+		blockType:         blockingType,
+		blockTTL:          configuration.BlockingTTL,
+		blockAddrs:        blockAddresses,
+		bypass:            bypass,
+		blockTXT:          configuration.AllowTXTReport,
 		cache: NewResponseCacheWithOptions(configuration.CacheSize, CacheOptions{
 			MinimumTTL: configuration.CacheMinimumTTL, MaximumTTL: configuration.CacheMaximumTTL,
 			NegativeTTL: configuration.CacheNegativeTTL, FailureTTL: configuration.CacheFailureTTL,
@@ -714,7 +729,7 @@ func NewHandler(runtime *Runtime) *Handler {
 	backgroundContext, backgroundCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
-		upstreamHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
+		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),
@@ -827,6 +842,7 @@ func (handler *Handler) Activate(runtime *Runtime) {
 	if active.upstreams == runtime.upstreams && active.cache.Compatible(runtime.cache) {
 		runtime.cache = active.cache
 		runtime.delegations = active.delegations
+		runtime.zoneCuts = active.zoneCuts
 		runtime.nameServers = active.nameServers
 	}
 	if runtime.managedTrustAnchors && runtime.dnssec != nil && handler.trustAnchorManager != nil {
@@ -878,6 +894,7 @@ func (handler *Handler) ActivateZones(zones []AuthoritativeZone, keys []TSIGKey)
 		// still publish into it after this runtime is activated.
 		candidate.cache = NewResponseCacheWithOptions(active.cache.Capacity(), active.cache.options)
 		candidate.delegations = compiled.delegations
+		candidate.zoneCuts = compiled.zoneCuts
 		candidate.nameServers = compiled.nameServers
 	}
 	handler.Activate(&candidate)
@@ -2842,9 +2859,23 @@ func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) [
 
 func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
 	tracker.mu.Lock()
-	tracker.retryAfter[forwarder] = tracker.now().Add(upstreamUnhealthyCooldown)
+	now := tracker.now()
+	tracker.retryAfter[forwarder] = now.Add(upstreamUnhealthyCooldown)
+	// Authoritative servers are many, so forget ones whose cooldown ended
+	// rather than keep every server that ever failed.
+	if len(tracker.retryAfter) > maximumTrackedUnhealthy {
+		for server, until := range tracker.retryAfter {
+			if !now.Before(until) {
+				delete(tracker.retryAfter, server)
+			}
+		}
+	}
 	tracker.mu.Unlock()
 }
+
+// maximumTrackedUnhealthy is how many failed servers the tracker holds before
+// it clears the ones whose cooldown is over.
+const maximumTrackedUnhealthy = 1024
 
 func (tracker *upstreamHealthTracker) markHealthy(forwarder string) {
 	tracker.mu.RLock()
@@ -2916,14 +2947,14 @@ func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns
 	networkContext, cancelNetwork := context.WithTimeout(ctx, runtime.timeout)
 	if runtime.dnssec == nil {
 		defer cancelNetwork()
-		response, err := handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
+		response, err := handler.resolveNetworkWaiting(networkContext, request, runtime, forwarders)
 		if response != nil {
 			response.AuthenticatedData = false
 		}
 		return response, validationIndeterminate, err
 	}
 	upstreamRequest := dnssecUpstreamRequest(request)
-	response, err := handler.resolveNetworkContext(networkContext, upstreamRequest, runtime, forwarders)
+	response, err := handler.resolveNetworkWaiting(networkContext, upstreamRequest, runtime, forwarders)
 	cancelNetwork()
 	if err != nil {
 		return nil, validationIndeterminate, err
