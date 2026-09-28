@@ -1777,6 +1777,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* The wizard's tool list follows the group permission picker: a checkbox per
    tool with the grant it needs pushed to the right, and no inner scrolling. */
 .mcp-tool-sections .permission-surface .permission-checks { max-height: none; overflow: visible; border-bottom: 0; padding-bottom: 0; }
+/* Rows sit flush, their padding keeping them apart, so both rows of sections
+   fit a laptop window without scrolling. */
+.mcp-tool-sections .permission-checks { gap: 0; }
 .mcp-tool-sections .permission-checks label { align-items: center; padding: .3rem .45rem; }
 .mcp-tool-sections .permission-checks input { margin: 0; }
 .mcp-tool-sections .mcp-tool-grant { margin-left: auto; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; }
