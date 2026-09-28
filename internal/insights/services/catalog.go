@@ -109,6 +109,14 @@ var catalog = []catalogEntry{
 	{Service{"eufy", "eufy", CategoryCameras}, []string{"eufylife.com", "eufy.com"}},
 	{Service{"simplisafe", "SimpliSafe", CategoryCameras}, []string{"simplisafe.com"}},
 
+	// Remote access: tunnels and remote control, by the names their agents
+	// reach rather than their websites where the two differ.
+	{Service{"cloudflare-tunnel", "Cloudflare Tunnel", CategoryRemoteAccess}, []string{"argotunnel.com"}},
+	{Service{"ngrok", "ngrok", CategoryRemoteAccess}, []string{"ngrok-agent.com"}},
+	{Service{"tailscale", "Tailscale", CategoryRemoteAccess}, []string{"tailscale.com", "tailscale.io", "ts.net"}},
+	{Service{"teamviewer", "TeamViewer", CategoryRemoteAccess}, []string{"teamviewer.com"}},
+	{Service{"anydesk", "AnyDesk", CategoryRemoteAccess}, []string{"net.anydesk.com"}},
+
 	// Cloud storage and backup.
 	{Service{"icloud", "iCloud", CategoryCloud}, []string{"icloud.com", "icloud-content.com", "apple-cloudkit.com", "me.com"}},
 	{Service{"google-drive", "Google Drive", CategoryCloud}, []string{"drive.google.com", "docs.google.com", "drive.usercontent.google.com"}},
@@ -138,7 +146,6 @@ var catalog = []catalogEntry{
 	{Service{"1password", "1Password", CategorySecurity}, []string{"1password.com", "1password.ca", "1password.eu", "agilebits.com"}},
 	{Service{"bitwarden", "Bitwarden", CategorySecurity}, []string{"bitwarden.com", "bitwarden.net", "bitwarden.eu"}},
 	{Service{"lastpass", "LastPass", CategorySecurity}, []string{"lastpass.com", "lastpass.eu"}},
-	{Service{"tailscale", "Tailscale", CategorySecurity}, []string{"tailscale.com", "tailscale.io", "ts.net"}},
 	{Service{"nordvpn", "NordVPN", CategorySecurity}, []string{"nordvpn.com", "nordcdn.com", "nordvpn.net"}},
 	{Service{"expressvpn", "ExpressVPN", CategorySecurity}, []string{"expressvpn.com", "expressapisv2.net"}},
 	{Service{"proton", "Proton", CategorySecurity}, []string{"proton.me", "protonmail.com", "protonvpn.com", "protonmail.ch"}},
@@ -201,7 +208,6 @@ var catalog = []catalogEntry{
 	{Service{"brother", "Brother", CategoryPlatform}, []string{"brother.com", "brother-usa.com"}},
 	{Service{"remarkable", "reMarkable", CategoryPlatform}, []string{"device.cloud.remarkable.com", "tectonic.remarkable.com"}},
 	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"api.bambulab.com", "mqtt.bambulab.com"}},
-	{Service{"cloudflare-tunnel", "Cloudflare Tunnel", CategoryPlatform}, []string{"argotunnel.com"}},
 	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time.cloudflare.com"}},
 
 	// Finance.

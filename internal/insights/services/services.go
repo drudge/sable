@@ -32,6 +32,10 @@ const (
 	CategoryPlatform     = "Device platform"
 	CategorySecurity     = "Security"
 	CategoryFinance      = "Finance"
+	// CategoryRemoteAccess is tunnels and remote control tools, which can let
+	// someone reach the network from outside. Insights treats a device that
+	// starts using one as worth a look.
+	CategoryRemoteAccess = "Remote access"
 )
 
 // Service is one app or service people would recognize by name.
