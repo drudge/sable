@@ -19,6 +19,7 @@ func TestInsightFindingsDefaultToWhatInsightsAlwaysDid(t *testing.T) {
 		TrafficSpike:        InsightTrafficSpike{Mode: "alert", Factor: 3, MinimumLookups: 500},
 		NewDestinations:     InsightNewDestinations{Mode: "alert", MinimumNewDomains: 20},
 		NewApp:              InsightFinding{Mode: "alert"},
+		RemoteAccess:        InsightFinding{Mode: "alert"},
 		UnusualHours:        InsightUnusualHours{Mode: "alert", MinimumLookups: 30},
 		CheckIn:             InsightCheckIn{Mode: "alert", LongestInterval: Duration{2 * time.Hour}, ShortestSpan: Duration{12 * time.Hour}},
 		ApplianceNewDomains: InsightApplianceNewDomains{Mode: "alert", MinimumNewDomains: 3},

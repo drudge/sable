@@ -38,7 +38,8 @@ func newApps(history []insights.DomainEvidence, since time.Time) []newApp {
 	byService := make(map[string]*newApp)
 	for _, domain := range history {
 		service, found := services.Lookup(domain.Name)
-		if !found || service.Category == services.CategoryPlatform {
+		// Remote access has a finding of its own, made whether or not it is new.
+		if !found || service.Category == services.CategoryPlatform || service.Category == services.CategoryRemoteAccess {
 			continue
 		}
 		app := byService[service.ID]
@@ -89,36 +90,16 @@ func newAppFindings(input ChangesInput) []insights.Finding {
 			continue
 		}
 		if apps := newApps(history, input.WindowStart); len(apps) > 0 {
-			// Remote access leads, so it is never among the apps left unnamed.
-			slices.SortStableFunc(apps, func(left, right newApp) int { return compareRemoteFirst(left.service, right.service) })
 			found = append(found, deviceApps{device: device, apps: apps})
 		}
 	}
-	slices.SortFunc(found, func(left, right deviceApps) int {
-		// A device that opened remote access is never among those left out.
-		if order := compareRemoteFirst(left.apps[0].service, right.apps[0].service); order != 0 {
-			return order
-		}
-		return right.apps[0].firstSeen.Compare(left.apps[0].firstSeen)
-	})
+	slices.SortFunc(found, func(left, right deviceApps) int { return right.apps[0].firstSeen.Compare(left.apps[0].firstSeen) })
 	findings := make([]insights.Finding, 0, min(len(found), maximumNewApps))
 	for _, entry := range found[:min(len(found), maximumNewApps)] {
 		shown := min(len(entry.apps), maximumAppsPerDevice)
 		findings = append(findings, newAppFinding(entry.device, entry.apps[:shown], entry.apps[shown:], input))
 	}
 	return findings
-}
-
-// compareRemoteFirst orders remote access before every other kind of app.
-func compareRemoteFirst(left, right services.Service) int {
-	leftRemote, rightRemote := left.Category == services.CategoryRemoteAccess, right.Category == services.CategoryRemoteAccess
-	switch {
-	case leftRemote && !rightRemote:
-		return -1
-	case rightRemote && !leftRemote:
-		return 1
-	}
-	return 0
 }
 
 func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insights.Finding {
@@ -154,21 +135,6 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 	if len(apps) > 1 {
 		title = "Started using new apps"
 	}
-	tone := insights.ToneNotice
-	explanations := []string{"Someone installed the app or signed in to it", "An update to other software now uses this service"}
-	remote := make([]string, 0)
-	for _, app := range apps {
-		if app.service.Category == services.CategoryRemoteAccess {
-			remote = append(remote, app.service.Name)
-		}
-	}
-	if len(remote) > 0 {
-		// A tunnel or remote control tool can let someone in from outside, so
-		// one nobody set up on purpose matters more than a new app.
-		tone = insights.ToneAttention
-		reasons = append([]insights.Reason{{Text: insights.JoinAnd(remote) + " can let someone reach this network from outside"}}, reasons...)
-		explanations = []string{"Someone set up remote access to this device on purpose", "Software installed a tunnel or remote control tool nobody knew about"}
-	}
 	facts := deviceFacts(device, false)
 	if len(apps) == 1 {
 		facts = append([]insights.Fact{{Label: "App", Value: apps[0].service.Name}, {Label: "Kind", Value: apps[0].service.Category}}, facts...)
@@ -176,14 +142,14 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 		facts = append([]insights.Fact{{Label: "Apps", Value: strings.Join(names, ", ")}}, facts...)
 	}
 	return insights.Finding{
-		Kind: KindNewApp, Tone: tone, Title: title,
+		Kind: KindNewApp, Tone: insights.ToneNotice, Title: title,
 		Subject:      deviceSubject(device),
 		Headline:     Label(device) + " started using " + insights.JoinAnd(names),
 		Summary:      fmt.Sprintf("Started using %s during the selected period.", insights.JoinAnd(names)),
 		Reasons:      reasons,
 		Facts:        facts,
 		Domains:      domains,
-		Explanations: explanations,
+		Explanations: []string{"Someone installed the app or signed in to it", "An update to other software now uses this service"},
 		Method: "Sable names apps from a built-in list of the domains each one owns. It reports an app when " + aNoun(device) +
 			" that was already on the network queries that app's domains for the first time. Operating system traffic is left out.",
 	}

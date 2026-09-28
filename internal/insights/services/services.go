@@ -71,6 +71,17 @@ func All() []Service {
 	return all
 }
 
+// InCategory lists the IDs of the services in a category, in catalog order.
+func InCategory(category string) []string {
+	ids := make([]string, 0)
+	for _, entry := range catalog {
+		if entry.service.Category == category {
+			ids = append(ids, entry.service.ID)
+		}
+	}
+	return ids
+}
+
 // Find returns a service by its ID.
 func Find(id string) (Service, bool) {
 	for _, entry := range catalog {

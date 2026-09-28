@@ -67,6 +67,7 @@ type InsightFindings struct {
 	TrafficSpike        InsightTrafficSpike        `toml:"traffic_spike"`
 	NewDestinations     InsightNewDestinations     `toml:"new_destinations"`
 	NewApp              InsightFinding             `toml:"new_app"`
+	RemoteAccess        InsightFinding             `toml:"remote_access"`
 	UnusualHours        InsightUnusualHours        `toml:"unusual_hours"`
 	CheckIn             InsightCheckIn             `toml:"check_in"`
 	ApplianceNewDomains InsightApplianceNewDomains `toml:"appliance_new_domains"`
@@ -159,6 +160,7 @@ func DefaultInsightFindings() InsightFindings {
 		TrafficSpike:    InsightTrafficSpike{Mode: InsightModeAlert, Factor: defaultInsightSpikeFactor, MinimumLookups: defaultInsightSpikeLookups},
 		NewDestinations: InsightNewDestinations{Mode: InsightModeAlert, MinimumNewDomains: defaultInsightNewDomains},
 		NewApp:          InsightFinding{Mode: InsightModeAlert},
+		RemoteAccess:    InsightFinding{Mode: InsightModeAlert},
 		UnusualHours:    InsightUnusualHours{Mode: InsightModeAlert, MinimumLookups: defaultInsightUnusualHourLookups},
 		CheckIn: InsightCheckIn{
 			Mode:            InsightModeAlert,
@@ -189,6 +191,7 @@ func (configuration *Config) normalizeInsights() {
 		{&findings.TrafficSpike.Mode, defaults.TrafficSpike.Mode},
 		{&findings.NewDestinations.Mode, defaults.NewDestinations.Mode},
 		{&findings.NewApp.Mode, defaults.NewApp.Mode},
+		{&findings.RemoteAccess.Mode, defaults.RemoteAccess.Mode},
 		{&findings.UnusualHours.Mode, defaults.UnusualHours.Mode},
 		{&findings.CheckIn.Mode, defaults.CheckIn.Mode},
 		{&findings.ApplianceNewDomains.Mode, defaults.ApplianceNewDomains.Mode},
@@ -281,6 +284,7 @@ func (findings InsightFindings) Problems() []InsightSettingProblem {
 	mode("new_destinations.mode", findings.NewDestinations.Mode)
 	count("new_destinations.minimum_new_domains", findings.NewDestinations.MinimumNewDomains, maximumInsightNewDomains)
 	mode("new_app.mode", findings.NewApp.Mode)
+	mode("remote_access.mode", findings.RemoteAccess.Mode)
 	mode("unusual_hours.mode", findings.UnusualHours.Mode)
 	count("unusual_hours.minimum_lookups", findings.UnusualHours.MinimumLookups, maximumInsightUnusualHourLookups)
 	mode("check_in.mode", findings.CheckIn.Mode)
