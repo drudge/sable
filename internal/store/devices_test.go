@@ -178,11 +178,30 @@ func TestClientNamesMatchingFindsSuffixesPerClient(t *testing.T) {
 		blockingEvent(now.Add(-time.Hour), "10.0.0.5", "example.net.", querylog.SourceUpstream),
 		blockingEvent(now.Add(-48*time.Hour), "10.0.0.9", "ring.com.", querylog.SourceUpstream),
 	})
-	matches, err := opened.ClientNamesMatching(context.Background(), now.Add(-24*time.Hour), []string{"ring.com"})
+	matches, err := opened.ClientNamesMatching(context.Background(), now.Add(-24*time.Hour), []string{"ring.com"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(matches) != 1 || len(matches["10.0.0.46"]) != 2 {
+		t.Fatalf("matches = %+v", matches)
+	}
+}
+
+func TestClientNamesMatchingFindsLabelsPerClient(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(now.Add(-time.Hour), "10.0.7.182", "mqtt.evrythng.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.7.78", "mqtt2.tidbyt.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.7.20", "us.mqtt.bambulab.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-time.Hour), "10.0.0.5", "example.net.", querylog.SourceUpstream),
+	})
+	matches, err := opened.ClientNamesMatching(context.Background(), now.Add(-24*time.Hour), nil, []string{"mqtt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 3 || len(matches["10.0.0.5"]) != 0 {
 		t.Fatalf("matches = %+v", matches)
 	}
 }

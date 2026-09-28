@@ -30,6 +30,13 @@ const (
 		{"mac":"aa:bb:cc:dd:ee:04","ip":"192.168.30.51","network_id":"net-iot"},
 		{"mac":"aa:bb:cc:dd:ee:05","name":"Broken","ip":"not-an-address","network_id":"net-iot"}
 	]}`
+	deviceFixture = `{"data":[
+		{"mac":"AA:BB:CC:00:00:01","name":"Office AP","ip":"192.168.1.2","model":"U7PRO","type":"uap","shortname":"U7PRO"},
+		{"mac":"aa:bb:cc:00:00:04","name":"UPS Tower","ip":"192.168.1.4","model":"USWDA23","type":"usw","shortname":"UPS23"},
+		{"mac":"aa:bb:cc:00:00:05","name":"Home","ip":"192.168.1.1","model":"UDMA6A8","type":"udm","shortname":"UCGF"},
+		{"mac":"aa:bb:cc:00:00:02","ip":"192.168.1.3","model":"USWED35"},
+		{"mac":"aa:bb:cc:00:00:03","name":"Pending","ip":"","model":"USWED35"}
+	]}`
 )
 
 func fixtureHandler(t *testing.T, authorize func(*http.Request) bool) http.Handler {
@@ -48,6 +55,7 @@ func fixtureHandler(t *testing.T, authorize func(*http.Request) bool) http.Handl
 	mux.Handle("GET /proxy/network/api/s/default/rest/networkconf", serve(networkFixture))
 	mux.Handle("GET /proxy/network/api/s/default/rest/user", serve(reservationFixture))
 	mux.Handle("GET /proxy/network/api/s/default/stat/sta", serve(activeFixture))
+	mux.Handle("GET /proxy/network/api/s/default/stat/device", serve(deviceFixture))
 	return mux
 }
 
@@ -146,6 +154,58 @@ func TestInventoryFiltersObservedIPv6(t *testing.T) {
 	printer := []netip.Addr{netip.MustParseAddr("2001:db8:0:1:aa:bb:cc:1")}
 	if !slices.Equal(byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer) {
 		t.Fatalf("printer IPv6 = %v, want the active lease's %v inherited by the winning reservation", byMAC["aa:bb:cc:dd:ee:01"].IPv6, printer)
+	}
+}
+
+// The controller's own switches and access points are not clients, so only
+// its device list names them. They stay out of Hosts, which the sync
+// publishes, and a device with no name or no address names nothing.
+func TestInventoryReadsGearApartFromHosts(t *testing.T) {
+	server := httptest.NewTLSServer(fixtureHandler(t, func(*http.Request) bool { return true }))
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	want := []Host{
+		{MAC: "aa:bb:cc:00:00:01", Hostname: "Office AP", Address: netip.MustParseAddr("192.168.1.2"), Kind: "access point"},
+		{MAC: "aa:bb:cc:00:00:04", Hostname: "UPS Tower", Address: netip.MustParseAddr("192.168.1.4"), Kind: "ups"},
+		{MAC: "aa:bb:cc:00:00:05", Hostname: "Home", Address: netip.MustParseAddr("192.168.1.1"), Kind: "gateway"},
+	}
+	if !slices.EqualFunc(inventory.Gear, want, func(left, right Host) bool {
+		return left.MAC == right.MAC && left.Hostname == right.Hostname && left.Address == right.Address && left.Kind == right.Kind
+	}) {
+		t.Fatalf("gear = %+v, want %+v", inventory.Gear, want)
+	}
+	for _, host := range inventory.Hosts {
+		if host.MAC == "aa:bb:cc:00:00:01" {
+			t.Fatalf("gear leaked into the published hosts: %+v", host)
+		}
+	}
+	// A UPS is filed under switches but carries power, not traffic.
+	types := []string{inventory.Gear[0].DeviceType(), inventory.Gear[1].DeviceType(), inventory.Gear[2].DeviceType()}
+	if !slices.Equal(types, []string{"network", "ups", "network"}) {
+		t.Fatalf("device types = %q, want the access point and gateway as network and the UPS as a UPS", types)
+	}
+}
+
+// A controller that will not list its devices still has clients to publish.
+func TestInventoryWithoutGearStillReadsHosts(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /proxy/network/api/s/default/stat/device", http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	mux.Handle("/", fixtureHandler(t, func(*http.Request) bool { return true }))
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	if len(inventory.Gear) != 0 || len(inventory.Hosts) != 2 {
+		t.Fatalf("gear = %+v, hosts = %d; want no gear and both hosts", inventory.Gear, len(inventory.Hosts))
 	}
 }
 
@@ -306,5 +366,23 @@ func TestInventoryPlacesReservationsWithoutNetworkID(t *testing.T) {
 	counts := inventory.HostCounts()
 	if counts["net-lan"] != 3 || counts["net-iot"] != 3 {
 		t.Fatalf("host counts = %v, want three hosts on each mapped network", counts)
+	}
+}
+
+// A UNAS joins as a client, and its product line says it is storage. The
+// reservation that wins the merge keeps what the active lease knew.
+func TestUniFiDriveClientsAreStorage(t *testing.T) {
+	t.Parallel()
+	active, ok := clientPayload{MAC: "a4:f8:ff:7e:1f:aa", Hostname: "Home-UNAS-4", IP: "192.168.1.14", ProductLine: "unifi-drive"}.host("192.168.1.14", false)
+	if !ok || active.DeviceType() != "storage" {
+		t.Fatalf("active UNAS = %+v", active)
+	}
+	reserved, _ := clientPayload{MAC: "a4:f8:ff:7e:1f:aa", Name: "Home-UNAS-4", FixedIP: "192.168.1.14", UseFixedIP: true}.host("192.168.1.14", true)
+	merged := mergeHosts([]Host{reserved}, []Host{active})
+	if len(merged) != 1 || !merged[0].Reserved || merged[0].DeviceType() != "storage" {
+		t.Fatalf("merged = %+v", merged)
+	}
+	if printer, _ := (clientPayload{MAC: "aa:bb:cc:dd:ee:01", Name: "Printer"}).host("192.168.1.10", false); printer.DeviceType() != "" {
+		t.Fatalf("an ordinary client got type %q", printer.DeviceType())
 	}
 }

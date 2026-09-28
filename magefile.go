@@ -131,14 +131,21 @@ dockers_v2:
 // Default builds the Sable executable.
 var Default = Build
 
-// Generate regenerates templ components.
+// Generate regenerates templ components and third-party notices.
 func Generate(ctx context.Context) error {
-	return run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages")
+	if err := run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages"); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", "run", "./internal/notices/internal/generate")
 }
 
-// CheckGenerated verifies that generated templ components are current.
+// CheckGenerated verifies that generated templ components and third-party
+// notices are current.
 func CheckGenerated(ctx context.Context) error {
-	return run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages", "-check")
+	if err := run(ctx, nil, "go", "tool", "templ", "generate", "-path", "internal/web/pages", "-check"); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", "run", "./internal/notices/internal/generate", "-check")
 }
 
 // Format formats application and Mage source files.

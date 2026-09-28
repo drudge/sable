@@ -120,7 +120,7 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 		}
 		reasons = append(reasons, insights.Reason{Text: "Also new to it: " + insights.JoinAnd(others)})
 	}
-	if device.NewDomains >= minimumNewDomains {
+	if device.NewDomains >= input.Limits.NewDomains {
 		reasons = append(reasons, insights.Reason{Text: fmt.Sprintf("%s domains queried for the first time in all", insights.FormatCount(device.NewDomains))})
 	}
 	reasons = append(reasons, insights.Reason{
@@ -149,7 +149,7 @@ func newAppFinding(device Device, apps, more []newApp, input ChangesInput) insig
 		Facts:        facts,
 		Domains:      domains,
 		Explanations: []string{"Someone installed the app or signed in to it", "An update to other software now uses this service"},
-		Method: "Sable names apps from a built-in list of the domains each one owns. It reports an app when a " + noun(device) +
+		Method: "Sable names apps from a built-in list of the domains each one owns. It reports an app when " + aNoun(device) +
 			" that was already on the network queries that app's domains for the first time. Operating system traffic is left out.",
 	}
 }

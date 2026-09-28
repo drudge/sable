@@ -25,6 +25,24 @@ const (
 	maximumUsername      = 64
 )
 
+// Audit actions for sign-ins that did not get in. Each records the client's
+// address, and a password sign-in records the username it tried as well.
+const (
+	ActionLoginFailed        = "auth.login.failed"
+	ActionPasskeyLoginFailed = "auth.login.passkey.failed"
+	ActionFederatedDenied    = "auth.federated.denied"
+	// ActionLoginLocked is a sign-in turned away for too many failures. It is
+	// recorded once per lockout, not for every request the lockout refuses.
+	ActionLoginLocked = "auth.login.locked"
+)
+
+// FailedSignInActions lists the audit actions of sign-ins that did not get
+// in: a wrong password, a passkey that did not verify, a single sign-on
+// identity turned away, and a sign-in refused for too many failures.
+func FailedSignInActions() []string {
+	return []string{ActionLoginFailed, ActionPasskeyLoginFailed, ActionFederatedDenied, ActionLoginLocked}
+}
+
 var (
 	ErrNotFound          = errors.New("not found")
 	ErrSetupComplete     = errors.New("initial administrator setup is already complete")
@@ -231,7 +249,15 @@ func (service *Service) Login(
 	normalized, normalizeErr := normalizeUsername(username)
 	key := strings.ToLower(strings.TrimSpace(username)) + "\x00" + clientIP
 	now := service.now()
-	if !service.limiter.allow(key, now) || !service.acquirePasswordOperation() {
+	if !service.limiter.allow(key, now) {
+		if service.limiter.refuse(key, now) {
+			service.audit(ctx, nil, ActionLoginLocked, clientIP, userAgent, usernameDetail("too many failed sign-ins", username))
+		}
+		return Credentials{}, ErrRateLimited
+	}
+	// Too many passwords being checked at once is the server protecting its
+	// memory, not a lockout, so it is not recorded.
+	if !service.acquirePasswordOperation() {
 		return Credentials{}, ErrRateLimited
 	}
 	defer service.releasePasswordOperation()
@@ -251,7 +277,7 @@ func (service *Service) Login(
 	}
 	if !valid {
 		service.limiter.failure(key, now)
-		service.audit(ctx, nil, "auth.login.failed", clientIP, userAgent, "invalid credentials")
+		service.audit(ctx, nil, ActionLoginFailed, clientIP, userAgent, usernameDetail("invalid credentials", username))
 		return Credentials{}, ErrInvalidCredential
 	}
 	service.limiter.success(key)
@@ -438,6 +464,29 @@ func (service *Service) audit(
 		OccurredAt: service.now(), UserID: userID, Action: action,
 		ClientIP: clientIP, UserAgent: userAgent, Details: details,
 	})
+}
+
+// usernameDetail adds the username a sign-in tried to its audit details, so a
+// run of failures shows whose accounts were tried. Only a well-formed username
+// is kept: anything else, such as a password typed into the username field,
+// must not reach the audit log. The password itself never does.
+func usernameDetail(reason, username string) string {
+	normalized, err := normalizeUsername(username)
+	if err != nil {
+		return reason + "; malformed username"
+	}
+	return reason + "; username=" + normalized
+}
+
+// AttemptedUsername returns the username a failed or refused sign-in tried, as
+// its audit details record it, or "" when they record none.
+func AttemptedUsername(details string) string {
+	for part := range strings.SplitSeq(details, "; ") {
+		if username, found := strings.CutPrefix(part, "username="); found {
+			return username
+		}
+	}
+	return ""
 }
 
 func normalizeUsername(username string) (string, error) {

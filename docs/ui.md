@@ -22,6 +22,12 @@ Icons (CC0, see `third_party/simple-icons`), and falls back to a gray Lucide
 icon for the app's category when Simple Icons has no mark. Regenerate the marks
 with `go run ./internal/web/pages/internal/applogos`.
 
+The sidebar's first group has no heading. Isotope calls it Overview, but that
+fit only the Dashboard and Insights, and it already titles the Dashboard's
+first card and the first Insights tab. System lists Administration, Cluster,
+Integrations, Settings, and About. Integrations, which Isotope doesn't have,
+sits there because it is setup rather than daily DNS work.
+
 Only product identity, backend-specific terminology, and controls unsupported
 by Sable may differ. Unsupported destinations remain visibly disabled until
 their native Sable backend exists; they must not be redesigned or silently
@@ -34,6 +40,38 @@ use vendored htmx 4 plus small dependency-free JavaScript helpers, and assets
 are embedded with `go:embed`. There is no Node.js runtime or separately
 deployed frontend. Every asset URL contains a content fingerprint; immutable
 assets are served precompressed when the browser accepts gzip.
+
+Text is set in Inter 3.019 (OFL, see `third_party/inter`), embedded like
+every other asset so it takes the same room on every device, not only where
+Inter is installed. It ships upright, with every weight from 100 to 900, in
+two files split by character. `inter-latin.woff2` holds what nearly every
+page shows, and the page preloads it. `inter-extra.woff2` holds the rest of
+Inter's characters and loads only on a page that shows one. The
+`unicode-range` of each `@font-face` rule in `app.css` lists its characters.
+To rebuild them from the variable font Google Fonts served for Inter 3.019,
+use fontTools (`pip install fonttools brotli`):
+
+```sh
+fonttools varLib.instancer Inter-VariableFont_slnt,wght.ttf slnt=0 -o inter-roman.ttf
+pyftsubset inter-roman.ttf --output-file=inter-latin.woff2 --flavor=woff2 \
+  --layout-features='*' --name-IDs='*' --notdef-outline \
+  --unicodes='<the unicode-range of the inter-latin.woff2 rule>'
+```
+
+Build `inter-extra.woff2` the same way from its own rule's `unicode-range`.
+A character the console starts to show should fall in the Latin file's
+range, or every page that shows it loads the second file.
+
+Third-Party Licenses, a button in About's MIT License dialog, lists the
+software Sable is built with and shows each license as its authors wrote it,
+since many of those licenses ask to travel with the binary. The list comes
+from `internal/notices/notices.json`, which `go tool mage generate` rebuilds from
+the modules compiled in on every release platform, the Go toolchain, and the
+console's files under `third_party`. `go tool mage verify` fails while it is
+out of date. A module under a license the generator doesn't recognize stops
+it, so a new kind of license gets a person's look before it ships. Update the
+console entries in `internal/notices/internal/generate` along with the files
+they describe.
 
 The application helper is registered before htmx initializes. It adds CSRF
 headers, initializes controls in the original document and later fragments,
@@ -117,9 +155,9 @@ contract:
   integrations, settings sections, and quick actions separately; supports
   ranked fuzzy search plus Arrow/Home/End navigation; provides one-step
   operational commands such as timed blocking pauses; and keeps server-log,
-  query-log, DNS-cache,
-  blocking-policy, and per-zone record search terms in the palette before
-  opening the filtered destination. Query-log search can target either a
+  query-log, DNS-cache, blocking-policy, Insights device, and per-zone record
+  search terms in the palette before opening the filtered destination.
+  Query-log search can target either a
   domain or client IP, with Left/Right switching that mode while focus remains
   in the palette input. Run DNS Query accepts a domain in the palette, defaults
   to an A query, and uses the same arrow-key model for common record types.

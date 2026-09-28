@@ -79,6 +79,9 @@ type JoinConfiguration struct {
 	Members        []Member       `json:"members"`
 	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
 	UpdateProtocol int            `json:"update_protocol,omitempty"`
+	// AlertProtocol is set only on synchronization, by a primary that takes
+	// replicas' own alerts in their heartbeats.
+	AlertProtocol int `json:"alert_protocol,omitempty"`
 }
 
 type storedEnrollmentToken struct {

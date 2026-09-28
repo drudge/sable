@@ -246,9 +246,11 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.status.NextAttempt = syncer.now().Add(interval)
 	if err != nil {
 		syncer.status.LastError = err.Error()
+		syncer.status.ConsecutiveFailures++
 		return
 	}
 	syncer.status.LastError = ""
+	syncer.status.ConsecutiveFailures = 0
 	syncer.status.LastSuccess = started
 	syncer.status.Hosts = hosts
 	syncer.status.HostsByNetwork = plan.HostsByNetwork
@@ -612,23 +614,34 @@ func compareUniFiPlanRecords(left, right unifi.PlanRecord) int {
 }
 
 // unifiIdentitySource labels identities learned from a UniFi controller.
+// Ubiquiti hardware whose type the controller vouches for, such as a switch
+// a UPS, or a UNAS, is labeled unifi- and that type, so Insights can state it
+// as a fact.
 const unifiIdentitySource = "unifi"
 
 // unifiIdentities ties every address the controller reported to its host's
-// hardware address and name.
+// hardware address and name, for its clients and its own gear alike.
 func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.ClientIdentity {
-	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts))
-	for _, host := range inventory.Hosts {
-		addresses := append([]netip.Addr{host.Address}, host.IPv6...)
-		for _, address := range addresses {
-			if !address.IsValid() || host.MAC == "" {
-				continue
+	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts)+len(inventory.Gear))
+	add := func(hosts []unifi.Host, source string) {
+		for _, host := range hosts {
+			source := source
+			if kind := host.DeviceType(); kind != "" {
+				source = unifiIdentitySource + "-" + kind
 			}
-			identities = append(identities, querylog.ClientIdentity{
-				Address: address.Unmap().WithZone("").String(), MAC: host.MAC,
-				Source: unifiIdentitySource, Hostname: host.Hostname, SeenAt: now,
-			})
+			addresses := append([]netip.Addr{host.Address}, host.IPv6...)
+			for _, address := range addresses {
+				if !address.IsValid() || host.MAC == "" {
+					continue
+				}
+				identities = append(identities, querylog.ClientIdentity{
+					Address: address.Unmap().WithZone("").String(), MAC: host.MAC,
+					Source: source, Hostname: host.Hostname, SeenAt: now,
+				})
+			}
 		}
 	}
+	add(inventory.Hosts, unifiIdentitySource)
+	add(inventory.Gear, unifiIdentitySource)
 	return identities
 }

@@ -40,6 +40,12 @@ The machine Sable runs on is marked **This server**, and the rest of its cluster
 
 Open a device to see its maker, apps, busiest domains, and first-time domains.
 
+### Find a device
+
+Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, or unnamed. The page's address keeps the search and filters, so they last through a range change or a reload.
+
+**Search Devices** in the command palette opens the list with your search already in place.
+
 ### Name a device
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.
@@ -56,37 +62,35 @@ Devices with a private, randomized hardware address have no maker, so their type
 
 ## Hide what you have seen
 
-Every finding's drawer ends with **Seen it?**:
+Use **Hide Finding** beside **Why Sable surfaced this** in a finding's drawer, then choose how long to hide it:
 
-- **Dismiss** hides the finding for a day.
-- **Snooze a Week** hides it for a week.
+- **For a Day** hides it until tomorrow.
+- **For a Week** hides it for a week.
 - **That's Normal** hides it until you show it again.
 
-Hiding applies to everyone who uses Insights. Hidden findings are listed under the findings card, where **Show Again** brings one back. You need permission to change settings to hide findings.
+A finding hidden for a day or a week comes back when the time is up, if it still applies. Hiding applies to everyone who uses Insights. Hidden findings are listed under the findings card, where **Show Again** brings one back. You need permission to change settings to hide findings.
+
+## Choose what Insights shows and alerts
+
+Use **Settings** beside the range control at the top of Insights to open **Insights Settings**.
+
+Each kind of finding has three choices:
+
+- **Show and alert** shows it in Insights and sends each new one as an alert. Everything that is news starts here.
+- **Show only** keeps it in Insights without sending alerts.
+- **Off** stops Insights from looking for it at all.
+
+Some kinds have limits you can change, such as how many lookups make a device **Unusually busy**, or how many new domains make it **Talking to new places**. Raise a limit to hear less, or lower it to hear more. The findings that compare block lists are never news, so they can only be shown or turned off. **Reset to Defaults** puts every choice and limit back the way Sable ships them.
+
+Anyone who can read logs can see these settings. Changing them needs permission to change settings.
+
+You can also set these in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
 
 ## Get alerts
 
-Insights can send each new finding worth a look to Slack, Discord, ntfy, Pushover, a webhook, or straight to your browsers. Use the bell beside the range control at the top of Insights, which also shows whether alerts are on, paused, or off, then pick where under **Send To**:
+Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
 
-- **Webhook** posts JSON to a URL, which works with Home Assistant and anything else that takes a JSON POST. Its `text` and `content` fields also make a plain Slack or Discord message.
-- **Slack** posts to an incoming webhook as a card: the finding, its reasons, a colored bar for how much it matters, and a button to Insights.
-- **Discord** posts to a channel webhook as an embed colored by how much the finding matters, with its reasons and a link to Insights. It never mentions anyone.
-- **ntfy** posts plain text with a title to your topic's URL, which ntfy shows as a notification.
-- **Browser** shows each finding as a notification from the browsers you turn it on in, even when Sable is closed. Pick Browser, then **Turn On** in each browser that should get alerts; the list below shows them all, and **Remove** stops one. No account or app is needed: Sable signs each push with its own key and your browser's push service delivers it. Browsers allow this only when Sable is opened over HTTPS (or at `localhost`), and on iPhone and iPad only after Sable is added to the Home Screen. The Sable server needs to reach the internet to hand pushes to those services.
-- **Pushover** asks only for your application token and user key; Sable knows Pushover's URL. Send Test says what Pushover rejected, such as a wrong token. Clear both keys to turn Pushover alerts off.
-
-Use **Preview** to see exactly what Sable would send, before you save, and **Copy** in its corner to take it with you. Tokens and `Authorization` values are cut short.
-
-Use **Send Test** to check the webhook. Each finding is sent once, and anything you hid is skipped. When you first set a webhook, Sable takes stock of what it already knows without sending it, so you are not flooded with old news. On a cluster, only the primary sends alerts.
-
-Use **Pause** to stop alerts without losing the webhook, and **Resume** to start them again. Findings that turn up while alerts are paused are not sent when you resume. **Send Test** still works while paused. For Slack, Discord, and Pushover it also checks that the service itself answered, so a mistyped URL shows an error instead of looking like it worked.
-
-For a plain webhook or ntfy, open **Advanced** for two more options:
-
-- **Check for an ntfy Receipt** only counts a send when ntfy answers with a message ID. It shows for ntfy. Without it, any server that answers counts, so a typo like `nfty.sh` can look like it worked.
-- **Headers** are sent with every alert. Use `Authorization` to reach a protected ntfy topic, or `Priority` and `Tags` to change how the notification looks.
-
-You can also set alerts in `sable.toml`; see [Devices and Insights](../configuration.md#devices-and-insights).
+The bell beside **Settings** shows whether Insights alerts are **On**, **Paused**, or **Off**. Hover over it to see why, or click it to open **Settings > Alerts**.
 
 ## Blocking
 

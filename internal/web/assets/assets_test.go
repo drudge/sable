@@ -131,6 +131,32 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 	}
 }
 
+func TestStylesheetLoadsFingerprintedFonts(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, name := range []string{"inter-latin.woff2", "inter-extra.woff2"} {
+		path := URL(name)
+		if !strings.Contains(stylesheet, `url("`+path+`")`) || strings.Contains(stylesheet, `url("`+name+`")`) {
+			t.Errorf("stylesheet does not load %s from its fingerprinted path %s", name, path)
+		}
+		response := httptest.NewRecorder()
+		Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", name, response.Code)
+		}
+		if got := response.Header().Get("Content-Type"); got != "font/woff2" {
+			t.Errorf("%s Content-Type = %q, want font/woff2", name, got)
+		}
+		if got := response.Header().Get("Cache-Control"); got != immutableCachePolicy {
+			t.Errorf("%s Cache-Control = %q", name, got)
+		}
+		if !bytes.HasPrefix(response.Body.Bytes(), []byte("wOF2")) {
+			t.Errorf("%s is not a WOFF2 font", name)
+		}
+	}
+}
+
 func TestVendoredHTMXVersion(t *testing.T) {
 	t.Parallel()
 
@@ -205,12 +231,64 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	}
 }
 
+func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	if strings.Contains(stylesheet, ".sidebar .nav { overflow-y: hidden; }") {
+		t.Error("desktop sidebar navigation cannot scroll, so a short window cuts off its last items")
+	}
+	sharedStyles, _, _ := strings.Cut(stylesheet, "@media (max-width: 767px)")
+	for _, expected := range []string{
+		`.nav[data-scroll-fade-bottom="true"]`,
+		`.nav[data-scroll-fade-top="true"]`,
+		`.sidebar-nav-hint[data-visible="true"] { opacity: 1; }`,
+	} {
+		if !strings.Contains(sharedStyles, expected) {
+			t.Errorf("sidebar navigation cue %q applies only on phones", expected)
+		}
+	}
+}
+
 func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := string(manifest["app.css"].content)
 	if !strings.Contains(stylesheet, ".nav-item + .nav-item { margin-top: .25rem; }") {
 		t.Fatal("adjacent sidebar navigation items do not have visual separation")
+	}
+}
+
+func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		".sidebar-header { padding: 0.5rem 0.375rem 0.25rem; }",
+		".nav-group { padding: 0.25rem 0; }",
+		".nav-label { height: 2rem; padding: 0.75rem 0.5rem 0.25rem;",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("sidebar sections are spaced out again, which scrolls About out of a laptop-height window: missing %q", expected)
+		}
+	}
+	if !strings.Contains(stylesheet, ".sidebar-collapsed .nav-group { padding: 0.5rem 0; }") {
+		t.Error("the collapsed sidebar rail runs its groups together once their labels are hidden")
+	}
+}
+
+func TestPhoneMenuScrimBlursLikeDialogBackdrops(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"dialog[open]::backdrop {\n  -webkit-backdrop-filter: blur(4px);\n  backdrop-filter: blur(4px);\n}",
+		".sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
+		".sidebar-mobile-open .sidebar-scrim { display: block; animation: backdrop-in 150ms ease-out; }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("the phone menu's scrim no longer blurs and fades in like a dialog backdrop: missing %q", expected)
+		}
 	}
 }
 
@@ -452,6 +530,39 @@ func TestDialogFooterButtonsCenterFullWidthMobileLabels(t *testing.T) {
 	stylesheet := string(manifest["app.css"].content)
 	if !strings.Contains(stylesheet, ".dialog-footer .button { display: inline-flex; align-items: center; justify-content: center;") {
 		t.Error("dialog footer buttons do not center their contents when expanded on mobile")
+	}
+}
+
+func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	for _, expected := range []string{
+		"@media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }",
+		"@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }",
+	} {
+		if !strings.Contains(stylesheet, expected) {
+			t.Errorf("settings tabs do not keep two rows of five down to 375px phones: missing %q", expected)
+		}
+	}
+}
+
+func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := string(manifest["app.css"].content)
+	_, phone, found := strings.Cut(stylesheet, "@media (max-width: 639px)")
+	for _, expected := range []string{
+		".dialog-footer { flex-direction: column-reverse; }",
+		".dialog-footer > [data-dialog-close] { order: -1; }",
+	} {
+		if !found || !strings.Contains(phone, expected) {
+			t.Errorf("phone dialog footers do not put the main button on top and the close button at the bottom: missing %q", expected)
+		}
+	}
+	// The update dialog follows the shared rule instead of stacking in order.
+	if strings.Contains(stylesheet, ".update-release-dialog .dialog-footer { flex-direction: column; }") {
+		t.Error("the update dialog stacks its buttons its own way on phones")
 	}
 }
 

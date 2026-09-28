@@ -20,6 +20,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/alerts"
 	"github.com/drudge/sable/internal/auth"
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/certificates"
@@ -28,6 +29,7 @@ import (
 	"github.com/drudge/sable/internal/dnsclient"
 	"github.com/drudge/sable/internal/dnsserver"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
+	"github.com/drudge/sable/internal/notices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/version"
@@ -49,6 +51,7 @@ const (
 )
 
 type Server struct {
+	mcpUseMu      sync.Mutex
 	httpServer    *http.Server
 	listener      net.Listener
 	httpsListener net.Listener
@@ -88,10 +91,11 @@ type Server struct {
 	setupRequired     atomic.Bool
 	history           *statsHistory
 	insightCache      dashboardInsightCache
-	// pushKeys signs Insights alerts pushed to browsers, and pushClient
-	// carries them; nil sends through the default client.
-	pushKeys   pushKeySource
-	pushClient *http.Client
+	// pushKeys signs alerts pushed to browsers. alerts sends alerts, and
+	// alertSecrets keeps their destinations' URLs and keys in the vault.
+	pushKeys     pushKeySource
+	alerts       *alerts.Dispatcher
+	alertSecrets *alerts.SecretStore
 	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
 	// page. appCache counts what the app ranking reads apart from the
 	// dashboard's insightCache, because Insights answers from a recent count
@@ -266,6 +270,7 @@ func New(
 	mux.HandleFunc("GET "+ssoCallbackPath, server.completeSSO)
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
+	mux.HandleFunc("GET /ui/about/license", server.thirdPartyLicense)
 	mux.HandleFunc("GET /insights", server.insightsPage)
 	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
 	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
@@ -274,13 +279,9 @@ func New(
 	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
 	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
 	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
-	mux.HandleFunc("POST /ui/insights/alerts", server.saveInsightAlerts)
-	mux.HandleFunc("POST /ui/insights/alerts/enabled", server.setInsightAlertsEnabled)
-	mux.HandleFunc("POST /ui/insights/alerts/test", server.testInsightAlerts)
-	mux.HandleFunc("POST /ui/insights/alerts/preview", server.previewInsightAlerts)
-	mux.HandleFunc("GET /ui/insights/alerts/browsers/key", server.insightAlertPushKey)
-	mux.HandleFunc("POST /ui/insights/alerts/browsers", server.addInsightAlertBrowser)
-	mux.HandleFunc("POST /ui/insights/alerts/browsers/remove", server.removeInsightAlertBrowser)
+	mux.HandleFunc("GET /ui/insights/settings", server.insightSettingsPanel)
+	mux.HandleFunc("POST /ui/insights/settings", server.saveInsightSettings)
+	mux.HandleFunc("POST /ui/insights/settings/reset", server.resetInsightSettings)
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
@@ -300,6 +301,11 @@ func New(
 	mux.HandleFunc("POST /ui/integrations/unifi/enabled", server.setUniFiEnabled)
 	mux.HandleFunc("POST /ui/integrations/unifi/remove", server.removeUniFi)
 	mux.HandleFunc("GET /ui/integrations/unifi/status", server.unifiStatusPanel)
+	mux.HandleFunc("POST /ui/integrations/mcp/enabled", server.setMCPEnabled)
+	mux.HandleFunc("POST /ui/integrations/mcp/remove", server.removeMCP)
+	mux.HandleFunc("POST /ui/integrations/mcp/setup", server.saveMCPSetup)
+	mux.HandleFunc("POST /ui/integrations/mcp/group", server.saveMCPGroup)
+	mux.HandleFunc("POST /ui/integrations/mcp/token", server.createMCPToken)
 	mux.HandleFunc("POST /ui/integrations/sso/check", server.checkSSO)
 	mux.HandleFunc("POST /ui/integrations/sso/enabled", server.setSSOEnabled)
 	mux.HandleFunc("POST /ui/integrations/sso/wizard", server.runSSOWizard)
@@ -311,6 +317,16 @@ func New(
 	mux.HandleFunc("POST /ui/settings/updates", server.updatePreferences)
 	mux.HandleFunc("POST /ui/settings/tsig/save", server.saveTSIGKey)
 	mux.HandleFunc("POST /ui/settings/tsig/delete", server.deleteTSIGKey)
+	mux.HandleFunc("GET /ui/settings/alerts/destinations/form", server.alertDestinationFormPanel)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/save", server.saveAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/remove", server.removeAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/test", server.testAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/destinations/preview", server.previewAlertDestination)
+	mux.HandleFunc("POST /ui/settings/alerts/paused", server.setAlertsPaused)
+	mux.HandleFunc("POST /ui/settings/alerts/groups", server.saveAlertGroups)
+	mux.HandleFunc("GET /ui/settings/alerts/browsers/key", server.alertBrowserPushKey)
+	mux.HandleFunc("POST /ui/settings/alerts/browsers", server.addAlertBrowser)
+	mux.HandleFunc("POST /ui/settings/alerts/browsers/remove", server.removeAlertBrowser)
 	mux.HandleFunc("POST /ui/certificates/renew", server.renewCertificate)
 	mux.HandleFunc("POST /ui/certificates/generate", server.generateManualCertificate)
 	mux.HandleFunc("POST /ui/certificates/import", server.importManualCertificate)
@@ -436,6 +452,9 @@ func New(
 	mux.HandleFunc("DELETE /api/v1/cluster/nodes/{node}", server.removeClusterNodeAPI)
 	mux.HandleFunc("DELETE /api/v1/cluster/membership", server.leaveClusterAPI)
 	mux.HandleFunc("DELETE /api/v1/cluster", server.deleteClusterAPI)
+	mux.HandleFunc("POST "+mcpPath, server.mcp)
+	mux.HandleFunc("GET "+mcpPath, mcpMethodNotAllowed)
+	mux.HandleFunc("DELETE "+mcpPath, mcpMethodNotAllowed)
 	mux.HandleFunc("GET /metrics", server.metrics)
 	mux.HandleFunc("GET "+technitiumStatsPath, server.technitiumStats)
 	mux.HandleFunc("GET /api/v1/query-log", server.queryLogAPI)
@@ -750,6 +769,19 @@ func (server *Server) aboutPage(writer http.ResponseWriter, request *http.Reques
 	}
 	if err := pages.AboutPage(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render about page", "error", err)
+	}
+}
+
+// thirdPartyLicense renders the license files of one piece of third-party
+// software, for its row in About's Third-Party Licenses.
+func (server *Server) thirdPartyLicense(writer http.ResponseWriter, request *http.Request) {
+	notice, found := notices.Named(request.URL.Query().Get("name"))
+	if !found {
+		http.NotFound(writer, request)
+		return
+	}
+	if err := pages.ThirdPartyLicenseText(notice).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render third-party license", "error", err)
 	}
 }
 

@@ -62,7 +62,7 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 	view.App.ID, view.App.Name, view.App.Category, view.App.Domains = service.ID, service.Name, service.Category, len(domains)
 	view.Domains = domains[:min(len(domains), insightsDeviceDomains)]
 
-	used, err := reader.ClientNamesMatching(request.Context(), countedWindow.Start, services.Suffixes([]string{service.ID}))
+	used, err := reader.ClientNamesMatching(request.Context(), countedWindow.Start, services.Suffixes([]string{service.ID}), nil)
 	if err != nil {
 		server.logger.Warn("read app devices", "error", err)
 	}

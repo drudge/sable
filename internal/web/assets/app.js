@@ -1593,8 +1593,8 @@
 	  });
 	});
 
-  // Insights alert headers are rows of name and value; the form posts them as
-  // parallel lists, so adding and removing rows needs no bookkeeping.
+  // Alert destination headers are rows of name and value; the form posts them
+  // as parallel lists, so adding and removing rows needs no bookkeeping.
   document.addEventListener("click", (event) => {
     const add = event.target.closest("[data-alert-header-add]");
     if (add) {
@@ -1613,11 +1613,12 @@
     }
   });
 
-  // Each kind of alert shows only its own setup: parts marked
-  // data-alert-for list the kinds they belong to. Pushover always posts to
-  // its own API, so it has no URL to ask for.
+  // Each format shows only its own setup: parts marked data-alert-for list
+  // the formats they belong to. Pushover always posts to its own API, so it
+  // has no URL to ask for. A saved URL keeps its placeholder whatever the
+  // format, since leaving the field blank keeps it.
   document.addEventListener("change", (event) => {
-    if (!event.target.matches?.('#insight-alerts input[name="format"]')) return;
+    if (!event.target.matches?.('[data-alert-destination-form] input[name="format"]')) return;
     const form = event.target.form;
     const kind = event.target.value;
     form?.querySelectorAll("[data-alert-for]").forEach((part) => {
@@ -1625,14 +1626,7 @@
     });
     const url = form?.querySelector('input[name="url"]');
     const placeholder = url?.dataset[`placeholder${kind[0].toUpperCase()}${kind.slice(1)}`];
-    if (placeholder) url.placeholder = placeholder;
-    // A URL belongs to its kind: an ntfy topic is no Slack webhook. Leaving
-    // the saved kind empties the box, and coming back fills it again.
-    if (url && url.dataset.savedKind) {
-      if (kind === url.dataset.savedKind) url.value ||= url.dataset.savedUrl;
-      else if (url.value === url.dataset.savedUrl) url.value = "";
-    }
-    if (kind === "browser") showPushState(form.querySelector("[data-push-panel]"));
+    if (placeholder && !url.hasAttribute("data-saved")) url.placeholder = placeholder;
     // An open preview follows the format.
     if (form?.querySelector("[data-alert-preview-popover]:popover-open")) form.querySelector("[data-alert-preview]")?.click();
   });
@@ -1746,7 +1740,7 @@
         setPushState(panel, Notification.permission === "denied" ? "blocked" : "ready");
         return;
       }
-      const answer = await fetch("/ui/insights/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
+      const answer = await fetch("/ui/settings/alerts/browsers/key", {credentials: "same-origin", headers: {Accept: "application/json"}});
       const {key, error} = await answer.json();
       if (!answer.ok || !key) throw new Error(error || "Sable could not start browser alerts.");
       await navigator.serviceWorker.register("/sw.js", {scope: "/"});
@@ -1774,22 +1768,71 @@
           "This browser's push service is off. Open about:config, set dom.push.connection.enabled to true, restart the browser, then try again." :
           "This browser's push service is off. In Brave, turn on Use Google services for push messaging in Settings, then try again.");
       }
-      panel.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
-      panel.querySelector("[data-push-submit]").click();
+      const form = panel.querySelector("[data-push-form]");
+      form.querySelector("[data-push-subscription]").value = JSON.stringify(subscription);
+      form.requestSubmit();
     } catch (error) {
       setPushState(panel, "ready", error.message || "This browser could not turn on alerts.");
     } finally {
       enable.disabled = false;
     }
   };
-  const alertPushPanel = () => document.querySelector("#insight-alerts [data-push-panel]");
+  const alertPushPanel = () => document.querySelector("#alerts-panel [data-push-panel]");
   document.addEventListener("click", (event) => {
     const enable = event.target.closest("[data-push-enable]");
     if (enable) turnOnPush(enable.closest("[data-push-panel]"));
-    if (event.target.closest('[data-dialog-open="insight-alerts-dialog"]')) showPushState(alertPushPanel());
   });
-  document.body.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
+  // The Alerts panel swaps itself, which htmx reports on the document when
+  // the button that asked went with it.
+  document.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
   showPushState(alertPushPanel());
+
+  // Add Destination and each Edit button load a fresh form into the dialog,
+  // then open it, so the dialog never shows the form it held before and focus
+  // lands on the new form's first field.
+  document.addEventListener("htmx:after:swap", (event) => {
+    const ctx = event.detail?.ctx;
+    const dialog = document.getElementById(ctx?.sourceElement?.dataset?.dialogLoad || "");
+    if (!dialog || !ctx.response || ctx.response.status >= 400) return;
+    showRoutedDialog(dialog, false, ctx.sourceElement);
+  });
+  // Saving a destination swaps the whole Alerts panel, the button that opened
+  // the dialog included. The dialog closes and forgets what was typed, and
+  // focus goes to that button's replacement, which keeps its id.
+  document.addEventListener("htmx:after:swap", (event) => {
+    const ctx = event.detail?.ctx;
+    const form = ctx?.sourceElement;
+    if (!form?.matches?.("[data-alert-destination-form]") || !ctx.response || ctx.response.status >= 400) return;
+    const dialog = form.closest("dialog");
+    const opener = dialog?.sableReturnFocus;
+    if (dialog) dialog.sableReturnFocus = null;
+    form.reset();
+    dialog?.close();
+    document.getElementById(opener?.id || "alert-destination-add")?.focus();
+  });
+  // Every other change on the Alerts panel swaps it too, the control that
+  // made the change included. Focus goes to that control's replacement, which
+  // keeps its id, or to Add Destination when it has none to go back to. A
+  // removal takes its button with it, and focus would otherwise land on the
+  // next Remove button, so it always goes to Add Destination. htmx disables a
+  // form's submit button before this hears of the request, and some browsers
+  // take focus off a disabled button at once, so the button that submitted
+  // the form stands in for the focused control.
+  document.addEventListener("htmx:before:request", (event) => {
+    const ctx = event.detail?.ctx;
+    const source = ctx?.sourceElement;
+    if (!source?.closest?.("#alerts-panel") || source.hasAttribute("data-dialog-load")) return;
+    const removal = source.matches("[data-alert-destination-remove], [data-alert-browser-remove]");
+    const focused = document.activeElement?.closest?.("#alerts-panel") ? document.activeElement.id : "";
+    ctx.sableAlertsFocus = {removal, id: removal ? "alert-destination-add" : focused || ctx.request?.submitter?.id || source.id};
+  });
+  document.addEventListener("htmx:after:swap", (event) => {
+    const focus = event.detail?.ctx?.sableAlertsFocus;
+    if (!focus || (!focus.removal && document.activeElement && document.activeElement !== document.body)) return;
+    const replacement = document.getElementById(focus.id);
+    replacement?.focus();
+    if (!replacement || document.activeElement !== replacement) document.getElementById("alert-destination-add")?.focus();
+  });
 
   const UPDATE_CHECK_RETRY_MS = 2000;
   const MAX_UPDATE_CHECK_RETRIES = 8;
@@ -2671,8 +2714,10 @@
 	const setupDialogTabs = (root) => {
 	  if (!root?.matches?.("[data-dialog-tabs]") || root.dataset.dialogTabsReady === "true") return;
 	  root.dataset.dialogTabsReady = "true";
-	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")];
-	  const panels = [...root.querySelectorAll("[data-dialog-panel]")];
+	  // A panel may hold a tab set of its own; each set takes only its tabs.
+	  const own = (element) => element.closest("[data-dialog-tabs]") === root;
+	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")].filter(own);
+	  const panels = [...root.querySelectorAll("[data-dialog-panel]")].filter(own);
 	  connectTabSet(root, tabs, panels, "dialogTab", "dialogPanel");
 	  const select = (value, focus = false) => {
 		const selected = tabs.find((tab) => tab.dataset.dialogTab === value);
@@ -3039,6 +3084,48 @@
 	  if (total) total.textContent = `${hits.toLocaleString()} hits`;
 	  if (dialog.open && dialog.contains(document.activeElement)) announce(`${visible.toLocaleString()} results shown`);
 	};
+
+	// Insights narrows its Devices list in place. The page URL keeps the search
+	// and filters, so a reload, a range change, and the refresh after a rename
+	// render them back. The URL and the announcement wait for a pause in typing,
+	// since Safari limits how often a page may rewrite its URL.
+	const deviceFilterTimers = new WeakMap();
+	const applyDeviceFilter = (root, changed = false) => {
+	  if (!root) return;
+	  const search = root.querySelector("[data-device-search]")?.value.trim() || "";
+	  const type = root.querySelector("[data-device-type-filter]")?.value || "";
+	  const show = root.querySelector("[data-device-show-filter]")?.value || "";
+	  const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+	  let visible = 0;
+	  root.querySelectorAll("[data-device-row]").forEach((row) => {
+		const matches = terms.every((term) => row.dataset.deviceText.includes(term)) &&
+		  (!type || row.dataset.deviceType === type) &&
+		  (!show || row.dataset.deviceTags.split(" ").includes(show));
+		row.hidden = !matches;
+		// The phone and desktop lists hold the same devices, so count one.
+		if (matches && row.matches("tr")) visible++;
+	  });
+	  root.querySelectorAll("[data-device-results]").forEach((list) => { list.hidden = visible === 0; });
+	  const empty = root.querySelector("[data-device-filter-empty]");
+	  if (empty) empty.hidden = visible !== 0;
+	  const count = root.querySelector("[data-device-count]");
+	  if (count) {
+		const total = Number(count.dataset.deviceCount) || 0;
+		const noun = total === 1 ? "device" : "devices";
+		count.textContent = search || type || show ? `${visible.toLocaleString()} of ${total.toLocaleString()} ${noun}` : `${total.toLocaleString()} ${noun}`;
+	  }
+	  if (!changed) return;
+	  window.clearTimeout(deviceFilterTimers.get(root));
+	  deviceFilterTimers.set(root, window.setTimeout(() => {
+		const url = new URL(window.location.href);
+		for (const [parameter, value] of [["search", search], ["type", type], ["show", show]]) {
+		  if (value) url.searchParams.set(parameter, value);
+		  else url.searchParams.delete(parameter);
+		}
+		window.history.replaceState(window.history.state, "", url);
+		announce(`${visible.toLocaleString()} ${visible === 1 ? "device" : "devices"} shown`);
+	  }, 300));
+	};
 	let dialogLabelSequence = 0;
 	const setupDialogAccessibility = (dialog) => {
 	  if (!dialog || dialog.dataset.dialogA11yReady === "true") return;
@@ -3051,8 +3138,11 @@
 		}
 	  }
 	  dialog.addEventListener("close", () => {
-		const returnFocus = dialog.sableReturnFocus;
+		let returnFocus = dialog.sableReturnFocus;
 		dialog.sableReturnFocus = null;
+		// A change made in the dialog can redraw the page behind it, invoker
+		// and all. A redrawn invoker keeps its id, so focus finds it again.
+		if (returnFocus && !returnFocus.isConnected && returnFocus.id) returnFocus = document.getElementById(returnFocus.id);
 		if (returnFocus?.isConnected && !returnFocus.disabled) returnFocus.focus();
 	  });
 	};
@@ -3147,6 +3237,8 @@
 	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
 	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
 	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
+	  if (root.matches?.("[data-device-filter-root]")) applyDeviceFilter(root);
+	  root.querySelectorAll?.("[data-device-filter-root]").forEach((list) => applyDeviceFilter(list));
 	  if (root.matches?.('input[type="time"][data-styled-time]')) setupStyledTime(root);
 	  root.querySelectorAll?.('input[type="time"][data-styled-time]').forEach(setupStyledTime);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
@@ -3369,10 +3461,70 @@
 	  if (!button) return;
 	  const surface = button.closest(".permission-surface");
 	  if (!surface) return;
-	  const checked = button.dataset.permissionSelect === "all";
+	  // "read" keeps only the choices marked as changing nothing.
+	  const choice = button.dataset.permissionSelect;
 	  surface.querySelectorAll('.permission-checks input[type="checkbox"]:not(:disabled)').forEach((input) => {
-		input.checked = checked;
+		input.checked = choice === "all" || (choice === "read" && input.dataset.readOnly === "true");
 	  });
+	  // Let anything summarizing these choices, such as the MCP wizard's
+	  // grant list, catch up.
+	  surface.querySelector('.permission-checks input[type="checkbox"]')?.dispatchEvent(new Event("change", {bubbles: true}));
+	});
+
+	// With tokens already made, the MCP wizard folds the token form behind
+	// New Token.
+	document.addEventListener("click", (event) => {
+	  const reveal = event.target.closest?.("[data-mcp-new-token] button");
+	  if (!reveal) return;
+	  const section = reveal.closest("#mcp-access-token");
+	  const form = section?.querySelector("[data-mcp-token-form]");
+	  if (!form) return;
+	  reveal.closest("[data-mcp-new-token]").hidden = true;
+	  form.hidden = false;
+	  form.querySelector("input")?.focus();
+	});
+
+	// The MCP setup wizard lists the grants its checked tools need and
+	// compares them with the group it made, offering Update Group when they
+	// differ. The server renders the same list and sentences on open.
+	document.addEventListener("change", (event) => {
+	  if (!event.target.matches?.('input[name="tools"][data-grant]')) return;
+	  const form = event.target.form;
+	  const summary = form?.querySelector("[data-mcp-grants]");
+	  if (!summary) return;
+	  const badges = (grants) => grants.map((grant) => {
+		const badge = document.createElement("span");
+		const code = document.createElement("code");
+		code.textContent = grant;
+		badge.append(code);
+		return badge;
+	  });
+	  const needed = [...new Set([...form.querySelectorAll('input[name="tools"][data-grant]:checked')].map((input) => input.dataset.grant))];
+	  summary.replaceChildren(...badges(needed));
+	  const section = form.querySelector("[data-mcp-group]");
+	  const coverage = section?.querySelector("[data-mcp-grant-coverage]");
+	  if (!coverage) return;
+	  const group = section.dataset.mcpGroup;
+	  const granted = (section.dataset.mcpGroupGrants || "").split(" ").filter(Boolean);
+	  const missing = needed.filter((grant) => !granted.includes(grant));
+	  const extra = granted.filter((grant) => !needed.includes(grant));
+	  let text = `${group} matches these grants.`;
+	  let differ = [];
+	  if (needed.length === 0) text = "Choose at least one tool.";
+	  else if (!group) text = "Create a group with these grants, then make a token that uses it.";
+	  else if (missing.length > 0) [text, differ] = [`${group} lacks these grants:`, missing];
+	  else if (extra.length > 0) [text, differ] = [`${group} also grants these, which the tools do not need:`, extra];
+	  const diff = section.querySelector("[data-mcp-grant-diff]");
+	  if (diff) {
+		diff.replaceChildren(...badges(differ));
+		diff.hidden = differ.length === 0;
+	  }
+	  const line = coverage.querySelector("[data-mcp-grant-coverage-text]") || coverage;
+	  line.textContent = text;
+	  const outOfStep = missing.length > 0 || extra.length > 0;
+	  coverage.toggleAttribute("data-matched", Boolean(group) && needed.length > 0 && !outOfStep);
+	  const update = section.querySelector("[data-mcp-group-update]");
+	  if (update) update.hidden = !(group && needed.length > 0 && outOfStep);
 	});
 
 	document.addEventListener("change", (event) => {
@@ -3594,6 +3746,23 @@
 	  nav.dataset.scrollFadeBottom = String(hasMoreBelow);
 	  hint.dataset.visible = String(hasMoreBelow);
 };
+	// The page the sidebar marks as current stays in sight. A list too tall
+	// for the window scrolls to it, clear of the fades its scroll padding
+	// leaves room for at either edge.
+	const revealActiveNavItem = () => {
+	  const nav = document.querySelector(".nav");
+	  const active = nav?.querySelector(".nav-item.active");
+	  if (!nav || !active) return;
+	  const clearance = parseFloat(getComputedStyle(nav).scrollPaddingTop) || 0;
+	  const view = nav.getBoundingClientRect();
+	  const item = active.getBoundingClientRect();
+	  if (item.bottom > view.bottom - clearance) nav.scrollTop += item.bottom - view.bottom + clearance;
+	  else if (item.top < view.top + clearance) nav.scrollTop -= view.top + clearance - item.top;
+	};
+	const settleSidebarNav = () => {
+	  revealActiveNavItem();
+	  updateSidebarNavScrollHint();
+	};
 	const sidebarNav = document.querySelector(".nav");
 	if (sidebarNav && !document.querySelector(".sidebar-nav-hint")) {
 	  const navWrap = document.createElement("div");
@@ -3609,7 +3778,7 @@
 }
 	sidebarNav?.addEventListener("scroll", updateSidebarNavScrollHint, { passive: true });
 	window.addEventListener("resize", updateSidebarNavScrollHint);
-	updateSidebarNavScrollHint();
+	settleSidebarNav();
 
 	const syncSidebarToggleState = () => {
 	  const mobile = window.matchMedia("(max-width: 767px)").matches;
@@ -3619,7 +3788,7 @@
 	  const main = document.getElementById("main-content");
 	  const mobileToggle = document.querySelector("[data-mobile-header] [data-sidebar-toggle]");
 	  document.documentElement.classList.toggle("sidebar-mobile-open", mobile && mobileOpen);
-	  window.requestAnimationFrame(updateSidebarNavScrollHint);
+	  window.requestAnimationFrame(settleSidebarNav);
 	  // Offscreen navigation must leave the tab order and accessibility tree.
 	  // Keep this in the shared sync path so initial load and resizing agree.
 	  const returnToPage = mobile && !mobileOpen && sidebar?.contains(document.activeElement);
@@ -3724,6 +3893,106 @@
       document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
         button.addEventListener("click", reveal);
       });
+    })();
+
+    // Safari gives pages pull to refresh, but a console added to the Home
+    // Screen opens without it. There the same gesture is drawn here: pulling
+    // down from the top of the page brings a chip down with the finger, and
+    // letting go once it has turned all the way reloads the page.
+    (() => {
+      const standalone = window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+      if (!standalone) return;
+      // The chip travels half as far as the finger, like the page's own
+      // rubber band, and reloads once it has come this far down.
+      const trigger = 72;
+      const maximum = 112;
+      const restingOffset = -48;
+      let pull = null;
+      const indicator = () => document.querySelector("[data-pull-refresh]");
+      // The chip rests tucked under the bars stuck to the top of the page and
+      // slides out from beneath them, following them as the page bounces.
+      const anchor = () => Math.max(0, ...Array.from(
+        document.querySelectorAll("[data-mobile-header], .replica-read-only-banner"),
+        (bar) => bar.getBoundingClientRect().bottom,
+      ));
+      const place = (chip, travel) => {
+        const progress = Math.min(1, travel / trigger);
+        chip.style.opacity = String(progress);
+        chip.style.transform = `translate3d(0, ${anchor() + restingOffset + travel}px, 0) rotate(${progress * 270}deg)`;
+        chip.classList.toggle("is-ready", travel >= trigger);
+      };
+      const settle = (chip) => {
+        chip.classList.remove("is-ready");
+        chip.classList.add("is-settling");
+        place(chip, 0);
+        window.setTimeout(() => {
+          if (pull) return;
+          chip.classList.remove("is-active", "is-settling");
+          chip.style.removeProperty("opacity");
+          chip.style.removeProperty("transform");
+        }, 180);
+      };
+      // A finger that starts inside a list scrolled away from its own top is
+      // scrolling that list back up, not asking for a reload.
+      const insideScrolledArea = (target) => {
+        for (let element = target instanceof Element ? target : null; element && element !== document.body; element = element.parentElement) {
+          if (element.scrollTop > 0) return true;
+        }
+        return false;
+      };
+      const blocked = () => document.documentElement.classList.contains("sidebar-mobile-open") ||
+        document.querySelector("dialog[open]") !== null;
+      document.addEventListener("touchstart", (event) => {
+        pull = null;
+        const chip = indicator();
+        if (!chip || chip.classList.contains("is-refreshing") || event.touches.length !== 1) return;
+        if (window.scrollY > 0 || blocked() || insideScrolledArea(event.target)) return;
+        const touch = event.touches[0];
+        pull = { chip, startX: touch.clientX, startY: touch.clientY, travel: 0, decided: false };
+      }, { passive: true });
+      document.addEventListener("touchmove", (event) => {
+        if (!pull) return;
+        const touch = event.touches[0];
+        const dx = touch.clientX - pull.startX;
+        const dy = touch.clientY - pull.startY;
+        // The first real move decides the gesture: sideways swipes and upward
+        // scrolls are left alone for the rest of the touch.
+        if (!pull.decided) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          if (dy <= 0 || Math.abs(dx) > dy) { pull = null; return; }
+          pull.decided = true;
+          pull.chip.classList.remove("is-settling");
+          pull.chip.classList.add("is-active");
+        }
+        if (window.scrollY > 0) {
+          const { chip } = pull;
+          pull = null;
+          settle(chip);
+          return;
+        }
+        pull.travel = Math.min(maximum, Math.max(0, dy / 2));
+        place(pull.chip, pull.travel);
+      }, { passive: true });
+      const release = () => {
+        if (!pull) return;
+        const { chip, travel, decided } = pull;
+        pull = null;
+        if (!decided) return;
+        if (travel < trigger) { settle(chip); return; }
+        chip.classList.remove("is-ready");
+        chip.classList.add("is-settling", "is-refreshing");
+        chip.style.opacity = "1";
+        chip.style.transform = `translate3d(0, ${anchor() + restingOffset + trigger}px, 0) rotate(270deg)`;
+        // Let the spinner show before the page goes away.
+        window.setTimeout(() => window.location.reload(), 150);
+      };
+      document.addEventListener("touchend", release, { passive: true });
+      document.addEventListener("touchcancel", () => {
+        if (!pull) return;
+        const { chip, decided } = pull;
+        pull = null;
+        if (decided) settle(chip);
+      }, { passive: true });
     })();
 
 	const routedDialogPath = (value) => new URL(value, window.location.origin).pathname;
@@ -4522,6 +4791,12 @@
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
 		return;
 	  }
+	  // A wizard's Next and Back move between the steps of its own dialog.
+	  const dialogStep = event.target.closest("[data-dialog-step]");
+	  if (dialogStep) {
+		dialogStep.closest("[data-dialog-tabs]")?.sableSelectDialogTab?.(dialogStep.dataset.dialogStep, true);
+		return;
+	  }
 	  const dialogSwitch = event.target.closest("[data-dialog-switch]");
 	  if (dialogSwitch) {
 		const current = dialogSwitch.closest("dialog");
@@ -5039,6 +5314,10 @@
 		updateTopStatsDialog(event.target.closest("[data-top-stats-dialog]"));
 		return;
 	  }
+	  if (event.target.matches("[data-device-search]")) {
+		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+		return;
+	  }
 	  if (event.target.matches("[data-zone-import-text]")) {
 		event.target.closest("form").querySelector("[data-zone-import-status]").textContent = "";
 		updateZoneImport(event.target.closest("form"));
@@ -5210,6 +5489,10 @@
 		event.target.closest("[data-zone-root]")?.querySelector("[data-record-search]")?.dispatchEvent(new Event("input", {bubbles: true}));
 		return;
 	  }
+	  if (event.target.matches("[data-device-type-filter], [data-device-show-filter]")) {
+		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+		return;
+	  }
 	  if (event.target.matches("[data-domain-import]") && event.target.files?.length) {
 		event.target.form?.requestSubmit();
 	  }
@@ -5227,11 +5510,27 @@
 		}
 		return;
 	  }
-	  const action = event.target.closest(".zone-import-menu button");
+	  const clearDevices = event.target.closest("[data-device-filter-clear]");
+	  if (clearDevices) {
+		const root = clearDevices.closest("[data-device-filter-root]");
+		root?.querySelectorAll("[data-device-type-filter], [data-device-show-filter]").forEach((select) => {
+		  select.value = "";
+		  select.sableSyncStyledSelect?.();
+		});
+		const search = root?.querySelector("[data-device-search]");
+		if (search) {
+		  search.value = "";
+		  syncSearchClear(search);
+		  search.focus();
+		}
+		applyDeviceFilter(root, true);
+		return;
+	  }
+	  const action = event.target.closest(".zone-import-menu button, .insight-hide-menu button");
 	  if (action && !action.disabled) action.closest("details").removeAttribute("open");
 	});
 
-	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open]";
+	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open], .insight-hide-menu[open]";
 	document.addEventListener("pointerdown", (event) => {
 	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");
@@ -5239,10 +5538,23 @@
 	});
 	document.addEventListener("keydown", (event) => {
 	  if (event.key !== "Escape") return;
-	  document.querySelectorAll(openMenus).forEach((menu) => {
+	  const menus = document.querySelectorAll(openMenus);
+	  // Escape closes only the menu, so a menu in a drawer keeps the drawer.
+	  if (menus.length > 0) event.preventDefault();
+	  menus.forEach((menu) => {
 		menu.removeAttribute("open");
 		menu.querySelector("summary")?.focus();
 	  });
+	});
+	// A finding's hide menu opens upward when the drawer has no room below it.
+	// It is opened here, not by the browser, so it is placed before it is drawn.
+	document.addEventListener("click", (event) => {
+	  const summary = event.target.closest?.(".insight-hide-menu > summary");
+	  if (!summary || event.defaultPrevented) return;
+	  event.preventDefault();
+	  const menu = summary.parentElement;
+	  menu.open = !menu.open;
+	  if (menu.open) positionAnchoredPopover(menu, summary, menu.querySelector(":scope > form"));
 	});
 
 	document.body.addEventListener("change", (event) => {

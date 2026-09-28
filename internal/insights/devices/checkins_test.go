@@ -56,7 +56,7 @@ func TestSteadyScheduleNeedsTheNight(t *testing.T) {
 	t.Parallel()
 	// Every five minutes, but only for a two-hour afternoon.
 	times := every(testNow.Add(-3*time.Hour), 5*time.Minute, 24, func(int) time.Duration { return 0 })
-	if plan, steady := steadySchedule(times); steady {
+	if plan, steady := steadySchedule(times, DefaultLimits()); steady {
 		t.Fatalf("schedule = %+v for a busy afternoon", plan)
 	}
 }

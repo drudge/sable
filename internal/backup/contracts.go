@@ -34,6 +34,7 @@ type Schedule struct {
 	NextRun           time.Time
 	LastSuccess       time.Time
 	LastError         string
+	LastErrorAt       time.Time
 }
 
 // ScheduleUpdate is an operator's replacement local-backup policy. A blank

@@ -41,6 +41,7 @@ var typeLabels = map[string]string{
 	"camera": "Camera", "doorbell": "Doorbell", "game-console": "Game console", "printer": "Printer",
 	"storage": "Network storage", "network": "Network equipment", "thermostat": "Thermostat",
 	"lighting": "Smart lighting", "smart-plug": "Smart plug", "smart-home": "Smart home device", "watch": "Watch",
+	"ups": "UPS",
 }
 
 // TypeLabel names a device type for people.
@@ -70,7 +71,7 @@ var makerClues = map[string][]clue{
 	"Sonos": {{"speaker", 4}}, "Roku": {{"streaming-player", 4}}, "Google Nest": {{"smart-home", 3}},
 	"ecobee": {{"thermostat", 4}}, "Philips Hue": {{"lighting", 4}}, "Sony PlayStation": {{"game-console", 4}},
 	"Nintendo": {{"game-console", 4}}, "Raspberry Pi": {{"server", 2}, {"computer", 1}},
-	"Espressif": {{"smart-plug", 2}, {"smart-home", 2}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
+	"Espressif": {{"smart-home", 3}, {"smart-plug", 1}}, "Tuya": {{"smart-plug", 2}, {"smart-home", 2}},
 	"Brother": {{"printer", 3}}, "Epson": {{"printer", 3}}, "Canon": {{"printer", 2}}, "HP": {{"printer", 1}, {"computer", 1}},
 	"Synology": {{"storage", 4}}, "QNAP": {{"storage", 4}}, "Ubiquiti": {{"network", 3}}, "Cisco": {{"network", 2}},
 	"Netgear": {{"network", 2}}, "eero": {{"network", 3}}, "TP-Link": {{"network", 1}, {"smart-plug", 1}},
@@ -80,18 +81,29 @@ var makerClues = map[string][]clue{
 	"Microsoft": {{"computer", 2}}, "Realtek": {{"computer", 1}}, "AzureWave": {{"computer", 1}},
 	"Foxconn": {{"computer", 1}}, "Lite-On": {{"computer", 1}}, "Garmin": {{"watch", 3}},
 	"iRobot": {{"smart-home", 4}}, "Chamberlain": {{"smart-home", 4}}, "Belkin": {{"smart-plug", 2}},
+	"APC": {{"ups", 4}}, "CyberPower": {{"ups", 4}},
 }
+
+// moduleMakers build the radio modules inside single-purpose hardware. Their
+// name alone says little about the device, but a device built on one runs no
+// browser or desktop app, so the services it talks to are its own: a Quectel
+// module reaching Bambu Lab is the printer, not a laptop running its slicer.
+var moduleMakers = map[string]bool{"Espressif": true, "Quectel": true, "Telit": true, "AMPAK": true, "Tuya": true}
+
+// moduleServiceWeight is what a module maker adds to each type the device's
+// services point to.
+const moduleServiceWeight = 2
 
 // nameClues are words in a device's name that say what it is. They are
 // matched against the words of the name, so "dock-camera-02" matches
 // "camera" and "scanner" does not match "can".
 var nameClues = map[string][]clue{
 	"iphone": {{"phone", 5}}, "android": {{"phone", 3}}, "galaxy": {{"phone", 3}}, "pixel": {{"phone", 3}},
-	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}},
+	"phone": {{"phone", 4}}, "ipad": {{"tablet", 5}}, "tablet": {{"tablet", 4}}, "kindle": {{"tablet", 3}}, "remarkable": {{"tablet", 5}},
 	"macbook": {{"computer", 5}}, "laptop": {{"computer", 5}}, "thinkpad": {{"computer", 5}}, "notebook": {{"computer", 4}},
 	"imac": {{"computer", 5}}, "desktop": {{"computer", 5}}, "workstation": {{"computer", 5}}, "pc": {{"computer", 3}},
 	"surface": {{"computer", 3}}, "mbp": {{"computer", 4}}, "server": {{"server", 5}}, "nas": {{"storage", 5}},
-	"diskstation": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
+	"diskstation": {{"storage", 5}}, "unas": {{"storage", 5}}, "backup": {{"storage", 2}, {"server", 1}}, "printer": {{"printer", 5}},
 	"laserjet": {{"printer", 5}}, "officejet": {{"printer", 5}}, "deskjet": {{"printer", 5}}, "press": {{"printer", 2}},
 	"camera": {{"camera", 5}}, "cam": {{"camera", 4}}, "ipcam": {{"camera", 5}}, "doorbell": {{"doorbell", 6}},
 	"thermostat": {{"thermostat", 6}}, "tv": {{"tv", 5}}, "television": {{"tv", 5}}, "bravia": {{"tv", 5}},
@@ -102,7 +114,7 @@ var nameClues = map[string][]clue{
 	"ps4": {{"game-console", 5}}, "ps5": {{"game-console", 5}}, "nintendo": {{"game-console", 5}}, "watch": {{"watch", 4}},
 	"plug": {{"smart-plug", 4}}, "outlet": {{"smart-plug", 4}}, "bulb": {{"lighting", 4}}, "lamp": {{"lighting", 3}},
 	"hue": {{"lighting", 3}}, "router": {{"network", 5}}, "gateway": {{"network", 4}}, "ap": {{"network", 2}},
-	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}},
+	"switch": {{"network", 2}}, "scanner": {{"smart-home", 1}}, "ups": {{"ups", 5}},
 }
 
 // serviceClues are the apps whose use says what a device is. Apps anyone
@@ -113,12 +125,36 @@ var serviceClues = map[string][]clue{
 	"eufy": {{"camera", 3}}, "simplisafe": {{"camera", 2}}, "philips-hue": {{"lighting", 3}}, "sonos": {{"speaker", 3}},
 	"roku": {{"streaming-player", 3}}, "fire-tv": {{"streaming-player", 3}}, "chromecast": {{"streaming-player", 3}},
 	"lg-webos": {{"tv", 4}}, "vizio": {{"tv", 4}}, "xbox": {{"game-console", 2}}, "playstation": {{"game-console", 2}},
-	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}},
+	"nintendo": {{"game-console", 2}}, "hp-printing": {{"printer", 3}}, "epson": {{"printer", 3}}, "brother": {{"printer", 3}}, "bambu-lab": {{"printer", 3}}, "remarkable": {{"tablet", 3}},
 	"synology": {{"storage", 3}}, "qnap": {{"storage", 3}}, "windows-update": {{"computer", 3}}, "android": {{"phone", 2}},
 	"alexa": {{"smart-speaker", 2}}, "ecobee": {{"thermostat", 3}}, "tuya": {{"smart-home", 2}},
 	"tp-link-kasa": {{"smart-plug", 2}}, "smartthings": {{"smart-home", 2}}, "myq": {{"smart-home", 3}},
-	"roomba": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
+	"roomba": {{"smart-home", 3}}, "trmnl": {{"smart-home", 3}}, "tidbyt": {{"smart-home", 3}}, "generac": {{"smart-home", 3}}, "raspberry-pi": {{"server", 1}, {"computer", 1}},
 	"homebrew": {{"computer", 3}}, "vscode": {{"computer", 3}}, "steam": {{"computer", 2}},
+	"mqtt": {{"smart-home", 3}},
+}
+
+// ClueLabels are the starts of host labels that are evidence of a device type
+// whoever runs the host. Smart home hardware hears from its maker's cloud
+// through an MQTT broker, such as mqtt.example.com or mqtt2.example.com, which
+// people and their apps rarely talk to directly.
+var ClueLabels = []string{"mqtt"}
+
+// mqttService stands for any MQTT broker. It is not in the service catalog,
+// because a broker says nothing about which company runs it.
+var mqttService = services.Service{ID: "mqtt", Name: "an MQTT server"}
+
+// mqttName reports a name with a host label that starts with "mqtt". The
+// registered domain itself does not count, so a site about MQTT, such as
+// mqtt.org, is not a broker.
+func mqttName(name string) bool {
+	labels := strings.Split(strings.TrimSuffix(strings.ToLower(name), "."), ".")
+	for _, label := range labels[:max(len(labels)-2, 0)] {
+		if strings.HasPrefix(label, "mqtt") {
+			return true
+		}
+	}
+	return false
 }
 
 // ServiceClueIDs lists the services whose use is evidence of a device type,
@@ -147,6 +183,14 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: kind, Confidence: ConfidenceSet, Reasons: []insights.Reason{reason},
 			Detected: Classify(detected, used).Type,
+		}
+	}
+	// What the UniFi controller says its own hardware is, such as a switch or
+	// a UNAS, is a fact, not a guess.
+	if label := TypeLabel(device.UniFiType); label != "" {
+		return Guess{
+			Type: device.UniFiType, Confidence: ConfidenceHigh, Detected: device.UniFiType,
+			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
 		}
 	}
 	type evidence struct {
@@ -186,9 +230,21 @@ func Classify(device Device, used []services.Service) Guess {
 			}
 		}
 	}
+	moduleBacked := map[string]bool{}
 	for _, service := range used {
-		if clues, found := serviceClues[service.ID]; found {
-			add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		clues, found := serviceClues[service.ID]
+		if !found {
+			continue
+		}
+		add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		if !moduleMakers[device.Vendor] {
+			continue
+		}
+		for _, pointer := range clues {
+			if !moduleBacked[pointer.kind] {
+				moduleBacked[pointer.kind] = true
+				add("maker", []clue{{pointer.kind, moduleServiceWeight}}, insights.Reason{Text: "Made by " + device.Vendor})
+			}
 		}
 	}
 
@@ -262,6 +318,10 @@ func Identify(list []Device, names map[string][]string) {
 					seen[service.ID] = true
 					used = append(used, service)
 				}
+				if mqttName(name) && !seen[mqttService.ID] {
+					seen[mqttService.ID] = true
+					used = append(used, mqttService)
+				}
 			}
 		}
 		slices.SortFunc(used, func(left, right services.Service) int { return cmp.Compare(left.ID, right.ID) })
@@ -277,9 +337,9 @@ func GuessText(guess Guess) string {
 	case ConfidenceSet, ConfidenceHigh:
 		return label
 	case ConfidenceMedium:
-		return "Probably " + article(label) + " " + inSentence(label)
+		return "Probably " + withArticle(label)
 	default:
-		return "Maybe " + article(label) + " " + inSentence(label)
+		return "Maybe " + withArticle(label)
 	}
 }
 
@@ -290,7 +350,7 @@ func describeDevice(device Device) string {
 	case device.Guess.Type != "" && device.Guess.Confidence != ConfidenceLow:
 		text := GuessText(device.Guess)
 		if device.Guess.Confidence == ConfidenceSet || device.Guess.Confidence == ConfidenceHigh {
-			text = article(text) + " " + inSentence(text)
+			text = withArticle(text)
 			text = strings.ToUpper(text[:1]) + text[1:]
 		}
 		if device.Vendor != "" {
@@ -313,7 +373,24 @@ func inSentence(label string) string {
 	return strings.ToLower(label)
 }
 
+// massLabels are the types that read as a mass noun, which takes no article:
+// "probably network equipment", not "a network equipment".
+var massLabels = map[string]bool{"Network equipment": true, "Network storage": true, "Smart lighting": true}
+
+// withArticle sets a type for the middle of a sentence with its article: "a
+// doorbell", "an iPad", or "network storage".
+func withArticle(label string) string {
+	if massLabels[label] {
+		return inSentence(label)
+	}
+	return article(label) + " " + inSentence(label)
+}
+
 func article(word string) string {
+	// An acronym is read letter by letter, and U reads "you".
+	if word == strings.ToUpper(word) && strings.HasPrefix(word, "U") {
+		return "a"
+	}
 	if word != "" && strings.ContainsRune("AEIOUaeiou", rune(word[0])) {
 		return "an"
 	}

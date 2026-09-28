@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -40,14 +41,47 @@ type zoneRefreshState struct {
 	serial      uint32
 	nextAttempt time.Time
 	expiresAt   time.Time
+	// failures counts the refreshes from the primaries that have failed in a
+	// row, the first of them at failingSince, and lastError is the latest
+	// one's error. A refresh that works starts the state afresh.
+	failures     int
+	failingSince time.Time
+	lastError    string
+}
+
+// failed counts one more refresh that did not work.
+func (state *zoneRefreshState) failed(now time.Time, err error) {
+	if state.failures == 0 {
+		state.failingSince = now
+	}
+	state.failures++
+	state.lastError = err.Error()
+}
+
+// zoneRefreshStatus is how refreshing one managed zone from its primaries is
+// going, as alerts see it.
+type zoneRefreshStatus struct {
+	Zone string
+	// Failures counts the refreshes that failed in a row, the first of them at
+	// FailingSince, and LastError is the latest one's error.
+	Failures     int
+	FailingSince time.Time
+	LastError    string
+	// ExpiresAt is when the zone stops answering unless a refresh works. It is
+	// zero for a zone that has never transferred.
+	ExpiresAt time.Time
 }
 
 type zoneRefresher struct {
 	configuration zoneRefreshConfiguration
 	dns           zoneRefreshDNS
 	logger        *slog.Logger
-	states        map[string]zoneRefreshState
-	lastNotify    map[string]time.Time
+	// mu lets Status read states from another goroutine. Only the refresher's
+	// own goroutine changes states, always through track and untrack, which
+	// take mu; its own reads need no lock.
+	mu         sync.Mutex
+	states     map[string]zoneRefreshState
+	lastNotify map[string]time.Time
 }
 
 func newZoneRefresher(configuration zoneRefreshConfiguration, dnsService zoneRefreshDNS, logger *slog.Logger) *zoneRefresher {
@@ -93,7 +127,7 @@ func (refresher *zoneRefresher) handleNotification(ctx context.Context, notifica
 		return
 	}
 	state.nextAttempt = now
-	refresher.states[notification.Zone] = state
+	refresher.track(notification.Zone, state)
 	refresher.logger.Debug("accepted zone notification", "zone", notification.Zone, "source", notification.Source)
 	refresher.step(ctx, now)
 }
@@ -111,7 +145,7 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		managed[current.Name] = struct{}{}
 		if current.Disabled {
 			refresher.dns.SetZoneExpired(current.Name, false)
-			delete(refresher.states, current.Name)
+			refresher.untrack(current.Name)
 			continue
 		}
 		if zone.AwaitingFirstTransfer(current) {
@@ -128,7 +162,7 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 			state = zoneRefreshState{
 				serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
 			}
-			refresher.states[current.Name] = state
+			refresher.track(current.Name, state)
 			refresher.dns.SetZoneExpired(current.Name, false)
 			continue
 		}
@@ -147,7 +181,8 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		}
 		if refreshErr != nil {
 			state.nextAttempt = now.Add(timers.retry)
-			refresher.states[current.Name] = state
+			state.failed(now, refreshErr)
+			refresher.track(current.Name, state)
 			if !now.Before(state.expiresAt) {
 				refresher.dns.SetZoneExpired(current.Name, true)
 			}
@@ -165,7 +200,7 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		state = zoneRefreshState{
 			serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
 		}
-		refresher.states[current.Name] = state
+		refresher.track(current.Name, state)
 		refresher.dns.SetZoneExpired(current.Name, false)
 		refresher.logger.Debug("managed zone refreshed", "zone", current.Name, "serial", soa.Serial, "changed", changed, "next_refresh", state.nextAttempt)
 	}
@@ -174,9 +209,37 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 			continue
 		}
 		refresher.dns.SetZoneExpired(name, false)
-		delete(refresher.states, name)
+		refresher.untrack(name)
 		delete(refresher.lastNotify, name)
 	}
+}
+
+// Status reports how refreshing each managed zone is going, in zone order. It
+// is safe to call while the refresher runs.
+func (refresher *zoneRefresher) Status() []zoneRefreshStatus {
+	refresher.mu.Lock()
+	defer refresher.mu.Unlock()
+	statuses := make([]zoneRefreshStatus, 0, len(refresher.states))
+	for name, state := range refresher.states {
+		statuses = append(statuses, zoneRefreshStatus{
+			Zone: name, Failures: state.failures, FailingSince: state.failingSince,
+			LastError: state.lastError, ExpiresAt: state.expiresAt,
+		})
+	}
+	slices.SortFunc(statuses, func(left, right zoneRefreshStatus) int { return strings.Compare(left.Zone, right.Zone) })
+	return statuses
+}
+
+func (refresher *zoneRefresher) track(name string, state zoneRefreshState) {
+	refresher.mu.Lock()
+	refresher.states[name] = state
+	refresher.mu.Unlock()
+}
+
+func (refresher *zoneRefresher) untrack(name string) {
+	refresher.mu.Lock()
+	delete(refresher.states, name)
+	refresher.mu.Unlock()
 }
 
 // fetchFirstTransfer pulls the initial content of a zone a catalog provisioned.
@@ -193,14 +256,21 @@ func (refresher *zoneRefresher) fetchFirstTransfer(ctx context.Context, member z
 		err = refresher.storeRecords(ctx, member.Name, records)
 	}
 	if err != nil {
-		refresher.states[member.Name] = zoneRefreshState{nextAttempt: now.Add(firstTransferRetry)}
+		// Only the run of failures carries over: a zone awaiting its first
+		// transfer has no serial or expiry of its own yet.
+		previous := refresher.states[member.Name]
+		state := zoneRefreshState{
+			nextAttempt: now.Add(firstTransferRetry), failures: previous.failures, failingSince: previous.failingSince,
+		}
+		state.failed(now, err)
+		refresher.track(member.Name, state)
 		refresher.logger.Warn("catalog member first transfer failed",
 			"zone", member.Name, "catalog", member.CatalogZone, "retry_at", now.Add(firstTransferRetry), "error", err)
 		return
 	}
 	// The zone now carries its own SOA, so the next tick schedules it from the
 	// timers the primary published.
-	delete(refresher.states, member.Name)
+	refresher.untrack(member.Name)
 	refresher.logger.Info("catalog member transferred", "zone", member.Name, "catalog", member.CatalogZone)
 }
 

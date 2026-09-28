@@ -119,13 +119,15 @@ func TestSendPostsAnEncryptedSignedPushAndSaysWhenItIsGone(t *testing.T) {
 		P256DH:   base64.RawURLEncoding.EncodeToString(browser.PublicKey().Bytes()),
 		Auth:     base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef")),
 	}
-	if err := sender.Send(context.Background(), subscription, []byte(`{"title":"hi"}`), time.Hour); err != nil {
+	// Random ciphertext can contain a short word by chance, but never this.
+	const marker = "plaintext-marker-that-must-never-reach-the-wire"
+	if err := sender.Send(context.Background(), subscription, []byte(`{"title":"`+marker+`"}`), time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if seen.Header.Get("Content-Encoding") != "aes128gcm" || seen.Header.Get("TTL") != "3600" || !strings.HasPrefix(seen.Header.Get("Authorization"), "vapid t=") {
 		t.Fatalf("headers = %v", seen.Header)
 	}
-	if bytes.Contains(body, []byte("hi")) || len(body) < 86 {
+	if bytes.Contains(body, []byte(marker)) || len(body) < 86 {
 		t.Fatalf("body is not an encrypted record: %q", body)
 	}
 	gone = true

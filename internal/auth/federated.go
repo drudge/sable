@@ -80,6 +80,9 @@ func (service *Service) FederatedLogin(
 	key := "federated\x00" + clientIP
 	now := service.now()
 	if !service.limiter.allow(key, now) {
+		if service.limiter.refuse(key, now) {
+			service.audit(ctx, nil, ActionLoginLocked, clientIP, userAgent, "too many single sign-on attempts")
+		}
 		return Credentials{}, ErrRateLimited
 	}
 
@@ -118,7 +121,7 @@ func (service *Service) FederatedLogin(
 		return Credentials{}, err
 	}
 	if len(grants) == 0 {
-		service.audit(ctx, &user.ID, "auth.federated.denied", clientIP, userAgent,
+		service.audit(ctx, &user.ID, ActionFederatedDenied, clientIP, userAgent,
 			"account has no role granting console access")
 		return Credentials{}, ErrForbidden
 	}
@@ -188,7 +191,7 @@ func (service *Service) resolveFederatedUser(
 		if !user.LoginAllowed {
 			// LoginAllowed is false for a disabled account as well as one with
 			// no console role. Either way it is not a sign-in.
-			service.audit(ctx, &user.ID, "auth.federated.denied", clientIP, userAgent, "account cannot sign in")
+			service.audit(ctx, &user.ID, ActionFederatedDenied, clientIP, userAgent, "account cannot sign in")
 			return User{}, ErrForbidden
 		}
 		return user, nil
@@ -216,20 +219,20 @@ func (service *Service) resolveFederatedUser(
 	}
 
 	if !policy.Provision {
-		service.audit(ctx, nil, "auth.federated.denied", clientIP, userAgent,
+		service.audit(ctx, nil, ActionFederatedDenied, clientIP, userAgent,
 			fmt.Sprintf("%s subject %s has no linked account and provisioning is off", policy.Provider, identity.Subject))
 		return User{}, ErrNoFederatedAccount
 	}
 	if len(policy.GrantedRoles) == 0 {
 		// Creating an account with no roles produces something that cannot
 		// sign in and cannot be told apart from a mapping mistake.
-		service.audit(ctx, nil, "auth.federated.denied", clientIP, userAgent,
+		service.audit(ctx, nil, ActionFederatedDenied, clientIP, userAgent,
 			fmt.Sprintf("%s subject %s maps to no role", policy.Provider, identity.Subject))
 		return User{}, ErrForbidden
 	}
 	username, err := service.availableFederatedUsername(ctx, identity)
 	if err != nil {
-		service.audit(ctx, nil, "auth.federated.denied", clientIP, userAgent, err.Error())
+		service.audit(ctx, nil, ActionFederatedDenied, clientIP, userAgent, err.Error())
 		return User{}, err
 	}
 	created, err := service.store.CreateFederatedUser(

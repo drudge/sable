@@ -121,6 +121,7 @@ type Config struct {
 	Blocking     Blocking     `toml:"blocking"`
 	Clients      []Client     `toml:"clients"`
 	Insights     Insights     `toml:"insights"`
+	Alerts       Alerts       `toml:"alerts"`
 	QueryLog     QueryLog     `toml:"query_log"`
 	ServerLog    ServerLog    `toml:"server_log"`
 	Statistics   Statistics   `toml:"statistics"`
@@ -129,15 +130,69 @@ type Config struct {
 	DynamicDNS   DynamicDNS   `toml:"dynamic_dns"`
 	UniFi        UniFi        `toml:"unifi"`
 	OIDC         OIDC         `toml:"oidc"`
+	MCP          MCP          `toml:"mcp"`
 	Security     Security     `toml:"security"`
 	Cluster      Cluster      `toml:"cluster"`
 	Updates      Updates      `toml:"updates"`
 	Reload       Reload       `toml:"config"`
 }
 
+// MCP controls the Model Context Protocol server through which AI
+// assistants read and change DNS with an API token. It stays off until an
+// operator sets it up, so no existing token gains a new use on upgrade.
+// Configured records that it was set up, so pausing it keeps the card's
+// Resume button instead of returning to setup.
+type MCP struct {
+	Configured bool `toml:"configured"`
+	Enabled    bool `toml:"enabled"`
+	// Tools names the tools assistants are offered. The everyday tools are
+	// on by default; the ones that reach further are off until an operator
+	// adds them. A token still needs each tool's grant.
+	Tools []string `toml:"tools"`
+	// Group names the group the setup wizard made for these tools, so the
+	// wizard can show it again instead of offering to make another.
+	Group string `toml:"group,omitempty"`
+}
+
+// MCPTools are the tools an operator can offer, in the order the console
+// lists them.
+var MCPTools = []string{
+	"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record", "create_zone", "delete_zone",
+	"check_domain", "allow_domain", "block_domain", "remove_domain_rule",
+	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
+	"lookup", "purge_cache", "list_findings", "search_queries",
+}
+
+// DefaultMCPTools are the tools offered until an operator chooses: records,
+// allow and block rules, lookups, and the cache. Creating and deleting
+// zones, block lists, Insights, and the query log wait to be added.
+func DefaultMCPTools() []string {
+	return []string{
+		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
+		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_block_lists",
+		"lookup", "purge_cache", "list_findings",
+	}
+}
+
+func (settings MCP) validate() []error {
+	var result []error
+	for _, tool := range settings.Tools {
+		if !slices.Contains(MCPTools, tool) {
+			result = append(result, fmt.Errorf("mcp.tools: unknown tool %q", tool))
+		}
+	}
+	return result
+}
+
 // Updates holds this node's release channel. It is not replicated to peers.
 type Updates struct {
 	CheckOnLogin bool `toml:"check_on_login"`
+	// CheckSchedule is how often the lead looks for a release on its own while
+	// CheckOnLogin is on: hourly, daily, or weekly. Daily and weekly checks run
+	// at CheckAt, HH:MM in this node's local time, and weekly ones on CheckDay.
+	CheckSchedule string `toml:"check_schedule"`
+	CheckAt       string `toml:"check_at"`
+	CheckDay      string `toml:"check_day"`
 	// RestartManaged opts externally supervised deployments into rolling restarts.
 	RestartManaged bool `toml:"restart_managed"`
 	// PreRelease includes release candidates when resolving the newest
@@ -469,7 +524,9 @@ type Reload struct {
 
 func Defaults() Config {
 	return Config{
-		Updates: Updates{CheckOnLogin: true},
+		Updates: Updates{
+			CheckOnLogin: true, CheckSchedule: UpdateCheckHourly, CheckAt: defaultUpdateCheckAt, CheckDay: defaultUpdateCheckDay,
+		},
 		Server: Server{
 			HTTPListen:      defaultHTTPListen,
 			DNSListen:       []string{defaultDNSListen},
@@ -507,6 +564,13 @@ func Defaults() Config {
 			Enabled: true, UpdateInterval: Duration{Duration: defaultBlockListUpdate},
 			ResponseType: "nxdomain", ResponseTTL: defaultBlockingTTL, AllowTXTReport: true,
 		},
+		Alerts: Alerts{
+			Send: AlertSwitches{
+				Insights: true, Cluster: true, Updates: true, Integrations: true,
+				Backups: AlertBackupsFailures, Server: true,
+			},
+			SignIns: AlertSignIns{After: defaultAlertSignInsAfter, Within: Duration{Duration: defaultAlertSignInsWithin}},
+		},
 		QueryLog: QueryLog{
 			Enabled:       true,
 			BufferSize:    defaultQueryLogBuffer,
@@ -537,6 +601,7 @@ func Defaults() Config {
 				RenewBefore: Duration{Duration: defaultACMERenewBefore},
 			},
 		},
+		MCP: MCP{Tools: DefaultMCPTools()},
 		DynamicDNS: DynamicDNS{
 			Interval: Duration{Duration: defaultDynamicDNSInterval},
 			IPv4URL:  defaultIPv4DiscoveryURL, IPv6URL: defaultIPv6DiscoveryURL,
@@ -558,6 +623,7 @@ func Defaults() Config {
 			Watch:    true,
 			Debounce: Duration{Duration: defaultReloadDebounce},
 		},
+		Insights: Insights{Findings: DefaultInsightFindings()},
 	}
 }
 
@@ -592,7 +658,7 @@ func Decode(reader io.Reader) (Config, error) {
 func (configuration Config) Validate() error {
 	var validationErrors []error
 	validationErrors = append(validationErrors, validateClients(configuration.Clients))
-	validationErrors = append(validationErrors, validateInsights(configuration.Insights))
+	validationErrors = append(validationErrors, validateAlerts(configuration.Alerts))
 	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
 	if configuration.Server.HTTPSListen != "" {
 		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
@@ -797,6 +863,7 @@ func (configuration Config) Validate() error {
 	if configuration.Backup.RetentionCount < 1 || configuration.Backup.RetentionCount > 1000 {
 		validationErrors = append(validationErrors, errors.New("backup.retention_count must be between 1 and 1000"))
 	}
+	validationErrors = append(validationErrors, configuration.Updates.validate()...)
 	for index, address := range configuration.EncryptedDNS.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
 	}
@@ -923,8 +990,12 @@ func (configuration Config) Validate() error {
 		}
 	}
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
+	validationErrors = append(validationErrors, configuration.MCP.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
+	for _, problem := range configuration.Insights.Findings.Problems() {
+		validationErrors = append(validationErrors, problem)
+	}
 	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
 		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf(
@@ -1190,7 +1261,8 @@ func (configuration Config) DedicatedDoHListeners() []string {
 
 func (configuration *Config) normalize() {
 	configuration.normalizeClients()
-	configuration.normalizeInsights()
+	configuration.normalizeAlerts()
+	configuration.Updates.normalize()
 	configuration.Database.Driver = strings.ToLower(strings.TrimSpace(configuration.Database.Driver))
 	configuration.ServerLog.Level = strings.ToLower(strings.TrimSpace(configuration.ServerLog.Level))
 	configuration.Backup.Directory = strings.TrimSpace(configuration.Backup.Directory)
@@ -1227,6 +1299,10 @@ func (configuration *Config) normalize() {
 	if configuration.EncryptedDNS.ACME.DirectoryURL == "" {
 		configuration.EncryptedDNS.ACME.DirectoryURL = defaultACMEDirectoryURL
 	}
+	// A hand-written enabled = true means the server was set up.
+	configuration.MCP.Configured = configuration.MCP.Configured || configuration.MCP.Enabled
+	configuration.MCP.Tools = normalizeMCPTools(configuration.MCP.Tools)
+	configuration.MCP.Group = strings.TrimSpace(configuration.MCP.Group)
 	if configuration.EncryptedDNS.ACME.StorageDirectory == "" {
 		configuration.EncryptedDNS.ACME.StorageDirectory = defaultACMEStorageDir
 	}
@@ -1235,6 +1311,7 @@ func (configuration *Config) normalize() {
 	}
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
+	configuration.normalizeInsights()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
 	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)
@@ -1696,4 +1773,23 @@ func AbsolutePath(path string) (string, error) {
 		return "", fmt.Errorf("resolve configuration path: %w", err)
 	}
 	return absolute, nil
+}
+
+// normalizeMCPTools lowercases the tools and keeps them in the order the
+// console lists them, once each. Unknown names are kept so validation can
+// name them.
+func normalizeMCPTools(tools []string) []string {
+	result := make([]string, 0, len(tools))
+	for _, known := range MCPTools {
+		if slices.ContainsFunc(tools, func(tool string) bool { return strings.EqualFold(strings.TrimSpace(tool), known) }) {
+			result = append(result, known)
+		}
+	}
+	for _, tool := range tools {
+		tool = strings.ToLower(strings.TrimSpace(tool))
+		if tool != "" && !slices.Contains(MCPTools, tool) && !slices.Contains(result, tool) {
+			result = append(result, tool)
+		}
+	}
+	return result
 }

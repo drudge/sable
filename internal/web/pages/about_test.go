@@ -45,6 +45,40 @@ func TestAboutLicenseUsesInAppDialog(t *testing.T) {
 	}
 }
 
+func TestAboutListsThirdPartyLicenses(t *testing.T) {
+	t.Parallel()
+	var body bytes.Buffer
+	if err := AboutContent(AboutPageView{Console: DashboardView{Version: "dev"}}).Render(context.Background(), &body); err != nil {
+		t.Fatal(err)
+	}
+	html := body.String()
+	// The MIT License dialog hands over to the third-party list.
+	mit := strings.Index(html, `id="mit-license-dialog"`)
+	if swap := strings.Index(html, `data-dialog-switch="third-party-licenses-dialog"`); mit < 0 || swap < mit || swap > strings.Index(html[mit:], "</dialog>")+mit {
+		t.Error("the MIT License dialog does not lead to third-party licenses")
+	}
+	for _, expected := range []string{
+		`id="third-party-licenses-dialog"`,
+		`<span class="third-party-license-name">htmx</span>`,
+		`<span class="third-party-license-name">Go</span>`,
+		`hx-get="/ui/about/license?name=github.com%2Fmiekg%2Fdns"`,
+		`hx-trigger="toggle once"`,
+	} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("About page is missing %q", expected)
+		}
+	}
+	console, server := strings.Index(html, ">Web console</h3>"), strings.Index(html, ">Server</h3>")
+	htmx, dns := strings.Index(html, ">htmx</span>"), strings.Index(html, ">github.com/miekg/dns</span>")
+	if console < 0 || console > htmx || htmx > server || server > dns {
+		t.Error("third-party software is not grouped under Web console and then Server")
+	}
+	// Each license loads when its row opens, so About stays light.
+	if strings.Contains(html, "Redistribution and use in source and binary forms") {
+		t.Error("About carries every third-party license instead of loading each when opened")
+	}
+}
+
 func TestUpdatePanelChecksOnceAfterServerRestart(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

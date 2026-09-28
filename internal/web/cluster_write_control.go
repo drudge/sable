@@ -62,6 +62,10 @@ func replicaLocalWrite(path string) bool {
 		return true
 	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
 		return true
+	// Every MCP message is a POST, reads included. The write tools refuse on
+	// a replica themselves, with the same message, so reads keep working.
+	case path == mcpPath:
+		return true
 	case strings.HasPrefix(path, "/ui/certificates/"):
 		return true
 	case path == "/ui/cluster/settings", path == "/ui/cluster/leave", path == "/ui/cluster/restart", path == "/api/v1/cluster/membership", path == "/api/v1/cluster/sync":

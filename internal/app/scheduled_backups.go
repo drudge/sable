@@ -50,8 +50,12 @@ type scheduledBackupService struct {
 	policyMu    sync.RWMutex
 	policy      config.Backup
 	nextRun     time.Time
+	// lastSuccess is when the newest scheduled archive was taken. Taking it
+	// from the archive rather than the clock lets a restart find the same
+	// time on disk.
 	lastSuccess time.Time
 	lastError   string
+	lastErrorAt time.Time
 	wake        chan struct{}
 }
 
@@ -131,17 +135,27 @@ func (service *scheduledBackupService) StageRestore(ctx context.Context, content
 }
 
 func (service *scheduledBackupService) BackupSchedule(ctx context.Context) (backup.Schedule, error) {
-	policy, nextRun, lastSuccess, lastError := service.snapshot()
+	schedule := service.schedule()
 	_, stored, err := service.passphrase(ctx)
 	if err != nil {
 		return backup.Schedule{}, err
 	}
+	schedule.PassphraseStored = stored
+	return schedule, nil
+}
+
+// schedule is the policy and how it has run, all but PassphraseStored, which
+// takes a read from the vault.
+func (service *scheduledBackupService) schedule() backup.Schedule {
+	service.policyMu.RLock()
+	defer service.policyMu.RUnlock()
+	policy := service.policy
 	return backup.Schedule{
 		Enabled: policy.Enabled, Directory: policy.Directory,
 		ResolvedDirectory: service.resolveDirectory(policy.Directory),
 		Interval:          policy.Interval.Duration, RunAt: policy.RunAt, RetentionCount: policy.RetentionCount,
-		PassphraseStored: stored, NextRun: nextRun, LastSuccess: lastSuccess, LastError: lastError,
-	}, nil
+		NextRun: service.nextRun, LastSuccess: service.lastSuccess, LastError: service.lastError, LastErrorAt: service.lastErrorAt,
+	}
 }
 
 func (service *scheduledBackupService) UpdateBackupSchedule(ctx context.Context, update backup.ScheduleUpdate) error {
@@ -355,6 +369,7 @@ func (service *scheduledBackupService) DeleteLocalBackup(ctx context.Context, na
 // retries after a bounded delay instead of spinning, and a policy update wakes
 // the loop immediately.
 func (service *scheduledBackupService) Run(ctx context.Context) {
+	service.recoverLastSuccess(ctx)
 	for {
 		policy, _, _, _ := service.snapshot()
 		if !policy.Enabled {
@@ -417,7 +432,7 @@ func (service *scheduledBackupService) Run(ctx context.Context) {
 			}
 			continue
 		}
-		err = service.createScheduled(ctx, policy, string(passphrase))
+		created, err := service.createScheduled(ctx, policy, string(passphrase))
 		service.operationMu.Unlock()
 		if err != nil {
 			service.recordScheduledFailure(err)
@@ -429,8 +444,8 @@ func (service *scheduledBackupService) Run(ctx context.Context) {
 			continue
 		}
 		service.policyMu.Lock()
-		service.lastSuccess = time.Now()
-		service.lastError = ""
+		service.lastSuccess = created
+		service.lastError, service.lastErrorAt = "", time.Time{}
 		service.policyMu.Unlock()
 		service.logger.Info("created scheduled backup", "directory", service.resolveDirectory(policy.Directory), "retention_count", policy.RetentionCount)
 	}
@@ -453,27 +468,52 @@ func nextAnchoredBackupRun(previous time.Time, interval time.Duration, runAt str
 	return anchor.Add(steps * interval)
 }
 
-func (service *scheduledBackupService) createScheduled(ctx context.Context, policy config.Backup, passphrase string) error {
+// createScheduled writes one scheduled archive and returns when it was taken.
+func (service *scheduledBackupService) createScheduled(ctx context.Context, policy config.Backup, passphrase string) (time.Time, error) {
 	contents, err := CreateBackup(ctx, BackupOptions{ConfigurationPath: service.configurationPath, Passphrase: passphrase})
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	summary, err := backup.Inspect(contents)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	directory := service.resolveDirectory(policy.Directory)
 	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return fmt.Errorf("create backup directory: %w", err)
+		return time.Time{}, fmt.Errorf("create backup directory: %w", err)
 	}
 	name := service.scheduledPrefix() + summary.CreatedAt.UTC().Format("20060102-150405") + ".sablebackup"
 	if err := writeLocalBackup(filepath.Join(directory, name), contents); err != nil {
-		return err
+		return time.Time{}, err
 	}
 	if err := service.pruneScheduled(ctx, policy); err != nil {
-		return fmt.Errorf("prune scheduled backups after creating %s: %w", name, err)
+		return time.Time{}, fmt.Errorf("prune scheduled backups after creating %s: %w", name, err)
 	}
-	return nil
+	return summary.CreatedAt, nil
+}
+
+// recoverLastSuccess takes the newest of this node's scheduled archives as the
+// last success. The archive is the record of it, so the time survives a
+// restart without being stored anywhere else, and it is the same time the run
+// that wrote the archive recorded.
+func (service *scheduledBackupService) recoverLastSuccess(ctx context.Context) {
+	policy, _, _, _ := service.snapshot()
+	archives, err := service.localBackups(ctx, policy)
+	if err != nil {
+		// The scheduler reports a directory it cannot read when it next runs.
+		return
+	}
+	for _, archive := range archives {
+		if !archive.Scheduled {
+			continue
+		}
+		service.policyMu.Lock()
+		if archive.CreatedAt.After(service.lastSuccess) {
+			service.lastSuccess = archive.CreatedAt
+		}
+		service.policyMu.Unlock()
+		return
+	}
 }
 
 func writeLocalBackup(path string, contents []byte) error {
@@ -594,7 +634,7 @@ func (service *scheduledBackupService) setNextRun(next time.Time) {
 
 func (service *scheduledBackupService) recordScheduledFailure(err error) {
 	service.policyMu.Lock()
-	service.lastError = err.Error()
+	service.lastError, service.lastErrorAt = err.Error(), time.Now()
 	service.policyMu.Unlock()
 }
 

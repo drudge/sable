@@ -4,10 +4,14 @@ import (
 	"testing"
 
 	"github.com/drudge/sable/internal/insights/services"
+	"github.com/drudge/sable/internal/querylog"
 )
 
 func service(t *testing.T, id string) services.Service {
 	t.Helper()
+	if id == mqttService.ID {
+		return mqttService
+	}
 	found, ok := services.Find(id)
 	if !ok {
 		t.Fatalf("no service %q", id)
@@ -28,6 +32,26 @@ func TestClassifyWeighsMakerNameAndServices(t *testing.T) {
 		{"a strong name alone", Device{Name: "dock-camera-02"}, nil, "camera", ConfidenceMedium},
 		{"a maker alone", Device{Vendor: "Sonos"}, nil, "speaker", ConfidenceMedium},
 		{"services alone", Device{}, []string{"lg-webos"}, "tv", ConfidenceMedium},
+		{"an e-ink display on a smart-home chip", Device{Vendor: "Espressif"}, []string{"trmnl"}, "smart-home", ConfidenceHigh},
+		{"a pixel clock on a smart-home chip", Device{Vendor: "Espressif"}, []string{"tidbyt"}, "smart-home", ConfidenceHigh},
+		{"a smart-home chip alone", Device{Vendor: "Espressif"}, nil, "smart-home", ConfidenceLow},
+		{"a smart-home chip named as a plug", Device{Name: "desk-plug", Vendor: "Espressif"}, nil, "smart-plug", ConfidenceHigh},
+		{"a generator's cloud alone", Device{}, []string{"generac"}, "smart-home", ConfidenceLow},
+		{"a generator on a cellular module", Device{Vendor: "Telit"}, []string{"generac"}, "smart-home", ConfidenceHigh},
+		{"a 3D printer's cloud alone", Device{}, []string{"bambu-lab"}, "printer", ConfidenceLow},
+		{"a 3D printer on a radio module", Device{Vendor: "Quectel"}, []string{"bambu-lab"}, "printer", ConfidenceHigh},
+		{"a slicer on a computer", Device{Vendor: "Dell"}, []string{"bambu-lab"}, "", ""},
+		{"a module reaching a broker", Device{Vendor: "Espressif"}, []string{"mqtt"}, "smart-home", ConfidenceHigh},
+		{"UniFi's own gear", Device{Name: "Basement U7 Pro", Vendor: "Ubiquiti", UniFiType: "network"}, nil, "network", ConfidenceHigh},
+		{"an operator's type over UniFi's gear", Device{Vendor: "Ubiquiti", UniFiType: "network", Type: "storage"}, nil, "storage", ConfidenceSet},
+		{"a UniFi NAS by its name", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti"}, nil, "storage", ConfidenceMedium},
+		{"a UniFi NAS by UniFi's word", Device{Name: "Home-UNAS-4", Vendor: "Ubiquiti", UniFiType: "storage"}, nil, "storage", ConfidenceHigh},
+		{"a UniFi UPS by UniFi's word", Device{Name: "UPS Tower", Vendor: "Ubiquiti", UniFiType: "ups"}, nil, "ups", ConfidenceHigh},
+		{"a type UniFi names that Sable lacks", Device{Vendor: "Ubiquiti", UniFiType: "fridge"}, nil, "network", ConfidenceLow},
+		{"a UPS by its maker", Device{Vendor: "APC"}, nil, "ups", ConfidenceMedium},
+		{"a UPS by its name", Device{Name: "rack-ups", Vendor: "Ubiquiti"}, nil, "ups", ConfidenceMedium},
+		{"an e-ink tablet by name and sync", Device{Name: "Remarkable 2", Vendor: "AMPAK"}, []string{"remarkable"}, "tablet", ConfidenceHigh},
+		{"an e-ink tablet's sync alone", Device{}, []string{"remarkable"}, "tablet", ConfidenceLow},
 		{"a weak lean", Device{Vendor: "Dell"}, nil, "computer", ConfidenceLow},
 		{"an operator's type wins", Device{Name: "dock-camera-02", Type: "doorbell"}, nil, "doorbell", ConfidenceSet},
 		{"no clues", Device{Name: "george"}, nil, "", ""},
@@ -83,6 +107,18 @@ func TestGuessesReadWithTheirCertainty(t *testing.T) {
 		t.Errorf("GuessText = %q", got)
 	}
 	// An acronym keeps its capitals in the middle of a sentence.
+	if got := GuessText(Guess{Type: "storage", Confidence: ConfidenceMedium}); got != "Probably network storage" {
+		t.Fatalf("GuessText = %q", got)
+	}
+	if got := describeDevice(Device{Vendor: "Ubiquiti", Guess: Guess{Type: "network", Confidence: ConfidenceHigh}}); got != "Network equipment made by Ubiquiti. " {
+		t.Fatalf("describeDevice = %q", got)
+	}
+	if got := Classify(Device{UniFiType: "storage"}, nil).Reasons[0].Text; got != "UniFi says it is network storage" {
+		t.Fatalf("UniFi reason = %q", got)
+	}
+	if got := GuessText(Guess{Type: "ups", Confidence: ConfidenceLow}); got != "Maybe a UPS" {
+		t.Fatalf("GuessText = %q", got)
+	}
 	if got := GuessText(Guess{Type: "tv", Confidence: ConfidenceMedium}); got != "Probably a TV" {
 		t.Errorf("GuessText = %q", got)
 	}
@@ -95,6 +131,35 @@ func TestClassifyRemembersWhatItDetectedUnderACorrection(t *testing.T) {
 	t.Parallel()
 	guess := Classify(Device{Name: "dock-camera-02", Type: "doorbell"}, nil)
 	if guess.Type != "doorbell" || guess.Detected != "camera" {
+		t.Fatalf("guess = %+v", guess)
+	}
+}
+
+func TestMQTTNamesAreBrokersNotSites(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[string]bool{
+		"mqtt.evrythng.com.":   true,
+		"mqtt2.tidbyt.com":     true,
+		"us.mqtt.bambulab.com": true,
+		"mqtt.org":             false,
+		"mqttfan.example":      false,
+		"www.example.com":      false,
+		"mqtt":                 false,
+	} {
+		if got := mqttName(name); got != want {
+			t.Errorf("mqttName(%q) = %t, want %t", name, got, want)
+		}
+	}
+}
+
+// A device whose only lookups are its maker's MQTT broker and clock is smart
+// home gear, even when Sable knows neither the maker nor the service.
+func TestIdentifyCountsAnyMQTTBroker(t *testing.T) {
+	t.Parallel()
+	built := Build(Input{Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{{Client: "10.0.7.182", Queries: 40}}}})
+	Identify(built, map[string][]string{"10.0.7.182": {"mqtt.evrythng.com", "time.evrythng.com"}})
+	guess := built[0].Guess
+	if guess.Type != "smart-home" || guess.Confidence != ConfidenceLow || len(guess.Reasons) != 1 || guess.Reasons[0].Text != "Talks to an MQTT server" {
 		t.Fatalf("guess = %+v", guess)
 	}
 }

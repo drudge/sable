@@ -126,15 +126,17 @@ templ ClusterContent(view ClusterPageView) {
 				}
 			</div>
 			<aside class="cluster-aside">
+				// The warning comes first because it spans both columns when the
+				// cards sit side by side, and between them it would split the pair.
+				if !view.NetworkReady {
+					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
+				}
 				<section class="card cluster-guidance">
 					<h2>How Clustering Works</h2>
 					@ClusterGuide("blue", "One Primary", "Configuration changes are made on the primary and synchronized to every replica.")
 					@ClusterGuide("green", "Independent DNS", "Every node answers DNS from local state even when the primary is unavailable.")
 					@ClusterGuide("purple", "Manual Promotion", "A replica can be explicitly promoted when the primary is offline. No third voting node is required.")
 				</section>
-				if !view.NetworkReady {
-					<div class="warning-box"><strong>HTTPS required:</strong> Configure a reachable HTTPS Console / API URL before joining nodes.</div>
-				}
 				if view.Initialized {
 					@ClusterUpdatePanel(view.Update, false)
 				}

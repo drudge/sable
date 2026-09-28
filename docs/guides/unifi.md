@@ -32,7 +32,7 @@ Records display a UniFi source badge and are read-only in the editor. Change the
 
 ## Keep it healthy
 
-Check last successful synchronization, skipped devices, and connection errors. On a promoted cluster node, the replicated configuration and credentials let synchronization resume; any local CA-file path must also exist there.
+Check last successful synchronization, skipped devices, and connection errors. With [alerts](../configuration.md#alerts) set up, three failed syncs in a row send an alert with the last error. On a promoted cluster node, the replicated configuration and credentials let synchronization resume; any local CA-file path must also exist there.
 
 If many names unexpectedly change, pause the integration while reviewing the controller data and mapping. Do not bulk-delete hand-authored records as a cleanup shortcut. Use a backup or Change Center when restoring DNS data, then correct the upstream cause before resuming.
 

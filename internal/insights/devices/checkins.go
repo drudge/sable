@@ -17,13 +17,13 @@ import (
 const KindCheckIn = "devices.check-in"
 
 const (
-	// A check-in repeats at least every two hours and at most every minute;
-	// anything faster is an app in use, not a schedule.
+	// A check-in repeats at most every minute; anything faster is an app in
+	// use, not a schedule. How long it may wait between lookups, and how long
+	// it must keep that up, are in Limits.
 	minimumCheckInInterval = time.Minute
-	maximumCheckInInterval = 2 * time.Hour
-	// minimumCheckInSpan makes a schedule run through the night, not just a
-	// busy afternoon.
-	minimumCheckInSpan = 12 * time.Hour
+	// overnight is how long a schedule has to have run for Sable to say it
+	// ran through the night, not just through a busy afternoon.
+	overnight = 12 * time.Hour
 	// checkInTolerance is how far an interval may stray from the typical one,
 	// and checkInRegularity the share of intervals that must stay within it.
 	checkInTolerance  = 0.2
@@ -43,9 +43,9 @@ type schedule struct {
 	times    []time.Time
 }
 
-// steadySchedule reports whether lookup times follow a steady clock, and at
-// what interval.
-func steadySchedule(times []time.Time) (schedule, bool) {
+// steadySchedule reports whether lookup times follow a steady clock within
+// the check-in limits, and at what interval.
+func steadySchedule(times []time.Time, limits Limits) (schedule, bool) {
 	if len(times) < 2 {
 		return schedule{}, false
 	}
@@ -67,7 +67,7 @@ func steadySchedule(times []time.Time) (schedule, bool) {
 	sortedIntervals := slices.Clone(intervals)
 	slices.Sort(sortedIntervals)
 	typical := sortedIntervals[len(sortedIntervals)/2]
-	if typical < minimumCheckInInterval || typical > maximumCheckInInterval {
+	if typical < minimumCheckInInterval || typical > limits.CheckInInterval {
 		return schedule{}, false
 	}
 	steady := 0
@@ -77,7 +77,7 @@ func steadySchedule(times []time.Time) (schedule, bool) {
 		}
 	}
 	span := merged[len(merged)-1].Sub(merged[0])
-	if float64(steady) < checkInRegularity*float64(len(intervals)) || span < minimumCheckInSpan {
+	if float64(steady) < checkInRegularity*float64(len(intervals)) || span < limits.CheckInSpan {
 		return schedule{}, false
 	}
 	return schedule{interval: typical, lookups: len(merged), span: span, times: merged}, true
@@ -130,7 +130,7 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 		if !found || seen[device.Key] || !checkInCandidate(lookup.Name) {
 			continue
 		}
-		if plan, steady := steadySchedule(lookup.Times); steady {
+		if plan, steady := steadySchedule(lookup.Times, input.Limits); steady {
 			seen[device.Key] = true
 			candidates = append(candidates, candidate{device: device, lookup: lookup, plan: plan})
 		}
@@ -140,6 +140,10 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 	for _, entry := range candidates[:min(len(candidates), maximumCheckIns)] {
 		device, lookup, plan := entry.device, entry.lookup, entry.plan
 		every := everyText(plan.interval)
+		keptUp := "Kept it up for " + insights.FormatDuration(plan.span)
+		if plan.span >= overnight {
+			keptUp += ", through the night"
+		}
 		finding := insights.Finding{
 			Kind: KindCheckIn, Tone: insights.ToneNotice, Title: "Checks in on a schedule",
 			Subject:  deviceSubject(device),
@@ -147,7 +151,7 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 			Summary:  fmt.Sprintf("Looked up %s %s, %d times in the last day. No other device uses that name.", lookup.Name, every, plan.lookups),
 			Reasons: []insights.Reason{
 				{Text: fmt.Sprintf("%d lookups in the last 24 hours, %s like clockwork:", plan.lookups, every), Code: lookup.Name},
-				{Text: "Kept it up for " + insights.FormatDuration(plan.span) + ", through the night"},
+				{Text: keptUp},
 				{Text: "No other device on the network looks this name up"},
 				{Text: "Not a service Sable recognizes"},
 			},
@@ -160,7 +164,7 @@ func checkInFindings(input ChangesInput) []insights.Finding {
 				"An app polling for updates or messages",
 				"Software phoning home that should not be there",
 			},
-			Method: "Sable looks for names only one device looks up, again and again, at a steady interval for at least 12 hours. " +
+			Method: "Sable looks for names only one device looks up, again and again, at a steady interval for at least " + spanText(input.Limits.CheckInSpan) + ". " +
 				"Services it recognizes, reverse lookups, and Sable's own lookups, such as its dynamic DNS updates, are left out.",
 			Chart: &insights.Chart{Schedule: &insights.ScheduleChart{Start: input.Now.Add(-24 * time.Hour), End: input.Now, Times: plan.times}},
 		}

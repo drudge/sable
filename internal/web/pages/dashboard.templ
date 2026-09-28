@@ -372,6 +372,7 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 			<link rel="apple-touch-icon" href={ assetURL("sable-icon-180.png") }/>
 			<link rel="manifest" href="/manifest.webmanifest"/>
 			<script src={ assetURL("bootstrap.js") }></script>
+			<link rel="preload" href={ assetURL("inter-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="stylesheet" href={ assetURL("app.css") }/>
 			<script src={ assetURL("app.js") } defer></script>
  <script src={ assetURL("passkeys.js") } defer></script>
@@ -399,7 +400,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					</div>
 					<nav class="nav" id="primary-navigation" aria-label="Primary navigation" tabindex="-1">
 						<div class="nav-group">
-							<div class="nav-label">Overview</div>
 							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
 							if view.CanBlocking || view.CanLogs {
 								@NavItem("Insights", "/insights", "lightbulb", activePage == "insights", false)
@@ -414,9 +414,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 								@NavItem("Allowed", "/blocked?tab=allowed", "shield-check", activePage == "allowed", false)
 								@NavItem("Blocked", "/blocked?tab=domains", "shield-x", activePage == "blocked", false)
 							}
-							if view.CanSettings {
-								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
-							}
 							@NavItem("DNS Client", "/dns-client", "terminal", activePage == "dns-client", false)
 							if view.CanLogs {
 								@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
@@ -424,14 +421,15 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 						</div>
 						<div class="nav-group">
 							<div class="nav-label">System</div>
-							if view.CanSettings {
-								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
-							}
 							if view.CanAdministration {
 								@NavItem("Administration", "/administration", "users", activePage == "administration", false)
 							}
 							if view.CanCluster {
 								@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
+							}
+							if view.CanSettings {
+								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
+								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
 							}
 							@NavItem("About", "/about", "info", activePage == "about", false)
 						</div>
@@ -486,6 +484,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar"></button>
 				</aside>
 				<div class="sidebar-scrim" data-sidebar-toggle aria-hidden="true"></div>
+				<div class="pull-refresh" data-pull-refresh aria-hidden="true">
+					@Icon("loader-circle")
+				</div>
 				<main class="main" id="main-content" tabindex="-1">
 					<header class="mobile-header" data-mobile-header>
 						<button type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">
@@ -554,6 +555,7 @@ templ CommandPalette(view DashboardView) {
 					if view.CanLogs {
 						@CommandOption("command-page-insights-apps", "App Insights", "Every app on your network, busiest first", "apps", "Page", "apps applications services top apps streaming social gaming", "", "/insights", "top-stats-apps-dialog", "", "")
 						@CommandOption("command-page-insights-devices", "Device Insights", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "")
+						@CommandOption("command-page-insights-settings", "Insights Settings", "Choose what Insights looks for and alerts you about", "sliders", "Settings", "insights findings alerts notifications limits thresholds show only off bell quiet busy check-in", "", "/insights", "insight-settings-dialog", "", "")
 					}
 					@CommandOption("command-page-insights-blocking", "Blocking Insights", "What blocking catches and how much each list adds", "shield", "Page", "blocking blocked queries clients block lists overlap unique coverage false positives", "/insights?tab=blocking", "", "", "", "")
 				}
@@ -568,22 +570,20 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-allowed", "Allowed Domains", "Domains exempt from blocking", "shield-check", "Page", "allow permit whitelist exceptions", "/blocked?tab=allowed", "", "", "", "")
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
 				}
-				if view.CanSettings {
-					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")
-				}
 				@CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "")
 				if view.CanLogs {
 					@CommandOption("command-page-server-logs", "Server Logs", "Runtime events and diagnostics", "logs", "Page", "runtime debug errors diagnostics", "/logs", "", "", "", "")
 					@CommandOption("command-page-query-logs", "Query Logs", "Search DNS query history", "search", "Page", "history clients domains response", "/logs?tab=queries", "", "", "", "")
-				}
-				if view.CanSettings {
-					@CommandOption("command-page-settings", "Settings", "DNS, logging, blocking, and backups", "settings", "Page", "configuration resolver protocols backup", "/settings", "", "", "", "")
 				}
 				if view.CanAdministration {
 					@CommandOption("command-page-administration", "Administration", "Users, groups, tokens, and sessions", "users", "Page", "accounts permissions roles sessions", "/administration", "", "", "", "")
 				}
 				if view.CanCluster {
 					@CommandOption("command-page-cluster", "Cluster", "Members, certificates, and replication", "cluster", "Page", "nodes primary replica sync", "/cluster", "", "", "", "")
+				}
+				if view.CanSettings {
+					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")
+					@CommandOption("command-page-settings", "Settings", "DNS, logging, blocking, and backups", "settings", "Page", "configuration resolver protocols backup", "/settings", "", "", "", "")
 				}
 				@CommandOption("command-page-about", "About", "Version and update information", "info", "Page", "release build update", "/about", "", "", "", "")
 				if view.SecurityEnabled {
@@ -605,6 +605,7 @@ templ CommandPalette(view DashboardView) {
 				if view.CanLogs {
 					@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "ssl runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
 					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
+					@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
 				}
 				if view.CanSettings {
 					@CommandSearchOption("command-action-search-cache", "Search DNS Cache", "Enter a domain without leaving the command palette", "search", "cached resolver responses browser", "/cache", "#cache-browser-dialog [data-cache-search]", "Search cached domains…", "")
@@ -638,8 +639,8 @@ templ CommandPalette(view DashboardView) {
 				if view.CanCheckUpdates {
 					@CommandPostOption("command-action-check-updates", "Check for Updates", "Look for the latest Sable release", "refresh", "update upgrade release latest version", "/ui/updates/command-check", `{}`, "")
 				}
-				if view.CanWriteSettings && (view.CanBlocking || view.CanLogs) {
-					@CommandOption("command-action-insights-alerts", "Insight Alerts", "Send new findings to a webhook", "bell", "Action", "alerts notifications notify webhook findings slack discord ntfy", "", "/insights", "insight-alerts-dialog", "", "")
+				if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+					@CommandOption("command-action-insights-alerts", "Set Up Alerts", "Choose where alerts go and which ones Sable sends", "bell", "Action", "alerts notifications notify webhook findings insights slack discord ntfy pushover browser push", "/settings?tab=alerts", "", "", "", "")
 				}
 				if view.CanCreateZones && !view.ControlPlaneReadOnly {
 					@CommandOption("command-action-add-zone", "Add Zone", "Open the new DNS zone workflow", "plus", "Action", "create authoritative secondary forwarder", "", "/zones", "create-zone-dialog", "", "")
@@ -716,6 +717,8 @@ func settingsCommandDescription(tab string) string {
 		return "Filtering policy and block lists"
 	case "logging":
 		return "Query logging and retention"
+	case "alerts":
+		return "Where alerts go and which ones Sable sends"
 	case "backup":
 		return "Export and restore configuration"
 	default:
@@ -741,6 +744,8 @@ func settingsCommandKeywords(tab string) string {
 		return "settings configuration blocking filtering policy lists response bypass clients"
 	case "logging":
 		return "settings configuration logging logs query retention"
+	case "alerts":
+		return "settings configuration alerts notifications notify webhook ntfy pushover slack discord browser push"
 	case "backup":
 		return "settings configuration backup backups restore download disaster recovery"
 	default:
@@ -954,6 +959,7 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 			<link rel="apple-touch-icon" href={ assetURL("sable-icon-180.png") }/>
 			<link rel="manifest" href="/manifest.webmanifest"/>
 			<script src={ assetURL("bootstrap.js") }></script>
+			<link rel="preload" href={ assetURL("inter-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="stylesheet" href={ assetURL("app.css") }/>
 			<script src={ assetURL("app.js") } defer></script>
  <script src={ assetURL("passkeys.js") } defer></script>
@@ -975,22 +981,28 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 				if errorMessage != "" {
 					<div class="auth-error">{ errorMessage }</div>
 				}
-				if !setup && ssoLabel != "" {
-					<form class="auth-form auth-sso" method="post" action="/auth/oidc/start">
-						<input type="hidden" name="csrf_token" value={ csrfToken }/>
-						<input type="hidden" name="return_to" value={ returnTo }/>
-						<button class="auth-sso-button" type="submit">
-							@Icon("key-round")
-							<span>Sign in with { ssoLabel }</span>
-						</button>
-					</form>
-				}
-    if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
-     <div class="auth-form auth-sso" data-passkey-capability data-passkeys data-return-to={ returnTo }>
-      <p class="auth-error" role="status" data-passkey-status></p>
-      <button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
-     </div>
-    }
+				// The passkey status sits above every alternate sign-in button, so
+				// a passkey error never lands under the OIDC button.
+				<div data-passkeys data-return-to={ returnTo }>
+					if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
+						<p class="auth-error" role="status" data-passkey-status></p>
+					}
+					if !setup && ssoLabel != "" {
+						<form class="auth-form auth-sso" method="post" action="/auth/oidc/start">
+							<input type="hidden" name="csrf_token" value={ csrfToken }/>
+							<input type="hidden" name="return_to" value={ returnTo }/>
+							<button class="auth-sso-button" type="submit">
+								@Icon("key-round")
+								<span>Sign in with { ssoLabel }</span>
+							</button>
+						</form>
+					}
+					if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
+						<div class="auth-form auth-sso" data-passkey-capability>
+							<button class="auth-sso-button" type="button" data-passkey-action="login">@Icon("fingerprint-pattern")<span>Sign in with a passkey</span></button>
+						</div>
+					}
+				</div>
     if !setup && ssoLabel != "" {
      <div class="auth-divider"><span>or</span></div>
     } else if !setup && (len(passkeysEnabled) == 0 || passkeysEnabled[0]) {
@@ -1013,12 +1025,14 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 				<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>
 			</footer>
 			</div>
-			@mitLicenseDialog()
+			@mitLicenseDialog(false)
 		</body>
 	</html>
 }
 
-templ mitLicenseDialog() {
+// mitLicenseDialog shows Sable's license. With thirdParty, it also leads to
+// the licenses of the software Sable is built with, which only About lists.
+templ mitLicenseDialog(thirdParty bool) {
 	<dialog class="custom-server-dialog license-dialog" id="mit-license-dialog" aria-labelledby="mit-license-dialog-title">
 		<div class="dialog-header">
 			<h2 id="mit-license-dialog-title">MIT License</h2>
@@ -1029,6 +1043,9 @@ templ mitLicenseDialog() {
 			<pre>{ mitLicenseText }</pre>
 		</div>
 		<div class="dialog-footer">
+			if thirdParty {
+				<button class="button outline third-party-licenses-button" type="button" data-dialog-switch="third-party-licenses-dialog">Third-Party Licenses</button>
+			}
 			<a class="button outline" href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
 				<span>View on GitHub</span>@Icon("external-link")
 			</a>
@@ -1503,6 +1520,11 @@ templ Icon(kind string) {
 				<circle cx="12" cy="12" r="10"></circle><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path>
 			case "globe-lock":
 				<path d="M15.686 15A14.5 14.5 0 0 1 12 22a14.5 14.5 0 0 1 0-20 10 10 0 1 0 9.542 13"></path><path d="M2 12h8.5"></path><path d="M20 6V4a2 2 0 1 0-4 0v2"></path><rect width="8" height="5" x="14" y="6" rx="1"></rect>
+			case "mcp-server":
+				// Hugeicons "mcp-server", MIT licensed; see third_party/hugeicons.
+				// Scaled up a little, since its fine diagonal strokes read smaller
+				// than the other icons at the same size.
+				<g transform="translate(12 12) scale(1.14) translate(-12 -12)"><path d="m3.5 11.75 8.172-8.171a2.828 2.828 0 1 1 4 4m0 0L9.5 13.75m6.172-6.171a2.828 2.828 0 0 1 4 4l-6.965 6.964a1 1 0 0 0 0 1.414L14 21.25"></path><path d="m17.5 9.75-6.172 6.171a2.829 2.829 0 0 1-4-4L13.5 5.749"></path></g>
 			case "cloud-sync":
 				<path d="m17 18-1.535 1.605a5 5 0 0 1-8-1.5"></path><path d="M17 22v-4h-4m7.996-2.749A4.5 4.5 0 0 0 17.495 8h-1.79a7 7 0 1 0-12.709 5.607"></path><path d="M7 10v4h4"></path><path d="m7 14 1.535-1.605a5 5 0 0 1 8 1.5"></path>
 			case "database":
@@ -1582,6 +1604,8 @@ templ Icon(kind string) {
 				<path d="M4 6h16M4 12h16M4 18h16"></path>
 			case "plus":
 				<path d="M12 5v14M5 12h14"></path>
+			case "list-checks":
+				<path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path>
 			case "list":
 				<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path>
 			case "sliders":
@@ -1650,6 +1674,8 @@ templ Icon(kind string) {
 				<path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"></path><path d="m2 22 3-3"></path><path d="M7.5 13.5 10 11"></path><path d="M10.5 16.5 13 14"></path><path d="m18 3-4 4h6l-4 4"></path>
 			case "house-wifi":
 				<path d="M9.5 13.866a4 4 0 0 1 5 .01"></path><path d="M12 17h.01"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="M7 10.754a8 8 0 0 1 10 0"></path>
+			case "battery-charging":
+				<path d="m11 7-3 5h4l-3 5"></path><path d="M14.856 6H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.935"></path><path d="M22 14v-4"></path><path d="M5.14 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.936"></path>
 			case "watch":
 				<path d="M12 10v2.2l1.6 1"></path><path d="m16.13 7.66-.81-4.05a2 2 0 0 0-2-1.61h-2.68a2 2 0 0 0-2 1.61l-.78 4.05"></path><path d="m7.88 16.36.8 4a2 2 0 0 0 2 1.61h2.72a2 2 0 0 0 2-1.61l.81-4.05"></path><circle cx="12" cy="12" r="6"></circle>
 			case "clock-alert":
@@ -1682,6 +1708,8 @@ templ Icon(kind string) {
 				<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>
 			case "bell-off":
 				<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M17 17H4a1 1 0 0 1-.74-1.673C4.59 13.956 6 12.499 6 8a6 6 0 0 1 .258-1.742"></path><path d="m2 2 20 20"></path><path d="M8.668 3.01A6 6 0 0 1 18 8c0 2.687.77 4.653 1.707 6.05"></path>
+			case "eye-off":
+				<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"></path><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"></path><path d="m2 2 20 20"></path>
 			case "x":
 				<path d="M18 6 6 18M6 6l12 12"></path>
 			case "refresh":

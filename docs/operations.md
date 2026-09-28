@@ -194,6 +194,11 @@ so use it only with console authentication and trusted HTTPS. Run
 Set `SABLE_GITHUB_TOKEN` when repeated update checks exhaust GitHub's anonymous
 API limit. It is used only for GitHub release-metadata requests.
 
+While `updates.check_on_login` is on, the lead node, or a node on its own, also
+checks on the schedule in `updates.check_schedule`, hourly by default, without
+anyone signing in, and a newer release sends an `updates` alert. See
+[Software updates](configuration.md#software-updates).
+
 ## Backup policy
 
 At minimum:
