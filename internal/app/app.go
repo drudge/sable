@@ -22,6 +22,7 @@ import (
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
+	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/neighbors"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/secrets"
@@ -483,6 +484,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	}.alertSources()...)
 	alertDispatcher.Add(clusterAlertSources(clusterService)...)
 	clusterService.SetLocalAlerts(alertDispatcher.Local)
+	// The lead hands replicas the addresses it has tied to hardware, since a
+	// replica may not see the network's hardware addresses itself.
+	clusterService.SetClientIdentities(cluster.ClientIdentities{
+		Read: database.ClientIdentities, Record: database.RecordClientIdentities, Lookback: devices.Lookback,
+	})
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	if authentication != nil {
 		// Single sign-on rides on the authentication service, so a deployment

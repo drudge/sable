@@ -64,6 +64,10 @@ type SyncConfiguration struct {
 	UpdateCommand  *UpdateCommand `json:"update_command,omitempty"`
 	UpdateProtocol int            `json:"update_protocol,omitempty"`
 	AlertProtocol  int            `json:"alert_protocol,omitempty"`
+	// ClientIdentities is a batch of the lead's client identities as a JSON
+	// list, handed to a replica once a minute. A replica that does not know
+	// the field passes over it.
+	ClientIdentities json.RawMessage `json:"client_identities,omitempty"`
 }
 
 type nodeTelemetry struct {
@@ -83,6 +87,7 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 			defer close(done)
 			var gathering sync.WaitGroup
 			gathering.Go(func() { service.gatherLocalAlerts(monitorContext) })
+			gathering.Go(func() { service.gatherClientIdentities(monitorContext) })
 			service.monitorPrimary(monitorContext)
 			gathering.Wait()
 		}()
@@ -179,6 +184,9 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	configuration := joinConfiguration(service.manifest, stateSnapshot)
 	if localIsPrimary {
 		configuration.AlertProtocol = alertProtocolVersion
+		if service.clientIdentities.Read != nil {
+			configuration.ClientIdentities = service.identityShare.due(heartbeat.NodeID, now)
+		}
 	}
 	return SyncConfiguration(configuration), nil
 }
@@ -341,6 +349,9 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	}
 	if err := validateSyncConfiguration(configuration); err != nil {
 		return err
+	}
+	if configuration.PrimaryID == primary.ID {
+		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
 	}
 	candidate := manifestFromJoinConfiguration(JoinConfiguration(configuration))
 	if candidate.ClusterID == "" || !manifestContainsNode(candidate, service.nodeID) {
