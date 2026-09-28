@@ -117,7 +117,8 @@ var mcpAdvancedTools = []mcpTool{
 			"name, or to blocked lookups only.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"client":       mcpString("Optional device address, matched exactly, for example 10.0.0.5."),
-			"name":         mcpString("Optional part of a name, for example netflix."),
+			"name":         mcpString("Optional part of a name, for example netflix, or the whole name with exact."),
+			"exact":        map[string]any{"type": "boolean", "description": "Match name as a whole name, such as api.example.com, instead of any name containing it."},
 			"blocked_only": map[string]any{"type": "boolean", "description": "Only lookups that blocking stopped."},
 			"hours":        mcpInteger("How many hours back to search. Defaults to 24.", 1),
 			"limit":        mcpInteger("Most lookups to return, up to 200. Defaults to 50.", 1),
@@ -480,6 +481,7 @@ func (server *Server) mcpSearchQueries(request *http.Request, arguments json.Raw
 		Client      string `json:"client"`
 		Name        string `json:"name"`
 		BlockedOnly bool   `json:"blocked_only"`
+		Exact       bool   `json:"exact"`
 		Hours       int    `json:"hours"`
 		Limit       int    `json:"limit"`
 	}
@@ -504,8 +506,10 @@ func (server *Server) mcpSearchQueries(request *http.Request, arguments json.Raw
 	}
 	limit = min(limit, mcpMaximumQueryLimit)
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	// A device address is always the whole address, so 10.0.0.1 never sweeps
+	// in 10.0.0.10; a name is part of one unless exact asks for the whole.
 	filter := querylog.Filter{
-		Page: 1, PageSize: limit, Since: since,
+		Page: 1, PageSize: limit, Since: since, ExactClient: true, Exact: input.Exact,
 		ClientIP: strings.TrimSpace(input.Client), Name: strings.ToLower(strings.TrimSpace(input.Name)),
 	}
 	if input.BlockedOnly {

@@ -136,8 +136,16 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 		t.Fatalf("blocked entry = %v", blocked)
 	}
 	filter := server.queries.(*mcpTestQueries).filter
-	if filter.PageSize != mcpMaximumQueryLimit || filter.ClientIP != "10.99.7.20" || filter.Name != "example" || filter.Source != querylog.SourceBlocked {
+	if filter.PageSize != mcpMaximumQueryLimit || filter.ClientIP != "10.99.7.20" || filter.Name != "example" || filter.Source != querylog.SourceBlocked ||
+		!filter.ExactClient || filter.Exact {
 		t.Fatalf("filter = %+v", filter)
+	}
+	// exact asks for the whole name too.
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_logs", "search_queries", map[string]any{"name": "ads.example", "exact": true}); failure != "" {
+		t.Fatalf("exact search = %q", failure)
+	}
+	if filter := server.queries.(*mcpTestQueries).filter; !filter.Exact || filter.Name != "ads.example" {
+		t.Fatalf("exact filter = %+v", filter)
 	}
 }
 

@@ -25,7 +25,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `list_findings` | On | What Insights noticed, with its evidence and a link to each finding | `logs.read` |
-| `search_queries` | Off | Each device's DNS lookups | `logs.read` |
+| `search_queries` | Off | Each device's DNS lookups, by its exact address and part or all of a name | `logs.read` |
 | `search_server_logs` | Off | Sable's runtime log, by level, text, and time | `logs.read` |
 | `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
 | `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
