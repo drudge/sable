@@ -282,12 +282,25 @@ func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.
 	latest := make(map[string]querylog.ClientIdentity, len(identities))
 	for _, identity := range identities {
 		current, found := latest[identity.Address]
-		if !found || identity.LastSeen.After(current.LastSeen) ||
-			(identity.LastSeen.Equal(current.LastSeen) && fromUniFi(identity.Source) && !fromUniFi(current.Source)) {
+		if !found || newerIdentity(identity, current) {
 			latest[identity.Address] = identity
 		}
 	}
 	return latest
+}
+
+// newerIdentity reports whether candidate is the better sighting of an
+// address than current: the later one, then UniFi's, then the lower hardware
+// address, so two sightings at the same moment settle the same way every time
+// rather than by the order the store returned them.
+func newerIdentity(candidate, current querylog.ClientIdentity) bool {
+	if !candidate.LastSeen.Equal(current.LastSeen) {
+		return candidate.LastSeen.After(current.LastSeen)
+	}
+	if fromUniFi(candidate.Source) != fromUniFi(current.Source) {
+		return fromUniFi(candidate.Source)
+	}
+	return candidate.MAC < current.MAC
 }
 
 // AddressesOf lists, in order, the client addresses whose most recent hardware

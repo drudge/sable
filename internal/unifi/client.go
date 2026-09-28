@@ -146,8 +146,9 @@ func (client *Client) Inventory(ctx context.Context) (Inventory, error) {
 	if err != nil {
 		return Inventory{}, err
 	}
-	hosts := placeHosts(networks, mergeHosts(reserved, activeHosts(active)))
-	return Inventory{Networks: networks, Hosts: hosts, Gear: client.gear(ctx), Stations: placeStations(networks, stations(active))}, nil
+	connected := stations(active)
+	hosts := placeHosts(networks, withoutDisplacedReservations(mergeHosts(reserved, activeHosts(active)), connected))
+	return Inventory{Networks: networks, Hosts: hosts, Gear: client.gear(ctx), Stations: placeStations(networks, connected)}, nil
 }
 
 type networkPayload struct {

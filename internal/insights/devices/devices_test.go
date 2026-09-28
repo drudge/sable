@@ -384,3 +384,28 @@ func TestBuildTiesALinkLocalClientThroughItsZone(t *testing.T) {
 		t.Fatalf("devices = %+v", built)
 	}
 }
+
+// Two UniFi sightings of one address at the same moment, such as a stale
+// reservation and the device now on that address, settle the same way
+// whichever order the store returns them in.
+func TestTiedSightingsSettleTheSameWay(t *testing.T) {
+	t.Parallel()
+	first := querylog.ClientIdentity{Address: "10.0.7.13", MAC: "bc:24:11:c9:8b:08", Source: "unifi", Hostname: "shuttle", LastSeen: testNow}
+	second := querylog.ClientIdentity{Address: "10.0.7.13", MAC: "bc:24:11:d2:4d:7e", Source: "unifi", Hostname: "ltm-backup-relay", LastSeen: testNow}
+	forward := latestIdentities([]querylog.ClientIdentity{first, second})["10.0.7.13"]
+	backward := latestIdentities([]querylog.ClientIdentity{second, first})["10.0.7.13"]
+	if forward.MAC != backward.MAC {
+		t.Fatalf("the tie settled on %s one way and %s the other", forward.MAC, backward.MAC)
+	}
+	// A later sighting still wins, and UniFi still wins a tie with the
+	// neighbor table.
+	later := second
+	later.LastSeen = testNow.Add(time.Minute)
+	if got := latestIdentities([]querylog.ClientIdentity{later, first})["10.0.7.13"]; got.MAC != later.MAC {
+		t.Fatalf("a later sighting lost to %s", got.MAC)
+	}
+	neighbor := querylog.ClientIdentity{Address: "10.0.7.13", MAC: "00:00:00:00:00:01", Source: "neighbor", LastSeen: testNow}
+	if got := latestIdentities([]querylog.ClientIdentity{neighbor, second})["10.0.7.13"]; got.MAC != second.MAC {
+		t.Fatalf("the neighbor table beat UniFi in a tie: %s", got.MAC)
+	}
+}
