@@ -133,7 +133,7 @@ func requiredPermission(request *http.Request) string {
 			return auth.PermissionZonesExport
 		}
 		return auth.PermissionZonesRead
-	case path == "/blocked" || strings.HasPrefix(path, "/ui/blocking") ||
+	case path == "/blocked" || strings.HasPrefix(path, pages.BlockListRoute) || strings.HasPrefix(path, "/ui/blocking") ||
 		strings.HasPrefix(path, "/api/v1/blocking") || path == "/api/v1/policy":
 		if write {
 			return auth.PermissionBlockingWrite

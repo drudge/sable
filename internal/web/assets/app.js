@@ -4799,7 +4799,7 @@
 	  }
 	  // A row whose record loads on demand opens through its own button, so a
 	  // click anywhere in the row does exactly what the button does.
-	  const openerRow = event.target.closest?.("tr[data-row-opener]");
+	  const openerRow = event.target.closest?.("[data-row-opener]");
 	  const openerInteractive = event.target.closest?.("button, a, input, select, textarea, label, summary");
 	  if (openerRow && !openerInteractive && !window.getSelection()?.toString()) {
 		openerRow.querySelector("[data-dialog-open]")?.click();

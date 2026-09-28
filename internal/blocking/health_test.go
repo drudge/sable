@@ -278,3 +278,77 @@ func TestDownloadRecordsFailureHealth(t *testing.T) {
 		t.Fatalf("health after failed download = %+v", sources)
 	}
 }
+
+func TestRefreshSourceUpdatesOneListAndLeavesTheRest(t *testing.T) {
+	t.Parallel()
+
+	var failing atomic.Bool
+	failing.Store(true)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/broken" && failing.Load() {
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = writer.Write([]byte("fresh " + request.URL.Path))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	other := RemoteSource{Name: "other", URL: server.URL + "/other", Path: "lists/other.txt"}
+	broken := RemoteSource{Name: "broken", URL: server.URL + "/broken", Path: "lists/broken.txt"}
+	writeCachedList(t, root, other, "cached other")
+	writeCachedList(t, root, broken, "cached broken")
+
+	clock := newFixedClock(time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC))
+	updater := NewUpdater(root)
+	updater.now = clock.now
+	if err := updater.Refresh(context.Background(), []RemoteSource{other, broken}, func(context.Context) error { return nil }); err == nil {
+		t.Fatal("Refresh() error = nil, want the broken source reported")
+	}
+	lastUpdate := updater.Status().LastUpdate
+	writeCachedList(t, root, other, "cached other")
+
+	// Asking for one list tries it now, even inside its backoff window, and
+	// touches nothing else.
+	failing.Store(false)
+	clock.advance(time.Minute)
+	activations := 0
+	if err := updater.RefreshSource(context.Background(), broken, func(context.Context) error {
+		activations++
+		return nil
+	}); err != nil {
+		t.Fatalf("RefreshSource() error = %v", err)
+	}
+	if activations != 1 {
+		t.Fatalf("activations = %d, want 1", activations)
+	}
+	if contents, _ := os.ReadFile(filepath.Join(root, broken.Path)); string(contents) != "fresh /broken" {
+		t.Fatalf("broken list = %q, want the fresh download", contents)
+	}
+	if contents, _ := os.ReadFile(filepath.Join(root, other.Path)); string(contents) != "cached other" {
+		t.Fatalf("other list = %q, want it untouched", contents)
+	}
+	status := updater.Status()
+	if len(status.Sources) != 2 || status.Degraded != 0 {
+		t.Fatalf("status = %+v, want both sources kept and healthy", status)
+	}
+	if !status.LastUpdate.Equal(lastUpdate) {
+		t.Fatalf("last update = %s, want the full update's %s", status.LastUpdate, lastUpdate)
+	}
+
+	// A failed download keeps the cached copy and does not recompile.
+	failing.Store(true)
+	activations = 0
+	if err := updater.RefreshSource(context.Background(), broken, func(context.Context) error {
+		activations++
+		return nil
+	}); err == nil {
+		t.Fatal("RefreshSource() error = nil, want the failure reported")
+	}
+	if activations != 0 {
+		t.Fatalf("activations = %d, want none after a failed download", activations)
+	}
+	if contents, _ := os.ReadFile(filepath.Join(root, broken.Path)); string(contents) != "fresh /broken" {
+		t.Fatalf("broken list = %q, want the last good copy", contents)
+	}
+}

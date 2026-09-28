@@ -203,6 +203,7 @@ func blockingMutationAction(path string) string {
 		"/ui/blocking/lists/add":      "blocking.list.add",
 		"/ui/blocking/lists/delete":   "blocking.list.delete",
 		"/ui/blocking/lists/update":   "blocking.list.update",
+		"/ui/blocking/lists/refresh":  "blocking.list.refresh",
 		"/ui/blocking/toggle":         "blocking.toggle",
 		"/ui/blocking/pause":          "blocking.pause",
 		"/ui/blocking/resume":         "blocking.resume",
