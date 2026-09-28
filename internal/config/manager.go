@@ -61,6 +61,7 @@ func (manager *Manager) Update(ctx context.Context, mutate func(*Config) error) 
 	}
 	revision := manager.revision.Add(1)
 	manager.current.Store(&Snapshot{Config: candidate, Revision: revision, LoadedAt: time.Now()})
+	manager.announceChange()
 	return nil
 }
 
@@ -158,10 +159,14 @@ type Manager struct {
 	current  atomic.Pointer[Snapshot]
 	revision atomic.Uint64
 	mu       sync.Mutex
+	// changed is closed and replaced each time a new configuration takes
+	// effect. It has its own lock so a waiter never queues behind an apply.
+	changedMu sync.Mutex
+	changed   chan struct{}
 }
 
 func NewManager(path string, initial Config, apply ApplyFunc) *Manager {
-	manager := &Manager{path: path, apply: apply}
+	manager := &Manager{path: path, apply: apply, changed: make(chan struct{})}
 	manager.revision.Store(1)
 	manager.current.Store(&Snapshot{Config: initial, Revision: 1, LoadedAt: time.Now()})
 	return manager
@@ -169,6 +174,23 @@ func NewManager(path string, initial Config, apply ApplyFunc) *Manager {
 
 func (manager *Manager) Current() Snapshot {
 	return *manager.current.Load()
+}
+
+// Changed returns a channel that is closed once the next configuration takes
+// effect, whether it was saved here or replicated from the cluster primary.
+// Current already returns the new configuration when it closes. Call Changed
+// again afterwards to wait for the change after that.
+func (manager *Manager) Changed() <-chan struct{} {
+	manager.changedMu.Lock()
+	defer manager.changedMu.Unlock()
+	return manager.changed
+}
+
+func (manager *Manager) announceChange() {
+	manager.changedMu.Lock()
+	defer manager.changedMu.Unlock()
+	close(manager.changed)
+	manager.changed = make(chan struct{})
 }
 
 func (manager *Manager) BaseDirectory() string { return filepath.Dir(manager.path) }
@@ -187,5 +209,6 @@ func (manager *Manager) Reload(ctx context.Context) error {
 	}
 	revision := manager.revision.Add(1)
 	manager.current.Store(&Snapshot{Config: candidate, Revision: revision, LoadedAt: time.Now()})
+	manager.announceChange()
 	return nil
 }

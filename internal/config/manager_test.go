@@ -152,3 +152,57 @@ func writeConfiguration(t *testing.T, contents string) string {
 	}
 	return path
 }
+
+func TestManagerChangedClosesAfterCommitOnly(t *testing.T) {
+	t.Parallel()
+
+	path := writeConfiguration(t, "[blocking]\nenabled = false\n")
+	initial, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	reject := false
+	manager := NewManager(path, initial, func(_ context.Context, _, _ Config) error {
+		if reject {
+			return errors.New("replacement listener unavailable")
+		}
+		return nil
+	})
+
+	changed := manager.Changed()
+	reject = true
+	if err := manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Blocking.Enabled = true
+		return nil
+	}); err == nil {
+		t.Fatal("Update() error = nil, want rejection")
+	}
+	select {
+	case <-changed:
+		t.Fatal("Changed() closed after a rejected update")
+	default:
+	}
+
+	reject = false
+	if err := manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Blocking.Enabled = true
+		return nil
+	}); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	select {
+	case <-changed:
+	default:
+		t.Fatal("Changed() still open after a committed update")
+	}
+	// A waiter woken by the change must already see the new configuration.
+	if !manager.Current().Config.Blocking.Enabled {
+		t.Fatal("Current() still has the old configuration after Changed() closed")
+	}
+	next := manager.Changed()
+	select {
+	case <-next:
+		t.Fatal("the next Changed() channel is already closed")
+	default:
+	}
+}
