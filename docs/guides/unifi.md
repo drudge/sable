@@ -10,7 +10,7 @@ On a cluster, run setup on the primary. Replicas receive records through Sable r
 
 ## 1. Run the wizard
 
-Open **Integrations → UniFi Host Sync** and connect to the controller. Select reservations, active clients, or both. When both describe one device, the reservation wins.
+Open **Integrations → UniFi Host Sync** and connect to the controller. Select reservations, active clients, or both. When both describe one device, the reservation wins. A reservation for a device that isn't connected is skipped while another connected device holds its address, so a retired machine's name doesn't stick to whatever replaced it.
 
 To use UniFi only so [Insights](insights.md#devices-that-dont-use-sable) can find devices that don't use Sable, check **Use UniFi to find devices, even if Sable doesn't publish their names** and select no network. The wizard skips the zones step and publishes nothing.
 

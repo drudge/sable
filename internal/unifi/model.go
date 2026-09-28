@@ -242,6 +242,23 @@ func mergeHosts(reserved, active []Host) []Host {
 	return hosts
 }
 
+// withoutDisplacedReservations drops a reservation for a device that is not
+// connected while another connected device holds its address. A reservation
+// left behind for a retired machine would otherwise publish the old name at
+// the new machine's address, and tie that address to the old hardware.
+func withoutDisplacedReservations(hosts []Host, connected []Station) []Host {
+	online := make(map[string]bool, len(connected))
+	holder := make(map[netip.Addr]string, len(connected))
+	for _, station := range connected {
+		online[station.MAC] = true
+		holder[station.Address] = station.MAC
+	}
+	return slices.DeleteFunc(hosts, func(host Host) bool {
+		mac, held := holder[host.Address]
+		return host.Reserved && !online[host.MAC] && held && mac != host.MAC
+	})
+}
+
 // placeHosts settles which network each host belongs to. What the controller
 // says comes first, but it says nothing at all on most reservations, and it can
 // name a network that does not hold the address being published, so the network

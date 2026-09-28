@@ -481,3 +481,34 @@ func TestNetworksReadHandedOutDNS(t *testing.T) {
 		t.Fatal("a network whose DHCP the controller does not run claims to know its DNS servers")
 	}
 }
+
+// A reservation left behind for a retired machine drops out while another
+// connected device holds its address, so the old name is neither published
+// at the new machine's address nor tied to its hardware. A reservation whose
+// address is free, or whose own device is connected, stays.
+func TestConnectedDevicesDisplaceStaleReservations(t *testing.T) {
+	t.Parallel()
+	reserve := func(mac, name, address string) Host {
+		host, _ := clientPayload{MAC: mac, Hostname: name, FixedIP: address, UseFixedIP: true}.host(address, true)
+		return host
+	}
+	retired := reserve("bc:24:11:c9:8b:08", "shuttle", "10.0.7.13")
+	idle := reserve("bc:24:11:9c:da:78", "backrest", "10.0.7.9")
+	moved := reserve("bc:24:11:14:31:8a", "homeassistant", "10.0.7.11")
+	current, _ := clientPayload{MAC: "bc:24:11:d2:4d:7e", Name: "ltm-backup-relay", IP: "10.0.7.13"}.host("10.0.7.13", false)
+	connected := stations([]clientPayload{
+		{MAC: "bc:24:11:d2:4d:7e", Name: "ltm-backup-relay", IP: "10.0.7.13"},
+		// The reserved device itself is connected, on a lease it got before
+		// the reservation took, while something else briefly holds .11.
+		{MAC: "bc:24:11:14:31:8a", IP: "10.0.7.201"},
+		{MAC: "aa:bb:cc:00:00:01", IP: "10.0.7.11"},
+	})
+	hosts := withoutDisplacedReservations(mergeHosts([]Host{retired, idle, moved}, []Host{current}), connected)
+	var names []string
+	for _, host := range hosts {
+		names = append(names, host.Hostname+"@"+host.Address.String())
+	}
+	if got := strings.Join(names, ","); got != "backrest@10.0.7.9,homeassistant@10.0.7.11,ltm-backup-relay@10.0.7.13" {
+		t.Fatalf("hosts = %s", got)
+	}
+}
