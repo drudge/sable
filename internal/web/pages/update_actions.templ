@@ -29,8 +29,8 @@ templ updatePrimaryAction(view UpdateView, fromNotification bool) {
 			case "restart":
 				<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
 			case "install":
-				if fromNotification && view.CanUpdateCluster {
-					@updateScopeButton(view)
+				if view.CanUpdateCluster {
+					@updateScopeButton(view, fromNotification)
 				} else {
 					@updateInstallButton(view, fromNotification)
 				}
@@ -71,24 +71,28 @@ templ updateInstallForm(view UpdateView, fromNotification bool) {
 	</form>
 }
 
-templ updateScopeButton(view UpdateView) {
+// updateScopeButton lets a primary install on this node or update the whole
+// cluster. The notification and About share one remembered choice, so either
+// one offers what was picked last.
+templ updateScopeButton(view UpdateView, fromNotification bool) {
+	{{ prefix := ifThen(fromNotification, "notification", "about") }}
 	<div class="update-split-button" data-update-scope>
 		<div data-update-scope-action="node">
-			@updateInstallForm(view, true) {
-				<button id="notification-update-node" class="button compact" type="submit">Install update</button>
+			@updateInstallForm(view, fromNotification) {
+				<button id={ prefix + "-update-node" } class="button compact" type="submit">{ ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion) }</button>
 			}
 		</div>
 		<div data-update-scope-action="cluster" hidden>
-			@clusterUpdateForm(view.LatestVersion, true) {
-				<button id="notification-update-cluster" class="button compact" type="submit">Update cluster</button>
+			@clusterUpdateForm(view.LatestVersion, prefix) {
+				<button id={ prefix + "-update-cluster" } class="button compact" type="submit">Update cluster</button>
 			}
 		</div>
-		<button id="notification-update-scope" class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls="notification-update-scope-menu" data-update-scope-trigger>@Icon("chevron-down")</button>
-		<div id="notification-update-scope-menu" class="update-scope-menu" role="menu" aria-label="Update scope" popover="manual">
-			@updateInstallForm(view, true) {
+		<button id={ prefix + "-update-scope" } class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls={ prefix + "-update-scope-menu" } data-update-scope-trigger>@Icon("chevron-down")</button>
+		<div id={ prefix + "-update-scope-menu" } class="update-scope-menu" role="menu" aria-label="Update scope" popover="manual">
+			@updateInstallForm(view, fromNotification) {
 				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="true" data-update-scope-option="node">@Icon("server")<span><strong>This node</strong><small>Install here, then restart when ready.</small></span>@Icon("check")</button>
 			}
-			@clusterUpdateForm(view.LatestVersion, true) {
+			@clusterUpdateForm(view.LatestVersion, prefix) {
 				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="false" data-update-scope-option="cluster">@Icon("cluster")<span><strong>Entire cluster</strong><small>Update all nodes, one at a time.</small></span>@Icon("check")</button>
 			}
 		</div>

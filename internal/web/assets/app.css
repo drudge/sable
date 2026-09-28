@@ -1,3 +1,31 @@
+/* Inter ships with Sable, so text takes the same room on every device, not
+   only where Inter happens to be installed. The first file holds what nearly
+   every page shows. The second holds the rest of Inter's characters and loads
+   only on a page that shows one. docs/ui.md says how both are built. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+03BC, U+2000-206F, U+20AC,
+    U+2122, U+2190-2193, U+21B5, U+2212, U+2318, U+2713, U+FEFF;
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("inter-extra.woff2") format("woff2");
+  unicode-range: U+0100-0130, U+0132-0151, U+0154-02BA, U+02BD-02C5,
+    U+02C7-02D9, U+02DB, U+02DD-0303, U+0305-0307, U+0309-0328, U+032A-03BB,
+    U+03BD-052F, U+0E3F, U+1D43-1FFE, U+2070-20AB, U+20AD-2121, U+2123-2188,
+    U+2194-21B4, U+21BA-2211, U+221A-2265, U+2303-2305, U+2325-24EA,
+    U+25A0-26A0, U+2717-27FA, U+2B06-2B1C, U+2C7C-2C7F, U+2DFF-2E18, U+A69F,
+    U+A7FF, U+A92E, U+FE20-FE2D, U+1F12F-1F16B, U+1F850-1F852;
+}
+
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -121,7 +149,7 @@ button { cursor: pointer; }
   color: var(--sidebar-foreground);
   transition: width 180ms ease, flex-basis 180ms ease;
 }
-.sidebar-header { padding: 0.5rem 0.375rem; }
+.sidebar-header { padding: 0.5rem 0.375rem 0.25rem; }
 .sidebar-header > div, .sidebar-header { min-width: 0; }
 .brand { display: flex; min-width: 0; flex: 1; align-items: center; gap: 0.5rem; border-radius: 0.375rem; padding: 0.5rem 2.75rem 0.5rem 0.5rem; }
 .brand:hover { background: var(--sidebar-accent); }
@@ -140,13 +168,22 @@ button { cursor: pointer; }
 .sidebar-collapse { position: absolute; top: 0.625rem; right: 0.5rem; display: grid; width: 2rem; height: 2rem; place-items: center; border: 0; border-radius: 0.375rem; background: transparent; }
 .sidebar-collapse:hover, .user-menu:hover { background: var(--sidebar-accent); }
 .sidebar-nav-wrap { position: relative; min-height: 0; flex: 1; }
-.nav { min-height: 0; height: 100%; flex: none; overflow-y: auto; padding: 0 0.5rem 0.5rem; }
-@media (min-width: 768px) {
-  .sidebar .nav { overflow-y: hidden; }
-}
-.sidebar-nav-hint { display: none; }
-.nav-group { padding: 0.5rem 0; }
-.nav-label { height: 2rem; padding: 0.5rem; color: var(--muted-foreground); font-size: 0.75rem; font-weight: 500; }
+/* The list scrolls when the window is too short for it. Scrollbars stay out
+   of sight until someone scrolls, so a fade and a chevron say that more of
+   the list waits below, at every size. Scroll padding the height of a fade
+   keeps the current page, or a focused item, clear of the fades. */
+.nav { min-height: 0; height: 100%; flex: none; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 2.75rem; padding: 0 0.5rem 0.5rem; }
+.nav[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
+.nav[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
+.nav[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
+.sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end center; padding-bottom: .25rem; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
+.sidebar-nav-hint[data-visible="true"] { opacity: 1; }
+.sidebar-nav-hint .nav-icon { width: 1rem; height: 1rem; transform: rotate(180deg); }
+/* Section labels sit close to the items they name, with more room above to
+   set their group apart. Tight spacing keeps the whole list in view on a
+   laptop-height window instead of scrolling. */
+.nav-group { padding: 0.25rem 0; }
+.nav-label { height: 2rem; padding: 0.75rem 0.5rem 0.25rem; color: var(--muted-foreground); font-size: 0.75rem; font-weight: 500; }
 .nav-item { display: flex; width: 100%; height: 2.25rem; align-items: center; gap: 0.5rem; overflow: hidden; border: 1px solid transparent; border-radius: 0.375rem; padding: 0 0.5rem; color: var(--sidebar-foreground); font-size: 0.875rem; font-weight: 500; white-space: nowrap; }
 .nav-item + .nav-item { margin-top: .25rem; }
 .nav-item:hover, .nav-item.active { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
@@ -222,6 +259,9 @@ button { cursor: pointer; }
   .sidebar-collapsed .user-menu { width: 2.5rem; height: 2.5rem; justify-content: center; margin-inline: auto; border-radius: 0.625rem; padding: 0.25rem; }
   .sidebar-collapsed .nav-item { height: 2.5rem; border-radius: .5rem; }
   .sidebar-collapsed .nav-item.active { border-color: transparent; background: var(--sidebar-accent); }
+  /* The collapsed rail hides the section labels, so a wider gap is all that
+     sets the groups apart. */
+  .sidebar-collapsed .nav-group { padding: 0.5rem 0; }
 }
 .sidebar-tooltip { position: fixed; z-index: 80; max-width: 14rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--popover); padding: .3rem .55rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 500; line-height: 1.4; white-space: nowrap; pointer-events: none; box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .22); }
 .sidebar-tooltip::after { position: absolute; top: 50%; left: -.25rem; width: .375rem; height: .375rem; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--popover); content: ""; transform: translateY(-50%) rotate(45deg); }
@@ -270,6 +310,16 @@ button { cursor: pointer; }
 
 .main { min-width: 0; flex: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 1rem; background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
 .mobile-header { display: none; }
+/* Home Screen apps get no refresh gesture from iOS, so the console draws its
+   own: a chip that slides out from under the header with the finger and spins
+   once the pull is far enough to reload. It sits just below the header's layer
+   so it stays hidden until it clears it. */
+.pull-refresh { position: fixed; top: 0; left: 50%; z-index: 14; display: none; width: 2.5rem; height: 2.5rem; place-items: center; margin-left: -1.25rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); color: var(--muted-foreground); box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .24); pointer-events: none; }
+.pull-refresh.is-active { display: grid; }
+.pull-refresh.is-settling { transition: transform 180ms ease, opacity 180ms ease; }
+.pull-refresh.is-ready, .pull-refresh.is-refreshing { color: var(--foreground); }
+.pull-refresh .nav-icon { width: 1.25rem; height: 1.25rem; }
+.pull-refresh.is-refreshing .nav-icon { animation: blocking-refresh-spin .8s linear infinite; }
 .content { width: 100%; padding: 1.5rem; }
 .dashboard-page { display: grid; gap: 1rem; }
 .dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: .5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
@@ -737,6 +787,12 @@ textarea:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in o
 .query-form label, .token-form label, .auth-form label { display: grid; gap: 0.5rem; font-size: 0.875rem; font-weight: 500; }
 input, select { width: 100%; height: 2.25rem; border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px); outline: 0; background: transparent; padding: 0 0.75rem; font-size: 0.875rem; }
 input:focus, select:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 28%, transparent); }
+/* Safari on iPhone zooms the page into any field with text under 16px and
+   leaves it zoomed after. Touch screens get 16px fields so it never starts;
+   the override has to beat every smaller size set on a field elsewhere. */
+@media (hover: none) and (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
 .button, .query-form button, .token-form button, .auth-form button { display: inline-flex; height: 2.25rem; align-items: center; justify-content: center; border: 1px solid var(--primary); border-radius: 999px; background: var(--primary); padding: 0 1rem; color: var(--primary-foreground); font-size: 0.875rem; font-weight: 500; line-height: 1; }
 .button:hover, .query-form button:hover, .token-form button:hover, .auth-form button:hover { opacity: 0.9; }
 .button.outline { border-color: var(--border); background: var(--background); color: var(--foreground); }
@@ -1274,8 +1330,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .toast-update .notification-actions .button { width: 100%; min-height: 2.25rem; justify-content: center; }
 .update-split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
 .update-split-button > [data-update-scope-action], .update-split-button > [data-update-scope-action] form { min-width: 0; margin: 0; }
-.toast-update .update-split-button > [data-update-scope-action] .button { border-top-right-radius: 0; border-bottom-right-radius: 0; padding-inline: .5rem; white-space: nowrap; }
-.toast-update .notification-actions .update-scope-trigger { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
+.update-split-button > [data-update-scope-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
+.toast-update .update-split-button > [data-update-scope-action] .button { padding-inline: .5rem; }
+.update-split-button .update-scope-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
 .update-scope-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
 .update-scope-menu form { margin: 0; }
 .update-scope-option { display: flex; align-items: center; gap: .75rem; width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem .5rem; color: inherit; text-align: left; }
@@ -1684,11 +1741,82 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .license-dialog { width: min(32rem, calc(100vw - 2rem)); }
 .license-dialog .license-content { max-height: min(28rem, 60dvh); margin-inline: -1.5rem; overflow: auto; }
 .license-dialog .license-content pre { margin: 0; border-right: 0; border-left: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--foreground); font: .75rem/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+/* Third-party licenses: a row per piece of software that opens to its
+   license. The dialog's list is the one scroll area, so an open license
+   grows the list rather than scrolling inside it. */
+.license-dialog .dialog-footer .third-party-licenses-button { margin-right: auto; }
+.third-party-licenses-dialog { width: min(36rem, calc(100vw - 2rem)); }
+.third-party-licenses section + section { margin-top: .5rem; }
+.release-notes-content.third-party-licenses h3 { margin: .75rem 1.5rem .5rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
+.third-party-license { border-top: 1px solid var(--border); }
+.third-party-license:last-child { border-bottom: 1px solid var(--border); }
+.third-party-license > summary { display: grid; min-height: 2.75rem; grid-template-columns: minmax(0, 1fr) auto 1rem; align-items: center; gap: .75rem; padding: .5rem 1.5rem; cursor: pointer; list-style: none; }
+.third-party-license > summary::-webkit-details-marker { display: none; }
+.third-party-license > summary:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.third-party-license-name { overflow-wrap: anywhere; font-weight: 500; }
+.third-party-license-kind { flex: none; border: 1px solid var(--border); border-radius: 999px; padding: .05rem .5rem; color: var(--muted-foreground); font-size: .6875rem; font-weight: 600; }
+.third-party-license > summary .nav-icon { flex: 0 0 1rem; color: var(--muted-foreground); transition: transform 150ms ease; }
+.third-party-license[open] > summary .nav-icon { transform: rotate(180deg); }
+.third-party-license-text { display: grid; justify-items: start; gap: .5rem; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 25%, transparent); padding: .75rem 1.5rem 1rem; }
+.third-party-license-link { display: inline-flex; max-width: 100%; align-items: center; gap: .35rem; font-size: .75rem; overflow-wrap: anywhere; }
+.third-party-license-link .nav-icon { width: .8rem; height: .8rem; flex: 0 0 .8rem; }
+.release-notes-content .third-party-license-text h4 { margin: .5rem 0 0; font-size: .75rem; }
+.license-dialog .license-content .third-party-license-text pre { max-height: none; overflow: visible; border: 0; background: transparent; padding: 0; }
+.third-party-license-loading { color: var(--muted-foreground); font-size: .78rem; }
 .auth-form { display: grid; gap: 1rem; }
 .auth-form button { width: 100%; margin-top: 0.25rem; }
 .integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem 0.75rem; }
 .integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+/* The address is long, so it takes its own row above the short facts, which
+   sit four across on a wide card and two by two on a narrow one. */
+.mcp-card-body { container-type: inline-size; }
+.mcp-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mcp-facts .integration-fact-address { grid-column: 1 / -1; }
+@container (max-width: 36rem) { .mcp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The wizard's tool list follows the group permission picker: a checkbox per
+   tool with the grant it needs pushed to the right, and no inner scrolling. */
+.mcp-tool-sections .permission-surface .permission-checks { max-height: none; overflow: visible; border-bottom: 0; padding-bottom: 0; }
+.mcp-tool-sections .permission-checks label { align-items: center; padding: .3rem .45rem; }
+.mcp-tool-sections .permission-checks input { margin: 0; }
+.mcp-tool-sections .mcp-tool-grant { margin-left: auto; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; }
+.mcp-tool-sections .permission-surface > header > .mcp-tool-section-title { display: flex; align-items: center; gap: .3rem; }
+/* The info button sits after the title at the left, so its tooltip opens
+   rightward instead of running off the dialog's edge. */
+.mcp-section-info { color: var(--muted-foreground); }
+.mcp-section-info .operational-metric-tooltip { right: auto; left: -.45rem; text-align: left; }
+.mcp-section-info .operational-metric-tooltip::before { right: auto; left: .85rem; transform: translate(-50%, 50%) rotate(45deg); }
+/* Keep the step bar close to the title and the list close to the bar. */
+.mcp-setup-dialog[open] { gap: .5rem; }
+.mcp-setup-form > .dialog-tab-panel { padding-top: .75rem; }
+/* Three steps whose markers are the dialog's tabs: the chosen step is
+   current, and every step before it, with the line after it, is complete. */
+.wizard-progress.mcp-wizard-progress { width: min(100%, 20rem); grid-template-columns: auto minmax(2rem, 1fr) auto minmax(2rem, 1fr) auto; justify-self: center; padding: 0 0 .4rem; }
+.mcp-wizard-progress > button[aria-selected="true"] { color: #3b82f6; }
+.mcp-wizard-progress > button[aria-selected="true"] > span { border-color: #3b82f6; background: rgb(59 130 246 / .12); }
+.mcp-wizard-progress > button:has(~ button[aria-selected="true"]) { color: #22c55e; }
+.mcp-wizard-progress > button:has(~ button[aria-selected="true"]) > span { border-color: #22c55e; background: rgb(34 197 94 / .12); }
+.mcp-wizard-progress > i:has(~ button[aria-selected="true"]) { background: #22c55e; }
+.table-badges.mcp-grant-summary { max-width: none; }
+.mcp-grant-summary code { font-size: .625rem; }
+.mcp-group-form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+/* Buttons in the Access step size their icons like other console buttons;
+   the flex basis is set too, or the icon keeps its larger default width. */
+.mcp-group-form .button { display: inline-flex; align-items: center; gap: .45rem; }
+.mcp-group-form .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+#mcp-access-group.wizard-panel.compact, #mcp-access-token.wizard-panel.compact { gap: .75rem; }
+.mcp-access-token.is-waiting .wizard-heading { opacity: .6; }
+#mcp-access-group .wizard-heading small strong { color: var(--foreground); font-size: inherit; font-weight: 600; }
+.mcp-group-form .field-control { flex: 1 1 12rem; }
+/* The join box matches the name field's height and centers its contents. */
+.mcp-group-form .settings-check { display: inline-flex; box-sizing: border-box; height: 2.25rem; align-items: center; gap: .5rem; padding: 0 .75rem; font-size: .8125rem; }
+.mcp-group-form .settings-check input { margin: 0; }
+#mcp-group-result:empty { display: none; }
+.mcp-client-tabs .dialog-tab-list { margin: 0; }
+.mcp-client-tabs .dialog-tab-panel { gap: .5rem; min-width: 0; padding: 0; }
+.mcp-client-tabs .field-help { margin: 0; }
+.mcp-client-tabs .dialog-tab { white-space: nowrap; }
+@media (max-width: 480px) { .mcp-client-tabs .dialog-tab-list.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .integration-fact-address { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
 .integration-fact-address .integration-fact-label { grid-column: 1; grid-row: 1; }
@@ -1795,13 +1923,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.sidebar-header { flex: 0 0 auto; padding: .75rem; }
 	.sidebar-collapse { top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; border-radius: .625rem; }
 	.sidebar-nav-wrap { flex: 1 1 auto; }
-	.nav { overscroll-behavior: contain; padding: .25rem .75rem .75rem; }
-	.nav[data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
-	.nav[data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
-	.nav[data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
-	.sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end center; padding-bottom: .25rem; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
-	.sidebar-nav-hint[data-visible="true"] { opacity: 1; }
-	.sidebar-nav-hint .nav-icon { width: 1rem; height: 1rem; transform: rotate(180deg); }
+	.nav { padding: .25rem .75rem .75rem; }
 	/* Keep the section break visible without spending a full touch target on it. */
 	.nav-group { padding: .375rem 0; }
 	.nav-label { height: 2.5rem; padding: .625rem .75rem; font-size: .8125rem; }
@@ -1815,8 +1937,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.user-action { width: 2.5rem; height: 2.5rem; border-radius: .625rem; }
 	.account-popover { left: 50%; transform: translateX(-50%); }
 	.sidebar-mobile-open .sidebar { transform: translateX(0); }
-  .sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); }
-  .sidebar-mobile-open .sidebar-scrim { display: block; }
+  /* The open menu leaves the page inert, like a dialog does, so its scrim
+     blurs and fades in the way dialog backdrops do. */
+  .sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+  .sidebar-mobile-open .sidebar-scrim { display: block; animation: backdrop-in 150ms ease-out; }
   .main { min-height: 100vh; overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
   /* The header sticks so navigation stays one tap away, but slides out of the
      way while reading down a long page and comes back on the first scroll up. */
@@ -1888,7 +2012,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.resolver-combobox, .query-options-row .transport-picker, .query-options-row .edns-subnet { width: auto; }
 	.resolver-combobox { grid-column: span 2; }
 	.resolver-popover { width: 100%; }
+	/* Stacked on a phone, the main button (last in every footer) goes on top,
+	   and the one that just closes the dialog, such as Cancel or Done, goes to
+	   the bottom, the way iOS stacks them. */
 	.dialog-footer { flex-direction: column-reverse; }
+	.dialog-footer > [data-dialog-close] { order: -1; }
 	.dialog-footer .button { width: 100%; }
 	.isotope-record-dialog { width: calc(100vw - 1rem); max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
 	.isotope-record-dialog-header { padding: 1.25rem 3rem .85rem 1rem; }
@@ -2103,7 +2231,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 }
 
 /* Isotope control-plane pages. These mirror the React/shadcn source layout. */
-.cluster-layout { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(17rem, .9fr); align-items: start; gap: 1.5rem; }
+.cluster-layout { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(17rem, 1fr); align-items: start; gap: 1.5rem; }
 .cluster-main-column, .cluster-aside { display: grid; min-width: 0; align-content: start; gap: 1.25rem; }
 .cluster-live-status { display: grid; min-width: 0; gap: 1.25rem; }
 .cluster-status-card { overflow: hidden; }
@@ -2368,6 +2496,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 @media (max-width: 800px) { .cluster-identity, .cluster-sync-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cluster-sync-grid > div:nth-child(3) { border-left: 0; padding-left: 0; } }
 @media (max-width: 639px) { .cluster-metrics { grid-template-columns: 1fr; padding: 1rem; } }
 @media (max-width: 700px) { .cluster-identity, .cluster-sync-grid, .cluster-aside { grid-template-columns: 1fr; } .cluster-sync-grid > div { border-top: 1px solid var(--border); border-left: 0; padding: .55rem 0 0; } .cluster-sync-grid > div:first-child { border-top: 0; padding-top: 0; } .cluster-aside .warning-box { grid-column: auto; } .cluster-danger-card { align-items: stretch; flex-direction: column; } .cluster-danger-card .button { width: 100%; justify-content: center; } .cluster-node-meta { display: none; } .cluster-node-actions .button { width: 100%; justify-content: center; } .cluster-node-actions, .cluster-node-actions form { width: 100%; } .cluster-nodes-card > header { align-items: flex-start; flex-wrap: wrap; } }
+/* On a phone the columns stack, which left Rolling Updates below every node.
+   Flatten both columns into one list so it follows Cluster Status. */
+@media (max-width: 700px) {
+  .cluster-layout { display: flex; flex-direction: column; align-items: stretch; gap: 1.25rem; }
+  .cluster-main-column, .cluster-aside, .cluster-live-status { display: contents; }
+  .cluster-status-card { order: -2; }
+  #cluster-updates { order: -1; }
+}
 @media (max-width: 700px) { .cluster-settings-grid { grid-template-columns: 1fr; } .cluster-settings-field-full { grid-column: auto; } .cluster-certificate-choices { grid-template-columns: 1fr; } .cluster-certificate-choices > label > span { min-height: 3.25rem; grid-template-columns: auto 1fr; justify-items: start; text-align: left; } .cluster-certificate-choices small { display: none; } .cluster-certificate-advanced-content { grid-template-columns: 1fr; } }
 
 .isotope-control-page { gap: 1.5rem; }
@@ -2398,7 +2534,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .isotope-data-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
 .isotope-data-header > div > span { color: var(--muted-foreground); font-size: .875rem; }
 .button.compact { display: inline-flex; height: 2rem; align-items: center; gap: .45rem; padding-inline: .75rem; font-size: .75rem; }
-.button.compact .nav-icon { width: 1rem; height: 1rem; }
+/* The basis matches the width. Otherwise phones give the icon the sidebar's
+   1.25rem basis, and Safari sizes the button too small and wraps its label. */
+.button.compact .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 [data-replica-primary-only="true"] { cursor: not-allowed !important; opacity: .45 !important; }
 .switch:has(input[data-replica-primary-only="true"]) { cursor: not-allowed; opacity: .45; }
 .replica-read-only-banner { position: sticky; top: 0; z-index: 15; display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid color-mix(in oklch, #3b82f6 60%, var(--border)); background-color: color-mix(in oklch, #3b82f6 10%, var(--background)); background-image: repeating-linear-gradient(135deg, transparent 0 14px, color-mix(in oklch, #3b82f6 7%, transparent) 14px 22px); padding: .5rem 1.5rem; box-shadow: 0 2px 10px rgb(0 0 0 / .08); backdrop-filter: blur(12px); }
@@ -2508,8 +2646,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .token-secret button { opacity: 1; }
 
 .isotope-form-dialog { width: min(calc(100% - 2rem), 32rem); }
-/* Six Send To choices fit on one line. */
-.isotope-form-dialog.insight-alerts-dialog { width: min(calc(100% - 2rem), 38rem); }
+/* Six Format choices fit on one line. */
+.isotope-form-dialog.alert-destination-dialog { width: min(calc(100% - 2rem), 38rem); }
 .isotope-dialog-body { display: grid; gap: 1rem; overflow-y: auto; padding: 1.5rem; }
 .isotope-dialog-body > label, .embedded-admin-form > label { display: grid; gap: .5rem; font-size: .8125rem; font-weight: 500; }
 .isotope-dialog-body fieldset { min-width: 0; margin: 0; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .75rem; }
@@ -2595,13 +2733,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* The strip shares each row out between whatever tabs land on it, so adding
    or dropping a section never leaves a hole at the end of a row. */
 .settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: .25rem; }
-.settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 8 * .25rem) / 9); }
+.settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 9 * .25rem) / 10); }
 /* The basis names how many tabs share a row, and flex-grow fills whatever row
-   they land on: nine across while there is room, then five, then three. A
-   plain fixed basis wraps wherever it happens to run out and leaves the last
-   row holding one tab stretched across the whole strip. */
+   they land on: ten across while there is room, then two even rows of five,
+   down to phones 375px wide, where Recursion still fits. Narrower phones get
+   four. A plain fixed basis wraps wherever it happens to run out and leaves
+   the last row holding one tab stretched across the whole strip. */
 @media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
-@media (max-width: 560px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 2 * .25rem) / 3); } }
+@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }
 .settings-tab { height: 3.25rem; flex-direction: column; gap: .25rem; padding: .45rem .25rem; }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
 .settings-tab span { font-size: .6875rem; line-height: 1; }
@@ -2756,9 +2895,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-card-title .nav-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 1.25rem; color: #f1ad47; }
 .about-code-block { position: relative; min-width: 0; }
 .about-code-block pre { max-height: none; padding-right: 2.75rem; background: color-mix(in oklch, var(--muted) 40%, transparent); font-size: .6875rem; }
-.about-copy-button { position: absolute; top: .25rem; right: .25rem; display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: .375rem; background: transparent; color: var(--muted-foreground); }
+.about-copy-button { position: absolute; top: .4rem; right: .4rem; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; padding: 0; color: var(--muted-foreground); transition: background 120ms; }
 .about-copy-button:hover { background: var(--accent); color: var(--foreground); }
-.about-copy-button .nav-icon { width: .875rem; height: .875rem; }
+/* Center the icon the way the record copy buttons do: without this the
+   text-height icon wrappers sit up and to the left of the hover box. */
+.about-copy-button > span { align-items: center; justify-content: center; line-height: 0; }
+.about-copy-button:not(.is-copied) > .copy-icon-default, .about-copy-button.is-copied > .copy-icon-success { display: flex; }
+.about-copy-button.is-copied > .copy-icon-success { color: #22c55e; }
+.about-copy-button .nav-icon { width: .85rem; height: .85rem; flex-basis: .85rem; }
 .about-metrics-preview { display: grid; justify-items: start; gap: .75rem; }
 .about-metrics-preview pre { width: 100%; max-height: 14rem; font-size: .6875rem; }
 .about-metrics-preview pre:not(:empty) { display: block !important; }
@@ -2771,13 +2915,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-copy small { overflow-wrap: anywhere; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.5; }
 .update-release-dialog { width: min(42rem, calc(100vw - 2rem)); pointer-events: auto; }
 .update-release-dialog .release-notes-content { margin: 0; padding-right: .25rem; max-height: min(28rem, 60dvh); }
-.about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0; }
+/* The auto margin keeps the actions on the right when they wrap under the
+   summary, instead of hugging the left edge. */
+.about-update-actions { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: .4rem; margin: 0 0 0 auto; }
 .about-update-actions:empty { display: none; }
 .about-update-actions > form { margin: 0; }
 .about-update-check-pending { display: none; }
-[data-update-check].htmx-request .about-update-check-idle { display: none; }
-[data-update-check].htmx-request .about-update-check-pending { display: inline; }
-[data-update-check].htmx-request .icon-refresh { animation: about-update-spin .65s linear infinite; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .about-update-check-idle { display: none; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .about-update-check-pending { display: inline; }
+[data-update-check]:is(.htmx-request, [aria-busy="true"]) .icon-refresh { animation: about-update-spin .65s linear infinite; }
 [data-update-check].htmx-request .about-update-menu { pointer-events: none; }
 /* Split control: the check runs on the left half, the release channel lives
    behind the caret so the row keeps one visible action. */
@@ -2812,7 +2958,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
 @keyframes about-update-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check].htmx-request .icon-refresh { animation: none; }
+  .about-update-busy .about-update-icon .nav-icon, .about-update.is-restarting .about-update-icon .icon-refresh, [data-update-check]:is(.htmx-request, [aria-busy="true"]) .icon-refresh { animation: none; }
 }
 .about-footer { padding: .25rem 0 1rem; color: var(--muted-foreground); font-size: .75rem; text-align: center; }
 @media (max-width: 640px) {
@@ -2826,13 +2972,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   .about-build-meta { display: grid; grid-template-columns: minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: .75rem; }
   .about-commit-suffix { display: none; }
   .about-update { align-items: stretch; }
-  .about-update-actions { width: 100%; }
-  .about-update-actions > form { min-width: 0; flex: 1 1 0; }
+  /* Equal columns, however many actions there are, so Release notes never
+     outgrows the main action beside it. */
+  .about-update-actions { display: grid; width: 100%; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; }
+  .about-update-actions > form { min-width: 0; }
   .about-update-actions > form > .button, .about-update-actions > form > .about-update-split { width: 100%; }
-  .about-update-actions > .button, .about-update-split { flex: 1 1 0; }
+  .about-update-split { flex: 1 1 0; }
   .about-update-actions > .button { justify-content: center; }
   .about-update-split > .button { flex: 1; justify-content: center; }
-  .update-release-dialog .dialog-footer { flex-direction: column; }
 }
 .settings-link-button { display: inline-flex; width: fit-content; align-items: center; gap: .5rem; }
 .settings-link-button .nav-icon { width: 1rem; height: 1rem; }
@@ -3154,8 +3301,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.certificate-renew-button { width: 100%; }
 	.certificate-detail-grid { grid-template-columns: 1fr; }
   .settings-source-card > header, .isotope-card-content { padding-inline: 1rem; }
-	.isotope-form-dialog { width: calc(100% - 1rem); }
-	.isotope-form-dialog.insight-alerts-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog, .isotope-form-dialog.mcp-setup-dialog { width: calc(100% - 1rem); }
+	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
 	.user-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
@@ -3212,7 +3359,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-card-empty { justify-items: start; }
 .integration-card-empty p { max-width: 46rem; margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.55; }
 .integration-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
-.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.integration-card-actions-primary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-left: auto; }
 /* Outline destructive: present but not shouting next to the primary action. */
 .button.outline.destructive { border-color: color-mix(in srgb, var(--destructive) 55%, var(--border)); background: var(--background); color: var(--destructive); }
 .button.outline.destructive:hover { background: color-mix(in srgb, var(--destructive) 12%, transparent); opacity: 1; }
@@ -3223,7 +3370,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-wizard-dialog input[type="checkbox"], .unifi-wizard-dialog input[type="radio"] {
 	width: 1rem; height: 1rem; flex: 0 0 1rem; padding: 0; accent-color: #3b82f6;
 }
-.integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; }
+/* Switches keep their track on this page, where plain checkboxes are shrunk. */
+.integrations-page .setting-switch-row input[type="checkbox"] { width: 2.75rem; height: 1.5rem; flex: 0 0 2.75rem; }
+.integration-card-actions .button .nav-icon, .integration-card-actions-primary .button .nav-icon, .integration-card-empty .button .nav-icon { width: 1rem; height: 1rem; flex-basis: 1rem; }
 #unifi-status, #dynamic-dns-status { display: grid; gap: .6rem; }
 .unifi-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; color: var(--muted-foreground); font-size: .72rem; }
 .button.is-syncing .icon-refresh, .unifi-status-line .icon-refresh { animation: blocking-refresh-spin .8s linear infinite; }
@@ -3316,6 +3465,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-plan-records .admin-desktop-table { max-height: 18rem; overflow-y: auto; margin-top: .6rem; }
 .unifi-skipped ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.6; }
 .unifi-wizard-dialog { width: min(56rem, calc(100% - 3rem)); }
+.isotope-form-dialog.mcp-setup-dialog { width: min(48rem, calc(100% - 3rem)); }
+.mcp-setup-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100dvh - 2rem); }
+.mcp-setup-form { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.mcp-setup-form > .dialog-tab-panel { overflow-y: auto; }
 /* Only the step panel scrolls. Without bounding the form the dialog itself
    grows past its max-height and drags the footer off screen. */
 .unifi-wizard-dialog[open] { grid-template-rows: auto minmax(0, 1fr); }
@@ -3437,6 +3590,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.unifi-wizard-dialog .wizard-footer { margin: 0 -1rem -1rem; padding-inline: 1rem; }
 	.wizard-footer { align-items: stretch; flex-direction: column-reverse; }
 	.wizard-footer-advance { align-items: stretch; flex-direction: column-reverse; }
+	/* Two steps need only Back beside the main button; Cancel stays below. */
+	.mcp-setup-dialog .wizard-footer-advance { flex-direction: row; }
+	.mcp-setup-dialog .wizard-footer-advance .button { flex: 1 1 0; }
 	.wizard-footer .button { width: 100%; justify-content: center; }
 	.wizard-progress { grid-template-columns: auto 1fr auto 1fr auto 1fr auto; }
 	.field-grid.dynamic-dns-global-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3669,27 +3825,31 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cluster-update-status { font-size: .75rem; font-weight: 500; }
 
 .cluster-update-card { padding: 1.25rem; }
+/* A rollout started from About or the update notification lands here. */
+#cluster-updates { scroll-margin-top: 1rem; }
+@media (max-width: 767px) { #cluster-updates { scroll-margin-top: 4.5rem; } }
 .cluster-update-card > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .cluster-update-card > header h2 { margin: 0; font-size: 1rem; }
 .cluster-update-version { flex: 0 0 auto; gap: .3rem; white-space: nowrap; }
 .cluster-update-version .nav-icon { width: .8rem; height: .8rem; }
 .cluster-update-version.available { background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
 .dark .cluster-update-version.available { color: #f1ad47; }
+.cluster-update-version.installing { background: color-mix(in oklch, #d97706 12%, transparent); color: #d97706; }
+.dark .cluster-update-version.installing { color: #f1ad47; }
 .cluster-update-version.current { background: color-mix(in oklch, #16a34a 12%, transparent); color: #16a34a; }
 .dark .cluster-update-version.current { color: #22c55e; }
 .cluster-update-content { display: grid; gap: 1rem; margin-top: .5rem; font-size: .8125rem; }
 .cluster-update-content > :is(p, ol) { margin: 0; }
 .cluster-update-content > p { color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
-.cluster-update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+/* Two equal columns at every width. A wrapping row stacked the buttons in the
+   narrow side column whenever a label ran a few pixels long, then unstacked
+   them when a shorter label, such as Checking…, took its place. */
+.cluster-update-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .cluster-update-actions:empty { display: none; }
-
-@media (max-width: 767px) {
-  .cluster-update-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cluster-update-actions > form { min-width: 0; }
-  .cluster-update-actions > :only-child { grid-column: 1 / -1; }
-  .cluster-update-actions > .button,
-  .cluster-update-actions > form .button { width: 100%; min-width: 0; white-space: nowrap; }
-}
+.cluster-update-actions > form { min-width: 0; }
+.cluster-update-actions > :only-child { grid-column: 1 / -1; }
+.cluster-update-actions > .button,
+.cluster-update-actions > form .button { width: 100%; min-width: 0; justify-content: center; padding-inline: .5rem; white-space: nowrap; }
 
 
 /* Insights */
@@ -3859,6 +4019,18 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
 .insights-tab-list .nav-icon { width: 1rem; height: 1rem; }
 .insights-tab-panel { display: grid; min-width: 0; gap: 1.5rem; }
 .insights-tab-panel[hidden] { display: none; }
+/* The Devices search sits under the card's heading, as Query Logs' does, with
+   the filters beside it. When the card is narrow the filters drop below. */
+.insight-device-filter-selects { display: flex; flex: none; gap: .5rem; }
+.insight-device-filter-selects > * { width: 8.75rem; }
+.insight-device-filter-selects > .insight-device-type-filter { width: 11rem; }
+.insight-device-search-bar .insights-skeleton-block { height: 2.25rem; border-radius: calc(var(--radius) - 2px); }
+.insight-device-search-bar > .insights-skeleton-block { min-width: 12rem; flex: 1; }
+@container (max-width: 36rem) {
+  .insight-device-search-bar { flex-wrap: wrap; row-gap: .5rem; padding-inline: 1rem; }
+  .insight-device-filter-selects { flex: 1 1 100%; }
+  .insight-device-filter-selects > *, .insight-device-filter-selects > .insight-device-type-filter { min-width: 0; flex: 1; width: auto; }
+}
 .insight-device-table tbody th { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; color: var(--foreground); font-size: .8125rem; font-weight: 400; text-align: left; }
 .insight-device-table td:last-child { width: 3rem; }
 .insight-device-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
@@ -3896,7 +4068,7 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
    icon on a gray tile. The app's name always sits beside it. */
 .app-icon { width: 2rem; height: 2rem; flex: 0 0 2rem; }
 svg.app-icon { display: block; border-radius: .5rem; }
-.dark svg.app-icon { box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent); }
+.dark svg.app-icon, svg.app-icon-white { box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent); }
 .app-icon-category { display: grid; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
 .app-icon-category .nav-icon { width: 1rem; height: 1rem; }
 .top-stats-row > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }
@@ -3956,7 +4128,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
 @media (max-width: 639px) {
 	.insights-tab-list { width: 100%; }
 	.insights-tab-list .isotope-tab { min-width: 0; flex: 1; }
-	.insights-heading { display: grid; }
+	/* The column fills the page. Left to size itself, it shrinks to the
+	   subtitle, and the range row ends where the subtitle does. */
+	.insights-heading { display: grid; grid-template-columns: minmax(0, 1fr); }
 	.insights-range { width: 100%; padding-top: 0; }
 	.insights-range .range-select { width: 100%; }
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: minmax(0, 1fr); }
@@ -4003,11 +4177,25 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .query-detail-answer .insight-type-reasons li code { border: 0; background: none; padding: 0; font-size: .78rem; overflow-wrap: anywhere; }
 .insight-type-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; }
 .insight-type-form .field-control { min-width: 12rem; flex: 1; }
-/* Hiding a finding: the drawer's last section and the card's hidden list. */
-.insight-feedback { display: grid; gap: .65rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
-.insight-feedback h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-.insight-feedback p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
-.insight-feedback-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* Hiding a finding: Hide Finding at the end of Why Sable surfaced this, and
+   the card's hidden list. The row is as tall as the button and rises into the
+   section's top padding, so the heading stays where it sits without the
+   button and the reasons start the section's own gap below it. The summary is
+   a block, so the menu's box is exactly the button whatever the font's line
+   metrics. The menu opens upward when the drawer has no room below it. */
+.insight-why-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.insight-why-heading.has-hide-menu { margin-top: -.5rem; }
+.insight-hide-menu { position: relative; }
+.insight-hide-menu > summary.button { display: flex; list-style: none; cursor: pointer; }
+.insight-hide-menu > summary::-webkit-details-marker { display: none; }
+.insight-hide-menu[open] > summary { background: var(--accent); color: var(--accent-foreground); }
+.insight-hide-menu > form { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 20; display: grid; width: 16rem; max-width: calc(100vw - 2.5rem); margin: 0; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); padding: .375rem; color: var(--popover-foreground); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+.insight-hide-menu[data-side="top"] > form { top: auto; bottom: calc(100% + .35rem); }
+.insight-hide-menu > form > span { padding: .3rem .5rem .35rem; color: var(--muted-foreground); font-size: .6875rem; font-weight: 600; letter-spacing: .055em; text-transform: uppercase; }
+.insight-hide-menu button { display: grid; gap: .2rem; width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .55rem .5rem; color: inherit; text-align: left; }
+.insight-hide-menu button:hover, .insight-hide-menu button:focus-visible { background: var(--accent); color: var(--accent-foreground); }
+.insight-hide-menu strong { font-size: .8125rem; font-weight: 500; }
+.insight-hide-menu small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
 .insight-hidden { border-top: 1px solid var(--border); padding: .75rem 1.25rem; }
 .insight-hidden > summary { width: fit-content; cursor: pointer; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .insight-hidden > summary:hover { color: var(--foreground); }
@@ -4016,6 +4204,63 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-hidden li > div { display: grid; min-width: 0; gap: .1rem; }
 .insight-hidden strong { overflow: hidden; font-size: .8125rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .insight-hidden small { color: var(--muted-foreground); font-size: .72rem; }
+/* The bell beside the range control says whether Insights alerts are on and
+   leads to Settings > Alerts. Settings beside it opens what Insights does
+   with each kind of finding. */
+.insight-alerts-bell, .insight-settings-open { flex: 0 0 auto; gap: .35rem; }
+.insight-alerts-bell .nav-icon, .insight-settings-open .nav-icon { width: 1rem; height: 1rem; }
+.insight-alerts-bell.on .nav-icon { color: #16a34a; }
+.insight-alerts-bell.paused .nav-icon { color: #d97706; }
+.dark .insight-alerts-bell.on .nav-icon { color: #22c55e; }
+.dark .insight-alerts-bell.paused .nav-icon { color: #f1ad47; }
+/* An operator who may not open Settings sees the state without a link. */
+span.insight-alerts-bell { cursor: default; }
+span.insight-alerts-bell:hover { background: var(--background); color: var(--foreground); }
+/* The header and footer stay put while the list of kinds scrolls between. */
+.isotope-form-dialog.insight-settings-dialog { width: min(calc(100% - 2rem), 46rem); max-height: min(92vh, 60rem); overflow: hidden; padding: 0; }
+.insight-settings-dialog[open] { grid-template-rows: auto minmax(0, 1fr); gap: 0; }
+.insight-settings-dialog > .dialog-header { padding: 1.5rem 3.5rem 1rem 1.5rem; }
+.insight-settings { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+.insight-settings-body { min-height: 0; gap: 1.25rem; padding-top: .25rem; }
+.insight-settings-footer { align-items: center; border-top: 1px solid var(--border); padding: 1rem 1.5rem; }
+.insight-settings-footer .insight-settings-reset { margin-right: auto; }
+.insight-settings-read-only { display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
+.insight-settings-read-only .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; }
+.insight-settings-group { display: grid; }
+.insight-settings-group > h3 { margin: 0 0 .25rem; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.insight-setting { display: grid; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 0; }
+.insight-setting-heading { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
+.insight-setting-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .5rem; background: color-mix(in oklch, currentColor 11%, transparent); color: var(--muted-foreground); }
+.insight-setting-icon .nav-icon { width: 1rem; height: 1rem; }
+.insight-setting-copy { display: grid; min-width: 0; gap: .15rem; }
+.insight-setting-copy strong { font-size: .8125rem; font-weight: 600; }
+.insight-setting-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+/* Show and alert, Show only, or Off: one choice, drawn like the range tabs. */
+.insight-mode-control { display: inline-flex; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.insight-mode-option { display: inline-flex; height: 1.75rem; align-items: center; justify-content: center; border-radius: .375rem; padding: 0 .6rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.insight-mode-option input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; border: 0; padding: 0; clip-path: inset(50%); opacity: 0; pointer-events: none; white-space: nowrap; }
+.insight-mode-option:hover:not(:has(input:disabled)) { color: var(--foreground); }
+.insight-mode-option:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.insight-mode-option:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.insight-mode-option:has(input:disabled) { cursor: default; }
+.insight-mode-option:has(input:disabled:not(:checked)) { opacity: .5; }
+/* Limits line up under the kind's name, and fade while the kind is off. */
+.insight-setting-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding-left: 2.75rem; }
+.insight-setting:has(input[value="off"]:checked) .insight-setting-limits { opacity: .55; }
+.insight-limit input { height: 2rem; font-size: .8125rem; }
+@media (max-width: 640px) {
+	.insight-settings-dialog > .dialog-header { padding: 1.25rem 3.25rem .85rem 1.25rem; }
+	.insight-settings-body { padding: .25rem 1.25rem 1.25rem; }
+	.insight-settings-footer { padding: .85rem 1.25rem; }
+	.insight-settings-footer .insight-settings-reset { margin-right: 0; }
+	.insight-setting-heading { grid-template-columns: 2rem minmax(0, 1fr); }
+	.insight-mode-control { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.insight-mode-option { padding: 0 .35rem; }
+	.insight-setting-limits { grid-template-columns: minmax(0, 1fr); padding-left: 0; }
+}
+@media (forced-colors: active) {
+	.insight-mode-option:has(input:checked) { border: 1px solid Highlight; }
+}
 /* The Overview opens with one sentence about what stands out, led by an icon
    in the tone of the most important finding. Each subject it names is
    underlined in its own finding's tone and opens that finding. */
@@ -4043,57 +4288,180 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 	.insights-headline > p { font-size: 1rem; }
 	.insight-findings { scroll-margin-top: 4.5rem; }
 }
-/* Alerts: where Insights sends new findings. */
-/* The alert setup opens from a bell beside the range control, green when on. */
+/* The Insights bell beside the range control says whether alerts are on:
+   green when they are, and amber when they are paused. */
 .insight-alerts-button { flex: 0 0 auto; gap: .35rem; }
 .insight-alerts-button .nav-icon { width: 1rem; height: 1rem; }
 .insight-alerts-button.active .nav-icon { color: #16a34a; }
 .dark .insight-alerts-button.active .nav-icon { color: #22c55e; }
 .insight-alerts-button.paused .nav-icon { color: #d97706; }
 .dark .insight-alerts-button.paused .nav-icon { color: #f59e0b; }
-.insight-alerts-advanced-body { display: grid; gap: .85rem; }
-.insight-alert-headers { display: grid; gap: .5rem; }
-.insight-alert-headers:empty { display: none; }
-.insight-alert-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; gap: .5rem; }
-.insight-alert-header-add { justify-self: start; }
-.insight-alerts .dialog-footer .insight-alert-preview-button { margin-right: auto; }
-.isotope-dialog-body fieldset.insight-alert-kinds { min-width: 0; margin: 0; border: 0; padding: 0; }
-.isotope-dialog-body .insight-alert-kinds > legend { margin-bottom: .5rem; padding: 0; font-size: .8125rem; font-weight: 500; }
-.insight-alert-kind-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
-.insight-alert-kind { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
-.insight-alert-kind .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
-.insight-alert-kind .insight-alert-mark { width: .8rem; height: .8rem; flex-basis: .8rem; }
-.insight-alert-kind:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
-.insight-alert-kind:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
-.insight-alert-preview-copy { z-index: 1; }
-.insight-alert-browsers { display: grid; gap: .75rem; }
-.insight-alert-push-card { display: flex; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
-.insight-alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
-.insight-alert-push-icon .nav-icon { width: 1rem; height: 1rem; }
-.insight-alert-push-card[data-push-state="ready"] .insight-alert-push-icon { color: #2563eb; }
-.insight-alert-push-card[data-push-state="on"] .insight-alert-push-icon { color: #16a34a; }
-.insight-alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .insight-alert-push-icon { color: #d97706; }
-.dark .insight-alert-push-card[data-push-state="ready"] .insight-alert-push-icon { color: #60a5fa; }
-.dark .insight-alert-push-card[data-push-state="on"] .insight-alert-push-icon { color: #22c55e; }
-.dark .insight-alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .insight-alert-push-icon { color: #f1ad47; }
-.insight-alert-push-copy { display: grid; flex: 1 1 auto; min-width: 0; gap: .15rem; font-size: .8125rem; }
-.insight-alert-push-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
-.insight-alert-push-copy .insight-alert-push-error { color: var(--destructive); }
-.insight-alert-push-card > .button { flex: 0 0 auto; }
-.insight-alert-browser-list { display: grid; gap: .4rem; }
-.insight-alert-browser-heading { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
-.insight-alert-browser { display: flex; align-items: center; gap: .65rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .55rem .65rem; }
-.insight-alert-browser > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
-.insight-alert-browser > div { display: grid; flex: 1 1 auto; min-width: 0; gap: .1rem; font-size: .8125rem; }
-.insight-alert-browser small { color: var(--muted-foreground); font-size: .7rem; }
-.insight-alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
-.insight-alert-browser-tip { color: var(--muted-foreground); font-size: .7rem; }
-.insight-alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
-.insight-alert-preview { position: fixed; inset: auto; z-index: 100; box-sizing: border-box; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); }
-.insight-alert-preview:popover-open { display: flex; flex-direction: column; transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
-.insight-alert-preview[data-side="top"] { transform-origin: bottom left; }
-.insight-alert-preview-error { margin: 0; padding: .45rem .65rem 0; color: var(--destructive); font-size: .8125rem; }
-.insight-alert-preview pre { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; border: 0; border-radius: 0; background: transparent; padding: .45rem 2.25rem .45rem .65rem; font-size: .75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.insight-alerts { display: grid; gap: 1rem; }
-.insight-alerts-body { padding: 0; }
-.insight-alerts-body > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
+
+/* Settings > Alerts. */
+.alerts-status-card { padding: 1rem 1.5rem; }
+.alerts-status { display: flex; flex-wrap: wrap; align-items: center; gap: .9rem; }
+.alerts-status-icon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; place-items: center; border-radius: .6rem; background: var(--muted); color: var(--muted-foreground); }
+.alerts-status-icon .nav-icon { width: 1.25rem; height: 1.25rem; }
+.alerts-status.on .alerts-status-icon { background: rgb(34 197 94 / .14); color: #16a34a; }
+.dark .alerts-status.on .alerts-status-icon { color: #22c55e; }
+.alerts-status.paused .alerts-status-icon { background: rgb(245 158 11 / .14); color: #d97706; }
+.dark .alerts-status.paused .alerts-status-icon { color: #f59e0b; }
+/* The detail keeps a floor of 16rem so Pause drops to its own row on a narrow
+   card rather than squeezing the sentence into a column. */
+.alerts-status-detail { display: grid; min-width: 0; flex: 1 1 16rem; gap: .25rem; }
+.alerts-status-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.alerts-status-heading strong { font-size: .875rem; }
+.alerts-status-detail > span { color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
+.alerts-status > .button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .45rem; }
+.alerts-empty { display: grid; place-items: center; align-content: center; gap: .35rem; padding: 2rem 1rem; color: var(--muted-foreground); text-align: center; }
+.alerts-empty > .nav-icon { width: 1.6rem; height: 1.6rem; margin-bottom: .3rem; }
+.alerts-empty h3 { margin: 0; color: var(--foreground); font-size: .9rem; }
+.alerts-empty p { margin: 0; max-width: 28rem; font-size: .78rem; }
+.alert-destination-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.alert-destination-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1rem; }
+.alert-destination-row:first-child { border-top: 0; }
+.alert-destination-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.alert-destination-icon .nav-icon { width: 1rem; height: 1rem; }
+.alert-destination-icon .alert-format-mark { width: .9rem; height: .9rem; }
+.alert-destination-detail { display: grid; min-width: 0; gap: .25rem; }
+.alert-destination-detail strong { font-size: .875rem; overflow-wrap: anywhere; }
+.alert-destination-detail small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; overflow-wrap: anywhere; }
+.alert-destination-detail .alert-destination-problem { display: flex; align-items: flex-start; gap: .3rem; color: var(--destructive); }
+.alert-destination-problem .nav-icon { width: .85rem; height: .85rem; flex: 0 0 auto; margin-top: .1rem; }
+.alert-destination-separator { margin-inline: .35rem; }
+.alert-destination-groups { display: flex; flex-wrap: wrap; gap: .3rem; }
+.alert-group-tag { border-radius: 999px; background: var(--muted); padding: .05rem .5rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 600; line-height: 1.5; }
+.alert-destination-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
+/* The icon's flex-basis matches its width. Left at .nav-icon's larger basis,
+   Safari sizes each button for the smaller icon and Send Test wraps. */
+.alert-destination-actions .button { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.alert-destination-actions .button .nav-icon { width: .9rem; height: .9rem; flex-basis: .9rem; }
+.alert-groups { display: grid; gap: .75rem; }
+.alert-choice-row { flex-wrap: wrap; }
+.alert-choice { display: inline-flex; flex: 0 0 auto; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.alert-choice label { display: inline-flex; height: 1.75rem; align-items: center; border-radius: .375rem; padding: 0 .65rem; color: var(--muted-foreground); font-size: .75rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.alert-choice label:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.alert-choice label:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.alert-choice label:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+/* The failed sign-in limit belongs to its switch, so the two share a border. */
+/* Failed Sign-Ins carries its limit under its switch, and Check for updates
+   its schedule. */
+.alert-sign-ins, .update-check { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-sign-ins > .switch-row, .update-check > .switch-row { border: 0; }
+.alert-sign-in-limit, .update-check-schedule { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding: .75rem 1rem; color: var(--muted-foreground); font-size: .78rem; }
+.alert-sign-in-limit input { width: 5rem; height: 2rem; }
+.alert-sign-ins:has(input[name="sign_ins"]:not(:checked)) .alert-sign-in-limit { opacity: .6; }
+.update-check-schedule > span { display: inline-flex; align-items: center; gap: .5rem; }
+.update-check-schedule .styled-select, .update-check-schedule .styled-time { width: 8.5rem; }
+.update-check-day .styled-select { width: 9.5rem; }
+/* The schedule folds away while checks are off, and the day and time show
+   only for the schedules that use them. */
+.update-check:has(input[name="check_on_login"]:not(:checked)) .update-check-schedule { display: none; }
+.update-check-schedule:has(select[name="check_schedule"] option[value="hourly"]:checked) .update-check-at { display: none; }
+.update-check-schedule:not(:has(select[name="check_schedule"] option[value="weekly"]:checked)) .update-check-day { display: none; }
+/* The Insights Findings switch carries a switch for each kind of finding, so
+   the kinds sit inside its border. */
+.alert-insights { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
+.alert-insights > .switch-row { border: 0; }
+.alert-insight-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .15rem 1.5rem; min-width: 0; margin: 0; border: 0; border-top: 1px solid var(--border); padding: .5rem 1rem; }
+.alert-insight-kind { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 2.25rem; cursor: pointer; }
+.alert-insight-kind > span { display: grid; gap: .1rem; min-width: 0; }
+.alert-insight-kind strong { font-size: .8rem; font-weight: 500; }
+.alert-insight-kind small { color: var(--muted-foreground); font-size: .72rem; }
+.alert-insight-kind input[type=checkbox] { position: relative; width: 2.25rem; height: 1.25rem; flex: 0 0 2.25rem; appearance: none; border: 1px solid var(--input); border-radius: 999px; background: var(--muted); padding: 0; cursor: pointer; transition: border-color 150ms, background 150ms; }
+.alert-insight-kind input[type=checkbox]::after { position: absolute; top: .125rem; left: .125rem; width: .875rem; height: .875rem; border-radius: 50%; background: var(--background); box-shadow: 0 1px 3px rgb(0 0 0 / .28); content: ""; transition: transform 150ms; }
+.alert-insight-kind input[type=checkbox]:checked { border-color: var(--primary); background: var(--primary); }
+.alert-insight-kind input[type=checkbox]:checked::after { transform: translateX(1rem); }
+.alert-insight-kind input[type=checkbox]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.alert-insight-kind:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+.alert-insight-kind input[type=checkbox]:disabled { cursor: not-allowed; }
+.alert-insight-kinds-note { margin: 0; border-top: 1px solid var(--border); padding: .6rem 1rem; color: var(--muted-foreground); font-size: .75rem; }
+.alert-insight-kinds-note a { color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+/* With Insights Findings off, its kinds fold away. They still post with the
+   form, so saving keeps each kind as it was. */
+.alert-insights:has(input[name="insights"]:not(:checked)) :is(.alert-insight-kinds, .alert-insight-kinds-note) { display: none; }
+.alert-groups-save { display: flex; justify-content: flex-end; }
+.alert-browsers { display: grid; gap: .75rem; }
+/* Browsers carry their browsers under the row, beside the destination's
+   details rather than under its icon. They sit flat in the row, past a rule,
+   rather than in boxes of their own inside it. */
+.alert-destination-browsers { grid-column: 2 / -1; gap: .15rem; border-top: 1px solid var(--border); padding-top: .6rem; }
+.alert-destination-browsers .alert-push-card { gap: .6rem; border: 0; border-radius: 0; background: none; padding: .2rem 0; }
+.alert-destination-browsers .alert-push-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; align-self: flex-start; margin-top: .1rem; background: none; }
+.alert-destination-browsers .alert-browser-list { gap: 0; }
+.alert-destination-browsers .alert-browser-heading { padding-top: .45rem; }
+.alert-destination-browsers .alert-browser { gap: .6rem; border: 0; border-radius: 0; padding: .35rem 0; }
+.alert-destination-browsers .alert-browser + .alert-browser { border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent); }
+.alert-push-card { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem .85rem; }
+.alert-push-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.alert-push-icon .nav-icon { width: 1rem; height: 1rem; }
+.alert-push-card[data-push-state="ready"] .alert-push-icon { color: #2563eb; }
+.alert-push-card[data-push-state="on"] .alert-push-icon { color: #16a34a; }
+.alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .alert-push-icon { color: #d97706; }
+.dark .alert-push-card[data-push-state="ready"] .alert-push-icon { color: #60a5fa; }
+.dark .alert-push-card[data-push-state="on"] .alert-push-icon { color: #22c55e; }
+.dark .alert-push-card:is([data-push-state="blocked"], [data-push-state="insecure"], [data-push-state="unsupported"]) .alert-push-icon { color: #f1ad47; }
+.alert-push-copy { display: grid; flex: 1 1 14rem; min-width: 0; gap: .15rem; font-size: .8125rem; }
+.alert-push-copy small { color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
+.alert-push-copy .alert-push-error { color: var(--destructive); }
+.alert-push-card > .button { flex: 0 0 auto; }
+.alert-push-form { display: none; }
+.alert-browser-list { display: grid; gap: .4rem; }
+.alert-browser-heading { color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
+.alert-browser { display: flex; align-items: center; gap: .65rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .55rem .65rem; }
+.alert-browser > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
+.alert-browser > div { display: grid; flex: 1 1 auto; min-width: 0; gap: .1rem; font-size: .8125rem; }
+.alert-browser small { color: var(--muted-foreground); font-size: .7rem; }
+.alert-browser > .button { display: inline-flex; align-items: center; gap: .4rem; }
+.alert-browser > .button .nav-icon { width: .9rem; height: .9rem; flex-basis: .9rem; }
+.alert-browser-this { margin-left: .45rem; border-radius: 999px; background: var(--muted); padding: .05rem .45rem; color: var(--muted-foreground); font-size: .65rem; font-weight: 500; vertical-align: middle; }
+.alert-browser-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; }
+.alert-browser-orphans { margin-top: .75rem; }
+@media (max-width: 640px) {
+	.alerts-status-card { padding: 1rem; }
+	.alert-destination-row { grid-template-columns: 2rem minmax(0, 1fr); padding-inline: .75rem; }
+	.alert-destination-actions { grid-column: 2 / -1; justify-content: flex-start; }
+}
+
+/* The Add and Edit Destination dialog. Six Format choices fit on one line. */
+.alert-destination-form { display: grid; gap: 1rem; }
+.alert-destination-body { padding: 0; }
+/* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
+.alert-destination-notice { display: contents; }
+.alert-destination-form .dialog-footer .alert-preview-button { margin-right: auto; }
+.isotope-dialog-body fieldset.alert-formats, .isotope-dialog-body fieldset.alert-sends { min-width: 0; margin: 0; border: 0; padding: 0; }
+.isotope-dialog-body :is(.alert-formats, .alert-sends) > legend { margin-bottom: .5rem; padding: 0; font-size: .8125rem; font-weight: 500; }
+.alert-format-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: .25rem; }
+.alert-format { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
+.alert-format .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
+.alert-format .alert-format-mark { width: .8rem; height: .8rem; flex-basis: .8rem; }
+.alert-format:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
+.alert-format:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.alert-format:has(input:disabled) { cursor: not-allowed; opacity: .5; }
+.alert-sends-choice { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; font-size: .8125rem; font-weight: 400; }
+.alert-sends-choice label, .alert-sends-groups label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
+.alert-sends :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
+.alert-sends-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem 1rem; margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
+.alert-sends-groups small { color: var(--muted-foreground); font-size: .68rem; }
+/* Everything needs no list of groups. */
+.alert-sends:has(input[name="sends_all"][value="true"]:checked) .alert-sends-groups { display: none; }
+.alert-destination-note { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.5; }
+.alert-destination-advanced-body { display: grid; gap: .85rem; }
+.alert-headers { display: grid; gap: .5rem; }
+.alert-headers:empty { display: none; }
+.alert-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; gap: .5rem; }
+.alert-header-add { justify-self: start; }
+.alert-preview-copy { z-index: 1; }
+.alert-preview { position: fixed; inset: auto; z-index: 100; box-sizing: border-box; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); }
+.alert-preview:popover-open { display: flex; flex-direction: column; transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
+.alert-preview[data-side="top"] { transform-origin: bottom left; }
+.alert-preview-error { margin: 0; padding: .45rem .65rem 0; color: var(--destructive); font-size: .8125rem; }
+.alert-preview pre { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; border: 0; border-radius: 0; background: transparent; padding: .45rem 2.25rem .45rem .65rem; font-size: .75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+	.alert-sends-groups { grid-template-columns: 1fr; }
+}
+.mcp-grant-coverage { display: flex; align-items: flex-start; gap: .55rem; margin: 0; }
+.mcp-grant-coverage-icon { display: none; }
+.mcp-grant-coverage[data-matched] .mcp-grant-coverage-icon { display: contents; }
+.mcp-grant-coverage-icon .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
+.dark .mcp-grant-coverage-icon .nav-icon { color: #22c55e; }

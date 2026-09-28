@@ -886,3 +886,39 @@ max_concurrent_per_client=11`} {
 		}
 	}
 }
+
+func TestDecodeMCPTools(t *testing.T) {
+	t.Parallel()
+
+	// A file from before tools could be chosen, such as 1.5.0-beta.12's,
+	// gets the everyday tools.
+	loaded, err := Decode(strings.NewReader(`
+[mcp]
+configured = true
+enabled = true
+`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if !slices.Equal(loaded.MCP.Tools, DefaultMCPTools()) {
+		t.Fatalf("MCP.Tools = %v, want defaults", loaded.MCP.Tools)
+	}
+	if loaded, err = Decode(strings.NewReader(`
+[mcp]
+tools = [" Search_Queries ", "list_zones", "list_zones"]
+`)); err != nil || !slices.Equal(loaded.MCP.Tools, []string{"list_zones", "search_queries"}) {
+		t.Fatalf("normalized tools = %v, %v", loaded.MCP.Tools, err)
+	}
+	if loaded, err = Decode(strings.NewReader(`
+[mcp]
+tools = []
+`)); err != nil || len(loaded.MCP.Tools) != 0 {
+		t.Fatalf("empty tools = %v, %v", loaded.MCP.Tools, err)
+	}
+	if _, err := Decode(strings.NewReader(`
+[mcp]
+tools = ["everything"]
+`)); err == nil || !strings.Contains(err.Error(), "unknown tool") {
+		t.Fatalf("unknown tool error = %v", err)
+	}
+}

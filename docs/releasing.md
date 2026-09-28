@@ -74,7 +74,11 @@ release commit or tag locally.
 
 1. Add or update the matching version section in [`CHANGELOG.md`](../CHANGELOG.md).
    Keep `Unreleased` while the release is being prepared; the workflow matches
-   the bracketed version, not the date text.
+   the bracketed version, not the date text. A stable section also moves the
+   docs to that release: `version` and `versionLabel` in
+   [`navigation.json`](navigation.json), and every "covers Sable" note and the
+   download link in [`index.md`](index.md). `go test ./docs` fails until they
+   match. Screenshot captions change later, when the screenshots are retaken.
 2. Merge the intended release commit to `main` and wait for the required CI
    checks to pass.
 3. In GitHub, open **Actions → Release → Run workflow**.

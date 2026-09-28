@@ -48,36 +48,36 @@ func TestInsightFeedbackRemembersAndForgets(t *testing.T) {
 	}
 }
 
-func TestInsightsNotifiedTracksEachTarget(t *testing.T) {
+func TestAlertsSentTracksEachTarget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	opened := openQueryLogStore(t, nil)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	if _, known, err := opened.InsightsNotified(ctx, "hook-a"); err != nil || known {
+	if _, known, err := opened.AlertsSent(ctx, "hook-a"); err != nil || known {
 		t.Fatalf("new target known = %t, %v", known, err)
 	}
 	// Taking stock with nothing to send still makes the target known.
-	if err := opened.MarkInsightsNotified(ctx, "hook-a", nil, now); err != nil {
+	if err := opened.MarkAlertsSent(ctx, "hook-a", nil, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, known, _ := opened.InsightsNotified(ctx, "hook-a"); !known {
+	if _, known, _ := opened.AlertsSent(ctx, "hook-a"); !known {
 		t.Fatal("a target that took stock is not known")
 	}
-	if err := opened.MarkInsightsNotified(ctx, "hook-a", []string{"devices.went-quiet/device:ip:10.0.0.9"}, now); err != nil {
+	if err := opened.MarkAlertsSent(ctx, "hook-a", []string{"devices.went-quiet/device:ip:10.0.0.9"}, now); err != nil {
 		t.Fatal(err)
 	}
-	notified, _, err := opened.InsightsNotified(ctx, "hook-a")
+	notified, _, err := opened.AlertsSent(ctx, "hook-a")
 	if err != nil || len(notified) != 1 || !notified["devices.went-quiet/device:ip:10.0.0.9"].Equal(now) {
 		t.Fatalf("notified = %+v, %v", notified, err)
 	}
-	if other, known, _ := opened.InsightsNotified(ctx, "hook-b"); known || len(other) != 0 {
+	if other, known, _ := opened.AlertsSent(ctx, "hook-b"); known || len(other) != 0 {
 		t.Fatal("targets share their sent lists")
 	}
-	if err := opened.ForgetInsightsNotified(ctx, "hook-a", []string{"devices.went-quiet/device:ip:10.0.0.9"}); err != nil {
+	if err := opened.ForgetAlertsSent(ctx, "hook-a", []string{"devices.went-quiet/device:ip:10.0.0.9"}); err != nil {
 		t.Fatal(err)
 	}
-	if notified, _, _ := opened.InsightsNotified(ctx, "hook-a"); len(notified) != 0 {
+	if notified, _, _ := opened.AlertsSent(ctx, "hook-a"); len(notified) != 0 {
 		t.Fatalf("after forget = %+v", notified)
 	}
 }

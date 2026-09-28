@@ -2492,6 +2492,56 @@ func (handler *Handler) PurgeCache() int {
 	return handler.runtime.Load().cache.Clear()
 }
 
+// PurgeCacheName forgets every cached answer for one name on this node, so the
+// next lookup asks upstream again.
+func (handler *Handler) PurgeCacheName(name string) int {
+	return handler.runtime.Load().cache.RemoveName(name)
+}
+
+// LookupResult is the answer an in-process lookup produced and the path Sable
+// took to reach it.
+type LookupResult struct {
+	Response *dns.Msg
+	Source   querylog.Source
+	Decision querylog.Decision
+}
+
+// Lookup answers a question exactly as a client with recursion access and no
+// blocking bypass would see it: zones, local names, blocking, the cache, then
+// the network. It is not a client query, so it stays out of the query log and
+// never shows up as a device in Insights.
+func (handler *Handler) Lookup(name string, recordType uint16) (LookupResult, error) {
+	runtime := handler.runtime.Load()
+	if runtime == nil {
+		return LookupResult{}, errors.New("DNS runtime is unavailable")
+	}
+	request := new(dns.Msg)
+	request.SetQuestion(dns.Fqdn(name), recordType)
+	request.RecursionDesired = true
+	result := handler.resolve(request, runtime)
+	if result.response == nil {
+		return LookupResult{}, fmt.Errorf("resolve %s: no response", name)
+	}
+	return LookupResult{Response: result.response, Source: result.source, Decision: result.decision}, nil
+}
+
+// DomainPolicy explains how the blocking policy treats a name for a client
+// without a bypass.
+type DomainPolicy struct {
+	Decision querylog.PolicyDecision
+	Rule     string
+	Sources  []string
+}
+
+func (handler *Handler) DomainPolicy(name string) DomainPolicy {
+	runtime := handler.runtime.Load()
+	if runtime == nil {
+		return DomainPolicy{Decision: querylog.PolicyNotEvaluated}
+	}
+	decision, rule, sources := runtime.policyDecision(name, "", handler.BlockingPaused())
+	return DomainPolicy{Decision: decision, Rule: rule, Sources: append([]string(nil), sources...)}
+}
+
 func (handler *Handler) CachedResponses() []CachedResponse {
 	return handler.runtime.Load().cache.Snapshot()
 }

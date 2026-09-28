@@ -58,3 +58,30 @@ func TestPersistentBooleanSettingsRenderAsSwitches(t *testing.T) {
 		t.Fatal("restore option rendered as a switch instead of an action-scoped checkbox")
 	}
 }
+
+// Check for updates carries its schedule under it: how often, and the day and
+// time for the schedules that use them, all saved with Save Settings.
+func TestUpdateCheckScheduleNamesEachControl(t *testing.T) {
+	t.Parallel()
+	markup := renderComponent(t, SettingsUpdatePreferences(SettingsUpdatePreferencesView{
+		CanEdit: true, CheckOnLogin: true, CheckSchedule: "weekly", CheckAt: "18:30", CheckDay: "friday",
+	}))
+	for _, want := range []string{
+		`role="group" aria-label="When to check for updates"`,
+		`<select form="settings-form" name="check_schedule" aria-label="How often to check for updates" data-styled-select>`,
+		`<option value="hourly">Hourly</option>`, `<option value="weekly" selected>Weekly</option>`,
+		`<select form="settings-form" name="check_day" aria-label="Day to check for updates" data-styled-select>`,
+		`<option value="friday" selected>Friday</option>`,
+		`<input type="time" form="settings-form" name="check_at" value="18:30" step="60" aria-label="Time to check for updates" data-styled-time>`,
+	} {
+		if !strings.Contains(markup, want) {
+			t.Errorf("the schedule lacks %q", want)
+		}
+	}
+	readOnly := renderComponent(t, SettingsUpdatePreferences(SettingsUpdatePreferencesView{CheckOnLogin: true, CheckSchedule: "daily", CheckAt: "09:00", CheckDay: "monday"}))
+	for _, name := range []string{"check_schedule", "check_day", "check_at"} {
+		if !regexp.MustCompile(`name="` + name + `"[^>]*disabled`).MatchString(readOnly) {
+			t.Errorf("an operator who cannot change settings can change %s", name)
+		}
+	}
+}

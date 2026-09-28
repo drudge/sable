@@ -1,5 +1,7 @@
 // Package unifi reads networks, DHCP reservations, and connected clients from
 // a UniFi controller so Sable can publish them as authoritative DNS records.
+// It also reads the controller's own devices, which name hardware in Insights
+// but are never published.
 package unifi
 
 import (
@@ -65,12 +67,35 @@ type Host struct {
 	IPv6      []netip.Addr
 	NetworkID string
 	Reserved  bool
+	// Kind is what a piece of Ubiquiti hardware is: "gateway", "switch",
+	// "access point", or "ups" for the controller's own devices, and "storage"
+	// for a UniFi Drive, which the controller lists as a client. Other hosts
+	// have none.
+	Kind string
 }
 
-// Inventory is one complete read of the controller.
+// DeviceType is the Insights device type the controller vouches for:
+// "network" for its gateways, switches, and access points, "ups" for its UPS
+// units, which carry power rather than traffic, and "storage" for a UniFi
+// Drive.
+func (host Host) DeviceType() string {
+	switch host.Kind {
+	case "gateway", "switch", "access point":
+		return "network"
+	case "ups", "storage":
+		return host.Kind
+	}
+	return ""
+}
+
+// Inventory is one complete read of the controller. Gear is the controller's
+// own adopted devices: its gateway, switches, and access points. It is kept
+// apart from Hosts because hosts are what the sync publishes as DNS records,
+// and naming the network's own hardware must not quietly add records.
 type Inventory struct {
 	Networks []Network
 	Hosts    []Host
+	Gear     []Host
 }
 
 // NetworkByID returns the named network, if the controller reported it.
@@ -111,8 +136,11 @@ func mergeHosts(reserved, active []Host) []Host {
 		if found && existing.Reserved && !host.Reserved {
 			if len(existing.IPv6) == 0 {
 				existing.IPv6 = host.IPv6
-				byMAC[host.MAC] = existing
 			}
+			if existing.Kind == "" {
+				existing.Kind = host.Kind
+			}
+			byMAC[host.MAC] = existing
 			continue
 		}
 		if found && host.NetworkID == "" {
@@ -120,6 +148,9 @@ func mergeHosts(reserved, active []Host) []Host {
 		}
 		if found && len(host.IPv6) == 0 {
 			host.IPv6 = existing.IPv6
+		}
+		if found && host.Kind == "" {
+			host.Kind = existing.Kind
 		}
 		byMAC[host.MAC] = host
 	}

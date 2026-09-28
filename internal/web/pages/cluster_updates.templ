@@ -44,6 +44,20 @@ func (view ClusterUpdateView) UpToDate() bool {
 	return view.Rollout.Phase == "complete" && view.Version == "" && view.DisplayVersion() == formatReleaseVersion(view.Rollout.Version)
 }
 
+// Checking reports that this node is looking for a newer release, whether an
+// operator asked or the schedule did.
+func (view ClusterUpdateView) Checking() bool {
+	return view.Release.Phase == "checking"
+}
+
+// CheckVisible offers a release check once the cluster is current. A running
+// check keeps its button, shown as checking: the status poll redraws this
+// panel every two seconds, and hiding it would blink the button away mid-check.
+// An installation hides it.
+func (view ClusterUpdateView) CheckVisible() bool {
+	return view.Release.CanCheck && !view.Rollout.Active() && view.Version == "" && (!view.Release.Busy || view.Checking())
+}
+
 func (view ClusterUpdateView) UnavailableWarningVisible() bool {
 	return !view.Supported && view.UnavailableReason != "" && !view.Rollout.Active()
 }
@@ -66,10 +80,13 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 				<header>
 					<h2>Rolling Updates</h2>
 					if view.DisplayVersion() != "" {
-						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("current", view.UpToDate()) }>
+						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("installing", view.Rollout.Active()), templ.KV("current", view.UpToDate()) }>
 							if view.UpdateAvailable() {
 								@Icon("sparkles")
 								<span class="sr-only">Update available: </span>
+							} else if view.Rollout.Active() {
+								@Icon("download")
+								<span class="sr-only">Updating to </span>
 							} else if view.UpToDate() {
 								@Icon("check")
 								<span class="sr-only">Up to date: </span>
@@ -114,26 +131,24 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 						</ol>
 					}
 					if view.Supported || view.Rollout.Active() {
- <div class="cluster-update-actions">
-						@updateReleaseNotesButton(view.Release, clusterUpdateNotesDialogID)
-
-						if view.Rollout.Active() {
-							if view.CanApply {
-								<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
+						<div class="cluster-update-actions">
+							@updateReleaseNotesButton(view.Release, clusterUpdateNotesDialogID)
+							if view.Rollout.Active() {
+								if view.CanApply {
+									<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
+								}
+							} else if view.Supported && view.CanApply && view.Version != "" {
+								@clusterUpdateForm(view.Version, "cluster") {
+									<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")<span>Update all</span></button>
+								}
 							}
-						} else if view.Supported && view.CanApply && view.Version != "" {
-							@clusterUpdateForm(view.Version, false) {
-								<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")
-<span>Update all</span></button>
+							if view.CheckVisible() {
+								<form data-update-check hx-post="/ui/updates/command-check" hx-target="body" hx-swap="beforeend" hx-disable="find button" if view.Checking() { aria-busy="true" }>
+									<button id="cluster-update-check" class="button outline compact" type="submit" disabled?={ view.Checking() }>@Icon("refresh")<span class="about-update-check-idle">{ ifThen(view.Rollout.ID != "" || view.Release.Checked, "Check again", "Check for updates") }</span><span class="about-update-check-pending" role="status">Checking…</span></button>
+								</form>
 							}
-						}
-						if view.Release.CanCheck && !view.Rollout.Active() && !view.Release.Busy && view.Version == "" {
-							<form data-update-check hx-post="/ui/updates/command-check" hx-target="body" hx-swap="beforeend" hx-disable="find button">
-								<button id="cluster-update-check" class="button outline compact" type="submit">@Icon("refresh")<span class="about-update-check-idle">{ ifThen(view.Rollout.ID != "" || view.Release.Checked, "Check again", "Check for updates") }</span><span class="about-update-check-pending" role="status">Checking…</span></button>
-							</form>
-						}
-					</div>
- }
+						</div>
+					}
 				</div>
 			</section>
 			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)
@@ -141,23 +156,51 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 	</div>
 }
 
-templ clusterUpdateForm(version string, fromNotification bool) {
+// clusterUpdateForm starts a rollout from the Cluster page, the update
+// notification, or About. A rollout started elsewhere lands on the Cluster
+// page, which follows it; a refusal redraws the control it came from.
+templ clusterUpdateForm(version string, source string) {
 	<form
 		hx-post="/ui/updates/cluster"
-		hx-target={ ifThen(fromNotification, "closest .toast-region", "#cluster-content") }
+		hx-target={ clusterUpdateTarget(source) }
 		hx-swap="outerHTML"
-		hx-disable={ ifThen(fromNotification, "[data-update-version] button, [data-update-version] input", "#cluster-updates button, #cluster-updates input") }
+		hx-disable={ clusterUpdateDisable(source) }
 		hx-confirm={ "Install Sable v" + version + " on every node? Each replica restarts and synchronizes before the next node updates. The primary restarts last, briefly interrupting its console. DNS clients must be configured to use multiple nodes." }
 		data-confirm-title="Update the entire cluster?"
 		data-confirm-action="Start rolling update"
 		data-confirm-tone="neutral"
 	>
 		<input type="hidden" name="version" value={ version }/>
-		if fromNotification {
-			<input type="hidden" name="notification" value="true"/>
+		switch source {
+			case "notification":
+				<input type="hidden" name="notification" value="true"/>
+			case "about":
+				<input type="hidden" name="source" value="about"/>
 		}
 		{ children... }
 	</form>
+}
+
+func clusterUpdateTarget(source string) string {
+	switch source {
+	case "notification":
+		return "closest .toast-region"
+	case "about":
+		return "#about-update"
+	default:
+		return "#cluster-content"
+	}
+}
+
+func clusterUpdateDisable(source string) string {
+	switch source {
+	case "notification":
+		return "[data-update-version] button, [data-update-version] input"
+	case "about":
+		return "#about-update button, #about-update input"
+	default:
+		return "#cluster-updates button, #cluster-updates input"
+	}
 }
 
 func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {

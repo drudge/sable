@@ -71,9 +71,6 @@ var retired = map[string]retiredMark{
 	"teams":     {Release: "12.4.0", Hex: "6264A7", Path: "M20.625 8.127q-.55 0-1.025-.205-.475-.205-.832-.563-.358-.357-.563-.832Q18 6.053 18 5.502q0-.54.205-1.02t.563-.837q.357-.358.832-.563.474-.205 1.025-.205.54 0 1.02.205t.837.563q.358.357.563.837.205.48.205 1.02 0 .55-.205 1.025-.205.475-.563.832-.357.358-.837.563-.48.205-1.02.205zm0-3.75q-.469 0-.797.328-.328.328-.328.797 0 .469.328.797.328.328.797.328.469 0 .797-.328.328-.328.328-.797 0-.469-.328-.797-.328-.328-.797-.328zM24 10.002v5.578q0 .774-.293 1.46-.293.685-.803 1.194-.51.51-1.195.803-.686.293-1.459.293-.445 0-.908-.105-.463-.106-.85-.329-.293.95-.855 1.729-.563.78-1.319 1.336-.756.557-1.67.861-.914.305-1.898.305-1.148 0-2.162-.398-1.014-.399-1.805-1.102-.79-.703-1.312-1.664t-.674-2.086h-5.8q-.411 0-.704-.293T0 16.881V6.873q0-.41.293-.703t.703-.293h8.59q-.34-.715-.34-1.5 0-.727.275-1.365.276-.639.75-1.114.475-.474 1.114-.75.638-.275 1.365-.275t1.365.275q.639.276 1.114.75.474.475.75 1.114.275.638.275 1.365t-.275 1.365q-.276.639-.75 1.113-.475.475-1.114.75-.638.276-1.365.276-.188 0-.375-.024-.188-.023-.375-.058v1.078h10.875q.469 0 .797.328.328.328.328.797zM12.75 2.373q-.41 0-.78.158-.368.158-.638.434-.27.275-.428.639-.158.363-.158.773 0 .41.158.78.159.368.428.638.27.27.639.428.369.158.779.158.41 0 .773-.158.364-.159.64-.428.274-.27.433-.639.158-.369.158-.779 0-.41-.158-.773-.159-.364-.434-.64-.275-.275-.639-.433-.363-.158-.773-.158zM6.937 9.814h2.25V7.94H2.814v1.875h2.25v6h1.875zm10.313 7.313v-6.75H12v6.504q0 .41-.293.703t-.703.293H8.309q.152.809.556 1.5.405.691.985 1.19.58.497 1.318.779.738.281 1.582.281.926 0 1.746-.352.82-.351 1.436-.966.615-.616.966-1.43.352-.815.352-1.752zm5.25-1.547v-5.203h-3.75v6.855q.305.305.691.452.387.146.809.146.469 0 .879-.176.41-.175.715-.48.304-.305.48-.715t.176-.879Z"},
 	"onedrive":  {Release: "12.4.0", Hex: "0078D4", Path: "M19.453 9.95q.961.058 1.787.468.826.41 1.442 1.066.615.657.966 1.512.352.856.352 1.816 0 1.008-.387 1.893-.386.885-1.049 1.547-.662.662-1.546 1.049-.885.387-1.893.387H6q-1.242 0-2.332-.475-1.09-.475-1.904-1.29-.815-.814-1.29-1.903Q0 14.93 0 13.688q0-.985.31-1.887.311-.903.862-1.658.55-.756 1.324-1.325.774-.568 1.711-.861.434-.129.85-.187.416-.06.861-.082h.012q.515-.786 1.207-1.413.691-.627 1.5-1.066.808-.44 1.705-.668.896-.229 1.845-.229 1.278 0 2.456.417 1.177.416 2.144 1.16.967.744 1.658 1.78.692 1.038 1.008 2.28zm-7.265-4.137q-1.325 0-2.52.544-1.195.545-2.04 1.565.446.117.85.299.405.181.792.416l4.78 2.86 2.731-1.15q.27-.117.545-.204.276-.088.58-.147-.293-.937-.855-1.705-.563-.768-1.319-1.318-.755-.551-1.658-.856-.902-.304-1.886-.304zM2.414 16.395l9.914-4.184-3.832-2.297q-.586-.351-1.23-.539-.645-.188-1.325-.188-.914 0-1.722.364-.809.363-1.412.978-.604.616-.955 1.436-.352.82-.352 1.723 0 .703.234 1.423.235.721.68 1.284zm16.711 1.793q.563 0 1.078-.176.516-.176.961-.516l-7.23-4.324-10.301 4.336q.527.328 1.13.504.604.175 1.237.175zm3.012-1.852q.363-.727.363-1.523 0-.774-.293-1.407t-.791-1.072q-.498-.44-1.166-.68-.668-.24-1.406-.24-.422 0-.838.1t-.815.252q-.398.152-.785.334-.386.181-.761.345Z"},
 	"microsoft": {Release: "12.4.0", Hex: "5E5E5E", Path: "M0 0v11.408h11.408V0zm12.594 0v11.408H24V0zM0 12.594V24h11.408V12.594zm12.594 0V24H24V12.594z"},
-	// Microsoft 365 never had a mark of its own, so it wears Office's, which left
-	// in Simple Icons 10.
-	"microsoft-365": {Release: "9.21.0", Hex: "D83B01", Path: "M21.53 4.306v15.363q0 .807-.472 1.433-.472.627-1.253.85l-6.888 1.974q-.136.037-.29.055-.156.019-.293.019-.396 0-.72-.105-.321-.106-.656-.292l-4.505-2.544q-.248-.137-.391-.366-.143-.23-.143-.515 0-.434.304-.738.304-.305.739-.305h5.831V4.964l-4.38 1.563q-.533.187-.856.658-.322.472-.322 1.03v8.078q0 .496-.248.912-.25.416-.683.651l-2.072 1.13q-.286.148-.571.148-.497 0-.844-.347-.348-.347-.348-.844V6.563q0-.62.33-1.19.328-.571.874-.881L11.07.285q.248-.136.534-.21.285-.075.57-.075.211 0 .38.031.166.031.364.093l6.888 1.899q.384.11.7.329.317.217.547.52.23.305.353.67.125.367.125.764zm-1.588 15.363V4.306q0-.273-.16-.478-.163-.204-.423-.28l-3.388-.93q-.397-.111-.794-.23-.397-.117-.794-.216v19.68l4.976-1.427q.26-.074.422-.28.161-.204.161-.477z"},
 	// Slack's mark left in Simple Icons 16.
 	"slack": {Release: "15.22.0", Hex: "4A154B", Path: "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"},
 	// LinkedIn's mark left in Simple Icons 14.
@@ -84,6 +81,33 @@ var retired = map[string]retiredMark{
 	// Adobe's mark left in Simple Icons 14.
 	"adobe": {Release: "13.21.0", Hex: "FF0000", Path: "M13.966 22.624l-1.69-4.281H8.122l3.892-9.144 5.662 13.425zM8.884 1.376H0v21.248zm15.116 0h-8.884L24 22.624Z"},
 }
+
+// colorMark is a mark drawn in several colors on a white tile, one path per
+// color, the way its brand draws it.
+type colorMark struct {
+	Parts []colorPart
+}
+
+type colorPart struct {
+	Path string
+	Fill string
+}
+
+// colorMarks are the apps whose brand mark is several colors, keyed by app.
+var colorMarks = map[string]colorMark{
+	// Microsoft 365 wears Microsoft's four-color logo: Simple Icons' Microsoft
+	// squares, each in the color Microsoft gives it.
+	"microsoft-365": {Parts: []colorPart{
+		{Path: "M0 0h11.408v11.408H0z", Fill: "#F25022"},
+		{Path: "M12.594 0H24v11.408H12.594z", Fill: "#7FBA00"},
+		{Path: "M0 12.594h11.408V24H0z", Fill: "#00A4EF"},
+		{Path: "M12.594 12.594H24V24H12.594z", Fill: "#FFB900"},
+	}},
+}
+
+// whiteTiles are the brands whose own app icon is a black mark on white
+// rather than a mark on their brand color.
+var whiteTiles = map[string]bool{"chatgpt": true}
 
 // darkMarks are the brands that show a black mark on their own color, though
 // the color is not light enough for the rule below to call for one.
@@ -142,13 +166,21 @@ func generate(directory, output string) error {
 			slug = strings.ReplaceAll(service.ID, "-", "")
 		}
 		entry, found := bySlug[slug]
+		if mark, colored := colorMarks[service.ID]; colored {
+			fmt.Fprintf(&table, "\t%q: {Color: %q, Parts: []appLogoPart{", service.ID, "#FFFFFF")
+			for _, part := range mark.Parts {
+				fmt.Fprintf(&table, "{Path: %q, Fill: %q}, ", part.Path, part.Fill)
+			}
+			fmt.Fprintf(&table, "}},\n")
+			continue
+		}
 		if old, kept := retired[service.ID]; kept && !found {
-			ink, err := inkOn(old.Hex)
+			color, ink, err := tile(service.ID, old.Hex)
 			if err != nil {
 				return fmt.Errorf("%s: %w", service.ID, err)
 			}
 			fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q}, // Simple Icons %s, the last release with this mark\n",
-				service.ID, old.Path, "#"+old.Hex, ink, old.Release)
+				service.ID, old.Path, color, ink, old.Release)
 			continue
 		}
 		if slug == "" || !found {
@@ -163,14 +195,14 @@ func generate(directory, output string) error {
 		if path == nil {
 			return fmt.Errorf("%s: no path in %s.svg", service.ID, slug)
 		}
-		ink, err := inkOn(entry.Hex)
+		color, ink, err := tile(service.ID, entry.Hex)
 		if err != nil {
 			return fmt.Errorf("%s: %w", service.ID, err)
 		}
 		if darkMarks[slug] {
 			ink = "#000"
 		}
-		fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q},\n", service.ID, path[1], "#"+entry.Hex, ink)
+		fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q},\n", service.ID, path[1], color, ink)
 	}
 	fmt.Fprintf(&table, "}\n")
 	source, err := format.Source(table.Bytes())
@@ -182,6 +214,15 @@ func generate(directory, output string) error {
 	}
 	log.Printf("%d apps have no mark and show their category: %s", len(missing), strings.Join(missing, " "))
 	return nil
+}
+
+// tile picks an app's tile color and the ink for its mark.
+func tile(id, hex string) (string, string, error) {
+	if whiteTiles[id] {
+		return "#FFFFFF", "#000", nil
+	}
+	ink, err := inkOn(hex)
+	return "#" + hex, ink, err
 }
 
 // inkOn picks the ink for a mark on a brand color. Brands draw their marks in

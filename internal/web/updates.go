@@ -84,7 +84,10 @@ func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages
 		canEditReleaseChannel = auth.HasPermission(principal, auth.PermissionUpdatesApply)
 	}
 	preferences := server.config.Current().Config.Updates
-	return pages.SettingsUpdatePreferencesView{CheckOnLogin: preferences.CheckOnLogin, IncludePreRelease: preferences.PreRelease, CanEdit: canEdit, CanEditReleaseChannel: canEdit && canEditReleaseChannel}
+	return pages.SettingsUpdatePreferencesView{
+		CheckOnLogin: preferences.CheckOnLogin, CheckSchedule: preferences.CheckSchedule, CheckAt: preferences.CheckAt, CheckDay: preferences.CheckDay,
+		IncludePreRelease: preferences.PreRelease, CanEdit: canEdit, CanEditReleaseChannel: canEdit && canEditReleaseChannel,
+	}
 }
 
 // updatePanel renders the current update state. The panel polls this endpoint
@@ -283,6 +286,18 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 
 func (server *Server) applyUpdatePreferences(request *http.Request, candidate *config.Config) error {
 	candidate.Updates.CheckOnLogin = request.FormValue("check_on_login") == "true"
+	// A form without the schedule, such as one from before schedules, keeps
+	// the saved one. The configuration checks what is posted when it saves.
+	if request.PostForm.Has("check_schedule") {
+		candidate.Updates.CheckSchedule = request.FormValue("check_schedule")
+		// A time or day left blank keeps the saved one.
+		if at := request.FormValue("check_at"); at != "" {
+			candidate.Updates.CheckAt = at
+		}
+		if day := request.FormValue("check_day"); day != "" {
+			candidate.Updates.CheckDay = day
+		}
+	}
 	if request.PostForm.Has("release_channel_present") {
 		if !server.settingsUpdatePreferencesView(request).CanEditReleaseChannel {
 			return auth.ErrForbidden

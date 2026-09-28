@@ -8,6 +8,13 @@ type appLogo struct {
 	Path  string
 	Color string
 	Ink   string
+	// Parts replace Path and Ink for a mark drawn in several colors.
+	Parts []appLogoPart
+}
+
+type appLogoPart struct {
+	Path string
+	Fill string
 }
 
 // appCategoryIcons stand in for the mark of an app Simple Icons has none for,
@@ -22,14 +29,23 @@ var appCategoryIcons = map[string]string{
 }
 
 // AppIcon is an app's logo as a small app tile: the brand's mark, in white or
-// black, whichever reads better, on the brand's color. An app without a mark
+// black, whichever reads better, on the brand's color. A white tile gets a
+// hairline so it holds its shape on a white card. An app without a mark
 // shows its category's icon on a gray tile, as a device shows its type. The
 // app's name always sits beside it, so the icon is decoration.
 templ AppIcon(id, category string) {
 	if logo, found := appLogos[id]; found {
-		<svg class="app-icon" viewBox="0 0 24 24" aria-hidden="true">
+		<svg class={ "app-icon", templ.KV("app-icon-white", logo.Color == "#FFFFFF") } viewBox="0 0 24 24" aria-hidden="true">
 			<rect width="24" height="24" rx="6" fill={ logo.Color }></rect>
-			<path d={ logo.Path } fill={ logo.Ink } transform="translate(5 5) scale(.5833)"></path>
+			if len(logo.Parts) > 0 {
+				<g transform="translate(5 5) scale(.5833)">
+					for _, part := range logo.Parts {
+						<path d={ part.Path } fill={ part.Fill }></path>
+					}
+				</g>
+			} else {
+				<path d={ logo.Path } fill={ logo.Ink } transform="translate(5 5) scale(.5833)"></path>
+			}
 		</svg>
 	} else {
 		<span class="app-icon app-icon-category" aria-hidden="true">@Icon(appCategoryIcon(category))</span>

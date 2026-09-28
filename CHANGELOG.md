@@ -8,6 +8,613 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.5.1-beta.2] - 2026-09-27
+
+Sable 1.5.1-beta.2 takes UniFi's word for what its own hardware is, adds a
+UPS device type, and moves passkey sign-in errors to where other errors show.
+
+### Insights
+
+- Show UniFi gateways, switches, and access points as **Network equipment**
+  and a UNAS as **Network storage**, with the reason "UniFi says it is …",
+  instead of guessing from the maker. In beta.1 they read as **Unsure**. A
+  type you set still wins. The next UniFi sync after updating fills this in.
+- Add a **UPS** device type with a battery icon. UniFi UPS units, APC and
+  CyberPower devices, and devices with "UPS" in their name get it.
+- Guess **Network storage** for a device with "UNAS" in its name when the
+  UniFi sync is off.
+- Write "Probably network storage" and "Network equipment made by Ubiquiti"
+  rather than "a network storage" and "A network equipment".
+
+### Sign-in
+
+- Show a failed passkey sign-in's error under the card's subtitle, above every
+  button, like a password or single sign-on error. With single sign-on on, it
+  used to appear between **Sign in with …** and the passkey button.
+
+## [1.5.1-beta.1] - 2026-09-27
+
+Sable 1.5.1-beta.1 makes **Insights → Devices** easy to search and better at
+telling what each device is.
+
+### Insights
+
+- Search the **Devices** list by name, hardware address, IP address, maker,
+  or type, and filter it by device type or by **All Devices**, **New**,
+  **Named**, and **Unnamed**. The search and filters stay in the page address,
+  so they survive a range change, a rename, and a reload.
+- Add **Search Devices** to the command palette. It opens **Devices** with
+  your search already applied.
+- Name a UniFi controller's own gateway, switches, and access points. They
+  used to show only a hardware address. The UniFi sync still publishes DNS
+  records for clients only.
+- Recognize TRMNL and Tidbyt displays, Generac generators, Bambu Lab 3D
+  printers, and reMarkable tablets by the servers the devices themselves talk
+  to. Visiting these companies' websites doesn't count.
+- Count any MQTT server, which smart home gear uses to hear from its maker, as
+  a sign of a smart home device, so gear from a brand Sable doesn't know still
+  gets a guess.
+- Trust what a device talks to more when it is built on a radio module from
+  Espressif, Quectel, Telit, AMPAK, or Tuya, since such hardware runs no
+  browser or desktop app. A Bambu Lab printer now reads as a printer, while a
+  laptop running Bambu Studio does not.
+- Guess **Smart home device** for an Espressif device with no other clues. It
+  used to get no guess at all.
+- Show Quectel, Telit, and AMPAK by their short names under **Maker**.
+
+## [1.5.0] - 2026-09-27
+
+Sable 1.5.0 adds three big features. **Insights** shows what changed on your
+network, what each device is, and the evidence behind every finding.
+**Alerts** tell you about it, and about the server itself, on your phone, in
+Slack or Discord, or in your browser. And the **MCP server** lets AI
+assistants such as Claude, ChatGPT, Codex, and Cursor manage your DNS with an
+API token. All of it runs on your own server. Insights uses fixed rules and
+lookup tables, with no machine learning or cloud service, and none of it runs
+on the DNS request path.
+
+### Upgrading from 1.4
+
+- Sable fills Insights from your existing query log in the background after
+  the upgrade, so it knows which devices were already on your network and can
+  read a month of history quickly. A busy month takes about a minute.
+  Insights works while it runs, just slower.
+- The MCP server stays off until you set it up, so no existing API token gains
+  a new use.
+- Alerts send nothing until you add a destination. **Failed Sign-Ins** alerts
+  stay off until you turn them on.
+- While **Check for updates** is on, the lead node now also looks for new
+  releases in the background, hourly unless you change it under
+  **Settings > General > Software Updates**.
+- **Integrations** moves in the sidebar to **System**, with
+  **Administration**, **Cluster**, **Settings**, and **About**.
+
+### Insights
+
+- Add an **Insights** page with **Overview**, **Devices**, and **Blocking**
+  tabs, in the sidebar and command palette for anyone who can read logs or
+  blocking.
+- Open the Overview with one sentence about what stands out, such as a camera
+  that went quiet or a file server that woke up at 3 AM. Each device it names
+  opens its finding. Below it are your network's numbers, **Worth a Look**,
+  **Top Apps**, and **Busiest Devices**.
+- Notice new devices; devices that go quiet, get unusually busy, or wake at an
+  hour they never use; appliances such as cameras and doorbells calling
+  somewhere new; devices that start using a new app or talking to many new
+  places; and names one device looks up on a steady schedule.
+- Explain every finding in a drawer: fact cards, the reasons Sable surfaced
+  it, what it could mean, the rule behind it, and a link to the exact queries
+  it counted. Charts show a device's day against its usual week, or each
+  lookup of a check-in across the last day.
+- Hide a finding **For a Day**, **For a Week**, or as **That's Normal** with
+  **Hide Finding**, and bring it back from the hidden list. Hiding follows the
+  device's hardware address, so it survives a rename.
+- Choose what Insights does with each kind of finding, **Show and alert**,
+  **Show only**, or **Off**, and tune the limits behind it, such as how much
+  busier than usual a device must get, under Insights **Settings**.
+- Open an app or device from **Top Apps** or **Busiest Devices** in a drawer.
+  An app lists the domains it used and the devices that used it, and each
+  opens the other.
+- Show app logos in each brand's colors, and a category icon for the rest.
+- Open in about a second on a busy month of history, about seven million
+  queries, and answer from the last count while a fresh one runs.
+- Leave out Sable's own scheduled lookups, such as dynamic DNS, UniFi sync,
+  and block list downloads, so the server never looks like it is phoning home.
+
+### Devices
+
+- Group a device's addresses by hardware address, using UniFi, the server's
+  neighbor table on Linux and macOS, and names you give, so its IPv4 and
+  changing IPv6 addresses count as one device.
+- Tie a phone's or computer's private IPv6 addresses, which change about once
+  a day, to the device, so they never show up as new devices or ones that
+  went quiet.
+- Name each device in one order: the name you gave it, then UniFi's, then a
+  local host entry, then reverse DNS, with a badge saying where the name came
+  from. Rename a device from its drawer. The dashboard's top clients use the
+  same names.
+- Name each device's maker from the IEEE registry built into Sable, and guess
+  what it is from its maker, its name, and the services it talks to, with a
+  confidence level and the clues behind it. Correct a wrong guess, and the
+  correction follows the hardware address.
+- Show what each device is as an icon beside its name.
+- Mark the machine Sable runs on as **This server** and the rest of its
+  cluster as **Sable node**.
+
+### Blocking
+
+- Record which block list supplied the rule behind each blocked query, and
+  show it when you explain a query.
+- Compare your block lists: the domains only one list covers, their biggest
+  overlap, and the blocked queries each list caught alone.
+- Find names that were blocked before you allowed them, and block lists that
+  stopped updating or cannot be read.
+
+### Alerts
+
+- Add **Settings > Alerts**. Send alerts to as many destinations as you like:
+  a JSON webhook for Home Assistant and anything else, ntfy, Slack as a card,
+  Discord as an embed that never mentions anyone, Pushover, or your browsers.
+  Each destination gets **Everything** or **Only These Types**.
+- Show alerts as browser notifications, even when Sable is closed, with no
+  account or app. Browsers allow this over HTTPS or at `localhost`, and on
+  iPhone and iPad once Sable is on the Home Screen. When a browser's push
+  service is off, as in Brave by default, Sable says how to turn it on.
+- Turn each type of alert on or off:
+  - **Insights Findings:** new findings worth a look, with a switch for each
+    kind.
+  - **Cluster:** a node that has not checked in for five minutes, and again
+    when it comes back, and rolling updates that start, finish, fail, or stop.
+    A node restarting for an update says nothing, and a replica speaks up if
+    the lead stops answering.
+  - **Sable Updates:** a newer release than the one running.
+  - **Integrations:** UniFi sync or dynamic DNS failing three times in a row,
+    and a new public IPv4 or IPv6 address.
+  - **Backups:** failures only, every backup, or off.
+  - **Server Health:** certificate renewals failing, secondary zones that stop
+    refreshing or expire, and DNSSEC root keys that stop updating.
+  - **Failed Sign-Ins:** off unless you turn it on. One alert per burst, 5
+    failures within 10 minutes to start, with the usernames tried and where
+    they came from.
+- Send problems, such as a node going down or a backup failing, at high
+  priority on ntfy, Pushover, and browsers.
+- Check that the service actually took the alert, so a mistyped URL shows an
+  error instead of looking like it worked. For ntfy, turn on **Check for an
+  ntfy Receipt** under **Advanced**, where you can also add headers such as
+  `Authorization` for a protected topic.
+- See exactly what a destination gets with **Preview**, with secrets cut
+  short, and try it with **Send Test**. Each destination shows its last send
+  or last error, and one that fails never holds up the others.
+- Keep destination URLs, keys, and header values in the encrypted vault
+  instead of `sable.toml`.
+- Pause and resume alerts without losing their setup.
+- Send each alert once, and never flood a new destination with old news.
+- Send from the cluster's lead only, so each alert arrives once. Alert
+  settings copy to every node, so a new lead keeps sending to the same places,
+  and replicas pass their own backup, certificate, zone, and DNSSEC problems
+  to the lead.
+
+### MCP server
+
+- Add **Integrations → MCP Server**, so an AI assistant can manage your DNS.
+  A typical use: it points a name at a service it just deployed, then looks
+  the name up through Sable to check.
+- Set it up in three steps: **Tools**, **Access**, and **Connect**. **Connect**
+  has the address to use and ready-to-paste setup for Claude Code, Claude
+  Desktop, ChatGPT, and Cursor.
+- Choose exactly which tools assistants get. The everyday ones start on: list
+  zones and records; add, change, replace, and delete records; check why a
+  domain is blocked; allow or block a domain; list block lists; look a name up
+  through Sable; forget one cached name; and list Insights findings.
+- Turn on more when you want them: create and delete zones, add, remove, and
+  refresh block lists, and search the query log. Before deleting a zone the
+  assistant is told to ask you, and must repeat the zone name.
+- Sign assistants in with API tokens only. **Access** lists the grants your
+  tools need, can create a group with exactly those grants, and makes a token
+  that uses it. The token's groups decide which zones and lists it can touch.
+- Check every change like a console edit. It advances the SOA serial,
+  notifies secondaries, shows in the zone's **History**, and is audited with
+  `via=mcp`. Repeating a change does nothing.
+- Answer read tools on a replica, and refuse changes there with the console's
+  replica message.
+- Show on the card how many tools are on, when one was last used, and how
+  many calls came in today. Hover over **Last used** to see who called which
+  tool, from which app.
+- `list_findings` and `search_queries` send what your devices do to the
+  assistant's AI provider when called. Leave them off, or keep `logs.read` out
+  of the token's group, if that matters to you.
+
+### Updates
+
+- Update the whole cluster from **About**. A primary's update button offers
+  **This node** or **Entire cluster**, like the update notification, and
+  remembers which you picked.
+- Start or follow a rolling update from the command palette with **Update
+  Cluster**.
+- Reload the console once an update finishes, so you run the new release
+  right away.
+- Look for new releases in the background on the lead node, **Hourly**,
+  **Daily**, or **Weekly**, so an update alert does not wait for someone to
+  sign in.
+
+### Console
+
+- Fit the whole sidebar in a laptop-height window, and scroll it with a fade
+  in a shorter one, keeping the current page in view.
+- Ship the Inter font with the console, so every device draws the same text.
+- Pull down to reload any page when Sable is added to an iPhone's Home
+  Screen.
+- Stop Safari zooming in when you tap a field on a phone or tablet.
+- Stack a dialog's buttons on a phone with **Cancel**, **Close**, or **Done**
+  at the bottom, the way iOS does, and lay the **Settings** tabs out in two
+  rows of five.
+- Jump to App, Device, and Blocking Insights, or to alert setup, from the
+  command palette.
+- Credit the open-source software Sable is built on under **About**, in the
+  **MIT License** dialog's **Third-Party Licenses**.
+- Show a message from a dialog above it instead of behind its blurred
+  backdrop, and keep button labels on one line in Safari.
+
+### Fixes
+
+- Tell a DNS-over-QUIC client that connects just as Sable stops that the
+  connection is closing, so it reconnects right away instead of waiting out
+  its idle timeout.
+- Show the last good scheduled backup on the **Backup** tab after a restart
+  instead of nothing.
+- Stop reporting a second, false failure for a rolling update that had already
+  ended.
+- Return focus to the button that opened a dialog even when saving redraws the
+  page behind it.
+- Record the username a failed password sign-in tried in the audit log, never
+  the password, and record each lockout once.
+
+### Configuration
+
+- Add `[alerts]`, `[alerts.send]`, `[alerts.sign_ins]`, and
+  `[[alerts.destinations]]`.
+- Add `[insights.findings]`, with a mode and limits for each kind of finding.
+- Add `[mcp]` with `configured`, `enabled`, `group`, and `tools`.
+- Add `check_schedule`, `check_at`, and `check_day` to `[updates]`.
+- Add `type` to `[[clients]]` entries, and let an entry set a name, a type, or
+  both.
+
+## [1.5.0-beta.16] - 2026-09-27
+
+Sable 1.5.0-beta.16 makes the console behave better on iPhone.
+
+### Console
+
+- Pull down from the top of any page to reload it when Sable is added to the
+  Home Screen. iPhone only gives this gesture to Safari tabs, so the console
+  now draws its own spinner and reloads once you pull far enough.
+- Stop Safari zooming in when you tap a field on a phone or tablet. Fields on
+  touch screens now use 16px text, so the page stays put. Desktop fields are
+  unchanged.
+
+## [1.5.0-beta.15] - 2026-09-27
+
+Sable 1.5.0-beta.15 lets you update the whole cluster from **About**.
+
+### About
+
+- Offer **This node** or **Entire cluster** on a primary's update button in
+  **About**, like the update notification. The two share one remembered
+  choice, so both offer whichever you picked last.
+- Say "Ready to install on this node or the whole cluster." when the cluster
+  can be updated.
+- Keep the update buttons on the right when they wrap under the summary, and
+  make **Release notes** and the update button the same width on a phone.
+
+### Cluster
+
+- Open the **Rolling Updates** card, not the top of the Cluster page, after
+  starting a cluster update from **About** or the update notification.
+
+## [1.5.0-beta.14] - 2026-09-27
+
+Sable 1.5.0-beta.14 fixes the Rolling Updates card on the Cluster page.
+
+### Cluster
+
+- Keep **Release notes** and **Check again** side by side on **Rolling
+  Updates**. In a laptop-width window they stacked, then jumped back into one
+  row while a check ran.
+- Keep **Check again** on the card while a check runs, showing
+  **Checking…**. It used to vanish for a moment partway through.
+- Color the version amber, with a download icon, while a rolling update
+  installs it. It was grey, which read as the version the cluster already ran.
+- Widen the side column, so the version sits beside the **Rolling Updates**
+  title and its buttons have more room.
+- Show **Rolling Updates** right under **Cluster Status** on a phone, instead
+  of below every node.
+
+## [1.5.0-beta.13] - 2026-09-27
+
+Sable 1.5.0-beta.13 lets you choose exactly which tools the MCP server offers,
+and makes the group and token an assistant needs as part of setup. It is the
+last beta before 1.5.0.
+
+### Upgrading from beta.12
+
+- `create_zone` is now off by default. In beta.12 it was always on. If your
+  assistant creates zones, turn it on in **Edit Setup → Tools**.
+- `list_block_lists` and `list_findings` now start on. A token still needs
+  `blocking.read` or `logs.read` to use them.
+
+### MCP Server
+
+- Set up the MCP server in three steps: **Tools**, **Access**, and **Connect**.
+- List every tool in **Tools** with the grant it needs, in four sections:
+  **Records & Zones**, **Blocking**, **Lookups & Cache**, and
+  **Insights & Logs**. Each section has **All**, **Read only**, and **None**.
+  The choice is saved as `tools` under `[mcp]` in the config file.
+- Offer assistants only the tools you chose. An assistant holding an older
+  list is told a tool is turned off.
+- Start with the everyday tools on: records, allowing and blocking domains,
+  `list_block_lists`, `lookup`, `purge_cache`, and `list_findings`.
+- Add tools that start off:
+  - `create_zone` creates a Primary zone.
+  - `delete_zone` deletes a zone and its records. The assistant is told to ask
+    you first, and must repeat the zone name to confirm.
+  - `add_block_list`, `remove_block_list`, and `refresh_block_lists` change
+    and refresh block lists.
+  - `search_queries` searches the query log by device, part of a name, or
+    blocked lookups only, up to 200 at a time.
+- Add `list_block_lists`, which lists block lists and how many domains each
+  adds, and `list_findings`, which lists what Insights noticed with its
+  evidence. Findings you hid or turned off are left out.
+- `list_findings` and `search_queries` send what your devices do to the
+  assistant's AI provider when called. Leave them off, or keep `logs.read` out
+  of the token's group, if that matters to you.
+- Show the grants your chosen tools need in **Access**. If you can manage
+  users, **Create Group** makes an API-only group with exactly those grants
+  for every zone, and can add you to it. Sable remembers the group. When your
+  tools change, it shows only the grants that differ, with **Update Group**.
+- Make a token that uses the group with **Create Token** in **Access**. The
+  token is shown once. Later visits list your tokens that use the group, with
+  **New Token** for another.
+- Show **Tools**, **Last used**, and **Calls today** on the card. Hover over
+  **Last used** to see who called which tool, from which app.
+
+### Console
+
+- Draw the MCP Server icon larger, so it matches the other integration icons.
+
+## [1.5.0-beta.12] - 2026-09-26
+
+Sable 1.5.0-beta.12 adds an MCP server, so AI assistants such as Claude,
+ChatGPT, Codex, and Cursor can manage your DNS with an API token, for example
+to point a name at a service they just deployed.
+
+### MCP Server
+
+- Add **Integrations → MCP Server**. It is off until you click
+  **Set Up MCP Server**, so no existing API token gains a new use on upgrade.
+  Once set up, the card offers **Pause**, **Resume**, and **Remove** like the
+  other integrations.
+- Show the address to give your assistant in the setup dialog, with tabs of
+  ready-to-paste setup for **Claude Code**, **Claude Desktop**, **ChatGPT**, and
+  **Cursor**. On a cluster the address is the primary's HTTPS address, because
+  only the primary accepts changes.
+- Let assistants list zones and records, add, update, and delete records,
+  replace a name's records in one step, and create Primary zones. Every change
+  is checked like a console edit, advances the SOA serial, notifies
+  secondaries, appears in the zone's **History**, and is audited with
+  `via=mcp`. Repeating a change does nothing.
+- Let assistants look a name up through Sable, forget one cached name, check
+  why a domain is blocked, and allow or block a domain.
+- Sign assistants in with API tokens only. The token's groups decide which
+  zones and lists it can see and change. Assistants cannot read the query log
+  or Insights, and their lookups never appear there.
+- Answer read tools on a replica and refuse changes there with the console's
+  replica message.
+
+### Console
+
+- Center the copy button on code blocks in **About**, alert previews, and the
+  MCP setup dialog, matching the record copy buttons.
+- Keep an integration card's main buttons on the right when it has no
+  **Remove** button beside them.
+
+## [1.5.0-beta.11] - 2026-09-26
+
+Sable 1.5.0-beta.11 makes it clear how long a hidden Insights finding stays
+hidden, and keeps the Cluster page's side cards together.
+
+### Insights
+
+- Replace **Seen it?** at the end of a finding's drawer with **Hide Finding**
+  beside **Why Sable surfaced this**. It opens **For a Day**, **For a Week**,
+  and **That's Normal**, each with a line saying when the finding comes back.
+  **Dismiss** sounded permanent but lasted only a day, and the buttons sat
+  below the fold in a laptop-height window.
+- Close only the hide menu when you press Escape, and keep the drawer open.
+
+### Cluster
+
+- Show the **HTTPS required** warning above **How Clustering Works** and
+  **Local Node**, so the two cards sit side by side in a window about 700 to
+  1050px wide. The warning used to split them onto separate rows.
+
+## [1.5.0-beta.10] - 2026-09-26
+
+Sable 1.5.0-beta.10 tidies the console. The sidebar fits a laptop screen and
+groups its pages more clearly, every device draws the console in Inter, and
+About credits the open-source software Sable is built on.
+
+### Sidebar
+
+- Fit the whole sidebar in a laptop-height browser window, so **About** no
+  longer sits cut off at the bottom.
+- Drop the **Overview** heading over the first group, and list
+  **Administration**, **Cluster**, **Integrations**, **Settings**, and
+  **About** under **System**. **Integrations** moves there from the first
+  group, and the command palette lists pages in the same order.
+- Scroll the sidebar in a window too short for it, with the fade and chevron
+  phones already show, and keep the current page in view.
+- Blur the page behind the open phone menu and fade in its dimming, as
+  dialogs do.
+
+### Console
+
+- Ship the Inter font with the console, so every device draws the same text.
+  Before, only a device with Inter installed drew it, and phones fell back to
+  their own font.
+- Credit the open-source software Sable is built on: **Third-Party Licenses**,
+  in About's **MIT License** dialog, lists each project with its license.
+- Stack a dialog's buttons on a phone with the one that only closes it,
+  **Cancel**, **Close**, or **Done**, at the bottom, the way iOS does.
+- Lay the ten **Settings** tabs out in two rows of five on phones at least
+  375px wide, instead of leaving two alone on a third row.
+
+### Alerts
+
+- Call the switches for each kind of alert **Alert Types** instead of groups,
+  in **Settings > Alerts** and in a destination's **Only These Types** choice.
+  The configuration and webhook JSON keep their names.
+
+### Fixes
+
+- Stretch the Insights time range picker across the full width of a phone
+  screen.
+- Keep the note on the **Alerts** card to one line while alerts are paused.
+
+## [1.5.0-beta.9] - 2026-09-26
+
+Sable 1.5.0-beta.9 keeps button labels on one line in Safari.
+
+### Console
+
+- Keep **Send Test** on one line on each alert destination in Safari, where
+  its button came out slightly too narrow for its label.
+- Keep small buttons with an icon on one line in Safari on a phone, such as
+  **Add Destination**, **Add Key**, and **Set Up UniFi Sync**.
+
+## [1.5.0-beta.8] - 2026-09-26
+
+Sable 1.5.0-beta.8 turns Insights alerts into alerts for the whole server.
+Set them up under **Settings > Alerts** and hear about nodes going down,
+failed backups, failing integrations, certificate and zone trouble, new
+releases, and bursts of failed sign-ins, along with Insights findings. You
+can also choose what Insights does with each kind of finding, and phones'
+rotating private IPv6 addresses no longer show up as new or quiet devices.
+
+### Alerts
+
+- Set up alerts under **Settings > Alerts** instead of in Insights. An
+  existing Insights webhook becomes the first destination on the next start,
+  and nothing it already sent goes out again.
+- Add as many destinations as you need, each a webhook, ntfy topic, Slack or
+  Discord channel, Pushover, or your browsers, and send each one
+  **Everything** or **Only These Groups**.
+- Keep destination URLs, Pushover keys, and header values in the encrypted
+  vault instead of `sable.toml`. Saved ones move there on the next start and
+  show cut short when you edit a destination.
+- Turn groups of alerts on or off: Insights Findings, Cluster, Sable Updates,
+  Integrations, Backups, Server Health, and Failed Sign-Ins.
+- Send problems, such as a node going down or a backup failing, at high
+  priority on ntfy, Pushover, and browsers.
+- Keep sending to every other destination when one fails, and show each
+  destination's last send or last error.
+- Send an alert once for as long as it stays news. Before, one that lasted
+  more than six hours could go out again.
+- Turn on browser alerts from the **Browsers** destination's row, which lists
+  every browser that turned them on. Removing Browsers forgets them all.
+
+### New alerts
+
+- **Cluster:** a node that has not checked in for five minutes, and again
+  when it comes back. A node restarting for an update within those five
+  minutes says nothing. If the lead stops answering, a replica says so after
+  five minutes, unless a planned handoff gave the cluster a new lead. Rolling
+  updates alert when they start, finish, fail, or stop.
+- **Sable Updates:** a release newer than the one running.
+- **Integrations:** UniFi sync or dynamic DNS failing three times in a row,
+  and a new public IPv4 or IPv6 address, with the address it replaced.
+- **Backups:** a scheduled backup that fails, or every backup as it finishes.
+- **Server Health:** a certificate renewal failing near expiry or three times
+  in a row, a secondary zone that stops refreshing or expires, and DNSSEC
+  root keys that stop updating. Certificates installed by hand are left out.
+- **Failed Sign-Ins:** off unless you turn it on. One alert for each burst, 5
+  failures within 10 minutes unless you change it, with the usernames tried
+  and the addresses they came from.
+
+### Clusters
+
+- Copy alert settings, their secrets, and the browsers that turned alerts on
+  to every node, so a new lead keeps sending to the same places. Only the
+  lead sends, so each alert arrives once.
+- Send each replica's own backup, certificate, zone, and DNSSEC problems
+  through the lead.
+- Copy Insights settings to every node.
+
+### Insights
+
+- Choose what Insights does with each kind of finding, **Show and alert**,
+  **Show only**, or **Off**, and change the limits behind it, such as how much
+  busier than usual a device must get. Open **Settings** beside the range
+  control. Alerts for each kind can also be switched under Insights Findings
+  in **Settings > Alerts**.
+- Show whether Insights alerts are **On**, **Paused**, or **Off** on the bell
+  beside **Settings**, say why when you hover over it, and open
+  **Settings > Alerts** from it.
+- Stop reporting a phone's or computer's private IPv6 address, which changes
+  about once a day, as a new address or one that went quiet.
+- Tie a device's older IPv6 addresses to it across the whole two weeks that
+  Went quiet, Unusually busy, and Active at an unusual hour look back, so last
+  week's address no longer looks like a device that went quiet and the phone
+  no longer looks unusually busy. Tie IPv6 addresses built from a hardware
+  address to that hardware right away.
+
+### Software updates
+
+- Look for a new Sable release in the background on the lead node, so an
+  update alert does not wait for someone to sign in. Check **Hourly**, the
+  default, **Daily** at a time, or **Weekly** on a day and time, under
+  **Settings > General > Software Updates**. Turning off **Check for updates**
+  stops these checks too.
+
+### Audit log
+
+- Record the username a failed password sign-in tried, never the password.
+- Record each password, single sign-on, and passkey lockout once.
+
+### Fixes
+
+- Show the last good scheduled backup on the Backup tab after a restart
+  instead of nothing.
+- Stop reporting a second, false failure for a rolling update that had
+  already ended.
+- Return focus to the button that opened a dialog even when saving redraws
+  the page behind it.
+
+### Configuration
+
+- Add `[alerts]` with `paused`, `[alerts.send]` for the groups,
+  `[alerts.sign_ins]`, and `[[alerts.destinations]]`. `[insights.webhook]`
+  still loads and moves into `[[alerts.destinations]]`.
+- Add `[insights.findings]`, with a mode and limits for each kind of finding.
+- Add `check_schedule`, `check_at`, and `check_day` to `[updates]`.
+
+## [1.5.0-beta.7] - 2026-09-24
+
+Sable 1.5.0-beta.7 draws the ChatGPT and Microsoft 365 logos the way their
+apps do, and closes DNS-over-QUIC connections cleanly when Sable stops.
+
+### Insights
+
+- Show ChatGPT's logo in black on white, like its app, instead of on
+  OpenAI's old purple.
+- Show Microsoft 365 with Microsoft's four-color logo on white instead of
+  Office's retired mark.
+
+### DNS over QUIC
+
+- Tell a client that connects just as Sable stops that the connection is
+  closing, so it reconnects right away instead of waiting for its idle
+  timeout.
+
 ## [1.5.0-beta.6] - 2026-09-24
 
 Sable 1.5.0-beta.6 fixes turning on browser alerts in browsers whose push

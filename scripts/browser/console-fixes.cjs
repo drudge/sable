@@ -219,6 +219,37 @@ async function checkWidgetLifecycle(page, baseURL) {
       const bounds = await commit.boundingBox();
       assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 375, 'mobile commit fits without overflow');
     });
+    await check(page, 'a short window scrolls the sidebar to the current page and cues the rest', async () => {
+      await page.setViewportSize({width: 1400, height: 480});
+      await page.goto(`${process.argv[2]}/?about`);
+      const nav = page.locator('#primary-navigation');
+      const state = () => nav.evaluate(nav => {
+        const view = nav.getBoundingClientRect();
+        const current = nav.querySelector('[aria-current="page"]').getBoundingClientRect();
+        const clearance = parseFloat(getComputedStyle(nav).scrollPaddingTop);
+        return {
+          scrollTop: nav.scrollTop,
+          scrollEnd: nav.scrollHeight - nav.clientHeight,
+          currentClear: current.top >= view.top + clearance - 1 && current.bottom <= view.bottom - clearance + 1,
+          moreBelow: document.querySelector('.sidebar-nav-hint').dataset.visible,
+          pageScroll: window.scrollY,
+        };
+      });
+      const loaded = await state();
+      assert.ok(loaded.scrollEnd > 0, 'the window is short enough that the sidebar list overflows');
+      assert.ok(loaded.scrollTop > 0, 'the list scrolled down to the current page');
+      assert.equal(loaded.currentClear, true, 'the current page sits clear of the fades');
+      assert.equal(loaded.moreBelow, 'true', 'a chevron says more of the list waits below');
+      await nav.hover();
+      await page.mouse.wheel(0, 2000);
+      await page.waitForFunction(() => {
+        const nav = document.querySelector('#primary-navigation');
+        return nav.scrollTop + nav.clientHeight >= nav.scrollHeight - 1;
+      });
+      const scrolled = await state();
+      assert.equal(scrolled.moreBelow, 'false', 'the chevron leaves at the end of the list');
+      assert.equal(scrolled.pageScroll, loaded.pageScroll, 'scrolling the list leaves the page where it was');
+    });
     await page.setViewportSize({width: 1400, height: 1000});
     assert.equal(await page.locator('.about-commit').innerText(), 'abcdef0123456789abcdef0123456789abcdef0123');
     await check(page, 'background dashboard refresh stays visually quiet', async () => {

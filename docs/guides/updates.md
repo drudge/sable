@@ -28,8 +28,19 @@ replica nodes. A dismissible notice offers **Release notes** and **Install updat
 without leaving the current page. Results, including failed checks, are cached for six hours per node;
 manual checks remain available. Nothing is installed automatically.
 
-Under **Settings → General → Software Updates**, turn off **Check for updates on sign-in** to disable automatic
-checks on this node and click **Save Settings**, or set `updates.check_on_login = false` in `sable.toml`.
+While that setting is on, the primary, or a server on its own, also checks in
+the background, every hour unless you choose otherwise. A newer release then
+sends an `updates` alert to the destinations under **Settings → Alerts**, so you
+hear about it without signing in. The alert lasts until the server runs that
+release, so it goes out once per release.
+
+Under **Settings → General → Software Updates**, the schedule under **Check for
+updates** picks **Hourly**, **Daily** at a time, or **Weekly** on a day at a
+time. Times are the server's local time. In a cluster, the primary's schedule
+is the one that runs.
+
+Turn off **Check for updates** to disable automatic
+checks on this node, including the scheduled ones, and click **Save Settings**, or set `updates.check_on_login = false` in `sable.toml`.
 The choice persists across restarts and is not replicated. Update readers can
 see notifications; changing the preference requires `settings.write`.
 

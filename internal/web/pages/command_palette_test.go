@@ -83,6 +83,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		`id="command-action-search-server-logs"`, `id="command-action-search-query-logs"`, `id="command-action-search-cache"`,
 		`id="command-action-search-blocked"`, `data-command-focus="[data-domain-search=domains]"`,
 		`id="command-action-search-allowed"`, `data-command-focus="[data-domain-search=allowed]"`,
+		`id="command-action-search-devices"`, `data-command-route="/insights?tab=devices" data-command-focus="[data-device-search]"`,
 		`data-command-search-modes-label="Search query logs by"`, `data-command-keywords="sql dns history client response filters ip address"`,
 		`data-command-search-modes-config=`, `data-command-search-submit="#dns-query-form"`,
 		`data-command-focus="#cache-browser-dialog [data-cache-search]"`, `data-command-search-prompt="Search cached domains…"`,
@@ -144,7 +145,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 	}
 
 	restricted := renderComponent(t, CommandPalette(DashboardView{}))
-	for _, forbidden := range []string{`id="command-action-import-catalog"`, `id="command-page-zones"`, `id="command-page-settings"`, `id="command-settings-title"`, `id="command-action-check-updates"`, `id="command-page-administration"`} {
+	for _, forbidden := range []string{`id="command-action-import-catalog"`, `id="command-page-zones"`, `id="command-page-settings"`, `id="command-settings-title"`, `id="command-action-check-updates"`, `id="command-page-administration"`, `id="command-action-search-devices"`} {
 		if strings.Contains(restricted, forbidden) {
 			t.Errorf("restricted command palette unexpectedly contains %q", forbidden)
 		}

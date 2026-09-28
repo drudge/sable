@@ -8,6 +8,8 @@ Validation is enabled by default. Sable follows DS/DNSKEY chains and checks posi
 
 Sable can maintain the bundled root trust anchors using persistent RFC 5011 state. Explicit `dnssec_trust_anchors` override that automatic policy. Only change them when you deliberately operate a different trust hierarchy.
 
+If those updates keep failing, so that none has worked for two refresh intervals (usually two days), the node sends a server [alert](../configuration.md#alerts) with the latest error. A node that has never completed an update alerts as soon as one fails. Validation carries on with the anchors it has, but a node that stays in this state can miss a root key change.
+
 If a private copy of a signed public namespace lacks signatures, confirm that split-horizon behavior is intentional. A Forwarder or Stub zone can disable validation for only its subtree. Do not disable validation globally to hide an unexplained SERVFAIL.
 
 ## Sign a Primary zone

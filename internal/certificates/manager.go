@@ -43,9 +43,14 @@ type Status struct {
 	LastAttempt           time.Time
 	LastSuccess           time.Time
 	LastError             string
-	Renewing              bool
-	ProviderEndpoint      string
-	TSIGAlgorithm         string
+	// ConsecutiveFailures counts the issuances and renewals that have failed
+	// in a row. It clears once one works or the installed certificate turns
+	// out to need no renewal, so it tells a failure that keeps happening from
+	// one that happened once.
+	ConsecutiveFailures int
+	Renewing            bool
+	ProviderEndpoint    string
+	TSIGAlgorithm       string
 
 	// The fields below describe the certificate that is actually installed,
 	// which is not always the certificate the settings ask for: a name added to
@@ -254,6 +259,7 @@ func (manager *Manager) recordCertificate(certificate *x509.Certificate, lastErr
 	manager.status.NotBefore = certificate.NotBefore
 	manager.status.NotAfter = certificate.NotAfter
 	manager.status.LastError = lastError
+	manager.status.ConsecutiveFailures = 0
 	manager.status.LastSuccess = manager.now()
 	manager.status.Subject = certificate.Subject.CommonName
 	manager.status.SerialNumber = formatSerialNumber(certificate.SerialNumber)
@@ -302,6 +308,7 @@ func formatFingerprint(sum [sha256.Size]byte) string {
 func (manager *Manager) recordError(err error) {
 	manager.mu.Lock()
 	manager.status.LastError = err.Error()
+	manager.status.ConsecutiveFailures++
 	manager.mu.Unlock()
 	manager.logger.Error("public TLS certificate operation failed", "error", err)
 }

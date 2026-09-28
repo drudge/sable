@@ -36,6 +36,8 @@ The configuration's `renew_before` defaults are documented in the [reference](..
 
 If issuance or renewal fails, check provider authorization, the selected zone, CAA policy, public TXT visibility, ACME rate limits, and the error shown by Sable. Avoid repeatedly requesting production certificates while debugging. Use the CA's staging environment where appropriate.
 
+When renewal of an ACME certificate fails within 14 days of its expiry, or fails three times in a row, the node sends a server [alert](../configuration.md#alerts) saying when it expires, with the latest error. Imported and self-signed certificates are renewed outside Sable, so no renewal alert covers them; watch their expiry yourself.
+
 ## Verify the endpoint
 
 Query each enabled [encrypted DNS transport](encrypted-dns.md) using its intended hostname. Confirm the chain is trusted and expiration is reasonable. In a cluster, configure each node's endpoint and verify every node; listener and certificate configuration is not replicated automatically.

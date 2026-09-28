@@ -7,6 +7,7 @@ package webpush
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -94,6 +95,10 @@ type Sender struct {
 	// Subject is how a push service can reach whoever runs the server: a
 	// mailto: or https: URL.
 	Subject string
+	// Urgency is how soon a push service should wake the browser's device for
+	// a push: "normal" unless set, or "high" for something that needs a look
+	// now (RFC 8030 section 5.3).
+	Urgency string
 	Client  *http.Client
 	Now     func() time.Time
 }
@@ -120,7 +125,7 @@ func (sender Sender) Send(ctx context.Context, subscription Subscription, payloa
 	request.Header.Set("Content-Type", "application/octet-stream")
 	request.Header.Set("Content-Encoding", "aes128gcm")
 	request.Header.Set("TTL", strconv.Itoa(int(ttl.Seconds())))
-	request.Header.Set("Urgency", "normal")
+	request.Header.Set("Urgency", cmp.Or(sender.Urgency, "normal"))
 	request.Header.Set("Authorization", authorization)
 	client := sender.Client
 	if client == nil {

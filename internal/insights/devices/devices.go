@@ -1,9 +1,10 @@
 // Package devices turns client addresses into devices and reports what changed
 // about them. An address is tied to a device through the names an operator
-// gave it, a UniFi controller's inventory, or the host's neighbor table, so a
-// laptop's IPv4 and rotating IPv6 addresses count as one device. When nothing
-// ties an address to hardware, the address stands on its own and every
-// sentence about it says "address" rather than claiming a device.
+// gave it, a UniFi controller's inventory, the host's neighbor table, or the
+// hardware address an IPv6 address was built from, so a laptop's IPv4 and
+// rotating IPv6 addresses count as one device. When nothing ties an address
+// to hardware, the address stands on its own and every sentence about it says
+// "address" rather than claiming a device.
 package devices
 
 import (
@@ -31,6 +32,10 @@ const (
 const (
 	identityUniFi    = "unifi"
 	identityNeighbor = "neighbor"
+	// identityUniFiTyped starts the source of a sighting of Ubiquiti hardware
+	// whose type the controller vouches for, followed by that type, as in
+	// "unifi-network" or "unifi-storage".
+	identityUniFiTyped = "unifi-"
 )
 
 // Device is one piece of hardware, or one address that could not be tied to
@@ -42,10 +47,17 @@ type Device struct {
 	Name       string
 	NameSource string
 	MAC        string
+	// MACFromAddress marks a hardware address read out of the device's IPv6
+	// addresses rather than seen with them on the network.
+	MACFromAddress bool
 	// PrivateMAC marks a randomized per-network hardware address.
 	PrivateMAC bool
 	// Named is set when the operator named this device in Sable.
 	Named bool
+	// UniFiType is the type the UniFi controller vouches for, such as
+	// "network" for its own switches and access points or "storage" for a
+	// UNAS. It is a fact rather than a guess.
+	UniFiType string
 	// NameNetwork is the network the operator's name was given to, when it
 	// names a whole network rather than this device.
 	NameNetwork string
@@ -128,6 +140,7 @@ type GivenNames struct {
 	identities map[string]querylog.ClientIdentity
 	operator   operatorNames
 	unifi      map[string]string
+	types      map[string]string
 }
 
 // NewGivenNames reads the operator's names and the UniFi names among the
@@ -137,15 +150,28 @@ func NewGivenNames(identities []querylog.ClientIdentity, clients []config.Client
 		identities: latestIdentities(identities),
 		operator:   newOperatorNames(clients),
 		unifi:      unifiNames(identities),
+		types:      unifiTypes(identities),
 	}
 }
 
 // Address returns the given name of the device behind one client address, or
 // nothing when only a discovered name could label it.
 func (given GivenNames) Address(address string) string {
-	device := Device{MAC: given.identities[address].MAC, Addresses: []Address{{Address: address}}}
+	mac, _, _ := given.hardware(address)
+	device := Device{MAC: mac, Addresses: []Address{{Address: address}}}
 	name, _, _ := chooseName(device, given, nil)
 	return name
+}
+
+// hardware returns the hardware address behind a client address: the one it
+// was last seen with on the network, or else the one an IPv6 address was built
+// from, which fromAddress marks.
+func (given GivenNames) hardware(address string) (mac string, fromAddress, found bool) {
+	if identity, seen := given.identities[address]; seen {
+		return identity.MAC, false, true
+	}
+	mac, found = hardwareFromAddress(address)
+	return mac, found, found
 }
 
 // Build groups client activity into devices, busiest first.
@@ -155,23 +181,26 @@ func Build(input Input) []Device {
 	order := make([]string, 0)
 	for _, activity := range input.Activity.Clients {
 		address := activity.Client
-		identity, identified := given.identities[address]
+		mac, fromAddress, identified := given.hardware(address)
 		key := "ip:" + address
 		if identified {
-			key = "mac:" + identity.MAC
+			key = "mac:" + mac
 		}
 		device, found := devices[key]
 		if !found {
-			device = &Device{Key: key}
+			device = &Device{Key: key, MACFromAddress: fromAddress}
 			if identified {
-				device.MAC = identity.MAC
-				if parsed, err := net.ParseMAC(identity.MAC); err == nil {
+				device.MAC = mac
+				if parsed, err := net.ParseMAC(mac); err == nil {
 					device.PrivateMAC = len(parsed) > 0 && parsed[0]&0x02 != 0
 				}
 			}
 			devices[key] = device
 			order = append(order, key)
 		}
+		// One address seen with the hardware on the network is better evidence
+		// than any number built from it.
+		device.MACFromAddress = device.MACFromAddress && fromAddress
 		device.Addresses = append(device.Addresses, Address{Address: address, Queries: activity.Queries, Blocked: activity.Blocked})
 		device.Queries += activity.Queries
 		device.Blocked += activity.Blocked
@@ -199,6 +228,9 @@ func Build(input Input) []Device {
 		})
 		device.Name, device.NameSource, device.NameNetwork = chooseName(*device, given, input.Names)
 		device.Named = device.NameSource == SourceOperator
+		if device.MAC != "" {
+			device.UniFiType = given.types[device.MAC]
+		}
 		device.Type = given.operator.own(*device, clientType)
 		device.NetworkType, device.TypeNetwork = given.operator.network(*device, clientType)
 		for _, address := range device.Addresses {
@@ -229,7 +261,7 @@ func latestIdentities(identities []querylog.ClientIdentity) map[string]querylog.
 	for _, identity := range identities {
 		current, found := latest[identity.Address]
 		if !found || identity.LastSeen.After(current.LastSeen) ||
-			(identity.LastSeen.Equal(current.LastSeen) && identity.Source == identityUniFi && current.Source != identityUniFi) {
+			(identity.LastSeen.Equal(current.LastSeen) && fromUniFi(identity.Source) && !fromUniFi(current.Source)) {
 			latest[identity.Address] = identity
 		}
 	}
@@ -249,6 +281,30 @@ func AddressesOf(identities []querylog.ClientIdentity, mac string) []string {
 	return addresses
 }
 
+// fromUniFi reports an identity the UniFi controller supplied, for one of its
+// clients or its own gear.
+func fromUniFi(source string) bool {
+	return source == identityUniFi || strings.HasPrefix(source, identityUniFiTyped)
+}
+
+// unifiTypes maps each hardware address to the type the controller vouches
+// for, from its most recent typed sighting.
+func unifiTypes(identities []querylog.ClientIdentity) map[string]string {
+	types := make(map[string]string)
+	seen := make(map[string]time.Time)
+	for _, identity := range identities {
+		kind, typed := strings.CutPrefix(identity.Source, identityUniFiTyped)
+		if !typed || kind == "" || identity.MAC == "" {
+			continue
+		}
+		if last, found := seen[identity.MAC]; found && !identity.LastSeen.After(last) {
+			continue
+		}
+		types[identity.MAC], seen[identity.MAC] = kind, identity.LastSeen
+	}
+	return types
+}
+
 // unifiNames keeps the name each hardware address had in its most recent UniFi
 // sighting. It is keyed by hardware address rather than read from an
 // address's latest sighting because the neighbor table is sampled more often
@@ -258,7 +314,7 @@ func unifiNames(identities []querylog.ClientIdentity) map[string]string {
 	names := make(map[string]string)
 	seen := make(map[string]time.Time)
 	for _, identity := range identities {
-		if identity.Source != identityUniFi || identity.MAC == "" || identity.Hostname == "" {
+		if !fromUniFi(identity.Source) || identity.MAC == "" || identity.Hostname == "" {
 			continue
 		}
 		if last, found := seen[identity.MAC]; found && !identity.LastSeen.After(last) {

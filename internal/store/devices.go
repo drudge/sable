@@ -581,25 +581,35 @@ LIMIT `+store.placeholder(len(arguments)), arguments...)
 const maximumClientNameMatches = 50_000
 
 // ClientNamesMatching lists, for each client address seen since a moment,
-// the names it has queried that equal one of the suffixes or end with one.
-// It lets a caller learn which services every device uses in one pass over
-// the sightings instead of one read per device.
-func (store *Store) ClientNamesMatching(ctx context.Context, since time.Time, suffixes []string) (map[string][]string, error) {
+// the names it has queried that equal one of the suffixes or end with one,
+// and the names with a label that starts with one of labels, such as "mqtt"
+// for mqtt2.example.com. It lets a caller learn which services every device
+// uses in one pass over the sightings instead of one read per device. A label
+// match is loose, so a caller checks which label it was.
+func (store *Store) ClientNamesMatching(ctx context.Context, since time.Time, suffixes, labels []string) (map[string][]string, error) {
 	matches := make(map[string][]string)
-	if len(suffixes) == 0 {
+	if len(suffixes) == 0 && len(labels) == 0 {
 		return matches, nil
 	}
 	arguments := []any{since.UTC()}
-	exact := make([]string, 0, len(suffixes))
-	conditions := make([]string, 0, len(suffixes)+1)
-	for _, suffix := range suffixes {
-		arguments = append(arguments, strings.ToLower(suffix))
-		exact = append(exact, store.placeholder(len(arguments)))
+	conditions := make([]string, 0, 2*len(suffixes)+2*len(labels)+1)
+	if len(suffixes) > 0 {
+		exact := make([]string, 0, len(suffixes))
+		for _, suffix := range suffixes {
+			arguments = append(arguments, strings.ToLower(suffix))
+			exact = append(exact, store.placeholder(len(arguments)))
+		}
+		conditions = append(conditions, "name_key IN ("+strings.Join(exact, ", ")+")")
 	}
-	conditions = append(conditions, "name_key IN ("+strings.Join(exact, ", ")+")")
 	for _, suffix := range suffixes {
 		arguments = append(arguments, "%."+strings.ToLower(suffix))
 		conditions = append(conditions, "name_key LIKE "+store.placeholder(len(arguments)))
+	}
+	for _, label := range labels {
+		for _, pattern := range []string{strings.ToLower(label) + "%", "%." + strings.ToLower(label) + "%"} {
+			arguments = append(arguments, pattern)
+			conditions = append(conditions, "name_key LIKE "+store.placeholder(len(arguments)))
+		}
 	}
 	arguments = append(arguments, maximumClientNameMatches)
 	rows, err := store.database.QueryContext(ctx, `

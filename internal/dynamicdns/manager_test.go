@@ -87,6 +87,104 @@ func TestPublicationHistorySurvivesManagerRestart(t *testing.T) {
 	}
 }
 
+// addressHistory is the part of the status an address-change alert reads.
+type addressHistory struct {
+	IPv4, IPv6, PreviousIPv4, PreviousIPv6 string
+	IPv4ChangedAt, IPv6ChangedAt           time.Time
+}
+
+func historyOf(status Status) addressHistory {
+	return addressHistory{
+		IPv4: status.IPv4, IPv6: status.IPv6, PreviousIPv4: status.PreviousIPv4, PreviousIPv6: status.PreviousIPv6,
+		IPv4ChangedAt: status.IPv4ChangedAt, IPv6ChangedAt: status.IPv6ChangedAt,
+	}
+}
+
+// A changed address stays news for a while, so what it changed from and when
+// must survive a restart, including one straight after an upgrade from a
+// release that saved no history.
+func TestAddressChangesAreRememberedAcrossARestart(t *testing.T) {
+	t.Parallel()
+	run := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
+	earlier := run.Add(-3 * time.Hour)
+	for _, test := range []struct {
+		name string
+		// saved is what an earlier run left in the database.
+		saved PersistentState
+		// ipv4 and ipv6 are what this run discovers; empty fails discovery.
+		ipv4, ipv6 string
+		want       addressHistory
+	}{
+		{
+			name: "the first address found is not a change",
+			ipv4: "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888"},
+		},
+		{
+			name:  "the same address again is not a change",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", LastSuccess: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888"},
+		},
+		{
+			name:  "a new IPv4 address after state an older release saved",
+			saved: PersistentState{IPv4: "8.8.4.4", IPv6: "2001:4860:4860::8888", LastSuccess: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: run},
+		},
+		{
+			name:  "a new IPv6 address leaves the IPv4 history alone",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8844", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{
+				IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", PreviousIPv6: "2001:4860:4860::8844",
+				IPv4ChangedAt: earlier, IPv6ChangedAt: run,
+			},
+		},
+		{
+			name:  "a later change replaces the earlier one",
+			saved: PersistentState{IPv4: "8.8.4.4", IPv6: "2001:4860:4860::8888", PreviousIPv4: "1.1.1.1", IPv4ChangedAt: earlier},
+			ipv4:  "8.8.8.8", ipv6: "2001:4860:4860::8888",
+			want: addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: run},
+		},
+		{
+			name:  "a failed discovery keeps the history",
+			saved: PersistentState{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+			want:  addressHistory{IPv4: "8.8.8.8", IPv6: "2001:4860:4860::8888", PreviousIPv4: "8.8.4.4", IPv4ChangedAt: earlier},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			settings := testDynamicDNSSettings()
+			settings.Records[0].IPv6 = true
+			durable := &testStateStore{state: test.saved}
+			manager := newTestManager(settings, &testProvider{changed: true})
+			manager.state = durable
+			manager.now = func() time.Time { return run }
+			manager.discover = func(_ context.Context, _ string, recordType string) (netip.Addr, error) {
+				address := test.ipv4
+				if recordType == dnsprovider.TypeAAAA {
+					address = test.ipv6
+				}
+				if address == "" {
+					return netip.Addr{}, io.ErrUnexpectedEOF
+				}
+				return netip.MustParseAddr(address), nil
+			}
+			manager.restoreStatus(ctx)
+			manager.runOnce(ctx)
+
+			restarted := newTestManager(settings, &testProvider{})
+			restarted.state = durable
+			restarted.restoreStatus(ctx)
+			if got := historyOf(restarted.Status(ctx)); got != test.want {
+				t.Fatalf("address history after a restart = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestReconcileDiscoversEachFamilyOnceAndPublishesEveryRecord(t *testing.T) {
 	settings := config.DynamicDNS{
 		Enabled: true, Provider: "cloudflare", Interval: config.Duration{Duration: 5 * time.Minute},
@@ -280,6 +378,42 @@ func TestValidatePublicAddressRejectsPrivateAndWrongFamily(t *testing.T) {
 	}
 	if err := validatePublicAddress(netip.MustParseAddr("8.8.8.8"), dnsprovider.TypeA); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Alerts wait for several failed publishes in a row, and retries back off by
+// the same count, so it must reset the moment a publish works.
+func TestConsecutiveFailuresAddUpAndResetOnSuccess(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		outcomes  []error
+		want      int
+		wantRetry time.Duration
+	}{
+		{name: "each failed publish adds one", outcomes: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF, io.ErrUnexpectedEOF}, want: 3, wantRetry: 2 * time.Minute},
+		{name: "a publish that works starts the count over", outcomes: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF, nil}, want: 0, wantRetry: 5 * time.Minute},
+		{name: "failures after a success count from one", outcomes: []error{io.ErrUnexpectedEOF, nil, io.ErrUnexpectedEOF}, want: 1, wantRetry: 30 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			publisher := &testProvider{changed: true}
+			manager := newTestManager(testDynamicDNSSettings(), publisher)
+			manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+				return netip.MustParseAddr("8.8.8.8"), nil
+			}
+			for _, outcome := range test.outcomes {
+				publisher.err = outcome
+				manager.runOnce(context.Background())
+			}
+			status := manager.Status(context.Background())
+			if status.ConsecutiveFailures != test.want {
+				t.Fatalf("consecutive failures = %d, want %d", status.ConsecutiveFailures, test.want)
+			}
+			if retry := status.NextAttempt.Sub(status.LastAttempt); retry != test.wantRetry {
+				t.Fatalf("next attempt in %s, want %s", retry, test.wantRetry)
+			}
+		})
 	}
 }
 

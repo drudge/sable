@@ -251,6 +251,71 @@ func TestZoneRefresherPacesFailedFirstTransfers(t *testing.T) {
 	}
 }
 
+func TestZoneRefresherStatusCountsFailuresInARowUntilOneWorks(t *testing.T) {
+	t.Parallel()
+
+	started := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	transferred := []dnsserver.ZoneRecord{
+		{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.member.example. hostmaster.member.example. 4 10 3 20 300"},
+		{Name: "@", Type: "NS", TTL: 300, Value: "ns1.member.example."},
+	}
+	for _, testCase := range []struct {
+		name string
+		zone zonemodel.Zone
+		// failing lists when the refresher runs while the primary is down, and
+		// working when it runs once the primary answers again.
+		failing []time.Duration
+		working time.Duration
+		want    zoneRefreshStatus
+	}{
+		{
+			name: "secondary refresh",
+			zone: managedTestZone(),
+			// The first run only schedules the zone. Its SOA refreshes after 10
+			// seconds, retries after 3, and expires after 20.
+			failing: []time.Duration{0, 10 * time.Second, 13 * time.Second},
+			working: 16 * time.Second,
+			want: zoneRefreshStatus{
+				Zone: "secondary.test", Failures: 2, FailingSince: started.Add(10 * time.Second),
+				LastError: "primary unavailable", ExpiresAt: started.Add(20 * time.Second),
+			},
+		},
+		{
+			name: "catalog member first transfer",
+			zone: zonemodel.Zone{
+				Name: "member.example", Type: "secondary", DefaultTTL: 300,
+				PrimaryServers: []string{"192.0.2.53:53"}, PrimaryProtocol: "tcp",
+				CatalogZone: "catalog.example", CatalogMemberID: "aaa",
+			},
+			failing: []time.Duration{0, firstTransferRetry},
+			working: 2 * firstTransferRetry,
+			// A zone that has never transferred has no expiry to report.
+			want: zoneRefreshStatus{Zone: "member.example", Failures: 2, FailingSince: started, LastError: "primary unavailable"},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			configuration := &refreshTestConfiguration{snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{testCase.zone}}}
+			dnsService := &refreshTestDNS{err: errors.New("primary unavailable"), expired: make(map[string]bool), updated: transferred}
+			refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			for _, offset := range testCase.failing {
+				refresher.step(context.Background(), started.Add(offset))
+			}
+			if got := refresher.Status(); len(got) != 1 || got[0] != testCase.want {
+				t.Fatalf("Status() while failing = %+v, want [%+v]", got, testCase.want)
+			}
+
+			dnsService.err = nil
+			refresher.step(context.Background(), started.Add(testCase.working))
+			refresher.step(context.Background(), started.Add(testCase.working+time.Second))
+			if got := refresher.Status(); len(got) != 1 || got[0].Failures != 0 || got[0].LastError != "" || !got[0].FailingSince.IsZero() {
+				t.Fatalf("Status() after a refresh worked = %+v, want one zone with no failures", got)
+			}
+		})
+	}
+}
+
 func TestLateTransferCannotOverwriteConvertedPrimary(t *testing.T) {
 	current := managedTestZone()
 	if err := zonemodel.ConvertToPrimary(&current, time.Now()); err != nil {

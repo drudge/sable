@@ -69,16 +69,34 @@ type Status struct {
 	NextAttempt           time.Time
 	Duration              time.Duration
 	LastError             string
+	// ConsecutiveFailures counts the attempts in a row that failed. It paces
+	// retries, and lets an alert wait out one failed request but not three.
+	ConsecutiveFailures int
+	// PreviousIPv4 and PreviousIPv6 are the addresses a family had before its
+	// latest change, and IPv4ChangedAt and IPv6ChangedAt are when a run found
+	// the new one. They stay empty until an address changes, because the
+	// first address Sable finds is not a change.
+	PreviousIPv4  string
+	PreviousIPv6  string
+	IPv4ChangedAt time.Time
+	IPv6ChangedAt time.Time
 }
 
 // PersistentState is the useful publication history that survives process
 // restarts. Attempt progress and errors remain runtime-only so a restart does
-// not resurrect stale transient state.
+// not resurrect stale transient state. The previous addresses and when they
+// changed are kept so a changed address stays news across a restart. Older
+// releases saved only the first four fields; what they saved still loads,
+// with no history.
 type PersistentState struct {
 	IPv4          string    `json:"ipv4,omitempty"`
 	IPv6          string    `json:"ipv6,omitempty"`
 	LastSuccess   time.Time `json:"last_success,omitempty"`
 	LastPublished time.Time `json:"last_published,omitempty"`
+	PreviousIPv4  string    `json:"previous_ipv4,omitempty"`
+	PreviousIPv6  string    `json:"previous_ipv6,omitempty"`
+	IPv4ChangedAt time.Time `json:"ipv4_changed_at,omitzero"`
+	IPv6ChangedAt time.Time `json:"ipv6_changed_at,omitzero"`
 }
 
 // Manager discovers this node's public addresses and reconciles configured
@@ -95,9 +113,8 @@ type Manager struct {
 
 	wake chan struct{}
 
-	mu               sync.Mutex
-	status           Status
-	consecutiveFails int
+	mu     sync.Mutex
+	status Status
 }
 
 func New(
@@ -249,6 +266,10 @@ func (manager *Manager) restoreStatus(ctx context.Context) {
 	manager.status.IPv6 = persisted.IPv6
 	manager.status.LastSuccess = persisted.LastSuccess
 	manager.status.LastPublished = persisted.LastPublished
+	manager.status.PreviousIPv4 = persisted.PreviousIPv4
+	manager.status.PreviousIPv6 = persisted.PreviousIPv6
+	manager.status.IPv4ChangedAt = persisted.IPv4ChangedAt
+	manager.status.IPv6ChangedAt = persisted.IPv6ChangedAt
 	manager.mu.Unlock()
 }
 
@@ -260,6 +281,8 @@ func (manager *Manager) persistStatus(ctx context.Context) {
 	persisted := PersistentState{
 		IPv4: manager.status.IPv4, IPv6: manager.status.IPv6,
 		LastSuccess: manager.status.LastSuccess, LastPublished: manager.status.LastPublished,
+		PreviousIPv4: manager.status.PreviousIPv4, PreviousIPv6: manager.status.PreviousIPv6,
+		IPv4ChangedAt: manager.status.IPv4ChangedAt, IPv6ChangedAt: manager.status.IPv6ChangedAt,
 	}
 	manager.mu.Unlock()
 	if err := manager.state.SaveDynamicDNSState(ctx, persisted); err != nil {
@@ -442,10 +465,19 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 	finished := manager.now()
 	manager.status.Running = false
 	manager.status.Duration = finished.Sub(started)
-	if result.ipv4 != "" {
+	// A run that finds a different address than the last one known records
+	// the one it replaced and when, so the change can be told as news. The
+	// first address Sable ever finds replaces nothing.
+	if result.ipv4 != "" && result.ipv4 != manager.status.IPv4 {
+		if manager.status.IPv4 != "" {
+			manager.status.PreviousIPv4, manager.status.IPv4ChangedAt = manager.status.IPv4, finished
+		}
 		manager.status.IPv4 = result.ipv4
 	}
-	if result.ipv6 != "" {
+	if result.ipv6 != "" && result.ipv6 != manager.status.IPv6 {
+		if manager.status.IPv6 != "" {
+			manager.status.PreviousIPv6, manager.status.IPv6ChangedAt = manager.status.IPv6, finished
+		}
 		manager.status.IPv6 = result.ipv6
 	}
 	manager.status.Changed = result.changed
@@ -454,15 +486,15 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 		manager.status.LastPublished = finished
 	}
 	if err == nil {
-		manager.consecutiveFails = 0
+		manager.status.ConsecutiveFailures = 0
 		manager.status.LastSuccess = finished
 		manager.status.LastError = ""
 		manager.status.NextAttempt = started.Add(interval)
 		return
 	}
-	manager.consecutiveFails++
+	manager.status.ConsecutiveFailures++
 	manager.status.LastError = err.Error()
-	manager.status.NextAttempt = started.Add(retryDelay(manager.consecutiveFails, interval))
+	manager.status.NextAttempt = started.Add(retryDelay(manager.status.ConsecutiveFailures, interval))
 }
 
 func retryDelay(failures int, interval time.Duration) time.Duration {

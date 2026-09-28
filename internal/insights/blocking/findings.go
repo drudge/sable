@@ -34,15 +34,33 @@ const (
 	// minimumComparedDomains keeps tiny lists from producing dramatic
 	// percentages out of a handful of names.
 	minimumComparedDomains = 100
-	// staleUpdateIntervals is how many missed update intervals make a failing
-	// list worth mentioning here. A single failed attempt is already visible
-	// on the Blocking page and usually recovers on retry.
-	staleUpdateIntervals = 2
-	maximumPastBlocks    = 3
-	maximumLowUnique     = 2
-	maximumFindings      = 6
-	maximumPastClients   = 10
+	maximumPastBlocks      = 3
+	maximumLowUnique       = 2
+	maximumFindings        = 6
+	maximumPastClients     = 10
 )
+
+// Limits are how long a problem has to last before it is worth reporting. The
+// console sets them from each kind of finding's settings, and a limit left at
+// zero takes its default.
+type Limits struct {
+	// MissedUpdates is how many update intervals a list must go without a
+	// successful download before its failing updates are worth mentioning.
+	// A single failed attempt is already visible on the Blocking page and
+	// usually recovers on retry.
+	MissedUpdates int
+}
+
+// DefaultLimits are the limits Insights uses unless an operator sets others.
+func DefaultLimits() Limits { return Limits{MissedUpdates: 2} }
+
+// withDefaults gives every limit left at zero its default.
+func (limits Limits) withDefaults() Limits {
+	if limits.MissedUpdates == 0 {
+		limits.MissedUpdates = DefaultLimits().MissedUpdates
+	}
+	return limits
+}
 
 // PastBlock is a name the query log shows as blocked in the window that an
 // allow rule now matches.
@@ -69,6 +87,12 @@ type FindingsInput struct {
 	// Queries holds blocked query counts per list when the operator may read
 	// query history. Nil leaves query counts out of the list findings.
 	Queries *SourceQueries
+	// Limits are how long a problem must last to be reported. Zero ones take
+	// their defaults.
+	Limits Limits
+	// Off lists the kinds of finding an operator turned off. They are not
+	// looked for, so they never crowd out the findings that are on.
+	Off map[string]bool
 }
 
 // SourceQueries is how many blocked queries each list accounted for in the
@@ -84,12 +108,19 @@ type SourceQueries struct {
 // a past block is reported only when a name was blocked and is now explicitly
 // allowed.
 func Findings(input FindingsInput) []insights.Finding {
+	input.Limits = input.Limits.withDefaults()
 	findings := make([]insights.Finding, 0, maximumFindings)
-	findings = append(findings, pastBlockFindings(input.PastBlocks)...)
-	findings = append(findings, updateFindings(input)...)
+	if !input.Off[KindPastBlock] {
+		findings = append(findings, pastBlockFindings(input.PastBlocks)...)
+	}
+	if !input.Off[KindUpdateFailing] {
+		findings = append(findings, updateFindings(input)...)
+	}
 	if input.Contribution != nil {
-		findings = append(findings, unreadableFindings(*input.Contribution)...)
-		findings = append(findings, coverageFindings(*input.Contribution, input.Queries)...)
+		if !input.Off[KindListUnreadable] {
+			findings = append(findings, unreadableFindings(*input.Contribution)...)
+		}
+		findings = append(findings, coverageFindings(*input.Contribution, input.Queries, input.Off)...)
 	}
 	return findings[:min(len(findings), maximumFindings)]
 }
@@ -160,7 +191,8 @@ func updateFindings(input FindingsInput) []insights.Finding {
 		if health.Healthy() {
 			continue
 		}
-		stale := health.LastSuccess.IsZero() || input.Now.Sub(health.LastSuccess) >= staleUpdateIntervals*interval
+		missed := input.Limits.MissedUpdates
+		stale := health.LastSuccess.IsZero() || input.Now.Sub(health.LastSuccess) >= time.Duration(missed)*interval
 		if !stale {
 			continue
 		}
@@ -192,14 +224,14 @@ func updateFindings(input FindingsInput) []insights.Finding {
 			Subject:  insights.Subject{Label: list.Name, BlockList: list.Name},
 			Headline: list.Name + " stopped updating",
 			Summary:  summary,
-			Reasons:  updateReasons(health, input.Now, interval),
+			Reasons:  updateReasons(health, input.Now, interval, missed),
 			Facts:    facts,
 			Explanations: []string{
 				"The list's server is down or has moved",
 				"Something between Sable and the internet is stopping the download",
 			},
-			Method: fmt.Sprintf("Sable reports a list once it has gone at least %d update intervals without a successful download. "+
-				"Until it recovers, blocking keeps using the last copy that downloaded.", staleUpdateIntervals),
+			Method: fmt.Sprintf("Sable reports a list once it has gone at least %d %s without a successful download. "+
+				"Until it recovers, blocking keeps using the last copy that downloaded.", missed, insights.Plural(missed, "update interval", "update intervals")),
 			Destination:      "/blocked?tab=lists",
 			DestinationLabel: "Block Lists",
 		})
@@ -229,7 +261,7 @@ func unreadableFindings(contribution Contribution) []insights.Finding {
 	return findings
 }
 
-func coverageFindings(contribution Contribution, queries *SourceQueries) []insights.Finding {
+func coverageFindings(contribution Contribution, queries *SourceQueries, off map[string]bool) []insights.Finding {
 	if contribution.Analyzed < 2 {
 		return nil
 	}
@@ -249,7 +281,7 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 	})
 	findings := make([]insights.Finding, 0)
 	for _, list := range low {
-		if len(findings) == maximumLowUnique || list.UniqueShare() >= lowUniqueShare {
+		if off[KindLowUnique] || len(findings) == maximumLowUnique || list.UniqueShare() >= lowUniqueShare {
 			break
 		}
 		covered := insights.FormatShare(uint64(list.Covered), uint64(list.Domains))
@@ -283,7 +315,7 @@ func coverageFindings(contribution Contribution, queries *SourceQueries) []insig
 			best = list
 		}
 	}
-	if best.Unique >= meaningfulUniqueDomains && best.UniqueShare() >= meaningfulUniqueShare {
+	if !off[KindUniqueCoverage] && best.Unique >= meaningfulUniqueDomains && best.UniqueShare() >= meaningfulUniqueShare {
 		findings = append(findings, insights.Finding{
 			Kind:    KindUniqueCoverage,
 			Tone:    insights.TonePositive,
@@ -359,14 +391,14 @@ func pastBlockReasons(block PastBlock) []insights.Reason {
 	return reasons
 }
 
-func updateReasons(health blockcompiler.SourceHealth, now time.Time, interval time.Duration) []insights.Reason {
+func updateReasons(health blockcompiler.SourceHealth, now time.Time, interval time.Duration, missed int) []insights.Reason {
 	reasons := insights.Reasons(fmt.Sprintf("%s %s failed in a row", insights.FormatCount(uint64(health.ConsecutiveFailures)),
 		insights.Plural(health.ConsecutiveFailures, "update", "updates")))
 	if health.LastSuccess.IsZero() {
 		reasons = append(reasons, insights.Reasons("Never downloaded successfully")...)
 	} else {
 		reasons = append(reasons, insights.Reasons("Newest cached copy is "+insights.FormatDuration(now.Sub(health.LastSuccess))+" old",
-			fmt.Sprintf("That is more than %d update intervals of %s", staleUpdateIntervals, insights.FormatDuration(interval)))...)
+			fmt.Sprintf("That is more than %d %s of %s", missed, insights.Plural(missed, "update interval", "update intervals"), insights.FormatDuration(interval)))...)
 	}
 	return reasons
 }
@@ -403,11 +435,17 @@ type Sources interface {
 // Analyzer reports what is worth knowing about blocking.
 type Analyzer struct {
 	Sources Sources
+	// Limits are how long a problem must last to be reported. Zero ones take
+	// their defaults.
+	Limits Limits
+	// Off lists the kinds of finding an operator turned off, which are not
+	// looked for.
+	Off map[string]bool
 }
 
 // Analyze gathers the blocking evidence for a window and turns it into findings.
 func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([]insights.Finding, error) {
-	input := FindingsInput{Now: window.End}
+	input := FindingsInput{Now: window.End, Limits: analyzer.Limits, Off: analyzer.Off}
 	contribution, err := analyzer.Sources.Contribution(ctx)
 	if err != nil {
 		return nil, err
@@ -417,8 +455,12 @@ func (analyzer Analyzer) Analyze(ctx context.Context, window insights.Window) ([
 	if input.Queries, err = analyzer.Sources.SourceQueries(ctx, window); err != nil {
 		return nil, err
 	}
-	if input.PastBlocks, err = analyzer.Sources.PastBlocks(ctx, window); err != nil {
-		return nil, err
+	// Past blocks cost a search of the query history, so they are read only
+	// when they are looked for.
+	if !analyzer.Off[KindPastBlock] {
+		if input.PastBlocks, err = analyzer.Sources.PastBlocks(ctx, window); err != nil {
+			return nil, err
+		}
 	}
 	return Findings(input), nil
 }

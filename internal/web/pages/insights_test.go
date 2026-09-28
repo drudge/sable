@@ -100,6 +100,61 @@ func TestDeviceTypesHaveIcons(t *testing.T) {
 	}
 }
 
+// The Devices filters match what each row shows. The type filter offers only
+// the types on the list, with their icons, and files a guess Sable is unsure
+// of under Unknown, as its plain icon does. Search finds a device by any of
+// its addresses and by the maker and type Sable shows for it.
+func TestInsightDevicesFilterByWhatTheRowsShow(t *testing.T) {
+	t.Parallel()
+	laptop := InsightDeviceView{
+		Key: "mac:3c:22:fb:01:02:03", Label: "George's Laptop", Named: true, NameSource: "UniFi", MAC: "3c:22:fb:01:02:03",
+		Vendor: "Apple", Type: "computer", TypeLabel: "Computer", TypeConfidence: "high",
+		Addresses: []InsightDeviceAddressView{{Address: "10.0.0.5"}, {Address: "fd00::5"}},
+	}
+	unsure := InsightDeviceView{Key: "ip:10.0.0.9", Label: "10.0.0.9", Type: "camera", TypeLabel: "Camera", TypeConfidence: "low", New: true,
+		Addresses: []InsightDeviceAddressView{{Address: "10.0.0.9"}}}
+	view := InsightsOverviewView{Devices: []InsightDeviceView{laptop, unsure}, DeviceTypeOptions: devices.TypeLabels()}
+	markup := renderComponent(t, InsightDevices(view))
+	for _, expected := range []string{
+		`data-device-tags="named" data-device-text="george&#39;s laptop 3c:22:fb:01:02:03 apple unifi 10.0.0.5 fd00::5 computer" data-device-type="computer"`,
+		`data-device-tags="new unnamed" data-device-text="10.0.0.9" data-device-type="unknown"`,
+		`<template data-option-icon="computer"><svg class="nav-icon icon-laptop"`, `<template data-option-icon="unknown"><svg class="nav-icon icon-monitor-smartphone"`,
+		`<span class="count-badge" data-device-count="2">2 devices</span>`, `<div class="insight-section-empty" hidden data-device-filter-empty>`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("devices list is missing %s", expected)
+		}
+	}
+	options := regexp.MustCompile(`<select data-device-type-filter[^>]*>(.*?)</select>`).FindStringSubmatch(markup)
+	if options == nil || regexp.MustCompile(`>\s+<`).ReplaceAllString(options[1], "><") !=
+		`<option value="" selected>All Types</option><option value="computer">Computer</option><option value="unknown">Unknown</option>` {
+		t.Errorf("type filter offers %q, want All Types, Computer, and Unknown", options)
+	}
+	// Each device is a phone row and a desktop row, and both narrow.
+	if got := strings.Count(markup, "data-device-row"); got != 4 {
+		t.Errorf("%d filterable rows, want 4", got)
+	}
+	if strings.Contains(markup, `data-option-icon="camera"`) {
+		t.Error("the type filter offers a type only an unsure guess names")
+	}
+
+	// A range with no device of the chosen type still offers and shows it.
+	view.DeviceFilter = InsightDeviceFilterView{Search: "laptop", Type: "printer", Show: "unnamed"}
+	markup = renderComponent(t, InsightDevices(view))
+	for _, expected := range []string{
+		`value="laptop"`, `<option value="printer" selected>Printer</option>`, `<option value="unnamed" selected>Unnamed</option>`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("filtered devices list is missing %s", expected)
+		}
+	}
+
+	// With nothing to narrow there are no filters.
+	if empty := renderComponent(t, InsightDevices(InsightsOverviewView{DeviceTypeOptions: devices.TypeLabels()})); strings.Contains(empty, "data-device-search") {
+		t.Error("an empty list offers a search")
+	}
+}
+
 // Every app Sable recognizes has an icon: its logo as an app tile, with the
 // mark in whichever of white or black reads on the brand's color, or its
 // category's icon on a gray tile when Simple Icons has no logo for it.
@@ -118,17 +173,19 @@ func TestAppsHaveIcons(t *testing.T) {
 	for id, want := range map[string]string{
 		"netflix":  `<rect width="24" height="24" rx="6" fill="#E50914"></rect>`,
 		"snapchat": `fill="#FFFC00"`,
-		// ChatGPT keeps OpenAI's mark from before it left Simple Icons.
-		"chatgpt":       `fill="#412991"`,
-		"xbox":          `fill="#107C10"`,
-		"prime-video":   `fill="#1F2E3E"`,
-		"teams":         `fill="#6264A7"`,
-		"slack":         `fill="#4A154B"`,
-		"linkedin":      `fill="#0A66C2"`,
-		"bing":          `fill="#258FFA"`,
-		"nintendo":      `fill="#E60012"`,
-		"adobe":         `fill="#FF0000"`,
-		"microsoft-365": `fill="#D83B01"`,
+		// ChatGPT keeps OpenAI's mark from before it left Simple Icons, drawn
+		// black on white like its app icon.
+		"chatgpt":     `class="app-icon app-icon-white"`,
+		"xbox":        `fill="#107C10"`,
+		"prime-video": `fill="#1F2E3E"`,
+		"teams":       `fill="#6264A7"`,
+		"slack":       `fill="#4A154B"`,
+		"linkedin":    `fill="#0A66C2"`,
+		"bing":        `fill="#258FFA"`,
+		"nintendo":    `fill="#E60012"`,
+		"adobe":       `fill="#FF0000"`,
+		// Microsoft 365 wears Microsoft's four-color squares on white.
+		"microsoft-365": `class="app-icon app-icon-white"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
@@ -136,10 +193,13 @@ func TestAppsHaveIcons(t *testing.T) {
 	}
 	// Brands draw their marks in white on their color unless it is very light,
 	// or their own look is a dark mark, as Spotify's is.
-	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000"} {
+	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000", "chatgpt": "#000"} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, `fill="`+ink+`" transform=`) {
 			t.Errorf("%s mark is not drawn in %s: %s", id, ink, drawn)
 		}
+	}
+	if drawn := renderComponent(t, AppIcon("microsoft-365", "")); strings.Count(drawn, "<path ") != 4 || !strings.Contains(drawn, `fill="#F25022"`) || !strings.Contains(drawn, `fill="#FFB900"`) {
+		t.Errorf("Microsoft 365 logo = %s", drawn)
 	}
 	if drawn := renderComponent(t, AppIcon("docusign", services.CategoryProductivity)); !strings.Contains(drawn, `class="app-icon app-icon-category"`) || !strings.Contains(drawn, "icon-briefcase") {
 		t.Errorf("an app without a logo shows %s", drawn)

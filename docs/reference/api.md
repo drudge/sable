@@ -1,6 +1,6 @@
 # HTTP API
 
-Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, DNSSEC status, and Secondary-to-Primary conversion; it does not provide general JSON zone or record CRUD.
+Sable exposes health, operational data, zone exports, and a set of administrative actions through its HTTP listener. The API is **not** a generic REST interface for every console form. In particular, the registered zone API provides listing, exports, DNSSEC status, and Secondary-to-Primary conversion; it does not provide general JSON zone CRUD. Record changes are available to AI assistants through the [MCP server](#mcp) and to other clients through [RFC 2136 dynamic updates](../guides/dynamic-updates.md).
 
 ## Authentication and permissions
 
@@ -49,6 +49,23 @@ Zone and DS export require the relevant zone-export grant. DNSSEC status require
 `GET /api/v1/zones/convert-primary?zone=example.com` reviews an independent unsigned Secondary. POST form fields to `/api/v1/zones/convert-primary` to confirm conversion, optionally synchronizing first. See the [conversion API contract](zones/secondary.md#api) for the confirmation token, required permissions, and failure behavior. These endpoints are not available in released 1.1.0.
 
 To automate record changes, use the supported [RFC 2136 dynamic-update workflow](../guides/dynamic-updates.md) for an eligible Primary zone. Do not build an integration by treating session-based `/ui/` form handlers as undocumented JSON API endpoints.
+
+## MCP
+
+`POST /mcp` is Sable's MCP server: the [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP for AI assistants. [Let an AI assistant manage records](../guides/mcp.md) explains setup for each client.
+
+| Property | Behavior |
+| --- | --- |
+| Availability | Off until set up in **Integrations → MCP Server**. While `[mcp] enabled` is false, an authenticated request gets `404` |
+| Authentication | API token in `Authorization: Bearer` only; a console session is refused. A missing or rejected token returns `401` with `WWW-Authenticate: Bearer` |
+| Transport | One JSON-RPC message per `POST` with `Content-Type: application/json`, answered with one JSON response. Notifications return `202`. There is no session ID and no event stream; `GET` and `DELETE` return `405`. Batches are refused |
+| Protocol versions | `2025-11-25`, `2025-06-18`, and `2025-03-26` |
+| Methods | `initialize`, `ping`, `tools/list`, and `tools/call` |
+| Tools | Each offered only while it is in `[mcp] tools`. On by default: `list_zones`, `list_records`, `add_record`, `set_records`, `update_record`, `delete_record`, `check_domain`, `allow_domain`, `block_domain`, `remove_domain_rule`, `lookup`, and `purge_cache`. Off by default: `create_zone`, `delete_zone`, `list_block_lists`, `add_block_list`, `remove_block_list`, `refresh_block_lists`, `list_findings`, and `search_queries` |
+| Authorization | Record reads need `zones.read` and record changes need `zones.records.write`, each checked against the zone; a zone the token cannot read is reported as not found. `create_zone` needs `zones.create` across all zones. `lookup` needs `zones.read`, `blocking.read`, or `settings.read`. `purge_cache` needs `settings.write`. `check_domain` needs `blocking.read`, and the list changes need `blocking.write`. `delete_zone` needs `zones.delete` for the zone and must repeat the zone name. `list_findings` and `search_queries` need `logs.read` |
+| Cluster | A replica serves the read tools and `purge_cache`, which clears only that node, and refuses every other change; send changes to the primary |
+
+Tool failures, such as a denied zone or an invalid value, come back as a tool result with `isError: true` and a readable message, so the assistant can correct its next call. Successful results carry both `structuredContent` and the same JSON as text.
 
 ## Logs
 

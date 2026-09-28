@@ -138,6 +138,49 @@ func testCertificate(t *testing.T, domain string, notAfter time.Time) ([]byte, [
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 }
 
+func TestEnsureCountsFailuresInARowUntilTheCertificateIsGood(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	configuration := config.EncryptedDNS{
+		CertificateMode: "acme",
+		ACME: config.ACME{
+			Domains: []string{"dns.example.test"}, StorageDirectory: "tls",
+			RenewBefore: config.Duration{Duration: 30 * 24 * time.Hour}, DNSProvider: "cloudflare",
+		},
+	}
+	certificatePath, privateKeyPath := certificatePaths(directory, configuration.ACME.StorageDirectory)
+	// A certificate inside the renewal window, with no provider credentials to
+	// renew it, fails the same way every time.
+	certificate, privateKey := testCertificate(t, "dns.example.test", time.Now().Add(10*24*time.Hour))
+	if err := commitKeyPair(certificatePath, privateKeyPath, certificate, privateKey); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(&memoryVault{}, slog.New(slog.NewTextHandler(io.Discard, nil)), directory)
+	for attempt := 1; attempt <= 3; attempt++ {
+		if _, err := manager.Ensure(context.Background(), configuration, false); err == nil {
+			t.Fatalf("Ensure() attempt %d error = nil, want missing credentials", attempt)
+		}
+		status := manager.Status(context.Background(), configuration)
+		if status.ConsecutiveFailures != attempt || status.LastError == "" {
+			t.Fatalf("after attempt %d: ConsecutiveFailures = %d, LastError = %q", attempt, status.ConsecutiveFailures, status.LastError)
+		}
+	}
+
+	// Once the installed certificate needs no renewal, the run of failures is
+	// over.
+	certificate, privateKey = testCertificate(t, "dns.example.test", time.Now().Add(90*24*time.Hour))
+	if err := commitKeyPair(certificatePath, privateKeyPath, certificate, privateKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Ensure(context.Background(), configuration, false); err != nil {
+		t.Fatalf("Ensure() with a good certificate error = %v", err)
+	}
+	if status := manager.Status(context.Background(), configuration); status.ConsecutiveFailures != 0 || status.LastError != "" {
+		t.Fatalf("after a good certificate: ConsecutiveFailures = %d, LastError = %q", status.ConsecutiveFailures, status.LastError)
+	}
+}
+
 func TestStatusReportsInstalledCertificateIdentity(t *testing.T) {
 	directory := t.TempDir()
 	configuration := config.EncryptedDNS{

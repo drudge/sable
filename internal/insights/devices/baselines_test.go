@@ -83,7 +83,7 @@ func TestUnusualHoursNeedARoutine(t *testing.T) {
 	now := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
 	// Back after two weeks away: every hour is "new", so none is unusual.
 	hourly := map[time.Time]uint64{now.Add(-3 * time.Hour).Truncate(time.Hour): 500, now.Add(-20 * day).Truncate(time.Hour): 10}
-	if span, found := unusualSpan(hourly, now, time.UTC); found {
+	if span, found := unusualSpan(hourly, now, time.UTC, DefaultLimits().UnusualHourLookups); found {
 		t.Fatalf("span = %+v for a device with no routine", span)
 	}
 }
