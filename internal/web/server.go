@@ -273,17 +273,20 @@ func New(
 	mux.HandleFunc("GET /", server.dashboard)
 	mux.HandleFunc("GET /about", server.aboutPage)
 	mux.HandleFunc("GET /ui/about/license", server.thirdPartyLicense)
-	mux.HandleFunc("GET /insights", server.insightsPage)
-	mux.HandleFunc("GET /ui/insights/overview", server.insightsOverviewPanel)
-	mux.HandleFunc("GET /ui/insights/device", server.insightsDevicePanel)
-	mux.HandleFunc("GET /ui/insights/app", server.insightsAppPanel)
-	mux.HandleFunc("POST /ui/insights/devices/name", server.nameInsightsDevice)
-	mux.HandleFunc("POST /ui/insights/devices/type", server.typeInsightsDevice)
-	mux.HandleFunc("POST /ui/insights/feedback", server.hideInsightFinding)
-	mux.HandleFunc("POST /ui/insights/feedback/remove", server.showInsightFinding)
-	mux.HandleFunc("GET /ui/insights/settings", server.insightSettingsPanel)
-	mux.HandleFunc("POST /ui/insights/settings", server.saveInsightSettings)
-	mux.HandleFunc("POST /ui/insights/settings/reset", server.resetInsightSettings)
+	mux.HandleFunc("GET /insights", server.whileInsightsOn(server.insightsPage))
+	mux.HandleFunc("GET "+pages.InsightDeviceRoute+"{key}", server.whileInsightsOn(server.insightsPage))
+	mux.HandleFunc("GET "+pages.InsightAppRoute+"{app}", server.whileInsightsOn(server.insightsPage))
+	mux.HandleFunc("GET "+pages.InsightFindingRoute+"{finding}", server.whileInsightsOn(server.insightsPage))
+	mux.HandleFunc("GET /ui/insights/overview", server.whileInsightsOn(server.insightsOverviewPanel))
+	mux.HandleFunc("GET /ui/insights/device", server.whileInsightsOn(server.insightsDevicePanel))
+	mux.HandleFunc("GET /ui/insights/app", server.whileInsightsOn(server.insightsAppPanel))
+	mux.HandleFunc("POST /ui/insights/devices/name", server.whileInsightsOn(server.nameInsightsDevice))
+	mux.HandleFunc("POST /ui/insights/devices/type", server.whileInsightsOn(server.typeInsightsDevice))
+	mux.HandleFunc("POST /ui/insights/feedback", server.whileInsightsOn(server.hideInsightFinding))
+	mux.HandleFunc("POST /ui/insights/feedback/remove", server.whileInsightsOn(server.showInsightFinding))
+	mux.HandleFunc("GET /ui/insights/settings", server.whileInsightsOn(server.insightSettingsPanel))
+	mux.HandleFunc("POST /ui/insights/settings", server.whileInsightsOn(server.saveInsightSettings))
+	mux.HandleFunc("POST /ui/insights/settings/reset", server.whileInsightsOn(server.resetInsightSettings))
 	mux.HandleFunc("GET /cluster", server.clusterPage)
 	mux.HandleFunc("GET /zones", server.zonesPage)
 	mux.HandleFunc("GET /zones/import-catalog", server.importCatalog)
@@ -317,6 +320,8 @@ func New(
 	mux.HandleFunc("GET /settings", server.settingsPage)
 	mux.HandleFunc("POST /ui/settings", server.updateSettings)
 	mux.HandleFunc("POST /ui/settings/updates", server.updatePreferences)
+	mux.HandleFunc("POST /ui/settings/insights", server.saveInsightsSwitch)
+	mux.HandleFunc("POST /ui/settings/insights/delete", server.deleteInsightData)
 	mux.HandleFunc("POST /ui/settings/tsig/save", server.saveTSIGKey)
 	mux.HandleFunc("POST /ui/settings/tsig/delete", server.deleteTSIGKey)
 	mux.HandleFunc("GET /ui/settings/alerts/destinations/form", server.alertDestinationFormPanel)
@@ -889,6 +894,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		BlockingEnabled:     snapshot.Config.Blocking.Enabled,
 		HasRemoteBlockLists: len(remoteBlockSources(snapshot.Config.Blocking)) > 0,
 		CanLogs:             !server.securityEnabled,
+		InsightsOff:         !snapshot.Config.Insights.Enabled,
 		CanMetrics:          !server.securityEnabled,
 		CanCheckUpdates:     server.updates != nil && !server.securityEnabled,
 		CheckUpdatesOnLogin: snapshot.Config.Updates.CheckOnLogin && !version.Current().Development(),

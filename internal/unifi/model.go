@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Network is a UniFi LAN or VLAN. The identifier is stable across renames, so
@@ -18,6 +19,30 @@ type Network struct {
 	Slug    string
 	Purpose string
 	Subnets []netip.Prefix
+	// Gateway is the gateway's own address on the network, which is where
+	// the controller's DHCP points devices for DNS unless told otherwise.
+	Gateway netip.Addr
+	// DHCP reports whether the controller runs the network's DHCP server,
+	// and DHCPDNS the DNS servers the operator set it to hand out. With none
+	// set, it hands out the gateway.
+	DHCP    bool
+	DHCPDNS []netip.Addr
+}
+
+// HandedOutDNS lists the DNS servers devices on the network are told to use.
+// Known is false when the controller does not run the network's DHCP, so what
+// devices are told is decided elsewhere.
+func (network Network) HandedOutDNS() (servers []netip.Addr, known bool) {
+	if !network.DHCP {
+		return nil, false
+	}
+	if len(network.DHCPDNS) > 0 {
+		return network.DHCPDNS, true
+	}
+	if network.Gateway.IsValid() {
+		return []netip.Addr{network.Gateway}, true
+	}
+	return nil, false
 }
 
 // IPv4Subnets returns only the IPv4 prefixes, which are the ones that produce
@@ -94,14 +119,52 @@ func (host Host) DeviceType() string {
 	return ""
 }
 
+// Station is one client connected to the controller right now, with or without
+// a name, and the traffic the controller has seen from it since it connected.
+// Unlike a Host it is never published; it is how Insights tells a device that
+// is online and busy from one that only holds a lease.
+type Station struct {
+	MAC  string
+	Name string
+	// Address is the IPv4 or IPv6 address the controller lists for the
+	// client, and IPv6 every global and unique-local address it has seen on
+	// it, privacy addresses included.
+	Address   netip.Addr
+	IPv6      []netip.Addr
+	NetworkID string
+	Wired     bool
+	// LastSeen is when the controller last heard from the client, and
+	// Uptime how long it has been connected this time.
+	LastSeen time.Time
+	Uptime   time.Duration
+	// Bytes is what the client sent and received since it connected.
+	Bytes uint64
+}
+
+// Addresses lists every address the controller ties to the station.
+func (station Station) Addresses() []netip.Addr {
+	addresses := make([]netip.Addr, 0, 1+len(station.IPv6))
+	if station.Address.IsValid() {
+		addresses = append(addresses, station.Address)
+	}
+	for _, address := range station.IPv6 {
+		if address != station.Address {
+			addresses = append(addresses, address)
+		}
+	}
+	return addresses
+}
+
 // Inventory is one complete read of the controller. Gear is the controller's
 // own adopted devices: its gateway, switches, and access points. It is kept
 // apart from Hosts because hosts are what the sync publishes as DNS records,
 // and naming the network's own hardware must not quietly add records.
+// Stations is every connected client, named or not, which is never published.
 type Inventory struct {
 	Networks []Network
 	Hosts    []Host
 	Gear     []Host
+	Stations []Station
 }
 
 // NetworkByID returns the named network, if the controller reported it.
@@ -213,4 +276,22 @@ func networkForAddress(networks []Network, address netip.Addr) (string, bool) {
 		}
 	}
 	return best, found
+}
+
+// placeStations settles which network each connected client is on, the way
+// placeHosts does for hosts.
+func placeStations(networks []Network, stations []Station) []Station {
+	byID := make(map[string]Network, len(networks))
+	for _, network := range networks {
+		byID[network.ID] = network
+	}
+	for index, station := range stations {
+		if declared, known := byID[station.NetworkID]; known && declared.Contains(station.Address) {
+			continue
+		}
+		if id, found := networkForAddress(networks, station.Address); found {
+			stations[index].NetworkID = id
+		}
+	}
+	return stations
 }

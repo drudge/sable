@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -33,22 +34,65 @@ type release struct {
 	Assets     []releaseAsset `json:"assets"`
 }
 
-func resolveRelease(ctx context.Context, options Options) (release, error) {
+// resolveRelease returns the release to check or install, and the recent
+// releases when it had to list them to choose.
+func resolveRelease(ctx context.Context, options Options) (release, []release, error) {
 	if requested := strings.TrimSpace(options.Version); requested != "" {
-		return fetchRelease(ctx, options, "/releases/tags/"+normalizeTag(requested))
+		selected, err := fetchRelease(ctx, options, "/releases/tags/"+normalizeTag(requested))
+		return selected, nil, err
 	}
 	if !options.PreRelease {
 		selected, err := fetchRelease(ctx, options, "/releases/latest")
 		if errors.Is(err, errReleaseNotFound) {
-			return release{}, errors.New("no published release was found; include pre-release builds to see the newest one")
+			return release{}, nil, errors.New("no published release was found; include pre-release builds to see the newest one")
 		}
-		return selected, err
+		return selected, nil, err
 	}
 	candidates, err := fetchReleases(ctx, options)
 	if err != nil {
-		return release{}, err
+		return release{}, nil, err
 	}
-	return newestRelease(candidates)
+	selected, err := newestRelease(candidates)
+	return selected, candidates, err
+}
+
+// ReleaseNote is one published release's notes.
+type ReleaseNote struct {
+	Version    string `json:"version"`
+	URL        string `json:"url"`
+	Notes      string `json:"notes"`
+	PreRelease bool   `json:"pre_release"`
+}
+
+// releasesSince lists the releases after current up to and including
+// selected, newest first, on the channel the check ran on, so someone several
+// releases behind can read everything they would get. Only the most recent
+// page of releases is considered.
+func releasesSince(candidates []release, selected release, current string, includePreRelease bool) []ReleaseNote {
+	latest := comparableVersion(selected.TagName)
+	var found []release
+	for _, candidate := range candidates {
+		tag := comparableVersion(candidate.TagName)
+		if candidate.Draft || tag == "" || (candidate.PreRelease && !includePreRelease) ||
+			!isNewer(tag, current) || semver.Compare(tag, latest) > 0 {
+			continue
+		}
+		found = append(found, candidate)
+	}
+	if !slices.ContainsFunc(found, func(candidate release) bool { return comparableVersion(candidate.TagName) == latest }) {
+		found = append(found, selected)
+	}
+	sort.SliceStable(found, func(first, second int) bool {
+		return semver.Compare(comparableVersion(found[first].TagName), comparableVersion(found[second].TagName)) > 0
+	})
+	notes := make([]ReleaseNote, 0, len(found))
+	for _, candidate := range found {
+		notes = append(notes, ReleaseNote{
+			Version: strings.TrimPrefix(candidate.TagName, "v"), URL: candidate.HTMLURL,
+			Notes: candidate.Body, PreRelease: candidate.PreRelease,
+		})
+	}
+	return notes
 }
 
 var errReleaseNotFound = errors.New("release not found")

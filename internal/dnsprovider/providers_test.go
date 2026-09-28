@@ -2,6 +2,7 @@ package dnsprovider
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"slices"
@@ -483,5 +484,22 @@ func TestAPIHostsNameWhatSableLooksUp(t *testing.T) {
 		if provider != "rfc2136" && len(APIHosts(provider)) == 0 {
 			t.Errorf("%s has no API host", provider)
 		}
+	}
+}
+
+// Namecheap takes the API key in the query, so a request that fails outright
+// must not put its URL in the error, which reaches the runtime log.
+func TestNamecheapFailuresDoNotNameTheAPIKey(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	})}
+	provider := &namecheapProvider{
+		credentials: Credentials{Username: "user", APIKey: "namecheap-secret-key", ClientIP: "203.0.113.10"},
+		client:      client, baseURL: "https://namecheap.test/xml.response",
+	}
+	_, err := provider.hosts(context.Background(), "example.com")
+	if err == nil || strings.Contains(err.Error(), "namecheap-secret-key") || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatalf("error = %v", err)
 	}
 }

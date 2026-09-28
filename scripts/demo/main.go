@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/unifi"
 )
 
 // The controller URL the screenshots show. Sable synchronizes against the mock
@@ -37,6 +39,10 @@ const presentedControllerURL = "https://10.20.10.1"
 // unifiSyncInterval is long enough that a capture always lands between two
 // synchronizations, and short enough to read as a live integration.
 const unifiSyncInterval = 15 * time.Minute
+
+// unifiReadingRefresh is how often a demo left running records a fresh UniFi
+// reading in place of the sync.
+const unifiReadingRefresh = 5 * time.Minute
 
 // demoUniFiAPIKey is a fixture: the mock controller accepts anything, and the
 // vault it lands in is deleted on the next run.
@@ -168,9 +174,46 @@ func run(root, binary, output string, basePort int, keep bool) error {
 		}
 	}
 	if keep {
+		go keepUniFiReadingFresh(ctx, primary.Configuration.Database.DSN, controller.URL())
 		return waitForShutdown(ctx, nodes)
 	}
 	return nil
+}
+
+// keepUniFiReadingFresh stands in for the syncs the presented controller URL
+// stops: every few minutes it reads the mock controller and records what the
+// sync would have, so Insights keeps seeing a current network for as long as
+// the demo runs.
+func keepUniFiReadingFresh(ctx context.Context, dsn, controllerURL string) {
+	ticker := time.NewTicker(unifiReadingRefresh)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if err := recordUniFiReading(ctx, dsn, controllerURL); err != nil && ctx.Err() == nil {
+			fmt.Println("refresh the UniFi reading:", err)
+		}
+	}
+}
+
+func recordUniFiReading(ctx context.Context, dsn, controllerURL string) error {
+	client, err := unifi.New(unifi.Options{ControllerURL: controllerURL, Credentials: unifi.Credentials{APIKey: demoUniFiAPIKey}})
+	if err != nil {
+		return err
+	}
+	inventory, err := client.Inventory(ctx)
+	if err != nil {
+		return err
+	}
+	backing, err := store.Open(ctx, "sqlite", dsn)
+	if err != nil {
+		return err
+	}
+	defer backing.Close()
+	return backing.RecordUniFiReading(ctx, inventory, time.Now())
 }
 
 // buildNodes lays out the primary and its replicas. Only the primary carries

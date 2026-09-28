@@ -352,7 +352,7 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
 		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", `class="insight-cause"`, "Could be ",
 		// The opening sentence names the finding's subject and opens it.
-		`class="insights-headline tone-attention"`, `data-dialog-open="insight-finding-1">telemetry.example.com</button>`,
+		`class="insights-headline tone-attention"`,
 		"Why Sable surfaced this", "Blocked 3 times during the selected period",
 		"george-laptop.corp.example",
 		`<th scope="col" class="right-cell">Queries blocked</th>`,
@@ -363,6 +363,10 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 		if !strings.Contains(body, expected) {
 			t.Errorf("overview is missing %q", expected)
 		}
+	}
+	// The headline's subject opens its finding at the finding's own address.
+	if !regexp.MustCompile(`data-dialog-open="insight-finding-1" data-dialog-url="/insights/findings/[0-9a-f]{12}\?range=[a-z]+">telemetry\.example\.com</button>`).MatchString(body) {
+		t.Error("the headline does not open its finding at the finding's address")
 	}
 	// DNS data in a reason is set in monospace after its text.
 	if !regexp.MustCompile(`Now allowed by\s+<code>telemetry\.example\.com</code>`).MatchString(body) {
@@ -407,7 +411,7 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 
 func TestRequiredAnyPermissionCoversInsightsRoutes(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"/insights", "/ui/insights/overview"} {
+	for _, path := range []string{"/insights", "/insights/devices/mac:3c:22:fb:01:02:03", "/ui/insights/overview"} {
 		permissions := requiredAnyPermission(httptest.NewRequest(http.MethodGet, path, nil))
 		if len(permissions) != 2 || permissions[0] != auth.PermissionBlockingRead || permissions[1] != auth.PermissionLogsRead {
 			t.Errorf("%s permissions = %v", path, permissions)

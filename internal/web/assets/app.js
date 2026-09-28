@@ -4021,10 +4021,16 @@
 	  delete dialog.dataset.tokenCreated;
 	};
 	const setupRoutedDialog = (dialog) => {
-	  if (!dialog?.dataset.dialogUrl || dialog.dataset.dialogRouteReady === "true") return;
+	  if (!(dialog?.dataset.dialogUrl || dialog?.dataset.drawerRoute) || dialog.dataset.dialogRouteReady === "true") return;
 	  dialog.dataset.dialogRouteReady = "true";
 	  dialog.addEventListener("close", () => {
-		if (window.location.pathname !== routedDialogPath(dialog.dataset.dialogUrl)) return;
+		// A drawer closed to bring back the one beneath it leaves the address
+		// to the drawer that opens next.
+		if (dialog.sableStacking) {
+		  dialog.sableStacking = false;
+		  return;
+		}
+		if (!dialog.dataset.dialogUrl || window.location.pathname !== routedDialogPath(dialog.dataset.dialogUrl)) return;
 		const baseURL = dialog.dataset.dialogBaseUrl;
 		if (!baseURL) return;
 		if (window.history.state?.sableDialog === dialog.id) {
@@ -4128,14 +4134,56 @@
 	  if (blockAction) blockAction.hidden = source === "blocked";
 	  showRoutedDialog(dialog, false, document.activeElement);
 	};
+	// A drawer that shows one record at a time, such as a device, has an
+	// address for each record: its route followed by the record's ID.
+	const drawerRecord = (dialog, path) => {
+	  const route = dialog.dataset.drawerRoute;
+	  if (!route || !path.startsWith(route)) return null;
+	  const id = path.slice(route.length);
+	  if (!id || id.includes("/")) return null;
+	  try {
+		return decodeURIComponent(id);
+	  } catch (_) {
+		return null;
+	  }
+	};
+	// Opening a record's address loads the record into its drawer, starting
+	// from the drawer's loading state.
+	const loadDrawerRecord = (dialog, id) => {
+	  const target = document.getElementById(dialog.dataset.drawerTarget || "");
+	  if (!target || !dialog.dataset.drawerContent) return;
+	  const loading = document.getElementById(dialog.dataset.drawerTemplate || "");
+	  if (loading?.content) target.replaceChildren(loading.content.cloneNode(true));
+	  const content = new URL(dialog.dataset.drawerContent, window.location.origin);
+	  content.searchParams.set(dialog.dataset.drawerParam || "id", id);
+	  const range = new URLSearchParams(window.location.search).get("range");
+	  if (range) content.searchParams.set("range", range);
+	  htmx.ajax("GET", content.pathname + content.search, {target: `#${target.id}`, swap: "innerHTML"});
+	};
 	const syncRoutedDialogs = () => {
-	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url]")];
+	  const path = window.location.pathname;
+	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url], dialog[data-drawer-route]")];
 	  dialogs.forEach(setupRoutedDialog);
-	  const active = dialogs.find((dialog) => routedDialogPath(dialog.dataset.dialogUrl) === window.location.pathname);
+	  let active = dialogs.find((dialog) => !dialog.dataset.drawerRoute && routedDialogPath(dialog.dataset.dialogUrl) === path) ||
+		dialogs.find((dialog) => !dialog.dataset.drawerFallback && drawerRecord(dialog, path) !== null);
+	  // A fallback, such as the drawer for a finding that is no longer on the
+	  // page, waits for the content it would stand in for.
+	  if (!active && !document.querySelector("[data-drawer-pending]")) {
+		active = dialogs.find((dialog) => dialog.dataset.drawerFallback && drawerRecord(dialog, path) !== null);
+	  }
+	  // Drawers the active one was opened from stay open beneath it.
+	  const kept = new Set();
+	  for (let dialog = active; dialog && !kept.has(dialog); dialog = dialog.sableUnder) kept.add(dialog);
 	  dialogs.forEach((dialog) => {
-		if (dialog !== active && dialog.open) dialog.close();
+		if (!kept.has(dialog) && dialog.open) dialog.close();
 	  });
-	  if (active) showRoutedDialog(active);
+	  if (!active) return;
+	  if (active.dataset.drawerRoute) {
+		if (active.dataset.drawerShown !== path) loadDrawerRecord(active, drawerRecord(active, path));
+		active.dataset.dialogUrl = path + window.location.search;
+		active.dataset.drawerShown = path;
+	  }
+	  showRoutedDialog(active);
 	};
 	const openAutomaticDialogs = () => {
 	  document.querySelectorAll('dialog[data-dialog-auto-open="true"]').forEach((dialog) => {
@@ -4668,6 +4716,17 @@
 	  }
 	};
 	window.addEventListener("popstate", syncRoutedDialogs);
+	// Back and Forward between a page and a drawer opened over it stay on the
+	// page: the drawer opens or closes. htmx would otherwise reload the page
+	// for the entry it recorded when the page loaded.
+	document.addEventListener("htmx:before:history:restore", (event) => {
+	  const path = new URL(event.detail?.path || window.location.href, window.location.origin).pathname;
+	  const dialogs = [...document.querySelectorAll("dialog[data-dialog-url], dialog[data-drawer-route]")];
+	  const routed = dialogs.some((dialog) =>
+		[dialog.dataset.dialogUrl, dialog.dataset.dialogBaseUrl].some((address) => address && routedDialogPath(address) === path) ||
+		drawerRecord(dialog, path) !== null);
+	  if (routed) event.preventDefault();
+	});
 	// The dashboard rankings refresh themselves on a timer. Replacing that block
 	// while an operator has a "View all" list open would close it out from under
 	// them, so the poll is dropped for that cycle and the next one catches up.
@@ -4796,6 +4855,14 @@
 		showRoutedDialog(dialog, false, uploadBackupRestore);
 		return;
 	  }
+	  // Turning Insights off asks first, so the switch stays on until the
+	  // dialog's Turn Off says otherwise.
+	  const insightsOff = event.target.closest("[data-insights-off]");
+	  if (insightsOff) {
+		event.preventDefault();
+		showRoutedDialog(document.getElementById(insightsOff.dataset.insightsOff), false, insightsOff);
+		return;
+	  }
 	  const dialogOpen = event.target.closest("[data-dialog-open]");
 	  if (dialogOpen) {
 		const dialog = document.getElementById(dialogOpen.dataset.dialogOpen);
@@ -4806,7 +4873,18 @@
 		// keeps where it returns focus to.
 		const from = dialogOpen.closest("dialog[open]");
 		const reopening = Boolean(dialog?.open && from && from !== dialog);
-		if (reopening) from.close();
+		if (reopening) {
+		  from.sableStacking = true;
+		  from.close();
+		}
+		if (dialog) dialog.sableUnder = !reopening && from && from !== dialog ? from : null;
+		// A drawer that shows one record at a time takes the address of the
+		// record it is opening; its content loads from the opener itself.
+		if (dialog?.dataset.drawerRoute && dialogOpen.dataset.dialogUrl) {
+		  const target = new URL(dialogOpen.dataset.dialogUrl, window.location.origin);
+		  dialog.dataset.dialogUrl = target.pathname + target.search;
+		  dialog.dataset.drawerShown = target.pathname;
+		}
 		showRoutedDialog(dialog, Boolean(dialogOpen.dataset.dialogUrl), reopening ? null : dialogOpen);
 		dialog?.sableSelectDialogTab?.(dialogOpen.dataset.dialogTabTarget);
 		return;
@@ -4884,15 +4962,17 @@
         if (select) select.value = quickQuery.dataset.queryType;
       }
 
-      const copyButton = event.target.closest("[data-copy-target]");
+      const copyButton = event.target.closest("[data-copy-target], [data-copy-url]");
       if (!copyButton) return;
-      const target = document.getElementById(copyButton.dataset.copyTarget);
-      if (!target) return;
+      // A link is copied as a full address, so it opens from anywhere.
+      const link = copyButton.dataset.copyUrl ? new URL(copyButton.dataset.copyUrl, window.location.origin).href : null;
+      const target = link === null ? document.getElementById(copyButton.dataset.copyTarget) : null;
+      if (link === null && !target) return;
 	  const label = copyButton.querySelector("[data-copy-label]");
 	  const previousLabel = label?.textContent;
 	  const previousAriaLabel = copyButton.getAttribute("aria-label");
       try {
-		const value = target.textContent || "";
+		const value = link ?? (target.textContent || "");
 		await copyText(value);
 		copyButton.classList.add("is-copied");
 		copyButton.setAttribute("aria-label", "Copied to clipboard");
@@ -5098,6 +5178,8 @@
 	  if (localRun && ctx.response?.status < 400) localRun.closest("dialog")?.close();
 	  const uploadedRestore = ctx?.sourceElement?.closest?.("[data-upload-backup-restore-form]");
 	  if (uploadedRestore && ctx.response?.status < 400) uploadedRestore.closest("dialog")?.close();
+	  const insightsForm = ctx?.sourceElement?.closest?.("[data-insights-form]");
+	  if (insightsForm && ctx.response?.status < 400) insightsForm.closest("dialog")?.close();
 	});
 
 	// Read the unencrypted envelope header so a file identifies itself before

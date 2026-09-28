@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -18,10 +19,10 @@ func TestUpdateReleaseSurvivesDatabaseReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
-	if empty, err := database.LoadUpdateRelease(ctx); err != nil || empty != (update.ReleaseInfo{}) {
+	if empty, err := database.LoadUpdateRelease(ctx); err != nil || !reflect.DeepEqual(empty, update.ReleaseInfo{}) {
 		t.Fatalf("initial cache = %+v, %v", empty, err)
 	}
-	want := update.ReleaseInfo{Repository: "drudge/sable", APIBaseURL: "https://api.github.com", Version: "1.0.2", URL: "https://github.com/drudge/sable/releases/tag/v1.0.2", Notes: "### Improvements\n\n- Reliable updates.", CheckedAt: time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)}
+	want := update.ReleaseInfo{Repository: "drudge/sable", APIBaseURL: "https://api.github.com", Version: "1.0.2", URL: "https://github.com/drudge/sable/releases/tag/v1.0.2", Notes: "### Improvements\n\n- Reliable updates.", Releases: []update.ReleaseNote{{Version: "1.0.2", Notes: "### Improvements\n\n- Reliable updates."}}, CheckedAt: time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)}
 	if err := database.SaveUpdateRelease(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestUpdateReleaseSurvivesDatabaseReopen(t *testing.T) {
 	}
 	defer reopened.Close()
 	got, err := reopened.LoadUpdateRelease(ctx)
-	if err != nil || got != want {
+	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("restored release = %+v, %v; want %+v", got, err, want)
 	}
 }

@@ -75,6 +75,7 @@ type clusterStateReplicator struct {
 	alertSecrets           *alerts.SecretStore
 	pushKeys               pushKeyVault
 	pushSubscriptions      pushSubscriptionStore
+	insightData            insightDataStore
 	baseDirectory          string
 	prepareConfiguration   func(context.Context, config.Config, string) error
 }
@@ -130,6 +131,22 @@ type clusterRuntimeConfiguration struct {
 	// cluster. A primary that predates it sends none, which leaves this
 	// node's own setting as it is.
 	MCP *config.MCP `toml:"mcp,omitempty"`
+	// InsightsEnabled turns Insights on or off across the cluster. A primary
+	// that predates the switch sends none, which leaves this node's own as it
+	// is.
+	InsightsEnabled *bool `toml:"insights_enabled,omitempty"`
+	// InsightDataDeletedAt is when the primary last deleted what Insights had
+	// collected. Every node keeps its own sightings, so a replica whose copy
+	// predates it deletes its own too. It is not configuration, so it is left
+	// out of the comparison that decides whether configuration changed.
+	InsightDataDeletedAt *time.Time `toml:"insight_data_deleted_at,omitempty"`
+}
+
+// insightDataStore deletes what Insights collected on this node, and says
+// when that last happened.
+type insightDataStore interface {
+	InsightDataDeletedAt(context.Context) (time.Time, bool, error)
+	DeleteInsightData(context.Context, time.Time) error
 }
 
 // clusterAlerts is the alert state that follows the primary.
@@ -174,6 +191,12 @@ func (replicator *clusterStateReplicator) setDNSProviderCredentials(credentials 
 // because a replica takes the snapshot's subscriptions as the whole list.
 func (replicator *clusterStateReplicator) setAlerts(secrets *alerts.SecretStore, pushKeys pushKeyVault, subscriptions pushSubscriptionStore) {
 	replicator.alertSecrets, replicator.pushKeys, replicator.pushSubscriptions = secrets, pushKeys, subscriptions
+}
+
+// setInsightData has the replicator carry when Insights data was last
+// deleted, and delete this node's copy when the primary's deletion is newer.
+func (replicator *clusterStateReplicator) setInsightData(data insightDataStore) {
+	replicator.insightData = data
 }
 
 func newClusterStateReplicator(
@@ -232,6 +255,17 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 	runtimeConfiguration.InsightFindings = &findings
 	mcp := active.MCP
 	runtimeConfiguration.MCP = &mcp
+	insightsEnabled := active.Insights.Enabled
+	runtimeConfiguration.InsightsEnabled = &insightsEnabled
+	if replicator.insightData != nil {
+		deletedAt, found, err := replicator.insightData.InsightDataDeletedAt(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read when Insights data was deleted: %w", err)
+		}
+		if found {
+			runtimeConfiguration.InsightDataDeletedAt = &deletedAt
+		}
+	}
 	configurationContents, err := toml.Marshal(runtimeConfiguration)
 	if err != nil {
 		return nil, fmt.Errorf("encode replicated runtime configuration: %w", err)
@@ -283,6 +317,10 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 	if err != nil {
 		return err
 	}
+	if err := replicator.deleteReplicatedInsightData(ctx, runtimeConfiguration.InsightDataDeletedAt); err != nil {
+		return err
+	}
+	runtimeConfiguration.InsightDataDeletedAt = nil
 	activeConfiguration := replicatedRuntimeConfiguration(replicator.configuration.Current().Config)
 	if runtimeConfiguration.Alerts == nil {
 		// The primary said nothing about alerts, so this node's are neither
@@ -291,6 +329,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 	}
 	if runtimeConfiguration.InsightFindings == nil {
 		activeConfiguration.InsightFindings = nil
+	}
+	if runtimeConfiguration.InsightsEnabled == nil {
+		activeConfiguration.InsightsEnabled = nil
 	}
 	activeZones := replicator.zones.Current().Zones
 	activeAuthorization := store.AuthorizationState{}
@@ -407,6 +448,7 @@ func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool 
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
 	findings := source.Insights.Findings
 	mcp := source.MCP
+	insightsEnabled := source.Insights.Enabled
 	return clusterRuntimeConfiguration{
 		Resolver:         source.Resolver,
 		TSIGKeys:         source.TSIGKeys,
@@ -419,6 +461,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		Alerts:           &clusterAlerts{Settings: cloneAlertSettings(source.Alerts)},
 		InsightFindings:  &findings,
 		MCP:              &mcp,
+		InsightsEnabled:  &insightsEnabled,
 	}
 }
 
@@ -451,6 +494,29 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	if source.MCP != nil {
 		candidate.MCP = *source.MCP
 	}
+	if source.InsightsEnabled != nil {
+		candidate.Insights.Enabled = *source.InsightsEnabled
+	}
+}
+
+// deleteReplicatedInsightData deletes this node's Insights data when the
+// primary deleted its own after this node last did. The primary's moment is
+// kept as this node's, so the same deletion is never carried out twice.
+func (replicator *clusterStateReplicator) deleteReplicatedInsightData(ctx context.Context, primaryDeletedAt *time.Time) error {
+	if replicator.insightData == nil || primaryDeletedAt == nil {
+		return nil
+	}
+	deletedAt, found, err := replicator.insightData.InsightDataDeletedAt(ctx)
+	if err != nil {
+		return fmt.Errorf("read when Insights data was deleted: %w", err)
+	}
+	if found && !deletedAt.Before(*primaryDeletedAt) {
+		return nil
+	}
+	if err := replicator.insightData.DeleteInsightData(ctx, *primaryDeletedAt); err != nil {
+		return fmt.Errorf("delete Insights data as the primary did: %w", err)
+	}
+	return nil
 }
 
 // replicatedOIDC is the section as it crosses the wire: everything except the

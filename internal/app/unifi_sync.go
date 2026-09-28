@@ -62,6 +62,10 @@ type unifiSyncer struct {
 	// identities remembers which hardware address each host address belongs
 	// to, so Insights can follow a device across address changes. Nil skips it.
 	identities func(context.Context, []querylog.ClientIdentity) error
+	// reading keeps the controller's networks and connected clients with
+	// their traffic, so Insights can find devices that never use Sable. Nil
+	// skips it.
+	reading func(context.Context, unifi.Inventory, time.Time) error
 
 	wake chan struct{}
 
@@ -284,14 +288,27 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
-	if !preview && syncer.identities != nil {
+	inventory.Stations = withoutGear(inventory)
+	insightsOn := syncer.configuration.Current().Config.Insights.Enabled
+	if !preview && syncer.identities != nil && insightsOn {
 		if err := syncer.identities(ctx, unifiIdentities(inventory, syncer.now())); err != nil {
 			syncer.logger.Warn("record UniFi client identities", "error", err)
+		}
+	}
+	// The reading is only for Insights, so it is kept only while Insights is on.
+	if !preview && syncer.reading != nil && insightsOn {
+		if err := syncer.reading(ctx, inventory, syncer.now()); err != nil {
+			syncer.logger.Warn("record UniFi reading", "error", err)
 		}
 	}
 	desired, skipped, err := desiredUniFiRecords(settings, inventory)
 	if err != nil {
 		return unifi.Plan{}, 0, err
+	}
+	// With no network mapped the sync only finds devices, and must not touch
+	// a zone: retiring records is for a mapping that stopped producing them.
+	if !settings.Publishes() {
+		return unifi.Plan{Skipped: skipped, HostsByNetwork: inventory.HostCounts()}, 0, nil
 	}
 	if preview {
 		zones := syncer.zones.Current().Zones
@@ -619,10 +636,22 @@ func compareUniFiPlanRecords(left, right unifi.PlanRecord) int {
 // as a fact.
 const unifiIdentitySource = "unifi"
 
+// withoutGear leaves the controller's own devices out of its connected
+// clients. They are network hardware, not devices that should ask Sable.
+func withoutGear(inventory unifi.Inventory) []unifi.Station {
+	gear := make(map[string]bool, len(inventory.Gear))
+	for _, host := range inventory.Gear {
+		gear[host.MAC] = true
+	}
+	return slices.DeleteFunc(slices.Clone(inventory.Stations), func(station unifi.Station) bool { return gear[station.MAC] })
+}
+
 // unifiIdentities ties every address the controller reported to its host's
-// hardware address and name, for its clients and its own gear alike.
+// hardware address and name, for its clients and its own gear alike. A
+// connected client without a publishable name still ties its addresses to
+// its hardware.
 func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.ClientIdentity {
-	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts)+len(inventory.Gear))
+	identities := make([]querylog.ClientIdentity, 0, len(inventory.Hosts)+len(inventory.Gear)+len(inventory.Stations))
 	add := func(hosts []unifi.Host, source string) {
 		for _, host := range hosts {
 			source := source
@@ -644,5 +673,20 @@ func unifiIdentities(inventory unifi.Inventory, now time.Time) []querylog.Client
 	}
 	add(inventory.Hosts, unifiIdentitySource)
 	add(inventory.Gear, unifiIdentitySource)
+	named := make(map[string]bool, len(inventory.Hosts))
+	for _, host := range inventory.Hosts {
+		named[host.MAC] = true
+	}
+	for _, station := range inventory.Stations {
+		if named[station.MAC] {
+			continue
+		}
+		for _, address := range station.Addresses() {
+			identities = append(identities, querylog.ClientIdentity{
+				Address: address.Unmap().WithZone("").String(), MAC: station.MAC,
+				Source: unifiIdentitySource, Hostname: station.Name, SeenAt: now,
+			})
+		}
+	}
 	return identities
 }

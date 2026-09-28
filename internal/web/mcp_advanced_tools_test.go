@@ -24,7 +24,7 @@ func mcpListedTools(t *testing.T, server *Server) []string {
 func TestMCPAdvancedToolsStayHiddenUntilTurnedOn(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
-	advanced := []string{"create_zone", "delete_zone", "add_block_list", "remove_block_list", "refresh_block_lists", "search_queries"}
+	advanced := []string{"create_zone", "delete_zone", "add_block_list", "remove_block_list", "refresh_block_lists", "search_queries", "sync_dynamic_dns", "search_server_logs"}
 
 	listed := strings.Join(mcpListedTools(t, server), ",")
 	for _, name := range advanced {
@@ -113,6 +113,11 @@ func TestMCPInsightAndQueryLogTools(t *testing.T) {
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_findings", map[string]any{"range": "fortnight"}); failure != "" {
 		t.Fatalf("list_findings failed: %s", failure)
 	}
+	configuration.snapshot.Config.Insights.Enabled = false
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_admin", "list_findings", map[string]any{}); failure != errInsightsOff.Error() {
+		t.Fatalf("list_findings with Insights off = %q", failure)
+	}
+	configuration.snapshot.Config.Insights.Enabled = true
 	for _, tool := range []string{"list_findings", "search_queries"} {
 		if _, failure := callMCPToolForTest(t, server, "sable_pat_blocking", tool, map[string]any{}); !strings.Contains(failure, "logs.read") {
 			t.Fatalf("%s without logs.read = %q", tool, failure)

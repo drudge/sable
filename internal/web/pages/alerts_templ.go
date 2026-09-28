@@ -113,6 +113,8 @@ type AlertGroupsView struct {
 	// InsightSettings opens Insights settings, for the limits and what shows
 	// in Insights. Empty for an operator who cannot open them.
 	InsightSettings string
+	// InsightsOff folds the Insights group away while Insights is off.
+	InsightsOff bool
 }
 
 // AlertInsightKindView is one kind of finding and whether it alerts. Its
@@ -260,7 +262,7 @@ func alertFormatIcon(format string) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(mark)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 228, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 230, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -478,7 +480,7 @@ func alertsStatusCard(view AlertsView) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(alertsStateLabel(view.State))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 268, Col: 142}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 270, Col: 142}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -491,7 +493,7 @@ func alertsStatusCard(view AlertsView) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(alertsStateSummary(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 269, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 271, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -677,7 +679,7 @@ func alertsDestinationsCard(view AlertsView) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(browserCount(len(view.Browsers)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 354, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 356, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -727,7 +729,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue("alert-destination-" + destination.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 364, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 366, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -748,7 +750,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(destination.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 367, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 369, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
@@ -767,7 +769,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(destination.FormatLabel)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 373, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 375, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -792,7 +794,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(destination.Address)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 379, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 381, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -826,7 +828,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(group)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 390, Col: 43}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 392, Col: 43}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -839,7 +841,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 390, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 392, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {
@@ -867,7 +869,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(destination.Problem)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 395, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 397, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -893,7 +895,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(destination.LastErrorAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 397, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 399, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -906,7 +908,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(destination.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 397, Col: 143}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 399, Col: 143}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
@@ -924,7 +926,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(destination.LastSent)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 399, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 401, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -937,7 +939,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(destination.LastSentTitle)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 399, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 401, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
@@ -960,7 +962,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue("alert-destination-test-" + destination.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 404, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -973,7 +975,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var27 string
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf(`{"id":%q}`, destination.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 404, Col: 205}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 205}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 			if templ_7745c5c3_Err != nil {
@@ -986,7 +988,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("Send Test to " + destination.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 404, Col: 336}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 336}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 			if templ_7745c5c3_Err != nil {
@@ -1007,7 +1009,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue("alert-destination-edit-" + destination.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 405, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 407, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
@@ -1020,7 +1022,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue("/ui/settings/alerts/destinations/form?id=" + destination.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 405, Col: 176}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 407, Col: 176}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
@@ -1033,7 +1035,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue("Edit " + destination.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 405, Col: 322}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 407, Col: 322}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -1054,7 +1056,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue("alert-destination-remove-" + destination.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 408, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -1067,7 +1069,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf(`{"id":%q}`, destination.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 221}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 408, Col: 221}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 			if templ_7745c5c3_Err != nil {
@@ -1080,7 +1082,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(alertRemoveConfirmation(destination))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 353}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 408, Col: 353}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 			if templ_7745c5c3_Err != nil {
@@ -1093,7 +1095,7 @@ func alertDestinationRow(destination AlertDestinationView, view AlertsView) temp
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + destination.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 406, Col: 468}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 408, Col: 468}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 			if templ_7745c5c3_Err != nil {
@@ -1177,9 +1179,11 @@ func alertsGroupsCard(view AlertsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = alertInsightKinds(view).Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
+		if !view.Groups.InsightsOff {
+			templ_7745c5c3_Err = alertInsightKinds(view).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		templ_7745c5c3_Err = alertGroupSwitch("cluster", "Cluster", "A node going down and coming back up, and update rollouts.", view.Groups.Cluster, view.CanEdit).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
@@ -1236,7 +1240,7 @@ func alertsGroupsCard(view AlertsView) templ.Component {
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.Groups.SignInsAfter))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 455, Col: 111}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 459, Col: 111}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
@@ -1259,7 +1263,7 @@ func alertsGroupsCard(view AlertsView) templ.Component {
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.Groups.SignInsWithin))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 457, Col: 113}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 461, Col: 113}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 		if templ_7745c5c3_Err != nil {
@@ -1338,7 +1342,7 @@ func alertInsightKinds(view AlertsView) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue("alerts-insight-" + kind.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 479, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 483, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -1351,7 +1355,7 @@ func alertInsightKinds(view AlertsView) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(kind.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 481, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 485, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -1374,7 +1378,7 @@ func alertInsightKinds(view AlertsView) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue("insight_alert_" + kind.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 486, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 490, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 			if templ_7745c5c3_Err != nil {
@@ -1413,7 +1417,7 @@ func alertInsightKinds(view AlertsView) templ.Component {
 			var templ_7745c5c3_Var43 templ.SafeURL
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(view.Groups.InsightSettings))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 491, Col: 134}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 495, Col: 134}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -1461,7 +1465,7 @@ func alertGroupSwitch(group, title, description string, on, canEdit bool) templ.
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue("alerts-group-" + group)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 498, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 502, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 		if templ_7745c5c3_Err != nil {
@@ -1474,7 +1478,7 @@ func alertGroupSwitch(group, title, description string, on, canEdit bool) templ.
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 498, Col: 112}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 502, Col: 112}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 		if templ_7745c5c3_Err != nil {
@@ -1487,7 +1491,7 @@ func alertGroupSwitch(group, title, description string, on, canEdit bool) templ.
 		var templ_7745c5c3_Var47 string
 		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 498, Col: 143}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 502, Col: 143}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 		if templ_7745c5c3_Err != nil {
@@ -1500,7 +1504,7 @@ func alertGroupSwitch(group, title, description string, on, canEdit bool) templ.
 		var templ_7745c5c3_Var48 string
 		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue(group)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 498, Col: 209}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 502, Col: 209}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 		if templ_7745c5c3_Err != nil {
@@ -1559,7 +1563,7 @@ func alertBackupsOption(value, label string, view AlertsView) templ.Component {
 		var templ_7745c5c3_Var50 string
 		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 503, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 507, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 		if templ_7745c5c3_Err != nil {
@@ -1588,7 +1592,7 @@ func alertBackupsOption(value, label string, view AlertsView) templ.Component {
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 503, Col: 159}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 507, Col: 159}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 		if templ_7745c5c3_Err != nil {
@@ -1689,7 +1693,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue(browser.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 543, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 547, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 				if templ_7745c5c3_Err != nil {
@@ -1710,7 +1714,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 				var templ_7745c5c3_Var54 string
 				templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(browser.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 546, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 550, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 				if templ_7745c5c3_Err != nil {
@@ -1723,7 +1727,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 				var templ_7745c5c3_Var55 string
 				templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(browser.Added)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 547, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 551, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 				if templ_7745c5c3_Err != nil {
@@ -1741,7 +1745,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue("alert-browser-remove-" + browser.ID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 550, Col: 99}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 554, Col: 99}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 					if templ_7745c5c3_Err != nil {
@@ -1754,7 +1758,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 					var templ_7745c5c3_Var57 string
 					templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf(`{"browser":%q}`, browser.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 550, Col: 213}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 554, Col: 213}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 					if templ_7745c5c3_Err != nil {
@@ -1767,7 +1771,7 @@ func alertBrowsersPanel(view AlertsView) templ.Component {
 					var templ_7745c5c3_Var58 string
 					templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + browser.Label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 550, Col: 334}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 554, Col: 334}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var58)
 					if templ_7745c5c3_Err != nil {
@@ -1937,7 +1941,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var61 string
 		templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(form.ID == "", "Add Destination", "Edit Destination"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 635, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 639, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 		if templ_7745c5c3_Err != nil {
@@ -1950,7 +1954,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(form.ID == "", "Choose where Sable sends alerts.", "Secrets you leave blank stay as they are."))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 636, Col: 110}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 640, Col: 110}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 		if templ_7745c5c3_Err != nil {
@@ -1976,7 +1980,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 			var templ_7745c5c3_Var63 string
 			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(form.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 640, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 644, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 			if templ_7745c5c3_Err != nil {
@@ -1994,7 +1998,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var64 string
 		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(form.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 644, Col: 96}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 648, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 		if templ_7745c5c3_Err != nil {
@@ -2040,7 +2044,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 			var templ_7745c5c3_Var65 string
 			templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(alertBrowsersUnavailable(form))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 656, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 660, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 			if templ_7745c5c3_Err != nil {
@@ -2088,7 +2092,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var66 string
 		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(alertURLPlaceholder(form))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 662, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 666, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 		if templ_7745c5c3_Err != nil {
@@ -2171,7 +2175,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var67 string
 		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(alertSavedPlaceholder(form.SavedPushoverToken, "Your application's token"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 672, Col: 196}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 676, Col: 196}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 		if templ_7745c5c3_Err != nil {
@@ -2184,7 +2188,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 		var templ_7745c5c3_Var68 string
 		templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(alertSavedPlaceholder(form.SavedPushoverUser, "Your user or group key"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 673, Col: 183}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 677, Col: 183}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 		if templ_7745c5c3_Err != nil {
@@ -2232,7 +2236,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 			var templ_7745c5c3_Var69 string
 			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.ResolveAttributeValue(group.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 685, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 689, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var69)
 			if templ_7745c5c3_Err != nil {
@@ -2255,7 +2259,7 @@ func AlertDestinationForm(form AlertDestinationFormView) templ.Component {
 			var templ_7745c5c3_Var70 string
 			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(group.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 686, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 690, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 			if templ_7745c5c3_Err != nil {
@@ -2400,7 +2404,7 @@ func alertFormatOption(form AlertDestinationFormView, format, label string, disa
 		var templ_7745c5c3_Var72 string
 		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(format)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 725, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 729, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 		if templ_7745c5c3_Err != nil {
@@ -2437,7 +2441,7 @@ func alertFormatOption(form AlertDestinationFormView, format, label string, disa
 		var templ_7745c5c3_Var73 string
 		templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 727, Col: 15}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 731, Col: 15}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 		if templ_7745c5c3_Err != nil {
@@ -2481,7 +2485,7 @@ func alertHeaderRow(header AlertHeaderView) templ.Component {
 		var templ_7745c5c3_Var75 string
 		templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.ResolveAttributeValue(header.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 735, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 739, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var75)
 		if templ_7745c5c3_Err != nil {
@@ -2494,7 +2498,7 @@ func alertHeaderRow(header AlertHeaderView) templ.Component {
 		var templ_7745c5c3_Var76 string
 		templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.ResolveAttributeValue(alertSavedPlaceholder(header.Saved, "Value"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 736, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 740, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 		if templ_7745c5c3_Err != nil {
@@ -2548,7 +2552,7 @@ func AlertPreviewPanel(preview AlertPreview) templ.Component {
 			var templ_7745c5c3_Var78 string
 			templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 746, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 750, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 			if templ_7745c5c3_Err != nil {
@@ -2574,7 +2578,7 @@ func AlertPreviewPanel(preview AlertPreview) templ.Component {
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.JoinStringErrs(preview.Text())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 749, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `alerts.templ`, Line: 753, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var79))
 		if templ_7745c5c3_Err != nil {

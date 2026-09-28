@@ -64,6 +64,14 @@ func (cache *windowCache[T]) serveStale() {
 	cache.staleFor, cache.timeout = insightsStaleFor, insightsQueryTimeout
 }
 
+// forget drops every kept count, so the next load counts afresh. A count
+// still running lands as usual.
+func (cache *windowCache[T]) forget() {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.entries = nil
+}
+
 func (cache *windowCache[T]) load(
 	ctx context.Context,
 	window insightWindow,

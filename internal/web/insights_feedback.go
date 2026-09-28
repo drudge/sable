@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -51,6 +52,12 @@ func (server *Server) hideInsightFinding(writer http.ResponseWriter, request *ht
 	case "normal":
 		feedback.Action = insights.FeedbackNormal
 		summary = "marked finding " + id + " normal"
+		// A rolled-up finding is normal for the members it lists, so it
+		// comes back for a new one.
+		if members := request.Form["member"]; len(members) > 0 {
+			server.markInsightMembersNormal(writer, request, store, feedback, members)
+			return
+		}
 	default:
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return
@@ -61,6 +68,35 @@ func (server *Server) hideInsightFinding(writer http.ResponseWriter, request *ht
 		return
 	}
 	server.recordControlPlaneAudit(request, "insights.finding.hide", summary)
+	writer.Header().Set("HX-Trigger", "insightsChanged")
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+// markInsightMembersNormal records that each member of a rolled-up finding
+// is normal, by the member's own identifier.
+func (server *Server) markInsightMembersNormal(writer http.ResponseWriter, request *http.Request, store insightFeedbackStore, feedback insights.Feedback, members []string) {
+	labels := request.Form["member_label"]
+	marked := 0
+	for index, member := range members {
+		if !isRollupMember(member) {
+			writeFragmentStatus(writer, http.StatusBadRequest)
+			return
+		}
+		entry := feedback
+		entry.FindingID, entry.Label = member, "Doesn't use Sable"
+		if index < len(labels) {
+			if label := strings.TrimSpace(labels[index]); label != "" {
+				entry.Label += ": " + string([]rune(label)[:min(len([]rune(label)), maximumFeedbackLabel)])
+			}
+		}
+		if err := store.SetInsightFeedback(request.Context(), entry); err != nil {
+			server.logger.Warn("mark insight members normal", "error", err)
+			writeFragmentStatus(writer, http.StatusInternalServerError)
+			return
+		}
+		marked++
+	}
+	server.recordControlPlaneAudit(request, "insights.finding.hide", fmt.Sprintf("marked %d %s normal in finding %s", marked, insights.Plural(marked, "device", "devices"), feedback.FindingID))
 	writer.Header().Set("HX-Trigger", "insightsChanged")
 	writer.WriteHeader(http.StatusNoContent)
 }

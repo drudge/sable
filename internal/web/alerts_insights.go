@@ -61,6 +61,12 @@ type insightAlertSource struct {
 func (source *insightAlertSource) Alerts(ctx context.Context, now time.Time) ([]alerts.Alert, error) {
 	source.mu.Lock()
 	defer source.mu.Unlock()
+	if !source.server.insightsEnabled() {
+		// Nothing is analyzed while Insights is off, and nothing kept from
+		// before is sent once it is.
+		source.at, source.alerts = time.Time{}, nil
+		return nil, nil
+	}
 	// A change to Insights settings, such as a kind set to show only, counts
 	// from the next round rather than once the kept answer runs out.
 	revision := source.server.config.Current().Revision
@@ -94,7 +100,7 @@ func insightAlert(finding insights.Finding) alerts.Alert {
 	return alerts.Alert{
 		ID: finding.ID, Group: config.AlertGroupInsights, Kind: finding.Kind, Tone: tone,
 		Title: finding.Title, Subject: finding.Subject.Label, Headline: finding.Headline, Summary: finding.Summary,
-		Reasons: reasons, Path: "/insights", PathLabel: "Open Insights", ObservedAt: finding.ObservedAt,
+		Reasons: reasons, Path: pages.InsightFindingPath(finding.ID, "day"), PathLabel: "Open Finding", ObservedAt: finding.ObservedAt,
 	}
 }
 

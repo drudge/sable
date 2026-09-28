@@ -35,11 +35,17 @@ const (
 // sightings. The lead hands its own to every replica, so a replica that cannot
 // see the network's hardware addresses, such as one in a container or on
 // another network, still ties addresses to devices. Lookback is how far back a
-// full batch reaches.
+// full batch reaches. Enabled, when set, is whether Insights is on: while it
+// is off the lead hands nothing over and a replica keeps nothing it is handed.
 type ClientIdentities struct {
 	Read     func(context.Context, time.Time) ([]querylog.ClientIdentity, error)
 	Record   func(context.Context, []querylog.ClientIdentity) error
 	Lookback time.Duration
+	Enabled  func() bool
+}
+
+func (identities ClientIdentities) enabled() bool {
+	return identities.Enabled == nil || identities.Enabled()
 }
 
 // sharedIdentity is one sighting as it crosses to a replica. It keeps its
@@ -101,9 +107,9 @@ func (service *Service) gatherClientIdentitiesOnce(ctx context.Context, now time
 	identities := service.clientIdentities
 	leads := service.manifest != nil && service.manifest.PrimaryID == service.nodeID
 	service.mu.RUnlock()
-	if identities.Read == nil || !leads {
-		// What a node gathered while it led is dropped once it steps down, so
-		// it never hands over a stale view.
+	if identities.Read == nil || !leads || !identities.enabled() {
+		// What a node gathered while it led is dropped once it steps down, or
+		// Insights is turned off, so it never hands over a stale view.
 		service.identityShare.reset()
 		return
 	}
@@ -214,9 +220,10 @@ func encodeSharedIdentities(found []querylog.ClientIdentity) json.RawMessage {
 // a heartbeat. A batch that cannot be read is dropped; the next one covers it.
 func (service *Service) recordSharedIdentities(ctx context.Context, encoded json.RawMessage) {
 	service.mu.RLock()
-	record := service.clientIdentities.Record
+	identities := service.clientIdentities
 	service.mu.RUnlock()
-	if record == nil || len(encoded) == 0 {
+	record := identities.Record
+	if record == nil || len(encoded) == 0 || !identities.enabled() {
 		return
 	}
 	var shared []sharedIdentity
@@ -226,24 +233,24 @@ func (service *Service) recordSharedIdentities(ctx context.Context, encoded json
 		}
 		return
 	}
-	identities := make([]querylog.ClientIdentity, 0, len(shared))
+	received := make([]querylog.ClientIdentity, 0, len(shared))
 	for _, identity := range shared {
 		if identity.Address == "" || identity.MAC == "" || identity.Source == "" || identity.LastSeen.IsZero() {
 			continue
 		}
-		identities = append(identities, querylog.ClientIdentity{
+		received = append(received, querylog.ClientIdentity{
 			Address: identity.Address, MAC: identity.MAC, Source: identity.Source, Hostname: identity.Hostname,
 			Kind: identity.Kind, KindConfidence: identity.KindConfidence, KindSet: identity.KindSet,
 			SeenAt: identity.LastSeen,
 		})
 	}
-	if len(identities) == 0 {
+	if len(received) == 0 {
 		return
 	}
 	go func() {
 		service.identityRecording.mu.Lock()
 		defer service.identityRecording.mu.Unlock()
-		if err := record(ctx, identities); err != nil && ctx.Err() == nil && service.logger != nil {
+		if err := record(ctx, received); err != nil && ctx.Err() == nil && service.logger != nil {
 			service.logger.Warn("record client identities from the cluster primary", "error", err)
 		}
 	}()

@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/netip"
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -140,12 +142,12 @@ func (client *Client) Inventory(ctx context.Context) (Inventory, error) {
 	if err != nil {
 		return Inventory{}, err
 	}
-	active, err := client.activeHosts(ctx)
+	active, err := client.activeClients(ctx)
 	if err != nil {
 		return Inventory{}, err
 	}
-	hosts := placeHosts(networks, mergeHosts(reserved, active))
-	return Inventory{Networks: networks, Hosts: hosts, Gear: client.gear(ctx)}, nil
+	hosts := placeHosts(networks, mergeHosts(reserved, activeHosts(active)))
+	return Inventory{Networks: networks, Hosts: hosts, Gear: client.gear(ctx), Stations: placeStations(networks, stations(active))}, nil
 }
 
 type networkPayload struct {
@@ -156,6 +158,30 @@ type networkPayload struct {
 	Enabled *bool  `json:"enabled"`
 	Subnet  string `json:"ip_subnet"`
 	Subnet6 string `json:"ipv6_subnet"`
+	// DHCPEnabled is whether the controller runs the network's DHCP server,
+	// and DNSEnabled whether it hands out the DNS servers listed after it
+	// rather than the gateway.
+	DHCPEnabled bool   `json:"dhcpd_enabled"`
+	DNSEnabled  bool   `json:"dhcpd_dns_enabled"`
+	DNS1        string `json:"dhcpd_dns_1"`
+	DNS2        string `json:"dhcpd_dns_2"`
+	DNS3        string `json:"dhcpd_dns_3"`
+	DNS4        string `json:"dhcpd_dns_4"`
+}
+
+// dns lists the DNS servers the network's DHCP is set to hand out, in order.
+func (payload networkPayload) dns() []netip.Addr {
+	if !payload.DNSEnabled {
+		return nil
+	}
+	var servers []netip.Addr
+	for _, value := range []string{payload.DNS1, payload.DNS2, payload.DNS3, payload.DNS4} {
+		address, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err == nil && !address.IsUnspecified() {
+			servers = append(servers, address.Unmap())
+		}
+	}
+	return servers
 }
 
 func (client *Client) networks(ctx context.Context) ([]Network, error) {
@@ -177,12 +203,20 @@ func (client *Client) networks(ctx context.Context) ([]Network, error) {
 		if entry.Enabled != nil && !*entry.Enabled {
 			continue
 		}
-		network := Network{ID: id, Name: entry.Name, Slug: SanitizeLabel(entry.Name), Purpose: entry.Purpose}
+		network := Network{
+			ID: id, Name: entry.Name, Slug: SanitizeLabel(entry.Name), Purpose: entry.Purpose,
+			DHCP: entry.DHCPEnabled, DHCPDNS: entry.dns(),
+		}
 		for _, candidate := range []string{entry.Subnet, entry.Subnet6} {
 			for _, field := range strings.Fields(candidate) {
 				prefix, err := netip.ParsePrefix(field)
 				if err != nil {
 					continue
+				}
+				// The controller writes a subnet as the gateway's own address
+				// and the prefix length, as in 192.168.1.1/24.
+				if gateway := prefix.Addr().Unmap(); gateway.Is4() && !network.Gateway.IsValid() && gateway != prefix.Masked().Addr() {
+					network.Gateway = gateway
 				}
 				network.Subnets = append(network.Subnets, prefix.Masked())
 			}
@@ -222,6 +256,34 @@ type clientPayload struct {
 	DeviceCategory      *int `json:"dev_cat"`
 	Confidence          int  `json:"confidence"`
 	FingerprintOverride bool `json:"fingerprint_override"`
+	// LastSeen is when the controller last heard from an active client, in
+	// Unix seconds, and Uptime how many seconds it has been connected. The
+	// byte counters run from when it connected; a wired client carries its
+	// own under wired- names.
+	LastSeen     number `json:"last_seen"`
+	Uptime       number `json:"uptime"`
+	Wired        bool   `json:"is_wired"`
+	TxBytes      number `json:"tx_bytes"`
+	RxBytes      number `json:"rx_bytes"`
+	WiredTxBytes number `json:"wired-tx_bytes"`
+	WiredRxBytes number `json:"wired-rx_bytes"`
+}
+
+// number reads a count from the controller. Controllers have written the same
+// field as an integer, a float, and a string across releases, and a counter
+// that cannot be read is only missing evidence, so a value it cannot parse
+// reads as zero rather than failing the whole inventory.
+type number uint64
+
+func (value *number) UnmarshalJSON(data []byte) error {
+	text := strings.Trim(strings.TrimSpace(string(data)), `"`)
+	parsed, err := strconv.ParseFloat(text, 64)
+	if err != nil || parsed < 0 || math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed > math.MaxInt64 {
+		*value = 0
+		return nil
+	}
+	*value = number(parsed)
+	return nil
 }
 
 // fingerprintTypes are the controller's fingerprint categories whose meaning
@@ -295,15 +357,21 @@ func (client *Client) reservedHosts(ctx context.Context) ([]Host, error) {
 	return hosts, nil
 }
 
-func (client *Client) activeHosts(ctx context.Context) ([]Host, error) {
+// activeClients reads the clients connected right now.
+func (client *Client) activeClients(ctx context.Context) ([]clientPayload, error) {
 	var payload struct {
 		Data []clientPayload `json:"data"`
 	}
 	if err := client.get(ctx, "stat/sta", &payload); err != nil {
 		return nil, fmt.Errorf("read UniFi clients: %w", err)
 	}
-	hosts := make([]Host, 0, len(payload.Data))
-	for _, entry := range payload.Data {
+	return payload.Data, nil
+}
+
+// activeHosts turns the connected clients with a usable name into hosts.
+func activeHosts(active []clientPayload) []Host {
+	hosts := make([]Host, 0, len(active))
+	for _, entry := range active {
 		address := entry.IP
 		if entry.UseFixedIP && entry.FixedIP != "" {
 			address = entry.FixedIP
@@ -312,7 +380,36 @@ func (client *Client) activeHosts(ctx context.Context) ([]Host, error) {
 			hosts = append(hosts, host)
 		}
 	}
-	return hosts, nil
+	return hosts
+}
+
+// stations turns every connected client into a station, named or not. A
+// client needs a hardware address and a usable address to be one.
+func stations(active []clientPayload) []Station {
+	found := make([]Station, 0, len(active))
+	for _, entry := range active {
+		mac := strings.ToLower(strings.TrimSpace(entry.MAC))
+		address, err := netip.ParseAddr(strings.TrimSpace(entry.IP))
+		if mac == "" || err != nil || address.IsUnspecified() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = strings.TrimSpace(entry.Hostname)
+		}
+		station := Station{
+			MAC: mac, Name: name, Address: address.Unmap(), IPv6: publishableIPv6(entry.IPv6Addresses),
+			NetworkID: entry.networkID(), Wired: entry.Wired,
+			Uptime: time.Duration(min(uint64(entry.Uptime), uint64(math.MaxInt64/int64(time.Second)))) * time.Second,
+			Bytes:  max(uint64(entry.TxBytes)+uint64(entry.RxBytes), uint64(entry.WiredTxBytes)+uint64(entry.WiredRxBytes)),
+		}
+		if entry.LastSeen > 0 {
+			station.LastSeen = time.Unix(int64(entry.LastSeen), 0).UTC()
+		}
+		found = append(found, station)
+	}
+	slices.SortFunc(found, func(left, right Station) int { return strings.Compare(left.MAC, right.MAC) })
+	return found
 }
 
 type devicePayload struct {

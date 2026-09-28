@@ -160,17 +160,20 @@ var MCPTools = []string{
 	"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record", "create_zone", "delete_zone",
 	"check_domain", "allow_domain", "block_domain", "remove_domain_rule",
 	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
-	"lookup", "purge_cache", "list_findings", "search_queries",
+	"lookup", "purge_cache", "list_findings", "search_queries", "search_server_logs",
+	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns", "get_cluster_status",
 }
 
 // DefaultMCPTools are the tools offered until an operator chooses: records,
-// allow and block rules, lookups, and the cache. Creating and deleting
-// zones, block lists, Insights, and the query log wait to be added.
+// allow and block rules, lookups, the cache, and how the server is doing.
+// Creating and deleting zones, block lists, updating Dynamic DNS, and the
+// query and runtime logs wait to be added.
 func DefaultMCPTools() []string {
 	return []string{
 		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
 		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_block_lists",
 		"lookup", "purge_cache", "list_findings",
+		"get_version", "get_stats", "get_dynamic_dns", "get_cluster_status",
 	}
 }
 
@@ -456,6 +459,11 @@ type UniFi struct {
 	CAFile        string         `toml:"tls_ca_file"`
 	Insecure      bool           `toml:"tls_insecure"`
 	Networks      []UniFiNetwork `toml:"networks"`
+
+	// FindDevices reads the controller's clients for Insights even when no
+	// network is mapped to a zone, so Sable can tell which devices never ask
+	// it anything without publishing their names.
+	FindDevices bool `toml:"find_devices"`
 }
 
 // UniFiNetwork maps one UniFi network onto a Sable zone. The identifier is the
@@ -499,10 +507,14 @@ func (unifi UniFi) ActiveNetworks() []UniFiNetwork {
 }
 
 // Runnable reports whether the synchronizer has enough configuration to do
-// anything at all.
+// anything at all: a network to publish, or devices to find.
 func (unifi UniFi) Runnable() bool {
-	return unifi.Enabled && unifi.ControllerURL != "" && len(unifi.ActiveNetworks()) > 0
+	return unifi.Enabled && unifi.ControllerURL != "" && (unifi.Publishes() || unifi.FindDevices)
 }
+
+// Publishes reports whether the synchronizer writes records, which it does
+// once at least one network is mapped to a zone.
+func (unifi UniFi) Publishes() bool { return len(unifi.ActiveNetworks()) > 0 }
 
 type Security struct {
 	PasskeysDisabled bool     `toml:"passkeys_disabled"`
@@ -629,7 +641,7 @@ func Defaults() Config {
 			Watch:    true,
 			Debounce: Duration{Duration: defaultReloadDebounce},
 		},
-		Insights: Insights{Findings: DefaultInsightFindings()},
+		Insights: Insights{Enabled: true, Findings: DefaultInsightFindings()},
 	}
 }
 

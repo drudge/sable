@@ -218,6 +218,13 @@ a network where it cannot see client hardware addresses, then names devices
 and follows their rotating IPv6 addresses the way the lead does. A replica on
 an older release ignores what it is handed.
 
+Going the other way, each replica tells the lead every five minutes which
+client addresses asked it something lately. That lets the lead's Insights tell
+a device that only uses one node from a device that
+[doesn't use Sable](guides/insights.md#devices-that-dont-use-sable) at all. The
+lead holds that finding back until every replica has reported, so a replica on
+an older release, which never reports, keeps it from appearing.
+
 ## Planned primary handoff
 
 Use a planned handoff for maintenance when both nodes are healthy:

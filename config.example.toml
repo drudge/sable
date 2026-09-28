@@ -110,6 +110,11 @@ batch_size = 256
 flush_interval = "250ms"
 retention = "30d"
 
+# Insights records which devices use Sable and what hardware they are, and
+# flags changes. Set enabled = false to stop all of it and hide Insights.
+# [insights]
+# enabled = true
+#
 # What Insights does with each kind of finding. Each table is named for the
 # kind: went_quiet is devices.went-quiet. mode is "alert" to show it and send
 # each new one as an alert, "show" to only show it, or "off" to stop looking for
@@ -249,6 +254,9 @@ sources = ["reservations", "active"]
 # the risk with tls_insecure.
 tls_ca_file = ""
 tls_insecure = false
+# Read the controller's clients for Insights even with no network mapped
+# below, so Sable can point out devices that never use it for DNS.
+find_devices = false
 
 # One mapping per UniFi network. Records land in the mapped zone and are owned
 # by the synchronizer, so hand-authored records in the same zone are never
@@ -280,7 +288,7 @@ secret_key_file = "data/sable.key"
 # while it is paused.
 # tools lists the tools assistants are offered. These everyday tools are on
 # by default; create_zone, delete_zone, the tools that change block lists,
-# and search_queries wait to be added. A token still needs each tool's grant.
+# sync_dynamic_dns, search_queries, and search_server_logs wait to be added. A token still needs each tool's grant.
 [mcp]
 configured = false
 enabled = false
@@ -288,7 +296,8 @@ tools = [
   "list_zones", "list_records", "add_record", "set_records", "update_record",
   "delete_record", "check_domain", "allow_domain", "block_domain",
   "remove_domain_rule", "list_block_lists", "lookup", "purge_cache",
-  "list_findings",
+  "list_findings", "get_version", "get_stats", "get_dynamic_dns",
+  "get_cluster_status",
 ]
 
 # Console sign-in through an OpenID Connect provider. Set this up from

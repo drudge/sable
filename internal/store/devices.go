@@ -73,6 +73,9 @@ type clientDomainKey struct{ client, name string }
 // and client-domain pair in a batch. It runs in the query log writer's
 // transaction, never on the DNS request path.
 func (store *Store) writeClientSightings(ctx context.Context, transaction *sql.Tx, events []querylog.Event) error {
+	if !store.ClientTracking() {
+		return nil
+	}
 	clients := make(map[string]*sightingSpan)
 	pairs := make(map[clientDomainKey]*sightingSpan)
 	for _, event := range events {
@@ -332,6 +335,31 @@ func (store *Store) clientSightings(ctx context.Context) (map[string]sightingSpa
 	return spans, rows.Err()
 }
 
+// ClientLastLookups returns, for each client address that sent a query at or
+// after since, when it last did.
+func (store *Store) ClientLastLookups(ctx context.Context, since time.Time) (map[string]time.Time, error) {
+	rows, err := store.database.QueryContext(ctx,
+		"SELECT client_key, last_seen FROM sable_client_seen WHERE last_seen >= "+store.placeholder(1), since.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("read client last lookups: %w", err)
+	}
+	defer rows.Close()
+	last := make(map[string]time.Time)
+	for rows.Next() {
+		var client string
+		var moment any
+		if err := rows.Scan(&client, &moment); err != nil {
+			return nil, fmt.Errorf("scan client last lookup: %w", err)
+		}
+		seen, err := databaseTime(moment)
+		if err != nil {
+			return nil, fmt.Errorf("read client last lookup: %w", err)
+		}
+		last[client] = seen.UTC()
+	}
+	return last, rows.Err()
+}
+
 func scanSpan(first, last any) (sightingSpan, error) {
 	firstSeen, err := databaseTime(first)
 	if err != nil {
@@ -490,7 +518,11 @@ func (store *Store) clientWindowIndex(ctx context.Context, clients []string, sin
 
 // RecordClientIdentities remembers which hardware address each client address
 // belonged to, so history can be tied to a device after its address changes.
+// With client tracking off it keeps nothing.
 func (store *Store) RecordClientIdentities(ctx context.Context, identities []querylog.ClientIdentity) error {
+	if !store.ClientTracking() {
+		return nil
+	}
 	rows := make([][]any, 0, len(identities))
 	for _, identity := range identities {
 		address := queryLogClientKey(identity.Address)

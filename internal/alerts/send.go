@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -56,6 +57,12 @@ func Post(ctx context.Context, client *http.Client, destination config.AlertDest
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		// A webhook's URL is its password, and a failed request would name it
+		// in the runtime log and on the Alerts page.
+		var failed *url.Error
+		if errors.As(err, &failed) {
+			err = failed.Err
+		}
 		return "", fmt.Errorf("post alert: %w", err)
 	}
 	defer response.Body.Close()

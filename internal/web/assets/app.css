@@ -1020,6 +1020,10 @@ dialog[open]::backdrop {
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
+/* The dialog already pads its edges, so the body lines up with the title
+   instead of padding again. A body inside a form keeps its gap to the footer. */
+.confirmation-dialog .isotope-dialog-body { overflow: visible; padding: 0; }
+.confirmation-dialog > form { display: grid; gap: 1rem; }
 /* The rankings dialog borrows the shared dialog chrome but lays its own rows
    out edge to edge, so it has to land after the base rules to keep them. */
 .top-stats-dialog { width: min(54rem, calc(100vw - 2rem)); max-width: 54rem; max-height: 85vh; padding: 0; overflow: hidden; }
@@ -1777,6 +1781,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* The wizard's tool list follows the group permission picker: a checkbox per
    tool with the grant it needs pushed to the right, and no inner scrolling. */
 .mcp-tool-sections .permission-surface .permission-checks { max-height: none; overflow: visible; border-bottom: 0; padding-bottom: 0; }
+/* Rows sit flush, their padding keeping them apart, so both rows of sections
+   fit a laptop window without scrolling. */
+.mcp-tool-sections .permission-checks { gap: 0; }
 .mcp-tool-sections .permission-checks label { align-items: center; padding: .3rem .45rem; }
 .mcp-tool-sections .permission-checks input { margin: 0; }
 .mcp-tool-sections .mcp-tool-grant { margin-left: auto; color: var(--muted-foreground); font-size: .625rem; white-space: nowrap; }
@@ -1855,7 +1862,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* A checkbox is a row, not a stack: the shared label rule would put the box on
    its own line with its text underneath. */
 .sso-wizard-dialog label.checkbox { display: flex; align-items: center; gap: 0.5rem; font-weight: 400; }
-.sso-wizard-dialog label.checkbox input { width: auto; margin: 0; }
+.sso-wizard-dialog label.checkbox input { margin: 0; }
 .sso-field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.8rem; }
 /* The shared label rule uses a child combinator, so a label nested one level
    down inside a field row matches nothing and renders unstyled. */
@@ -2781,6 +2788,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .setting-switch-row input[type=checkbox]:checked::after, .alert-watch-switch input[type=checkbox]:checked::after { transform: translateX(1.25rem); }
 .setting-switch-row:has(input:disabled) { cursor: not-allowed; opacity: .58; }
 .setting-switch-row input[type=checkbox]:disabled, .alert-watch-switch input[type=checkbox]:disabled { cursor: not-allowed; }
+.settings-insights { display: grid; gap: .75rem; }
+.settings-insights-data { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.settings-insights-data p { margin: 0; color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
+.settings-insights-data strong { color: var(--foreground); font-weight: 600; }
+.settings-insights-data .button { display: inline-flex; align-items: center; gap: .4rem; }
+.isotope-dialog-body > .settings-insights-delete { display: flex; align-items: center; gap: .55rem; font-size: .85rem; font-weight: 400; cursor: pointer; }
 .protocol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .protocol-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .protocol-setting { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
@@ -3305,6 +3318,16 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.isotope-form-dialog.alert-destination-dialog { width: calc(100% - 1rem); }
 	.group-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.permission-surface-grid { grid-template-columns: 1fr; }
+	/* A phone has no room for a title and the quick picks side by side, so the
+	   picks go under the title, lined up with it. */
+	.mcp-tool-sections .permission-surface > header { flex-direction: column; align-items: flex-start; gap: .35rem; }
+	.mcp-tool-sections .permission-bulk-actions { margin-left: -.35rem; }
+	/* The dialog's own padding is enough on a phone. Without the step panel's
+	   and some of the cards' padding, tool names such as get_cluster_status fit
+	   on one line. */
+	.mcp-setup-form > .dialog-tab-panel { padding-inline: 0; }
+	.mcp-tool-sections .permission-surface { padding-inline: .75rem; }
+	.mcp-tool-sections .permission-checks label { padding-inline: .3rem; }
 	.user-edit-dialog { width: calc(100% - 1rem); max-height: calc(100vh - 1rem); }
 	.user-edit-dialog > .dialog-header { padding-inline: 1rem; }
 	.dialog-tab-list { margin-inline: 1rem; }
@@ -3885,6 +3908,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .dark .insight-findings-empty > span { color: #22c55e; }
 .insight-findings-empty > span .nav-icon { width: 1.15rem; height: 1.15rem; }
 .insight-findings-empty strong, .insight-section-empty strong { font-size: .875rem; }
+/* A finding's link that cannot open is neither good nor bad news. */
+.insight-link-missing { min-height: 16rem; }
+.insight-link-missing > span, .dark .insight-link-missing > span { background: var(--muted); color: var(--muted-foreground); }
 .insight-findings-empty p, .insight-section-empty p { max-width: 30rem; margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
 .insight-section-empty > .nav-icon { width: 1.25rem; height: 1.25rem; margin-bottom: .35rem; color: var(--muted-foreground); }
 .insight-section-empty .button { margin-top: .5rem; }
@@ -4485,3 +4511,13 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .mcp-grant-coverage[data-matched] .mcp-grant-coverage-icon { display: contents; }
 .mcp-grant-coverage-icon .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
 .dark .mcp-grant-coverage-icon .nav-icon { color: #22c55e; }
+
+/* One checkbox everywhere. A native box in the light dark-mode accent color
+   gets a dark contrast ring around it, so the box and its check are drawn
+   instead. Switches keep their own track, including the older .switch ones
+   that hide a plain checkbox under a drawn track. */
+input[type="checkbox"]:not([role="switch"], .switch > input) { position: relative; box-sizing: border-box; width: 1rem; min-width: 1rem; height: 1rem; min-height: 1rem; appearance: none; border: 1px solid var(--muted-foreground); border-radius: .25rem; background: transparent; box-shadow: none; padding: 0; cursor: pointer; }
+input[type="checkbox"]:not([role="switch"], .switch > input):checked { border-color: var(--primary); background: var(--primary); }
+input[type="checkbox"]:not([role="switch"], .switch > input):checked::after { position: absolute; inset: 0; background: var(--primary-foreground); content: ""; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; }
+input[type="checkbox"]:not([role="switch"], .switch > input):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: not-allowed; opacity: .5; }

@@ -26,6 +26,7 @@ Insights reports:
 - **Talking somewhere new.** An appliance, such as a camera, doorbell, or TV, that started calling services it never used. A laptop doing the same is ordinary and is not reported.
 - **Started using a new app.** A device that began using an app, such as Discord or Zoom, it had not used before.
 - **Checks in on a schedule.** A name only one device looks up, again and again, at a steady interval through the night. This is how a smart device's heartbeat looks, and also how software phoning home looks.
+- **Devices that don't use Sable.** Devices UniFi shows online and busy that never sent Sable a lookup, and networks whose DHCP hands out other DNS servers. See [Devices that don't use Sable](#devices-that-dont-use-sable).
 - **Blocking findings.** Names that were blocked before you allowed them, block lists that stopped updating, and lists that add little of their own.
 
 **Top Apps** and **Busiest Devices** rank the whole network for the selected range. Open an app to see the domains it used, each linked to its queries, and the devices that used it. Open a device to see its details.
@@ -42,7 +43,7 @@ Open a device to see its maker, apps, busiest domains, and first-time domains.
 
 ### Find a device
 
-Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, or unnamed. The page's address keeps the search and filters, so they last through a range change or a reload.
+Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, unnamed, or not using Sable. The page's address keeps the search and filters, so they last through a range change or a reload.
 
 **Search Devices** in the command palette opens the list with your search already in place.
 
@@ -59,6 +60,25 @@ Sable names the maker from the device's hardware address and guesses its type fr
 When a guess is wrong, use the pencil beside it and choose the right type. The first choice, marked **(detected)**, hands the decision back to Sable. Your correction is kept against the hardware address, like a name.
 
 Devices with a private, randomized hardware address have no maker, so their type rests on their name and the services they use.
+
+### Devices that don't use Sable
+
+With [UniFi](unifi.md) connected, Insights compares what UniFi says is online with what asks Sable. A device that UniFi shows connected and passing traffic for the last 24 hours, with no lookup from any of its addresses, doesn't use Sable. It may have DNS set by hand, like a TV with `8.8.8.8` built in, or use a VPN or DNS over HTTPS. Either way, blocking, logging, and Insights can't see it.
+
+Insights lists every such device in one finding, **Not using Sable**, so a new one can alert. The Devices tab lists them too, under **Not Using Sable**, and each one's drawer says so. Insights also reports a network whose DHCP hands out a DNS server that isn't Sable, such as a guest network handing out `1.1.1.1`.
+
+Sable checks every address tied to a device before calling it silent: the ones UniFi lists, including every IPv6 address it has seen, any address Sable has seen with the device's hardware address, and IPv6 addresses built from it. On a cluster, a lookup to any node counts, so the finding waits until every node has reported. Two things keep it from blaming devices wrongly:
+
+- **Gateway forwarding.** When a network's DHCP hands out the UniFi gateway and the gateway forwards to Sable, every lookup arrives as the gateway's. Insights leaves that network's devices out and says so in a separate finding instead.
+- **Devices that are supposed to be quiet.** Use **That's Normal** on the finding to mark every device it lists. A device you haven't marked brings the finding back. Marked devices are listed under the findings card, where **Show Again** undoes it.
+
+Change how long a device must stay silent in [Insights Settings](#choose-what-insights-shows-and-alerts). Sable needs a day of UniFi readings before it can tell traffic across the whole window, so a new setup reports nothing for the first day.
+
+## Share a finding, device, or app
+
+Each finding, device, and app has its own address while its drawer is open, such as `/insights/devices/mac:3c:22:fb:01:02:03?range=week`. Use **Copy Link** in the drawer to copy it, bookmark it, or send it to someone who can open Insights. The link keeps the time range. Browser **Back** closes the drawer, and **Forward** opens it again.
+
+A link to a finding opens it only while Insights still shows it. If the finding has cleared up, been hidden, or falls outside the range, the drawer says so. A link to a device's IP address opens the device that address belongs to now, even after Sable learns its hardware address.
 
 ## Hide what you have seen
 
@@ -88,9 +108,33 @@ You can also set these in `sable.toml`; see [Devices and Insights](../configurat
 
 ## Get alerts
 
-Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
+Sable can send each new finding worth a look to your phone, a chat channel, a webhook, or your browser, and it skips anything you hid. Each alert's **Open Finding** button opens that finding in Insights. Set up where alerts go in **Settings > Alerts**. See [Get alerts](alerts.md).
 
 The bell beside **Settings** shows whether Insights alerts are **On**, **Paused**, or **Off**. Hover over it to see why, or click it to open **Settings > Alerts**.
+
+## What Insights collects
+
+Insights keeps a few things beyond the query log, all in Sable's own database on this server:
+
+- **When each device was first and last seen,** overall and for each name it looked up.
+- **The hardware behind each address,** read once a minute from the server's neighbor table and, when [UniFi](unifi.md) is set up, from the controller. With a cluster, the node that leads hands these to the other nodes.
+- **The findings you hid or snoozed.**
+
+It does not touch the query log itself (that is **Settings > Logging**), the numbers on the dashboard, the names and types you gave devices, or the records UniFi publishes.
+
+## Turn Insights off
+
+Turn off **Insights** in **Settings > General** to stop all of it. Sable asks once, with **Also delete what Insights has collected** checked. While it is off:
+
+- Sable stops recording which devices it sees and what hardware they are, and stops looking for findings.
+- Insights leaves the sidebar and the command palette, and the Insights alerts in **Settings > Alerts** fold away.
+- The dashboard names clients only from the names you gave them, local hosts, and reverse DNS. Names from UniFi and the neighbor table go away.
+- The MCP `list_findings` tool says Insights is off.
+- In a cluster, every node follows the primary, and each deletes its own copy when the primary does.
+
+**Delete Insights Data** under the switch deletes what Insights holds without turning it off. Both are recorded in the audit log.
+
+Turning Insights back on starts fresh. It does not fill device history in from the query log still there, and for the first hour it treats devices it has not seen yet as ones that may have been there all along.
 
 ## Blocking
 
