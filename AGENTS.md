@@ -39,7 +39,8 @@ Use the mage targets. They set `GOEXPERIMENT=jsonv2`, so set it yourself when yo
 | `go tool mage verify` | Checks generated files, runs every test, and runs `go vet` |
 | `go tool mage race` | Runs the tests with the race detector |
 | `go tool mage bench` | Runs the DNS, storage, and blocking benchmarks |
-| `go tool mage devDemo` | Runs the Vandelay demo with live rebuilds at http://localhost:5391 |
+| `go tool mage devDemo` | Runs the Vandelay demo with hot reload; open http://localhost:5381 |
+| `go tool mage dev` | Runs one server from your own `sable.toml` with hot reload; open http://localhost:5381 |
 
 Before every push, run `go tool mage verify` and `gofmt -l .`. `gofmt -l .` must print nothing. `verify` doesn't check formatting, but CI does.
 
@@ -68,9 +69,13 @@ A browser test must pass on a slow CI machine too. Wait for the request or state
 ## The Vandelay demo
 
 Check UI work in the demo, not in a custom seed.
-- `go tool mage devDemo` signs you in on its own. Stay on `localhost`; `127.0.0.1` shows the sign-in page because the cookie is per host.
-- It rebuilds on any `.go`, `.templ`, `.css`, or `.js` save, which takes about a minute, so finish a batch of edits before you look.
-- It uses ports 5391-5393, 5491-5493, and 8555-8557. If another demo already holds them, don't stop it. Run yours on other ports instead:
+- `go tool mage devDemo` runs the demo under Air, which gives you hot reload. Saving a `.go`, `.templ`, `.css`, or `.js` file regenerates the templ components, rebuilds, and restarts the demo with its data kept.
+- Open http://localhost:5381, Air's proxy in front of the demo, and the page reloads itself after each rebuild. The demo answers directly at http://localhost:5391, but there you reload by hand.
+- A rebuild can take up to a minute, so finish a batch of edits before you look.
+- The reload works because mage hands the demo the hash of Air's reload script, and the console's Content Security Policy lets that one inline script run. Any other inline script is still blocked, just as in production.
+- The demo signs you in on its own. Stay on `localhost`; `127.0.0.1` shows the sign-in page because the cookie is per host.
+- `go tool mage dev` does the same for a single server using your own `sable.toml`, which isn't in the repository. Air expects that server on port 5380. Both targets use port 5381 for the proxy, so run only one at a time.
+- The demo uses ports 5381, 5391-5393, 5491-5493, and 8555-8557. If another demo already holds them, don't stop it. Run yours on other ports instead:
   1. Change `8555+index` in `scripts/demo/main.go` to another range.
   2. Pass `-base-port`.
   3. Revert the file.
