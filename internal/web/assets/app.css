@@ -1859,7 +1859,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 /* A checkbox is a row, not a stack: the shared label rule would put the box on
    its own line with its text underneath. */
 .sso-wizard-dialog label.checkbox { display: flex; align-items: center; gap: 0.5rem; font-weight: 400; }
-.sso-wizard-dialog label.checkbox input { width: auto; margin: 0; }
+.sso-wizard-dialog label.checkbox input { margin: 0; }
 .sso-field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.8rem; }
 /* The shared label rule uses a child combinator, so a label nested one level
    down inside a field row matches nothing and renders unstyled. */
@@ -2791,12 +2791,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .settings-insights-data strong { color: var(--foreground); font-weight: 600; }
 .settings-insights-data .button { display: inline-flex; align-items: center; gap: .4rem; }
 .isotope-dialog-body > .settings-insights-delete { display: flex; align-items: center; gap: .55rem; font-size: .85rem; font-weight: 400; cursor: pointer; }
-/* Drawn by hand: a native checkbox in a light accent color gets a dark
-   contrast ring around it in dark mode. */
-.isotope-dialog-body > .settings-insights-delete input { position: relative; width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; appearance: none; border: 1px solid var(--input); border-radius: .25rem; background: transparent; padding: 0; cursor: pointer; }
-.isotope-dialog-body > .settings-insights-delete input:checked { border-color: var(--primary); background: var(--primary); }
-.isotope-dialog-body > .settings-insights-delete input:checked::after { position: absolute; top: .1rem; left: .28rem; width: .25rem; height: .5rem; border: solid var(--primary-foreground); border-width: 0 .125rem .125rem 0; content: ""; transform: rotate(45deg); }
-.isotope-dialog-body > .settings-insights-delete input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .protocol-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .protocol-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .protocol-setting { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; }
@@ -4481,3 +4475,13 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .mcp-grant-coverage[data-matched] .mcp-grant-coverage-icon { display: contents; }
 .mcp-grant-coverage-icon .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; color: #16a34a; }
 .dark .mcp-grant-coverage-icon .nav-icon { color: #22c55e; }
+
+/* One checkbox everywhere. A native box in the light dark-mode accent color
+   gets a dark contrast ring around it, so the box and its check are drawn
+   instead. Switches keep their own track, including the older .switch ones
+   that hide a plain checkbox under a drawn track. */
+input[type="checkbox"]:not([role="switch"], .switch > input) { position: relative; box-sizing: border-box; width: 1rem; min-width: 1rem; height: 1rem; min-height: 1rem; appearance: none; border: 1px solid var(--muted-foreground); border-radius: .25rem; background: transparent; box-shadow: none; padding: 0; cursor: pointer; }
+input[type="checkbox"]:not([role="switch"], .switch > input):checked { border-color: var(--primary); background: var(--primary); }
+input[type="checkbox"]:not([role="switch"], .switch > input):checked::after { position: absolute; inset: 0; background: var(--primary-foreground); content: ""; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; }
+input[type="checkbox"]:not([role="switch"], .switch > input):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: not-allowed; opacity: .5; }
