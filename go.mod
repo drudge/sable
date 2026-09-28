@@ -7,7 +7,7 @@ toolchain go1.27.1
 require (
 	github.com/a-h/templ v0.3.1020
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/fxamacker/cbor/v2 v2.9.3
+	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/go-webauthn/webauthn v0.18.1
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/miekg/dns v1.1.73
@@ -19,7 +19,7 @@ require (
 	golang.org/x/net v0.59.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
-	modernc.org/sqlite v1.58.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
