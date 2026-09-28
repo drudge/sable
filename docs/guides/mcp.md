@@ -24,14 +24,14 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
+| `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
+| `search_queries` | Off | Each device's DNS lookups | `logs.read` |
+| `search_server_logs` | Off | Sable's runtime log, by level, text, and time | `logs.read` |
 | `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
 | `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
 | `get_dynamic_dns` | On | Your public addresses, the records Dynamic DNS keeps up to date, and its last error | `settings.read` |
 | `sync_dynamic_dns` | Off | Updates the Dynamic DNS records now | `settings.write` |
 | `get_cluster_status` | On | Which node leads, which are online and caught up, their versions and problems, and any rolling update | `cluster.read` |
-| `list_findings` | On | What Insights noticed, with its evidence | `logs.read` |
-| `search_queries` | Off | Each device's DNS lookups | `logs.read` |
-| `search_server_logs` | Off | Sable's runtime log, by level, text, and time | `logs.read` |
 
 `add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 

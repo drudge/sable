@@ -41,7 +41,7 @@ var mcpServerLogTool = mcpTool{
 	call:        (*Server).mcpSearchServerLogs,
 	// Log lines name devices and what they looked up, so like the query log
 	// this is off until an operator adds it.
-	section: "insights",
+	section: "lookups",
 	grant:   "logs.read",
 }
 
