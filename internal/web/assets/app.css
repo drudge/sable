@@ -3226,6 +3226,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-policy-actions form { display: inline-flex; }
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
+.query-detail-policy-actions .button { white-space: nowrap; }
+/* With Block showing, a query has four actions. Like a cluster node's, they
+   take their own row above Close, and pair up on a phone. */
+.query-detail-footer:has(> .query-detail-policy-actions > [data-query-detail-policy="block"]:not([hidden])) { flex-wrap: wrap; }
+.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { order: -1; display: grid; width: 100%; grid-template-columns: repeat(4, auto); justify-content: end; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: 1.25rem; }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3323,6 +3328,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-footer > .button { display: none; }
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
+	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { grid-template-columns: 1fr 1fr; }
+	.query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) .button { width: 100%; }
 }
 
 @media (max-width: 700px) {
