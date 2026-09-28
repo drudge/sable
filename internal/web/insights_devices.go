@@ -211,7 +211,8 @@ func (server *Server) insightsDevicePanel(writer http.ResponseWriter, request *h
 func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key, edit, message, errorMessage string) {
 	view := pages.InsightDeviceDrawerView{
 		Range: window.Range, TimeDisplay: console.TimeDisplay, CanName: console.CanWriteSettings,
-		Editing: edit == "1" && console.CanWriteSettings, EditingType: edit == "type" && console.CanWriteSettings,
+		CanWatch: console.CanWriteSettings && server.alerts != nil,
+		Editing:  edit == "1" && console.CanWriteSettings, EditingType: edit == "type" && console.CanWriteSettings,
 		Message: message, Error: errorMessage,
 	}
 	reader, ok := server.queries.(deviceInsightReader)

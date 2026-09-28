@@ -48,13 +48,14 @@ const (
 	AlertGroupBackups      = "backups"
 	AlertGroupServer       = "server"
 	AlertGroupSignIns      = "sign_ins"
+	AlertGroupWatches      = "watches"
 )
 
 // AlertGroupNames lists every alert group in the order the console shows them.
 func AlertGroupNames() []string {
 	return []string{
 		AlertGroupInsights, AlertGroupCluster, AlertGroupUpdates, AlertGroupIntegrations,
-		AlertGroupBackups, AlertGroupServer, AlertGroupSignIns,
+		AlertGroupBackups, AlertGroupServer, AlertGroupSignIns, AlertGroupWatches,
 	}
 }
 
@@ -89,6 +90,8 @@ type Alerts struct {
 	// Destinations are where alerts go. Their URLs, keys, and header values
 	// live in the encrypted vault, not in this file.
 	Destinations []AlertDestination `toml:"destinations,omitempty"`
+	// Watches alert when a device looks up a domain someone picked.
+	Watches []AlertWatch `toml:"watches,omitempty"`
 }
 
 // AlertSwitches turns whole groups of alerts on or off.
@@ -103,6 +106,7 @@ type AlertSwitches struct {
 	// Server covers certificate renewals, secondary zones, and DNSSEC keys.
 	Server  bool `toml:"server"`
 	SignIns bool `toml:"sign_ins"`
+	Watches bool `toml:"watches"`
 }
 
 // Allows reports whether alerts of a group are on. Problem marks an alert
@@ -123,6 +127,8 @@ func (switches AlertSwitches) Allows(group string, problem bool) bool {
 		return switches.Server
 	case AlertGroupSignIns:
 		return switches.SignIns
+	case AlertGroupWatches:
+		return switches.Watches
 	default:
 		return false
 	}
@@ -350,6 +356,12 @@ func (configuration *Config) normalizeAlerts() {
 	if alerts.SignIns.Within.Duration == 0 {
 		alerts.SignIns.Within.Duration = defaultAlertSignInsWithin
 	}
+	for index := range alerts.Watches {
+		alerts.Watches[index].Normalize()
+	}
+	if len(alerts.Watches) == 0 {
+		alerts.Watches = nil
+	}
 }
 
 func validateAlerts(alerts Alerts) error {
@@ -401,7 +413,7 @@ func validateAlerts(alerts Alerts) error {
 	if within := alerts.SignIns.Within.Duration; within < minimumAlertSignInsWithin || within > maximumAlertSignInsWithin {
 		return fmt.Errorf("alerts.sign_ins.within must be between 1 minute and 24 hours")
 	}
-	return nil
+	return validateAlertWatches(alerts.Watches)
 }
 
 func validateAlertHeaders(field string, headers []AlertHeader) error {

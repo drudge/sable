@@ -530,6 +530,9 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		TSIGAlgorithms: tsig.Algorithms(),
 	}
 	view.Alerts = server.alertsView(request.Context(), view.Console)
+	if view.Alerts.Available && view.Alerts.CanEdit {
+		view.Alerts.OpenWatch = alertWatchOpenURL(request.URL.Query())
+	}
 	if server.certificates != nil {
 		status := server.certificates.Status(request.Context(), configuration.EncryptedDNS)
 		view.ACMECredentialsConfigured = status.CredentialsConfigured

@@ -585,7 +585,7 @@ func Defaults() Config {
 		Alerts: Alerts{
 			Send: AlertSwitches{
 				Insights: true, Cluster: true, Updates: true, Integrations: true,
-				Backups: AlertBackupsFailures, Server: true,
+				Backups: AlertBackupsFailures, Server: true, Watches: true,
 			},
 			SignIns: AlertSignIns{After: defaultAlertSignInsAfter, Within: Duration{Duration: defaultAlertSignInsWithin}},
 		},

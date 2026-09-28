@@ -50,9 +50,25 @@ Each destination in the list shows its last send, or its last error, since Sable
 - **Integrations** is UniFi sync and dynamic DNS.
 - **Backups** sends **Failures Only**, **Every Backup**, or nothing when **Off**.
 - **Server Health** is certificate renewals, secondary zones, and DNSSEC keys.
+- **Domain Watches** is a device looking up a domain you picked. See [Watch domains](#watch-domains).
 - **Failed Sign-Ins** is off unless you turn it on. Sable sends one alert when a node sees as many failed sign-ins as you set within the minutes you set, 5 within 10 to start.
 
 Problems, such as a node going down or a backup failing, go out at high priority on ntfy, Pushover, and browsers.
+
+## Watch domains
+
+A watch alerts when a device looks up a domain you pick, such as a game on a child's tablet or a site you know is bad. Select **Add Watch** under **Watches**:
+
+- **Domains** are one per line. Names under each one count too, so `discord.com` also covers `gateway.discord.com`, as blocking rules do.
+- **Devices** is **Any Device**, or **Only These Devices**: pick them from the devices Insights knows, or type addresses and networks such as `10.0.7.20` or `10.0.7.0/24`. A device picked from the list is followed across address changes. With Insights off, Sable keeps no devices, so watches pick them by address and network only.
+- **When** alerts on lookups that were **Allowed or Blocked**, **Only When Allowed**, or **Only When Blocked**.
+- **Quiet For** is how long the same device stays quiet for that watch after an alert: 15 minutes, 1 hour (the default), 6 hours, or 24 hours.
+
+The alert names the watch and the device, the names it looked up, how many times, and whether blocking stopped them, with a button that opens those lookups in Query Logs. Each row in **Watches** has a switch to turn it off without removing it, and says when it last alerted.
+
+The fastest way to start one is **Watch** in a query's details in Query Logs, or the eye beside a domain in a device's details in Insights. Either opens **Add Watch** with the domain and the device filled in.
+
+Sable checks the query log for new lookups about once a minute, away from answering DNS, so watches never slow a lookup down. They need the query log on. In a cluster, every node checks its own lookups and the lead weighs them together, so a device that asks two nodes still alerts once. A lookup seen only by a replica takes a minute or two longer.
 
 ## Pause alerts
 

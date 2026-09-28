@@ -183,6 +183,10 @@ almost everything:
   these to the lead in their heartbeats, once a minute or as soon as they
   change. If a replica stops reporting, its alerts stop counting as news
   after three minutes.
+- **Domain watches**. Each replica reads its own query log for watched names
+  and hands the lookups to the lead in the same heartbeat. The lead weighs them
+  with its own, so a device that asks two nodes alerts once, naming every node
+  that saw it.
 
 The lead cannot report that it stopped answering, so replicas watch it. When
 the lead has been out of reach for five minutes, the replica with the lowest

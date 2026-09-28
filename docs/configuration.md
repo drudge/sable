@@ -827,6 +827,7 @@ integrations = true
 backups = "failures"
 server = true
 sign_ins = false
+watches = true
 
 [alerts.sign_ins]
 after = 5
@@ -842,6 +843,15 @@ sends = ["cluster", "sign_ins"]
 id = "chat"
 name = "Home Slack"
 format = "slack"
+
+[[alerts.watches]]
+id = "kids-games"
+name = "Kids' games"
+domains = ["roblox.com", "discord.com"]
+devices = ["mac:aa:bb:cc:dd:ee:ff", "10.0.7.0/24"]
+result = "any"
+quiet = "1h"
+enabled = true
 ```
 
 Sable sends each new alert once to every destination that wants its type, and
@@ -854,7 +864,8 @@ look. `cluster` is a node going down and coming back, and update rollouts.
 `backups` is `"failures"` (the default), `"all"` to hear about every finished
 backup too, or `"off"`. `server` is certificate renewals, secondary zones, and
 DNSSEC keys. `sign_ins` is off by default; `[alerts.sign_ins]` sends one alert
-when `after` sign-ins fail on one node within `within`. Problems, such as a
+when `after` sign-ins fail on one node within `within`. `watches` is a device
+looking up a domain in one of the `[[alerts.watches]]`. Problems, such as a
 node down or a failed backup, go out at high priority on ntfy, Pushover, and
 browsers.
 
@@ -888,6 +899,19 @@ older release's `[insights.webhook]`, move to the vault the next time Sable
 starts, and the file is written back without them. Only the `json` and `text`
 formats send headers, such as `Authorization` for a protected ntfy topic; Sable
 sets `Host`, `Content-Length`, `Transfer-Encoding`, and `Connection` itself.
+
+Each `[[alerts.watches]]` entry alerts when a device looks up one of its
+`domains` or a name under one. `devices` limits it to Insights devices
+(`mac:` or `ip:` keys, as Insights names them), addresses, or networks; leave
+it out to watch every device. With `[insights] enabled = false` Sable records
+no hardware, so only addresses and networks match. `result` is `"any"` (the default), `"allowed"`,
+or `"blocked"`. After an alert, the same device stays quiet for that watch for
+`quiet`, from 1 minute to 24 hours and an hour by default. `enabled = false`
+keeps a watch without alerting. `id` names it in its alerts, so renaming it
+changes only `name`. Sable keeps up to 50 watches of up to 100 domains and 50
+devices each. Every node reads its own query log for watched names once a
+minute, so watches need `[query_log]` on; a replica hands what it saw to the
+lead in its heartbeat, and the lead sends one alert per watch and device.
 
 When a destination is added, Sable takes stock of what it already knows without
 sending it, so a new destination never gets old news. `paused = true` stops

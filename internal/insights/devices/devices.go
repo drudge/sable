@@ -171,6 +171,15 @@ func (given GivenNames) Address(address string) string {
 	return name
 }
 
+// Key returns the key of the device behind one client address, as Build keys
+// it.
+func (given GivenNames) Key(address string) string {
+	if mac, _, found := given.hardware(address); found {
+		return "mac:" + mac
+	}
+	return "ip:" + address
+}
+
 // hardware returns the hardware address behind a client address: the one it
 // was last seen with on the network, or else the one an IPv6 address was built
 // from, which fromAddress marks.
