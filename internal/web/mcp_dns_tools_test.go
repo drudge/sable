@@ -8,6 +8,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 )
@@ -32,6 +33,9 @@ func (mcpTestStats) PurgeCacheName(string) int { return 2 }
 func (mcpTestStats) DomainPolicy(name string) dnsserver.DomainPolicy {
 	if name == "tracker.example" || strings.HasSuffix(name, ".tracker.example") {
 		return dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: "tracker.example", Sources: []string{"Hagezi Pro"}}
+	}
+	if name == "pixel.custom.example" {
+		return dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: name, Sources: []string{blockcompiler.CustomSourceName, "Hagezi Pro"}}
 	}
 	return dnsserver.DomainPolicy{Decision: querylog.PolicyNoMatch}
 }

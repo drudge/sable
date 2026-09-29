@@ -7,13 +7,16 @@ import (
 	"strings"
 	"time"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
 // domainCheck is what blocking does with one domain for a typical device.
-// The Check a domain panel and MCP's check_domain both tell it.
+// The Check a domain panel and MCP's check_domain both tell it. OnAllowList
+// and OnBlockList report an exact entry of the domain on the Blocking page's
+// Allowed or Blocked tab, not a wildcard entry or a subscribed block list.
 type domainCheck struct {
 	Domain      string
 	Policy      dnsserver.DomainPolicy
@@ -110,8 +113,14 @@ func (server *Server) checkDomainView(request *http.Request) pages.CheckDomainVi
 	view.Verdict = checkDomainVerdict(check)
 	view.Explanation = check.Explanation(func(moment time.Time) string { return pages.FormatShortDateTime(moment, display, false) })
 	view.Rule = check.Policy.Rule
-	view.Lists = check.Policy.Sources
-	view.OnAllowList, view.OnBlockList = check.OnAllowList, check.OnBlockList
+	for _, source := range check.Policy.Sources {
+		if source == blockcompiler.CustomSourceName {
+			view.CustomBlocked = true
+		} else {
+			view.Lists = append(view.Lists, source)
+		}
+	}
+	view.OnBlockList = check.OnBlockList
 	view.Zone = check.Zone
 	return view
 }
