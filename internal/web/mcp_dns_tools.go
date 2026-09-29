@@ -76,7 +76,9 @@ var mcpDNSTools = []mcpTool{
 		Name:  "check_domain",
 		Title: "Check whether a domain is blocked",
 		Description: "Say whether blocking stops a domain for a typical device, which rule and block list cause it, " +
-			"and whether the domain is on the allow or block list. Devices set to bypass blocking are never blocked. " +
+			"and whether the domain has its own exact entry among the allowed domains (on_allow_list) or the custom blocked " +
+			"domains (on_block_list), apart from any wildcard entry or subscribed block list. Devices set to bypass blocking " +
+			"are never blocked. " +
 			"Use it when an app or site will not load.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"domain": mcpString("Domain to check, for example ads.example.com."),
