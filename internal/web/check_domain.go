@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
@@ -112,7 +113,13 @@ func (server *Server) checkDomainView(request *http.Request) pages.CheckDomainVi
 	view.Verdict = checkDomainVerdict(check)
 	view.Explanation = check.Explanation(func(moment time.Time) string { return pages.FormatShortDateTime(moment, display, false) })
 	view.Rule = check.Policy.Rule
-	view.Lists = check.Policy.Sources
+	for _, source := range check.Policy.Sources {
+		if source == blockcompiler.CustomSourceName {
+			view.CustomBlocked = true
+		} else {
+			view.Lists = append(view.Lists, source)
+		}
+	}
 	view.OnBlockList = check.OnBlockList
 	view.Zone = check.Zone
 	return view

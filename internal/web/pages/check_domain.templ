@@ -39,8 +39,11 @@ type CheckDomainView struct {
 	Verdict     CheckDomainVerdict
 	Explanation string
 	Rule        string
-	// Lists are the block lists the rule is on.
-	Lists []string
+	// Lists are the block lists the rule is on. CustomBlocked says the rule is
+	// also, or only, among the custom blocked domains on the Blocking page's
+	// Blocked tab, which have no panel of their own.
+	Lists         []string
+	CustomBlocked bool
 	// OnBlockList says the domain has its own entry on the Blocked tab, so the
 	// panel doesn't offer to block it again.
 	OnBlockList bool
@@ -113,12 +116,15 @@ templ CheckDomainDrawer(view CheckDomainView) {
 					}
 				</dl>
 			}
-			if len(view.Lists) > 0 {
+			if len(view.Lists) > 0 || view.CustomBlocked {
 				<section class="query-detail-answer" aria-labelledby="check-domain-lists">
 					<h3 id="check-domain-lists">Block lists</h3>
 					<div class="check-domain-lists">
 						for _, list := range view.Lists {
 							<button class="button outline compact" type="button" { drawerOpener(BlockListDrawerLink(list))... } aria-label={ "View details for " + list }>@Icon("list")<span>{ list }</span></button>
+						}
+						if view.CustomBlocked {
+							<a class="button outline compact" href="/blocked?tab=domains">@Icon("shield-x")<span>Custom blocked domains</span></a>
 						}
 					</div>
 				</section>

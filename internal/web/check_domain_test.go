@@ -64,6 +64,15 @@ func TestCheckDomainPanel(t *testing.T) {
 		t.Error("a blocked domain offers Block")
 	}
 
+	// The custom blocked domains have no panel of their own, so they link to
+	// the Blocking page's Blocked tab beside the lists.
+	custom := getDetailsPanel(server, "/ui/blocking/check?domain=pixel.custom.example", true).Body.String()
+	expectContains(t, "custom blocked domain", custom,
+		`href="/blocked?tab=domains"`, "<span>Custom blocked domains</span>", `data-dialog-url="/blocked/lists/Hagezi%20Pro"`)
+	if strings.Contains(custom, "/blocked/lists/Custom") {
+		t.Error("the custom blocked domains open a block list panel")
+	}
+
 	open := getDetailsPanel(server, "/ui/blocking/check?domain=example.org", true).Body.String()
 	expectContains(t, "open domain", open, ">Not blocked</span>", "Nothing blocks this domain.", `name="action" value="block"`)
 	if strings.Contains(open, "query-detail-grid") {
