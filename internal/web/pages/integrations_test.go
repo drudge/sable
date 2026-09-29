@@ -8,6 +8,19 @@ import (
 	"github.com/a-h/templ"
 )
 
+// Testing the provider shows its answer in green when it answered and in red
+// when it did not, like other results in the console.
+func TestSSOCheckResultIsGreenOrRed(t *testing.T) {
+	answered := render(t, SSOCard(SSOAppView{Configured: true, Enabled: true, SecretStored: true, Check: SSOCheckView{Ran: true, Reachable: true}}))
+	if !strings.Contains(answered, `<div class="unifi-status success">`) || !strings.Contains(answered, "The provider answered") {
+		t.Errorf("a provider that answered is not shown as a success: %s", answered)
+	}
+	failed := render(t, SSOCard(SSOAppView{Configured: true, Enabled: true, SecretStored: true, Check: SSOCheckView{Ran: true, Error: "connection refused"}}))
+	if !strings.Contains(failed, `<div class="unifi-status error">`) || !strings.Contains(failed, "Could not reach the provider") {
+		t.Errorf("a provider that did not answer is not shown as an error: %s", failed)
+	}
+}
+
 func TestSSOReadOnlyCardOmitsAdministrationActions(t *testing.T) {
 	for _, configured := range []bool{false, true} {
 		markup := render(t, SSOCard(SSOAppView{Configured: configured, Enabled: true}))
