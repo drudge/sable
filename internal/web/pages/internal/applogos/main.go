@@ -1,7 +1,8 @@
 // Command applogos writes the brand marks of the apps Sable recognizes from
 // the Simple Icons package, which is released under CC0, into the table the
 // console draws app icons from. An app whose brand is not in Simple Icons is
-// left out and shows its category's icon instead.
+// left out and shows its category's icon instead, unless its mark is drawn
+// below.
 //
 //	curl -sSL https://registry.npmjs.org/simple-icons/-/simple-icons-16.32.0.tgz | tar -xz
 //	go run ./internal/web/pages/internal/applogos -icons package -out internal/web/pages/app_logos.go
@@ -80,6 +81,21 @@ var retired = map[string]retiredMark{
 	"nintendo": {Release: "13.21.0", Hex: "E60012", Path: "M14.176 24h3.674c3.376 0 6.15-2.774 6.15-6.15V6.15C24 2.775 21.226 0 17.85 0H14.1c-.074 0-.15.074-.15.15v23.7c-.001.076.075.15.226.15zm4.574-13.199c1.351 0 2.399 1.125 2.399 2.398 0 1.352-1.125 2.4-2.399 2.4-1.35 0-2.4-1.049-2.4-2.4-.075-1.349 1.05-2.398 2.4-2.398zM11.4 0H6.15C2.775 0 0 2.775 0 6.15v11.7C0 21.226 2.775 24 6.15 24h5.25c.074 0 .15-.074.15-.149V.15c.001-.076-.075-.15-.15-.15zM9.676 22.051H6.15c-2.326 0-4.201-1.875-4.201-4.201V6.15c0-2.326 1.875-4.201 4.201-4.201H9.6l.076 20.102zM3.75 7.199c0 1.275.975 2.25 2.25 2.25s2.25-.975 2.25-2.25c0-1.273-.975-2.25-2.25-2.25s-2.25.977-2.25 2.25z"},
 	// Adobe's mark left in Simple Icons 14.
 	"adobe": {Release: "13.21.0", Hex: "FF0000", Path: "M13.966 22.624l-1.69-4.281H8.122l3.892-9.144 5.662 13.425zM8.884 1.376H0v21.248zm15.116 0h-8.884L24 22.624Z"},
+}
+
+// drawnMark is a mark Simple Icons has never carried, traced for Sable from
+// the brand's own icon, which Source names: its path on a 24-unit square and
+// the color of the brand's tile.
+type drawnMark struct {
+	Source string
+	Hex    string
+	Path   string
+}
+
+// drawn are the marks of apps Simple Icons has no mark for, keyed by app.
+var drawn = map[string]drawnMark{
+	// reMarkable's mark is a slanted bar beside an arch, black on a white tile.
+	"remarkable": {Source: "the app icon on remarkable.com", Hex: "FFFFFF", Path: "M0 0 12 12V24L0 12ZM12 12C12 4.71 15.53 0 20.29 0 21.85 0 24 .46 24 .8V12C22.74 10.68 20 9.72 18.75 9.72 16.19 9.72 13.38 10.78 12 12Z"},
 }
 
 // colorMark is a mark drawn in several colors on a white tile, one path per
@@ -181,6 +197,15 @@ func generate(directory, output string) error {
 			}
 			fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q}, // Simple Icons %s, the last release with this mark\n",
 				service.ID, old.Path, color, ink, old.Release)
+			continue
+		}
+		if mark, kept := drawn[service.ID]; kept && !found {
+			color, ink, err := tile(service.ID, mark.Hex)
+			if err != nil {
+				return fmt.Errorf("%s: %w", service.ID, err)
+			}
+			fmt.Fprintf(&table, "\t%q: {Path: %q, Color: %q, Ink: %q}, // traced from %s; Simple Icons has no mark\n",
+				service.ID, mark.Path, color, ink, mark.Source)
 			continue
 		}
 		if slug == "" || !found {
