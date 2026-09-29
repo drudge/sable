@@ -40,8 +40,9 @@ type CheckDomainView struct {
 	Explanation string
 	Rule        string
 	// Lists are the block lists the rule is on.
-	Lists       []string
-	OnAllowList bool
+	Lists []string
+	// OnBlockList says the domain has its own entry on the Blocked tab, so the
+	// panel doesn't offer to block it again.
 	OnBlockList bool
 	Zone        string
 	// CanWrite offers Allow and Block.
@@ -102,16 +103,16 @@ templ CheckDomainDrawer(view CheckDomainView) {
 				<div class="query-detail-result"><span id="check-domain-verdict" class={ checkDomainVerdictClass(view.Verdict) }>{ checkDomainVerdictLabel(view.Verdict) }</span></div>
 				<p>{ view.Explanation }</p>
 			</section>
-			<dl class="query-detail-grid">
-				if view.Zone != "" {
-					<div class="query-detail-fact-wide"><dt>Answered by zone</dt><dd><a class="inline-link" href={ templ.SafeURL("/zones/" + url.PathEscape(view.Zone)) }>{ view.Zone }</a></dd></div>
-				}
-				if view.Rule != "" {
-					<div class="query-detail-fact-wide insight-fact-full"><dt>Matching rule</dt><dd><code>{ view.Rule }</code></dd></div>
-				}
-				<div class="query-detail-fact-wide"><dt>On the allow list</dt><dd>{ ifThen(view.OnAllowList, "Yes", "No") }</dd></div>
-				<div class="query-detail-fact-wide"><dt>On the block list</dt><dd>{ ifThen(view.OnBlockList, "Yes", "No") }</dd></div>
-			</dl>
+			if view.Zone != "" || view.Rule != "" {
+				<dl class="query-detail-grid">
+					if view.Zone != "" {
+						<div class="query-detail-fact-wide"><dt>Answered by zone</dt><dd><a class="inline-link" href={ templ.SafeURL("/zones/" + url.PathEscape(view.Zone)) }>{ view.Zone }</a></dd></div>
+					}
+					if view.Rule != "" {
+						<div class="query-detail-fact-wide insight-fact-full"><dt>Matching rule</dt><dd><code>{ view.Rule }</code></dd></div>
+					}
+				</dl>
+			}
 			if len(view.Lists) > 0 {
 				<section class="query-detail-answer" aria-labelledby="check-domain-lists">
 					<h3 id="check-domain-lists">Block lists</h3>

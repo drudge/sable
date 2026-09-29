@@ -66,6 +66,9 @@ func TestCheckDomainPanel(t *testing.T) {
 
 	open := getDetailsPanel(server, "/ui/blocking/check?domain=example.org", true).Body.String()
 	expectContains(t, "open domain", open, ">Not blocked</span>", "Nothing blocks this domain.", `name="action" value="block"`)
+	if strings.Contains(open, "query-detail-grid") {
+		t.Error("a domain nothing matches shows an empty set of facts")
+	}
 
 	zoned := getDetailsPanel(server, "/ui/blocking/check?domain=www.example.test", true).Body.String()
 	expectContains(t, "zone domain", zoned, ">Answered by your zone</span>", `href="/zones/example.test"`)
@@ -86,5 +89,5 @@ func TestCheckDomainPanel(t *testing.T) {
 		t.Fatalf("allowed domains = %v", configuration.snapshot.Config.Blocking.AllowedDomains)
 	}
 	expectContains(t, "allow response", allowed.Body.String(),
-		"cdn.tracker.example is now allowed.", `id="blocking-content"`, `hx-swap-oob="outerHTML"`, "<dd>Yes</dd>")
+		"cdn.tracker.example is now allowed.", `id="blocking-content"`, `hx-swap-oob="outerHTML"`, `id="check-domain-verdict"`)
 }
