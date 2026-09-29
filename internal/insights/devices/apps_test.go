@@ -26,6 +26,7 @@ func TestChangesReportAppsADeviceStartedUsing(t *testing.T) {
 			{Name: "mesu.apple.com", FirstSeen: testNow.Add(-time.Hour)},
 			// A brand's public time server is time sync, not the brand's app.
 			{Name: "time.facebook.com", FirstSeen: testNow.Add(-time.Hour)},
+			{Name: "ntp-g7g.amazon.com", FirstSeen: testNow.Add(-time.Hour)},
 			// Remote access has a finding of its own.
 			{Name: "region1.v2.argotunnel.com", FirstSeen: testNow.Add(-time.Hour)},
 		},
