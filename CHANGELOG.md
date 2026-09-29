@@ -8,6 +8,48 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0-beta.5] - 2026-09-29
+
+Sable 1.6.0-beta.5 says which range an Insights drawer covers, clears up
+the Check a Domain panel, stops a clock sync with Amazon from looking like
+shopping, and colors result notices green, amber, or red by what they mean.
+
+### Insights
+
+- Name the range in an app's, device's, or finding's drawer header, as in
+  **App · Last 30 days**, so a drawer opened from a link says which window
+  its numbers cover. An app or device with nothing in the range says "in the
+  last 30 days" instead of "in the selected period."
+- Stop saying a device started using Amazon when it only sets its clock from
+  `ntp-g7g.amazon.com`, the time server Amazon's devices fall back to. It
+  and AWS's `time.aws.com` now count as time sync.
+
+### Blocking
+
+- Drop the **On the allow list** and **On the block list** facts from the
+  Check a Domain panel. They meant the Blocking page's own **Allowed** and
+  **Blocked** tabs, not the subscribed block lists, and they said No when a
+  wildcard entry decided the domain. The verdict, its explanation, the
+  matching rule, and the block list chips already say what decided it.
+- Link a domain's **Custom blocked domains** chip to the **Blocked** tab. It
+  opened a block list panel that said **Block list not found**.
+
+### Console
+
+- Color result notices by what they mean: green for success, amber for a
+  warning, and red for a failure. Testing the single sign-on provider, on its
+  card and in its setup wizard, shows the answer in green, and so does
+  creating the MCP Server group. The MCP server's **Sign-in is off on this
+  server** and **This address is not HTTPS** warnings are amber on its card
+  and in its setup wizard alike. A failed rolling update shows its reason in
+  red, and one an operator stopped shows it in amber.
+
+### MCP
+
+- `check_domain` says what `on_allow_list` and `on_block_list` mean: an exact
+  entry among the allowed domains or the custom blocked domains, apart from
+  any wildcard entry or subscribed block list.
+
 ## [1.6.0-beta.4] - 2026-09-29
 
 Sable 1.6.0-beta.4 makes drawer buttons always fit, stops a device's clock sync
