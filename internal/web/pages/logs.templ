@@ -339,7 +339,7 @@ func queryDrawerRoute(base string) templ.Attributes {
 }
 
 templ queryDetailLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "Loading…", CloseLabel: "Close query details"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "Loading…", CloseLabel: "Close query details"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Loading query details…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
@@ -416,7 +416,6 @@ templ queryMissing(view QueryDetailView) {
 }
 
 templ queryMissingFooter(view QueryDetailView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if view.Name != "" {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			<a class="button" href={ templ.SafeURL(queryDomainSearchURL(view.Name)) }>@Icon("search")<span>Search Query Logs</span></a>
@@ -452,7 +451,6 @@ func queryWatchURL(entry QueryLogEntryView) string {
 }
 
 templ queryDetailFooter(view QueryDetailView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions" data-query-detail-policy-actions>
 		// The page's script points these at the open query.
 		@queryCopyLinkButton(ifThen(view.Loaded, QueryPath(view.Entry.ID, view.Entry.Name), ""))

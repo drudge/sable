@@ -447,7 +447,6 @@ func insightHiddenExplanation(hidden InsightHiddenFindingView) string {
 }
 
 templ insightMissingFooter(view InsightsOverviewView, missing InsightLinkedMissingView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions insight-drawer-actions">
 		if missing.Hidden != nil {
 			if missing.CanShowAgain {
@@ -924,7 +923,6 @@ templ insightNameSource(source string) {
 }
 
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	<div class="query-detail-policy-actions insight-drawer-actions">
 		if finding.Link != "" {
 			@CopyLinkButton(finding.Link)
@@ -1492,7 +1490,7 @@ templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 }
 
 templ insightDeviceLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: "Loading…", CloseLabel: "Close device details"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: "Loading…", CloseLabel: "Close device details"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Loading device details…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
@@ -1500,10 +1498,6 @@ templ insightDeviceLoading() {
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
 		</div>
 	}
-}
-
-templ insightDeviceCloseFooter() {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 }
 
 // InsightDeviceDrawer is one device's details, loaded into the open drawer.
@@ -1589,7 +1583,6 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 }
 
 templ insightDeviceFooter(view InsightDeviceDrawerView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if view.Device.Key != "" {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(InsightDevicePath(view.Device.Key, view.Range))
@@ -1671,7 +1664,6 @@ func insightDrawerRoute(route, content, param, target, loading, base string) tem
 }
 
 templ insightAppFooter(view InsightAppDrawerView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if view.App.ID != "" {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(InsightAppPath(view.App.ID, view.Range))
@@ -1680,7 +1672,7 @@ templ insightAppFooter(view InsightAppDrawerView) {
 }
 
 templ insightAppLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Title: "Loading…", CloseLabel: "Close app details"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Title: "Loading…", CloseLabel: "Close app details"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Loading app details…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>

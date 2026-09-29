@@ -483,7 +483,7 @@ type ClusterNodeProblemView struct {
 }
 
 templ clusterNodeLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "cluster-node-dialog", TitleID: "cluster-node-title", Eyebrow: "Cluster Node", Title: "Loading…", CloseLabel: "Close node details"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "cluster-node-dialog", TitleID: "cluster-node-title", Eyebrow: "Cluster Node", Title: "Loading…", CloseLabel: "Close node details"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Loading node details…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
@@ -556,7 +556,6 @@ templ ClusterNodeDetails(view ClusterNodeDrawerView) {
 }
 
 templ clusterNodeFooter(view ClusterNodeDrawerView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if !view.Missing {
 		@clusterNodeActions(view.Node, view.LocalRole, true)
 		<div class="query-detail-policy-actions insight-drawer-actions">
