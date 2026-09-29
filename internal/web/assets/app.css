@@ -3455,6 +3455,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-status.error > .nav-icon { color: var(--destructive); }
 .unifi-status.success { border-color: color-mix(in srgb, var(--metric-no-error) 45%, var(--border)); background: color-mix(in srgb, var(--metric-no-error) 8%, transparent); }
 .unifi-status.success > .nav-icon { color: var(--metric-no-error); }
+.unifi-status.warning { border-color: color-mix(in srgb, #d97706 45%, var(--border)); background: color-mix(in srgb, #d97706 8%, transparent); }
+.unifi-status.warning > .nav-icon { color: #d97706; }
 .unifi-status > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; margin-top: .1rem; }
 .unifi-status > div { display: grid; gap: .2rem; }
 .unifi-status strong { font-size: .75rem; }

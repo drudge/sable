@@ -108,7 +108,11 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
 						}
 						if view.Rollout.Error != "" {
-							<p role="alert">{ view.Rollout.Error }</p>
+							if view.Rollout.Phase == "stopped" {
+								<div class="unifi-status warning" role="status">@Icon("alert-triangle")<div><strong>Rolling update stopped</strong><span>{ view.Rollout.Error }</span></div></div>
+							} else {
+								<div class="unifi-status error" role="alert">@Icon("alert-triangle")<div><strong>Rolling update failed</strong><span>{ view.Rollout.Error }</span></div></div>
+							}
 						}
 						<ol class="cluster-update-nodes" role="list" aria-label="Node update progress">
 							for index, node := range view.Rollout.Nodes {

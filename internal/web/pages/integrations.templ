@@ -688,9 +688,9 @@ templ MCPCard(view MCPAppView) {
 		} else {
 			<div class="integration-card-body mcp-card-body">
 				if view.SecurityDisabled {
-					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Sign-in is off on this server</strong><span>Any program that can reach it can use these tools without a token.</span></div></div>
+					<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>Sign-in is off on this server</strong><span>Any program that can reach it can use these tools without a token.</span></div></div>
 				} else if !view.Secure {
-					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>Tokens would cross the network unencrypted. Set up a certificate unless the assistant runs on this server.</span></div></div>
+					<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>Tokens would cross the network unencrypted. Set up a certificate unless the assistant runs on this server.</span></div></div>
 				}
 				<div class="integration-facts mcp-facts">
 					<div class="integration-fact-address" title={ view.Address } aria-label={ "MCP address: " + view.Address }>
@@ -761,7 +761,7 @@ templ MCPAccessStep(view MCPAppView) {
 		</div>
 	</section>
 	if view.SecurityDisabled {
-		<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, so no group is needed.</span></p></div>
+		<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>Sign-in is off on this server</strong><span>Assistants connect without a token, so no group is needed.</span></div></div>
 	} else {
 		@MCPAccessGroup(view.Group)
 		@MCPAccessToken(view.Group, false)
@@ -808,7 +808,7 @@ templ MCPAccessGroup(group MCPGroupView) {
 		}
 		if group.Result != "" {
 			if group.ResultOK {
-				<p class="field-help">{ group.Result }</p>
+				<div class="unifi-status success">@Icon("check")<div><span>{ group.Result }</span></div></div>
 			} else {
 				<div class="unifi-status error">@Icon("alert-triangle")<div><span>{ group.Result }</span></div></div>
 			}
@@ -901,7 +901,7 @@ templ MCPSetupDialog(view MCPAppView) {
 						<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@CopyIcons()</button>
 					</div>
 					if !view.Secure && !view.SecurityDisabled {
-						<div class="cluster-dialog-note">@Icon("alert-triangle")<p><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></p></div>
+						<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></div></div>
 					}
 				</section>
 				<section class="wizard-panel compact mcp-client-tabs" data-dialog-tabs>
@@ -1913,7 +1913,7 @@ templ SSOWizardProviderStep(wizard SSOWizardView) {
 
 templ SSOWizardClaimsStep(wizard SSOWizardView) {
 	if wizard.Probe.Ran {
-		<div class="unifi-status">
+		<div class="unifi-status success">
 			@Icon("shield-check")
 			<div>
 				<strong>{ wizard.Probe.Issuer } answered</strong>
