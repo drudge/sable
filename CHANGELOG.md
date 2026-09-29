@@ -8,6 +8,161 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0] - 2026-09-29
+
+Sable 1.6.0 can alert you when a device looks up a domain you pick, points out
+devices that skip Sable for DNS, and lets you turn Insights off completely.
+Findings, devices, apps, queries, block lists, cluster nodes, and Settings
+sections get their own links, and a new **Check a Domain** panel says whether
+blocking stops a domain and why. The MCP server gains tools for checking on the
+server itself, and assistants pick up new tools without a restart.
+
+### Upgrading from 1.5.1
+
+- In a cluster, upgrade every node, replicas first and the lead last.
+  **Cluster → Rolling Updates** does it in that order. A replica still on 1.5.1
+  doesn't send its lookups to the lead, so domain watches miss what it saw, and
+  the lead holds back the new **Not using Sable** finding until every replica
+  can report.
+- An MCP setup that already saved its tool list keeps it, so the new server
+  tools that start on don't appear until you tick them in **Integrations → MCP
+  Server → Edit Setup**. New setups get them.
+- Restart Claude Desktop once after upgrading every node. Its MCP connection
+  started against 1.5.1, which didn't announce tool changes, so it won't hear
+  about new tools until it reconnects. After that, changes reach it on their
+  own.
+- Domain watches are a new alert type. A destination set to send only some
+  alert types needs **Domain Watches** added to get them. One that sends
+  everything gets them already.
+- The UniFi sync now skips a reservation for a device that isn't connected
+  while another connected device holds its address. On the first sync after
+  upgrading, the old name's records at that address are removed.
+
+### Alerts
+
+- Watch domains and get an alert when a device looks one up. Set watches up in
+  **Settings → Alerts → Watches**, or use **Watch** in a query's details in
+  Query Logs or beside a domain in a device's details in Insights. A watch can
+  cover any device or chosen devices, addresses, or networks, only allowed or
+  only blocked lookups, and waits a quiet time per device (an hour by default)
+  before alerting again. A device that asks more than one node alerts once.
+  Each alert opens the lookup that set it off, or a search for it when only a
+  replica logged it.
+- Keep webhook URLs and API keys out of error messages. A failed Slack,
+  Discord, ntfy, or browser push send used to show its URL, token included, on
+  the Alerts page and in the server log, and so did a failed Namecheap request.
+
+### Insights
+
+- Turn Insights off completely with a switch in **Settings → General**. Off
+  stops recording which devices Sable sees and what hardware they are, stops
+  looking for findings, and hides Insights. Turning it off can also delete what
+  Insights collected, and **Delete Insights Data** does that on its own. The
+  query log keeps working either way, and domain watches pick devices by
+  address or network instead. Turning Insights back on starts fresh.
+- Point out devices that don't use Sable for DNS. With UniFi connected, a new
+  finding lists devices that stayed connected and moved traffic but never asked
+  Sable anything, and another names networks whose DHCP hands out a different
+  DNS server. **Not Using Sable** on the Devices tab lists them. A network that
+  reaches Sable through its gateway is recognized, not blamed. To use this
+  without publishing names from UniFi, turn on **Use UniFi to find devices,
+  even if Sable doesn't publish their names** in the UniFi setup.
+- Give each finding, device, and app its own link, such as
+  `/insights/devices/mac:3c:22:fb:01:02:03?range=week`. Use **Copy Link** in
+  its details to share it. Back closes the details and Forward opens them
+  again. A link to a finding that isn't showing says whether you hid it, with
+  **Show Again**, or offers a longer range. Insights alerts now open their
+  finding.
+- Name the range in the header of a finding's, device's, or app's details, as
+  in **App · Last 30 days**, so details opened from a link say which window
+  their numbers cover.
+- Recognize devices and apps more reliably. A device that sets its clock from
+  a large company's public time server now counts as time sync, not as starting
+  to use that company's app. Sable also knows more of the servers devices talk
+  to, and shows more app logos.
+- Keep a device's name steady. A reservation left behind for a retired machine
+  could flip a device between its current name and an old one.
+
+### Query Logs
+
+- Give each query its own link, with **Copy Link** in its details. A query too
+  old to still be in the log says so, and searches Query Logs for its domain.
+
+### Blocking
+
+- Add a **Check a Domain** box on the Blocking page, and a command palette
+  entry, that says whether a domain is blocked, allowed, not blocked, or
+  answered by one of your zones, and which rule and block lists decided it. It
+  has its own link, and **Allow** and **Block** buttons. A blocked query's
+  details link to it with **Why is this blocked?**
+- Open a block list's details from its name on the Blocking page, with its own
+  link and **Copy Link**. The panel shows the full source, domain and line
+  counts, the last and next update, failures in a row, and the whole last
+  error. **Refresh This List** updates just that list.
+
+### Cluster
+
+- Open a node's details from its name on the Cluster page, with its own link.
+  The panel shows the node's open problems, its ID, and its addresses, and
+  keeps **Promote** and **Remove**.
+
+### Settings
+
+- Link to a Settings section, such as `/settings?tab=alerts#watches`. The link
+  opens the tab, scrolls to the section, and outlines it for a moment.
+
+### MCP
+
+- Add tools for checking on the server: `get_version` (the running version,
+  whether a newer one is out, and its release notes), `get_stats` (the
+  dashboard's numbers for a time range), `get_dynamic_dns`, and
+  `get_cluster_status` start on. `sync_dynamic_dns` (run a Dynamic DNS update
+  now) and `search_server_logs` start off. They sit in a new **Server** section
+  of the setup wizard, and the Lookups and Insights sections are now one
+  **Lookups & Logs** section.
+- Tell connected assistants when the tool list changes, so new tools show up
+  without restarting them. This covers turning tools on or off in the setup
+  wizard and upgrading Sable to a version with new tools. Claude Desktop
+  (through `mcp-remote`) and Claude Code both refresh. A Claude Code session
+  running inside the Claude Desktop app still needs a new session. If a node
+  stays down for more than about a minute, Claude Desktop stops listening until
+  it restarts.
+- Warn before the setup wizard's **Connect** step when the group lacks a grant
+  a chosen tool needs. The warning names the grants and the tools that won't
+  work, and points to **Update Group**, or to an administrator for someone who
+  can't change groups.
+- `search_server_logs` blanks passwords, tokens, and other credentials Sable
+  holds before sending a log line to the assistant.
+- `list_findings` returns a link to each finding.
+- `search_queries` matches `client` as a whole address, as it promised, so
+  `10.0.7.13` no longer returns `10.0.7.133`. A new `exact` argument matches
+  `name` as a whole name.
+- `check_domain` says what `on_allow_list` and `on_block_list` mean: an exact
+  entry among the allowed domains or the custom blocked domains, apart from any
+  wildcard entry or subscribed block list.
+
+### Console
+
+- Drop the **Close** button from the footer of every details panel. The X and
+  Escape close them, and phones already hid it. Footers hold only their
+  actions, on the right, and wrap onto a second row instead of running off the
+  edge. The panels are a little wider, and one with no actions has no footer.
+- Color result notices by what they mean: green for success, amber for a
+  warning, and red for a failure. Testing the single sign-on provider and
+  creating the MCP Server group show their answer in green. The MCP server's
+  **Sign-in is off on this server** and **This address is not HTTPS** warnings
+  are amber on its card and in its setup wizard. A failed rolling update shows
+  its reason in red, and one an operator stopped shows it in amber.
+- Fade release notes and the license dialogs at an edge with more to read, and
+  show a chevron below while more waits, like the sidebar.
+- Close a zone record without reloading the zone page.
+- Draw every checkbox the same way, and line confirmation dialog text up with
+  its title.
+
+### Dependencies
+
+- Update the passkey library and the QUIC library.
+
 ## [1.6.0-beta.5] - 2026-09-29
 
 Sable 1.6.0-beta.5 says which range an Insights drawer covers, clears up
