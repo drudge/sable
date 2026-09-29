@@ -2584,7 +2584,7 @@ func SSOCard(view SSOAppView) templ.Component {
 			}
 			if view.Check.Ran {
 				if view.Check.Reachable {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "<div class=\"unifi-status\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "<div class=\"unifi-status success\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -2599,7 +2599,7 @@ func SSOCard(view SSOAppView) templ.Component {
 					var templ_7745c5c3_Var94 string
 					templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.JoinStringErrs(ssoCheckSummary(view.Check))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 626, Col: 131}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 626, Col: 139}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var94))
 					if templ_7745c5c3_Err != nil {
