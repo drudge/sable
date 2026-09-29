@@ -3343,6 +3343,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	/* With Block showing, a query's four actions pair up. */
 	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { display: grid; grid-template-columns: 1fr 1fr; }
 	.query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) .button { width: 100%; }
+	/* A node's Remove and Promote don't fit side by side, so they stack. */
+	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
+	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }
+	.query-detail-footer > .cluster-node-actions .button { width: 100%; }
 }
 
 @media (max-width: 700px) {
