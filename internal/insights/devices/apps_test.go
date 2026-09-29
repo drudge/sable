@@ -24,6 +24,8 @@ func TestChangesReportAppsADeviceStartedUsing(t *testing.T) {
 			{Name: "www.youtube.com", FirstSeen: testNow.Add(-30 * day)},
 			// Operating system traffic never counts as a new app.
 			{Name: "mesu.apple.com", FirstSeen: testNow.Add(-time.Hour)},
+			// A brand's public time server is time sync, not the brand's app.
+			{Name: "time.facebook.com", FirstSeen: testNow.Add(-time.Hour)},
 			// Remote access has a finding of its own.
 			{Name: "region1.v2.argotunnel.com", FirstSeen: testNow.Add(-time.Hour)},
 		},
