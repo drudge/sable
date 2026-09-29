@@ -167,7 +167,9 @@ type InsightDeviceDomainView struct {
 
 // InsightDeviceDrawerView is the device drawer's content.
 type InsightDeviceDrawerView struct {
+	// Range names the window, and RangeLabel says it in words for the header.
 	Range          string
+	RangeLabel     string
 	LogWindowQuery string
 	TimeDisplay    TimeDisplay
 	CanName        bool
@@ -199,7 +201,9 @@ type InsightAppView struct {
 // InsightAppDrawerView is one app's details: the domains it was reached at in
 // the window, busiest first, and the devices that looked it up.
 type InsightAppDrawerView struct {
+	// Range names the window, and RangeLabel says it in words for the header.
 	Range          string
+	RangeLabel     string
 	LogWindowQuery string
 	Missing        bool
 	Error          string
@@ -775,7 +779,7 @@ templ InsightFindings(view InsightsOverviewView) {
 // InsightEvidence opens the facts behind one finding in the same drawer the
 // query log uses to explain a query.
 templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
-	@DetailDrawer(insightEvidenceHeader(finding, view.Range), insightEvidenceFooter(finding, view)) {
+	@DetailDrawer(insightEvidenceHeader(finding, view.Range, view.RangeLabel), insightEvidenceFooter(finding, view)) {
 		// The cards come first because they are the evidence itself; the one
 		// block after them says why that evidence matters.
 		if len(finding.Reasons) == 0 {
@@ -903,9 +907,9 @@ templ insightHideMenu(finding InsightFindingView) {
 	</details>
 }
 
-func insightEvidenceHeader(finding InsightFindingView, rangeName string) DetailDrawerView {
+func insightEvidenceHeader(finding InsightFindingView, rangeName, rangeLabel string) DetailDrawerView {
 	header := DetailDrawerView{
-		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Title: finding.Subject,
+		ID: finding.ID, TitleID: finding.ID + "-title", Eyebrow: finding.Title, Range: rangeLabel, Title: finding.Subject,
 		CloseLabel: "Close details",
 	}
 	if finding.Link != "" {
@@ -1508,7 +1512,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
 		}
 		if view.Missing {
-			<div class="query-detail-section-heading"><p>This device sent no queries in the selected period.</p></div>
+			<div class="query-detail-section-heading"><p>This device sent no queries in the { insightRangePhrase(view.RangeLabel) }.</p></div>
 		} else if view.Device.Key != "" {
 			if view.Device.New || view.Device.PrivateMAC || view.Device.Server != "" || view.Device.NameNetwork != "" || view.Device.NotUsingSable != "" {
 				<div class="query-detail-result insight-device-badges">@insightDeviceBadges(view.Device, false)</div>
@@ -1691,7 +1695,7 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
 		}
 		if view.Missing {
-			<div class="query-detail-section-heading"><p>Nothing on the network used this app in the selected period.</p></div>
+			<div class="query-detail-section-heading"><p>Nothing on the network used this app in the { insightRangePhrase(view.RangeLabel) }.</p></div>
 		} else if view.App.Name != "" {
 			<dl class="query-detail-grid">
 				<div class="query-detail-fact-wide"><dt>Category</dt><dd>{ view.App.Category }</dd></div>
@@ -1876,8 +1880,17 @@ func insightDomainDetail(domain InsightDeviceDomainView, display TimeDisplay) st
 }
 
 // insightAppDrawerHeader leads the app drawer with the app's logo.
+// insightRangePhrase is a window's label as it reads in a sentence, such as
+// "last 30 days" in "in the last 30 days".
+func insightRangePhrase(label string) string {
+	if label == "" {
+		return "selected period"
+	}
+	return strings.ToLower(label)
+}
+
 func insightAppDrawerHeader(view InsightAppDrawerView) DetailDrawerView {
-	header := DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Title: ifThen(view.App.Name != "", view.App.Name, "App"), CloseLabel: "Close app details"}
+	header := DetailDrawerView{ID: "insight-app-dialog", TitleID: "insight-app-title", Eyebrow: "App", Range: view.RangeLabel, Title: ifThen(view.App.Name != "", view.App.Name, "App"), CloseLabel: "Close app details"}
 	if view.App.ID != "" {
 		header.Leading = AppIcon(view.App.ID, view.App.Category)
 	}
@@ -1885,7 +1898,7 @@ func insightAppDrawerHeader(view InsightAppDrawerView) DetailDrawerView {
 }
 
 func insightDeviceDrawerHeader(view InsightDeviceDrawerView) DetailDrawerView {
-	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
+	header := DetailDrawerView{ID: "insight-device-dialog", TitleID: "insight-device-title", Eyebrow: "Device", Range: view.RangeLabel, Title: insightDrawerTitle(view), CloseLabel: "Close device details"}
 	if view.Device.Key == "" || view.Missing {
 		return header
 	}
