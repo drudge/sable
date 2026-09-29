@@ -623,7 +623,7 @@ templ SSOCard(view SSOAppView) {
 			<div class="integration-card-body">
 				if view.Check.Ran {
 					if view.Check.Reachable {
-						<div class="unifi-status">@Icon("shield-check")<div><strong>The provider answered</strong><span>{ ssoCheckSummary(view.Check) }</span></div></div>
+						<div class="unifi-status success">@Icon("shield-check")<div><strong>The provider answered</strong><span>{ ssoCheckSummary(view.Check) }</span></div></div>
 					} else {
 						<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Could not reach the provider</strong><span>{ view.Check.Error }</span></div></div>
 					}

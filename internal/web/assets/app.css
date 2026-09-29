@@ -3455,6 +3455,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .unifi-status { display: flex; gap: .7rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: .8rem; }
 .unifi-status.error { border-color: color-mix(in srgb, var(--destructive) 45%, var(--border)); background: color-mix(in srgb, var(--destructive) 8%, transparent); }
 .unifi-status.error > .nav-icon { color: var(--destructive); }
+.unifi-status.success { border-color: color-mix(in srgb, var(--metric-no-error) 45%, var(--border)); background: color-mix(in srgb, var(--metric-no-error) 8%, transparent); }
+.unifi-status.success > .nav-icon { color: var(--metric-no-error); }
 .unifi-status > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; margin-top: .1rem; }
 .unifi-status > div { display: grid; gap: .2rem; }
 .unifi-status strong { font-size: .75rem; }
