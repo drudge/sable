@@ -208,7 +208,10 @@ var catalog = []catalogEntry{
 	{Service{"brother", "Brother", CategoryPlatform}, []string{"brother.com", "brother-usa.com"}},
 	{Service{"remarkable", "reMarkable", CategoryPlatform}, []string{"device.cloud.remarkable.com", "tectonic.remarkable.com", "ping.remarkable.com", "cloud.remarkable.engineering"}},
 	{Service{"bambu-lab", "Bambu Lab", CategoryPlatform}, []string{"api.bambulab.com", "mqtt.bambulab.com"}},
-	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time.cloudflare.com"}},
+	// Big brands run public time servers under their own domains. Listing them
+	// here keeps a clock sync from counting as the brand's app, as when a smart
+	// switch sets its clock from time.facebook.com.
+	{Service{"ntp", "Time sync", CategoryPlatform}, []string{"pool.ntp.org", "time.apple.com", "time.windows.com", "time.google.com", "time1.google.com", "time2.google.com", "time3.google.com", "time4.google.com", "time.cloudflare.com", "time.facebook.com", "time1.facebook.com", "time2.facebook.com", "time3.facebook.com", "time4.facebook.com", "time5.facebook.com"}},
 
 	// Finance.
 	{Service{"paypal", "PayPal", CategoryFinance}, []string{"paypal.com", "paypalobjects.com", "venmo.com"}},
