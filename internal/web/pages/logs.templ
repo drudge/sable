@@ -477,7 +477,10 @@ type DetailDrawerView struct {
 	ID      string
 	TitleID string
 	// Eyebrow is the small uppercase label naming what kind of record is open.
+	// Range follows it when the drawer's numbers cover a window of time, such
+	// as Last 30 days, so a drawer opened from a link says which.
 	Eyebrow string
+	Range   string
 	// Title is the record itself, set in the monospace face used for DNS data.
 	Title           string
 	TitleAttributes templ.Attributes
@@ -511,11 +514,11 @@ templ DetailDrawerContent(view DetailDrawerView, footer templ.Component) {
 			@view.Leading
 		}
 		if view.TitleEditor != nil {
-			<div class="query-detail-title-editor"><span>{ view.Eyebrow }</span><h2 class="sr-only" id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleEditor</div>
+			<div class="query-detail-title-editor">@detailDrawerEyebrow(view)<h2 class="sr-only" id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleEditor</div>
 		} else if view.TitleAction != nil {
-			<div><span>{ view.Eyebrow }</span><div class="query-detail-title-row"><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleAction</div></div>
+			<div>@detailDrawerEyebrow(view)<div class="query-detail-title-row"><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2>@view.TitleAction</div></div>
 		} else {
-			<div><span>{ view.Eyebrow }</span><h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
+			<div>@detailDrawerEyebrow(view)<h2 id={ view.TitleID } { view.TitleAttributes... }>{ view.Title }</h2></div>
 		}
 		<button class="dialog-close" type="button" data-dialog-close aria-label={ view.CloseLabel }>@Icon("x")</button>
 	</header>
@@ -525,6 +528,17 @@ templ DetailDrawerContent(view DetailDrawerView, footer templ.Component) {
 	<footer class="query-detail-footer">
 		@footer
 	</footer>
+}
+
+// detailDrawerEyebrow is the eyebrow, then the window the drawer covers when it
+// has one.
+templ detailDrawerEyebrow(view DetailDrawerView) {
+	<span>
+		{ view.Eyebrow }
+		if view.Range != "" {
+			<span class="query-detail-range">{ view.Range }</span>
+		}
+	</span>
 }
 
 templ QueryDecisionStep(name, title, label, detail string) {

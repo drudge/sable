@@ -25,7 +25,7 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
-	view := pages.InsightAppDrawerView{Range: window.Range}
+	view := pages.InsightAppDrawerView{Range: window.Range, RangeLabel: window.Label}
 	queries, counts := server.queries.(queryInsightReader)
 	reader, groups := server.queries.(deviceInsightReader)
 	if !counts || !groups {
