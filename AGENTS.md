@@ -119,6 +119,7 @@ Every screen should look finished: polished, responsive, and consistent with the
 - **Dependent controls:** a control that only matters while a switch is on is hidden while it's off (use CSS `:has()`), not dimmed.
 - **Buttons:** one job per button, with Title Case labels such as **Copy Link** and **Show Again**. A status indicator links to where its setting lives rather than opening a small dialog of its own.
 - **Dialog and drawer headers** hold only the title and the close X. Actions go in the footer, or at the end of the section heading they belong to. An action that changes something gets a text label; copy and close may be icons alone.
+- **Drawer footers** hold only the drawer's actions, right-aligned with the main one last. They have no Close button, since the X and Escape close a drawer, and a drawer with no actions has no footer.
 - **Phone dialog footers** put the main action on top and the dismiss button at the bottom. Keep the main button last in the markup, mark the dismiss button `data-dialog-close`, and let the shared `.dialog-footer` rule do the rest.
 - **Searching a long list:** the search bar goes inside the card, under its header (`.log-search-bar`), with its filters in the same bar. Keep the search and filters in the page address, and add a matching **Search** action to the command palette (`CommandSearchOption`).
 - **Drawers with their own address:** reuse the routed drawers from `app.js` (`data-drawer-route`, `data-dialog-url`) and put `CopyLinkButton` in the drawer.
