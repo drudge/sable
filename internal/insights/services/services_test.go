@@ -39,6 +39,8 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 		{"time.facebook.com", "ntp"},
 		{"time3.facebook.com", "ntp"},
 		{"time2.google.com", "ntp"},
+		{"ntp-g7g.amazon.com", "ntp"},
+		{"www.amazon.com", "amazon"},
 		{"www.facebook.com", "facebook"},
 		{"mail.google.com", "gmail"},
 		{"eu.tectonic.remarkable.com", "remarkable"},
