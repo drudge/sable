@@ -168,7 +168,7 @@ templ ClusterContent(view ClusterPageView) {
 			// The panel sits outside the live status, which replaces itself
 			// every few seconds.
 			<dialog class="query-detail-dialog cluster-node-dialog" id="cluster-node-dialog" aria-labelledby="cluster-node-title" { insightDrawerRoute(ClusterNodeRoute, "/ui/cluster/node", "name", "cluster-node-content", "cluster-node-loading", "/cluster")... }>
-				<div class="cluster-node-content" id="cluster-node-content">
+				<div class="query-detail-content" id="cluster-node-content">
 					@clusterNodeLoading()
 				</div>
 			</dialog>

@@ -4159,7 +4159,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
    outlines the card for a moment. */
 [data-settings-card] { scroll-margin-top: 1rem; transition: box-shadow .6s ease; }
 [data-settings-card].is-linked { box-shadow: 0 0 0 2px var(--ring); }
-/* The query panel's content is swapped whole, by a row or by an address. */
+/* A drawer's content is swapped in whole. Its wrapper lays out as if it
+   weren't there, so the body fills the drawer and the footer stays at the
+   bottom. */
 .query-detail-content { display: contents; }
 .check-domain-form { display: flex; gap: .5rem; }
 .blocking-check-search .search-field input { width: 100%; }
