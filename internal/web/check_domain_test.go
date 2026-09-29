@@ -64,8 +64,20 @@ func TestCheckDomainPanel(t *testing.T) {
 		t.Error("a blocked domain offers Block")
 	}
 
+	// The custom blocked domains have no panel of their own, so they link to
+	// the Blocking page's Blocked tab beside the lists.
+	custom := getDetailsPanel(server, "/ui/blocking/check?domain=pixel.custom.example", true).Body.String()
+	expectContains(t, "custom blocked domain", custom,
+		`href="/blocked?tab=domains"`, "<span>Custom blocked domains</span>", `data-dialog-url="/blocked/lists/Hagezi%20Pro"`)
+	if strings.Contains(custom, "/blocked/lists/Custom") {
+		t.Error("the custom blocked domains open a block list panel")
+	}
+
 	open := getDetailsPanel(server, "/ui/blocking/check?domain=example.org", true).Body.String()
 	expectContains(t, "open domain", open, ">Not blocked</span>", "Nothing blocks this domain.", `name="action" value="block"`)
+	if strings.Contains(open, "query-detail-grid") {
+		t.Error("a domain nothing matches shows an empty set of facts")
+	}
 
 	zoned := getDetailsPanel(server, "/ui/blocking/check?domain=www.example.test", true).Body.String()
 	expectContains(t, "zone domain", zoned, ">Answered by your zone</span>", `href="/zones/example.test"`)
@@ -86,5 +98,5 @@ func TestCheckDomainPanel(t *testing.T) {
 		t.Fatalf("allowed domains = %v", configuration.snapshot.Config.Blocking.AllowedDomains)
 	}
 	expectContains(t, "allow response", allowed.Body.String(),
-		"cdn.tracker.example is now allowed.", `id="blocking-content"`, `hx-swap-oob="outerHTML"`, "<dd>Yes</dd>")
+		"cdn.tracker.example is now allowed.", `id="blocking-content"`, `hx-swap-oob="outerHTML"`, `id="check-domain-verdict"`)
 }

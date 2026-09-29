@@ -348,6 +348,8 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 	body := response.Body.String()
 	for _, expected := range []string{
 		"Possible past blocking issue", "Blocked 3 times during the selected period and is now explicitly allowed.",
+		// A finding's drawer names the window it was found in.
+		`<span class="query-detail-range">Last 24 hours</span>`,
 		"Little unique coverage", "100% of this list&#39;s domains are also covered by Alpha.",
 		`class="admin-mobile-list insight-list-mobile"`, `class="admin-desktop-table"`,
 		`data-dialog-open="insight-finding-1"`, `id="insight-finding-1"`, "How Sable decides", `class="insight-cause"`, "Could be ",
@@ -518,6 +520,7 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 	body := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
 	for _, expected := range []string{
 		"george-laptop.corp.example", "Most queried domains", "telemetry.example.com",
+		`<span>Device <span class="query-detail-range">Last 24 hours</span></span>`,
 		`aria-label="Rename george-laptop.corp.example"`, `hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day&amp;edit=1"`,
 		// Useful values carry a copy button labeled with what it copies.
 		`<code id="insight-device-mac">3c:22:fb:01:02:03</code>`, `data-copy-target="insight-device-mac" aria-label="Copy hardware address"`,
@@ -556,7 +559,7 @@ func TestInsightsDeviceDrawerLinksReproduceTheirCounts(t *testing.T) {
 	if readOnly := server.get(t, "logs-reader", "/ui/insights/device?range=day&edit=1&key="+url.QueryEscape(insightsTestLaptop), true).Body.String(); strings.Contains(readOnly, "Rename ") || strings.Contains(readOnly, `name="name"`) {
 		t.Fatal("an operator without settings write could rename a device")
 	}
-	if missing := server.get(t, "everything", "/ui/insights/device?range=day&key=mac:00:00:00:00:00:01", true).Body.String(); !strings.Contains(missing, "sent no queries in the selected period") {
+	if missing := server.get(t, "everything", "/ui/insights/device?range=day&key=mac:00:00:00:00:00:01", true).Body.String(); !strings.Contains(missing, "sent no queries in the last 24 hours") {
 		t.Fatal("an unknown device did not explain itself")
 	}
 }
@@ -860,6 +863,8 @@ func TestInsightsRankingsOpenAppsAndDevices(t *testing.T) {
 	for _, expected := range []string{
 		"Netflix", "Streaming", "Devices that used it", "george-laptop.corp.example", "10.0.0.9",
 		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
+		// A drawer opened from a link says which window its numbers cover.
+		`<span>App <span class="query-detail-range">Last 24 hours</span></span>`,
 	} {
 		if !strings.Contains(drawer, expected) {
 			t.Errorf("the app drawer is missing %q", expected)
@@ -884,7 +889,7 @@ func TestInsightsRankingsOpenAppsAndDevices(t *testing.T) {
 	if strconv.Itoa(page.TotalEntries) != match[2] || match[2] != "3" {
 		t.Fatalf("the link reports %d queries, the drawer %s", page.TotalEntries, match[2])
 	}
-	if unused := server.get(t, "everything", "/ui/insights/app?id=spotify&range=day", true).Body.String(); !strings.Contains(unused, "Nothing on the network used this app") {
+	if unused := server.get(t, "everything", "/ui/insights/app?id=spotify&range=day", true).Body.String(); !strings.Contains(unused, "Nothing on the network used this app in the last 24 hours.") {
 		t.Fatal("an app nobody used did not explain itself")
 	}
 }
