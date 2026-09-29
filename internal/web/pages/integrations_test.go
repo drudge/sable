@@ -21,6 +21,38 @@ func TestSSOCheckResultIsGreenOrRed(t *testing.T) {
 	}
 }
 
+// The setup wizard's answer from the provider is a success too, and creating
+// the MCP group says it worked in green as failing to says so in red.
+func TestSetupResultsAreGreenOrRed(t *testing.T) {
+	probe := render(t, SSOWizardClaimsStep(SSOWizardView{Probe: SSOProbeView{Ran: true, Issuer: "https://id.example.test"}}))
+	if !strings.Contains(probe, `<div class="unifi-status success">`) {
+		t.Errorf("the provider's answer in the wizard is not a success: %s", probe)
+	}
+	created := render(t, MCPAccessGroup(MCPGroupView{Result: "Created MCP Server and added you to it.", ResultOK: true}))
+	if !strings.Contains(created, `<div class="unifi-status success">`) {
+		t.Errorf("a created group is not shown as a success: %s", created)
+	}
+	failed := render(t, MCPAccessGroup(MCPGroupView{Result: "A group with that name already exists."}))
+	if !strings.Contains(failed, `<div class="unifi-status error">`) {
+		t.Errorf("a group that could not be created is not shown as an error: %s", failed)
+	}
+}
+
+// The MCP server's two security warnings look the same on its card and in
+// its setup wizard: amber, since nothing has failed.
+func TestMCPSecurityWarningsAreAmber(t *testing.T) {
+	for name, view := range map[string]MCPAppView{
+		"sign-in off": {Configured: true, Enabled: true, SecurityDisabled: true},
+		"not https":   {Configured: true, Enabled: true, Address: "http://sable.example.test/mcp"},
+	} {
+		for place, markup := range map[string]string{"card": render(t, MCPCard(view)), "wizard": render(t, MCPSetupDialog(view))} {
+			if !strings.Contains(markup, `<div class="unifi-status warning">`) || strings.Contains(markup, `<div class="unifi-status error">`) {
+				t.Errorf("%s: the %s does not show an amber warning", name, place)
+			}
+		}
+	}
+}
+
 func TestSSOReadOnlyCardOmitsAdministrationActions(t *testing.T) {
 	for _, configured := range []bool{false, true} {
 		markup := render(t, SSOCard(SSOAppView{Configured: configured, Enabled: true}))

@@ -116,3 +116,21 @@ func TestRollingUpdateVersionShowsInstallTarget(t *testing.T) {
 		}
 	}
 }
+
+// A rollout that failed says so in red. One an operator stopped is a
+// warning, not a failure, so it says so in amber.
+func TestRollingUpdateEndingIsRedOrAmber(t *testing.T) {
+	for phase, want := range map[string]string{
+		"failed":  `<div class="unifi-status error" role="alert">`,
+		"stopped": `<div class="unifi-status warning" role="status">`,
+	} {
+		var html strings.Builder
+		view := ClusterUpdateView{Initialized: true, CanApply: true, Rollout: cluster.RolloutStatus{ID: "rollout", Version: "v1.2.0", Phase: phase, Error: "replica-2 did not come back."}}
+		if err := ClusterUpdatePanel(view, false).Render(context.Background(), &html); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(html.String(), want) || !strings.Contains(html.String(), "replica-2 did not come back.") {
+			t.Errorf("a %s rollout does not show %s: %s", phase, want, html.String())
+		}
+	}
+}
