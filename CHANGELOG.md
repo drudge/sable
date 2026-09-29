@@ -76,18 +76,12 @@ server itself, and assistants pick up new tools without a restart.
 - Name the range in the header of a finding's, device's, or app's details, as
   in **App · Last 30 days**, so details opened from a link say which window
   their numbers cover.
-- Stop counting a clock sync as an app. The public time servers Meta, Google,
-  and Amazon run, such as `time.facebook.com`, `time1.google.com`, and
-  `ntp-g7g.amazon.com`, and AWS's `time.aws.com`, now count as time sync, so a
-  smart switch or camera setting its clock no longer reads as starting to use
-  Facebook or Amazon.
-- Recognize more of reMarkable's servers, `cloud.remarkable.engineering` and
-  `ping.remarkable.com`, and show reMarkable's own logo instead of a gray chip.
-- Stop a device's name from flipping between its current name and an old one.
-  A UniFi reservation left behind for a retired machine kept claiming the
-  address a new machine now uses, and published the old name there too. Two
-  sightings of one address at the same moment now settle the same way every
-  time.
+- Recognize devices and apps more reliably. A device that sets its clock from
+  a large company's public time server now counts as time sync, not as starting
+  to use that company's app. Sable also knows more of the servers devices talk
+  to, and shows more app logos.
+- Keep a device's name steady. A reservation left behind for a retired machine
+  could flip a device between its current name and an old one.
 
 ### Query Logs
 
