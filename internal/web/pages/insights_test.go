@@ -186,6 +186,9 @@ func TestAppsHaveIcons(t *testing.T) {
 		"adobe":       `fill="#FF0000"`,
 		// Microsoft 365 wears Microsoft's four-color squares on white.
 		"microsoft-365": `class="app-icon app-icon-white"`,
+		// reMarkable's mark, traced from its app icon since Simple Icons has
+		// none, is black on white like the icon.
+		"remarkable": `class="app-icon app-icon-white"`,
 	} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, want) {
 			t.Errorf("%s logo = %s", id, drawn)
@@ -193,7 +196,7 @@ func TestAppsHaveIcons(t *testing.T) {
 	}
 	// Brands draw their marks in white on their color unless it is very light,
 	// or their own look is a dark mark, as Spotify's is.
-	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000", "chatgpt": "#000"} {
+	for id, ink := range map[string]string{"netflix": "#fff", "youtube": "#fff", "reddit": "#fff", "instagram": "#fff", "snapchat": "#000", "spotify": "#000", "chatgpt": "#000", "remarkable": "#000"} {
 		if drawn := renderComponent(t, AppIcon(id, "")); !strings.Contains(drawn, `fill="`+ink+`" transform=`) {
 			t.Errorf("%s mark is not drawn in %s: %s", id, ink, drawn)
 		}
