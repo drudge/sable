@@ -8,6 +8,49 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.0-beta.4] - 2026-09-29
+
+Sable 1.6.0-beta.4 makes drawer buttons always fit, stops a device's clock sync
+from looking like it opened Facebook, and teaches Insights more about
+reMarkable tablets, including their logo.
+
+### Console
+
+- Drop the **Close** button from drawer footers. The X in the header and Escape
+  still close every drawer, and phones already hid it. Footers now hold only
+  their actions, on the right, and wrap onto a second row instead of running off
+  the edge, as a finding's **View Query Logs** did.
+- Make drawers a little wider, the same width as the form dialogs, so a
+  finding's **Copy Link**, **Device Details**, and **View Query Logs** fit on one
+  row.
+- Leave out the footer when a drawer has no actions, such as while it loads or
+  for a device that's gone. On a phone, that drops the empty bar those drawers
+  used to end with.
+- Keep the footer at the bottom of a block list's or cluster node's panel,
+  instead of right under the details.
+- Stack a cluster node's **Remove Replica** and **Promote to Primary** on a
+  phone, where they ran off the edge.
+
+### Insights
+
+- Stop saying a device started using Facebook when it only sets its clock from
+  `time.facebook.com`. The public time servers Meta and Google run, such as
+  `time1.facebook.com` and `time1.google.com`, now count as time sync, which
+  Insights never reports as a new app.
+- Count `cloud.remarkable.engineering`, where reMarkable signs in and renews
+  tokens, and `ping.remarkable.com`, the tablet's connection check, as
+  reMarkable.
+- Show reMarkable's own logo, a slanted bar beside an arch, instead of the gray
+  chip. Simple Icons has no reMarkable logo, so this one is traced from the app
+  icon on remarkable.com.
+
+### Development
+
+- `go tool mage dev` and `go tool mage devDemo` reload the page after a rebuild
+  again. The console's Content Security Policy had blocked Air's reload script.
+  Mage now allows that one script by its hash, and only in development.
+- Add `AGENTS.md`, instructions for AI coding agents working on Sable.
+
 ## [1.6.0-beta.3] - 2026-09-28
 
 Sable 1.6.0-beta.3 gives queries, Settings sections, and a new Check a Domain
