@@ -38,6 +38,8 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 		{"www.google.com", "google-search"},
 		{"mail.google.com", "gmail"},
 		{"eu.tectonic.remarkable.com", "remarkable"},
+		{"webapp-prod.cloud.remarkable.engineering", "remarkable"},
+		{"ping.remarkable.com", "remarkable"},
 		{"us.mqtt.bambulab.com", "bambu-lab"},
 		{"mqtt2.tidbyt.com", "tidbyt"},
 		{"region1.v2.argotunnel.com", "cloudflare-tunnel"},
@@ -48,7 +50,7 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 			t.Errorf("Lookup(%q) = %q, %t; want %q", test.name, service.ID, found, test.want)
 		}
 	}
-	for _, name := range []string{"d3abc.cloudfront.net", "fonts.googleapis.com", "www.remarkable.com", "store.bambulab.com", "trmnl.com", "www.generac.com", "tidbyt.com", "example.com", "", "com"} {
+	for _, name := range []string{"d3abc.cloudfront.net", "fonts.googleapis.com", "www.remarkable.com", "remarkable.engineering", "store.bambulab.com", "trmnl.com", "www.generac.com", "tidbyt.com", "example.com", "", "com"} {
 		if service, found := Lookup(name); found {
 			t.Errorf("Lookup(%q) = %q, want no owner for shared or unknown names", name, service.ID)
 		}
