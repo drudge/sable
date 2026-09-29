@@ -75,7 +75,7 @@ templ checkDomainDialog() {
 }
 
 templ checkDomainLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "check-domain-dialog", TitleID: "check-domain-title", Eyebrow: "Check a Domain", Title: "Checking…", CloseLabel: "Close domain check"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "check-domain-dialog", TitleID: "check-domain-title", Eyebrow: "Check a Domain", Title: "Checking…", CloseLabel: "Close domain check"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Checking the domain…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
@@ -128,7 +128,6 @@ templ CheckDomainDrawer(view CheckDomainView) {
 }
 
 templ checkDomainFooter(view CheckDomainView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if view.Checked {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(CheckDomainPath(view.Domain))

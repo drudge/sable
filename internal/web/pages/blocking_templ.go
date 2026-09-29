@@ -149,7 +149,7 @@ func blockingDocument(view BlockingPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "><div class=\"block-list-content\" id=\"block-list-content\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "><div class=\"query-detail-content\" id=\"block-list-content\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2400,7 +2400,7 @@ func blockListLoading() templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: "Loading…", CloseLabel: "Close block list details"}, insightDeviceCloseFooter()).Render(templ.WithChildren(ctx, templ_7745c5c3_Var111), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: "Loading…", CloseLabel: "Close block list details"}, templ.NopComponent).Render(templ.WithChildren(ctx, templ_7745c5c3_Var111), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2717,12 +2717,8 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 			templ_7745c5c3_Var128 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "<button class=\"button outline\" type=\"button\" data-dialog-close>Close</button> ")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
 		if !view.Missing {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2731,20 +2727,20 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.CanRefresh && view.List.URL != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, "<button class=\"button blocking-update-button block-list-refresh\" id=\"block-list-refresh\" type=\"button\" hx-post=\"/ui/blocking/lists/refresh\" hx-vals=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "<button class=\"button blocking-update-button block-list-refresh\" id=\"block-list-refresh\" type=\"button\" hx-post=\"/ui/blocking/lists/refresh\" hx-vals=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var129 string
 				templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q}", view.List.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 384, Col: 198}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 383, Col: 198}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var129)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 213, "\" hx-target=\"#block-list-content\" hx-swap=\"innerHTML\" hx-disable=\"this\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, "\" hx-target=\"#block-list-content\" hx-swap=\"innerHTML\" hx-disable=\"this\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2752,12 +2748,12 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "<span class=\"update-label\">Refresh This List</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 213, "<span class=\"update-label\">Refresh This List</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 215, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

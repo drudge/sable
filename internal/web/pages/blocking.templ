@@ -83,7 +83,7 @@ templ blockingDocument(view BlockingPageView) {
 	@BlockingContent(view)
 	@checkDomainDialog()
 	<dialog class="query-detail-dialog block-list-dialog" id="block-list-dialog" aria-labelledby="block-list-title" { blockListDrawerRoute()... }>
-		<div class="block-list-content" id="block-list-content">
+		<div class="query-detail-content" id="block-list-content">
 			@blockListLoading()
 		</div>
 	</dialog>
@@ -320,7 +320,7 @@ type BlockListDrawerView struct {
 }
 
 templ blockListLoading() {
-	@DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: "Loading…", CloseLabel: "Close block list details"}, insightDeviceCloseFooter()) {
+	@DetailDrawerContent(DetailDrawerView{ID: "block-list-dialog", TitleID: "block-list-title", Eyebrow: "Block List", Title: "Loading…", CloseLabel: "Close block list details"}, templ.NopComponent) {
 		<div class="insight-device-loading" role="status" aria-live="polite">
 			<span class="sr-only">Loading block list details…</span>
 			<span class="insight-skeleton-line insights-skeleton-block"></span>
@@ -376,7 +376,6 @@ templ BlockListDrawer(view BlockListDrawerView) {
 }
 
 templ blockListFooter(view BlockListDrawerView) {
-	<button class="button outline" type="button" data-dialog-close>Close</button>
 	if !view.Missing {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(BlockListPath(view.List.Name))

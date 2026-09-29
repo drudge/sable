@@ -2321,8 +2321,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cluster-node-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .cluster-node-actions.split { width: 100%; justify-content: space-between; }
 .cluster-node-actions form { margin: 0; }
-/* A node's panel puts Promote and Remove on their own row, above Close and
-   Copy Link, so neither row wraps in a narrow panel. */
+/* A node's panel puts Promote and Remove on their own row, above Copy Link,
+   so neither row wraps in a narrow panel. */
 .query-detail-footer:has(> .cluster-node-actions) { flex-wrap: wrap; }
 .query-detail-footer > .cluster-node-actions { order: -1; width: 100%; flex-wrap: nowrap; }
 .query-detail-footer > .cluster-node-actions .button { gap: .45rem; white-space: nowrap; }
@@ -3197,7 +3197,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-policy-action.allow:hover { color: #10b981; }
 .query-policy-action .nav-icon { width: .85rem; height: .85rem; }
 .query-detail-button .nav-icon { width: .9rem; height: .9rem; }
-.query-detail-dialog { position: fixed; inset: 0 0 0 auto; width: min(30rem, 100vw); max-width: none; height: 100dvh; max-height: none; margin: 0; overflow: hidden; border: 0; border-left: 1px solid var(--border); border-radius: var(--radius) 0 0 var(--radius); background: var(--background); color: var(--foreground); padding: 0; box-shadow: -1rem 0 3rem rgb(0 0 0 / .24); }
+/* A drawer is as wide as a form dialog, room for three actions in its footer. */
+.query-detail-dialog { position: fixed; inset: 0 0 0 auto; width: min(32rem, 100vw); max-width: none; height: 100dvh; max-height: none; margin: 0; overflow: hidden; border: 0; border-left: 1px solid var(--border); border-radius: var(--radius) 0 0 var(--radius); background: var(--background); color: var(--foreground); padding: 0; box-shadow: -1rem 0 3rem rgb(0 0 0 / .24); }
 .query-detail-dialog[open] { display: flex; flex-direction: column; animation: query-detail-in 180ms ease-out; }
 .query-detail-dialog::backdrop { background: rgb(0 0 0 / .52); animation: backdrop-in 150ms ease-out; }
 @keyframes query-detail-in { from { opacity: 0; translate: 2rem 0; } to { opacity: 1; translate: 0 0; } }
@@ -3234,16 +3235,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-decision-kind { color: var(--muted-foreground); font-size: .65rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .query-decision-path strong { font-size: .82rem; font-weight: 600; }
 .query-decision-path [data-query-decision-detail] { color: var(--muted-foreground); font-size: .75rem; overflow-wrap: anywhere; }
-.query-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1.25rem; }
-.query-detail-policy-actions { display: flex; gap: .5rem; }
+.query-detail-footer { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; border-top: 1px solid var(--border); padding: .85rem 1.25rem; }
+/* The X in a drawer's header closes it, so the footer holds only actions. A
+   drawer with none, such as one still loading, has no footer. */
+.query-detail-footer:not(:has(.button)) { display: none; }
+.query-detail-policy-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 .query-detail-policy-actions form { display: inline-flex; }
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-detail-policy-actions .button { white-space: nowrap; }
-/* With Block showing, a query has four actions. Like a cluster node's, they
-   take their own row above Close, and pair up on a phone. */
-.query-detail-footer:has(> .query-detail-policy-actions > [data-query-detail-policy="block"]:not([hidden])) { flex-wrap: wrap; }
-.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { order: -1; display: grid; width: 100%; grid-template-columns: repeat(4, auto); justify-content: end; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: 1.25rem; }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3338,11 +3338,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-dialog[open] { animation-name: query-detail-mobile-in; }
 	@keyframes query-detail-mobile-in { from { opacity: 0; translate: 0 2rem; } to { opacity: 1; translate: 0 0; } }
 	.query-detail-footer { padding-bottom: max(.85rem, env(safe-area-inset-bottom)); }
-	.query-detail-footer > .button { display: none; }
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
-	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { grid-template-columns: 1fr 1fr; }
+	/* With Block showing, a query's four actions pair up. */
+	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { display: grid; grid-template-columns: 1fr 1fr; }
 	.query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) .button { width: 100%; }
+	/* A node's Remove and Promote don't fit side by side, so they stack. */
+	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
+	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }
+	.query-detail-footer > .cluster-node-actions .button { width: 100%; }
 }
 
 @media (max-width: 700px) {
@@ -4155,7 +4159,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
    outlines the card for a moment. */
 [data-settings-card] { scroll-margin-top: 1rem; transition: box-shadow .6s ease; }
 [data-settings-card].is-linked { box-shadow: 0 0 0 2px var(--ring); }
-/* The query panel's content is swapped whole, by a row or by an address. */
+/* A drawer's content is swapped in whole. Its wrapper lays out as if it
+   weren't there, so the body fills the drawer and the footer stays at the
+   bottom. */
 .query-detail-content { display: contents; }
 .check-domain-form { display: flex; gap: .5rem; }
 .blocking-check-search .search-field input { width: 100%; }
