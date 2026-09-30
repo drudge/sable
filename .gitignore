@@ -6,6 +6,7 @@
 /work/
 /outputs/
 /sable
+/demo
 /sable.toml
 *.test
 coverage.out
