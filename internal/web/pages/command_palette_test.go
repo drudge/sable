@@ -84,6 +84,7 @@ func TestCommandPaletteCommandsFollowPermissionsAndReplicaState(t *testing.T) {
 		`id="command-action-search-blocked"`, `data-command-focus="[data-domain-search=domains]"`,
 		`id="command-action-search-allowed"`, `data-command-focus="[data-domain-search=allowed]"`,
 		`id="command-action-search-devices"`, `data-command-route="/insights?tab=devices" data-command-focus="[data-device-search]"`,
+		`id="command-action-search-apps"`, `data-command-route="/insights?tab=apps" data-command-focus="[data-app-search]"`,
 		`data-command-search-modes-label="Search query logs by"`, `data-command-keywords="sql dns history client response filters ip address"`,
 		`data-command-search-modes-config=`, `data-command-search-submit="#dns-query-form"`,
 		`data-command-focus="#cache-browser-dialog [data-cache-search]"`, `data-command-search-prompt="Search cached domains…"`,

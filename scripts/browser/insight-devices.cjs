@@ -17,12 +17,12 @@ const {chromium} = require('playwright');
     page.on('pageerror', error => errors.push(error.message));
 
     await page.goto(`${baseURL}/insights?range=day&tab=devices`);
-    const card = page.locator('[data-device-filter-root]');
+    const card = page.locator('section[aria-labelledby="insight-devices-title"]');
     const search = card.getByRole('searchbox', {name: 'Search devices'});
     await search.waitFor();
-    const rows = card.locator('tbody tr[data-device-row]');
+    const rows = card.locator('tbody tr[data-list-row]');
     const shown = () => rows.evaluateAll(list => list.filter(row => !row.hidden).map(row => row.querySelector('strong').textContent));
-    const badge = card.locator('[data-device-count]');
+    const badge = card.locator('[data-list-count]');
     const choose = async (name, choice) => {
       await card.getByRole('combobox', {name}).click();
       await page.getByRole('option', {name: choice, exact: true}).click();

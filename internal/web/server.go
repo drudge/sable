@@ -106,15 +106,14 @@ type Server struct {
 	alertSecrets *alerts.SecretStore
 	// watchLastAlert reports when each domain watch last alerted.
 	watchLastAlert func() map[string]time.Time
-	// blockingActivityCache, appCache, and blockListAnalysis back the Insights
-	// page. appCache counts what the app ranking reads apart from the
-	// dashboard's insightCache, because Insights answers from a recent count
-	// while it refreshes.
+	// blockingActivityCache, the app caches, and blockListAnalysis back the
+	// Insights page, which answers from a recent count while it refreshes.
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	deviceActivityCache   windowCache[querylog.ClientActivityReport]
 	deviceSignalCache     windowCache[map[string][]string]
 	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
-	appCache              dashboardInsightCache
+	appActivityCache      windowCache[querylog.AppActivity]
+	appSightingCache      windowCache[querylog.AppSightings]
 	blockListAnalysis     blockinginsights.ContributionCache
 	baseDirectory         string
 	historyPrune          chan struct{}
@@ -245,11 +244,13 @@ func New(
 	server.deviceActivityCache.serveStale()
 	server.deviceSignalCache.serveStale()
 	server.repeatedLookupCache.serveStale()
-	server.appCache.serveStale()
+	server.appActivityCache.serveStale()
+	server.appSightingCache.serveStale()
 	// Each cache counts in the background, detached from the request that asked,
 	// for as long as the server runs.
 	server.insightCache.background = server.goBackground
-	server.appCache.background = server.goBackground
+	server.appActivityCache.background = server.goBackground
+	server.appSightingCache.background = server.goBackground
 	server.blockingActivityCache.background = server.goBackground
 	server.deviceActivityCache.background = server.goBackground
 	server.deviceSignalCache.background = server.goBackground

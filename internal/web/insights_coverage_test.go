@@ -67,7 +67,7 @@ func TestInsightsReportDevicesThatDontUseSable(t *testing.T) {
 		"Guest network hands out 1.1.1.1 for DNS, not Sable",
 		"Its DHCP gives devices 1.1.1.1 for DNS, so their lookups skip Sable.",
 		`<option value="not-using-sable">Not Using Sable</option>`,
-		`data-device-tags="named not-using-sable"`,
+		`data-list-tags="named not-using-sable"`,
 		`href="/insights?tab=devices&amp;show=not-using-sable"`,
 		`name="member" value="devices.not-using-sable/device:mac:52:54:00:aa:bb:01"`,
 	} {

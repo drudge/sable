@@ -564,7 +564,7 @@ templ CommandPalette(view DashboardView) {
 				if (view.CanBlocking || view.CanLogs) && !view.InsightsOff {
 					@CommandOption("command-page-insights", "Insights", "Devices, changes, and blocking on your network", "lightbulb", "Page", "intelligence findings evidence analysis devices new device what changed quiet spike hardware address blocking overlap unique coverage false positive blocked clients", "/insights", "", "", "", "")
 					if view.CanLogs {
-						@CommandOption("command-page-insights-apps", "App Insights", "Every app on your network, busiest first", "apps", "Page", "apps applications services top apps streaming social gaming", "", "/insights", "top-stats-apps-dialog", "", "")
+						@CommandOption("command-page-insights-apps", "App Insights", "Every app on your network, busiest first", "apps", "Page", "apps applications services top apps streaming social gaming failing failed", "/insights?tab=apps", "", "", "", "")
 						@CommandOption("command-page-insights-devices", "Device Insights", "Every device on your network and what it is", "monitor-smartphone", "Page", "devices clients hardware mac address type names unifi new busiest phones computers tv", "/insights?tab=devices", "", "", "", "")
 						@CommandOption("command-page-insights-settings", "Insights Settings", "Choose what Insights looks for and alerts you about", "sliders", "Settings", "insights findings alerts notifications limits thresholds show only off bell quiet busy check-in", "", "/insights", "insight-settings-dialog", "", "")
 					}
@@ -618,6 +618,7 @@ templ CommandPalette(view DashboardView) {
 					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
 					if !view.InsightsOff {
 						@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
+						@CommandSearchOption("command-action-search-apps", "Search Apps", "Find an app by name or category", "search", "insights services applications failing failed refused category", "/insights?tab=apps", "[data-app-search]", "Search apps…", "app_search")
 					}
 				}
 				if view.CanSettings {

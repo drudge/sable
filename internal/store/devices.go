@@ -205,7 +205,7 @@ func (store *Store) ClientActivity(ctx context.Context, since, until time.Time) 
 		return report, err
 	}
 	blocked, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
-		name: queryLogRollupBlockedClient, column: "client_ip_key", blockedOnly: true, since: store.blockedClientRollupSince,
+		name: queryLogRollupBlockedClient, column: "client_ip_key", only: querylog.SourceBlocked, since: store.blockedClientRollupSince,
 	}, maximumClientActivity, nil)
 	if err != nil {
 		return report, err

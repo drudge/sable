@@ -342,6 +342,8 @@ type deviceStory struct {
 	// heartbeat is looked up every heartbeatEvery through the last day.
 	heartbeat      string
 	heartbeatEvery time.Duration
+	// refused marks the daily and recent queries as ones Sable refused.
+	refused bool
 }
 
 var deviceStories = []deviceStory{
@@ -361,6 +363,11 @@ var deviceStories = []deviceStory{
 		heartbeat: "c2.sensorhub-telemetry.io", heartbeatEvery: 10 * time.Minute},
 	// The doorbell was installed two days ago.
 	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
+	// The reMarkable tablet synced for weeks. Since the router started handing
+	// out public IPv6 addresses it asks from one, and the recursion policy
+	// refuses every lookup.
+	{address: "2001:db8:20:10::5a", domains: []string{"eu.tectonic.remarkable.com", "ping.remarkable.com", "webapp-prod.cloud.remarkable.engineering"},
+		perDay: 24, daysFrom: 5, daysTo: 0, recent: 30, established: true, refused: true},
 }
 
 // georgeNewDomains are the collaboration tools George started using this week.

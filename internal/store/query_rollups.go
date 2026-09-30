@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 )
 
@@ -27,8 +28,36 @@ const (
 	queryLogRollupRecordType        = "record_type"
 	queryLogRollupSource            = "source"
 	queryLogRollupResponseCode      = "response_code"
-	queryLogRollupInsertRows        = 128
+	// queryLogRollupFailed counts the queries Sable could not answer per name,
+	// so an app's drawer can say which of its names failed.
+	queryLogRollupFailed = "failed"
+	// queryLogRollupAppClient counts the queries each client made to each app
+	// in the service catalog, valued as appClientValue writes them, and the
+	// two dimensions after it count the ones that failed and were blocked.
+	// Every name counts, so an app too quiet for the domain rankings still
+	// shows up.
+	queryLogRollupAppClient        = "app_client"
+	queryLogRollupAppClientFailed  = "app_client_failed"
+	queryLogRollupAppClientBlocked = "app_client_blocked"
+	queryLogRollupInsertRows       = 128
 )
+
+// appRollupDimensions are the dimensions written for app activity, which
+// began after the others and are filled in from history on their own.
+var appRollupDimensions = []string{
+	queryLogRollupFailed, queryLogRollupAppClient, queryLogRollupAppClientFailed, queryLogRollupAppClientBlocked,
+}
+
+// appClientValue keys an app and a client in one rollup value. Service IDs and
+// client addresses never contain a space.
+func appClientValue(app, client string) string {
+	return app + " " + client
+}
+
+// splitAppClientValue reverses appClientValue.
+func splitAppClientValue(value string) (app, client string, ok bool) {
+	return strings.Cut(value, " ")
+}
 
 type queryLogRollupKey struct {
 	bucket    time.Time
@@ -83,6 +112,7 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 		for _, value := range values {
 			counts[queryLogRollupKey{bucket: bucket, dimension: value.dimension, value: value.value}]++
 		}
+		countAppEvent(counts, bucket, client, domain, event)
 		if event.Source == querylog.SourceBlocked {
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlocked, value: domain}]++
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedClient, value: client}]++
@@ -94,6 +124,31 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 			}
 		}
 	}
+	return sortedRollups(counts)
+}
+
+// countAppEvent adds one query to the app dimensions: its failure by name, and
+// its app, when the catalog names one, by client.
+func countAppEvent(counts map[queryLogRollupKey]uint64, bucket time.Time, client, domain string, event querylog.Event) {
+	if event.Failed() {
+		counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupFailed, value: domain}]++
+	}
+	service, found := services.Lookup(domain)
+	if !found {
+		return
+	}
+	value := appClientValue(service.ID, client)
+	counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupAppClient, value: value}]++
+	if event.Failed() {
+		counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupAppClientFailed, value: value}]++
+	}
+	if event.Source == querylog.SourceBlocked {
+		counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupAppClientBlocked, value: value}]++
+	}
+}
+
+// sortedRollups lists counts in bucket, dimension, and value order.
+func sortedRollups(counts map[queryLogRollupKey]uint64) []queryLogRollup {
 	rollups := make([]queryLogRollup, 0, len(counts))
 	for key, hits := range counts {
 		rollups = append(rollups, queryLogRollup{queryLogRollupKey: key, hits: hits})
