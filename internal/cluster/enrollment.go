@@ -88,6 +88,9 @@ type JoinConfiguration struct {
 	// ClientIdentities is set only on synchronization, by a primary handing a
 	// replica its client identities.
 	ClientIdentities json.RawMessage `json:"client_identities,omitempty"`
+	// AttachedNetworks is set only on synchronization, by a primary handing a
+	// replica its IPv6 networks.
+	AttachedNetworks json.RawMessage `json:"attached_networks,omitempty"`
 }
 
 type storedEnrollmentToken struct {

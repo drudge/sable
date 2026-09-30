@@ -81,7 +81,10 @@ type Server struct {
 	// records the resolver can reach, which covers the reverse zones this
 	// server does not answer for itself. Nil when the DNS handler cannot
 	// resolve, in which case the rankings fall back to local zones alone.
-	reverseNames      *reverseNameCache
+	reverseNames *reverseNameCache
+	// attachedNetworks is the IPv6 networks private recursion admits besides
+	// the fixed private ranges. Nil in tests that don't set it.
+	attachedNetworks  attachedNetworkSource
 	reload            func(context.Context) error
 	auth              Authenticator
 	sso               ssoController
@@ -1814,6 +1817,10 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.ResolverError:
 		view.Resolver = "Resolution failed"
 		view.Summary = "Sable could not complete resolution."
+	case querylog.ResolverNotAllowed:
+		view.Resolver = "Refused: recursion not allowed"
+		view.Summary = "Sable refused this lookup because this address isn't allowed to use recursion. Settings → Recursion sets who is."
+		view.PolicyDetail = "Sable refused the lookup before checking blocking."
 	}
 	switch decision.DNSSEC {
 	case querylog.DNSSECSecure:

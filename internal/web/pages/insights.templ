@@ -277,6 +277,8 @@ type InsightFindingView struct {
 	DestinationLabel string
 	DeviceKey        string
 	Domains          []InsightDeviceDomainView
+	// DomainsTitle heads Domains when they aren't first-time domains.
+	DomainsTitle string
 	// FindingID is the finding's stable identifier, which feedback is kept by.
 	FindingID string
 	// Link is the finding's own address, which opens its drawer.
@@ -821,7 +823,7 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 		}
 		if len(finding.Domains) > 0 {
 			<section class="query-detail-answer insight-evidence-domains" aria-labelledby={ finding.ID + "-domains" }>
-				<h3 id={ finding.ID + "-domains" }>First-time domains</h3>
+				<h3 id={ finding.ID + "-domains" }>{ ifThen(finding.DomainsTitle != "", finding.DomainsTitle, "First-time domains") }</h3>
 				@insightDomainList(finding.ID+"-domain", finding.Domains, view.LogWindowQuery, view.TimeDisplay, view.CanLogs, "")
 			</section>
 		}

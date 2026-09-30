@@ -27,6 +27,7 @@ Open **Logs → Queries**, constrain the time range, and filter by client, name,
 | Forwarded answer | Selected route, upstream reachability, transport, and timeout |
 | Recursive failure | Outbound DNS access, authority failures, and DNSSEC explanation |
 | DNSSEC bogus / EDE | Broken signature, parent DS mismatch, or unsigned split-horizon data beneath a signed delegation |
+| Refused: recursion not allowed | **Settings → Recursion**. The client's address isn't covered, which happens to IPv6 devices on a network Sable isn't attached to |
 
 NXDOMAIN means the name does not exist in that answer's namespace. NOERROR with no answer can mean the name exists but not the requested type. REFUSED is a policy refusal, not necessarily a network problem. SERVFAIL is a processing or resolution failure; inspect the explanation before changing settings.
 

@@ -237,12 +237,19 @@ func buildNodes(ctx context.Context, root, controllerURL string, basePort int) (
 		if err != nil {
 			return nil, err
 		}
+		// The primary stands on the office's IPv6 network in place of the
+		// host's own; the replicas stand on none and take the primary's.
+		attached := ""
 		if index == 0 {
-			built.Environment = []string{
+			attached = vandelayAttachedNetwork
+		}
+		built.Environment = []string{"SABLE_DEV_DEMO_ATTACHED_NETWORKS=" + attached}
+		if index == 0 {
+			built.Environment = append(built.Environment,
 				"SABLE_DEV_DEMO_AUTO_LOGIN=1",
-				"SABLE_DEV_DEMO_USERNAME=" + operatorUsername,
-				"SABLE_DEV_DEMO_PASSWORD=" + operatorPassword,
-			}
+				"SABLE_DEV_DEMO_USERNAME="+operatorUsername,
+				"SABLE_DEV_DEMO_PASSWORD="+operatorPassword,
+			)
 		}
 		nodes = append(nodes, built)
 	}

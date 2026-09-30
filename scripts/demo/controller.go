@@ -108,6 +108,9 @@ func controllerClients(reserved bool) []map[string]any {
 			uptime, bytes := stationTraffic(host, now)
 			entry["last_seen"], entry["uptime"] = now.Unix(), int64(uptime/time.Second)
 			entry["tx_bytes"], entry["rx_bytes"] = bytes/4, bytes-bytes/4
+			if addresses := stationIPv6[host.MAC]; len(addresses) > 0 {
+				entry["ipv6_addresses"] = addresses
+			}
 		}
 		payload = append(payload, entry)
 	}
