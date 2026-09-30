@@ -73,6 +73,9 @@ type InsightsOverviewView struct {
 	Apps            []InsightAppRowView
 	AppsUnavailable bool
 	AppsSince       time.Time
+	// AppsFailedSince is when failures began to be counted, when that is
+	// inside the window.
+	AppsFailedSince time.Time
 	AppFilter       InsightAppFilterView
 	// Settings are Insights settings, which the bell opens. Nil hides the
 	// bell from operators who may not read the query log.
@@ -99,7 +102,8 @@ type InsightDeviceFilterView struct {
 type InsightAppFilterView struct {
 	Search   string
 	Category string
-	// Show is "failing", "blocked", or "new".
+	// Show is "failing", "blocked", or "new". Failing means failing in the
+	// last hour.
 	Show string
 }
 
@@ -112,9 +116,11 @@ type InsightAppRowView struct {
 	Category string
 	Devices  int
 	Queries  uint64
-	// Failed counts the queries Sable refused or could not answer.
-	Failed  uint64
-	Blocked uint64
+	// Failed counts the queries Sable refused or could not answer in the
+	// window, and FailingNow is set when some of them were in the last hour.
+	Failed     uint64
+	FailingNow bool
+	Blocked    uint64
 	// LastSeen is the last lookup of any of the app's names, in all history.
 	LastSeen time.Time
 	// New is set when nothing on the network used the app before the window
@@ -1584,7 +1590,7 @@ func insightAppCategories(view InsightsOverviewView) []string {
 // insightAppFilterAttributes carry what the filters match a row on.
 func insightAppFilterAttributes(app InsightAppRowView) templ.Attributes {
 	tags := make([]string, 0, 3)
-	if app.Failed > 0 {
+	if app.FailingNow {
 		tags = append(tags, "failing")
 	}
 	if app.Blocked > 0 {
@@ -1613,8 +1619,8 @@ templ insightAppBadges(app InsightAppRowView) {
 	if app.New {
 		<span class="status-badge active">New</span>
 	}
-	if app.Failed > 0 {
-		<span class="status-badge warning">Failing</span>
+	if app.FailingNow {
+		<span class="status-badge warning" title="Failed in the last hour">Failing</span>
 	}
 }
 
@@ -1683,7 +1689,7 @@ templ InsightApps(view InsightsOverviewView) {
 								</th>
 								<td class="right-cell numeric-cell">{ formatNumber(uint64(app.Devices)) }</td>
 								<td class="right-cell numeric-cell">{ formatNumber(app.Queries) }</td>
-								<td class="right-cell">@insightShareCell(app.Failed, app.Queries, "insight-failed-cell")</td>
+								<td class="right-cell">@insightShareCell(app.Failed, app.Queries, ifThen(app.FailingNow, "insight-failed-cell", ""))</td>
 								<td class="right-cell insight-optional-cell">@insightShareCell(app.Blocked, app.Queries, "")</td>
 								<td class="muted-cell">{ insightDeviceTime(app.LastSeen, view.TimeDisplay) }</td>
 								<td><button class="icon-button" type="button" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name }>@Icon("chevron-right")</button></td>
@@ -1698,7 +1704,10 @@ templ InsightApps(view InsightsOverviewView) {
 				<button class="button outline compact" type="button" data-list-filter-clear>Clear Filters</button>
 			</div>
 			<footer class="insight-card-note">
-				<p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it.</p>
+				<p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it, and an app is <strong>Failing</strong> while that happened in the last hour.</p>
+				if !view.AppsFailedSince.IsZero() {
+					<p>Failures count from { FormatShortDateTime(view.AppsFailedSince, view.TimeDisplay, false) }, when this version of Sable started counting them.</p>
+				}
 				if !view.AppsSince.IsZero() {
 					<p>App counts start { FormatShortDateTime(view.AppsSince, view.TimeDisplay, false) }, while Sable counts older history.</p>
 				}

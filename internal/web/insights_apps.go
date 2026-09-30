@@ -77,17 +77,35 @@ func appUsages(activity querylog.AppActivity, report deviceReport) []appUsage {
 	return usages
 }
 
+// appFailingWindow is how recently an app must have failed to count as
+// failing now. Failures older than that are history, most often a problem
+// already fixed.
+const appFailingWindow = "hour"
+
 // insightApps loads the Overview's Top Apps and the Apps tab together, since
 // both come from one count. A report of no devices counts each address as its
 // own device.
-func (server *Server) insightApps(ctx context.Context, window insightWindow, report deviceReport) (top []pages.RankedStatView, rows []pages.InsightAppRowView, since time.Time, err error) {
+func (server *Server) insightApps(ctx context.Context, window insightWindow, report deviceReport) (top []pages.RankedStatView, rows []pages.InsightAppRowView, activity querylog.AppActivity, err error) {
 	reader, ok := server.queries.(appInsightReader)
 	if !ok {
-		return nil, nil, time.Time{}, errAppsUnavailable
+		return nil, nil, activity, errAppsUnavailable
 	}
 	activity, counted, err := server.appActivityCache.load(ctx, window, reader.AppActivity)
 	if err != nil {
-		return nil, nil, time.Time{}, err
+		return nil, nil, activity, err
+	}
+	failingNow := make(map[string]bool)
+	recentWindow, _ := chartInsightWindow(appFailingWindow, counted.End)
+	if recent, _, err := server.appActivityCache.load(ctx, recentWindow, reader.AppActivity); err != nil {
+		server.logger.Warn("read recent app failures", "error", err)
+	} else {
+		for app, clients := range recent.Clients {
+			for _, counts := range clients {
+				if counts.Failed > 0 {
+					failingNow[app] = true
+				}
+			}
+		}
 	}
 	sightings, _, err := server.appSightingCache.load(ctx, window, appSightings(reader))
 	if err != nil {
@@ -112,12 +130,12 @@ func (server *Server) insightApps(ctx context.Context, window insightWindow, rep
 		rows = append(rows, pages.InsightAppRowView{
 			ID: service.ID, Name: service.Name, Category: service.Category, Devices: usage.devices,
 			Queries: usage.counts.Queries, Failed: usage.counts.Failed, Blocked: usage.counts.Blocked,
-			LastSeen: sighting.LastSeen,
+			LastSeen: sighting.LastSeen, FailingNow: failingNow[service.ID],
 			New: !sighting.FirstSeen.IsZero() && !sighting.FirstSeen.Before(counted.Start) &&
 				!sightings.SeenSince.IsZero() && sightings.SeenSince.Add(time.Hour).Before(sighting.FirstSeen),
 		})
 	}
-	return top, rows, activity.Since, nil
+	return top, rows, activity, nil
 }
 
 // errAppsUnavailable reports a store that cannot count apps.

@@ -8,6 +8,28 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.2] - 2026-09-30
+
+Sable 1.6.1-beta.2 stops the Insights Apps tab from flagging problems that
+are already fixed.
+
+### Upgrading from 1.6.1-beta.1
+
+- App failures now count from this upgrade on. The failures beta.1 filled in
+  from older history are no longer read, so an app that failed only before
+  the IPv6 recursion fix stops showing failures.
+
+### Insights
+
+- Mark an app **Failing** only while it failed in the last hour. Before, any
+  failure in the range kept the badge, so a fixed problem stayed flagged for
+  a day on **Day** and a month on **Month**. The **Failed** column still
+  counts the whole range, and the **Failing** filter follows the badge.
+- Count app failures from the upgrade on, not from the history filled in
+  after it. Most of what failed before an upgrade is what the upgrade fixed,
+  such as devices refused over IPv6. The Apps tab says when failure counting
+  began if that falls inside the range.
+
 ## [1.6.1-beta.1] - 2026-09-30
 
 Sable 1.6.1-beta.1 answers devices that ask over IPv6 from your own network,

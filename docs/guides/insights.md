@@ -8,7 +8,7 @@ Insights runs entirely on your server. It uses fixed rules and lookup tables, no
 
 Insights needs query logging, which is on by default. Open **Insights** from the sidebar or the command palette. You need permission to read logs, blocking, or both; each section shows only what you may read.
 
-Right after an upgrade, Sable fills in device history and app counts from the query log it already keeps, so Insights knows which devices were already on the network from the first day.
+Right after an upgrade, Sable fills in device history and app counts from the query log it already keeps, so Insights knows which devices were already on the network from the first day. App failures count from the upgrade on, since most of what failed before is what the upgrade fixed.
 
 ![Insights Overview with the summary sentence, device metrics, and findings](../assets/screenshots/insights.png "The Overview opens with one sentence about what stands out, then the findings behind it.")
 
@@ -86,7 +86,7 @@ The **Apps** tab lists every app anything on the network used in the range, busi
 
 ![Insights Apps tab listing apps with their devices, queries, and failures](../assets/screenshots/insights-apps.png "Each app shows its category, how many devices used it, and how many of its lookups failed.")
 
-Each app shows how many devices used it, its queries, and **Failed**: the lookups Sable refused or could not answer. An app with failures is marked **Failing**. A common cause is a device outside the networks allowed to use Sable, such as one asking from a public IPv6 address; see **Settings → Recursion**.
+Each app shows how many devices used it, its queries, and **Failed**: the lookups Sable refused or could not answer. An app that failed in the last hour is marked **Failing**, so once you fix a problem the mark clears within the hour while the range still counts what failed before. A common cause is a device outside the networks allowed to use Sable, such as one asking from a public IPv6 address; see **Settings → Recursion**.
 
 Open an app to see its facts, **Failed lookups**, its busiest domains, and the devices that used it. Each failed domain links to exactly those failures in the query log, and each device shows how many of its lookups failed.
 

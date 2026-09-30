@@ -473,7 +473,7 @@ func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bo
 // with it.
 func (store *Store) migrateActivityMarkers(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey, appRollupSinceKey} {
+	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey, appRollupSinceKey, appFailedSinceKey} {
 		if _, err := store.database.ExecContext(ctx,
 			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
 			key, now,

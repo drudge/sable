@@ -174,7 +174,7 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 		if story.heartbeat != "" {
 			for at := now.Add(-24 * time.Hour); at.Before(now); at = at.Add(story.heartbeatEvery) {
 				jittered := at.Add(time.Duration(random.Intn(10)-5) * time.Second)
-				events = append(events, seedQueryEvent(random, jittered, client, queryDomain{name: story.heartbeat, source: querylog.SourceUpstream}, policy))
+				events = append(events, seedQueryEvent(random, jittered, client, queryDomain{name: story.heartbeat, source: story.source()}, policy))
 			}
 		}
 		for index, name := range story.newDomains {
@@ -482,7 +482,7 @@ func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) e
 	}
 	defer database.Close()
 	if _, err := database.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since', 'query_log_rollup_app_since')",
+		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since', 'query_log_rollup_app_since', 'query_log_rollup_app_failed_since')",
 		since.UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return fmt.Errorf("backdate demo source recording: %w", err)
