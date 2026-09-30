@@ -26,6 +26,7 @@ type appInsightReader interface {
 	AppActivity(context.Context, time.Time, time.Time) (querylog.AppActivity, error)
 	AppDomains(context.Context, time.Time, time.Time, []string) ([]querylog.AppDomain, error)
 	AppSightings(context.Context) (querylog.AppSightings, error)
+	LastLookup(context.Context, []string, querylog.Source, time.Time, time.Time) (time.Time, error)
 }
 
 // appSightings reads when each app was first and last used. The window only
@@ -157,7 +158,7 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 		return
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
-	view := pages.InsightAppDrawerView{Range: window.Range, RangeLabel: window.Label}
+	view := pages.InsightAppDrawerView{Range: window.Range, RangeLabel: window.Label, TimeDisplay: console.TimeDisplay}
 	apps, counts := server.queries.(appInsightReader)
 	reader, groups := server.queries.(deviceInsightReader)
 	if !counts || !groups {
@@ -194,6 +195,21 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 		server.logger.Warn("read app domains", "error", err)
 	}
 	view.App.Domains = len(domains)
+	var failing, blocked []string
+	for _, domain := range domains {
+		if domain.Failed > 0 {
+			failing = append(failing, domain.Name)
+		}
+		if domain.Blocked > 0 {
+			blocked = append(blocked, domain.Name)
+		}
+	}
+	if view.App.LastFailed, err = apps.LastLookup(request.Context(), failing, querylog.SourceError, countedWindow.Start, countedWindow.End); err != nil {
+		server.logger.Warn("read last app failure", "error", err)
+	}
+	if view.App.LastBlocked, err = apps.LastLookup(request.Context(), blocked, querylog.SourceBlocked, countedWindow.Start, countedWindow.End); err != nil {
+		server.logger.Warn("read last app block", "error", err)
+	}
 	slices.SortFunc(domains, func(left, right querylog.AppDomain) int {
 		return cmp.Or(cmp.Compare(right.Queries, left.Queries), cmp.Compare(left.Name, right.Name))
 	})

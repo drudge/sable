@@ -26,6 +26,7 @@ import (
 	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/web/pages"
 )
 
 // permissionAuthenticator signs each test session in with its own permissions.
@@ -194,6 +195,10 @@ func (*slowAppCounts) AppDomains(context.Context, time.Time, time.Time, []string
 
 func (*slowAppCounts) AppSightings(context.Context) (querylog.AppSightings, error) {
 	return querylog.AppSightings{}, nil
+}
+
+func (*slowAppCounts) LastLookup(context.Context, []string, querylog.Source, time.Time, time.Time) (time.Time, error) {
+	return time.Time{}, nil
 }
 
 // Opening Insights starts reads that fill its caches without holding up the
@@ -941,6 +946,9 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 	if strings.Contains(rankings[:strings.Index(rankings, "Busiest Devices")], "reMarkable") {
 		t.Error("Top Apps ranks a device platform")
 	}
+	if strings.Contains(server.get(t, "everything", "/ui/insights/app?id=netflix&range=day", true).Body.String(), "Last failure") {
+		t.Error("an app with no failures shows when it last failed")
+	}
 	if blocking := server.get(t, "blocking-only", "/ui/insights/overview?range=day", true).Body.String(); strings.Contains(blocking, `data-isotope-tab="apps"`) {
 		t.Error("an operator who cannot read the query log sees the Apps tab")
 	}
@@ -948,6 +956,8 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 	drawer := server.get(t, "everything", "/ui/insights/app?id=remarkable&range=day", true).Body.String()
 	for _, expected := range []string{
 		"reMarkable", "Failed lookups", "3 of 3 failed", `<strong id="insight-app-device-0">10.0.0.9</strong>`, "<small>3 failed</small>",
+		// The newest of the three failures, 30 minutes ago.
+		"<dt>Last failure</dt><dd>" + pages.FormatShortDateTime(server.now.Add(-30*time.Minute), pages.TimeDisplay{}, false) + "</dd>",
 	} {
 		if !strings.Contains(drawer, expected) {
 			t.Errorf("the app drawer is missing %q", expected)

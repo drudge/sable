@@ -183,7 +183,7 @@ func (store *Store) appWindow(ctx context.Context, since, until time.Time) (star
 }
 
 // AppDomains counts the queries in [since, until] to the names under the given
-// suffixes, which are one app's, with how many failed, busiest first. Only
+// suffixes, which are one app's, with how many failed and were blocked. Only
 // names below a suffix or equal to it count, so "tv.apple.com" never takes in
 // "apple.com".
 func (store *Store) AppDomains(ctx context.Context, since, until time.Time, suffixes []string) ([]querylog.AppDomain, error) {
@@ -207,11 +207,51 @@ func (store *Store) AppDomains(ctx context.Context, since, until time.Time, suff
 	if err != nil {
 		return nil, err
 	}
+	blocked, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
+		name: queryLogRollupBlocked, column: queryLogDomainExpression, only: querylog.SourceBlocked,
+	}, maximumAppDomains, &filter)
+	if err != nil {
+		return nil, err
+	}
 	domains := make([]querylog.AppDomain, 0, len(queries.ranks))
 	for name, hits := range queries.ranks {
-		domains = append(domains, querylog.AppDomain{Name: name, Queries: hits, Failed: failed.ranks[name]})
+		domains = append(domains, querylog.AppDomain{Name: name, Queries: hits, Failed: failed.ranks[name], Blocked: blocked.ranks[name]})
 	}
 	return domains, nil
+}
+
+// LastLookup is the newest query in [since, until] to any of the names that
+// was answered from source, or zero if there is none. It reads each name
+// through its own index, so callers pass only the names they know have such
+// a query, which keeps a busy name with one failure from costing much.
+func (store *Store) LastLookup(ctx context.Context, names []string, source querylog.Source, since, until time.Time) (time.Time, error) {
+	var last time.Time
+	index := ""
+	if store.driver != "postgres" {
+		index = " INDEXED BY sable_query_log_name_key_idx"
+	}
+	for _, name := range names[:min(len(names), maximumAppDomains)] {
+		var occurred any
+		err := store.database.QueryRowContext(ctx, `
+SELECT MAX(occurred_at) FROM sable_query_log`+index+`
+WHERE name_key = `+store.placeholder(1)+` AND source = `+store.placeholder(2)+`
+  AND occurred_at >= `+store.placeholder(3)+` AND occurred_at <= `+store.placeholder(4),
+			queryLogDomainKey(name), string(source), since.UTC(), until.UTC()).Scan(&occurred)
+		if err == nil && occurred == nil {
+			continue
+		}
+		if err != nil {
+			return time.Time{}, fmt.Errorf("read last %s lookup: %w", source, err)
+		}
+		moment, err := databaseTime(occurred)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("read last %s lookup time: %w", source, err)
+		}
+		if moment.After(last) {
+			last = moment
+		}
+	}
+	return last, nil
 }
 
 // AppSightings reads when each app was first and last looked up, across all

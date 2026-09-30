@@ -234,6 +234,10 @@ type InsightAppView struct {
 	Failed   uint64
 	Blocked  uint64
 	Domains  int
+	// LastFailed and LastBlocked are the newest failed and blocked queries
+	// in the window, which the app drawer shows beside their counts.
+	LastFailed  time.Time
+	LastBlocked time.Time
 }
 
 // InsightAppDrawerView is one app's details: the domains it was reached at in
@@ -243,6 +247,7 @@ type InsightAppDrawerView struct {
 	Range          string
 	RangeLabel     string
 	LogWindowQuery string
+	TimeDisplay    TimeDisplay
 	Missing        bool
 	Error          string
 	App            InsightAppView
@@ -1932,14 +1937,18 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 			<dl class="query-detail-grid">
 				<div class="query-detail-fact-wide"><dt>Category</dt><dd>{ view.App.Category }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.App.Queries) }</dd></div>
-				if view.App.Failed > 0 {
-					<div class="query-detail-fact-wide"><dt>Failed</dt><dd>{ formatNumber(view.App.Failed) } <small>{ percent(view.App.Failed, view.App.Queries) }</small></dd></div>
-				}
-				if view.App.Blocked > 0 {
-					<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.App.Blocked) } <small>{ percent(view.App.Blocked, view.App.Queries) }</small></dd></div>
-				}
 				<div class="query-detail-fact-wide"><dt>Domains</dt><dd>{ formatNumber(uint64(view.App.Domains)) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Devices</dt><dd>{ formatNumber(uint64(len(view.Devices) + view.MoreDevices)) }</dd></div>
+				// Blocks and failures each pair a count with when the last one
+				// happened, so the grid stays even.
+				if view.App.Blocked > 0 {
+					<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.App.Blocked) } <small>{ percent(view.App.Blocked, view.App.Queries) }</small></dd></div>
+					<div class="query-detail-fact-wide"><dt>Last blocked</dt><dd>{ insightDeviceTime(view.App.LastBlocked, view.TimeDisplay) }</dd></div>
+				}
+				if view.App.Failed > 0 {
+					<div class="query-detail-fact-wide"><dt>Failed</dt><dd>{ formatNumber(view.App.Failed) } <small>{ percent(view.App.Failed, view.App.Queries) }</small></dd></div>
+					<div class="query-detail-fact-wide"><dt>Last failure</dt><dd>{ insightDeviceTime(view.App.LastFailed, view.TimeDisplay) }</dd></div>
+				}
 			</dl>
 			if len(view.Failures) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-app-failures">

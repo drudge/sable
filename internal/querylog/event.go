@@ -310,6 +310,7 @@ type AppDomain struct {
 	Name    string
 	Queries uint64
 	Failed  uint64
+	Blocked uint64
 }
 
 // AppSighting is when any client first and last looked up a name an app owns.

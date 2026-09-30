@@ -98,6 +98,7 @@ func TestAppDomainsCountsAnAppsNamesWithFailures(t *testing.T) {
 		blockingEvent(now.Add(-30*time.Minute), "10.0.7.20", "ping.remarkable.com.", querylog.SourceError),
 		// The company's website is not one of the app's names.
 		blockingEvent(now.Add(-20*time.Minute), "10.0.7.20", "remarkable.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-10*time.Minute), "10.0.7.20", "ping.remarkable.com.", querylog.SourceBlocked),
 	})
 	rewindAppMarker(t, opened, now.Add(-4*time.Hour))
 
@@ -109,10 +110,32 @@ func TestAppDomainsCountsAnAppsNamesWithFailures(t *testing.T) {
 	slices.SortFunc(domains, func(left, right querylog.AppDomain) int { return compareStrings(left.Name, right.Name) })
 	want := []querylog.AppDomain{
 		{Name: "eu.tectonic.remarkable.com", Queries: 2, Failed: 1},
-		{Name: "ping.remarkable.com", Queries: 1, Failed: 1},
+		{Name: "ping.remarkable.com", Queries: 2, Failed: 1, Blocked: 1},
 	}
 	if !slices.Equal(domains, want) {
 		t.Fatalf("domains = %+v, want %+v", domains, want)
+	}
+}
+
+func TestLastLookupFindsTheNewestFromOneSource(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	// Written newest first, so the order rows were stored in is no guide.
+	opened := openQueryLogStore(t, []querylog.Event{
+		blockingEvent(now.Add(-10*time.Minute), "10.0.7.20", "ping.remarkable.com.", querylog.SourceUpstream),
+		blockingEvent(now.Add(-20*time.Minute), "10.0.7.20", "ping.remarkable.com.", querylog.SourceError),
+		blockingEvent(now.Add(-40*time.Minute), "10.0.7.20", "eu.tectonic.remarkable.com.", querylog.SourceError),
+		blockingEvent(now.Add(-3*time.Hour), "10.0.7.20", "eu.tectonic.remarkable.com.", querylog.SourceError),
+	})
+	ctx := context.Background()
+	names := []string{"ping.remarkable.com", "eu.tectonic.remarkable.com"}
+	last, err := opened.LastLookup(ctx, names, querylog.SourceError, now.Add(-time.Hour), now)
+	if err != nil || !last.Equal(now.Add(-20*time.Minute)) {
+		t.Fatalf("last failure = %s, %v; want %s", last, err, now.Add(-20*time.Minute))
+	}
+	if last, err := opened.LastLookup(ctx, names, querylog.SourceBlocked, now.Add(-time.Hour), now); err != nil || !last.IsZero() {
+		t.Fatalf("last block = %s, %v; want none", last, err)
 	}
 }
 
