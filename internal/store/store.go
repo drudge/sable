@@ -458,6 +458,12 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 			addCondition(queryLogDomainExpression, "LIKE", "%"+queryLogDomainKey(value)+"%")
 		}
 	}
+	if value := strings.ToLower(strings.TrimSpace(filter.Search)); value != "" {
+		arguments = append(arguments, "%"+queryLogDomainKey(value)+"%", "%"+queryLogClientKey(value)+"%", "%"+value+"%")
+		count := len(arguments)
+		conditions = append(conditions, "("+queryLogDomainExpression+" LIKE "+store.placeholder(count-2)+
+			" OR client_ip_key LIKE "+store.placeholder(count-1)+" OR LOWER(answer) LIKE "+store.placeholder(count)+")")
+	}
 	if !filter.Since.IsZero() {
 		addCondition("occurred_at", ">=", filter.Since.UTC())
 	}

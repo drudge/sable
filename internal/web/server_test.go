@@ -771,7 +771,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		}
 	}
 	logsResponse := serveRequest(server, "GET", "/logs?tab=queries")
-	for _, expected := range []string{"Server Logs", "DNS Query Log", "example.com", "Filters", "Search in results", "Protocol", "Answer", `href="/settings?tab=logging"`} {
+	for _, expected := range []string{"Server Logs", "DNS Query Log", "example.com", "Filters", `name="q"`, "Search domains, clients, or answers...", "Protocol", "Answer", `href="/settings?tab=logging"`} {
 		if !strings.Contains(logsResponse.Body.String(), expected) {
 			t.Errorf("logs page does not contain %q", expected)
 		}

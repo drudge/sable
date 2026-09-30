@@ -27,6 +27,17 @@ const {chromium} = require('playwright');
       assert.equal(await page.evaluate(id => document.activeElement?.id, selector.slice(1)), selector.slice(1), 'the box keeps focus');
     };
 
+    await page.goto(`${baseURL}/logs?tab=queries`);
+    await page.locator('#query-log-search').click();
+    await typeAndSettle('#query-log-search', '/ui/logs/queries', 'q', 'exam', 'exam');
+    await typeAndSettle('#query-log-search', '/ui/logs/queries', 'q', 'ple.com', 'example.com');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'example.com');
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'queries', 'the address stays on Query Logs');
+
+    // A reload shows the same search.
+    await page.reload();
+    assert.equal(await page.locator('#query-log-search').inputValue(), 'example.com', 'a reload keeps the search');
+
     await page.goto(`${baseURL}/logs`);
     await page.locator('#runtime-log-search').click();
     await typeAndSettle('#runtime-log-search', '/ui/logs/runtime', 'search', 'zone', 'zone');

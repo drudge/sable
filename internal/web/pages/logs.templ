@@ -52,6 +52,9 @@ type QueryLogsView struct {
 	TotalPages   int
 	ClientIP     string
 	Name         string
+	// Search is the box above the table, which looks through the domain, the
+	// client, and the answer across the whole log rather than one column.
+	Search       string
 	RecordType   string
 	ResponseCode string
 	Source       string
@@ -151,7 +154,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 
 templ QueryLogsPanel(view QueryLogsView) {
 	{{ tokens := queryFilterTokens(view) }}
-	<section class="card logs-card" id="query-logs-panel" aria-labelledby="query-log-title" tabindex="-1" data-log-live-panel data-live-refresh data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) }>
+	<section class="card logs-card" id="query-logs-panel" aria-labelledby="query-log-title" tabindex="-1" data-log-live-panel data-live-refresh data-live={ fmt.Sprint(view.Live) } data-live-url={ queryPanelLiveURL(view) } data-page-url={ queryFilterURL(view) }>
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
 				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
@@ -175,7 +178,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 			</div>
 		</header>
 		<div class="query-log-filters isotope-query-filters" id="query-log-filters" data-query-filters hidden?={ !view.FiltersOpen }>
-			<form hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML">
+			<form hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML" hx-include="#query-log-search">
 				<div class="query-filter-grid">
 					<label><span>Client IP</span><input name="client_ip" value={ view.ClientIP } placeholder="e.g. 10.0.7.168"/></label>
 					<label><span>Domain</span><input name="name" value={ view.Name } placeholder="e.g. example.com"/></label>
@@ -213,7 +216,17 @@ templ QueryLogsPanel(view QueryLogsView) {
 				}</div>
 			</form>
 		</div>
-		<div class="log-search-bar query-result-search">@SearchField("Search in results", "Search in results...", "", "", templ.Attributes{"data-query-result-search": true})<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div></div>
+		// The box searches the whole log, so it posts with the filters already
+		// applied and lands back on the first page of what it found. It swaps
+		// without a settle for the reason the server log search does.
+		<form class="log-search-bar" id="query-log-search-bar" hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML settle:0" hx-trigger="submit, input delay:400ms from:#query-log-search">
+			@SearchField("Search query logs", "Search domains, clients, or answers...", view.Search, "", templ.Attributes{"id": "query-log-search", "name": "q"})
+			for _, field := range queryFilterFields(view) {
+				<input type="hidden" name={ field.Key } value={ field.Value }/>
+			}
+			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/><input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/><input type="hidden" name="filters" value="1" disabled?={ !view.FiltersOpen } data-query-filters-input/>
+			<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="query-log-copy" aria-label="Copy current results" title="Copy current results">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(view.ExportURL) } aria-label="Export query logs" title="Export query logs">@Icon("download")</a></div>
+		</form>
 		<textarea class="sr-only" id="query-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
 			<div class="logs-empty error" role="alert">{ view.Error }</div>
@@ -246,7 +259,6 @@ templ QueryAnswers(answers []string) {
 
 templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 	<tr
-		data-query-result-row
 		data-query-detail-row
 		data-query-detail-time={ entry.OccurredAt }
 		data-query-detail-client={ entry.ClientIP }
@@ -594,7 +606,7 @@ func queryFilterTokens(view QueryLogsView) []queryFilterToken {
 func queryFilterURL(view QueryLogsView, omit ...string) string {
 	dropped := func(key string) bool { for _, name := range omit { if name == key { return true } }; return false }
 	values := url.Values{"tab": []string{"queries"}}
-	for key, value := range map[string]string{"client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
+	for key, value := range map[string]string{"q": view.Search, "client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
 		if value != "" && !dropped(key) {
 			values.Set(key, value)
 		}
@@ -607,6 +619,27 @@ func queryFilterURL(view QueryLogsView, omit ...string) string {
 		values.Set("filters", "1")
 	}
 	return "/logs?" + values.Encode()
+}
+
+type queryFilterField struct{ Key, Value string }
+
+// queryFilterFields lists the filters already applied, so the search box can
+// post them along with what was typed instead of dropping them.
+func queryFilterFields(view QueryLogsView) []queryFilterField {
+	fields := []queryFilterField{
+		{"client_ip", view.ClientIP}, {"name", view.Name}, {"record_type", view.RecordType}, {"response_code", view.ResponseCode},
+		{"source", view.Source}, {"protocol", view.Protocol}, {"start", view.Start}, {"end", view.End},
+	}
+	if view.Exact && (view.ClientIP != "" || view.Name != "") {
+		fields = append(fields, queryFilterField{"match", "exact"})
+	}
+	applied := fields[:0]
+	for _, field := range fields {
+		if field.Value != "" {
+			applied = append(applied, field)
+		}
+	}
+	return applied
 }
 
 // logWindowLabel reads a datetime-local bound back out for people rather than
@@ -666,7 +699,7 @@ func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0
 func runtimeExportURL(view RuntimeLogsView) string { return runtimeLogURL(view, "/api/v1/logs/runtime/export", false) }
 func queryPanelLiveURL(view QueryLogsView) string {
 	values := url.Values{"page": []string{"1"}, "page_size": []string{fmt.Sprint(view.PageSize)}}
-	for key, value := range map[string]string{"client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
+	for key, value := range map[string]string{"q": view.Search, "client_ip": view.ClientIP, "name": view.Name, "record_type": view.RecordType, "response_code": view.ResponseCode, "source": view.Source, "protocol": view.Protocol, "start": view.Start, "end": view.End} {
 		if value != "" {
 			values.Set(key, value)
 		}

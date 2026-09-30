@@ -289,6 +289,7 @@ type CommandSearchMode struct {
 }
 
 var queryLogCommandSearchModes = []CommandSearchMode{
+	{Label: "All", Parameter: "q", Focus: "#query-log-search", Prompt: "Search query logs…", InputLabel: "Search Query Logs"},
 	{Label: "Domain", Parameter: "name", Focus: "#query-log-filters input[name='name']", Prompt: "Search query logs by domain…", InputLabel: "Search Query Logs by Domain"},
 	{Label: "Client IP", Parameter: "client_ip", Focus: "#query-log-filters input[name='client_ip']", Prompt: "Search query logs by client IP…", InputLabel: "Search Query Logs by Client IP"},
 }
@@ -615,7 +616,7 @@ templ CommandPalette(view DashboardView) {
 				@CommandSearchModesOption("command-action-query", "Run DNS Query", "Enter a domain and choose a record type", "terminal", "rdq resolve lookup dig nslookup", "/dns-client", "DNS record type", dnsQueryCommandSearchModes, "#dns-query-form")
 				if view.CanLogs {
 					@CommandSearchOption("command-action-search-server-logs", "Search Server Logs", "Enter a term without leaving the command palette", "search", "ssl runtime debug errors diagnostics", "/logs", "#runtime-log-search", "Search server logs…", "search")
-					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain or client IP", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
+					@CommandSearchModesOption("command-action-search-query-logs", "Search Query Logs", "Search by domain, client IP, or answer", "search", "sql dns history client response filters ip address", "/logs?tab=queries&filters=1", "Search query logs by", queryLogCommandSearchModes, "")
 					if !view.InsightsOff {
 						@CommandSearchOption("command-action-search-devices", "Search Devices", "Find a device by name, address, or maker", "search", "insights clients hosts hardware mac ip address vendor", "/insights?tab=devices", "[data-device-search]", "Search devices…", "search")
 					}

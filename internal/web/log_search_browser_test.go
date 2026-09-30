@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// The server log search keeps what was typed while its panel refreshes
-// around the box.
+// Both log searches keep what was typed while their panels refresh around
+// the box, and the query log search keeps its terms in the address.
 func TestBrowserLogSearch(t *testing.T) {
 	app, _ := newCheckDomainTestServer(t)
 	server := httptest.NewServer(app.httpServer.Handler)
