@@ -151,7 +151,7 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 				if at.After(now) {
 					continue
 				}
-				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+				domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: story.source()}
 				events = append(events, seedQueryEvent(random, at, client, domain, policy))
 			}
 		}
@@ -180,7 +180,7 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 		}
 		for range story.recent {
 			at := now.Add(-time.Duration(random.Int63n(int64(24 * time.Hour))))
-			domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: querylog.SourceUpstream}
+			domain := queryDomain{name: story.domains[random.Intn(len(story.domains))], source: story.source()}
 			events = append(events, seedQueryEvent(random, at, client, domain, policy))
 		}
 	}
@@ -195,6 +195,14 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 	return events
 }
 
+// source is where a story's daily and recent queries were answered from.
+func (story deviceStory) source() querylog.Source {
+	if story.refused {
+		return querylog.SourceError
+	}
+	return querylog.SourceUpstream
+}
+
 func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain, policy *demoBlockPolicy) querylog.Event {
 	responseCode, answer, duration := 0, "", time.Duration(0)
 	switch domain.source {
@@ -207,6 +215,9 @@ func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain
 	case querylog.SourceCache:
 		answer = fmt.Sprintf("104.18.%d.%d", random.Intn(60), random.Intn(255))
 		duration = microseconds(random, 90, 500)
+	case querylog.SourceError:
+		responseCode = 5
+		duration = microseconds(random, 10, 80)
 	default:
 		answer = fmt.Sprintf("151.101.%d.%d", random.Intn(80), random.Intn(255))
 		duration = microseconds(random, 8_000, 52_000)
@@ -231,6 +242,8 @@ func seedQueryDecision(domain queryDomain, policy *demoBlockPolicy) querylog.Dec
 		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}
 	case querylog.SourceCache:
 		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}
+	case querylog.SourceError:
+		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}
 	default:
 		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheMiss, Resolver: querylog.ResolverForwarded, DNSSEC: querylog.DNSSECIndeterminate}
 	}
@@ -442,7 +455,7 @@ func backdateSourceRecording(ctx context.Context, dsn string, since time.Time) e
 	}
 	defer database.Close()
 	if _, err := database.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since')",
+		"UPDATE sable_metadata SET value = ? WHERE key IN ('query_log_rollup_blocked_source_since', 'query_log_rollup_blocked_client_since', 'query_log_client_seen_since', 'query_log_rollup_app_since')",
 		since.UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return fmt.Errorf("backdate demo source recording: %w", err)

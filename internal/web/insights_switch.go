@@ -177,4 +177,5 @@ func (server *Server) forgetInsightCaches() {
 	server.deviceActivityCache.forget()
 	server.deviceSignalCache.forget()
 	server.repeatedLookupCache.forget()
+	server.appSightingCache.forget()
 }

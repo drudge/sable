@@ -2,22 +2,154 @@ package web
 
 import (
 	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/insights/devices"
 	"github.com/drudge/sable/internal/insights/services"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
 // insightsAppDevices bounds how many devices an app's drawer lists.
 const insightsAppDevices = 50
 
-// insightsAppPanel loads one app's details into the open drawer: the domains
-// it was reached at, counted as Top Apps counts them, and the devices that
-// looked it up.
+// appInsightReader is the optional store capability behind the Apps tab, Top
+// Apps, and the app drawer.
+type appInsightReader interface {
+	AppActivity(context.Context, time.Time, time.Time) (querylog.AppActivity, error)
+	AppDomains(context.Context, time.Time, time.Time, []string) ([]querylog.AppDomain, error)
+	AppSightings(context.Context) (querylog.AppSightings, error)
+}
+
+// appSightings reads when each app was first and last used. The window only
+// keys the cache; sightings span all history.
+func appSightings(reader appInsightReader) func(context.Context, time.Time, time.Time) (querylog.AppSightings, error) {
+	return func(ctx context.Context, _, _ time.Time) (querylog.AppSightings, error) {
+		return reader.AppSightings(ctx)
+	}
+}
+
+// appUsage is one app's traffic in a window, with how many devices it came
+// from.
+type appUsage struct {
+	service services.Service
+	counts  querylog.AppCounts
+	devices int
+}
+
+// appUsages totals each app's traffic, busiest first. Addresses the device
+// report ties to one device count as that device; the rest count alone.
+func appUsages(activity querylog.AppActivity, report deviceReport) []appUsage {
+	owners := make(map[string]string)
+	for _, device := range report.devices {
+		for _, address := range device.Addresses {
+			owners[address.Address] = device.Key
+		}
+	}
+	usages := make([]appUsage, 0, len(activity.Clients))
+	for id, clients := range activity.Clients {
+		service, found := services.Find(id)
+		if !found {
+			continue
+		}
+		usage := appUsage{service: service}
+		seen := make(map[string]struct{}, len(clients))
+		for client, counts := range clients {
+			usage.counts.Queries += counts.Queries
+			usage.counts.Failed += counts.Failed
+			usage.counts.Blocked += counts.Blocked
+			seen[cmp.Or(owners[client], client)] = struct{}{}
+		}
+		usage.devices = len(seen)
+		usages = append(usages, usage)
+	}
+	slices.SortFunc(usages, func(left, right appUsage) int {
+		return cmp.Or(cmp.Compare(right.counts.Queries, left.counts.Queries), cmp.Compare(left.service.Name, right.service.Name))
+	})
+	return usages
+}
+
+// insightApps loads the Overview's Top Apps and the Apps tab together, since
+// both come from one count. A report of no devices counts each address as its
+// own device.
+func (server *Server) insightApps(ctx context.Context, window insightWindow, report deviceReport) (top []pages.RankedStatView, rows []pages.InsightAppRowView, since time.Time, err error) {
+	reader, ok := server.queries.(appInsightReader)
+	if !ok {
+		return nil, nil, time.Time{}, errAppsUnavailable
+	}
+	activity, counted, err := server.appActivityCache.load(ctx, window, reader.AppActivity)
+	if err != nil {
+		return nil, nil, time.Time{}, err
+	}
+	sightings, _, err := server.appSightingCache.load(ctx, window, appSightings(reader))
+	if err != nil {
+		// The list still stands without when each app was first and last used.
+		server.logger.Warn("read app sightings", "error", err)
+	}
+	usages := appUsages(activity, report)
+	top = make([]pages.RankedStatView, 0, min(len(usages), insightsRankLimit))
+	rows = make([]pages.InsightAppRowView, 0, len(usages))
+	for _, usage := range usages {
+		service := usage.service
+		// Operating system check-ins are not apps anyone chose to use, so the
+		// ranking leaves them to the Apps tab.
+		if service.Category != services.CategoryPlatform && len(top) < insightsRankLimit {
+			top = append(top, pages.RankedStatView{
+				Name: service.Name, Secondary: service.Category, Value: usage.counts.Queries,
+				Drawer: pages.AppDrawerLink(service.ID, window.Range),
+				Icon:   pages.AppIcon(service.ID, service.Category),
+			})
+		}
+		sighting := sightings.Apps[service.ID]
+		rows = append(rows, pages.InsightAppRowView{
+			ID: service.ID, Name: service.Name, Category: service.Category, Devices: usage.devices,
+			Queries: usage.counts.Queries, Failed: usage.counts.Failed, Blocked: usage.counts.Blocked,
+			LastSeen: sighting.LastSeen,
+			New: !sighting.FirstSeen.IsZero() && !sighting.FirstSeen.Before(counted.Start) &&
+				!sightings.SeenSince.IsZero() && sightings.SeenSince.Add(time.Hour).Before(sighting.FirstSeen),
+		})
+	}
+	return top, rows, activity.Since, nil
+}
+
+// errAppsUnavailable reports a store that cannot count apps.
+var errAppsUnavailable = errors.New("app activity is not available for this database")
+
+// insightsAppShows are the Apps tab's choices of which apps to show.
+var insightsAppShows = map[string]struct{}{"failing": {}, "blocked": {}, "new": {}}
+
+// insightAppFilter reads the Apps tab's search and filters, from the request
+// or, for a range change or refresh, from the page URL htmx reports.
+func insightAppFilter(request *http.Request) pages.InsightAppFilterView {
+	values := request.URL.Query()
+	if !values.Has("app_search") && !values.Has("category") && !values.Has("app_show") {
+		if current, err := url.Parse(request.Header.Get("HX-Current-URL")); err == nil {
+			values = current.Query()
+		}
+	}
+	filter := pages.InsightAppFilterView{Search: strings.TrimSpace(values.Get("app_search"))}
+	if len(filter.Search) > maximumDeviceSearch {
+		filter.Search = strings.ToValidUTF8(filter.Search[:maximumDeviceSearch], "")
+	}
+	if category := values.Get("category"); slices.ContainsFunc(services.All(), func(service services.Service) bool { return service.Category == category }) {
+		filter.Category = category
+	}
+	if _, offered := insightsAppShows[values.Get("app_show")]; offered {
+		filter.Show = values.Get("app_show")
+	}
+	return filter
+}
+
+// insightsAppPanel loads one app's details into the open drawer: its traffic,
+// the names it was reached at and which of them failed, and the devices that
+// used it, from every lookup rather than the busiest names.
 func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http.Request) {
 	console := server.consoleView(request)
 	if !console.CanLogs {
@@ -26,7 +158,7 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 	}
 	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
 	view := pages.InsightAppDrawerView{Range: window.Range, RangeLabel: window.Label}
-	queries, counts := server.queries.(queryInsightReader)
+	apps, counts := server.queries.(appInsightReader)
 	reader, groups := server.queries.(deviceInsightReader)
 	if !counts || !groups {
 		writeFragmentStatus(writer, http.StatusServiceUnavailable)
@@ -35,57 +167,99 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 		return
 	}
 	service, known := services.Find(request.URL.Query().Get("id"))
-	counted, countedWindow, err := server.appCache.load(request.Context(), window, queries.QueryLogInsights)
+	activity, countedWindow, err := server.appActivityCache.load(request.Context(), window, apps.AppActivity)
 	if err != nil {
-		server.logger.Warn("read app domains", "error", err)
+		server.logger.Warn("read app activity", "error", err)
 		writeFragmentStatus(writer, http.StatusInternalServerError)
 		view.Error = "App details could not be loaded right now."
 		server.renderAppDrawer(writer, request, view)
 		return
 	}
 	view.LogWindowQuery = countedWindow.logWindowQuery()
-	domains := make([]pages.InsightDeviceDomainView, 0)
-	for name, hits := range counted.Domains {
-		if owner, found := services.Lookup(name); known && found && owner.ID == service.ID {
-			domains = append(domains, pages.InsightDeviceDomainView{Name: name, Queries: hits})
-			view.App.Queries += hits
-		}
-	}
-	if len(domains) == 0 {
+	clients := activity.Clients[service.ID]
+	if !known || len(clients) == 0 {
 		view.Missing = true
 		server.renderAppDrawer(writer, request, view)
 		return
 	}
-	slices.SortFunc(domains, func(left, right pages.InsightDeviceDomainView) int {
+	view.App.ID, view.App.Name, view.App.Category = service.ID, service.Name, service.Category
+	for _, counts := range clients {
+		view.App.Queries += counts.Queries
+		view.App.Failed += counts.Failed
+		view.App.Blocked += counts.Blocked
+	}
+
+	domains, err := apps.AppDomains(request.Context(), countedWindow.Start, countedWindow.End, services.Suffixes([]string{service.ID}))
+	if err != nil {
+		server.logger.Warn("read app domains", "error", err)
+	}
+	view.App.Domains = len(domains)
+	slices.SortFunc(domains, func(left, right querylog.AppDomain) int {
 		return cmp.Or(cmp.Compare(right.Queries, left.Queries), cmp.Compare(left.Name, right.Name))
 	})
-	view.App.ID, view.App.Name, view.App.Category, view.App.Domains = service.ID, service.Name, service.Category, len(domains)
-	view.Domains = domains[:min(len(domains), insightsDeviceDomains)]
-
-	used, err := reader.ClientNamesMatching(request.Context(), countedWindow.Start, services.Suffixes([]string{service.ID}), nil)
-	if err != nil {
-		server.logger.Warn("read app devices", "error", err)
+	for _, domain := range domains[:min(len(domains), insightsDeviceDomains)] {
+		view.Domains = append(view.Domains, pages.InsightDeviceDomainView{Name: domain.Name, Queries: domain.Queries, Failed: domain.Failed})
 	}
+	slices.SortFunc(domains, func(left, right querylog.AppDomain) int {
+		return cmp.Or(cmp.Compare(right.Failed, left.Failed), cmp.Compare(left.Name, right.Name))
+	})
+	for _, domain := range domains {
+		if domain.Failed == 0 || len(view.Failures) == insightsDeviceDomains {
+			break
+		}
+		view.Failures = append(view.Failures, pages.InsightDeviceDomainView{Name: domain.Name, Queries: domain.Queries, Failed: domain.Failed})
+	}
+
 	report, err := server.insightDevices(request.Context(), reader, window)
 	if err != nil {
 		server.logger.Warn("build insights devices", "error", err)
 	}
-	for _, device := range report.devices {
-		if !slices.ContainsFunc(device.Addresses, func(address devices.Address) bool { return len(used[address.Address]) > 0 }) {
-			continue
-		}
-		if len(view.Devices) == insightsAppDevices {
-			view.MoreDevices++
-			continue
-		}
-		label := devices.Label(device)
-		row := pages.InsightAppDeviceView{Key: device.Key, Label: label, Named: device.Name != "", Detail: deviceAddressDetail(label, device.ClientAddresses())}
-		if device.Guess.Type != "" {
-			row.Type, row.TypeLabel, row.TypeConfidence = device.Guess.Type, devices.TypeLabel(device.Guess.Type), string(device.Guess.Confidence)
-		}
-		view.Devices = append(view.Devices, row)
-	}
+	view.Devices, view.MoreDevices = appDeviceViews(clients, report)
 	server.renderAppDrawer(writer, request, view)
+}
+
+// appDeviceViews lists the devices behind an app's clients, busiest first,
+// each with its queries and failures summed across its addresses. An address
+// no device claims is listed as itself.
+func appDeviceViews(clients map[string]querylog.AppCounts, report deviceReport) ([]pages.InsightAppDeviceView, int) {
+	byDevice := make(map[string]*pages.InsightAppDeviceView)
+	order := make([]*pages.InsightAppDeviceView, 0)
+	claimed := make(map[string]bool, len(clients))
+	for _, device := range report.devices {
+		var row *pages.InsightAppDeviceView
+		for _, address := range device.Addresses {
+			counts, used := clients[address.Address]
+			if !used {
+				continue
+			}
+			claimed[address.Address] = true
+			if row == nil {
+				label := devices.Label(device)
+				row = &pages.InsightAppDeviceView{Key: device.Key, Label: label, Named: device.Name != "", Detail: deviceAddressDetail(label, device.ClientAddresses())}
+				if device.Guess.Type != "" {
+					row.Type, row.TypeLabel, row.TypeConfidence = device.Guess.Type, devices.TypeLabel(device.Guess.Type), string(device.Guess.Confidence)
+				}
+				byDevice[device.Key] = row
+				order = append(order, row)
+			}
+			row.Queries += counts.Queries
+			row.Failed += counts.Failed
+		}
+	}
+	for client, counts := range clients {
+		if claimed[client] {
+			continue
+		}
+		order = append(order, &pages.InsightAppDeviceView{Key: client, Label: client, Queries: counts.Queries, Failed: counts.Failed})
+	}
+	slices.SortFunc(order, func(left, right *pages.InsightAppDeviceView) int {
+		return cmp.Or(cmp.Compare(right.Queries, left.Queries), cmp.Compare(left.Label, right.Label))
+	})
+	views := make([]pages.InsightAppDeviceView, 0, min(len(order), insightsAppDevices))
+	for _, row := range order[:min(len(order), insightsAppDevices)] {
+		views = append(views, *row)
+	}
+	return views, len(order) - len(views)
 }
 
 func (server *Server) renderAppDrawer(writer http.ResponseWriter, request *http.Request, view pages.InsightAppDrawerView) {

@@ -179,13 +179,21 @@ func (*slowAppCounts) RecentQueryEvents(context.Context, int) ([]querylog.Entry,
 	return nil, nil
 }
 
-func (counts *slowAppCounts) QueryLogInsights(ctx context.Context, _, _ time.Time) (querylog.Insights, error) {
+func (counts *slowAppCounts) AppActivity(ctx context.Context, _, _ time.Time) (querylog.AppActivity, error) {
 	counts.started <- struct{}{}
 	<-ctx.Done()
 	// A read takes a moment to wind down after it is canceled.
 	time.Sleep(20 * time.Millisecond)
 	counts.finished.Store(true)
-	return querylog.Insights{}, ctx.Err()
+	return querylog.AppActivity{}, ctx.Err()
+}
+
+func (*slowAppCounts) AppDomains(context.Context, time.Time, time.Time, []string) ([]querylog.AppDomain, error) {
+	return nil, nil
+}
+
+func (*slowAppCounts) AppSightings(context.Context) (querylog.AppSightings, error) {
+	return querylog.AppSightings{}, nil
 }
 
 // Opening Insights starts reads that fill its caches without holding up the
@@ -301,7 +309,7 @@ func TestInsightsNavigationAndCommandPaletteFollowPermissions(t *testing.T) {
 		`data-command-label="Device Insights"`, `data-command-label="Blocking Insights"`, `data-command-label="Set Up Alerts"`,
 		`data-command-href="/insights?tab=devices"`, `data-command-href="/insights?tab=blocking"`,
 		`data-command-href="/settings?tab=alerts"`,
-		`data-command-label="App Insights"`, `data-command-route="/insights" data-command-dialog="top-stats-apps-dialog"`,
+		`data-command-label="App Insights"`, `data-command-href="/insights?tab=apps"`,
 		`data-command-label="Insights Settings"`, `data-command-route="/insights" data-command-dialog="insight-settings-dialog"`,
 	} {
 		if !strings.Contains(palette, expected) {
@@ -891,6 +899,71 @@ func TestInsightsRankingsOpenAppsAndDevices(t *testing.T) {
 	}
 	if unused := server.get(t, "everything", "/ui/insights/app?id=spotify&range=day", true).Body.String(); !strings.Contains(unused, "Nothing on the network used this app in the last 24 hours.") {
 		t.Fatal("an app nobody used did not explain itself")
+	}
+}
+
+// The Apps tab lists every app, platform services too, with the lookups Sable
+// could not answer. An app's drawer names the failing domains, each linking to
+// exactly those failures in Query Logs, and which device they came from.
+func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	var events []querylog.Event
+	lookup := func(offset time.Duration, client, name string, source querylog.Source) {
+		events = append(events, querylog.Event{
+			OccurredAt: server.now.Add(-offset), ClientIP: client, Name: name, RecordType: dns.TypeA,
+			Class: dns.ClassINET, ResponseCode: dns.RcodeRefused, Source: source, Protocol: "UDP",
+		})
+	}
+	for index := range 3 {
+		lookup(time.Duration(30+index)*time.Minute, "10.0.0.9", "eu.tectonic.remarkable.com.", querylog.SourceError)
+	}
+	lookup(20*time.Minute, "10.0.0.9", "ping.remarkable.com.", querylog.SourceUpstream)
+	lookup(20*time.Minute, "10.0.0.5", "www.netflix.com.", querylog.SourceUpstream)
+	if err := server.store.WriteQueryEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+
+	overview := server.get(t, "everything", "/ui/insights/overview?range=day&tab=apps", true).Body.String()
+	for _, expected := range []string{
+		`data-isotope-tab="apps"`, `id="insight-apps-title"`,
+		// Nothing used it before today, so it is new too.
+		`data-list-category="Device platform" data-list-row data-list-tags="failing new"`,
+		`<span class="status-badge warning">Failing</span>`,
+		`hx-get="/ui/insights/app?id=remarkable&amp;range=day"`,
+	} {
+		if !strings.Contains(overview, expected) {
+			t.Errorf("the Apps tab is missing %q", expected)
+		}
+	}
+	// Top Apps still leaves device platforms out.
+	rankings := overview[strings.Index(overview, "Top Apps"):]
+	if strings.Contains(rankings[:strings.Index(rankings, "Busiest Devices")], "reMarkable") {
+		t.Error("Top Apps ranks a device platform")
+	}
+	if blocking := server.get(t, "blocking-only", "/ui/insights/overview?range=day", true).Body.String(); strings.Contains(blocking, `data-isotope-tab="apps"`) {
+		t.Error("an operator who cannot read the query log sees the Apps tab")
+	}
+
+	drawer := server.get(t, "everything", "/ui/insights/app?id=remarkable&range=day", true).Body.String()
+	for _, expected := range []string{
+		"reMarkable", "Failed lookups", "3 of 3 failed", `<strong id="insight-app-device-0">10.0.0.9</strong>`, "<small>3 failed</small>",
+	} {
+		if !strings.Contains(drawer, expected) {
+			t.Errorf("the app drawer is missing %q", expected)
+		}
+	}
+	match := regexp.MustCompile(`href="(/logs\?name=eu\.tectonic\.remarkable\.com&amp;source=error&amp;tab=queries[^"]*)" aria-label="View (\d+) queries`).FindStringSubmatch(drawer)
+	if match == nil {
+		t.Fatalf("the app drawer has no query log link for the failures:\n%s", drawer)
+	}
+	filter, _ := queryLogFilter(httptest.NewRequest(http.MethodGet, html.UnescapeString(match[1]), nil))
+	page, err := server.store.QueryEvents(context.Background(), filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strconv.Itoa(page.TotalEntries) != match[2] || match[2] != "3" {
+		t.Fatalf("the link reports %d queries, the drawer %s", page.TotalEntries, match[2])
 	}
 }
 

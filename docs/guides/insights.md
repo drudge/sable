@@ -8,7 +8,7 @@ Insights runs entirely on your server. It uses fixed rules and lookup tables, no
 
 Insights needs query logging, which is on by default. Open **Insights** from the sidebar or the command palette. You need permission to read logs, blocking, or both; each section shows only what you may read.
 
-Right after an upgrade, Sable fills in device history from the query log it already keeps, so Insights knows which devices were already on the network from the first day.
+Right after an upgrade, Sable fills in device history and app counts from the query log it already keeps, so Insights knows which devices were already on the network from the first day.
 
 ![Insights Overview with the summary sentence, device metrics, and findings](../assets/screenshots/insights.png "The Overview opens with one sentence about what stands out, then the findings behind it.")
 
@@ -29,7 +29,7 @@ Insights reports:
 - **Devices that don't use Sable.** Devices UniFi shows online and busy that never sent Sable a lookup, and networks whose DHCP hands out other DNS servers. See [Devices that don't use Sable](#devices-that-dont-use-sable).
 - **Blocking findings.** Names that were blocked before you allowed them, block lists that stopped updating, and lists that add little of their own.
 
-**Top Apps** and **Busiest Devices** rank the whole network for the selected range. Open an app to see the domains it used, each linked to its queries, and the devices that used it. Open a device to see its details.
+**Top Apps** and **Busiest Devices** rank the whole network for the selected range. Top Apps leaves out device platforms, such as UniFi or a printer's cloud; the [Apps](#apps) tab lists those too. Open an app to see the domains it used, each linked to its queries, and the devices that used it. Open a device to see its details.
 
 ## Devices
 
@@ -73,6 +73,22 @@ Sable checks every address tied to a device before calling it silent: the ones U
 - **Devices that are supposed to be quiet.** Use **That's Normal** on the finding to mark every device it lists. A device you haven't marked brings the finding back. Marked devices are listed under the findings card, where **Show Again** undoes it.
 
 Change how long a device must stay silent in [Insights Settings](#choose-what-insights-shows-and-alerts). Sable needs a day of UniFi readings before it can tell traffic across the whole window, so a new setup reports nothing for the first day.
+
+## Apps
+
+The **Apps** tab lists every app anything on the network used in the range, busiest first. Sable knows an app by the domains it owns and counts every lookup of them, so a quiet app, such as a tablet's sync service, shows up as surely as a busy one.
+
+![Insights Apps tab listing apps with their devices, queries, and failures](../assets/screenshots/insights-apps.png "Each app shows its category, how many devices used it, and how many of its lookups failed.")
+
+Each app shows how many devices used it, its queries, and **Failed**: the lookups Sable refused or could not answer. An app with failures is marked **Failing**. A common cause is a device outside the networks allowed to use Sable, such as one asking from a public IPv6 address; see **Settings → Recursion**.
+
+Open an app to see its facts, **Failed lookups**, its busiest domains, and the devices that used it. Each failed domain links to exactly those failures in the query log, and each device shows how many of its lookups failed.
+
+### Find an app
+
+Search the list by name or category. The filters beside the search narrow it to one category, or to apps that are failing, blocked, or new. The page's address keeps the search and filters, so they last through a range change or a reload.
+
+**Search Apps** in the command palette opens the list with your search already in place.
 
 ## Share a finding, device, or app
 
