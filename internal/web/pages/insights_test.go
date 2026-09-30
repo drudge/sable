@@ -162,16 +162,19 @@ func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
 	t.Parallel()
 	view := InsightsOverviewView{Range: "week", Apps: []InsightAppRowView{
 		{ID: "youtube", Name: "YouTube", Category: "Streaming", Devices: 3, Queries: 1200, Blocked: 12},
-		{ID: "remarkable", Name: "reMarkable", Category: "Device platform", Devices: 1, Queries: 54, Failed: 54, New: true},
+		{ID: "remarkable", Name: "reMarkable", Category: "Device platform", Devices: 1, Queries: 54, Failed: 54, FailingNow: true, New: true},
+		// Its failures stopped over an hour ago, so it is counted but not failing.
+		{ID: "icloud", Name: "iCloud", Category: "Cloud storage", Devices: 2, Queries: 80, Failed: 20},
 	}}
 	markup := renderComponent(t, InsightApps(view))
 	for _, expected := range []string{
 		`data-list-category="Streaming" data-list-row data-list-tags="blocked" data-list-text="youtube streaming youtube"`,
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new" data-list-text="remarkable device platform remarkable"`,
-		`<span class="count-badge" data-list-count="2">2 apps</span>`, `data-list-nouns="app apps"`,
-		`<span class="status-badge warning">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
+		`<span class="count-badge" data-list-count="3">3 apps</span>`, `data-list-nouns="app apps"`,
+		`<span class="status-badge warning" title="Failed in the last hour">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
 		`data-list-param="app_search"`, `data-list-param="category"`, `data-list-param="app_show"`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=week"`,
+		`data-list-category="Cloud storage" data-list-row data-list-tags="" data-list-text="icloud cloud storage icloud"`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("apps list is missing %s", expected)
@@ -179,15 +182,22 @@ func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
 	}
 	options := regexp.MustCompile(`<select data-list-select="category"[^>]*>(.*?)</select>`).FindStringSubmatch(markup)
 	if options == nil || regexp.MustCompile(`>\s+<`).ReplaceAllString(options[1], "><") !=
-		`<option value="" selected>All Categories</option><option value="Device platform">Device platform</option><option value="Streaming">Streaming</option>` {
-		t.Errorf("category filter offers %q, want All Categories and the two shown", options)
+		`<option value="" selected>All Categories</option><option value="Cloud storage">Cloud storage</option><option value="Device platform">Device platform</option><option value="Streaming">Streaming</option>` {
+		t.Errorf("category filter offers %q, want All Categories and the three shown", options)
+	}
+	if got := strings.Count(markup, "Failing</span>"); got != 2 {
+		t.Errorf("%d Failing badges, want one per list for the app failing now", got)
+	}
+	if got := strings.Count(markup, "insight-failed-cell"); got != 1 {
+		t.Errorf("%d highlighted failure counts, want only the app failing now", got)
 	}
 	if strings.Contains(markup, "App counts start") {
 		t.Error("a list counted over the whole range says counting started late")
 	}
 
 	view.AppsSince = time.Date(2026, 9, 30, 13, 0, 0, 0, time.UTC)
-	if markup := renderComponent(t, InsightApps(view)); !strings.Contains(markup, "App counts start") {
+	view.AppsFailedSince = view.AppsSince
+	if markup := renderComponent(t, InsightApps(view)); !strings.Contains(markup, "App counts start") || !strings.Contains(markup, "Failures count from") {
 		t.Error("a partial count does not say when counting started")
 	}
 	if empty := renderComponent(t, InsightApps(InsightsOverviewView{})); strings.Contains(empty, "data-list-search") || !strings.Contains(empty, "No apps in this period") {

@@ -192,6 +192,9 @@ func (server *Server) warmInsights(console pages.DashboardView, window insightWi
 		}
 		if reader, ok := server.queries.(appInsightReader); ok {
 			warm(func(ctx context.Context) { server.appActivityCache.load(ctx, window, reader.AppActivity) })
+			if recent, valid := chartInsightWindow(appFailingWindow, window.End); valid {
+				warm(func(ctx context.Context) { server.appActivityCache.load(ctx, recent, reader.AppActivity) })
+			}
 			warm(func(ctx context.Context) { server.appSightingCache.load(ctx, window, appSightings(reader)) })
 		}
 	}
@@ -331,10 +334,12 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 		}
 		view.DeviceFilter, view.DeviceTypeOptions = insightDeviceFilter(request), devices.TypeLabels()
-		if view.TopApps, view.Apps, view.AppsSince, err = server.insightApps(request.Context(), window, report); err != nil {
+		var apps querylog.AppActivity
+		if view.TopApps, view.Apps, apps, err = server.insightApps(request.Context(), window, report); err != nil {
 			server.logger.Warn("count insights apps", "error", err)
 			view.AppsUnavailable = true
 		}
+		view.AppsSince, view.AppsFailedSince = apps.Since, apps.FailedSince
 		view.AppFilter = insightAppFilter(request)
 	}
 	if console.CanBlocking {

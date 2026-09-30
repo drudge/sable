@@ -925,6 +925,9 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 	}
 	lookup(20*time.Minute, "10.0.0.9", "ping.remarkable.com.", querylog.SourceUpstream)
 	lookup(20*time.Minute, "10.0.0.5", "www.netflix.com.", querylog.SourceUpstream)
+	// iCloud failed hours ago and works now.
+	lookup(3*time.Hour, "10.0.0.5", "gateway.icloud.com.", querylog.SourceError)
+	lookup(10*time.Minute, "10.0.0.5", "gateway.icloud.com.", querylog.SourceUpstream)
 	if err := server.store.WriteQueryEvents(context.Background(), events); err != nil {
 		t.Fatal(err)
 	}
@@ -934,8 +937,10 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 		`data-isotope-tab="apps"`, `id="insight-apps-title"`,
 		// Nothing used it before today, so it is new too.
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new"`,
-		`<span class="status-badge warning">Failing</span>`,
+		`<span class="status-badge warning" title="Failed in the last hour">Failing</span>`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=day"`,
+		// iCloud's failure is counted, but it is not failing now.
+		`data-list-category="Cloud storage" data-list-row data-list-tags="new"`,
 	} {
 		if !strings.Contains(overview, expected) {
 			t.Errorf("the Apps tab is missing %q", expected)

@@ -174,7 +174,7 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 		if story.heartbeat != "" {
 			for at := now.Add(-24 * time.Hour); at.Before(now); at = at.Add(story.heartbeatEvery) {
 				jittered := at.Add(time.Duration(random.Intn(10)-5) * time.Second)
-				events = append(events, seedQueryEvent(random, jittered, client, queryDomain{name: story.heartbeat, source: querylog.SourceUpstream}, policy))
+				events = append(events, seedQueryEvent(random, jittered, client, queryDomain{name: story.heartbeat, source: story.source()}, policy))
 			}
 		}
 		for index, name := range story.newDomains {
