@@ -92,6 +92,11 @@ var unifiHosts = []unifiHost{
 	{"a4:cf:12:88:44:02", "kruger-visitor", "10.20.40.111", guestNetworkID, false},
 }
 
+// vandelayAttachedNetwork is the office's IPv6 network on Corporate, where
+// the Queens nodes sit, so private recursion covers it. The IoT network gets
+// its own /64 from the same prefix, which the nodes aren't attached to.
+const vandelayAttachedNetwork = "2001:db8:5a1e:10::53/64"
+
 // silentStations are connected clients that never ask Sable anything, which
 // Insights reports as devices that don't use Sable. They are connected for
 // days and stream steadily, but none of them is in the query history.

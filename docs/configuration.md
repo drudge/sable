@@ -87,12 +87,34 @@ renews within the configured window.
 ## Recursive resolution and forwarding
 
 Client recursion defaults to `recursion = "private"`: loopback, RFC 1918 IPv4,
-IPv6 unique-local, and link-local source addresses. This restriction also applies
-when upgrading a configuration that omits the setting. Public-network clients
-must be explicitly allowed. It covers UDP, TCP, DoT, DoH, and DoQ, including
+IPv6 unique-local, and link-local source addresses, plus the IPv6 networks Sable
+is attached to. This restriction also applies when upgrading a configuration
+that omits the setting. Public-network clients must be explicitly allowed. It covers UDP, TCP, DoT, DoH, and DoQ, including
 conditional forwarding and recursive cache hits. DoH uses the connection source;
 it does not trust forwarding headers. A reverse proxy must enforce equivalent
 client restrictions before forwarding to Sable.
+
+Most home networks with IPv6 give devices global addresses from the ISP's
+prefix, such as `2001:db8:1234:1500::/64`, not private ones. So private access
+also covers every global IPv6 network on an interface of Sable's that is up,
+isn't loopback or a tunnel, and also has a private IPv4 (or `100.64.0.0/10`)
+or unique-local IPv6 address. That last rule marks a LAN. It leaves out a
+hosting provider's shared network, where a server has only public addresses.
+An address on a longer prefix, such as a DHCPv6 `/128`, counts as the `/64` it
+sits in, and a network broader than `/48` never counts. Sable reads its
+interfaces at startup and every 30 seconds, so a new prefix from the ISP is
+picked up within half a minute. **Settings → Recursion** lists the networks
+under **This Network**.
+
+In a cluster, the lead hands its networks to every replica, which admits them
+too. A replica in a container can't see the LAN it serves, so this is what
+lets it answer the LAN's IPv6 devices. The list shows those networks as **from**
+the lead.
+
+Private access only covers networks Sable is attached to. A device on another
+VLAN with its own `/64` is still refused. The fix is `recursion = "acl"`
+listing that network along with your private ranges. Use `acl` too for the stricter behavior of earlier
+releases, which left global IPv6 out entirely.
 
 Use Settings → Recursion to choose the access policy, or configure:
 

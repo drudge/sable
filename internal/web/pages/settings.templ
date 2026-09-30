@@ -25,6 +25,8 @@ type SettingsPageView struct {
 	DatabaseDSN         string
 	Recursion string
  RecursionClients string
+	// AttachedNetworks are the IPv6 networks private recursion also covers.
+	AttachedNetworks []AttachedNetworkView
  ResolverMode        string
 	Forwarders          string
 	RootHints           string
@@ -376,6 +378,32 @@ templ ManualCertificateDialogs() {
 	</dialog>
 }
 
+// AttachedNetworkView is one IPv6 network private recursion covers, with the
+// interface it's on or the node that shared it.
+type AttachedNetworkView struct {
+	Prefix string
+	Source string
+}
+
+// SettingsAttachedNetworks lists the networks private recursion covers
+// besides the fixed private ranges. It only shows while private access is
+// chosen.
+templ SettingsAttachedNetworks(networks []AttachedNetworkView) {
+	<div class="read-only-field attached-networks">
+		<span>This Network</span>
+		if len(networks) > 0 {
+			<ul class="attached-network-list">
+				for _, network := range networks {
+					<li><code>{ network.Prefix }</code><small>{ network.Source }</small></li>
+				}
+			</ul>
+		} else {
+			<strong>No IPv6 network found</strong>
+		}
+		<small>Private access also covers the IPv6 networks Sable is attached to.</small>
+	</div>
+}
+
 templ SettingsRecursionPanel(view SettingsPageView) {
  <div class="settings-panel-stack">
  @SettingsCard("shield", "Recursive Clients", "Control who can use forwarding, recursion, and cached recursive answers") {
@@ -386,6 +414,7 @@ templ SettingsRecursionPanel(view SettingsPageView) {
  <option value="deny" selected?={ view.Recursion == "deny" }>Disabled — authoritative and local answers only</option>
  <option value="allow" selected?={ view.Recursion == "allow" }>Everyone — public recursive resolver</option>
  </select><small>Applies to UDP, TCP, DoT, DoH, and DoQ. Private access includes link-local clients. Authoritative zones remain public.</small></label>
+ @SettingsAttachedNetworks(view.AttachedNetworks)
  <label class="field-control"><span>Allowed Recursive Clients</span><textarea name="recursion_clients" rows="4" spellcheck="false" placeholder={ "192.168.1.0/24\nfd00::/8" }>{ view.RecursionClients }</textarea><small>Used with “Listed clients only”. Enter one IP address or CIDR network per line. An empty list denies all client recursion.</small></label>
  </div>
  }

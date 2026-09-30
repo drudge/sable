@@ -2177,6 +2177,13 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .settings-check strong { font-size: .8rem; }
 .read-only-field { display: grid; gap: .3rem; border: 1px dashed var(--border); border-radius: calc(var(--radius) - 2px); background: color-mix(in oklch, var(--muted) 40%, transparent); padding: .8rem; }
 .read-only-field > span { color: var(--muted-foreground); font-size: .7rem; }
+.attached-network-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.attached-network-list li { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; min-width: 0; }
+.attached-network-list code { min-width: 0; font-family: var(--font-mono, monospace); font-size: .8rem; overflow-wrap: anywhere; }
+.attached-network-list small { flex: none; }
+.attached-networks > strong { font-size: .8rem; font-weight: 500; }
+/* The networks only matter while private access is chosen. */
+.settings-panel-stack:not(:has(select[name="recursion"] option[value="private"]:checked)) .attached-networks { display: none; }
 .settings-summary-card { padding: 1.25rem; }
 .settings-summary-card header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
 .settings-summary-card dl { display: grid; margin: 0; }

@@ -260,8 +260,12 @@ type Stats struct {
 }
 
 type Handler struct {
-	admission            resolutionAdmission
-	runtime              atomic.Pointer[Runtime]
+	admission resolutionAdmission
+	runtime   atomic.Pointer[Runtime]
+	// attached holds the IPv6 networks this node is attached to, which
+	// private recursion admits. A background watcher replaces the list; a
+	// lookup only loads it.
+	attached             atomic.Pointer[[]netip.Prefix]
 	queries              atomic.Uint64
 	noError              atomic.Uint64
 	serverFailures       atomic.Uint64
@@ -1382,7 +1386,18 @@ func (handler *Handler) resolve(request *dns.Msg, runtime *Runtime) resolution {
 }
 
 func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, clientIP string) resolution {
-	return handler.resolveRequest(request, runtime, clientIP, runtime.recursion.Allows(clientIP))
+	var attached []netip.Prefix
+	if networks := handler.attached.Load(); networks != nil {
+		attached = *networks
+	}
+	return handler.resolveRequest(request, runtime, clientIP, runtime.recursion.AllowsFrom(clientIP, attached))
+}
+
+// SetAttachedNetworks replaces the IPv6 networks private recursion admits
+// besides the fixed private ranges.
+func (handler *Handler) SetAttachedNetworks(networks []netip.Prefix) {
+	networks = slices.Clone(networks)
+	handler.attached.Store(&networks)
 }
 
 func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clientIP string, recursionAllowed bool) (result resolution) {
