@@ -23,6 +23,7 @@ import (
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/localnet"
 	"github.com/drudge/sable/internal/neighbors"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/secrets"
@@ -201,6 +202,11 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	handler = dnsserver.NewHandler(runtime)
 	handler.SetLogger(logger)
 	handler.StartMaintenance()
+	// Private recursion admits the IPv6 networks this node is attached to.
+	// They are read once before any listener opens, then kept current.
+	readInterfaces := attachedInterfaceReader()
+	attachedNetworks := localnet.NewWatcher(handler.SetAttachedNetworks)
+	_ = attachedNetworks.Refresh(readInterfaces)
 	startupComplete := false
 	defer func() {
 		if startupComplete {
@@ -417,6 +423,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	runRuntimeWorker(func(context.Context) {
 		runNeighborSampler(runtimeContext, insightsEnabled, neighbors.Read, database.RecordClientIdentities, logger)
 	})
+	runRuntimeWorker(func(context.Context) { attachedNetworks.Run(runtimeContext, readInterfaces, logger) })
 	runRuntimeWorker(func(context.Context) {
 		// One after the other: each reads through the whole query history.
 		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
@@ -510,6 +517,10 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 		Read: database.ClientIdentities, Record: database.RecordClientIdentities, Lookback: devices.Lookback,
 		Enabled: insightsEnabled,
 	})
+	// A replica in a container can't see the LAN it serves, so the lead hands
+	// it the networks private recursion should admit.
+	clusterService.SetAttachedNetworks(cluster.AttachedNetworks{Own: attachedNetworks.Own, Lead: attachedNetworks.SetLead})
+	webServer.SetAttachedNetworks(attachedNetworks)
 	webServer.SetAlerts(alertDispatcher, alertSecrets)
 	webServer.SetWatchStatus(watches.LastAlert)
 	if authentication != nil {

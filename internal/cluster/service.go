@@ -185,6 +185,8 @@ type Service struct {
 	clientIdentities  ClientIdentities
 	identityShare     identitySharer
 	identityRecording identityRecorder
+	// attachedNetworks reads this node's IPv6 networks and takes the lead's.
+	attachedNetworks AttachedNetworks
 }
 
 func Open(options Options) (*Service, error) {

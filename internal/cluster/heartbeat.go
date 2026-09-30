@@ -73,6 +73,10 @@ type SyncConfiguration struct {
 	// list, handed to a replica once a minute. A replica that does not know
 	// the field passes over it.
 	ClientIdentities json.RawMessage `json:"client_identities,omitempty"`
+	// AttachedNetworks lists the lead's IPv6 networks, which a replica's
+	// private recursion admits too. A replica that does not know the field
+	// passes over it.
+	AttachedNetworks json.RawMessage `json:"attached_networks,omitempty"`
 }
 
 type nodeTelemetry struct {
@@ -196,6 +200,9 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		configuration.LookupProtocol = lookupProtocolVersion
 		if service.clientIdentities.Read != nil {
 			configuration.ClientIdentities = service.identityShare.due(heartbeat.NodeID, now)
+		}
+		if service.attachedNetworks.Own != nil {
+			configuration.AttachedNetworks = encodeAttachedNetworks(service.attachedNetworks.Own())
 		}
 	}
 	return SyncConfiguration(configuration), nil
@@ -368,6 +375,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	}
 	if configuration.PrimaryID == primary.ID {
 		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
+		service.receiveAttachedNetworks(primary.Name, configuration.AttachedNetworks)
 	}
 	candidate := manifestFromJoinConfiguration(JoinConfiguration(configuration))
 	if candidate.ClusterID == "" || !manifestContainsNode(candidate, service.nodeID) {

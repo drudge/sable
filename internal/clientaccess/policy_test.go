@@ -1,6 +1,9 @@
 package clientaccess
 
-import "testing"
+import (
+	"net/netip"
+	"testing"
+)
 
 func TestRecursionAccess(t *testing.T) {
 	for _, test := range []struct {
@@ -36,6 +39,41 @@ func TestRecursionAccess(t *testing.T) {
 	} {
 		if _, err := Compile(test.mode, test.clients); err == nil {
 			t.Fatalf("accepted %+v", test)
+		}
+	}
+}
+
+// Private mode admits the networks Sable is attached to, and no other mode
+// does, since the ACL and the open and closed modes are explicit.
+func TestPrivateRecursionAdmitsAttachedNetworks(t *testing.T) {
+	attached := []netip.Prefix{netip.MustParsePrefix("2001:db8:1234:1500::/64")}
+	for _, test := range []struct {
+		mode, client string
+		allowed      bool
+	}{
+		{"private", "2001:db8:1234:1500:4b53:1028:c3bd:115b", true},
+		{"private", "2001:db8:1234:1501::1", false},
+		{"private", "192.0.2.1", false},
+		{"acl", "2001:db8:1234:1500::1", false},
+		{"deny", "2001:db8:1234:1500::1", false},
+	} {
+		policy, err := Compile(test.mode, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := policy.AllowsFrom(test.client, attached); got != test.allowed {
+			t.Errorf("%s %s allowed=%v, want %v", test.mode, test.client, got, test.allowed)
+		}
+	}
+}
+
+func BenchmarkPrivateRecursionWithAttachedNetworks(b *testing.B) {
+	policy, _ := Compile("private", nil)
+	attached := []netip.Prefix{netip.MustParsePrefix("2001:db8:1234:1500::/64"), netip.MustParsePrefix("2001:db8:1234:1600::/64")}
+	b.ReportAllocs()
+	for b.Loop() {
+		if !policy.AllowsFrom("2001:db8:1234:1600:4b53:1028:c3bd:115b", attached) {
+			b.Fatal("refused an attached client")
 		}
 	}
 }

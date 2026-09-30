@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
+
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
@@ -56,6 +58,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	}
 	if err := backing.WriteQueryEvents(ctx, seedDeviceHistory(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo device history: %w", err)
+	}
+	if err := backing.WriteQueryEvents(ctx, seedRefusedLookups(now)); err != nil {
+		return fmt.Errorf("write demo refused lookups: %w", err)
 	}
 	if err := seedUniFiTraffic(ctx, backing); err != nil {
 		return err
@@ -203,6 +208,28 @@ func (story deviceStory) source() querylog.Source {
 	return querylog.SourceUpstream
 }
 
+// seedRefusedLookups is the weather station asking over IPv6 every 40 minutes
+// for the last day, refused each time because recursion doesn't cover the IoT
+// network. Insights reports it as Lookups refused.
+func seedRefusedLookups(now time.Time) []querylog.Event {
+	events := make([]querylog.Event, 0, 72)
+	for step := range 36 {
+		at := now.Add(-time.Duration(step)*40*time.Minute - 3*time.Minute)
+		name := "api.weather.com."
+		if step%3 == 0 {
+			name = "rtupdate.wunderground.com."
+		}
+		for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA} {
+			events = append(events, querylog.Event{
+				OccurredAt: at, ClientIP: refusedStationAddress, Name: name, RecordType: recordType, Class: dns.ClassINET,
+				ResponseCode: dns.RcodeRefused, Source: querylog.SourceError, Protocol: "UDP", Duration: 60 * time.Microsecond,
+				Decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed},
+			})
+		}
+	}
+	return events
+}
+
 func seedQueryEvent(random *rand.Rand, at time.Time, client clientWeight, domain queryDomain, policy *demoBlockPolicy) querylog.Event {
 	responseCode, answer, duration := 0, "", time.Duration(0)
 	switch domain.source {
@@ -243,7 +270,7 @@ func seedQueryDecision(domain queryDomain, policy *demoBlockPolicy) querylog.Dec
 	case querylog.SourceCache:
 		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}
 	case querylog.SourceError:
-		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}
+		return querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed}
 	default:
 		return querylog.Decision{Policy: querylog.PolicyNoMatch, Cache: querylog.CacheMiss, Resolver: querylog.ResolverForwarded, DNSSEC: querylog.DNSSECIndeterminate}
 	}

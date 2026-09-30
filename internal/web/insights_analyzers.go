@@ -52,6 +52,9 @@ func (server *Server) insightAnalyzers(console pages.DashboardView, window insig
 			}
 			analyzers = append(analyzers, devices.CoverageAnalyzer{Sources: coverage, Limits: insightDeviceLimits(settings), Off: off})
 		}
+		if reader, ok := server.queries.(refusedLookupReader); ok {
+			analyzers = append(analyzers, devices.RefusalAnalyzer{Sources: &refusalSources{server: server, reader: reader, devices: deviceData}, Off: off})
+		}
 	}
 	analyzers = append(analyzers, blockinginsights.Analyzer{Sources: blocking, Limits: insightBlockingLimits(settings), Off: off})
 	return analyzers, blocking, deviceData
@@ -342,4 +345,37 @@ func ownLookups(configuration config.Config) map[string]bool {
 		add(list.URL)
 	}
 	return names
+}
+
+// refusedLookupReader reads the lookups the recursion policy refused.
+type refusedLookupReader interface {
+	RefusedLookups(context.Context, time.Time) ([]querylog.RefusedLookup, error)
+}
+
+// refusalSources feeds the refused-lookup analyzer: the last day's refusals,
+// the devices that name them, and the policy and networks in force now.
+type refusalSources struct {
+	server  *Server
+	reader  refusedLookupReader
+	devices *deviceSources
+}
+
+func (sources *refusalSources) Refusals(ctx context.Context, end time.Time) (devices.RefusalInput, error) {
+	refused, err := sources.reader.RefusedLookups(ctx, end.Add(-devices.RefusalWindow))
+	if err != nil {
+		sources.server.logger.Warn("read refused lookups", "error", err)
+		return devices.RefusalInput{}, err
+	}
+	input := devices.RefusalInput{
+		Refused: refused, Now: end,
+		Allowed: sources.server.recursionAllows(), Attached: sources.server.onAttachedNetwork(),
+	}
+	if len(refused) > 0 && sources.devices != nil {
+		// Devices only name what was refused, so a failed read leaves
+		// addresses unnamed rather than the finding out.
+		if report, err := sources.devices.load(ctx); err == nil {
+			input.Devices = report.devices
+		}
+	}
+	return input, nil
 }

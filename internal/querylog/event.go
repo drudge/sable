@@ -47,6 +47,9 @@ const (
 	ResolverForwarded     ResolverDecision = "forwarded"
 	ResolverRecursive     ResolverDecision = "recursive"
 	ResolverError         ResolverDecision = "error"
+	// ResolverNotAllowed marks a lookup refused because the recursion policy
+	// doesn't cover the client.
+	ResolverNotAllowed ResolverDecision = "not_allowed"
 )
 
 type DNSSECDecision string
@@ -200,6 +203,13 @@ type ClientActivity struct {
 	// BaselineNewDomains the names first queried in the seven days before.
 	RecentNewDomains   uint64
 	BaselineNewDomains uint64
+}
+
+// RefusedLookup is one lookup the recursion policy refused.
+type RefusedLookup struct {
+	Client string
+	Name   string
+	At     time.Time
 }
 
 // LookupTimes is when one client looked up one name, oldest first, for

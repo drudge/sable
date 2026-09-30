@@ -26,6 +26,7 @@ func TestInsightFindingsDefaultToWhatInsightsAlwaysDid(t *testing.T) {
 		NotUsingSable:       InsightNotUsingSable{Mode: "alert", Hours: 24},
 		NetworkOtherDNS:     InsightFinding{Mode: "alert"},
 		NetworkViaGateway:   InsightFinding{Mode: "show"},
+		LookupsRefused:      InsightFinding{Mode: "alert"},
 		UpdateFailing:       InsightUpdateFailing{Mode: "alert", MissedUpdates: 2},
 		PastBlock:           InsightFinding{Mode: "alert"},
 		ListUnreadable:      InsightFinding{Mode: "show"},

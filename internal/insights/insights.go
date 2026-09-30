@@ -141,8 +141,10 @@ type Finding struct {
 	// Clients lists the clients the evidence involves, busiest first.
 	Clients []Count
 	// Domains lists the names the evidence involves, with the query filter
-	// that reproduces each one's rows.
-	Domains []DomainEvidence
+	// that reproduces each one's rows. DomainsTitle heads the list when the
+	// names aren't first-time domains, which most findings list.
+	Domains      []DomainEvidence
+	DomainsTitle string
 	// Explanations are plain possibilities for what the finding could mean,
 	// offered as next steps to check rather than conclusions.
 	Explanations []string

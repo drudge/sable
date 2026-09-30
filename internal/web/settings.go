@@ -488,7 +488,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
 		Recursion: configuration.Resolver.Recursion, RecursionClients: strings.Join(configuration.Resolver.RecursionClients, "\n"),
-		MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
+		AttachedNetworks: server.attachedNetworkViews(), MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),

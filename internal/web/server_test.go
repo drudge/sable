@@ -216,6 +216,17 @@ func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
 	}
 }
 
+// A lookup refused by the recursion policy says so, apart from one that
+// failed, and says where the policy lives.
+func TestQueryDecisionViewExplainsARecursionRefusal(t *testing.T) {
+	t.Parallel()
+	view := queryDecisionView(querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed})
+	if view.Resolver != "Refused: recursion not allowed" || !strings.Contains(view.Summary, "Settings → Recursion") ||
+		view.PolicyDetail != "Sable refused the lookup before checking blocking." {
+		t.Fatalf("refusal explanation = %+v", view)
+	}
+}
+
 func TestQueryDecisionViewNamesTheBlockListsBehindABlock(t *testing.T) {
 	t.Parallel()
 	for sources, want := range map[string]string{

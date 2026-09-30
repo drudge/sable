@@ -74,6 +74,12 @@ Sable checks every address tied to a device before calling it silent: the ones U
 
 Change how long a device must stay silent in [Insights Settings](#choose-what-insights-shows-and-alerts). Sable needs a day of UniFi readings before it can tell traffic across the whole window, so a new setup reports nothing for the first day.
 
+### Devices Sable refuses
+
+A device can ask Sable and still get nothing back. When Recursion Access doesn't cover its address, Sable refuses every lookup it sends. Most devices quietly fall back to IPv4, so the problem can hide for days. Insights reports such a device as **Lookups refused** once Sable has refused it at least 10 times across at least 2 hours of the last day.
+
+It only reports devices that look local: ones Sable has seen on the network by hardware address, or with an address on a network Sable is attached to. Lookups refused from elsewhere on the internet never raise it. The finding lists the addresses, the names the device looked up, and a link to **Settings → Recursion**. It clears once the policy covers the device. See [recursion access](../configuration.md#recursive-resolution-and-forwarding) for what private access covers.
+
 ## Apps
 
 The **Apps** tab lists every app anything on the network used in the range, busiest first. Sable knows an app by the domains it owns and counts every lookup of them, so a quiet app, such as a tablet's sync service, shows up as surely as a busy one.
