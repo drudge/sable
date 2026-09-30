@@ -82,6 +82,22 @@ func appUsages(activity querylog.AppActivity, report deviceReport) []appUsage {
 // already fixed.
 const appFailingWindow = "hour"
 
+// An app is failing now when, in the last hour, at least appFailingShare
+// percent of its lookups failed and at least appFailingMinimum of them did.
+// One upstream timeout fails about three lookups as the device retries, so
+// the minimum keeps a quiet app from flagging on a single blip, and the
+// share keeps a busy app from flagging on a few in thousands. A device that
+// is refused outright fails every lookup and clears both.
+const (
+	appFailingShare   = 1
+	appFailingMinimum = 5
+)
+
+// appFailing reports whether an app's last hour counts as failing now.
+func appFailing(counts querylog.AppCounts) bool {
+	return counts.Failed >= appFailingMinimum && counts.Failed*100 >= counts.Queries*appFailingShare
+}
+
 // insightApps loads the Overview's Top Apps and the Apps tab together, since
 // both come from one count. A report of no devices counts each address as its
 // own device.
@@ -100,11 +116,12 @@ func (server *Server) insightApps(ctx context.Context, window insightWindow, rep
 		server.logger.Warn("read recent app failures", "error", err)
 	} else {
 		for app, clients := range recent.Clients {
+			var total querylog.AppCounts
 			for _, counts := range clients {
-				if counts.Failed > 0 {
-					failingNow[app] = true
-				}
+				total.Queries += counts.Queries
+				total.Failed += counts.Failed
 			}
+			failingNow[app] = appFailing(total)
 		}
 	}
 	sightings, _, err := server.appSightingCache.load(ctx, window, appSightings(reader))

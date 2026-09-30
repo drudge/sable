@@ -920,11 +920,17 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 			Class: dns.ClassINET, ResponseCode: dns.RcodeRefused, Source: source, Protocol: "UDP",
 		})
 	}
-	for index := range 3 {
+	for index := range 6 {
 		lookup(time.Duration(30+index)*time.Minute, "10.0.0.9", "eu.tectonic.remarkable.com.", querylog.SourceError)
 	}
 	lookup(20*time.Minute, "10.0.0.9", "ping.remarkable.com.", querylog.SourceUpstream)
 	lookup(20*time.Minute, "10.0.0.5", "www.netflix.com.", querylog.SourceUpstream)
+	// One upstream timeout failed YouTube three times as the laptop retried,
+	// which is not enough to call it failing.
+	for index := range 3 {
+		lookup(time.Duration(15+index)*time.Second, "10.0.0.5", "www.youtube.com.", querylog.SourceError)
+	}
+	lookup(10*time.Second, "10.0.0.5", "www.youtube.com.", querylog.SourceUpstream)
 	// iCloud failed hours ago and works now.
 	lookup(3*time.Hour, "10.0.0.5", "gateway.icloud.com.", querylog.SourceError)
 	lookup(10*time.Minute, "10.0.0.5", "gateway.icloud.com.", querylog.SourceUpstream)
@@ -937,8 +943,9 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 		`data-isotope-tab="apps"`, `id="insight-apps-title"`,
 		// Nothing used it before today, so it is new too.
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new"`,
-		`<span class="status-badge warning" title="Failed in the last hour">Failing</span>`,
+		`<span class="status-badge warning" title="At least 1% of its lookups failed in the last hour">Failing</span>`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=day"`,
+		`data-list-tags="new" data-list-text="youtube streaming youtube"`,
 		// iCloud's failure is counted, but it is not failing now.
 		`data-list-category="Cloud storage" data-list-row data-list-tags="new"`,
 	} {
@@ -960,7 +967,7 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 
 	drawer := server.get(t, "everything", "/ui/insights/app?id=remarkable&range=day", true).Body.String()
 	for _, expected := range []string{
-		"reMarkable", "Failed lookups", "3 of 3 failed", `<strong id="insight-app-device-0">10.0.0.9</strong>`, "<small>3 failed</small>",
+		"reMarkable", "Failed lookups", "6 of 6 failed", `<strong id="insight-app-device-0">10.0.0.9</strong>`, "<small>6 failed</small>",
 		// The newest of the three failures, 30 minutes ago.
 		"<dt>Last failure</dt><dd>" + pages.FormatShortDateTime(server.now.Add(-30*time.Minute), pages.TimeDisplay{}, false) + "</dd>",
 	} {
@@ -977,8 +984,28 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strconv.Itoa(page.TotalEntries) != match[2] || match[2] != "3" {
+	if strconv.Itoa(page.TotalEntries) != match[2] || match[2] != "6" {
 		t.Fatalf("the link reports %d queries, the drawer %s", page.TotalEntries, match[2])
+	}
+}
+
+func TestAppFailingNeedsAShareAndACount(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		counts  querylog.AppCounts
+		failing bool
+	}{
+		{"refused outright", querylog.AppCounts{Queries: 40, Failed: 40}, true},
+		{"one timeout on a quiet app", querylog.AppCounts{Queries: 30, Failed: 3}, false},
+		{"a few in thousands", querylog.AppCounts{Queries: 5_500, Failed: 12}, false},
+		{"one device of many refused", querylog.AppCounts{Queries: 400, Failed: 6}, true},
+		{"right at one percent", querylog.AppCounts{Queries: 500, Failed: 5}, true},
+		{"nothing failed", querylog.AppCounts{Queries: 100}, false},
+	} {
+		if got := appFailing(test.counts); got != test.failing {
+			t.Errorf("%s: appFailing(%+v) = %t, want %t", test.name, test.counts, got, test.failing)
+		}
 	}
 }
 

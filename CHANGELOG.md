@@ -8,6 +8,19 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.3] - 2026-09-30
+
+Sable 1.6.1-beta.3 stops a single upstream timeout from marking an app
+**Failing**.
+
+### Insights
+
+- Mark an app **Failing** only when at least 1% of its lookups in the last
+  hour failed, and at least 5 of them. One upstream timeout fails about three
+  lookups as the device retries, which flagged busy apps such as Apple
+  services for 3 failures in 5,500. A device that is refused outright still
+  marks the app, even when many other devices use it without trouble.
+
 ## [1.6.1-beta.2] - 2026-09-30
 
 Sable 1.6.1-beta.2 stops the Insights Apps tab from flagging problems that

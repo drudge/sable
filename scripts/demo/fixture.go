@@ -365,11 +365,11 @@ var deviceStories = []deviceStory{
 	{address: "10.20.30.46", domains: []string{"events.ringbell-cloud.com", "video.ringbell-cloud.com", "time.apple.com"}, perDay: 120, daysFrom: 2, daysTo: 0},
 	// The reMarkable tablet synced for weeks. Since the router started handing
 	// out public IPv6 addresses it asks from one, and the recursion policy
-	// refuses every lookup, including its ping every half hour, so it is
+	// refuses every lookup, including its ping every ten minutes, so it is
 	// failing right now.
 	{address: "2001:db8:20:10::5a", domains: []string{"eu.tectonic.remarkable.com", "ping.remarkable.com", "webapp-prod.cloud.remarkable.engineering"},
 		perDay: 24, daysFrom: 5, daysTo: 0, recent: 30, established: true, refused: true,
-		heartbeat: "ping.remarkable.com", heartbeatEvery: 30 * time.Minute},
+		heartbeat: "ping.remarkable.com", heartbeatEvery: 10 * time.Minute},
 }
 
 // georgeNewDomains are the collaboration tools George started using this week.

@@ -110,8 +110,8 @@ type InsightDeviceFilterView struct {
 type InsightAppFilterView struct {
 	Search   string
 	Category string
-	// Show is "failing", "blocked", or "new". Failing means failing in the
-	// last hour.
+	// Show is "failing", "blocked", or "new". Failing means failing now, as
+	// FailingNow says.
 	Show string
 }
 
@@ -125,7 +125,7 @@ type InsightAppRowView struct {
 	Devices  int
 	Queries  uint64
 	// Failed counts the queries Sable refused or could not answer in the
-	// window, and FailingNow is set when some of them were in the last hour.
+	// window, and FailingNow is set when enough of the last hour's failed.
 	Failed     uint64
 	FailingNow bool
 	Blocked    uint64
@@ -5034,7 +5034,7 @@ func insightAppBadges(app InsightAppRowView) templ.Component {
 			}
 		}
 		if app.FailingNow {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "<span class=\"status-badge warning\" title=\"Failed in the last hour\">Failing</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "<span class=\"status-badge warning\" title=\"At least 1% of its lookups failed in the last hour\">Failing</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5452,7 +5452,7 @@ func InsightApps(view InsightsOverviewView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, "<strong>No apps match</strong> <button class=\"button outline compact\" type=\"button\" data-list-filter-clear>Clear Filters</button></div><footer class=\"insight-card-note\"><p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it, and an app is <strong>Failing</strong> while that happened in the last hour.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, "<strong>No apps match</strong> <button class=\"button outline compact\" type=\"button\" data-list-filter-clear>Clear Filters</button></div><footer class=\"insight-card-note\"><p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it, and an app is <strong>Failing</strong> while at least 1% of its lookups in the last hour failed, and at least 5 of them.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
