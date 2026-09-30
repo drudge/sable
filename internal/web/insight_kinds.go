@@ -194,6 +194,11 @@ func insightSettingGroups() []insightSettingGroup {
 				note:        "It describes how a network is set up rather than news, so it never alerts.",
 				mode:        func(findings *config.InsightFindings) *string { return &findings.NetworkViaGateway.Mode },
 			},
+			{
+				kind: devices.KindLookupsRefused, key: "lookups_refused", title: "Lookups refused",
+				description: "Recursion Access keeps refusing a device on your network.",
+				mode:        func(findings *config.InsightFindings) *string { return &findings.LookupsRefused.Mode },
+			},
 		}},
 		{id: "blocking", title: "Blocking", kinds: []insightKindSetting{
 			{

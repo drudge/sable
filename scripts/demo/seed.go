@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
+
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
@@ -56,6 +58,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	}
 	if err := backing.WriteQueryEvents(ctx, seedDeviceHistory(random, now, policy)); err != nil {
 		return fmt.Errorf("write demo device history: %w", err)
+	}
+	if err := backing.WriteQueryEvents(ctx, seedRefusedLookups(now)); err != nil {
+		return fmt.Errorf("write demo refused lookups: %w", err)
 	}
 	if err := seedUniFiTraffic(ctx, backing); err != nil {
 		return err
@@ -190,6 +195,28 @@ func seedDeviceHistory(random *rand.Rand, now time.Time, policy *demoBlockPolicy
 		at := now.Add(-72*time.Hour + time.Duration(index)*3*time.Hour)
 		for range 1 + random.Intn(6) {
 			events = append(events, seedQueryEvent(random, at.Add(time.Duration(random.Intn(3600))*time.Second), george, queryDomain{name: name, source: querylog.SourceUpstream}, policy))
+		}
+	}
+	return events
+}
+
+// seedRefusedLookups is the weather station asking over IPv6 every 40 minutes
+// for the last day, refused each time because recursion doesn't cover the IoT
+// network. Insights reports it as Lookups refused.
+func seedRefusedLookups(now time.Time) []querylog.Event {
+	events := make([]querylog.Event, 0, 72)
+	for step := range 36 {
+		at := now.Add(-time.Duration(step)*40*time.Minute - 3*time.Minute)
+		name := "api.weather.com."
+		if step%3 == 0 {
+			name = "rtupdate.wunderground.com."
+		}
+		for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA} {
+			events = append(events, querylog.Event{
+				OccurredAt: at, ClientIP: refusedStationAddress, Name: name, RecordType: recordType, Class: dns.ClassINET,
+				ResponseCode: dns.RcodeRefused, Source: querylog.SourceError, Protocol: "UDP", Duration: 60 * time.Microsecond,
+				Decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed},
+			})
 		}
 	}
 	return events

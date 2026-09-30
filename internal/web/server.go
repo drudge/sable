@@ -1817,6 +1817,10 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.ResolverError:
 		view.Resolver = "Resolution failed"
 		view.Summary = "Sable could not complete resolution."
+	case querylog.ResolverNotAllowed:
+		view.Resolver = "Refused: recursion not allowed"
+		view.Summary = "Sable refused this lookup because this address isn't allowed to use recursion. Settings → Recursion sets who is."
+		view.PolicyDetail = "Sable refused the lookup before checking blocking."
 	}
 	switch decision.DNSSEC {
 	case querylog.DNSSECSecure:

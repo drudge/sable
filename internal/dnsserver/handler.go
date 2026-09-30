@@ -1429,7 +1429,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	// Authoritative and local answers remain public, but neither fresh nor cached
 	// recursive data is available outside the client's grant.
 	if !recursionAllowed {
-		return recursionRefused(request)
+		return recursionNotAllowed(request)
 	}
 	policy, policyRule, policySources := runtime.policyDecision(request.Question[0].Name, clientIP, handler.BlockingPaused())
 	if policy == querylog.PolicyBlocked {
@@ -1478,6 +1478,12 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	}
 	result.decision.Route = route
 	return result
+}
+
+// recursionNotAllowed refuses a client the recursion policy leaves out, and
+// says so in the query log, apart from a refusal for load or an RD=0 miss.
+func recursionNotAllowed(request *dns.Msg) resolution {
+	return resolution{response: errorResponse(request, dns.RcodeRefused), source: querylog.SourceError, decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed}}
 }
 
 func recursionRefused(request *dns.Msg) resolution {

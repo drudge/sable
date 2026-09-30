@@ -112,8 +112,9 @@ lets it answer the LAN's IPv6 devices. The list shows those networks as **from**
 the lead.
 
 Private access only covers networks Sable is attached to. A device on another
-VLAN with its own `/64` is still refused. The fix is `recursion = "acl"`
-listing that network along with your private ranges. Use `acl` too for the stricter behavior of earlier
+VLAN with its own `/64` is still refused. Insights reports it as **Lookups
+refused**, and the fix is `recursion = "acl"` listing that network along with
+your private ranges. Use `acl` too for the stricter behavior of earlier
 releases, which left global IPv6 out entirely.
 
 Use Settings → Recursion to choose the access policy, or configure:
@@ -131,7 +132,9 @@ this policy. ANAME resolution is limited to administrator-configured targets and
 available as part of authoritative service, including requests from recursive
 resolvers with RD=0. Other RD=0 queries never initiate upstream resolution or
 prefetch: they receive available local/authoritative or permitted cached data,
-or REFUSED on a recursive miss. The RA flag reflects client access. DoH responses
+or REFUSED on a recursive miss. The RA flag reflects client access. A lookup
+refused because the policy doesn't cover the client says so in the query log:
+its explanation reads **Refused: recursion not allowed**. DoH responses
 use private HTTP caching so shared caches cannot reuse client-specific answers.
 
 
@@ -825,6 +828,7 @@ most people never edit it by hand. A kind set to alert is sent only while
 | `not_using_sable` | Not using Sable | `hours`: how long UniFi must show a device online and busy with no lookup; 24, 1 to 168. |
 | `network_other_dns` | Network hands out other DNS | None |
 | `network_via_gateway` | Network sends lookups through the gateway | None. `"show"` or `"off"`. |
+| `lookups_refused` | Lookups refused | None. The rule is fixed: at least 10 refused lookups across at least 2 hours of the last day. |
 | `update_failing` | Block list updates are failing | `missed_updates`: update intervals without a download; 2, 1 to 100. |
 | `past_block` | Possible past blocking issue | None |
 | `list_unreadable` | Block list left out of the comparison | None. `"show"` or `"off"`. |

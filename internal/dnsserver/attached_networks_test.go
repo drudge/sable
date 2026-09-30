@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+
+	"github.com/drudge/sable/internal/querylog"
 )
 
 // A LAN device with a global IPv6 address is refused under private recursion
-// until the handler knows the network it's on.
+// until the handler knows the network it's on, and the refusal says why.
 func TestPrivateRecursionAdmitsAttachedNetworks(t *testing.T) {
 	configuration := testRuntimeConfig()
 	configuration.Recursion = "private"
@@ -20,6 +22,8 @@ func TestPrivateRecursionAdmitsAttachedNetworks(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := NewHandler(runtime)
+	observer := &recordingObserver{}
+	handler.SetQueryObserver(observer)
 	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
 		response := new(dns.Msg)
 		response.SetReply(request)
@@ -44,6 +48,21 @@ func TestPrivateRecursionAdmitsAttachedNetworks(t *testing.T) {
 	handler.ServeDNS(outsider, query)
 	if outsider.message.Rcode != dns.RcodeRefused {
 		t.Fatalf("a client off the network got %v", outsider.message)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for len(observer.events()) < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	events := observer.events()
+	if len(events) != 3 {
+		t.Fatalf("logged %d lookups, want 3", len(events))
+	}
+	if events[0].Decision.Resolver != querylog.ResolverNotAllowed || events[2].Decision.Resolver != querylog.ResolverNotAllowed {
+		t.Errorf("refusals logged as %q and %q, want %q", events[0].Decision.Resolver, events[2].Decision.Resolver, querylog.ResolverNotAllowed)
+	}
+	if events[1].Decision.Resolver == querylog.ResolverNotAllowed {
+		t.Error("an admitted lookup was logged as not allowed")
 	}
 }
 

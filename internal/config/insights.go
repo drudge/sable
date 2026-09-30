@@ -81,9 +81,11 @@ type InsightFindings struct {
 	NetworkOtherDNS     InsightFinding             `toml:"network_other_dns"`
 	// NetworkViaGateway describes how a network reaches Sable, which is never
 	// news, so it is shown or left out but never sent as an alert.
-	NetworkViaGateway InsightFinding       `toml:"network_via_gateway"`
-	UpdateFailing     InsightUpdateFailing `toml:"update_failing"`
-	PastBlock         InsightFinding       `toml:"past_block"`
+	NetworkViaGateway InsightFinding `toml:"network_via_gateway"`
+	// LookupsRefused reports a local device the recursion policy refuses.
+	LookupsRefused InsightFinding       `toml:"lookups_refused"`
+	UpdateFailing  InsightUpdateFailing `toml:"update_failing"`
+	PastBlock      InsightFinding       `toml:"past_block"`
 	// ListUnreadable, LowUniqueCoverage, and UniqueCoverage describe how the
 	// block lists compare. That is never news, so they are shown or left out
 	// but never sent as alerts.
@@ -191,6 +193,7 @@ func DefaultInsightFindings() InsightFindings {
 		NotUsingSable:       InsightNotUsingSable{Mode: InsightModeAlert, Hours: defaultInsightSilentHours},
 		NetworkOtherDNS:     InsightFinding{Mode: InsightModeAlert},
 		NetworkViaGateway:   InsightFinding{Mode: InsightModeShow},
+		LookupsRefused:      InsightFinding{Mode: InsightModeAlert},
 		UpdateFailing:       InsightUpdateFailing{Mode: InsightModeAlert, MissedUpdates: defaultInsightMissedUpdates},
 		PastBlock:           InsightFinding{Mode: InsightModeAlert},
 		ListUnreadable:      InsightFinding{Mode: InsightModeShow},
@@ -221,6 +224,7 @@ func (configuration *Config) normalizeInsights() {
 		{&findings.NotUsingSable.Mode, defaults.NotUsingSable.Mode},
 		{&findings.NetworkOtherDNS.Mode, defaults.NetworkOtherDNS.Mode},
 		{&findings.NetworkViaGateway.Mode, defaults.NetworkViaGateway.Mode},
+		{&findings.LookupsRefused.Mode, defaults.LookupsRefused.Mode},
 		{&findings.UpdateFailing.Mode, defaults.UpdateFailing.Mode},
 		{&findings.PastBlock.Mode, defaults.PastBlock.Mode},
 		{&findings.ListUnreadable.Mode, defaults.ListUnreadable.Mode},
@@ -329,6 +333,7 @@ func (findings InsightFindings) Problems() []InsightSettingProblem {
 	count("not_using_sable.hours", findings.NotUsingSable.Hours, maximumInsightSilentHours)
 	mode("network_other_dns.mode", findings.NetworkOtherDNS.Mode)
 	shownMode("network_via_gateway.mode", findings.NetworkViaGateway.Mode)
+	mode("lookups_refused.mode", findings.LookupsRefused.Mode)
 	mode("update_failing.mode", findings.UpdateFailing.Mode)
 	count("update_failing.missed_updates", findings.UpdateFailing.MissedUpdates, maximumInsightMissedUpdates)
 	mode("past_block.mode", findings.PastBlock.Mode)

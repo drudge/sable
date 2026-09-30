@@ -452,7 +452,7 @@ func (server *Server) insightFindingViews(findings []insights.Finding, given dev
 		for _, reason := range finding.Reasons {
 			view.Reasons = append(view.Reasons, pages.InsightReasonView{Text: reason.Text, Code: reason.Code})
 		}
-		view.DeviceKey = finding.Subject.Device
+		view.DeviceKey, view.DomainsTitle = finding.Subject.Device, finding.DomainsTitle
 		for _, domain := range finding.Domains {
 			item := pages.InsightDeviceDomainView{Name: domain.Name, FirstSeen: domain.FirstSeen}
 			if domain.Query != nil {
@@ -507,6 +507,8 @@ func insightFindingIcon(kind string) string {
 		return "shield-off"
 	case devices.KindNetworkOtherDNS:
 		return "router"
+	case devices.KindLookupsRefused:
+		return "shield-x"
 	case devices.KindNetworkViaGateway:
 		return "arrow-left-right"
 	default:

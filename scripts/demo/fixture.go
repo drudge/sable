@@ -97,6 +97,17 @@ var unifiHosts = []unifiHost{
 // its own /64 from the same prefix, which the nodes aren't attached to.
 const vandelayAttachedNetwork = "2001:db8:5a1e:10::53/64"
 
+// stationIPv6 is the IPv6 addresses the controller has seen on a connected
+// client, by hardware address.
+var stationIPv6 = map[string][]string{
+	// The weather station prefers IPv6 on the IoT network. Sable refuses
+	// those lookups, and it falls back to IPv4.
+	"dc:a6:32:77:33:f2": {refusedStationAddress},
+}
+
+// refusedStationAddress is the weather station's IPv6 address.
+const refusedStationAddress = "2001:db8:5a1e:30:de4b:91c2:7a10:3e5f"
+
 // silentStations are connected clients that never ask Sable anything, which
 // Insights reports as devices that don't use Sable. They are connected for
 // days and stream steadily, but none of them is in the query history.
