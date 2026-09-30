@@ -67,6 +67,13 @@ type InsightsOverviewView struct {
 	// from DeviceTypeOptions.
 	DeviceFilter      InsightDeviceFilterView
 	DeviceTypeOptions [][2]string
+	// Apps lists every app anything on the network used in the window,
+	// busiest first, narrowed in place by AppFilter. AppsSince is when app
+	// counting began, when that is inside the window.
+	Apps            []InsightAppRowView
+	AppsUnavailable bool
+	AppsSince       time.Time
+	AppFilter       InsightAppFilterView
 	// Settings are Insights settings, which the bell opens. Nil hides the
 	// bell from operators who may not read the query log.
 	Settings *InsightSettingsView
@@ -85,6 +92,34 @@ type InsightDeviceFilterView struct {
 	Type string
 	// Show is "new", "named", "unnamed", or "not-using-sable".
 	Show string
+}
+
+// InsightAppFilterView narrows the Apps tab, and the page URL keeps it, as
+// InsightDeviceFilterView does for the Devices tab.
+type InsightAppFilterView struct {
+	Search   string
+	Category string
+	// Show is "failing", "blocked", or "new".
+	Show string
+}
+
+// InsightAppRowView is one app on the Apps tab: its traffic in the window and
+// how many devices it came from.
+type InsightAppRowView struct {
+	// ID is the app's service ID, which picks its logo and opens its drawer.
+	ID       string
+	Name     string
+	Category string
+	Devices  int
+	Queries  uint64
+	// Failed counts the queries Sable refused or could not answer.
+	Failed  uint64
+	Blocked uint64
+	// LastSeen is the last lookup of any of the app's names, in all history.
+	LastSeen time.Time
+	// New is set when nothing on the network used the app before the window
+	// and first-seen tracking covered that time.
+	New bool
 }
 
 // InsightDeviceView is one device with its traffic in the window.
@@ -162,6 +197,7 @@ type InsightDeviceDomainView struct {
 	ClientIP  string
 	Queries   uint64
 	Blocked   uint64
+	Failed    uint64
 	FirstSeen time.Time
 }
 
@@ -195,7 +231,13 @@ type InsightAppView struct {
 	Name     string
 	Category string
 	Queries  uint64
+	Failed   uint64
+	Blocked  uint64
 	Domains  int
+	// LastFailed and LastBlocked are the newest failed and blocked queries
+	// in the window, which the app drawer shows beside their counts.
+	LastFailed  time.Time
+	LastBlocked time.Time
 }
 
 // InsightAppDrawerView is one app's details: the domains it was reached at in
@@ -205,10 +247,14 @@ type InsightAppDrawerView struct {
 	Range          string
 	RangeLabel     string
 	LogWindowQuery string
+	TimeDisplay    TimeDisplay
 	Missing        bool
 	Error          string
 	App            InsightAppView
 	Domains        []InsightDeviceDomainView
+	// Failures are the app's names that Sable refused or could not answer,
+	// most failures first.
+	Failures []InsightDeviceDomainView
 	// Devices are busiest first; MoreDevices counts the ones left off.
 	Devices     []InsightAppDeviceView
 	MoreDevices int
@@ -221,6 +267,8 @@ type InsightAppDeviceView struct {
 	Label          string
 	Named          bool
 	Detail         string
+	Queries        uint64
+	Failed         uint64
 	Type           string
 	TypeLabel      string
 	TypeConfidence string
@@ -326,6 +374,8 @@ type InsightQueryView struct {
 	Name     string
 	ClientIP string
 	Blocked  bool
+	// Failed narrows to the queries Sable refused or could not answer.
+	Failed bool
 }
 
 type InsightsContributionView struct {
@@ -372,6 +422,7 @@ func insightsRangeControl(active string) RangeControlView {
 var insightsTabOptions = []tabOption{
 	{"overview", "Overview", "lightbulb"},
 	{"devices", "Devices", "monitor-smartphone"},
+	{"apps", "Apps", "apps"},
 	{"blocking", "Blocking", "shield"},
 }
 
@@ -504,7 +555,7 @@ templ InsightsContent(view InsightsOverviewView) {
 		</header>
 		<div class="isotope-tab-list insights-tab-list" role="tablist" aria-label="Insights sections">
 			for _, tab := range insightsTabOptions {
-				if tab.Value != "devices" || view.CanLogs {
+				if (tab.Value != "devices" && tab.Value != "apps") || view.CanLogs {
 					<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) } tabindex={ ifThen(view.ActiveTab == tab.Value, "0", "-1") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
 				}
 			}
@@ -530,9 +581,16 @@ templ InsightsContent(view InsightsOverviewView) {
 		if view.CanLogs {
 			<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="devices" hidden?={ view.ActiveTab != "devices" }>
 				if view.Loading {
-					@insightDevicesSkeleton(view.RangeLabel)
+					@insightEntitySkeleton("Devices", "Loading devices…", view.RangeLabel)
 				} else {
 					@InsightDevices(view)
+				}
+			</div>
+			<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="apps" hidden?={ view.ActiveTab != "apps" }>
+				if view.Loading {
+					@insightEntitySkeleton("Apps", "Loading apps…", view.RangeLabel)
+				} else {
+					@InsightApps(view)
 				}
 			</div>
 		}
@@ -644,15 +702,16 @@ templ insightsSkeleton(view InsightsOverviewView) {
 	</div>
 }
 
-// insightDevicesSkeleton holds the search's place too, so the rows do not
-// jump down when it arrives.
-templ insightDevicesSkeleton(rangeLabel string) {
-	<section class="card isotope-data-card insight-devices" role="status" aria-live="polite" aria-busy="true">
-		<span class="sr-only">Loading devices…</span>
-		<header class="isotope-data-header" aria-hidden="true"><div class="ranking-heading"><h2>Devices</h2><small>{ rangeLabel }</small></div></header>
-		<div class="log-search-bar insight-device-search-bar" aria-hidden="true">
+// insightEntitySkeleton stands in for the Devices or Apps list while it loads.
+// It holds the search's place too, so the rows do not jump down when it
+// arrives.
+templ insightEntitySkeleton(title, loading, rangeLabel string) {
+	<section class="card isotope-data-card insight-entity-card" role="status" aria-live="polite" aria-busy="true">
+		<span class="sr-only">{ loading }</span>
+		<header class="isotope-data-header" aria-hidden="true"><div class="ranking-heading"><h2>{ title }</h2><small>{ rangeLabel }</small></div></header>
+		<div class="log-search-bar insight-entity-search-bar" aria-hidden="true">
 			<span class="insights-skeleton-block"></span>
-			<div class="insight-device-filter-selects">
+			<div class="insight-entity-filter-selects">
 				<span class="insight-device-type-filter insights-skeleton-block"></span>
 				<span class="insights-skeleton-block"></span>
 			</div>
@@ -1266,6 +1325,9 @@ func insightQueryURL(query InsightQueryView, window string) string {
 	if query.Blocked {
 		values.Set("source", "blocked")
 	}
+	if query.Failed {
+		values.Set("source", "error")
+	}
 	link := "/logs?" + values.Encode()
 	if window != "" {
 		link += "&" + window
@@ -1293,12 +1355,12 @@ templ insightDomainList(idPrefix string, domains []InsightDeviceDomainView, wind
 // whether a device is new or has a name. They sit under the card's heading,
 // as Query Logs' search does.
 templ insightDeviceFilters(view InsightsOverviewView) {
-	<div class="log-search-bar insight-device-search-bar">
-		@SearchField("Search devices", "Search devices...", view.DeviceFilter.Search, "", templ.Attributes{"data-device-search": true})
-		<div class="insight-device-filter-selects">
+	<div class="log-search-bar insight-entity-search-bar">
+		@SearchField("Search devices", "Search devices...", view.DeviceFilter.Search, "", templ.Attributes{"data-list-search": true, "data-list-param": "search", "data-device-search": true})
+		<div class="insight-entity-filter-selects">
 			<label class="insight-device-type-filter">
 				<span class="sr-only">Device type</span>
-				<select data-device-type-filter data-styled-select>
+				<select data-list-select="type" data-list-param="type" data-styled-select>
 					<option value="" selected?={ view.DeviceFilter.Type == "" }>All Types</option>
 					for _, choice := range insightDeviceTypeChoices(view) {
 						<option value={ choice[0] } selected?={ view.DeviceFilter.Type == choice[0] }>{ choice[1] }</option>
@@ -1312,7 +1374,7 @@ templ insightDeviceFilters(view InsightsOverviewView) {
 			</label>
 			<label>
 				<span class="sr-only">Show devices</span>
-				<select data-device-show-filter data-styled-select>
+				<select data-list-select="tags" data-list-param="show" data-styled-select>
 					for _, choice := range insightDeviceShowChoices {
 						<option value={ choice[0] } selected?={ view.DeviceFilter.Show == choice[0] }>{ choice[1] }</option>
 					}
@@ -1356,8 +1418,8 @@ func insightDeviceFilterAttributes(device InsightDeviceView) templ.Attributes {
 		tags += " not-using-sable"
 	}
 	return templ.Attributes{
-		"data-device-row": true, "data-device-text": insightDeviceSearchText(device),
-		"data-device-type": insightDeviceFilterType(device), "data-device-tags": tags,
+		"data-list-row": true, "data-list-text": insightDeviceSearchText(device),
+		"data-list-type": insightDeviceFilterType(device), "data-list-tags": tags,
 	}
 }
 
@@ -1389,11 +1451,11 @@ func insightDeviceFilterType(device InsightDeviceView) string {
 }
 
 templ InsightDevices(view InsightsOverviewView) {
-	<section class="card isotope-data-card insight-devices" aria-labelledby="insight-devices-title" data-device-filter-root>
+	<section class="card isotope-data-card insight-entity-card" aria-labelledby="insight-devices-title" data-list-filter-root data-list-nouns="device devices">
 		<header class="isotope-data-header">
 			<div class="ranking-heading"><h2 id="insight-devices-title">Devices</h2><small>{ view.RangeLabel }</small></div>
 			if len(view.Devices) > 0 {
-				<span class="count-badge" data-device-count={ fmt.Sprint(len(view.Devices)) }>{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
+				<span class="count-badge" data-list-count={ fmt.Sprint(len(view.Devices)) }>{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
 			}
 		</header>
 		if view.DevicesUnavailable {
@@ -1410,12 +1472,12 @@ templ InsightDevices(view InsightsOverviewView) {
 			</div>
 		} else {
 			@insightDeviceFilters(view)
-			<div class="admin-mobile-list insight-device-mobile" data-device-results>
+			<div class="admin-mobile-list insight-entity-mobile" data-list-results>
 				for _, device := range view.Devices {
-					<button type="button" class="admin-mobile-row insight-device-mobile-row" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label } { insightDeviceFilterAttributes(device)... }>
+					<button type="button" class="admin-mobile-row insight-entity-mobile-row" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label } { insightDeviceFilterAttributes(device)... }>
 						@insightTypeTile(device)
-						<div class="insight-device-mobile-copy">
-							<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+						<div class="insight-entity-mobile-copy">
+							<span class="insight-entity-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 							@insightDeviceSubtitle(device)
 							<small>{ formatNumber(device.Queries) } queries · { percent(device.Blocked, device.Queries) } blocked</small>
 						</div>
@@ -1423,8 +1485,8 @@ templ InsightDevices(view InsightsOverviewView) {
 					</button>
 				}
 			</div>
-			<div class="admin-desktop-table" data-device-results>
-				<table class="isotope-table insight-device-table">
+			<div class="admin-desktop-table" data-list-results>
+				<table class="isotope-table insight-entity-table">
 					<caption class="sr-only">Devices with queries in this period</caption>
 					<thead>
 						<tr>
@@ -1441,10 +1503,10 @@ templ InsightDevices(view InsightsOverviewView) {
 						for _, device := range view.Devices {
 							<tr data-row-opener { insightDeviceFilterAttributes(device)... }>
 								<th scope="row">
-									<span class="insight-device-heading">
+									<span class="insight-entity-heading">
 										@insightTypeTile(device)
-										<span class="insight-device-cell">
-											<span class="insight-device-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+										<span class="insight-entity-cell">
+											<span class="insight-entity-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
 											@insightDeviceSubtitle(device)
 										</span>
 									</span>
@@ -1460,13 +1522,186 @@ templ InsightDevices(view InsightsOverviewView) {
 					</tbody>
 				</table>
 			</div>
-			<div class="insight-section-empty" hidden data-device-filter-empty>
+			<div class="insight-section-empty" hidden data-list-filter-empty>
 				@Icon("search")
 				<strong>No devices match</strong>
-				<button class="button outline compact" type="button" data-device-filter-clear>Clear Filters</button>
+				<button class="button outline compact" type="button" data-list-filter-clear>Clear Filters</button>
 			</div>
 			<footer class="insight-card-note">
 				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
+			</footer>
+		}
+	</section>
+}
+
+// insightAppFilters narrow the Apps list in place, as the Devices filters do
+// theirs: by search, by category, and to apps that failed, were blocked, or
+// are new.
+templ insightAppFilters(view InsightsOverviewView) {
+	<div class="log-search-bar insight-entity-search-bar">
+		@SearchField("Search apps", "Search apps...", view.AppFilter.Search, "", templ.Attributes{"data-list-search": true, "data-list-param": "app_search", "data-app-search": true})
+		<div class="insight-entity-filter-selects">
+			<label class="insight-app-category-filter">
+				<span class="sr-only">Category</span>
+				<select data-list-select="category" data-list-param="category" data-styled-select>
+					<option value="" selected?={ view.AppFilter.Category == "" }>All Categories</option>
+					for _, category := range insightAppCategories(view) {
+						<option value={ category } selected?={ view.AppFilter.Category == category }>{ category }</option>
+					}
+				</select>
+			</label>
+			<label>
+				<span class="sr-only">Show apps</span>
+				<select data-list-select="tags" data-list-param="app_show" data-styled-select>
+					for _, choice := range insightAppShowChoices {
+						<option value={ choice[0] } selected?={ view.AppFilter.Show == choice[0] }>{ choice[1] }</option>
+					}
+				</select>
+			</label>
+		</div>
+	</div>
+}
+
+var insightAppShowChoices = [][2]string{{"", "All Apps"}, {"failing", "Failing"}, {"blocked", "Blocked"}, {"new", "New"}}
+
+// insightAppCategories are the categories the Apps list shows, in name order.
+// A category chosen before a range change left no app of it stays on offer,
+// so the filter still says what it is hiding.
+func insightAppCategories(view InsightsOverviewView) []string {
+	categories := make([]string, 0)
+	if view.AppFilter.Category != "" {
+		categories = append(categories, view.AppFilter.Category)
+	}
+	for _, app := range view.Apps {
+		if !slices.Contains(categories, app.Category) {
+			categories = append(categories, app.Category)
+		}
+	}
+	slices.Sort(categories)
+	return categories
+}
+
+// insightAppFilterAttributes carry what the filters match a row on.
+func insightAppFilterAttributes(app InsightAppRowView) templ.Attributes {
+	tags := make([]string, 0, 3)
+	if app.Failed > 0 {
+		tags = append(tags, "failing")
+	}
+	if app.Blocked > 0 {
+		tags = append(tags, "blocked")
+	}
+	if app.New {
+		tags = append(tags, "new")
+	}
+	return templ.Attributes{
+		"data-list-row": true, "data-list-text": strings.ToLower(app.Name + " " + app.Category + " " + app.ID),
+		"data-list-category": app.Category, "data-list-tags": strings.Join(tags, " "),
+	}
+}
+
+// insightShareCell is a count with its share of the queries under it. A zero
+// leaves the share off, so the rows that have some stand out.
+templ insightShareCell(count, queries uint64, class string) {
+	if count == 0 {
+		<span class="numeric-cell muted-cell">0</span>
+	} else {
+		<span class={ "insight-queries-cell", class }><span class="numeric-cell">{ formatNumber(count) }</span> <small>{ percent(count, queries) }</small></span>
+	}
+}
+
+templ insightAppBadges(app InsightAppRowView) {
+	if app.New {
+		<span class="status-badge active">New</span>
+	}
+	if app.Failed > 0 {
+		<span class="status-badge warning">Failing</span>
+	}
+}
+
+// InsightApps lists every app the network used in the window, from every name
+// Sable knows an app by, however quiet. Each row opens the app's drawer.
+templ InsightApps(view InsightsOverviewView) {
+	<section class="card isotope-data-card insight-entity-card insight-apps" aria-labelledby="insight-apps-title" data-list-filter-root data-list-nouns="app apps">
+		<header class="isotope-data-header">
+			<div class="ranking-heading"><h2 id="insight-apps-title">Apps</h2><small>{ view.RangeLabel }</small></div>
+			if len(view.Apps) > 0 {
+				<span class="count-badge" data-list-count={ fmt.Sprint(len(view.Apps)) }>{ formatNumber(uint64(len(view.Apps))) } { insights.Plural(len(view.Apps), "app", "apps") }</span>
+			}
+		</header>
+		if view.AppsUnavailable {
+			<div class="insight-section-empty">
+				@Icon("alert-triangle")
+				<strong>Apps could not be loaded</strong>
+				<p>Sable could not read app activity from query history right now. Try again in a moment.</p>
+			</div>
+		} else if len(view.Apps) == 0 {
+			<div class="insight-section-empty">
+				@Icon("apps")
+				<strong>No apps in this period</strong>
+				<p>Apps appear here once devices look up names that Sable knows an app by.</p>
+			</div>
+		} else {
+			@insightAppFilters(view)
+			<div class="admin-mobile-list insight-entity-mobile" data-list-results>
+				for _, app := range view.Apps {
+					<button type="button" class="admin-mobile-row insight-entity-mobile-row" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name } { insightAppFilterAttributes(app)... }>
+						@AppIcon(app.ID, app.Category)
+						<div class="insight-entity-mobile-copy">
+							<span class="insight-entity-name"><strong>{ app.Name }</strong>@insightAppBadges(app)</span>
+							<small>{ app.Category }</small>
+							<small>{ formatNumber(app.Queries) } queries · { formatNumber(uint64(app.Devices)) } { insights.Plural(app.Devices, "device", "devices") }{ ifThen(app.Failed > 0, " · "+formatNumber(app.Failed)+" failed", "") }</small>
+						</div>
+						@Icon("chevron-right")
+					</button>
+				}
+			</div>
+			<div class="admin-desktop-table" data-list-results>
+				<table class="isotope-table insight-entity-table insight-app-table">
+					<caption class="sr-only">Apps used in this period</caption>
+					<thead>
+						<tr>
+							<th scope="col">App</th>
+							<th scope="col" class="right-cell">Devices</th>
+							<th scope="col" class="right-cell">Queries</th>
+							<th scope="col" class="right-cell">Failed</th>
+							<th scope="col" class="right-cell insight-optional-cell">Blocked</th>
+							<th scope="col">Last seen</th>
+							<th scope="col"><span class="sr-only">Details</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, app := range view.Apps {
+							<tr data-row-opener { insightAppFilterAttributes(app)... }>
+								<th scope="row">
+									<span class="insight-entity-heading">
+										@AppIcon(app.ID, app.Category)
+										<span class="insight-entity-cell">
+											<span class="insight-entity-name"><strong>{ app.Name }</strong>@insightAppBadges(app)</span>
+											<small class="insight-app-category">{ app.Category }</small>
+										</span>
+									</span>
+								</th>
+								<td class="right-cell numeric-cell">{ formatNumber(uint64(app.Devices)) }</td>
+								<td class="right-cell numeric-cell">{ formatNumber(app.Queries) }</td>
+								<td class="right-cell">@insightShareCell(app.Failed, app.Queries, "insight-failed-cell")</td>
+								<td class="right-cell insight-optional-cell">@insightShareCell(app.Blocked, app.Queries, "")</td>
+								<td class="muted-cell">{ insightDeviceTime(app.LastSeen, view.TimeDisplay) }</td>
+								<td><button class="icon-button" type="button" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name }>@Icon("chevron-right")</button></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<div class="insight-section-empty" hidden data-list-filter-empty>
+				@Icon("search")
+				<strong>No apps match</strong>
+				<button class="button outline compact" type="button" data-list-filter-clear>Clear Filters</button>
+			</div>
+			<footer class="insight-card-note">
+				<p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it.</p>
+				if !view.AppsSince.IsZero() {
+					<p>App counts start { FormatShortDateTime(view.AppsSince, view.TimeDisplay, false) }, while Sable counts older history.</p>
+				}
 			</footer>
 		}
 	</section>
@@ -1704,7 +1939,31 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.App.Queries) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Domains</dt><dd>{ formatNumber(uint64(view.App.Domains)) }</dd></div>
 				<div class="query-detail-fact-wide"><dt>Devices</dt><dd>{ formatNumber(uint64(len(view.Devices) + view.MoreDevices)) }</dd></div>
+				// Blocks and failures each pair a count with when the last one
+				// happened, so the grid stays even.
+				if view.App.Blocked > 0 {
+					<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.App.Blocked) } <small>{ percent(view.App.Blocked, view.App.Queries) }</small></dd></div>
+					<div class="query-detail-fact-wide"><dt>Last blocked</dt><dd>{ insightDeviceTime(view.App.LastBlocked, view.TimeDisplay) }</dd></div>
+				}
+				if view.App.Failed > 0 {
+					<div class="query-detail-fact-wide"><dt>Failed</dt><dd>{ formatNumber(view.App.Failed) } <small>{ percent(view.App.Failed, view.App.Queries) }</small></dd></div>
+					<div class="query-detail-fact-wide"><dt>Last failure</dt><dd>{ insightDeviceTime(view.App.LastFailed, view.TimeDisplay) }</dd></div>
+				}
 			</dl>
+			if len(view.Failures) > 0 {
+				<section class="query-detail-answer" aria-labelledby="insight-app-failures">
+					<h3 id="insight-app-failures">Failed lookups</h3>
+					<div class="insight-client-list">
+						for index, domain := range view.Failures {
+							@InsightListRow(InsightListRowView{
+								ID: fmt.Sprintf("insight-app-failure-%d", index), Value: domain.Name, CopyLabel: "Copy domain",
+								Detail: formatNumber(domain.Failed) + " of " + formatNumber(domain.Queries) + " failed",
+								Count:  formatNumber(domain.Failed), Href: insightQueryURL(InsightQueryView{Name: domain.Name, Failed: true}, view.LogWindowQuery),
+							})
+						}
+					</div>
+				</section>
+			}
 			<section class="query-detail-answer" aria-labelledby="insight-app-domains">
 				<h3 id="insight-app-domains">Most queried domains</h3>
 				<div class="insight-client-list">
@@ -1722,7 +1981,8 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 					<div class="insight-client-list">
 						for index, device := range view.Devices {
 							@InsightListRow(InsightListRowView{
-								ID: fmt.Sprintf("insight-app-device-%d", index), Value: device.Label, Detail: device.Detail, Plain: device.Named,
+								ID: fmt.Sprintf("insight-app-device-%d", index), Value: device.Label, Detail: insightAppDeviceDetail(device), Plain: device.Named,
+								Count:   formatNumber(device.Queries),
 								Drawer:  DeviceDrawerLink(device.Key, view.Range),
 								Leading: insightTypeTile(InsightDeviceView{Type: device.Type, TypeLabel: device.TypeLabel, TypeConfidence: device.TypeConfidence}),
 							})
@@ -1735,6 +1995,19 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 			}
 		}
 	}
+}
+
+// insightAppDeviceDetail says under a device in an app's drawer which address
+// it is and how many of its lookups failed.
+func insightAppDeviceDetail(device InsightAppDeviceView) string {
+	parts := make([]string, 0, 2)
+	if device.Detail != "" {
+		parts = append(parts, device.Detail)
+	}
+	if device.Failed > 0 {
+		parts = append(parts, formatNumber(device.Failed)+" failed")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func insightDrawerTitle(view InsightDeviceDrawerView) string {

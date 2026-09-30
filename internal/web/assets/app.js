@@ -3098,45 +3098,50 @@
 	  if (dialog.open && dialog.contains(document.activeElement)) announce(`${visible.toLocaleString()} results shown`);
 	};
 
-	// Insights narrows its Devices list in place. The page URL keeps the search
-	// and filters, so a reload, a range change, and the refresh after a rename
-	// render them back. The URL and the announcement wait for a pause in typing,
-	// since Safari limits how often a page may rewrite its URL.
-	const deviceFilterTimers = new WeakMap();
-	const applyDeviceFilter = (root, changed = false) => {
+	// Insights narrows its Devices and Apps lists in place. Each list's search
+	// and selects name the page URL parameter they keep, so a reload, a range
+	// change, and the refresh after a rename render them back. A select matches
+	// the row attribute it names, or one of the row's tags. The URL and the
+	// announcement wait for a pause in typing, since Safari limits how often a
+	// page may rewrite its URL.
+	const listFilterTimers = new WeakMap();
+	const applyListFilter = (root, changed = false) => {
 	  if (!root) return;
-	  const search = root.querySelector("[data-device-search]")?.value.trim() || "";
-	  const type = root.querySelector("[data-device-type-filter]")?.value || "";
-	  const show = root.querySelector("[data-device-show-filter]")?.value || "";
+	  const controls = [...root.querySelectorAll("[data-list-search], [data-list-select]")];
+	  const search = root.querySelector("[data-list-search]")?.value.trim() || "";
+	  const selects = controls.filter((control) => control.matches("[data-list-select]") && control.value);
 	  const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
 	  let visible = 0;
-	  root.querySelectorAll("[data-device-row]").forEach((row) => {
-		const matches = terms.every((term) => row.dataset.deviceText.includes(term)) &&
-		  (!type || row.dataset.deviceType === type) &&
-		  (!show || row.dataset.deviceTags.split(" ").includes(show));
+	  root.querySelectorAll("[data-list-row]").forEach((row) => {
+		const matches = terms.every((term) => row.dataset.listText.includes(term)) &&
+		  selects.every((select) => select.dataset.listSelect === "tags"
+			? row.dataset.listTags.split(" ").includes(select.value)
+			: row.getAttribute(`data-list-${select.dataset.listSelect}`) === select.value);
 		row.hidden = !matches;
-		// The phone and desktop lists hold the same devices, so count one.
+		// The phone and desktop lists hold the same rows, so count one.
 		if (matches && row.matches("tr")) visible++;
 	  });
-	  root.querySelectorAll("[data-device-results]").forEach((list) => { list.hidden = visible === 0; });
-	  const empty = root.querySelector("[data-device-filter-empty]");
+	  root.querySelectorAll("[data-list-results]").forEach((list) => { list.hidden = visible === 0; });
+	  const empty = root.querySelector("[data-list-filter-empty]");
 	  if (empty) empty.hidden = visible !== 0;
-	  const count = root.querySelector("[data-device-count]");
+	  const [one, many] = (root.dataset.listNouns || "item items").split(" ");
+	  const count = root.querySelector("[data-list-count]");
 	  if (count) {
-		const total = Number(count.dataset.deviceCount) || 0;
-		const noun = total === 1 ? "device" : "devices";
-		count.textContent = search || type || show ? `${visible.toLocaleString()} of ${total.toLocaleString()} ${noun}` : `${total.toLocaleString()} ${noun}`;
+		const total = Number(count.dataset.listCount) || 0;
+		const noun = total === 1 ? one : many;
+		count.textContent = search || selects.length ? `${visible.toLocaleString()} of ${total.toLocaleString()} ${noun}` : `${total.toLocaleString()} ${noun}`;
 	  }
 	  if (!changed) return;
-	  window.clearTimeout(deviceFilterTimers.get(root));
-	  deviceFilterTimers.set(root, window.setTimeout(() => {
+	  window.clearTimeout(listFilterTimers.get(root));
+	  listFilterTimers.set(root, window.setTimeout(() => {
 		const url = new URL(window.location.href);
-		for (const [parameter, value] of [["search", search], ["type", type], ["show", show]]) {
-		  if (value) url.searchParams.set(parameter, value);
-		  else url.searchParams.delete(parameter);
+		for (const control of controls) {
+		  const value = control.value.trim();
+		  if (value) url.searchParams.set(control.dataset.listParam, value);
+		  else url.searchParams.delete(control.dataset.listParam);
 		}
 		window.history.replaceState(window.history.state, "", url);
-		announce(`${visible.toLocaleString()} ${visible === 1 ? "device" : "devices"} shown`);
+		announce(`${visible.toLocaleString()} ${visible === 1 ? one : many} shown`);
 	  }, 300));
 	};
 	let dialogLabelSequence = 0;
@@ -3250,8 +3255,8 @@
 	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
 	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
 	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
-	  if (root.matches?.("[data-device-filter-root]")) applyDeviceFilter(root);
-	  root.querySelectorAll?.("[data-device-filter-root]").forEach((list) => applyDeviceFilter(list));
+	  if (root.matches?.("[data-list-filter-root]")) applyListFilter(root);
+	  root.querySelectorAll?.("[data-list-filter-root]").forEach((list) => applyListFilter(list));
 	  if (root.matches?.('input[type="time"][data-styled-time]')) setupStyledTime(root);
 	  root.querySelectorAll?.('input[type="time"][data-styled-time]').forEach(setupStyledTime);
 	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
@@ -5558,8 +5563,8 @@
 		updateTopStatsDialog(event.target.closest("[data-top-stats-dialog]"));
 		return;
 	  }
-	  if (event.target.matches("[data-device-search]")) {
-		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+	  if (event.target.matches("[data-list-search]")) {
+		applyListFilter(event.target.closest("[data-list-filter-root]"), true);
 		return;
 	  }
 	  if (event.target.matches("[data-zone-import-text]")) {
@@ -5733,8 +5738,8 @@
 		event.target.closest("[data-zone-root]")?.querySelector("[data-record-search]")?.dispatchEvent(new Event("input", {bubbles: true}));
 		return;
 	  }
-	  if (event.target.matches("[data-device-type-filter], [data-device-show-filter]")) {
-		applyDeviceFilter(event.target.closest("[data-device-filter-root]"), true);
+	  if (event.target.matches("[data-list-select]")) {
+		applyListFilter(event.target.closest("[data-list-filter-root]"), true);
 		return;
 	  }
 	  if (event.target.matches("[data-domain-import]") && event.target.files?.length) {
@@ -5754,20 +5759,20 @@
 		}
 		return;
 	  }
-	  const clearDevices = event.target.closest("[data-device-filter-clear]");
-	  if (clearDevices) {
-		const root = clearDevices.closest("[data-device-filter-root]");
-		root?.querySelectorAll("[data-device-type-filter], [data-device-show-filter]").forEach((select) => {
+	  const clearList = event.target.closest("[data-list-filter-clear]");
+	  if (clearList) {
+		const root = clearList.closest("[data-list-filter-root]");
+		root?.querySelectorAll("[data-list-select]").forEach((select) => {
 		  select.value = "";
 		  select.sableSyncStyledSelect?.();
 		});
-		const search = root?.querySelector("[data-device-search]");
+		const search = root?.querySelector("[data-list-search]");
 		if (search) {
 		  search.value = "";
 		  syncSearchClear(search);
 		  search.focus();
 		}
-		applyDeviceFilter(root, true);
+		applyListFilter(root, true);
 		return;
 	  }
 	  const action = event.target.closest(".zone-import-menu button, .insight-hide-menu button");

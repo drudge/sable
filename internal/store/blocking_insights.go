@@ -40,9 +40,9 @@ type rollupDimension struct {
 	name string
 	// column is the raw query log column the rollup value was taken from.
 	column string
-	// blockedOnly limits the raw recount to blocked queries, matching the
-	// rollup dimensions that are only written for them.
-	blockedOnly bool
+	// only limits the raw recount to queries from one source, matching the
+	// rollup dimensions that are only written for them, such as blocked ones.
+	only querylog.Source
 	// since reports when the rollups began carrying this dimension. Nil means
 	// the dimension has always been written alongside the others.
 	since func(context.Context) (time.Time, bool, error)
@@ -75,13 +75,13 @@ func (store *Store) BlockingActivity(ctx context.Context, since, until time.Time
 		return querylog.BlockingActivity{}, err
 	}
 	domains, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
-		name: queryLogRollupBlocked, column: queryLogDomainExpression, blockedOnly: true,
+		name: queryLogRollupBlocked, column: queryLogDomainExpression, only: querylog.SourceBlocked,
 	}, maximumBlockingRanks, nil)
 	if err != nil {
 		return querylog.BlockingActivity{}, err
 	}
 	clients, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
-		name: queryLogRollupBlockedClient, column: "client_ip_key", blockedOnly: true,
+		name: queryLogRollupBlockedClient, column: "client_ip_key", only: querylog.SourceBlocked,
 		since: store.blockedClientRollupSince,
 	}, maximumBlockingRanks, nil)
 	if err != nil {
@@ -216,7 +216,7 @@ func (store *Store) BlockedNamesMatching(ctx context.Context, since, until time.
 		return nil, errors.New("blocked name counts need a bounded window")
 	}
 	matched := make(map[string]uint64)
-	dimension := rollupDimension{name: queryLogRollupBlocked, column: queryLogDomainExpression, blockedOnly: true}
+	dimension := rollupDimension{name: queryLogRollupBlocked, column: queryLogDomainExpression, only: querylog.SourceBlocked}
 	// A name can match an exact rule in one chunk and a wildcard in another.
 	// Its count is the same either way, so the chunks merge by maximum rather
 	// than by sum.
@@ -354,8 +354,8 @@ WITH boundary AS (
     FROM sable_query_log` + store.queryLogTimeIndex() + `
     WHERE ((occurred_at >= ` + bind(since) + ` AND occurred_at < ` + bind(fullStart) + `)
         OR (occurred_at >= ` + bind(fullEnd) + ` AND occurred_at <= ` + bind(until) + `))`)
-	if dimension.blockedOnly {
-		statement.WriteString(` AND source = ` + bind(string(querylog.SourceBlocked)))
+	if dimension.only != "" {
+		statement.WriteString(` AND source = ` + bind(string(dimension.only)))
 	}
 	if filter != nil {
 		statement.WriteString(` AND ` + store.rollupValueCondition(dimension.column, *filter, bind))
@@ -468,11 +468,12 @@ func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bo
 }
 
 // migrateActivityMarkers marks the moment this database began writing the
-// blocked-client and blocked-source rollups and client sightings. The first
-// migration wins, so a marker never moves forward over data written with it.
+// blocked-client, blocked-source, and app rollups and client sightings. The
+// first migration wins, so a marker never moves forward over data written
+// with it.
 func (store *Store) migrateActivityMarkers(ctx context.Context) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey} {
+	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey, appRollupSinceKey} {
 		if _, err := store.database.ExecContext(ctx,
 			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
 			key, now,

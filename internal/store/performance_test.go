@@ -31,6 +31,33 @@ func BenchmarkWriteQueryEventsBatch(b *testing.B) {
 	}
 }
 
+// BenchmarkWriteQueryEventsBatchWithApps writes a batch in which half the
+// names belong to apps and a tenth failed, so the app rollups do real work.
+func BenchmarkWriteQueryEventsBatchWithApps(b *testing.B) {
+	opened, err := Open(context.Background(), "sqlite", filepath.Join(b.TempDir(), "sable.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer opened.Close()
+	apps := []string{"rr3---sn-abc.googlevideo.com.", "api-global.netflix.com.", "eu.tectonic.remarkable.com.", "gateway.discord.gg.", "outlook.office365.com."}
+	events := benchmarkQueryEvents(benchmarkQueryLogBatchSize, time.Now())
+	for index := range events {
+		if index%2 == 0 {
+			events[index].Name = apps[index%len(apps)]
+		}
+		if index%10 == 0 {
+			events[index].Source = querylog.SourceError
+		}
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := opened.WriteQueryEvents(context.Background(), events); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkQueryLogInsightsHundredThousandRows(b *testing.B) {
 	ctx := context.Background()
 	opened, err := Open(ctx, "sqlite", ":memory:")

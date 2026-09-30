@@ -503,7 +503,7 @@ button { cursor: pointer; }
 .ranking-card h2, .distribution-card h2 { margin: 0; font-size: 1rem; font-weight: 600; }
 .ranking-heading { display: grid; min-width: 0; gap: .15rem; }
 /* Insights' Findings and Devices cards share the ranking cards' header band. */
-.ranking-card > header, :is(.insight-findings, .insight-devices) > .isotope-data-header { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.ranking-card > header, :is(.insight-findings, .insight-entity-card) > .isotope-data-header { background: color-mix(in oklch, var(--muted) 45%, transparent); }
 /* A ranking header is a band, so its title and View all button center in it. */
 .ranking-card > header { padding-block: 1rem; }
 .ranking-heading small { color: var(--muted-foreground); font-size: .75rem; }
@@ -4002,6 +4002,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .insight-contribution .blocklist-health-warning .nav-icon { width: .875rem; height: .875rem; flex: 0 0 auto; }
 .insight-queries-cell { display: inline-grid; justify-items: end; gap: .1rem; }
 .insight-queries-cell small { color: var(--muted-foreground); font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.insight-failed-cell > .numeric-cell { color: #d97706; font-weight: 600; }
+.dark .insight-failed-cell > .numeric-cell { color: #f59e0b; }
+.insight-app-category { color: var(--muted-foreground); font-size: .72rem; }
 .insight-card-note p + p { margin-top: .35rem; }
 .insight-card-note { border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 45%, transparent); padding: .75rem 1rem; }
 .insight-card-note p { margin: 0; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; }
@@ -4110,47 +4113,47 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
 .insights-tab-panel[hidden] { display: none; }
 /* The Devices search sits under the card's heading, as Query Logs' does, with
    the filters beside it. When the card is narrow the filters drop below. */
-.insight-device-filter-selects { display: flex; flex: none; gap: .5rem; }
-.insight-device-filter-selects > * { width: 8.75rem; }
-.insight-device-filter-selects > .insight-device-type-filter { width: 11rem; }
-.insight-device-search-bar .insights-skeleton-block { height: 2.25rem; border-radius: calc(var(--radius) - 2px); }
-.insight-device-search-bar > .insights-skeleton-block { min-width: 12rem; flex: 1; }
+.insight-entity-filter-selects { display: flex; flex: none; gap: .5rem; }
+.insight-entity-filter-selects > * { width: 8.75rem; }
+.insight-entity-filter-selects > :is(.insight-device-type-filter, .insight-app-category-filter) { width: 11rem; }
+.insight-entity-search-bar .insights-skeleton-block { height: 2.25rem; border-radius: calc(var(--radius) - 2px); }
+.insight-entity-search-bar > .insights-skeleton-block { min-width: 12rem; flex: 1; }
 @container (max-width: 36rem) {
-  .insight-device-search-bar { flex-wrap: wrap; row-gap: .5rem; padding-inline: 1rem; }
-  .insight-device-filter-selects { flex: 1 1 100%; }
-  .insight-device-filter-selects > *, .insight-device-filter-selects > .insight-device-type-filter { min-width: 0; flex: 1; width: auto; }
+  .insight-entity-search-bar { flex-wrap: wrap; row-gap: .5rem; padding-inline: 1rem; }
+  .insight-entity-filter-selects { flex: 1 1 100%; }
+  .insight-entity-filter-selects > *, .insight-entity-filter-selects > :is(.insight-device-type-filter, .insight-app-category-filter) { min-width: 0; flex: 1; width: auto; }
 }
-.insight-device-table tbody th { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; color: var(--foreground); font-size: .8125rem; font-weight: 400; text-align: left; }
-.insight-device-table td:last-child { width: 3rem; }
-.insight-device-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
-.insight-device-table .icon-button:hover { background: var(--accent); }
-.insight-device-table .muted-cell { white-space: nowrap; }
-.insight-device-cell { display: grid; min-width: 11rem; max-width: 26rem; gap: .2rem; }
+.insight-entity-table tbody th { height: 3.75rem; border-top: 1px solid var(--border); padding: .625rem 1rem; color: var(--foreground); font-size: .8125rem; font-weight: 400; text-align: left; }
+.insight-entity-table td:last-child { width: 3rem; }
+.insight-entity-table .icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; border-color: transparent; background: transparent; }
+.insight-entity-table .icon-button:hover { background: var(--accent); }
+.insight-entity-table .muted-cell { white-space: nowrap; }
+.insight-entity-cell { display: grid; min-width: 11rem; max-width: 26rem; gap: .2rem; }
 /* When the card is too narrow for every column the name matters more than
    history. The card's own width decides, since the sidebar can take a third of
    the window, and a row that ran off the edge would hide its details button. */
-.insight-devices { container-type: inline-size; }
-@container (max-width: 68rem) { .insight-device-table .insight-optional-cell { display: none; } }
+.insight-entity-card { container-type: inline-size; }
+@container (max-width: 68rem) { .insight-entity-table .insight-optional-cell { display: none; } }
 /* Narrower still, as on a tablet with the sidebar open, the card lists its
    devices the way a phone does. */
 @container (max-width: 50rem) {
-  .insight-devices .admin-desktop-table { display: none; }
-  .insight-devices .admin-mobile-list { display: block; }
+  .insight-entity-card .admin-desktop-table { display: none; }
+  .insight-entity-card .admin-mobile-list { display: block; }
 }
 .insight-device-ids { display: grid; min-width: 0; gap: .1rem; }
 .insight-device-ids code { color: var(--muted-foreground); font-size: .72rem; white-space: nowrap; }
-.insight-device-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }
-.insight-device-name strong { min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.insight-device-name strong.mono { font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-.insight-device-name .status-badge, .insight-device-badges .status-badge { padding: .1rem .45rem; font-size: .625rem; }
-.insight-device-mobile-row .insight-device-name strong:not(.mono) { font-family: inherit; font-weight: 600; }
-.insight-device-mobile-row .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
-.admin-mobile-row > div.insight-device-mobile-copy { display: grid; min-width: 0; flex: 1; grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+.insight-entity-name { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .4rem; }
+.insight-entity-name strong { min-width: 0; overflow: hidden; font-size: .8125rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.insight-entity-name strong.mono { font: 500 .8125rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.insight-entity-name .status-badge, .insight-device-badges .status-badge { padding: .1rem .45rem; font-size: .625rem; }
+.insight-entity-mobile-row .insight-entity-name strong:not(.mono) { font-family: inherit; font-weight: 600; }
+.insight-entity-mobile-row .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; color: var(--muted-foreground); }
+.admin-mobile-row > div.insight-entity-mobile-copy { display: grid; min-width: 0; flex: 1; grid-template-columns: minmax(0, 1fr); gap: .25rem; }
 /* A device's row starts with a gray tile for what it is; the drawer sets the
    same icon before its type. */
 .insight-type-tile { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
-.insight-type-tile .nav-icon, .insight-device-mobile-row .insight-type-tile .nav-icon { width: 1rem; height: 1rem; flex: none; color: inherit; }
-.insight-device-heading { display: flex; align-items: center; gap: .75rem; }
+.insight-type-tile .nav-icon, .insight-entity-mobile-row .insight-type-tile .nav-icon { width: 1rem; height: 1rem; flex: none; color: inherit; }
+.insight-entity-heading { display: flex; align-items: center; gap: .75rem; }
 .insight-list-row > .insight-type-tile { margin-right: -.25rem; }
 /* An app's logo is a small app tile in the brand's color, ringed in dark mode
    so a black tile keeps its edge; an app without a logo shows its category's
@@ -4166,7 +4169,7 @@ svg.app-icon { display: block; border-radius: .5rem; }
 .query-detail-header > .app-icon-category .nav-icon { width: 1.25rem; height: 1.25rem; }
 .query-detail-header > .insight-type-tile { width: 2.5rem; height: 2.5rem; flex-basis: 2.5rem; margin-right: .85rem; border-radius: .6rem; }
 .query-detail-header > .insight-type-tile .nav-icon { width: 1.25rem; height: 1.25rem; }
-.insight-device-mobile-copy small { font-variant-numeric: tabular-nums; }
+.insight-entity-mobile-copy small { font-variant-numeric: tabular-nums; }
 .insight-device-content { display: contents; }
 /* A link to a Settings card lands just below the top of the window and
    outlines the card for a moment. */
@@ -4237,7 +4240,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
 
 @media (max-width: 639px) {
 	.insights-tab-list { width: 100%; }
-	.insights-tab-list .isotope-tab { min-width: 0; flex: 1; }
+	/* Four labels fill a phone's width, so the icons give way. */
+	.insights-tab-list .isotope-tab { min-width: 0; flex: 1; padding-inline: .5rem; }
+	.insights-tab-list .isotope-tab .nav-icon { display: none; }
 	/* The column fills the page. Left to size itself, it shrinks to the
 	   subtitle, and the range row ends where the subtitle does. */
 	.insights-heading { display: grid; grid-template-columns: minmax(0, 1fr); }

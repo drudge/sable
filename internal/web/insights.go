@@ -16,7 +16,6 @@ import (
 	"github.com/drudge/sable/internal/insights"
 	blockinginsights "github.com/drudge/sable/internal/insights/blocking"
 	"github.com/drudge/sable/internal/insights/devices"
-	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -50,7 +49,7 @@ type blockingInsightReader interface {
 var insightsPermissions = []string{auth.PermissionBlockingRead, auth.PermissionLogsRead}
 
 // insightsTabs are the Insights sections in display order.
-var insightsTabs = []string{"overview", "devices", "blocking"}
+var insightsTabs = []string{"overview", "devices", "apps", "blocking"}
 
 // maximumOverviewFindings keeps the Overview to what is worth reading.
 const maximumOverviewFindings = 10
@@ -69,7 +68,7 @@ func insightsTab(request *http.Request, console pages.DashboardView) string {
 			tab = current.Query().Get("tab")
 		}
 	}
-	if tab == "devices" && !console.CanLogs {
+	if (tab == "devices" || tab == "apps") && !console.CanLogs {
 		tab = ""
 	}
 	for _, offered := range insightsTabs {
@@ -80,19 +79,18 @@ func insightsTab(request *http.Request, console pages.DashboardView) string {
 	return "overview"
 }
 
-func insightsPageURL(window insightWindow, tab string, filter pages.InsightDeviceFilterView) string {
+func insightsPageURL(window insightWindow, tab string, filter pages.InsightDeviceFilterView, apps pages.InsightAppFilterView) string {
 	values := url.Values{"range": []string{window.Range}}
 	if tab != "overview" {
 		values.Set("tab", tab)
 	}
-	if filter.Search != "" {
-		values.Set("search", filter.Search)
-	}
-	if filter.Type != "" {
-		values.Set("type", filter.Type)
-	}
-	if filter.Show != "" {
-		values.Set("show", filter.Show)
+	for _, parameter := range [][2]string{
+		{"search", filter.Search}, {"type", filter.Type}, {"show", filter.Show},
+		{"app_search", apps.Search}, {"category", apps.Category}, {"app_show", apps.Show},
+	} {
+		if parameter[1] != "" {
+			values.Set(parameter[0], parameter[1])
+		}
 	}
 	return "/insights?" + values.Encode()
 }
@@ -163,7 +161,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 	server.warmInsights(console, window)
 	view := pages.InsightsPageView{Console: console, Overview: pages.InsightsOverviewView{
 		Range: window.Range, RangeLabel: window.Label, Loading: true, ActiveTab: tab,
-		PageURL: insightsPageURL(window, tab, insightDeviceFilter(request)),
+		PageURL: insightsPageURL(window, tab, insightDeviceFilter(request), insightAppFilter(request)),
 		LoadURL: "/ui/insights/overview?" + url.Values{"range": []string{window.Range}, "tab": []string{tab}}.Encode(),
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 		Settings: server.insightSettingsPageView(console),
@@ -192,8 +190,9 @@ func (server *Server) warmInsights(console pages.DashboardView, window insightWi
 		if reader, ok := server.queries.(blockingInsightReader); ok {
 			warm(func(ctx context.Context) { server.blockingActivityCache.load(ctx, window, reader.BlockingActivity) })
 		}
-		if reader, ok := server.queries.(queryInsightReader); ok {
-			warm(func(ctx context.Context) { server.appCache.load(ctx, window, reader.QueryLogInsights) })
+		if reader, ok := server.queries.(appInsightReader); ok {
+			warm(func(ctx context.Context) { server.appActivityCache.load(ctx, window, reader.AppActivity) })
+			warm(func(ctx context.Context) { server.appSightingCache.load(ctx, window, appSightings(reader)) })
 		}
 	}
 	if console.CanBlocking {
@@ -222,7 +221,7 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	// At a drawer's address the page keeps it, so the drawer can open once
 	// this arrives.
 	if request.Header.Get("HX-Request") == "true" && !insightsDrawerOpen(request) {
-		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab, view.DeviceFilter))
+		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab, view.DeviceFilter, view.AppFilter))
 	}
 	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights overview", "error", err)
@@ -317,11 +316,13 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
 			server.nameRankedClients(view.TopClients)
 		}
+		var report deviceReport
 		if deviceData == nil {
 			view.DevicesUnavailable = true
-		} else if report, err := deviceData.load(request.Context()); err != nil {
+		} else if loaded, err := deviceData.load(request.Context()); err != nil {
 			view.DevicesUnavailable = true
 		} else {
+			report = loaded
 			view.Devices = insightDeviceViews(report)
 			if deviceData.coverage != nil {
 				view.Devices = withSilentDevices(view.Devices, deviceData.coverage.silent(request.Context()), report)
@@ -330,7 +331,11 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 		}
 		view.DeviceFilter, view.DeviceTypeOptions = insightDeviceFilter(request), devices.TypeLabels()
-		view.TopApps = server.topAppRanking(request, window)
+		if view.TopApps, view.Apps, view.AppsSince, err = server.insightApps(request.Context(), window, report); err != nil {
+			server.logger.Warn("count insights apps", "error", err)
+			view.AppsUnavailable = true
+		}
+		view.AppFilter = insightAppFilter(request)
 	}
 	if console.CanBlocking {
 		contribution, err := blockingData.Contribution(request.Context())
@@ -563,42 +568,6 @@ func insightsCheckedSummary(console pages.DashboardView, window insightWindow) s
 	default:
 		return "Sable checked block list updates and block list overlap."
 	}
-}
-
-// topAppRanking groups the window's busiest domains into the apps that own
-// them. It reads the same counts as the dashboard's domain ranking, so the two
-// never disagree about the traffic behind an app.
-func (server *Server) topAppRanking(request *http.Request, window insightWindow) []pages.RankedStatView {
-	reader, ok := server.queries.(queryInsightReader)
-	if !ok {
-		return nil
-	}
-	counted, _, err := server.appCache.load(request.Context(), window, reader.QueryLogInsights)
-	if err != nil {
-		server.logger.Warn("rank insights apps", "error", err)
-		return nil
-	}
-	domains := make([]services.Domain, 0, len(counted.Domains))
-	for name, hits := range counted.Domains {
-		domains = append(domains, services.Domain{Name: name, Queries: hits})
-	}
-	usages := services.Group(domains)
-	ranking := make([]pages.RankedStatView, 0, min(len(usages), insightsRankLimit))
-	for _, usage := range usages {
-		// Operating system check-ins are not apps anyone chose to use.
-		if usage.Service.Category == services.CategoryPlatform {
-			continue
-		}
-		if len(ranking) == insightsRankLimit {
-			break
-		}
-		ranking = append(ranking, pages.RankedStatView{
-			Name: usage.Service.Name, Secondary: usage.Service.Category, Value: usage.Queries,
-			Drawer: pages.AppDrawerLink(usage.Service.ID, window.Range),
-			Icon:   pages.AppIcon(usage.Service.ID, usage.Service.Category),
-		})
-	}
-	return ranking
 }
 
 // busiestDeviceRanking ranks devices by their queries. Each opens the

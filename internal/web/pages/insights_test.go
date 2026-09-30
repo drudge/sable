@@ -116,22 +116,22 @@ func TestInsightDevicesFilterByWhatTheRowsShow(t *testing.T) {
 	view := InsightsOverviewView{Devices: []InsightDeviceView{laptop, unsure}, DeviceTypeOptions: devices.TypeLabels()}
 	markup := renderComponent(t, InsightDevices(view))
 	for _, expected := range []string{
-		`data-device-tags="named" data-device-text="george&#39;s laptop 3c:22:fb:01:02:03 apple unifi 10.0.0.5 fd00::5 computer" data-device-type="computer"`,
-		`data-device-tags="new unnamed" data-device-text="10.0.0.9" data-device-type="unknown"`,
+		`data-list-tags="named" data-list-text="george&#39;s laptop 3c:22:fb:01:02:03 apple unifi 10.0.0.5 fd00::5 computer" data-list-type="computer"`,
+		`data-list-tags="new unnamed" data-list-text="10.0.0.9" data-list-type="unknown"`,
 		`<template data-option-icon="computer"><svg class="nav-icon icon-laptop"`, `<template data-option-icon="unknown"><svg class="nav-icon icon-monitor-smartphone"`,
-		`<span class="count-badge" data-device-count="2">2 devices</span>`, `<div class="insight-section-empty" hidden data-device-filter-empty>`,
+		`<span class="count-badge" data-list-count="2">2 devices</span>`, `<div class="insight-section-empty" hidden data-list-filter-empty>`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("devices list is missing %s", expected)
 		}
 	}
-	options := regexp.MustCompile(`<select data-device-type-filter[^>]*>(.*?)</select>`).FindStringSubmatch(markup)
+	options := regexp.MustCompile(`<select data-list-select="type"[^>]*>(.*?)</select>`).FindStringSubmatch(markup)
 	if options == nil || regexp.MustCompile(`>\s+<`).ReplaceAllString(options[1], "><") !=
 		`<option value="" selected>All Types</option><option value="computer">Computer</option><option value="unknown">Unknown</option>` {
 		t.Errorf("type filter offers %q, want All Types, Computer, and Unknown", options)
 	}
 	// Each device is a phone row and a desktop row, and both narrow.
-	if got := strings.Count(markup, "data-device-row"); got != 4 {
+	if got := strings.Count(markup, "data-list-row"); got != 4 {
 		t.Errorf("%d filterable rows, want 4", got)
 	}
 	if strings.Contains(markup, `data-option-icon="camera"`) {
@@ -150,8 +150,48 @@ func TestInsightDevicesFilterByWhatTheRowsShow(t *testing.T) {
 	}
 
 	// With nothing to narrow there are no filters.
-	if empty := renderComponent(t, InsightDevices(InsightsOverviewView{DeviceTypeOptions: devices.TypeLabels()})); strings.Contains(empty, "data-device-search") {
+	if empty := renderComponent(t, InsightDevices(InsightsOverviewView{DeviceTypeOptions: devices.TypeLabels()})); strings.Contains(empty, "data-list-search") {
 		t.Error("an empty list offers a search")
+	}
+}
+
+// The Apps list shows every app with its failures, and its filters match what
+// each row shows: its name and category, and whether it failed, was blocked,
+// or is new.
+func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
+	t.Parallel()
+	view := InsightsOverviewView{Range: "week", Apps: []InsightAppRowView{
+		{ID: "youtube", Name: "YouTube", Category: "Streaming", Devices: 3, Queries: 1200, Blocked: 12},
+		{ID: "remarkable", Name: "reMarkable", Category: "Device platform", Devices: 1, Queries: 54, Failed: 54, New: true},
+	}}
+	markup := renderComponent(t, InsightApps(view))
+	for _, expected := range []string{
+		`data-list-category="Streaming" data-list-row data-list-tags="blocked" data-list-text="youtube streaming youtube"`,
+		`data-list-category="Device platform" data-list-row data-list-tags="failing new" data-list-text="remarkable device platform remarkable"`,
+		`<span class="count-badge" data-list-count="2">2 apps</span>`, `data-list-nouns="app apps"`,
+		`<span class="status-badge warning">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
+		`data-list-param="app_search"`, `data-list-param="category"`, `data-list-param="app_show"`,
+		`hx-get="/ui/insights/app?id=remarkable&amp;range=week"`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Errorf("apps list is missing %s", expected)
+		}
+	}
+	options := regexp.MustCompile(`<select data-list-select="category"[^>]*>(.*?)</select>`).FindStringSubmatch(markup)
+	if options == nil || regexp.MustCompile(`>\s+<`).ReplaceAllString(options[1], "><") !=
+		`<option value="" selected>All Categories</option><option value="Device platform">Device platform</option><option value="Streaming">Streaming</option>` {
+		t.Errorf("category filter offers %q, want All Categories and the two shown", options)
+	}
+	if strings.Contains(markup, "App counts start") {
+		t.Error("a list counted over the whole range says counting started late")
+	}
+
+	view.AppsSince = time.Date(2026, 9, 30, 13, 0, 0, 0, time.UTC)
+	if markup := renderComponent(t, InsightApps(view)); !strings.Contains(markup, "App counts start") {
+		t.Error("a partial count does not say when counting started")
+	}
+	if empty := renderComponent(t, InsightApps(InsightsOverviewView{})); strings.Contains(empty, "data-list-search") || !strings.Contains(empty, "No apps in this period") {
+		t.Errorf("an empty list offers a search or no explanation:\n%s", empty)
 	}
 }
 

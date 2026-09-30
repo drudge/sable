@@ -30,6 +30,7 @@ var shots = []shot{
 	{"dashboard-full.png", "/", 1600, 1400},
 	{"insights.png", "/insights", 1600, 1120},
 	{"insights-devices.png", "/insights?tab=devices", 1600, 1000},
+	{"insights-apps.png", "/insights?tab=apps", 1600, 1000},
 	{"insights-blocking.png", "/insights?tab=blocking", 1600, 1180},
 	{"blocking.png", "/blocked", 1600, 880},
 	{"blocking-domains.png", "/blocked?tab=domains", 1600, 1150},
