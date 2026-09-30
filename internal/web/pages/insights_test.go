@@ -171,7 +171,7 @@ func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
 		`data-list-category="Streaming" data-list-row data-list-tags="blocked" data-list-text="youtube streaming youtube"`,
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new" data-list-text="remarkable device platform remarkable"`,
 		`<span class="count-badge" data-list-count="3">3 apps</span>`, `data-list-nouns="app apps"`,
-		`<span class="status-badge warning" title="Failed in the last hour">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
+		`<span class="status-badge warning" title="At least 1% of its lookups failed in the last hour">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
 		`data-list-param="app_search"`, `data-list-param="category"`, `data-list-param="app_show"`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=week"`,
 		`data-list-category="Cloud storage" data-list-row data-list-tags="" data-list-text="icloud cloud storage icloud"`,

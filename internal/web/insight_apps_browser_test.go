@@ -28,7 +28,9 @@ func TestBrowserInsightAppFilters(t *testing.T) {
 	for index := range 5 {
 		lookup(time.Duration(30+index)*time.Minute, "10.0.0.5", "www.netflix.com.", querylog.SourceUpstream)
 	}
-	lookup(20*time.Minute, "10.0.0.9", "eu.tectonic.remarkable.com.", querylog.SourceError)
+	for index := range 5 {
+		lookup(time.Duration(20+index)*time.Minute, "10.0.0.9", "eu.tectonic.remarkable.com.", querylog.SourceError)
+	}
 	if err := app.store.WriteQueryEvents(context.Background(), events); err != nil {
 		t.Fatal(err)
 	}
