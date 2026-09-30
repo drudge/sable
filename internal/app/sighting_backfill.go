@@ -32,6 +32,19 @@ func backfillBlockedClientRollups(ctx context.Context, backfill func(context.Con
 	}
 }
 
+// backfillAppRollups counts the queries each client made to each app before
+// the app rollups existed, once per database, so the Insights Apps tab covers
+// the whole retained history from the first upgrade.
+func backfillAppRollups(ctx context.Context, backfill func(context.Context) (bool, error), logger *slog.Logger) {
+	filled, err := backfill(ctx)
+	switch {
+	case err != nil && ctx.Err() == nil:
+		logger.Warn("count app queries from the query log", "error", err)
+	case filled:
+		logger.Info("counted app queries from the existing query log")
+	}
+}
+
 // rollupCompactionInterval is how often settled query log minutes are summed
 // into hours and days.
 const rollupCompactionInterval = 5 * time.Minute

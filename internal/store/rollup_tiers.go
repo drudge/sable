@@ -48,7 +48,8 @@ var (
 var queryLogRollupDimensions = []string{
 	queryLogRollupClient, queryLogRollupDomain, queryLogRollupBlocked, queryLogRollupBlockedClient,
 	queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource, queryLogRollupRecordType,
-	queryLogRollupSource, queryLogRollupResponseCode,
+	queryLogRollupSource, queryLogRollupResponseCode, queryLogRollupFailed, queryLogRollupAppClient,
+	queryLogRollupAppClientFailed, queryLogRollupAppClientBlocked,
 }
 
 const (
@@ -227,7 +228,7 @@ func (store *Store) compactTier(ctx context.Context, tier rollupTier, sourceFrom
 func (store *Store) compactBuckets(ctx context.Context, tier rollupTier, start, end, from, until time.Time) error {
 	rollups := make([]queryLogRollup, 0)
 	for bucket := start; bucket.Before(end); bucket = bucket.Add(tier.size) {
-		summed, err := store.sumRollups(ctx, tier.source, bucket, bucket.Add(tier.size))
+		summed, err := store.sumRollups(ctx, tier.source, queryLogRollupDimensions, bucket, bucket.Add(tier.size))
 		if err != nil {
 			return err
 		}
@@ -271,14 +272,14 @@ func (store *Store) compactBuckets(ctx context.Context, tier rollupTier, start, 
 }
 
 // sumRollups totals one bucket's worth of a finer table by dimension and value.
-func (store *Store) sumRollups(ctx context.Context, table string, start, end time.Time) ([]queryLogRollup, error) {
+func (store *Store) sumRollups(ctx context.Context, table string, dimensions []string, start, end time.Time) ([]queryLogRollup, error) {
 	var arguments []any
 	bind := func(value any) string {
 		arguments = append(arguments, value)
 		return store.placeholder(len(arguments))
 	}
 	statement := "SELECT dimension, value, CAST(SUM(hits) AS BIGINT) FROM " + table +
-		" WHERE " + store.dimensionCondition(queryLogRollupDimensions, bind) +
+		" WHERE " + store.dimensionCondition(dimensions, bind) +
 		" AND bucket_start >= " + bind(start) + " AND bucket_start < " + bind(end) +
 		" GROUP BY dimension, value"
 	rows, err := store.database.QueryContext(ctx, statement, arguments...)
@@ -295,6 +296,57 @@ func (store *Store) sumRollups(ctx context.Context, table string, start, end tim
 		summed = append(summed, rollup)
 	}
 	return summed, rows.Err()
+}
+
+// resumTierDimensions sums the given dimensions again into every hour and day
+// the tiers hold that overlaps [start, end), after those minutes gained counts
+// the tiers summed without. Finer tiers go first, since each sums the one
+// before it.
+func (store *Store) resumTierDimensions(ctx context.Context, dimensions []string, start, end time.Time) error {
+	for _, tier := range rollupTiers {
+		coverage, found, err := store.tierCoverage(ctx, tier)
+		if err != nil {
+			return err
+		}
+		first := maxTime(start.UTC().Truncate(tier.size), coverage.from)
+		last := minTime(ceilTime(end.UTC(), tier.size), coverage.until)
+		if !found || !first.Before(last) {
+			continue
+		}
+		rollups := make([]queryLogRollup, 0)
+		for bucket := first; bucket.Before(last); bucket = bucket.Add(tier.size) {
+			summed, err := store.sumRollups(ctx, tier.source, dimensions, bucket, bucket.Add(tier.size))
+			if err != nil {
+				return err
+			}
+			rollups = append(rollups, summed...)
+		}
+		transaction, err := store.database.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin %s resum: %w", tier.table, err)
+		}
+		var arguments []any
+		bind := func(value any) string {
+			arguments = append(arguments, value)
+			return store.placeholder(len(arguments))
+		}
+		statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(dimensions, bind) +
+			" AND bucket_start >= " + bind(first) + " AND bucket_start < " + bind(last)
+		if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
+			_ = transaction.Rollback()
+			return fmt.Errorf("clear %s: %w", tier.table, err)
+		}
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.insertTierRows(ctx, transaction, tier.table, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				_ = transaction.Rollback()
+				return err
+			}
+		}
+		if err := transaction.Commit(); err != nil {
+			return fmt.Errorf("commit %s resum: %w", tier.table, err)
+		}
+	}
+	return nil
 }
 
 func (store *Store) insertTierRows(ctx context.Context, transaction interface {

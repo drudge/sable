@@ -267,3 +267,51 @@ type WatchedLookup struct {
 	Name    string
 	Blocked bool
 }
+
+// Failed reports whether Sable could not answer a query at all: it refused
+// the client, or the lookup failed. A blocked query or a name that does not
+// exist was answered, so neither counts.
+func (event Event) Failed() bool {
+	return event.Source == SourceError
+}
+
+// AppCounts is one app's traffic from one client address, or in total.
+type AppCounts struct {
+	Queries uint64
+	// Failed counts the queries Sable could not answer, as Event.Failed says.
+	Failed  uint64
+	Blocked uint64
+}
+
+// AppActivity counts, per app and client address, the queries in a window
+// whose names belong to an app in the service catalog. Every name counts, not
+// only the busiest ones, so a quiet app appears as surely as a busy one.
+type AppActivity struct {
+	// Clients maps an app's service ID to each client address that used it.
+	Clients map[string]map[string]AppCounts
+	// Since is when counting began, when that falls inside the window, so a
+	// partial count is never passed off as the whole period. It is zero when
+	// the whole window is covered.
+	Since time.Time
+}
+
+// AppDomain is one name an app was reached at in a window.
+type AppDomain struct {
+	Name    string
+	Queries uint64
+	Failed  uint64
+}
+
+// AppSighting is when any client first and last looked up a name an app owns.
+type AppSighting struct {
+	FirstSeen time.Time
+	LastSeen  time.Time
+}
+
+// AppSightings are the first and last lookups of each app, by service ID,
+// across all retained history. SeenSince is when first-seen tracking began, so
+// an app first seen soon after is not called new.
+type AppSightings struct {
+	Apps      map[string]AppSighting
+	SeenSince time.Time
+}
