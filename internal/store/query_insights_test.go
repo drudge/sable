@@ -155,6 +155,43 @@ func TestQueryEventsExactDomainIgnoresSubdomains(t *testing.T) {
 	}
 }
 
+func TestQueryEventsSearchLooksThroughDomainClientAndAnswer(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	opened := openQueryLogStore(t, []querylog.Event{
+		{OccurredAt: now, ClientIP: "10.0.7.16", Name: "my.remarkable.com.", RecordType: dns.TypeA, Class: dns.ClassINET, Source: querylog.SourceUpstream, Protocol: "UDP", Answer: "104.18.2.9"},
+		{OccurredAt: now, ClientIP: "10.0.7.44", Name: "example.org.", RecordType: dns.TypeA, Class: dns.ClassINET, Source: querylog.SourceUpstream, Protocol: "UDP", Answer: "93.184.216.34"},
+		{OccurredAt: now, ClientIP: "10.0.7.44", Name: "cdn.example.net.", RecordType: dns.TypeCNAME, Class: dns.ClassINET, Source: querylog.SourceCache, Protocol: "UDP", Answer: "Edge.Remarkable.com."},
+	})
+
+	for _, test := range []struct {
+		search string
+		want   int
+	}{
+		{"remarkable.com", 2},  // the domain, and a CNAME answer in another case
+		{"REMARKABLE.COM.", 2}, // a pasted trailing dot still finds the domain
+		{"10.0.7.44", 2},
+		{"104.18.", 1},
+		{"nowhere.test", 0},
+	} {
+		page, err := opened.QueryEvents(context.Background(), querylog.Filter{Search: test.search})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.TotalEntries != test.want {
+			t.Errorf("search %q total = %d, want %d", test.search, page.TotalEntries, test.want)
+		}
+	}
+	narrowed, err := opened.QueryEvents(context.Background(), querylog.Filter{Search: "remarkable.com", ClientIP: "10.0.7.16"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if narrowed.TotalEntries != 1 {
+		t.Fatalf("search with a client filter total = %d, want 1", narrowed.TotalEntries)
+	}
+}
+
 func TestQueryEventReadsOneRowByID(t *testing.T) {
 	t.Parallel()
 

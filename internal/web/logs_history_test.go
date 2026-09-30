@@ -110,6 +110,31 @@ func TestQueryLogPanelFollowsByDefault(t *testing.T) {
 	}
 }
 
+// The search box looks through the whole log, so what was typed has to ride
+// along with every way of reaching more of the same rows: the next page, the
+// live refresh, the export, and the page address.
+func TestQueryLogSearchCarriesThroughThePanel(t *testing.T) {
+	t.Parallel()
+
+	server := newRuntimeLogTestServerWithStore(t, config.Defaults(), &testServerLogStore{})
+	body := serveRequest(server, "GET", "/ui/logs/queries?q=remarkable.com&client_ip=10.0.7.16&filters=1").Body.String()
+
+	for _, expected := range []string{
+		`placeholder="Search domains, clients, or answers..." value="remarkable.com"`, `id="query-log-search"`, `name="q"`,
+		`<input type="hidden" name="client_ip" value="10.0.7.16">`,
+		`data-page-url="/logs?client_ip=10.0.7.16&amp;filters=1&amp;q=remarkable.com&amp;tab=queries"`,
+		`q=remarkable.com`, `/api/v1/logs/queries/export?client_ip=10.0.7.16&amp;q=remarkable.com`,
+		`hx-include="#query-log-search"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("query log panel does not contain %q", expected)
+		}
+	}
+	if !strings.Contains(body, `data-live-url="/ui/logs/queries?after_id=1&amp;client_ip=10.0.7.16&amp;filters=1&amp;known_total=1&amp;live=1&amp;page=1&amp;page_size=50&amp;q=remarkable.com"`) {
+		t.Error("the live refresh drops the search")
+	}
+}
+
 // Switching persistence off has to fall back to the live buffer. Serving the
 // table anyway would show whatever was captured before it was switched off and
 // then simply stop, which reads as a broken log rather than a disabled one.

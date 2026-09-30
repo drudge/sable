@@ -1796,6 +1796,15 @@
     if (!dialog || !ctx.response || ctx.response.status >= 400) return;
     showRoutedDialog(dialog, false, ctx.sourceElement);
   });
+  // A search or filter on Query Logs swaps only the panel, so the address
+  // follows it: a reload, a bookmark, or a shared link shows the same rows.
+  document.addEventListener("htmx:after:swap", () => {
+    const panel = document.getElementById("query-logs-panel");
+    const address = new URL(window.location.href);
+    if (!panel?.dataset.pageUrl || address.pathname !== "/logs" || address.searchParams.get("tab") !== "queries") return;
+    const next = new URL(panel.dataset.pageUrl, window.location.origin);
+    if (next.search !== address.search) window.history.replaceState(window.history.state, "", next.pathname + next.search + address.hash);
+  });
   // A Watch link from Query Logs or a device opens Settings with the Add
   // Watch dialog loading. Once it opens, the link's details leave the address,
   // so a reload does not open it again.
@@ -2931,14 +2940,14 @@
 	  input.focus();
 	});
 
-	let queryResultSearch = "";
 	const setupLogLivePanel = (panel) => {
 	  if (!panel || panel.dataset.logLiveReady === "true") return;
 	  panel.dataset.logLiveReady = "true";
 	  let timer = null;
 	  let requestInFlight = false;
 	  const button = panel.querySelector("[data-log-live-toggle]");
-	  const input = panel.querySelector("[data-log-live-input]");
+	  // The filters and the search box each post the live flag, so both follow it.
+	  const inputs = panel.querySelectorAll("[data-log-live-input]");
 	  const label = button?.querySelector("[data-log-live-label]");
 	  const filtersButton = panel.querySelector("[data-query-filters-toggle]");
 	  const filtersPanel = panel.querySelector("[data-query-filters]");
@@ -3025,7 +3034,7 @@
 		button.classList.toggle("active", live);
 		button.setAttribute("aria-pressed", String(live));
 		if (label) label.textContent = live ? "Pause" : "Live";
-		if (input) input.value = live ? "1" : "0";
+		inputs.forEach((input) => { input.value = live ? "1" : "0"; });
 		announce(live ? "Live log updates started" : "Live log updates paused");
 		syncLiveURL(live);
 		if (live) { poll(); start(); } else stop();
@@ -3036,30 +3045,11 @@
 		filtersButton.classList.toggle("active", open);
 		filtersButton.setAttribute("aria-expanded", String(open));
 		announce(open ? "Query log filters expanded" : "Query log filters collapsed");
+		panel.querySelectorAll("[data-query-filters-input]").forEach((field) => { field.disabled = !open; });
 		const liveURL = new URL(panel.dataset.liveUrl, window.location.origin);
 		if (open) liveURL.searchParams.set("filters", "1");
 		else liveURL.searchParams.delete("filters");
 		panel.dataset.liveUrl = liveURL.pathname + liveURL.search;
-	  });
-	  const resultSearch = panel.querySelector("[data-query-result-search]");
-	  if (resultSearch) {
-		resultSearch.value = queryResultSearch;
-		syncSearchClear(resultSearch);
-	  }
-	  const applyResultSearch = (search) => {
-		let visible = 0;
-		panel.querySelectorAll("[data-query-result-row]").forEach((row) => {
-		  const matches = search === "" || row.textContent.toLowerCase().includes(search);
-		  row.hidden = !matches;
-		  if (matches) visible++;
-		});
-		if (search && document.activeElement === resultSearch) announce(`${visible} query results shown`);
-	  };
-	  applyResultSearch(queryResultSearch);
-	  resultSearch?.addEventListener("input", (event) => {
-		const search = event.target.value.trim().toLowerCase();
-		queryResultSearch = search;
-		applyResultSearch(search);
 	  });
 	  panel.querySelector("[data-query-page-size]")?.addEventListener("change", (event) => {
 		const target = new URL(panel.dataset.liveUrl, window.location.origin);

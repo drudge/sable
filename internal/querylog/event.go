@@ -114,10 +114,14 @@ type Filter struct {
 	Incremental   bool
 	ClientIP      string
 	Name          string
-	RecordTypes   []uint16
-	ResponseCode  *int
-	Source        Source
-	Protocol      string
+	// Search matches a substring of the domain, the client address, or the
+	// answer, which is what an operator means when they type a name into the
+	// log's one search box without saying which column it belongs to.
+	Search       string
+	RecordTypes  []uint16
+	ResponseCode *int
+	Source       Source
+	Protocol     string
 	// Exact turns the client and domain filters into equality tests. The
 	// search boxes want a substring so an operator can type half an address,
 	// but a link that arrives from a dashboard ranking already knows the whole

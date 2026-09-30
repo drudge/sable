@@ -237,7 +237,7 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 	display := requestTimeDisplay(request)
 	view := pages.QueryLogsView{
 		Page: filter.Page, PageSize: filter.PageSize, ClientIP: raw.Get("client_ip"),
-		Name: raw.Get("name"), RecordType: strings.ToUpper(raw.Get("record_type")),
+		Name: raw.Get("name"), Search: raw.Get("q"), RecordType: strings.ToUpper(raw.Get("record_type")),
 		ResponseCode: strings.ToUpper(raw.Get("response_code")), Source: raw.Get("source"), Protocol: strings.ToUpper(raw.Get("protocol")),
 		Start: logTimeField(filter.Since, display), End: logTimeField(filter.Until, display),
 		Exact: filter.Exact,
@@ -284,7 +284,7 @@ func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
 	filter := querylog.Filter{
 		Page:     parseBoundedInt(values.Get("page"), 1, 1, 1_000_000),
 		PageSize: parseBoundedInt(values.Get("page_size"), 50, 1, 250),
-		ClientIP: values.Get("client_ip"), Name: values.Get("name"),
+		ClientIP: values.Get("client_ip"), Name: values.Get("name"), Search: values.Get("q"),
 		Source: querylog.Source(values.Get("source")), Protocol: values.Get("protocol"),
 	}
 	filter.Cursor = parsePositiveInt64(values.Get("cursor"))
@@ -387,7 +387,7 @@ func queryLogPanelURL(values url.Values, page int, cursor int64, direction strin
 
 func exportQueryValues(values url.Values) url.Values {
 	copy := make(url.Values)
-	for _, key := range []string{"client_ip", "name", "record_type", "response_code", "source", "protocol", "page_size", "start", "end", "match"} {
+	for _, key := range []string{"q", "client_ip", "name", "record_type", "response_code", "source", "protocol", "page_size", "start", "end", "match"} {
 		if value := values.Get(key); value != "" {
 			copy.Set(key, value)
 		}
