@@ -8,6 +8,57 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.1] - 2026-09-30
+
+Sable 1.6.1-beta.1 answers devices that ask over IPv6 from your own network,
+says when it keeps refusing one, adds an Apps tab to Insights, and makes the
+query log search box search the whole log.
+
+### Upgrading
+
+- Private recursion access now also covers the IPv6 networks Sable is
+  attached to. To keep the old behavior, choose **Listed clients only** in
+  **Settings → Recursion** and list your private ranges.
+- The new **Lookups refused** finding adds `lookups_refused` to
+  `[insights.findings]`. Upgrade replicas before the primary. An older
+  replica rejects a configuration that has it.
+
+### Recursion
+
+- Answer devices on your own network that ask from a global IPv6 address.
+  Under private access, Sable used to refuse them, since their addresses come
+  from your ISP's prefix rather than a private range. It now also admits the
+  IPv6 networks on its own interfaces, as long as the interface also has a
+  private IPv4 or ULA address. **Settings → Recursion** lists them under
+  **This Network**. Replicas also admit the primary's networks.
+- Say why a lookup was refused. A query refused by recursion access now reads
+  **Refused: recursion not allowed** in its details, instead of looking like
+  any other refusal.
+
+### Insights
+
+- Report a local device that keeps getting refused as **Lookups refused**.
+  It takes at least 10 refused lookups across at least 2 hours of the last
+  day, from a device Sable has seen on the network or on a network it is
+  attached to. The finding clears once recursion access covers the device.
+- Add an **Apps** tab that lists every app your network used, counted from
+  every lookup rather than the top 1,000 domains. Search it, filter it by
+  category, or show only apps that are failing, blocked, or new. An app's
+  drawer lists its failed lookups, each linked to those queries in the log,
+  and which devices hit them. Counts from before the upgrade are filled in
+  once in the background.
+
+### Logs
+
+- Search the whole query log from the search box above the table. It used to
+  hide rows on the page already loaded, so a domain that wasn't in the newest
+  rows found nothing. It now matches the domain, the client address, or the
+  answer, keeps the filters you set, and stays in the page address. The
+  **Domain** filter still matches domains only. **Search Query Logs** in the
+  command palette gains an **All** option.
+- Keep everything typed in the server log search. Typing in two bursts left
+  the box showing only the first part.
+
 ## [1.6.0] - 2026-09-29
 
 Sable 1.6.0 can alert you when a device looks up a domain you pick, points out
