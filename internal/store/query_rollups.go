@@ -112,7 +112,7 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 		for _, value := range values {
 			counts[queryLogRollupKey{bucket: bucket, dimension: value.dimension, value: value.value}]++
 		}
-		countAppEvent(counts, bucket, client, domain, event)
+		countAppEvent(counts, bucket, client, domain, event, true)
 		if event.Source == querylog.SourceBlocked {
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlocked, value: domain}]++
 			counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupBlockedClient, value: client}]++
@@ -128,9 +128,10 @@ func aggregateQueryLogEvents(events []querylog.Event) []queryLogRollup {
 }
 
 // countAppEvent adds one query to the app dimensions: its failure by name, and
-// its app, when the catalog names one, by client.
-func countAppEvent(counts map[queryLogRollupKey]uint64, bucket time.Time, client, domain string, event querylog.Event) {
-	if event.Failed() {
+// its app, when the catalog names one, by client. Failures are left out when
+// failures is false.
+func countAppEvent(counts map[queryLogRollupKey]uint64, bucket time.Time, client, domain string, event querylog.Event, failures bool) {
+	if failures && event.Failed() {
 		counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupFailed, value: domain}]++
 	}
 	service, found := services.Lookup(domain)
@@ -139,7 +140,7 @@ func countAppEvent(counts map[queryLogRollupKey]uint64, bucket time.Time, client
 	}
 	value := appClientValue(service.ID, client)
 	counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupAppClient, value: value}]++
-	if event.Failed() {
+	if failures && event.Failed() {
 		counts[queryLogRollupKey{bucket: bucket, dimension: queryLogRollupAppClientFailed, value: value}]++
 	}
 	if event.Source == querylog.SourceBlocked {

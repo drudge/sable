@@ -17,6 +17,13 @@ import (
 // than undercounted.
 const appRollupSinceKey = "query_log_rollup_app_since"
 
+// appFailedSinceKey records when this database started counting app failures.
+// The backfill leaves failures out and never moves this marker back: most of
+// what failed before an upgrade, such as devices a recursion policy refused,
+// is what the upgrade fixed, so counting it would fill the Apps tab with
+// problems already gone.
+const appFailedSinceKey = "query_log_rollup_app_failed_since"
+
 // appBackfilledKey records that the app dimensions were filled in from the
 // query history written before they existed.
 const appBackfilledKey = "query_log_rollup_app_backfilled"
@@ -32,18 +39,14 @@ const maximumAppDomains = 100
 // catalog, by client, with the ones that failed and were blocked. Whole minutes
 // come from the rollups and the ragged edges from the raw log, whose names are
 // matched to apps here, so the counts cover every name rather than the busiest.
+// Failures count only from when this version began counting them, since those
+// from before an upgrade are mostly ones the upgrade fixed.
 func (store *Store) AppActivity(ctx context.Context, since, until time.Time) (querylog.AppActivity, error) {
 	activity := querylog.AppActivity{Clients: map[string]map[string]querylog.AppCounts{}}
 	if since.IsZero() || until.IsZero() || !since.Before(until) {
 		return activity, errors.New("app activity needs a bounded window")
 	}
 	since, until = since.UTC(), until.UTC()
-	start, fullStart, fullEnd, reported, counted, err := store.appWindow(ctx, since, until)
-	if err != nil || !counted {
-		activity.Since = reported
-		return activity, err
-	}
-	activity.Since = reported
 	add := func(app, client string, counts querylog.AppCounts) {
 		clients := activity.Clients[app]
 		if clients == nil {
@@ -56,96 +59,133 @@ func (store *Store) AppActivity(ctx context.Context, since, until time.Time) (qu
 		total.Blocked += counts.Blocked
 		clients[client] = total
 	}
-
-	spans, err := store.rollupSpans(ctx, fullStart, fullEnd, dayRollupTier.size)
-	if err != nil {
-		return activity, err
+	passes := []struct {
+		marker     string
+		dimensions []string
+		reported   *time.Time
+		count      func(querylog.Event) querylog.AppCounts
+	}{
+		{appRollupSinceKey, []string{queryLogRollupAppClient, queryLogRollupAppClientBlocked}, &activity.Since, func(event querylog.Event) querylog.AppCounts {
+			counts := querylog.AppCounts{Queries: 1}
+			if event.Source == querylog.SourceBlocked {
+				counts.Blocked = 1
+			}
+			return counts
+		}},
+		{appFailedSinceKey, []string{queryLogRollupAppClientFailed}, &activity.FailedSince, func(event querylog.Event) querylog.AppCounts {
+			if event.Failed() {
+				return querylog.AppCounts{Failed: 1}
+			}
+			return querylog.AppCounts{}
+		}},
 	}
-	if len(spans) > 0 {
-		var arguments []any
-		bind := func(value any) string {
-			arguments = append(arguments, value)
-			return store.placeholder(len(arguments))
+	for _, pass := range passes {
+		start, fullStart, fullEnd, reported, counted, err := store.appWindow(ctx, pass.marker, since, until)
+		*pass.reported = reported
+		if err != nil {
+			return activity, err
 		}
-		dimensions := []string{queryLogRollupAppClient, queryLogRollupAppClientFailed, queryLogRollupAppClientBlocked}
-		arms := make([]string, 0, len(spans))
-		for _, span := range spans {
-			arms = append(arms, "SELECT dimension, value, hits FROM "+span.table+
-				" WHERE "+store.dimensionCondition(dimensions, bind)+
-				" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+		if !counted {
+			continue
 		}
-		rows, err := store.database.QueryContext(ctx, `
+		if err := store.countAppRollups(ctx, pass.dimensions, fullStart, fullEnd, add); err != nil {
+			return activity, err
+		}
+		if err := store.countAppEdges(ctx, start, fullStart, fullEnd, until, pass.count, add); err != nil {
+			return activity, err
+		}
+	}
+	return activity, nil
+}
+
+// countAppRollups adds the given app dimensions' whole minutes in [start, end).
+func (store *Store) countAppRollups(ctx context.Context, dimensions []string, start, end time.Time, add func(app, client string, counts querylog.AppCounts)) error {
+	spans, err := store.rollupSpans(ctx, start, end, dayRollupTier.size)
+	if err != nil || len(spans) == 0 {
+		return err
+	}
+	var arguments []any
+	bind := func(value any) string {
+		arguments = append(arguments, value)
+		return store.placeholder(len(arguments))
+	}
+	arms := make([]string, 0, len(spans))
+	for _, span := range spans {
+		arms = append(arms, "SELECT dimension, value, hits FROM "+span.table+
+			" WHERE "+store.dimensionCondition(dimensions, bind)+
+			" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+	}
+	rows, err := store.database.QueryContext(ctx, `
 SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
 FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS rolled
 GROUP BY dimension, value`, arguments...)
-		if err != nil {
-			return activity, fmt.Errorf("read app rollups: %w", err)
+	if err != nil {
+		return fmt.Errorf("read app rollups: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dimension, value string
+		var hits uint64
+		if err := rows.Scan(&dimension, &value, &hits); err != nil {
+			return fmt.Errorf("scan app rollup: %w", err)
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var dimension, value string
-			var hits uint64
-			if err := rows.Scan(&dimension, &value, &hits); err != nil {
-				return activity, fmt.Errorf("scan app rollup: %w", err)
-			}
-			app, client, ok := splitAppClientValue(value)
-			if !ok {
-				continue
-			}
-			switch dimension {
-			case queryLogRollupAppClient:
-				add(app, client, querylog.AppCounts{Queries: hits})
-			case queryLogRollupAppClientFailed:
-				add(app, client, querylog.AppCounts{Failed: hits})
-			case queryLogRollupAppClientBlocked:
-				add(app, client, querylog.AppCounts{Blocked: hits})
-			}
+		app, client, ok := splitAppClientValue(value)
+		if !ok {
+			continue
 		}
-		if err := rows.Err(); err != nil {
-			return activity, fmt.Errorf("iterate app rollups: %w", err)
+		switch dimension {
+		case queryLogRollupAppClient:
+			add(app, client, querylog.AppCounts{Queries: hits})
+		case queryLogRollupAppClientFailed:
+			add(app, client, querylog.AppCounts{Failed: hits})
+		case queryLogRollupAppClientBlocked:
+			add(app, client, querylog.AppCounts{Blocked: hits})
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate app rollups: %w", err)
+	}
+	return nil
+}
 
+// countAppEdges adds what count makes of each raw query in [start, fullStart)
+// and [fullEnd, until] whose name belongs to an app.
+func (store *Store) countAppEdges(ctx context.Context, start, fullStart, fullEnd, until time.Time, count func(querylog.Event) querylog.AppCounts, add func(app, client string, counts querylog.AppCounts)) error {
 	edges, err := store.database.QueryContext(ctx, `
 SELECT client_ip_key, name_key, source FROM sable_query_log`+store.queryLogTimeIndex()+`
 WHERE (occurred_at >= `+store.placeholder(1)+` AND occurred_at < `+store.placeholder(2)+`)
    OR (occurred_at >= `+store.placeholder(3)+` AND occurred_at <= `+store.placeholder(4)+`)`,
 		start, fullStart, fullEnd, until)
 	if err != nil {
-		return activity, fmt.Errorf("read app edges: %w", err)
+		return fmt.Errorf("read app edges: %w", err)
 	}
 	defer edges.Close()
 	for edges.Next() {
 		var client, name, source string
 		if err := edges.Scan(&client, &name, &source); err != nil {
-			return activity, fmt.Errorf("scan app edge: %w", err)
+			return fmt.Errorf("scan app edge: %w", err)
 		}
 		service, found := services.Lookup(name)
 		if !found {
 			continue
 		}
-		event := querylog.Event{Source: querylog.Source(source)}
-		counts := querylog.AppCounts{Queries: 1}
-		if event.Failed() {
-			counts.Failed = 1
+		if counts := count(querylog.Event{Source: querylog.Source(source)}); counts != (querylog.AppCounts{}) {
+			add(service.ID, client, counts)
 		}
-		if event.Source == querylog.SourceBlocked {
-			counts.Blocked = 1
-		}
-		add(service.ID, client, counts)
 	}
 	if err := edges.Err(); err != nil {
-		return activity, fmt.Errorf("iterate app edges: %w", err)
+		return fmt.Errorf("iterate app edges: %w", err)
 	}
-	return activity, nil
+	return nil
 }
 
-// appWindow splits [since, until] for the app dimensions: counting starts at
+// appWindow splits [since, until] for the app dimensions that began at the
+// marker: counting starts at
 // start, whole minutes run from fullStart to fullEnd, and the raw log covers
 // the rest. reported is when counting began, if that is inside the window, and
 // counted is false when it began after the window ended.
-func (store *Store) appWindow(ctx context.Context, since, until time.Time) (start, fullStart, fullEnd, reported time.Time, counted bool, err error) {
-	began, found, err := store.rollupMarker(ctx, appRollupSinceKey)
+func (store *Store) appWindow(ctx context.Context, marker string, since, until time.Time) (start, fullStart, fullEnd, reported time.Time, counted bool, err error) {
+	began, found, err := store.rollupMarker(ctx, marker)
 	if err != nil {
 		return
 	}
@@ -200,12 +240,15 @@ func (store *Store) AppDomains(ctx context.Context, since, until time.Time, suff
 	if err != nil {
 		return nil, err
 	}
-	failed, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
-		name: queryLogRollupFailed, column: queryLogDomainExpression, only: querylog.SourceError,
-		since: func(ctx context.Context) (time.Time, bool, error) { return store.rollupMarker(ctx, appRollupSinceKey) },
-	}, maximumAppDomains, &filter)
-	if err != nil {
+	failed := rollupSummary{ranks: map[string]uint64{}}
+	if failedSince, err := store.appFailuresSince(ctx, since); err != nil {
 		return nil, err
+	} else if failedSince.Before(until) {
+		if failed, err = store.summarizeRollupDimension(ctx, failedSince, until, rollupDimension{
+			name: queryLogRollupFailed, column: queryLogDomainExpression, only: querylog.SourceError,
+		}, maximumAppDomains, &filter); err != nil {
+			return nil, err
+		}
 	}
 	blocked, err := store.summarizeRollupDimension(ctx, since, until, rollupDimension{
 		name: queryLogRollupBlocked, column: queryLogDomainExpression, only: querylog.SourceBlocked,
@@ -221,10 +264,18 @@ func (store *Store) AppDomains(ctx context.Context, since, until time.Time, suff
 }
 
 // LastLookup is the newest query in [since, until] to any of the names that
-// was answered from source, or zero if there is none. It reads each name
+// was answered from source, or zero if there is none. Failures count only
+// from when app failures began to be counted. It reads each name
 // through its own index, so callers pass only the names they know have such
 // a query, which keeps a busy name with one failure from costing much.
 func (store *Store) LastLookup(ctx context.Context, names []string, source querylog.Source, since, until time.Time) (time.Time, error) {
+	if source == querylog.SourceError {
+		failedSince, err := store.appFailuresSince(ctx, since)
+		if err != nil {
+			return time.Time{}, err
+		}
+		since = failedSince
+	}
 	var last time.Time
 	index := ""
 	if store.driver != "postgres" {
@@ -252,6 +303,15 @@ WHERE name_key = `+store.placeholder(1)+` AND source = `+store.placeholder(2)+`
 		}
 	}
 	return last, nil
+}
+
+// appFailuresSince moves since up to when app failures began to be counted.
+func (store *Store) appFailuresSince(ctx context.Context, since time.Time) (time.Time, error) {
+	began, found, err := store.rollupMarker(ctx, appFailedSinceKey)
+	if err != nil || !found {
+		return since, err
+	}
+	return maxTime(since, began.UTC()), nil
 }
 
 // AppSightings reads when each app was first and last looked up, across all
@@ -374,7 +434,8 @@ WHERE occurred_at >= `+store.placeholder(1)+` AND occurred_at < `+store.placehol
 			rows.Close()
 			return fmt.Errorf("read app history time: %w", err)
 		}
-		countAppEvent(counts, moment.UTC().Truncate(time.Minute), client, name, querylog.Event{Source: querylog.Source(source)})
+		// Failures from before the upgrade are left out; see appFailedSinceKey.
+		countAppEvent(counts, moment.UTC().Truncate(time.Minute), client, name, querylog.Event{Source: querylog.Source(source)}, false)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

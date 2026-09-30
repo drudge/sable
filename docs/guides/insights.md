@@ -8,7 +8,7 @@ Insights runs entirely on your server. It uses fixed rules and lookup tables, no
 
 Insights needs query logging, which is on by default. Open **Insights** from the sidebar or the command palette. You need permission to read logs, blocking, or both; each section shows only what you may read.
 
-Right after an upgrade, Sable fills in device history and app counts from the query log it already keeps, so Insights knows which devices were already on the network from the first day.
+Right after an upgrade, Sable fills in device history and app counts from the query log it already keeps, so Insights knows which devices were already on the network from the first day. App failures count from the upgrade on, since most of what failed before is what the upgrade fixed.
 
 ![Insights Overview with the summary sentence, device metrics, and findings](../assets/screenshots/insights.png "The Overview opens with one sentence about what stands out, then the findings behind it.")
 

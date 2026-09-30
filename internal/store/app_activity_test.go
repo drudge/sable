@@ -9,12 +9,12 @@ import (
 	"github.com/drudge/sable/internal/querylog"
 )
 
-// rewindAppMarker dates the app dimensions back to since, as though they had
-// been written for all the history a test seeds.
+// rewindAppMarker dates the app dimensions, failures included, back to since,
+// as though they had been written for all the history a test seeds.
 func rewindAppMarker(t *testing.T, opened *Store, since time.Time) {
 	t.Helper()
-	if _, err := opened.database.ExecContext(context.Background(), "UPDATE sable_metadata SET value = ? WHERE key = ?",
-		since.UTC().Format(time.RFC3339Nano), appRollupSinceKey); err != nil {
+	if _, err := opened.database.ExecContext(context.Background(), "UPDATE sable_metadata SET value = ? WHERE key IN (?, ?)",
+		since.UTC().Format(time.RFC3339Nano), appRollupSinceKey, appFailedSinceKey); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -128,11 +128,17 @@ func TestLastLookupFindsTheNewestFromOneSource(t *testing.T) {
 		blockingEvent(now.Add(-40*time.Minute), "10.0.7.20", "eu.tectonic.remarkable.com.", querylog.SourceError),
 		blockingEvent(now.Add(-3*time.Hour), "10.0.7.20", "eu.tectonic.remarkable.com.", querylog.SourceError),
 	})
+	rewindAppMarker(t, opened, now.Add(-4*time.Hour))
 	ctx := context.Background()
 	names := []string{"ping.remarkable.com", "eu.tectonic.remarkable.com"}
 	last, err := opened.LastLookup(ctx, names, querylog.SourceError, now.Add(-time.Hour), now)
 	if err != nil || !last.Equal(now.Add(-20*time.Minute)) {
 		t.Fatalf("last failure = %s, %v; want %s", last, err, now.Add(-20*time.Minute))
+	}
+	// Failures from before they began to be counted are left out.
+	rewindAppMarker(t, opened, now.Add(-15*time.Minute))
+	if last, err := opened.LastLookup(ctx, names, querylog.SourceError, now.Add(-time.Hour), now); err != nil || !last.IsZero() {
+		t.Fatalf("last failure before counting began = %s, %v; want none", last, err)
 	}
 	if last, err := opened.LastLookup(ctx, names, querylog.SourceBlocked, now.Add(-time.Hour), now); err != nil || !last.IsZero() {
 		t.Fatalf("last block = %s, %v; want none", last, err)
@@ -204,7 +210,7 @@ func TestBackfillAppRollupsCountsHistoryIntoEveryTier(t *testing.T) {
 		sql       string
 		arguments []any
 	}{
-		{"UPDATE sable_metadata SET value = ? WHERE key = ?", []any{began.Format(time.RFC3339Nano), appRollupSinceKey}},
+		{"UPDATE sable_metadata SET value = ? WHERE key IN (?, ?)", []any{began.Format(time.RFC3339Nano), appRollupSinceKey, appFailedSinceKey}},
 		{"DELETE FROM sable_query_log_rollup WHERE dimension IN (?, ?, ?, ?) AND bucket_start < ?", []any{
 			queryLogRollupFailed, queryLogRollupAppClient, queryLogRollupAppClientFailed, queryLogRollupAppClientBlocked, began.Truncate(time.Minute),
 		}},
@@ -237,9 +243,11 @@ func TestBackfillAppRollupsCountsHistoryIntoEveryTier(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// The failure 26 hours ago predates the upgrade and is left out; the
+		// one in the minute counting began is read from the raw log.
 		want := map[string]querylog.AppCounts{
 			"youtube":    {Queries: 3},
-			"remarkable": {Queries: 3, Failed: 2},
+			"remarkable": {Queries: 3, Failed: 1},
 			"netflix":    {Queries: 1, Blocked: 1},
 		}
 		for app, counts := range want {
@@ -254,8 +262,16 @@ func TestBackfillAppRollupsCountsHistoryIntoEveryTier(t *testing.T) {
 		if !activity.Since.IsZero() {
 			t.Fatalf("%s: Since = %s, want zero once history is counted", stage, activity.Since)
 		}
+		if !activity.FailedSince.Equal(began) {
+			t.Fatalf("%s: FailedSince = %s, want the upgrade at %s", stage, activity.FailedSince, began)
+		}
 	}
 	check("after the backfill")
+	var failures int
+	if err := opened.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_query_log_rollup WHERE dimension IN (?, ?) AND bucket_start < ?",
+		queryLogRollupFailed, queryLogRollupAppClientFailed, began.Truncate(time.Minute)).Scan(&failures); err != nil || failures != 0 {
+		t.Fatalf("backfilled failure rows = %d, %v; want none", failures, err)
+	}
 	var hours int
 	if err := opened.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_query_log_rollup_hour WHERE dimension = ?",
 		queryLogRollupAppClient).Scan(&hours); err != nil || hours == 0 {

@@ -307,6 +307,9 @@ type AppActivity struct {
 	// partial count is never passed off as the whole period. It is zero when
 	// the whole window is covered.
 	Since time.Time
+	// FailedSince is when failures began to be counted, when that falls
+	// inside the window. Failures from before it are left out.
+	FailedSince time.Time
 }
 
 // AppDomain is one name an app was reached at in a window.
