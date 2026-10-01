@@ -25,6 +25,10 @@ import (
 // and it matches the default query log retention.
 const defaultInsightsRange = "month"
 
+// insightsRangeCookie remembers the range last picked in Insights, so the
+// sidebar and the command palette open it again, as the dashboard chart does.
+const insightsRangeCookie = "sable_insights_range"
+
 // insightsRanges are the windows Insights offers. An hour is too short to say
 // anything about blocking behavior, so the control starts at a day.
 var insightsRanges = map[string]struct{}{"day": {}, "week": {}, "month": {}, "year": {}}
@@ -155,7 +159,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	window := insightsWindow(server.insightsRange(writer, request), time.Now())
 	tab := insightsTab(request, console)
 	// The page loads its analysis next; start the reads behind it now.
 	server.warmInsights(console, window)
@@ -217,7 +221,7 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	window := insightsWindow(server.insightsRange(writer, request), time.Now())
 	server.warmInsights(console, window)
 	view := server.insightsOverview(request, console, window)
 	view.ActiveTab = insightsTab(request, console)
@@ -229,6 +233,42 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
 		server.logger.Error("render insights overview", "error", err)
 	}
+}
+
+// insightsRange is the range a request shows: the one it names, which is
+// remembered, or else the one last picked. A request with neither gets the
+// default.
+func (server *Server) insightsRange(writer http.ResponseWriter, request *http.Request) string {
+	if rangeName := request.URL.Query().Get("range"); offersInsightsRange(rangeName) {
+		http.SetCookie(writer, &http.Cookie{
+			Name: insightsRangeCookie, Value: rangeName, Path: "/",
+			Expires: time.Now().Add(dashboardChartRangeMaxAge), MaxAge: int(dashboardChartRangeMaxAge / time.Second),
+			HttpOnly: true, Secure: server.secureCookies || request.TLS != nil, SameSite: http.SameSiteStrictMode,
+		})
+		return rangeName
+	}
+	return rememberedInsightsRange(request)
+}
+
+// requestedInsightsRange is the range a request shows without remembering
+// it, for the drawers and tabs that open inside the page.
+func requestedInsightsRange(request *http.Request) string {
+	if rangeName := request.URL.Query().Get("range"); offersInsightsRange(rangeName) {
+		return rangeName
+	}
+	return rememberedInsightsRange(request)
+}
+
+func rememberedInsightsRange(request *http.Request) string {
+	if cookie, err := request.Cookie(insightsRangeCookie); err == nil && offersInsightsRange(cookie.Value) {
+		return cookie.Value
+	}
+	return defaultInsightsRange
+}
+
+func offersInsightsRange(rangeName string) bool {
+	_, offered := insightsRanges[rangeName]
+	return offered
 }
 
 func insightsWindow(rangeName string, now time.Time) insightWindow {

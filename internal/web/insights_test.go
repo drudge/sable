@@ -1177,3 +1177,40 @@ func TestInsightAlertsKnowADevicesOlderIPv6Addresses(t *testing.T) {
 		t.Fatalf("new devices = %d, want none", summary.New)
 	}
 }
+
+// Insights opens on the range picked last, as the dashboard chart does, so
+// the sidebar and the command palette don't reset it to the default.
+func TestInsightsRemembersTheRangePickedLast(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	open := func(target string, remembered *http.Cookie) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request.AddCookie(&http.Cookie{Name: server.sessionCookieName(), Value: "everything"})
+		if remembered != nil {
+			request.AddCookie(remembered)
+		}
+		response := httptest.NewRecorder()
+		server.httpServer.Handler.ServeHTTP(response, request)
+		return response
+	}
+	loads := func(response *httptest.ResponseRecorder, rangeName string) bool {
+		return strings.Contains(response.Body.String(), "/ui/insights/overview?range="+rangeName+"&amp;")
+	}
+
+	if response := open("/insights", nil); !loads(response, defaultInsightsRange) || namedCookie(response, insightsRangeCookie) != nil {
+		t.Fatalf("a first visit should open on %s and remember nothing", defaultInsightsRange)
+	}
+	picked := namedCookie(open("/ui/insights/overview?range=week", nil), insightsRangeCookie)
+	if picked == nil || picked.Value != "week" || !picked.HttpOnly || picked.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("picking a range set cookie %+v, want week", picked)
+	}
+	if response := open("/insights", picked); !loads(response, "week") {
+		t.Fatal("Insights opened from the sidebar did not use the range picked last")
+	}
+	if response := open("/insights?range=day", picked); !loads(response, "day") {
+		t.Fatal("a range in the address should win over the one remembered")
+	}
+	if response := open("/insights", &http.Cookie{Name: insightsRangeCookie, Value: "hour"}); !loads(response, defaultInsightsRange) {
+		t.Fatal("a range Insights doesn't offer should fall back to the default")
+	}
+}
