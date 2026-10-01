@@ -193,7 +193,7 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	window := insightsWindow(requestedInsightsRange(request), time.Now())
 	view := pages.InsightAppDrawerView{Range: window.Range, RangeLabel: window.Label, TimeDisplay: console.TimeDisplay}
 	apps, counts := server.queries.(appInsightReader)
 	reader, groups := server.queries.(deviceInsightReader)

@@ -202,7 +202,7 @@ func (server *Server) insightsDevicePanel(writer http.ResponseWriter, request *h
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	window := insightsWindow(request.URL.Query().Get("range"), time.Now())
+	window := insightsWindow(requestedInsightsRange(request), time.Now())
 	server.renderDeviceDrawer(writer, request, console, window, request.URL.Query().Get("key"), request.URL.Query().Get("edit"), "", "")
 }
 
