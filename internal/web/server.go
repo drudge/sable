@@ -1822,6 +1822,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		view.Resolver = "Refused: recursion not allowed"
 		view.Summary = "Sable refused this lookup because this address isn't allowed to use recursion. Settings → Recursion sets who is."
 		view.PolicyDetail = "Sable refused the lookup before checking blocking."
+	case querylog.ResolverLocallyServed:
+		view.Resolver = "Answered as a local-only name"
+		view.Summary = "This name is reserved for local networks, so Sable said it doesn't exist instead of asking the internet."
 	}
 	switch decision.DNSSEC {
 	case querylog.DNSSECSecure:

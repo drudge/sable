@@ -36,8 +36,95 @@ var defaultRootHints = []string{
 	"202.12.27.33:53",
 }
 
+// iterativeBudget caps the queries one lookup may send. Name-server addresses
+// are found in parallel, so it is shared between goroutines.
 type iterativeBudget struct {
+	mu        sync.Mutex
 	remaining int
+	// shared holds the questions in flight once the lookup has gone
+	// parallel. The A and AAAA lookups of one name server walk the same
+	// zones, and each question they share is asked once.
+	shared map[sharedExchangeKey]*sharedExchange
+}
+
+type sharedExchangeKey struct {
+	name       string
+	recordType uint16
+	server     string
+}
+
+// sharedExchange is one question to a zone's servers that several parts of a
+// lookup are waiting on.
+type sharedExchange struct {
+	key      sharedExchangeKey
+	done     chan struct{}
+	waiters  int
+	response *dns.Msg
+	err      error
+}
+
+// goParallel makes the lookup's questions shared from here on.
+func (budget *iterativeBudget) goParallel() {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.shared == nil {
+		budget.shared = make(map[sharedExchangeKey]*sharedExchange)
+	}
+}
+
+// join returns the exchange in flight for a question to servers, and whether
+// the caller is the one to send it. It returns nothing until the lookup goes
+// parallel.
+func (budget *iterativeBudget) join(request *dns.Msg, servers []string) (*sharedExchange, bool) {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.shared == nil {
+		return nil, false
+	}
+	key := sharedExchangeKey{name: normalizeName(request.Question[0].Name), recordType: request.Question[0].Qtype, server: servers[0]}
+	if call, found := budget.shared[key]; found {
+		call.waiters++
+		return call, false
+	}
+	call := &sharedExchange{key: key, done: make(chan struct{})}
+	budget.shared[key] = call
+	return call, true
+}
+
+// settle hands the sender's result to the others waiting on the question.
+func (budget *iterativeBudget) settle(call *sharedExchange, response *dns.Msg, err error) {
+	budget.mu.Lock()
+	delete(budget.shared, call.key)
+	if call.waiters > 0 && response != nil {
+		// The sender goes on to change its response.
+		call.response = response.Copy()
+	}
+	call.err = err
+	budget.mu.Unlock()
+	close(call.done)
+}
+
+func (call *sharedExchange) wait(ctx context.Context) (*dns.Msg, error) {
+	select {
+	case <-call.done:
+		if call.response == nil {
+			return nil, call.err
+		}
+		return call.response.Copy(), call.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// take spends one query, reporting false when none are left.
+func (budget *iterativeBudget) take() bool {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.remaining <= 0 {
+		return false
+	}
+	budget.remaining--
+	return true
 }
 
 // addressCache is a small map of name to server addresses with per-entry expiry
@@ -303,6 +390,13 @@ minimizing:
 			case response.Rcode == dns.RcodeSuccess && len(response.Answer) == 0:
 				// No delegation here, only more of the same zone.
 				runtime.recordWalked(candidate, closestZone, noCutTTL(response))
+			case response.Authoritative && apexAt(response, candidate):
+				// The servers answer for the zone below themselves, as the
+				// uk servers do for co.uk. Remembering that saves asking
+				// again for every name under it.
+				closestZone = candidate
+				runtime.delegations.set(candidate, servers, apexTTL(response, candidate), time.Now())
+				walked = runtime.walkedNames(cacheName, closestZone)
 			}
 			continue
 		}
@@ -363,6 +457,12 @@ minimizing:
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
 }
 
+// authorityAttemptTimeout is how long an authoritative server is waited on
+// before the next server for the zone is asked. Authorities answer in tens of
+// milliseconds from almost anywhere, so this is several round trips even on a
+// slow path.
+const authorityAttemptTimeout = 800 * time.Millisecond
+
 // minimumFairTurn is the least time an authoritative server must have had
 // before a failure counts against it.
 const minimumFairTurn = 500 * time.Millisecond
@@ -391,6 +491,29 @@ func aliasRecords(response *dns.Msg, name string) []dns.RR {
 		}
 	}
 	return records
+}
+
+// apexAt reports an answer that gives name's own NS records, making it a
+// zone's apex.
+func apexAt(response *dns.Msg, name string) bool {
+	for _, record := range response.Answer {
+		if nameServer, ok := record.(*dns.NS); ok && normalizeName(nameServer.Hdr.Name) == normalizeName(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// apexTTL is how long the zone at name may be remembered: its NS records'
+// TTL, no longer than a day.
+func apexTTL(response *dns.Msg, name string) uint32 {
+	ttl := maximumDelegationTTL
+	for _, record := range response.Answer {
+		if nameServer, ok := record.(*dns.NS); ok && normalizeName(nameServer.Hdr.Name) == normalizeName(name) {
+			ttl = min(ttl, nameServer.Hdr.Ttl)
+		}
+	}
+	return ttl
 }
 
 // aliasedAt reports an answer that makes name an alias, whether a CNAME the
@@ -457,6 +580,27 @@ func (handler *Handler) exchangeIterative(
 	if len(servers) == 0 {
 		return nil, errors.New("delegation contains no reachable name-server addresses")
 	}
+	call, sender := budget.join(request, servers)
+	if call == nil {
+		return handler.exchangeAuthorities(ctx, request, servers, runtime, budget)
+	}
+	if !sender {
+		return call.wait(ctx)
+	}
+	response, err := handler.exchangeAuthorities(ctx, request, servers, runtime, budget)
+	budget.settle(call, response, err)
+	return response, err
+}
+
+// exchangeAuthorities asks a zone's servers a question, one after another
+// until one answers.
+func (handler *Handler) exchangeAuthorities(
+	ctx context.Context,
+	request *dns.Msg,
+	servers []string,
+	runtime *Runtime,
+	budget *iterativeBudget,
+) (*dns.Msg, error) {
 	start := handler.upstreamIndex.Add(1) - 1
 	// A server that just timed out is asked last for a while, so one that is
 	// unreachable from here does not cost every lookup its share of the time.
@@ -468,13 +612,20 @@ func (handler *Handler) exchangeIterative(
 			failures = append(failures, fmt.Errorf("ran out of time before asking %s: %w", server, err))
 			break
 		}
-		if budget.remaining <= 0 {
+		if !budget.take() {
 			return nil, errors.New("iterative resolution exceeded its query budget")
 		}
-		budget.remaining--
 		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
 		fair := attemptGotFairTurn(attemptContext)
-		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		// The zone's other servers are its retries: one that is silent for
+		// authorityAttemptTimeout is passed over for the next, rather than
+		// asked again at the full retry timeout. Only the last server left
+		// gets the configured retries.
+		retryTimeout, retries := min(runtime.retryTimeout, authorityAttemptTimeout), 1
+		if offset == len(ordered)-1 {
+			retryTimeout, retries = runtime.retryTimeout, runtime.retries
+		}
+		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, retryTimeout, retries)
 		release()
 		if err != nil {
 			// A server is only held against when it had a fair turn: the
@@ -568,30 +719,66 @@ func (handler *Handler) referralServers(
 	if len(addresses) >= 2 {
 		return slices.Compact(addresses), nil
 	}
+	// A name server's own addresses are worth remembering beyond the zone that
+	// sent us here: one host commonly serves many delegations, and without this
+	// every cold delegation resolves the same host again from the root. Only
+	// fully resolved answers are stored. Glue stays confined to the delegation
+	// that carried it, because it is unverified data from the parent zone.
+	var unresolved []string
 	for _, name := range nameServers {
 		if resolved[name] {
 			continue
 		}
-		// A name server's own addresses are worth remembering beyond the zone that
-		// sent us here: one host commonly serves many delegations, and without this
-		// every cold delegation resolves the same host again from the root. Only
-		// fully resolved answers are stored. Glue stays confined to the delegation
-		// that carried it, because it is unverified data from the parent zone.
 		if cached, found := runtime.nameServers.get(name, time.Now()); found {
 			addresses = append(addresses, cached...)
-			if len(addresses) >= 4 {
-				break
-			}
 			continue
 		}
+		unresolved = append(unresolved, name)
+	}
+	// Names outside the parent's zone, as Route 53 and Akamai use, each need
+	// a lookup of their own. A few are looked up at once, A and AAAA side by
+	// side, so a cold chain waits for the slowest of them rather than for
+	// all of them in turn.
+	for len(addresses) < 4 && len(unresolved) > 0 {
+		batch := unresolved[:min(len(unresolved), parallelNameServerLookups)]
+		unresolved = unresolved[len(batch):]
+		addresses = append(addresses, handler.resolveNameServerAddresses(ctx, batch, runtime, budget, depth)...)
+	}
+	addresses = slices.Compact(addresses)
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("delegation for %s has no resolvable name servers", dns.Fqdn(zone))
+	}
+	return addresses, nil
+}
+
+// parallelNameServerLookups is how many name servers' addresses are looked
+// up at once when a referral carries no usable glue.
+const parallelNameServerLookups = 2
+
+// resolveNameServerAddresses looks up the A and AAAA records of names all at
+// once, remembers each name's addresses, and returns them in the order of
+// names, IPv4 first.
+func (handler *Handler) resolveNameServerAddresses(ctx context.Context, names []string, runtime *Runtime, budget *iterativeBudget, depth int) []string {
+	budget.goParallel()
+	recordTypes := []uint16{dns.TypeA, dns.TypeAAAA}
+	found := make([][]dns.RR, len(names)*len(recordTypes))
+	var wait sync.WaitGroup
+	for index := range found {
+		name, recordType := names[index/len(recordTypes)], recordTypes[index%len(recordTypes)]
+		wait.Go(func() {
+			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
+			if err == nil {
+				found[index] = response.Answer
+			}
+		})
+	}
+	wait.Wait()
+	var addresses []string
+	for nameIndex, name := range names {
 		discovered := make([]string, 0, 2)
 		ttl := maximumDelegationTTL
-		for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA} {
-			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
-			if err != nil {
-				continue
-			}
-			for _, record := range response.Answer {
+		for _, records := range found[nameIndex*len(recordTypes) : (nameIndex+1)*len(recordTypes)] {
+			for _, record := range records {
 				if address, ok := addressFromRecord(record); ok {
 					discovered = append(discovered, net.JoinHostPort(address.String(), "53"))
 					ttl = min(ttl, record.Header().Ttl)
@@ -600,15 +787,8 @@ func (handler *Handler) referralServers(
 		}
 		runtime.nameServers.set(name, discovered, ttl, time.Now())
 		addresses = append(addresses, discovered...)
-		if len(addresses) >= 4 {
-			break
-		}
 	}
-	addresses = slices.Compact(addresses)
-	if len(addresses) == 0 {
-		return nil, fmt.Errorf("delegation for %s has no resolvable name servers", dns.Fqdn(zone))
-	}
-	return addresses, nil
+	return addresses
 }
 
 func addressFromRecord(record dns.RR) (netip.Addr, bool) {
@@ -656,32 +836,57 @@ func iterativeTerminal(response *dns.Msg) bool {
 	return false
 }
 
-// detachedLookup is a recursive lookup that runs to its own deadline, apart
-// from the clients waiting on it.
+// detachedLookup is a recursive lookup, with its DNSSEC validation, that runs
+// to its own deadline apart from the clients waiting on it.
 type detachedLookup struct {
-	done     chan struct{}
-	response *dns.Msg
-	err      error
+	// fetched closes when the network part is done and validation starts;
+	// done closes when the result is ready.
+	fetched    chan struct{}
+	done       chan struct{}
+	response   *dns.Msg
+	validation validationState
+	err        error
+	finishedAt time.Time
+	// The fields below are guarded by Handler.detachedMu. waiting counts the
+	// clients still waiting, so the lookup knows when it must cache its own
+	// answer.
+	hasFetched bool
+	finished   bool
+	waiting    int
 }
+
+// detachedAnswerGrace is how long a finished recursive lookup keeps its
+// answer for a client that asks again. A device whose first question timed
+// out retries within a few seconds, and the lookup it started is often what
+// it is waiting for.
+const detachedAnswerGrace = 5 * time.Second
+
+// errStillRunning reports that a client stopped waiting while its recursive
+// lookup kept going. The lookup caches its answer when it finishes, so the
+// failure says nothing about the name and must not be cached as one.
+var errStillRunning = errors.New("recursive resolution is still running and will finish for a retry")
 
 // recursiveFinishBudget is how long a recursive lookup may keep working after
 // its client stopped waiting. A cold chain through several providers can take
-// several seconds, more than a client waits, and finishing it fills the
-// delegation caches so the client's retry is answered in a moment.
+// several seconds, more than a client waits, and finishing it means the
+// client's retry is answered from the cache.
 func recursiveFinishBudget(runtime *Runtime) time.Duration {
 	return max(4*runtime.timeout, 8*time.Second)
 }
 
-// resolveNetworkWaiting resolves a request, waiting no longer than wait
-// allows. In recursive mode the lookup itself runs on apart from the wait, up
-// to recursiveFinishBudget, and a second client asking the same question
-// meanwhile waits on the same lookup. Forwarded lookups are left to wait as
-// they always have: an upstream resolver keeps working for itself.
-func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	if len(forwarders) > 0 || runtime.mode != "recursive" || len(request.Question) != 1 {
-		return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+// resolveRecursiveWaiting resolves and validates a recursive request, waiting
+// no longer than wait. The lookup itself runs on apart from the wait, up to
+// recursiveFinishBudget, and a second client asking the same question
+// meanwhile waits on the same lookup. A lookup that every client stopped
+// waiting for caches its own answer when it finishes.
+func (handler *Handler) resolveRecursiveWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
+	// Clients share a lookup whenever they would send the same question
+	// upstream, which with validation on ignores their DO and CD bits.
+	upstreamRequest := request
+	if runtime.dnssec != nil {
+		upstreamRequest = dnssecUpstreamRequest(request)
 	}
-	key := coalesceKey(request)
+	key := coalesceKey(upstreamRequest)
 	key.runtime = runtime
 	handler.detachedMu.Lock()
 	lookup, running := handler.detached[key]
@@ -690,33 +895,87 @@ func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns
 		// a flood of names that never resolve cannot pile up work.
 		if len(handler.detached) >= runtime.maxConcurrent || !handler.startBackground() {
 			handler.detachedMu.Unlock()
-			return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+			return handler.fetchAndValidate(ctx, request, runtime, nil, wait)
 		}
 		if handler.detached == nil {
 			handler.detached = make(map[inflightKey]*detachedLookup)
 		}
-		lookup = &detachedLookup{done: make(chan struct{})}
+		lookup = &detachedLookup{fetched: make(chan struct{}), done: make(chan struct{})}
 		handler.detached[key] = lookup
-		request = request.Copy()
-		go func() {
-			defer handler.backgroundWG.Done()
-			ctx, cancel := context.WithTimeout(handler.backgroundContext, recursiveFinishBudget(runtime))
-			lookup.response, lookup.err = handler.resolveNetworkContext(ctx, request, runtime, nil)
-			cancel()
-			handler.detachedMu.Lock()
-			delete(handler.detached, key)
-			handler.detachedMu.Unlock()
-			close(lookup.done)
-		}()
+		go handler.finishRecursiveLookup(key, lookup, request.Copy(), runtime)
 	}
+	lookup.waiting++
 	handler.detachedMu.Unlock()
+	// The client waits for the network as long as wait allows. Validation
+	// then has its own budget, as it does for a lookup a client runs itself.
+	waitContext, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	select {
+	case <-lookup.fetched:
+	case <-waitContext.Done():
+		handler.detachedMu.Lock()
+		fetched := lookup.hasFetched
+		if !fetched {
+			lookup.waiting--
+		}
+		handler.detachedMu.Unlock()
+		if !fetched {
+			return nil, validationIndeterminate, fmt.Errorf("%w: %w", errStillRunning, waitContext.Err())
+		}
+	}
 	select {
 	case <-lookup.done:
-		if lookup.response == nil {
-			return nil, lookup.err
-		}
-		return lookup.response.Copy(), lookup.err
-	case <-wait.Done():
-		return nil, fmt.Errorf("recursive resolution is still running and will finish for a retry: %w", wait.Err())
+		return lookup.answer()
+	case <-ctx.Done():
+		return nil, validationIndeterminate, ctx.Err()
 	}
+}
+
+// finishRecursiveLookup runs a detached lookup to its end. request is the
+// question of the client that started it.
+func (handler *Handler) finishRecursiveLookup(key inflightKey, lookup *detachedLookup, request *dns.Msg, runtime *Runtime) {
+	defer handler.backgroundWG.Done()
+	response, err := handler.fetchUpstream(handler.backgroundContext, request, runtime, nil, recursiveFinishBudget(runtime))
+	handler.detachedMu.Lock()
+	lookup.hasFetched = true
+	handler.detachedMu.Unlock()
+	close(lookup.fetched)
+	response, validation, err := handler.validateUpstream(handler.backgroundContext, request, runtime, response, err)
+	handler.detachedMu.Lock()
+	lookup.response, lookup.validation, lookup.err = response, validation, err
+	lookup.finishedAt = time.Now()
+	lookup.finished = true
+	abandoned := lookup.waiting == 0
+	handler.detachedMu.Unlock()
+	close(lookup.done)
+	forget := func() {
+		handler.detachedMu.Lock()
+		if handler.detached[key] == lookup {
+			delete(handler.detached, key)
+		}
+		handler.detachedMu.Unlock()
+	}
+	if err != nil || response == nil {
+		forget()
+		return
+	}
+	// No client is left to cache the answer, so the lookup does, and their
+	// retry is a cache hit, validation and all.
+	if abandoned {
+		runtime.cacheUpstreamAnswer(request, response.Copy(), validation)
+	}
+	time.AfterFunc(detachedAnswerGrace, forget)
+}
+
+// answer returns a client's own copy of a finished lookup's result.
+func (lookup *detachedLookup) answer() (*dns.Msg, validationState, error) {
+	if lookup.response == nil {
+		return nil, lookup.validation, lookup.err
+	}
+	response := lookup.response.Copy()
+	// An answer kept for a retry has aged since it arrived.
+	if elapsed := time.Since(lookup.finishedAt) / time.Second; elapsed > 0 {
+		decrementTTLs(response, uint32(elapsed))
+	}
+	return response, lookup.validation, lookup.err
 }

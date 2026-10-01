@@ -27,7 +27,9 @@ timeout = "3s"
 # An upstream only gets a second attempt if its share of timeout has room for
 # one, so raise timeout to keep retries as well as failover across a long
 # forwarder list. In recursive mode, raise timeout if you also raise these so
-# the full delegation chain still fits.
+# the full delegation chain still fits. Authoritative servers get at most 800ms
+# each before the zone's next server is asked; only the last one left gets the
+# full retries.
 retries = 2
 retry_timeout = "1500ms"
 cache_size = 65536

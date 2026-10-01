@@ -343,6 +343,9 @@ type resolution struct {
 	source           querylog.Source
 	decision         querylog.Decision
 	transientFailure bool
+	// stillRunning marks a failure only because the client's wait ran out
+	// while its recursive lookup went on.
+	stillRunning bool
 }
 
 func Compile(configuration RuntimeConfig) (*Runtime, error) {
@@ -733,7 +736,7 @@ func NewHandler(runtime *Runtime) *Handler {
 	backgroundContext, backgroundCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
-		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
+		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newAuthorityHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),
@@ -1458,6 +1461,16 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	if route != "" {
 		handler.routedQueries.Add(1)
 	}
+	// A name only a local network can answer never goes to the internet. A
+	// route or a forwarder zone for it still wins, since that names a server
+	// that does know it.
+	if len(forwarders) == 0 && runtime.mode == "recursive" {
+		if zone, found := locallyServedZone(request.Question[0].Name); found {
+			handler.localAnswers.Add(1)
+			return resolution{response: locallyServedResponse(request, zone), source: querylog.SourceLocal,
+				decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Cache: querylog.CacheMiss, Resolver: querylog.ResolverLocallyServed}}
+		}
+	}
 	release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
 	if !admitted {
 		return recursionRefused(request)
@@ -1523,11 +1536,21 @@ func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwar
 }
 
 func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+	arrived := time.Now()
 	key := coalesceKey(request)
 	key.runtime = runtime
-	result, _ := handler.inflight.doContext(ctx, key, func() resolution {
+	result, shared := handler.inflight.doContext(ctx, key, func() resolution {
 		return handler.resolveLiveUpstreamContext(ctx, request, runtime, forwarders, staleFallback, clientIP)
 	})
+	if shared && result.stillRunning {
+		// The client that started the lookup stopped waiting, but this one
+		// asked later, often as that device's own retry. It waits on the same
+		// recursive lookup for the rest of its own time instead of ending
+		// with the first.
+		if wait := runtime.timeout - time.Since(arrived); wait > 0 {
+			result = handler.resolveLiveUpstreamWaiting(ctx, request, runtime, forwarders, staleFallback, clientIP, wait)
+		}
+	}
 	if result.response == nil {
 		return result
 	}
@@ -1634,7 +1657,7 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 	select {
 	case resolved := <-result:
 		if resolved.response == nil || resolved.transientFailure {
-			return handler.resolveUpstreamFailure(request, runtime)
+			return handler.staleOrFailure(request, runtime, !resolved.stillRunning)
 		}
 		return resolved
 	case <-timer.C:
@@ -1653,7 +1676,13 @@ func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, 
 }
 
 func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	response, validation, validationErr := handler.resolveUpstreamContext(ctx, request, runtime, forwarders)
+	return handler.resolveLiveUpstreamWaiting(ctx, request, runtime, forwarders, staleFallback, clientIP, runtime.timeout)
+}
+
+// resolveLiveUpstreamWaiting resolves a cache miss, waiting up to wait for the
+// network.
+func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string, wait time.Duration) resolution {
+	response, validation, validationErr := handler.resolveUpstreamWaiting(ctx, request, runtime, forwarders, wait)
 	decision := querylog.Decision{Resolver: resolverDecision(runtime, forwarders), DNSSEC: dnssecDecision(validation)}
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
@@ -1672,11 +1701,14 @@ func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request 
 		handler.upstreamErrors.Add(1)
 		handler.logResolutionFailure(request, clientIP, "upstream resolution failed",
 			upstreamFailureFields(runtime, forwarders, validationErr)...)
+		// A lookup still running will answer a retry, so its failure is
+		// neither cached nor final.
+		stillRunning := errors.Is(validationErr, errStillRunning)
 		if !staleFallback {
 			decision.Resolver = querylog.ResolverError
-			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, decision: decision, transientFailure: true}
+			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, decision: decision, transientFailure: true, stillRunning: stillRunning}
 		}
-		return handler.resolveUpstreamFailure(request, runtime)
+		return handler.staleOrFailure(request, runtime, !stillRunning)
 	}
 	if response == nil {
 		handler.upstreamErrors.Add(1)
@@ -1692,6 +1724,13 @@ func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request 
 		handler.logResolutionFailure(request, clientIP, "upstream answered SERVFAIL",
 			upstreamFailureFields(runtime, forwarders, nil)...)
 	}
+	runtime.cacheUpstreamAnswer(request, response, validation)
+	prepareResponseForClient(response, request)
+	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
+}
+
+// cacheUpstreamAnswer readies a fetched answer for request and caches it.
+func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validation validationState) {
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	response.CheckingDisabled = request.CheckingDisabled
@@ -1705,8 +1744,6 @@ func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request 
 	if validation != validationBogus && (runtime.dnssec != nil || !request.CheckingDisabled) {
 		runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 	}
-	prepareResponseForClient(response, request)
-	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
@@ -1755,18 +1792,37 @@ func (handler *Handler) startBackground() bool {
 }
 
 func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtime) resolution {
-	if response, found := runtime.cache.GetStale(request); found {
-		handler.cacheHits.Add(1)
-		prepareResponseForClient(response, request)
-		return resolution{response: response, source: querylog.SourceCache,
-			decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}
+	return handler.staleOrFailure(request, runtime, true)
+}
+
+// staleOrFailure answers a failed lookup with a stale answer when one is
+// kept, or else SERVFAIL, cached when cacheFailure is set. A lookup that is
+// still running leaves its failure uncached, or a retry would find it there
+// instead of the answer, and marks it so clients sharing it wait on.
+func (handler *Handler) staleOrFailure(request *dns.Msg, runtime *Runtime, cacheFailure bool) resolution {
+	if stale, found := handler.staleResponse(request, runtime); found {
+		return stale
 	}
 	response := errorResponse(request, fallbackErrorCode)
-	// A synthesised failure carries no records, so there is nothing a client that
-	// set DO would be missing and no reason to make it refetch the same failure.
-	runtime.cache.Set(request, response, true)
+	if cacheFailure {
+		// A synthesised failure carries no records, so there is nothing a
+		// client that set DO would be missing and no reason to make it
+		// refetch the same failure.
+		runtime.cache.Set(request, response, true)
+	}
 	return resolution{response: response, source: querylog.SourceError,
-		decision: querylog.Decision{Resolver: querylog.ResolverError}}
+		decision: querylog.Decision{Resolver: querylog.ResolverError}, stillRunning: !cacheFailure}
+}
+
+func (handler *Handler) staleResponse(request *dns.Msg, runtime *Runtime) (resolution, bool) {
+	response, found := runtime.cache.GetStale(request)
+	if !found {
+		return resolution{}, false
+	}
+	handler.cacheHits.Add(1)
+	prepareResponseForClient(response, request)
+	return resolution{response: response, source: querylog.SourceCache,
+		decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}, true
 }
 
 func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
@@ -2840,6 +2896,12 @@ func forwarderBudget(ctx context.Context, untried int) (context.Context, context
 // upstream is probed again and cleared on the next success.
 const upstreamUnhealthyCooldown = 10 * time.Second
 
+// authorityUnhealthyCooldownLimit is the longest an authoritative server that
+// keeps failing is tried last. Some name servers never answer from a given
+// network, often only over IPv6, and a lookup every few minutes would
+// otherwise find each one again as soon as its cooldown ended.
+const authorityUnhealthyCooldownLimit = 15 * time.Minute
+
 // upstreamHealthTracker remembers which forwarders recently failed so a query
 // does not keep starting at a dead upstream and stalling on it for the whole
 // per-attempt timeout. The common case (nothing failing) takes only a read lock
@@ -2847,11 +2909,24 @@ const upstreamUnhealthyCooldown = 10 * time.Second
 type upstreamHealthTracker struct {
 	mu         sync.RWMutex
 	retryAfter map[string]time.Time
-	now        func() time.Time
+	// failures counts each server's failures in a row, which double its
+	// cooldown up to cooldownLimit.
+	failures      map[string]int
+	cooldownLimit time.Duration
+	now           func() time.Time
 }
 
 func newUpstreamHealthTracker() *upstreamHealthTracker {
-	return &upstreamHealthTracker{retryAfter: make(map[string]time.Time), now: time.Now}
+	return &upstreamHealthTracker{retryAfter: make(map[string]time.Time), failures: make(map[string]int),
+		cooldownLimit: upstreamUnhealthyCooldown, now: time.Now}
+}
+
+// newAuthorityHealthTracker tracks authoritative servers, whose cooldown grows
+// while they keep failing.
+func newAuthorityHealthTracker() *upstreamHealthTracker {
+	tracker := newUpstreamHealthTracker()
+	tracker.cooldownLimit = authorityUnhealthyCooldownLimit
+	return tracker
 }
 
 func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) []string {
@@ -2881,13 +2956,19 @@ func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) [
 func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
 	tracker.mu.Lock()
 	now := tracker.now()
-	tracker.retryAfter[forwarder] = now.Add(upstreamUnhealthyCooldown)
+	tracker.failures[forwarder]++
+	cooldown := upstreamUnhealthyCooldown
+	for range min(tracker.failures[forwarder]-1, 16) {
+		cooldown = min(2*cooldown, tracker.cooldownLimit)
+	}
+	tracker.retryAfter[forwarder] = now.Add(cooldown)
 	// Authoritative servers are many, so forget ones whose cooldown ended
 	// rather than keep every server that ever failed.
 	if len(tracker.retryAfter) > maximumTrackedUnhealthy {
 		for server, until := range tracker.retryAfter {
 			if !now.Before(until) {
 				delete(tracker.retryAfter, server)
+				delete(tracker.failures, server)
 			}
 		}
 	}
@@ -2907,6 +2988,7 @@ func (tracker *upstreamHealthTracker) markHealthy(forwarder string) {
 	}
 	tracker.mu.Lock()
 	delete(tracker.retryAfter, forwarder)
+	delete(tracker.failures, forwarder)
 	tracker.mu.Unlock()
 }
 
@@ -2965,18 +3047,45 @@ func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forw
 }
 
 func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
-	networkContext, cancelNetwork := context.WithTimeout(ctx, runtime.timeout)
+	return handler.resolveUpstreamWaiting(ctx, request, runtime, forwarders, runtime.timeout)
+}
+
+// resolveUpstreamWaiting resolves and validates a request, waiting up to wait.
+// A recursive lookup runs on apart from the wait; see resolveRecursiveWaiting.
+func (handler *Handler) resolveUpstreamWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
+	if len(forwarders) == 0 && runtime.mode == "recursive" && len(request.Question) == 1 {
+		return handler.resolveRecursiveWaiting(ctx, request, runtime, wait)
+	}
+	return handler.fetchAndValidate(ctx, request, runtime, forwarders, wait)
+}
+
+// fetchAndValidate resolves a request, waiting up to wait for the network, and
+// validates the answer under its own budget.
+func (handler *Handler) fetchAndValidate(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
+	response, err := handler.fetchUpstream(ctx, request, runtime, forwarders, wait)
+	return handler.validateUpstream(ctx, request, runtime, response, err)
+}
+
+// fetchUpstream sends a request upstream, with DO and CD set when Sable
+// validates, waiting up to wait.
+func (handler *Handler) fetchUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, error) {
+	networkContext, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	if runtime.dnssec != nil {
+		request = dnssecUpstreamRequest(request)
+	}
+	return handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
+}
+
+// validateUpstream validates a fetched answer to request. It has its own
+// budget, apart from the client's wait for the network.
+func (handler *Handler) validateUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, response *dns.Msg, err error) (*dns.Msg, validationState, error) {
 	if runtime.dnssec == nil {
-		defer cancelNetwork()
-		response, err := handler.resolveNetworkWaiting(networkContext, request, runtime, forwarders)
 		if response != nil {
 			response.AuthenticatedData = false
 		}
 		return response, validationIndeterminate, err
 	}
-	upstreamRequest := dnssecUpstreamRequest(request)
-	response, err := handler.resolveNetworkWaiting(networkContext, upstreamRequest, runtime, forwarders)
-	cancelNetwork()
 	if err != nil {
 		return nil, validationIndeterminate, err
 	}

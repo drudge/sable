@@ -162,8 +162,32 @@ every server is then asked for the full name. **Settings → Recursive Resolver
 from the root down, and a name that aliases through several DNS providers can
 take close to that on an empty cache; DNSSEC validation afterward has its own,
 longer budget. A lookup that outlasts `timeout` still runs to completion in the
-background, so a retry is answered from it. Files written before 1.5.1 saved
-the old 2-second default, so raise it by hand in recursive mode.
+background, validated, so a retry is answered from it. A retry that arrives
+while the lookup runs waits its own `timeout` on it. When no client is still
+waiting as it finishes, the lookup caches its answer itself, so the next retry
+is a cache hit. The client that gave up gets SERVFAIL, but that failure isn't
+cached, so it can't hide the answer from the retry. Files written before 1.5.1
+saved the old 2-second default, so raise it by hand in recursive mode.
+
+When a referral gives no addresses for its name servers, as with Route 53 and
+Akamai, whose name servers live in other zones, Sable looks up two of them at
+once, A and AAAA side by side.
+
+An authoritative server gets 800 milliseconds, or `retry_timeout` if that is
+shorter, before Sable asks the zone's next server; only the last server left
+gets the full `retries`. A server that times out is asked last for 10 seconds,
+and that doubles each time it fails again, up to 15 minutes. Some name servers
+never answer from a given network, often only over IPv6, and this keeps one
+from costing every lookup its wait.
+
+Names reserved for local networks never go to the internet in recursive mode.
+These are `home.arpa`, `service.arpa`, `resolver.arpa`, `local`, `localhost`,
+`invalid`, `test`, `onion`, `alt`, `internal`, and the reverse zones for
+private, link-local, loopback, and documentation addresses (RFC 6303). Sable
+answers them itself with NXDOMAIN. The IANA servers for some of them never
+reply, so asking them used to cost the whole `timeout` and end in SERVFAIL. A
+zone, local host, route, or forwarder zone for one of these names still
+answers it as before.
 
 `timeout` is the budget for the whole query, not for one upstream. In forward
 mode it is split evenly across the forwarders that have not been tried yet, so a
@@ -270,6 +294,11 @@ anchor, validates positive RRsets and NSEC/NSEC3 denial proofs, and returns
 SERVFAIL with an Extended DNS Error for bogus data. A client that explicitly
 sets CD receives the unvalidated response for diagnostics. Sable emits AD only
 for a secure response and only when the client signals interest with AD or DO.
+
+Unsigned data is accepted only from a zone Sable proves is unsigned. Like BIND,
+it walks down from the trust anchor and asks for the DS record at each label of
+the name until a signed proof shows a delegation with no DS. Unsigned data,
+including an empty answer, found inside signed zones is bogus.
 
 An empty `dnssec_trust_anchors` array uses the bundled current IANA root DS
 anchors and, when `dnssec_trust_anchor_updates = true`, manages their successor
