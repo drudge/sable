@@ -169,6 +169,10 @@ gets SERVFAIL, but that failure isn't cached, so it can't hide the answer from
 the retry. Files written before 1.5.1 saved the old 2-second default, so raise
 it by hand in recursive mode.
 
+When a referral gives no addresses for its name servers, as with Route 53 and
+Akamai, whose name servers live in other zones, Sable looks up two of them at
+once, A and AAAA side by side.
+
 An authoritative server gets 800 milliseconds, or `retry_timeout` if that is
 shorter, before Sable asks the zone's next server; only the last server left
 gets the full `retries`. A server that times out is asked last for 10 seconds,

@@ -36,8 +36,95 @@ var defaultRootHints = []string{
 	"202.12.27.33:53",
 }
 
+// iterativeBudget caps the queries one lookup may send. Name-server addresses
+// are found in parallel, so it is shared between goroutines.
 type iterativeBudget struct {
+	mu        sync.Mutex
 	remaining int
+	// shared holds the questions in flight once the lookup has gone
+	// parallel. The A and AAAA lookups of one name server walk the same
+	// zones, and each question they share is asked once.
+	shared map[sharedExchangeKey]*sharedExchange
+}
+
+type sharedExchangeKey struct {
+	name       string
+	recordType uint16
+	server     string
+}
+
+// sharedExchange is one question to a zone's servers that several parts of a
+// lookup are waiting on.
+type sharedExchange struct {
+	key      sharedExchangeKey
+	done     chan struct{}
+	waiters  int
+	response *dns.Msg
+	err      error
+}
+
+// goParallel makes the lookup's questions shared from here on.
+func (budget *iterativeBudget) goParallel() {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.shared == nil {
+		budget.shared = make(map[sharedExchangeKey]*sharedExchange)
+	}
+}
+
+// join returns the exchange in flight for a question to servers, and whether
+// the caller is the one to send it. It returns nothing until the lookup goes
+// parallel.
+func (budget *iterativeBudget) join(request *dns.Msg, servers []string) (*sharedExchange, bool) {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.shared == nil {
+		return nil, false
+	}
+	key := sharedExchangeKey{name: normalizeName(request.Question[0].Name), recordType: request.Question[0].Qtype, server: servers[0]}
+	if call, found := budget.shared[key]; found {
+		call.waiters++
+		return call, false
+	}
+	call := &sharedExchange{key: key, done: make(chan struct{})}
+	budget.shared[key] = call
+	return call, true
+}
+
+// settle hands the sender's result to the others waiting on the question.
+func (budget *iterativeBudget) settle(call *sharedExchange, response *dns.Msg, err error) {
+	budget.mu.Lock()
+	delete(budget.shared, call.key)
+	if call.waiters > 0 && response != nil {
+		// The sender goes on to change its response.
+		call.response = response.Copy()
+	}
+	call.err = err
+	budget.mu.Unlock()
+	close(call.done)
+}
+
+func (call *sharedExchange) wait(ctx context.Context) (*dns.Msg, error) {
+	select {
+	case <-call.done:
+		if call.response == nil {
+			return nil, call.err
+		}
+		return call.response.Copy(), call.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// take spends one query, reporting false when none are left.
+func (budget *iterativeBudget) take() bool {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	if budget.remaining <= 0 {
+		return false
+	}
+	budget.remaining--
+	return true
 }
 
 // addressCache is a small map of name to server addresses with per-entry expiry
@@ -493,6 +580,27 @@ func (handler *Handler) exchangeIterative(
 	if len(servers) == 0 {
 		return nil, errors.New("delegation contains no reachable name-server addresses")
 	}
+	call, sender := budget.join(request, servers)
+	if call == nil {
+		return handler.exchangeAuthorities(ctx, request, servers, runtime, budget)
+	}
+	if !sender {
+		return call.wait(ctx)
+	}
+	response, err := handler.exchangeAuthorities(ctx, request, servers, runtime, budget)
+	budget.settle(call, response, err)
+	return response, err
+}
+
+// exchangeAuthorities asks a zone's servers a question, one after another
+// until one answers.
+func (handler *Handler) exchangeAuthorities(
+	ctx context.Context,
+	request *dns.Msg,
+	servers []string,
+	runtime *Runtime,
+	budget *iterativeBudget,
+) (*dns.Msg, error) {
 	start := handler.upstreamIndex.Add(1) - 1
 	// A server that just timed out is asked last for a while, so one that is
 	// unreachable from here does not cost every lookup its share of the time.
@@ -504,10 +612,9 @@ func (handler *Handler) exchangeIterative(
 			failures = append(failures, fmt.Errorf("ran out of time before asking %s: %w", server, err))
 			break
 		}
-		if budget.remaining <= 0 {
+		if !budget.take() {
 			return nil, errors.New("iterative resolution exceeded its query budget")
 		}
-		budget.remaining--
 		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
 		fair := attemptGotFairTurn(attemptContext)
 		// The zone's other servers are its retries: one that is silent for
@@ -612,30 +719,66 @@ func (handler *Handler) referralServers(
 	if len(addresses) >= 2 {
 		return slices.Compact(addresses), nil
 	}
+	// A name server's own addresses are worth remembering beyond the zone that
+	// sent us here: one host commonly serves many delegations, and without this
+	// every cold delegation resolves the same host again from the root. Only
+	// fully resolved answers are stored. Glue stays confined to the delegation
+	// that carried it, because it is unverified data from the parent zone.
+	var unresolved []string
 	for _, name := range nameServers {
 		if resolved[name] {
 			continue
 		}
-		// A name server's own addresses are worth remembering beyond the zone that
-		// sent us here: one host commonly serves many delegations, and without this
-		// every cold delegation resolves the same host again from the root. Only
-		// fully resolved answers are stored. Glue stays confined to the delegation
-		// that carried it, because it is unverified data from the parent zone.
 		if cached, found := runtime.nameServers.get(name, time.Now()); found {
 			addresses = append(addresses, cached...)
-			if len(addresses) >= 4 {
-				break
-			}
 			continue
 		}
+		unresolved = append(unresolved, name)
+	}
+	// Names outside the parent's zone, as Route 53 and Akamai use, each need
+	// a lookup of their own. A few are looked up at once, A and AAAA side by
+	// side, so a cold chain waits for the slowest of them rather than for
+	// all of them in turn.
+	for len(addresses) < 4 && len(unresolved) > 0 {
+		batch := unresolved[:min(len(unresolved), parallelNameServerLookups)]
+		unresolved = unresolved[len(batch):]
+		addresses = append(addresses, handler.resolveNameServerAddresses(ctx, batch, runtime, budget, depth)...)
+	}
+	addresses = slices.Compact(addresses)
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("delegation for %s has no resolvable name servers", dns.Fqdn(zone))
+	}
+	return addresses, nil
+}
+
+// parallelNameServerLookups is how many name servers' addresses are looked
+// up at once when a referral carries no usable glue.
+const parallelNameServerLookups = 2
+
+// resolveNameServerAddresses looks up the A and AAAA records of names all at
+// once, remembers each name's addresses, and returns them in the order of
+// names, IPv4 first.
+func (handler *Handler) resolveNameServerAddresses(ctx context.Context, names []string, runtime *Runtime, budget *iterativeBudget, depth int) []string {
+	budget.goParallel()
+	recordTypes := []uint16{dns.TypeA, dns.TypeAAAA}
+	found := make([][]dns.RR, len(names)*len(recordTypes))
+	var wait sync.WaitGroup
+	for index := range found {
+		name, recordType := names[index/len(recordTypes)], recordTypes[index%len(recordTypes)]
+		wait.Go(func() {
+			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
+			if err == nil {
+				found[index] = response.Answer
+			}
+		})
+	}
+	wait.Wait()
+	var addresses []string
+	for nameIndex, name := range names {
 		discovered := make([]string, 0, 2)
 		ttl := maximumDelegationTTL
-		for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA} {
-			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
-			if err != nil {
-				continue
-			}
-			for _, record := range response.Answer {
+		for _, records := range found[nameIndex*len(recordTypes) : (nameIndex+1)*len(recordTypes)] {
+			for _, record := range records {
 				if address, ok := addressFromRecord(record); ok {
 					discovered = append(discovered, net.JoinHostPort(address.String(), "53"))
 					ttl = min(ttl, record.Header().Ttl)
@@ -644,15 +787,8 @@ func (handler *Handler) referralServers(
 		}
 		runtime.nameServers.set(name, discovered, ttl, time.Now())
 		addresses = append(addresses, discovered...)
-		if len(addresses) >= 4 {
-			break
-		}
 	}
-	addresses = slices.Compact(addresses)
-	if len(addresses) == 0 {
-		return nil, fmt.Errorf("delegation for %s has no resolvable name servers", dns.Fqdn(zone))
-	}
-	return addresses, nil
+	return addresses
 }
 
 func addressFromRecord(record dns.RR) (netip.Addr, bool) {

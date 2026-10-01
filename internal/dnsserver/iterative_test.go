@@ -690,6 +690,125 @@ func TestRecursiveLookupFinishesForARetry(t *testing.T) {
 	}
 }
 
+// A referral whose name servers live in other zones, as Route 53 and Akamai
+// delegate, gives no glue. Their A and AAAA records, for more than one name,
+// are looked up at once rather than one after another.
+func TestIterativeResolverLooksUpNameServerAddressesInParallel(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	runtime.timeout = 10 * time.Second
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	nameServers := []string{"ns1.dns-host.net.", "ns2.dns-host.org."}
+	var mu sync.Mutex
+	inFlight, mostAtOnce := 0, 0
+	allStarted := make(chan struct{})
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		switch {
+		case question.Name == "com." && question.Qtype == dns.TypeNS:
+			response := new(dns.Msg)
+			response.SetReply(request)
+			for _, nameServer := range nameServers {
+				response.Ns = append(response.Ns, &dns.NS{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 300}, Ns: nameServer})
+			}
+			return response, nil
+		case slices.Contains(nameServers, question.Name):
+			// Each address lookup waits until all four are under way.
+			mu.Lock()
+			inFlight++
+			mostAtOnce = max(mostAtOnce, inFlight)
+			if inFlight == 2*len(nameServers) {
+				close(allStarted)
+			}
+			mu.Unlock()
+			select {
+			case <-allStarted:
+			case <-time.After(2 * time.Second):
+			}
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+			if question.Qtype == dns.TypeA {
+				if question.Name == nameServers[0] {
+					return addressResponse(request, "192.0.2.10"), nil
+				}
+				return addressResponse(request, "192.0.2.11"), nil
+			}
+			return noDataResponse(request, "."), nil
+		case question.Name == "www.example.com." && (endpoint == "udp://192.0.2.10:53" || endpoint == "udp://192.0.2.11:53"):
+			return addressResponse(request, "192.0.2.44"), nil
+		default:
+			// Every other step of the walk finds no delegation.
+			return noDataResponse(request, "."), nil
+		}
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("www.example.com.", dns.TypeA)
+	response, err := handler.resolveNetwork(request, runtime, nil)
+	if err != nil || len(response.Answer) != 1 {
+		t.Fatalf("resolveNetwork = %v, %v", response, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if mostAtOnce != 2*len(nameServers) {
+		t.Fatalf("at most %d name-server address lookups ran at once, want all %d", mostAtOnce, 2*len(nameServers))
+	}
+	for index, name := range nameServers {
+		if cached, found := runtime.nameServers.get(name, time.Now()); !found || len(cached) != 1 || cached[0] != fmt.Sprintf("192.0.2.%d:53", 10+index) {
+			t.Fatalf("remembered %s at %v, want its own address", name, cached)
+		}
+	}
+}
+
+// When the A and AAAA lookups of one name server walk the same zones at once,
+// each question goes out once and both get the answer.
+func TestParallelLookupAsksASharedQuestionOnce(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	asked := make(chan struct{}, 4)
+	release := make(chan struct{})
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, _ string, _ time.Duration) (*dns.Msg, error) {
+		asked <- struct{}{}
+		<-release
+		return noDataResponse(request, "net."), nil
+	}
+	budget := &iterativeBudget{remaining: maximumIterativeQueries}
+	budget.goParallel()
+	servers := []string{"192.0.2.1:53"}
+	responses := make(chan *dns.Msg, 2)
+	exchange := func() {
+		response, err := handler.exchangeIterative(context.Background(), iterativeQuery("dns-host.net.", dns.TypeNS), servers, runtime, budget)
+		if err != nil {
+			t.Error(err)
+		}
+		responses <- response
+	}
+	go exchange()
+	<-asked
+	go exchange()
+	// Wait until the second lookup is waiting on the first one's question.
+	for {
+		budget.mu.Lock()
+		joined := len(budget.shared) == 1 && budget.shared[sharedExchangeKey{name: "dns-host.net", recordType: dns.TypeNS, server: servers[0]}].waiters == 1
+		budget.mu.Unlock()
+		if joined {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	first, second := <-responses, <-responses
+	if first == nil || second == nil || first == second {
+		t.Fatalf("responses = %p and %p, want each lookup its own copy", first, second)
+	}
+	if len(asked) != 0 || budget.remaining != maximumIterativeQueries-1 {
+		t.Fatalf("%d more questions went out and %d were spent, want the one", len(asked), maximumIterativeQueries-budget.remaining)
+	}
+}
+
 // The uk servers answer for co.uk themselves rather than delegating it.
 // Remembering that saves asking them about co.uk again for every name under
 // it, which a Route 53 chain does many times over.
