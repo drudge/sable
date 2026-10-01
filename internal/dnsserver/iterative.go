@@ -659,10 +659,22 @@ func iterativeTerminal(response *dns.Msg) bool {
 // detachedLookup is a recursive lookup that runs to its own deadline, apart
 // from the clients waiting on it.
 type detachedLookup struct {
-	done     chan struct{}
-	response *dns.Msg
-	err      error
+	done       chan struct{}
+	response   *dns.Msg
+	err        error
+	finishedAt time.Time
 }
+
+// detachedAnswerGrace is how long a finished recursive lookup keeps its
+// answer for a client that asks again. A device whose first question timed
+// out retries within a few seconds, and the lookup it started is often what
+// it is waiting for.
+const detachedAnswerGrace = 5 * time.Second
+
+// errStillRunning reports that a client stopped waiting while its recursive
+// lookup kept going. The lookup warms the delegation caches as it finishes, so
+// the failure says nothing about the name and must not be cached as one.
+var errStillRunning = errors.New("recursive resolution is still running and will finish for a retry")
 
 // recursiveFinishBudget is how long a recursive lookup may keep working after
 // its client stopped waiting. A cold chain through several providers can take
@@ -703,10 +715,20 @@ func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns
 			ctx, cancel := context.WithTimeout(handler.backgroundContext, recursiveFinishBudget(runtime))
 			lookup.response, lookup.err = handler.resolveNetworkContext(ctx, request, runtime, nil)
 			cancel()
-			handler.detachedMu.Lock()
-			delete(handler.detached, key)
-			handler.detachedMu.Unlock()
+			lookup.finishedAt = time.Now()
 			close(lookup.done)
+			forget := func() {
+				handler.detachedMu.Lock()
+				if handler.detached[key] == lookup {
+					delete(handler.detached, key)
+				}
+				handler.detachedMu.Unlock()
+			}
+			if lookup.err != nil || lookup.response == nil {
+				forget()
+				return
+			}
+			time.AfterFunc(detachedAnswerGrace, forget)
 		}()
 	}
 	handler.detachedMu.Unlock()
@@ -715,8 +737,13 @@ func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns
 		if lookup.response == nil {
 			return nil, lookup.err
 		}
-		return lookup.response.Copy(), lookup.err
+		response := lookup.response.Copy()
+		// An answer kept for a retry has aged since it arrived.
+		if elapsed := time.Since(lookup.finishedAt) / time.Second; elapsed > 0 {
+			decrementTTLs(response, uint32(elapsed))
+		}
+		return response, lookup.err
 	case <-wait.Done():
-		return nil, fmt.Errorf("recursive resolution is still running and will finish for a retry: %w", wait.Err())
+		return nil, fmt.Errorf("%w: %w", errStillRunning, wait.Err())
 	}
 }
