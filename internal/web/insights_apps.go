@@ -110,7 +110,7 @@ func (server *Server) insightApps(ctx context.Context, window insightWindow, rep
 	if err != nil {
 		return nil, nil, activity, err
 	}
-	failingNow := make(map[string]bool)
+	lastHour := make(map[string]querylog.AppCounts)
 	recentWindow, _ := chartInsightWindow(appFailingWindow, counted.End)
 	if recent, _, err := server.appActivityCache.load(ctx, recentWindow, reader.AppActivity); err != nil {
 		server.logger.Warn("read recent app failures", "error", err)
@@ -121,7 +121,7 @@ func (server *Server) insightApps(ctx context.Context, window insightWindow, rep
 				total.Queries += counts.Queries
 				total.Failed += counts.Failed
 			}
-			failingNow[app] = appFailing(total)
+			lastHour[app] = total
 		}
 	}
 	sightings, _, err := server.appSightingCache.load(ctx, window, appSightings(reader))
@@ -147,7 +147,8 @@ func (server *Server) insightApps(ctx context.Context, window insightWindow, rep
 		rows = append(rows, pages.InsightAppRowView{
 			ID: service.ID, Name: service.Name, Category: service.Category, Devices: usage.devices,
 			Queries: usage.counts.Queries, Failed: usage.counts.Failed, Blocked: usage.counts.Blocked,
-			LastSeen: sighting.LastSeen, FailingNow: failingNow[service.ID],
+			LastSeen: sighting.LastSeen, FailingNow: appFailing(lastHour[service.ID]),
+			HourQueries: lastHour[service.ID].Queries, HourFailed: lastHour[service.ID].Failed,
 			New: !sighting.FirstSeen.IsZero() && !sighting.FirstSeen.Before(counted.Start) &&
 				!sightings.SeenSince.IsZero() && sightings.SeenSince.Add(time.Hour).Before(sighting.FirstSeen),
 		})

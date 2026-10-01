@@ -943,7 +943,7 @@ func TestInsightsAppsTabShowsFailingApps(t *testing.T) {
 		`data-isotope-tab="apps"`, `id="insight-apps-title"`,
 		// Nothing used it before today, so it is new too.
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new"`,
-		`<span class="status-badge warning" title="At least 1% of its lookups failed in the last hour">Failing</span>`,
+		`<span class="status-badge warning" title="6 of 7 lookups failed in the last hour">Failing</span>`, `<small>85.71% last hour</small>`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=day"`,
 		`data-list-tags="new" data-list-text="youtube streaming youtube"`,
 		// iCloud's failure is counted, but it is not failing now.

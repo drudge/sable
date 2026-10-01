@@ -120,7 +120,11 @@ type InsightAppRowView struct {
 	// window, and FailingNow is set when enough of the last hour's failed.
 	Failed     uint64
 	FailingNow bool
-	Blocked    uint64
+	// HourQueries and HourFailed are the last hour's lookups and failures,
+	// which decide FailingNow and which a failing app's row shows.
+	HourQueries uint64
+	HourFailed  uint64
+	Blocked     uint64
 	// LastSeen is the last lookup of any of the app's names, in all history.
 	LastSeen time.Time
 	// New is set when nothing on the network used the app before the window
@@ -1615,12 +1619,29 @@ templ insightShareCell(count, queries uint64, class string) {
 	}
 }
 
+// insightAppFailedCell counts an app's failures in the range. For an app
+// failing now, the share under the count is the last hour's, the one that
+// made it Failing, rather than the range's, which a long healthy stretch can
+// shrink to almost nothing.
+templ insightAppFailedCell(app InsightAppRowView) {
+	if app.FailingNow {
+		<span class="insight-queries-cell insight-failed-cell"><span class="numeric-cell">{ formatNumber(app.Failed) }</span> <small>{ percent(app.HourFailed, app.HourQueries) } last hour</small></span>
+	} else {
+		@insightShareCell(app.Failed, app.Queries, "")
+	}
+}
+
+// insightAppFailingTitle says what made an app Failing.
+func insightAppFailingTitle(app InsightAppRowView) string {
+	return formatNumber(app.HourFailed) + " of " + formatNumber(app.HourQueries) + " lookups failed in the last hour"
+}
+
 templ insightAppBadges(app InsightAppRowView) {
 	if app.New {
 		<span class="status-badge active">New</span>
 	}
 	if app.FailingNow {
-		<span class="status-badge warning" title="At least 1% of its lookups failed in the last hour">Failing</span>
+		<span class="status-badge warning" title={ insightAppFailingTitle(app) }>Failing</span>
 	}
 }
 
@@ -1689,7 +1710,7 @@ templ InsightApps(view InsightsOverviewView) {
 								</th>
 								<td class="right-cell numeric-cell">{ formatNumber(uint64(app.Devices)) }</td>
 								<td class="right-cell numeric-cell">{ formatNumber(app.Queries) }</td>
-								<td class="right-cell">@insightShareCell(app.Failed, app.Queries, ifThen(app.FailingNow, "insight-failed-cell", ""))</td>
+								<td class="right-cell">@insightAppFailedCell(app)</td>
 								<td class="right-cell insight-optional-cell">@insightShareCell(app.Blocked, app.Queries, "")</td>
 								<td class="muted-cell">{ insightDeviceTime(app.LastSeen, view.TimeDisplay) }</td>
 								<td><button class="icon-button" type="button" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name }>@Icon("chevron-right")</button></td>
