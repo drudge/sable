@@ -162,7 +162,9 @@ func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
 	t.Parallel()
 	view := InsightsOverviewView{Range: "week", Apps: []InsightAppRowView{
 		{ID: "youtube", Name: "YouTube", Category: "Streaming", Devices: 3, Queries: 1200, Blocked: 12},
-		{ID: "remarkable", Name: "reMarkable", Category: "Device platform", Devices: 1, Queries: 54, Failed: 54, FailingNow: true, New: true},
+		// Failing now on its last hour, though the range dilutes its share.
+		{ID: "remarkable", Name: "reMarkable", Category: "Device platform", Devices: 1, Queries: 5_400, Failed: 54, FailingNow: true, New: true,
+			HourQueries: 900, HourFailed: 18},
 		// Its failures stopped over an hour ago, so it is counted but not failing.
 		{ID: "icloud", Name: "iCloud", Category: "Cloud storage", Devices: 2, Queries: 80, Failed: 20},
 	}}
@@ -171,7 +173,9 @@ func TestInsightAppsFilterByWhatTheRowsShow(t *testing.T) {
 		`data-list-category="Streaming" data-list-row data-list-tags="blocked" data-list-text="youtube streaming youtube"`,
 		`data-list-category="Device platform" data-list-row data-list-tags="failing new" data-list-text="remarkable device platform remarkable"`,
 		`<span class="count-badge" data-list-count="3">3 apps</span>`, `data-list-nouns="app apps"`,
-		`<span class="status-badge warning" title="At least 1% of its lookups failed in the last hour">Failing</span>`, `class="insight-queries-cell insight-failed-cell"`,
+		`<span class="status-badge warning" title="18 of 900 lookups failed in the last hour">Failing</span>`,
+		// The share under a failing app's count is the last hour's, not the range's 1%.
+		`<small>2.00% last hour</small>`, `class="insight-queries-cell insight-failed-cell"`,
 		`data-list-param="app_search"`, `data-list-param="category"`, `data-list-param="app_show"`,
 		`hx-get="/ui/insights/app?id=remarkable&amp;range=week"`,
 		`data-list-category="Cloud storage" data-list-row data-list-tags="" data-list-text="icloud cloud storage icloud"`,
