@@ -689,3 +689,53 @@ func TestRecursiveLookupFinishesForARetry(t *testing.T) {
 		t.Fatalf("the authority was asked %d times, cancelled while answering %t; want one lookup that ran to the end", asked, cancelledWhileAnswering)
 	}
 }
+
+// The uk servers answer for co.uk themselves rather than delegating it.
+// Remembering that saves asking them about co.uk again for every name under
+// it, which a Route 53 chain does many times over.
+func TestIterativeResolverRemembersAZoneItsParentServes(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	var mu sync.Mutex
+	apexAsked := 0
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Name == "uk." && question.Qtype == dns.TypeNS:
+			return referralResponse(request, "uk.", "nsa.nic.uk.", "192.0.2.2"), nil
+		case endpoint == "udp://192.0.2.2:53" && question.Name == "co.uk." && question.Qtype == dns.TypeNS:
+			mu.Lock()
+			apexAsked++
+			mu.Unlock()
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Authoritative = true
+			response.Answer = []dns.RR{&dns.NS{Hdr: dns.RR_Header{Name: "co.uk.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 172800}, Ns: "nsa.nic.uk."}}
+			return response, nil
+		case endpoint == "udp://192.0.2.2:53" && question.Qtype == dns.TypeNS:
+			zone := question.Name
+			return referralResponse(request, zone, "ns."+zone, "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53":
+			return addressResponse(request, "192.0.2.44"), nil
+		default:
+			return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+		}
+	}
+	for _, name := range []string{"www.example.co.uk.", "www.other.co.uk."} {
+		request := new(dns.Msg)
+		request.SetQuestion(name, dns.TypeA)
+		if response, err := handler.resolveNetwork(request, runtime, nil); err != nil || len(response.Answer) != 1 {
+			t.Fatalf("resolveNetwork(%s) = %v, %v", name, response, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if apexAsked != 1 {
+		t.Fatalf("co.uk's own NS records were asked for %d times, want once", apexAsked)
+	}
+	if zone, servers, found := runtime.delegations.get("www.third.co.uk.", time.Now()); !found || zone != "co.uk" || !slices.Equal(servers, []string{"192.0.2.2:53"}) {
+		t.Fatalf("closest known zone for a third name = %q at %v, want co.uk at the uk servers", zone, servers)
+	}
+}

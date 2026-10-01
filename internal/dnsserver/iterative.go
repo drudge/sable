@@ -303,6 +303,13 @@ minimizing:
 			case response.Rcode == dns.RcodeSuccess && len(response.Answer) == 0:
 				// No delegation here, only more of the same zone.
 				runtime.recordWalked(candidate, closestZone, noCutTTL(response))
+			case response.Authoritative && apexAt(response, candidate):
+				// The servers answer for the zone below themselves, as the
+				// uk servers do for co.uk. Remembering that saves asking
+				// again for every name under it.
+				closestZone = candidate
+				runtime.delegations.set(candidate, servers, apexTTL(response, candidate), time.Now())
+				walked = runtime.walkedNames(cacheName, closestZone)
 			}
 			continue
 		}
@@ -397,6 +404,29 @@ func aliasRecords(response *dns.Msg, name string) []dns.RR {
 		}
 	}
 	return records
+}
+
+// apexAt reports an answer that gives name's own NS records, making it a
+// zone's apex.
+func apexAt(response *dns.Msg, name string) bool {
+	for _, record := range response.Answer {
+		if nameServer, ok := record.(*dns.NS); ok && normalizeName(nameServer.Hdr.Name) == normalizeName(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// apexTTL is how long the zone at name may be remembered: its NS records'
+// TTL, no longer than a day.
+func apexTTL(response *dns.Msg, name string) uint32 {
+	ttl := maximumDelegationTTL
+	for _, record := range response.Answer {
+		if nameServer, ok := record.(*dns.NS); ok && normalizeName(nameServer.Hdr.Name) == normalizeName(name) {
+			ttl = min(ttl, nameServer.Hdr.Ttl)
+		}
+	}
+	return ttl
 }
 
 // aliasedAt reports an answer that makes name an alias, whether a CNAME the
