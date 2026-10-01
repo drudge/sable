@@ -1724,6 +1724,13 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 		handler.logResolutionFailure(request, clientIP, "upstream answered SERVFAIL",
 			upstreamFailureFields(runtime, forwarders, nil)...)
 	}
+	runtime.cacheUpstreamAnswer(request, response, validation)
+	prepareResponseForClient(response, request)
+	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
+}
+
+// cacheUpstreamAnswer readies a fetched answer for request and caches it.
+func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validation validationState) {
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	response.CheckingDisabled = request.CheckingDisabled
@@ -1737,8 +1744,6 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 	if validation != validationBogus && (runtime.dnssec != nil || !request.CheckingDisabled) {
 		runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 	}
-	prepareResponseForClient(response, request)
-	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
@@ -3045,21 +3050,42 @@ func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns
 	return handler.resolveUpstreamWaiting(ctx, request, runtime, forwarders, runtime.timeout)
 }
 
-// resolveUpstreamWaiting resolves and validates a request, waiting up to wait
-// for the network. Validation keeps its own budget.
+// resolveUpstreamWaiting resolves and validates a request, waiting up to wait.
+// A recursive lookup runs on apart from the wait; see resolveRecursiveWaiting.
 func (handler *Handler) resolveUpstreamWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
-	networkContext, cancelNetwork := context.WithTimeout(ctx, wait)
+	if len(forwarders) == 0 && runtime.mode == "recursive" && len(request.Question) == 1 {
+		return handler.resolveRecursiveWaiting(ctx, request, runtime, wait)
+	}
+	return handler.fetchAndValidate(ctx, request, runtime, forwarders, wait)
+}
+
+// fetchAndValidate resolves a request, waiting up to wait for the network, and
+// validates the answer under its own budget.
+func (handler *Handler) fetchAndValidate(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
+	response, err := handler.fetchUpstream(ctx, request, runtime, forwarders, wait)
+	return handler.validateUpstream(ctx, request, runtime, response, err)
+}
+
+// fetchUpstream sends a request upstream, with DO and CD set when Sable
+// validates, waiting up to wait.
+func (handler *Handler) fetchUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, error) {
+	networkContext, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	if runtime.dnssec != nil {
+		request = dnssecUpstreamRequest(request)
+	}
+	return handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
+}
+
+// validateUpstream validates a fetched answer to request. It has its own
+// budget, apart from the client's wait for the network.
+func (handler *Handler) validateUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, response *dns.Msg, err error) (*dns.Msg, validationState, error) {
 	if runtime.dnssec == nil {
-		defer cancelNetwork()
-		response, err := handler.resolveNetworkWaiting(networkContext, request, runtime, forwarders)
 		if response != nil {
 			response.AuthenticatedData = false
 		}
 		return response, validationIndeterminate, err
 	}
-	upstreamRequest := dnssecUpstreamRequest(request)
-	response, err := handler.resolveNetworkWaiting(networkContext, upstreamRequest, runtime, forwarders)
-	cancelNetwork()
 	if err != nil {
 		return nil, validationIndeterminate, err
 	}

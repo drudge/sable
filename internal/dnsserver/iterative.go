@@ -836,13 +836,23 @@ func iterativeTerminal(response *dns.Msg) bool {
 	return false
 }
 
-// detachedLookup is a recursive lookup that runs to its own deadline, apart
-// from the clients waiting on it.
+// detachedLookup is a recursive lookup, with its DNSSEC validation, that runs
+// to its own deadline apart from the clients waiting on it.
 type detachedLookup struct {
+	// fetched closes when the network part is done and validation starts;
+	// done closes when the result is ready.
+	fetched    chan struct{}
 	done       chan struct{}
 	response   *dns.Msg
+	validation validationState
 	err        error
 	finishedAt time.Time
+	// The fields below are guarded by Handler.detachedMu. waiting counts the
+	// clients still waiting, so the lookup knows when it must cache its own
+	// answer.
+	hasFetched bool
+	finished   bool
+	waiting    int
 }
 
 // detachedAnswerGrace is how long a finished recursive lookup keeps its
@@ -852,28 +862,31 @@ type detachedLookup struct {
 const detachedAnswerGrace = 5 * time.Second
 
 // errStillRunning reports that a client stopped waiting while its recursive
-// lookup kept going. The lookup warms the delegation caches as it finishes, so
-// the failure says nothing about the name and must not be cached as one.
+// lookup kept going. The lookup caches its answer when it finishes, so the
+// failure says nothing about the name and must not be cached as one.
 var errStillRunning = errors.New("recursive resolution is still running and will finish for a retry")
 
 // recursiveFinishBudget is how long a recursive lookup may keep working after
 // its client stopped waiting. A cold chain through several providers can take
-// several seconds, more than a client waits, and finishing it fills the
-// delegation caches so the client's retry is answered in a moment.
+// several seconds, more than a client waits, and finishing it means the
+// client's retry is answered from the cache.
 func recursiveFinishBudget(runtime *Runtime) time.Duration {
 	return max(4*runtime.timeout, 8*time.Second)
 }
 
-// resolveNetworkWaiting resolves a request, waiting no longer than wait
-// allows. In recursive mode the lookup itself runs on apart from the wait, up
-// to recursiveFinishBudget, and a second client asking the same question
-// meanwhile waits on the same lookup. Forwarded lookups are left to wait as
-// they always have: an upstream resolver keeps working for itself.
-func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	if len(forwarders) > 0 || runtime.mode != "recursive" || len(request.Question) != 1 {
-		return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+// resolveRecursiveWaiting resolves and validates a recursive request, waiting
+// no longer than wait. The lookup itself runs on apart from the wait, up to
+// recursiveFinishBudget, and a second client asking the same question
+// meanwhile waits on the same lookup. A lookup that every client stopped
+// waiting for caches its own answer when it finishes.
+func (handler *Handler) resolveRecursiveWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
+	// Clients share a lookup whenever they would send the same question
+	// upstream, which with validation on ignores their DO and CD bits.
+	upstreamRequest := request
+	if runtime.dnssec != nil {
+		upstreamRequest = dnssecUpstreamRequest(request)
 	}
-	key := coalesceKey(request)
+	key := coalesceKey(upstreamRequest)
 	key.runtime = runtime
 	handler.detachedMu.Lock()
 	lookup, running := handler.detached[key]
@@ -882,48 +895,87 @@ func (handler *Handler) resolveNetworkWaiting(wait context.Context, request *dns
 		// a flood of names that never resolve cannot pile up work.
 		if len(handler.detached) >= runtime.maxConcurrent || !handler.startBackground() {
 			handler.detachedMu.Unlock()
-			return handler.resolveNetworkContext(wait, request, runtime, forwarders)
+			return handler.fetchAndValidate(ctx, request, runtime, nil, wait)
 		}
 		if handler.detached == nil {
 			handler.detached = make(map[inflightKey]*detachedLookup)
 		}
-		lookup = &detachedLookup{done: make(chan struct{})}
+		lookup = &detachedLookup{fetched: make(chan struct{}), done: make(chan struct{})}
 		handler.detached[key] = lookup
-		request = request.Copy()
-		go func() {
-			defer handler.backgroundWG.Done()
-			ctx, cancel := context.WithTimeout(handler.backgroundContext, recursiveFinishBudget(runtime))
-			lookup.response, lookup.err = handler.resolveNetworkContext(ctx, request, runtime, nil)
-			cancel()
-			lookup.finishedAt = time.Now()
-			close(lookup.done)
-			forget := func() {
-				handler.detachedMu.Lock()
-				if handler.detached[key] == lookup {
-					delete(handler.detached, key)
-				}
-				handler.detachedMu.Unlock()
-			}
-			if lookup.err != nil || lookup.response == nil {
-				forget()
-				return
-			}
-			time.AfterFunc(detachedAnswerGrace, forget)
-		}()
+		go handler.finishRecursiveLookup(key, lookup, request.Copy(), runtime)
 	}
+	lookup.waiting++
 	handler.detachedMu.Unlock()
+	// The client waits for the network as long as wait allows. Validation
+	// then has its own budget, as it does for a lookup a client runs itself.
+	waitContext, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	select {
+	case <-lookup.fetched:
+	case <-waitContext.Done():
+		handler.detachedMu.Lock()
+		fetched := lookup.hasFetched
+		if !fetched {
+			lookup.waiting--
+		}
+		handler.detachedMu.Unlock()
+		if !fetched {
+			return nil, validationIndeterminate, fmt.Errorf("%w: %w", errStillRunning, waitContext.Err())
+		}
+	}
 	select {
 	case <-lookup.done:
-		if lookup.response == nil {
-			return nil, lookup.err
-		}
-		response := lookup.response.Copy()
-		// An answer kept for a retry has aged since it arrived.
-		if elapsed := time.Since(lookup.finishedAt) / time.Second; elapsed > 0 {
-			decrementTTLs(response, uint32(elapsed))
-		}
-		return response, lookup.err
-	case <-wait.Done():
-		return nil, fmt.Errorf("%w: %w", errStillRunning, wait.Err())
+		return lookup.answer()
+	case <-ctx.Done():
+		return nil, validationIndeterminate, ctx.Err()
 	}
+}
+
+// finishRecursiveLookup runs a detached lookup to its end. request is the
+// question of the client that started it.
+func (handler *Handler) finishRecursiveLookup(key inflightKey, lookup *detachedLookup, request *dns.Msg, runtime *Runtime) {
+	defer handler.backgroundWG.Done()
+	response, err := handler.fetchUpstream(handler.backgroundContext, request, runtime, nil, recursiveFinishBudget(runtime))
+	handler.detachedMu.Lock()
+	lookup.hasFetched = true
+	handler.detachedMu.Unlock()
+	close(lookup.fetched)
+	response, validation, err := handler.validateUpstream(handler.backgroundContext, request, runtime, response, err)
+	handler.detachedMu.Lock()
+	lookup.response, lookup.validation, lookup.err = response, validation, err
+	lookup.finishedAt = time.Now()
+	lookup.finished = true
+	abandoned := lookup.waiting == 0
+	handler.detachedMu.Unlock()
+	close(lookup.done)
+	forget := func() {
+		handler.detachedMu.Lock()
+		if handler.detached[key] == lookup {
+			delete(handler.detached, key)
+		}
+		handler.detachedMu.Unlock()
+	}
+	if err != nil || response == nil {
+		forget()
+		return
+	}
+	// No client is left to cache the answer, so the lookup does, and their
+	// retry is a cache hit, validation and all.
+	if abandoned {
+		runtime.cacheUpstreamAnswer(request, response.Copy(), validation)
+	}
+	time.AfterFunc(detachedAnswerGrace, forget)
+}
+
+// answer returns a client's own copy of a finished lookup's result.
+func (lookup *detachedLookup) answer() (*dns.Msg, validationState, error) {
+	if lookup.response == nil {
+		return nil, lookup.validation, lookup.err
+	}
+	response := lookup.response.Copy()
+	// An answer kept for a retry has aged since it arrived.
+	if elapsed := time.Since(lookup.finishedAt) / time.Second; elapsed > 0 {
+		decrementTTLs(response, uint32(elapsed))
+	}
+	return response, lookup.validation, lookup.err
 }

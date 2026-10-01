@@ -162,12 +162,12 @@ every server is then asked for the full name. **Settings → Recursive Resolver
 from the root down, and a name that aliases through several DNS providers can
 take close to that on an empty cache; DNSSEC validation afterward has its own,
 longer budget. A lookup that outlasts `timeout` still runs to completion in the
-background, so a retry is answered from it. A retry that arrives while the
-lookup runs waits its own `timeout` on it, and one that arrives within 5
-seconds after it finished gets its answer at once. The client that gave up
-gets SERVFAIL, but that failure isn't cached, so it can't hide the answer from
-the retry. Files written before 1.5.1 saved the old 2-second default, so raise
-it by hand in recursive mode.
+background, validated, so a retry is answered from it. A retry that arrives
+while the lookup runs waits its own `timeout` on it. When no client is still
+waiting as it finishes, the lookup caches its answer itself, so the next retry
+is a cache hit. The client that gave up gets SERVFAIL, but that failure isn't
+cached, so it can't hide the answer from the retry. Files written before 1.5.1
+saved the old 2-second default, so raise it by hand in recursive mode.
 
 When a referral gives no addresses for its name servers, as with Route 53 and
 Akamai, whose name servers live in other zones, Sable looks up two of them at

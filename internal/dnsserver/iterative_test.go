@@ -669,9 +669,7 @@ func TestRecursiveLookupFinishesForARetry(t *testing.T) {
 	}
 	retry := make(chan *dns.Msg, 1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		response, err := handler.resolveNetworkWaiting(ctx, request, runtime, nil)
+		response, _, err := handler.resolveRecursiveWaiting(context.Background(), request, runtime, 5*time.Second)
 		if err != nil {
 			t.Error(err)
 		}
