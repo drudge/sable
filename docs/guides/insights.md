@@ -86,7 +86,7 @@ The **Apps** tab lists every app anything on the network used in the range, busi
 
 ![Insights Apps tab listing apps with their devices, queries, and failures](../assets/screenshots/insights-apps.png "Each app shows its category, how many devices used it, and how many of its lookups failed.")
 
-Each app shows how many devices used it, its queries, and **Failed**: the lookups Sable refused or could not answer. An app is marked **Failing** while at least 1% of its lookups in the last hour failed, and at least 5 of them, so a single upstream timeout doesn't mark it and a fixed problem clears within the hour. The range still counts what failed before. A common cause is a device outside the networks allowed to use Sable, such as one asking from a public IPv6 address; see **Settings → Recursion**.
+Each app shows how many devices used it, its queries, and **Failed**: the lookups Sable refused or could not answer. An app is marked **Failing** while at least 1% of its lookups in the last hour failed, and at least 5 of them, so a single upstream timeout doesn't mark it and a fixed problem clears within the hour. Under a failing app's count, the share is the last hour's, the one that made it **Failing**. The range still counts what failed before. A common cause is a device outside the networks allowed to use Sable, such as one asking from a public IPv6 address; see **Settings → Recursion**.
 
 Open an app to see its facts, **Failed lookups**, its busiest domains, and the devices that used it. Each failed domain links to exactly those failures in the query log, and each device shows how many of its lookups failed.
 
