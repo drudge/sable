@@ -844,6 +844,11 @@ pre { max-height: 24rem; margin: 0; overflow: auto; border: 1px solid var(--bord
 .search-field { position: relative; min-width: 0; }
 .search-field > .nav-icon { pointer-events: none; position: absolute; top: 50%; left: 0.75rem; z-index: 1; width: 1rem; height: 1rem; transform: translateY(-50%); color: var(--muted-foreground); }
 .search-field input { padding-right: 2.25rem; padding-left: 2.25rem; }
+/* A search the server runs swaps its icon for a spinner while it's out. */
+.search-field > .search-pending { display: none; pointer-events: none; position: absolute; top: 50%; left: 0.75rem; z-index: 1; width: 1rem; height: 1rem; transform: translateY(-50%); color: var(--muted-foreground); }
+.search-pending .nav-icon { width: 1rem; height: 1rem; animation: blocking-refresh-spin .8s linear infinite; }
+form.htmx-request > .search-field > .nav-icon { visibility: hidden; }
+form.htmx-request > .search-field > .search-pending { display: block; }
 /* One clear control, ours: the browser's own search cancel button would sit on
    top of it wherever the engine draws one. */
 .search-field input::-webkit-search-cancel-button { display: none; }
@@ -1352,6 +1357,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .toast-update-busy .notification-badge .nav-icon, .toast-update.is-restarting .notification-badge .icon-refresh, .update-install-progress .icon-refresh { animation: about-update-spin 1.4s linear infinite; }
 .toast-update-busy, .toast-update.is-restarting { animation: none; }
 @media (prefers-reduced-motion: reduce) {
+  .search-pending .nav-icon { animation: none; }
   .toast-update-busy .notification-badge .nav-icon, .toast-update.is-restarting .notification-badge .icon-refresh, .update-install-progress .icon-refresh { animation: none; }
 }
 .toast-update > .notification-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; padding: 0; }
