@@ -8,6 +8,53 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.4] - 2026-10-01
+
+Sable 1.6.1-beta.4 fixes recursive lookups that failed after 3 seconds,
+often Apple and Ring names, and the device retries that failed with them.
+
+### Recursion
+
+- Answer names that only a local network can answer without asking the
+  internet. These are `service.arpa`, `home.arpa`, `resolver.arpa`, `local`,
+  `localhost`, `invalid`, `test`, `onion`, `alt`, `internal`, and the reverse
+  zones for private, link-local, loopback, and documentation addresses. The
+  IANA servers for some of them never reply over IPv6, so lookups such as
+  `_matter._tcp.default.service.arpa` and `_dns-sd._udp` PTRs waited 3 seconds
+  and failed. Sable now says they don't exist at once. A zone, local host,
+  route, or forwarder zone for one of these names still answers it. The
+  query log calls these **Answered as a local-only name**.
+- Let a device's retry wait its own time. A retry that joined a lookup still
+  running used to give up when the first question did, so all three answers
+  came back as SERVFAIL at the same moment. That SERVFAIL was also cached for
+  10 seconds, so a retry after the lookup finished still failed. Now each
+  retry waits its own timeout, the failure isn't cached, and a lookup that
+  finishes with no one waiting caches its answer, so the next retry is
+  answered at once.
+- Pass over a name server that doesn't answer after 800 milliseconds instead
+  of 1.5 seconds, and ask it last for longer each time it fails again, up to
+  15 minutes. Some of Apple's name servers never answer from some networks,
+  and each one cost a lookup its wait every few minutes.
+- Look up the name servers of zones such as Route 53's and Akamai's in
+  parallel, and stop asking the `uk` servers about `co.uk` again for every
+  name under it. A cold lookup of a long alias chain such as Ring's took 5 to
+  7 seconds and now takes about 3.
+
+### DNSSEC
+
+- Prove an unsigned name unsigned the way BIND does: check for a DS record
+  at each label from the trust anchor down. This fixes false SERVFAILs such
+  as `38.220.208.23.in-addr.arpa` PTR ("missing RRSIG") and
+  `whoami.akamai.net` AAAA ("no data or denial records"), which Cloudflare,
+  Quad9, and Google all answer. It also asks fewer questions on long alias
+  chains.
+
+### Insights
+
+- Show a failing app's failure rate for the last hour, the rate that earns
+  the **Failing** badge, instead of its share over the whole range. The
+  badge's tooltip says how many lookups failed in that hour.
+
 ## [1.6.1-beta.3] - 2026-09-30
 
 Sable 1.6.1-beta.3 stops a single upstream timeout from marking an app
