@@ -8,6 +8,35 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.5] - 2026-10-01
+
+Sable 1.6.1-beta.5 makes searching the query log fast on a large log, and
+Insights opens on the range you picked last.
+
+### Upgrading from 1.6.1-beta.4
+
+- On SQLite the first start indexes the query log already stored, in the
+  background, newest first: about 30 seconds per million queries on fast
+  hardware. Searches work the old way until it finishes. The index takes
+  about 340 MB per million queries kept.
+
+### Logs
+
+- Search the query log with an index. The search box and the Domain and
+  Client filters no longer read every row, so a search for something rare,
+  which took over a second per million queries, now takes a few
+  milliseconds. Searches shorter than 3 characters still read every row. On
+  PostgreSQL, Sable builds `pg_trgm` indexes once; if the extension can't be
+  enabled, it logs a warning and searches as before.
+- Show a spinner in the search box while a search runs, and drop a search
+  that is still running when you type more.
+
+### Insights
+
+- Open Insights on the range you picked last. The sidebar and the command
+  palette used to reset it to **Month**. A range in the page address still
+  wins.
+
 ## [1.6.1-beta.4] - 2026-10-01
 
 Sable 1.6.1-beta.4 fixes recursive lookups that failed after 3 seconds,
