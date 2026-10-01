@@ -784,6 +784,16 @@ transaction as the raw events. Dashboard rankings therefore count the exact
 selected time range even when it spans far more rows than one log page. Raw
 event retention and rollup retention follow query-log retention together.
 
+The search box on the Logs page, and the Domain and Client filters, find text
+anywhere in a domain, client address, or answer. A search index makes that
+quick on a large log, so a search no longer reads every row. Searches shorter
+than 3 characters still do. On SQLite the index is about as large as the query
+log table itself; a million queries take roughly 350 MB of index. The upgrade
+that adds it indexes the log already stored in the background, newest first,
+and searches read every row until that finishes. On PostgreSQL Sable builds
+`pg_trgm` trigram indexes once, without locking the log. If the extension
+can't be enabled, Sable logs a warning and searches read every row, as before.
+
 ## Devices and Insights
 
 ```toml
