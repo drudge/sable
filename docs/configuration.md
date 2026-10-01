@@ -295,6 +295,11 @@ SERVFAIL with an Extended DNS Error for bogus data. A client that explicitly
 sets CD receives the unvalidated response for diagnostics. Sable emits AD only
 for a secure response and only when the client signals interest with AD or DO.
 
+Unsigned data is accepted only from a zone Sable proves is unsigned. Like BIND,
+it walks down from the trust anchor and asks for the DS record at each label of
+the name until a signed proof shows a delegation with no DS. Unsigned data,
+including an empty answer, found inside signed zones is bogus.
+
 An empty `dnssec_trust_anchors` array uses the bundled current IANA root DS
 anchors and, when `dnssec_trust_anchor_updates = true`, manages their successor
 keys using RFC 5011. Sable persists Valid, AddPend, Missing, Revoked, and Removed
