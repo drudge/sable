@@ -168,6 +168,16 @@ func (validator *dnssecValidator) validate(
 
 	rrsets, signatures := validationRRSets(response)
 	if len(rrsets) == 0 {
+		// An empty answer, such as a NODATA with no SOA, has nothing to
+		// verify. That's fine from an unsigned zone, and bogus from a signed
+		// one, which has to prove the denial.
+		state, err := validator.unsignedNameState(ctx, qname, query, false)
+		if err != nil {
+			return validationBogus, err
+		}
+		if state == validationInsecure {
+			return validationInsecure, nil
+		}
 		return validationBogus, errors.New("DNSSEC response contains no data or denial records")
 	}
 	overall := validationSecure

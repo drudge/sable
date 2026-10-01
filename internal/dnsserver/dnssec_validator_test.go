@@ -378,6 +378,31 @@ func TestDNSSECRefusesDSDenialSignedFromBelow(t *testing.T) {
 	}
 }
 
+// Akamai's whoami.akamai.net answers some queries with nothing at all: no
+// records and no SOA. From an unsigned zone that is a plain empty answer; from
+// a signed zone, one that should have proved the denial, it is bogus.
+func TestDNSSECEmptyAnswerDependsOnWhetherTheZoneIsSigned(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "demo.")
+	validator := validatorWithAnchor(t, parent, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("demo.", dns.TypeDNSKEY):        validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):   validatorDSDenial(t, now, parent, "unsigned.demo.", dns.TypeNS),
+		validatorQueryKey("signed.demo.", dns.TypeDS):     validatorDSDenial(t, now, parent, "signed.demo.", dns.TypeA),
+		validatorQueryKey("www.signed.demo.", dns.TypeDS): validatorDSDenial(t, now, parent, "www.signed.demo.", dns.TypeA),
+	})
+	for name, want := range map[string]validationState{"whoami.unsigned.demo.": validationInsecure, "www.signed.demo.": validationBogus} {
+		response := new(dns.Msg)
+		response.SetQuestion(name, dns.TypeAAAA)
+		response.SetReply(response)
+		state, err := validator.validate(context.Background(), response, response.Question[0], query)
+		if state != want || (want == validationInsecure) != (err == nil) {
+			t.Errorf("validate(empty %s) = %v, %v; want %v", name, state, err, want)
+		}
+	}
+}
+
 func TestDNSSECResponsePresentation(t *testing.T) {
 	t.Parallel()
 	request := new(dns.Msg)
