@@ -284,52 +284,97 @@ func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 	}
 }
 
-// An unsigned alias's zone is found from its parent. Asking for the alias's own
-// SOA would follow the alias, and down a long chain such as Ring's that
-// resolves the whole chain again for every zone in it.
-func TestDNSSECUnsignedAliasZoneDiscoveryStartsAtItsParent(t *testing.T) {
+// validatorDSDenial answers a DS query for name the way a signed parent does:
+// its SOA and an NSEC for name listing types, both signed by the parent.
+func validatorDSDenial(t *testing.T, now time.Time, parent validatorTestKey, name string, types ...uint16) *dns.Msg {
+	t.Helper()
+	soa := validatorSOA(parent.key.Hdr.Name)
+	denial := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "zzz." + parent.key.Hdr.Name,
+		TypeBitMap: append(types, dns.TypeRRSIG, dns.TypeNSEC),
+	}
+	response := new(dns.Msg)
+	response.SetQuestion(dns.Fqdn(name), dns.TypeDS)
+	response.SetReply(response)
+	response.Ns = []dns.RR{
+		soa, signValidatorRRSet(t, now, parent, []dns.RR{soa}),
+		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
+	}
+	return response
+}
+
+// An unsigned name is proved unsigned the way BIND does it: DS at each label
+// down from the trust anchor, never an SOA lookup. A label the signed parent
+// proves is no delegation is passed over, and the walk ends at the first
+// delegation proved to have no DS. An alias is never a zone's apex, and a DS
+// query for it would follow it, so its own name is left out.
+func TestDNSSECUnsignedNameWalksDownFromTheTrustAnchor(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	parent := newValidatorTestKey(t, "demo.")
 	validator := validatorWithAnchor(t, parent, now)
-	denial := &dns.NSEC{
-		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
-		NextDomain: "z.demo.",
-		TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
-	}
-	parentSOA := validatorSOA("demo.")
-	dsResponse := new(dns.Msg)
-	dsResponse.SetQuestion("unsigned.demo.", dns.TypeDS)
-	dsResponse.SetReply(dsResponse)
-	dsResponse.Ns = []dns.RR{
-		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
-		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
-	}
-	zoneSOAResponse := new(dns.Msg)
-	zoneSOAResponse.SetQuestion("unsigned.demo.", dns.TypeSOA)
-	zoneSOAResponse.SetReply(zoneSOAResponse)
-	zoneSOAResponse.Answer = []dns.RR{validatorSOA("unsigned.demo.")}
-	targetSOAResponse := new(dns.Msg)
-	targetSOAResponse.SetQuestion("target.unsigned.demo.", dns.TypeSOA)
-	targetSOAResponse.SetReply(targetSOAResponse)
-	targetSOAResponse.Ns = []dns.RR{validatorSOA("unsigned.demo.")}
-	// No answer for alias.unsigned.demo. SOA: asking it fails validation.
+	// No SOA and no DS for the alias or the names under the cut: asking for
+	// any of them fails validation.
 	query := mapValidatorQuery(map[string]*dns.Msg{
-		validatorQueryKey("demo.", dns.TypeDNSKEY):              validatorDNSKEYResponse(t, now, parent),
-		validatorQueryKey("unsigned.demo.", dns.TypeDS):         dsResponse,
-		validatorQueryKey("unsigned.demo.", dns.TypeSOA):        zoneSOAResponse,
-		validatorQueryKey("target.unsigned.demo.", dns.TypeSOA): targetSOAResponse,
+		validatorQueryKey("demo.", dns.TypeDNSKEY):       validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("sub.demo.", dns.TypeDS):       validatorDSDenial(t, now, parent, "sub.demo.", dns.TypeA),
+		validatorQueryKey("child.sub.demo.", dns.TypeDS): validatorDSDenial(t, now, parent, "child.sub.demo.", dns.TypeNS),
 	})
 	response := new(dns.Msg)
-	response.SetQuestion("alias.unsigned.demo.", dns.TypeA)
+	response.SetQuestion("alias.child.sub.demo.", dns.TypeA)
 	response.SetReply(response)
 	response.Answer = []dns.RR{
-		&dns.CNAME{Hdr: dns.RR_Header{Name: "alias.unsigned.demo.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: "target.unsigned.demo."},
-		validatorA("target.unsigned.demo.", "192.0.2.20"),
+		&dns.CNAME{Hdr: dns.RR_Header{Name: "alias.child.sub.demo.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: "www.child.sub.demo."},
+		validatorA("www.child.sub.demo.", "192.0.2.20"),
 	}
 	state, err := validator.validate(context.Background(), response, response.Question[0], query)
 	if err != nil || state != validationInsecure {
-		t.Fatalf("validate() = %v, %v; want insecure without asking for the alias's own SOA", state, err)
+		t.Fatalf("validate() = %v, %v; want insecure", state, err)
+	}
+}
+
+// When the walk reaches the name without leaving signed zones, the name had
+// to be signed, so its missing signature makes the answer bogus.
+func TestDNSSECUnsignedNameInsideASignedZoneIsBogus(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "demo.")
+	validator := validatorWithAnchor(t, parent, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("demo.", dns.TypeDNSKEY):     validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("sub.demo.", dns.TypeDS):     validatorDSDenial(t, now, parent, "sub.demo.", dns.TypeA),
+		validatorQueryKey("www.sub.demo.", dns.TypeDS): validatorDSDenial(t, now, parent, "www.sub.demo.", dns.TypeA),
+	})
+	response := new(dns.Msg)
+	response.SetQuestion("www.sub.demo.", dns.TypeA)
+	response.SetReply(response)
+	response.Answer = []dns.RR{validatorA("www.sub.demo.", "192.0.2.20")}
+	state, err := validator.validate(context.Background(), response, response.Question[0], query)
+	if state != validationBogus || err == nil || !strings.Contains(err.Error(), "missing RRSIG") {
+		t.Fatalf("validate() = %v, %v; want bogus for a missing RRSIG", state, err)
+	}
+}
+
+// A DS denial comes from the zone above the name. One signed by the zone
+// itself, or by any zone not above it, is refused rather than trusted or
+// followed in a loop.
+func TestDNSSECRefusesDSDenialSignedFromBelow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "demo.")
+	child := newValidatorTestKey(t, "unsigned.demo.")
+	validator := validatorWithAnchor(t, parent, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("demo.", dns.TypeDNSKEY):          validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):     validatorDSDenial(t, now, child, "unsigned.demo.", dns.TypeNS),
+		validatorQueryKey("unsigned.demo.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, child),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	state, err := validator.unsignedNameState(ctx, "www.unsigned.demo.", query, false)
+	if state != validationBogus || err == nil || !strings.Contains(err.Error(), "not above it") {
+		t.Fatalf("unsignedNameState() = %v, %v; want bogus for a denial signed from below", state, err)
 	}
 }
 

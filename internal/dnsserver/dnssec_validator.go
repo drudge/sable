@@ -331,6 +331,11 @@ func (validator *dnssecValidator) zoneKeys(ctx context.Context, zoneName string,
 	}
 
 	parentName, err := denialSigner(dsResponse)
+	if err == nil && (parentName == zoneName || !dns.IsSubDomain(parentName, zoneName)) {
+		// A DS denial comes from the zone above. Any other signer could
+		// claim an unsigned zone of its own, or this one, which would loop.
+		return validatedZone{}, fmt.Errorf("DS denial for %s is signed by %s, which is not above it", zoneName, parentName)
+	}
 	if err != nil {
 		// Names below an insecure delegation carry no DNSSEC records, so a
 		// resolver that already proved the ancestor unsigned answers the DS
@@ -351,7 +356,7 @@ func (validator *dnssecValidator) zoneKeys(ctx context.Context, zoneName string,
 		return validatedZone{}, fmt.Errorf("validate DS denial for %s: %w", zoneName, err)
 	}
 	if !provesInsecureDelegation(dsResponse.Ns, zoneName) {
-		return validatedZone{}, fmt.Errorf("%s has no authenticated delegation", zoneName)
+		return validatedZone{}, fmt.Errorf("%s has no authenticated delegation: %w", zoneName, errNotZoneCut)
 	}
 	zone := validatedZone{state: validationInsecure, expiresAt: validator.cacheExpiration(dsResponse)}
 	validator.cacheZone(zoneName, zone)
@@ -480,52 +485,53 @@ func (validator *dnssecValidator) verifyDenialRRsets(response *dns.Msg, keys []*
 	return nil
 }
 
-// unsignedNameState finds the zone that holds an unsigned name and reports
-// whether that zone is signed. aliased says the name owns a CNAME.
+// errNotZoneCut reports a name that an authenticated denial shows is no
+// delegation, only a name inside its parent's zone.
+var errNotZoneCut = errors.New("not a zone cut")
+
+// unsignedNameState reports whether an unsigned name sits in an unsigned zone.
+// Like BIND, it walks down from the closest trust anchor and asks for the DS
+// record at each label. A signed proof that a delegation has no DS ends the
+// chain of trust, and the name is insecure. Reaching the name inside signed
+// zones makes it secure, so its missing signature is bogus. aliased says the
+// name owns a CNAME.
 func (validator *dnssecValidator) unsignedNameState(ctx context.Context, name string, query dnssecQuery, aliased bool) (validationState, error) {
 	name = normalizeFQDN(name)
 	if validator.validationExempt(name) || validator.cachedInsecureAncestor(name) {
 		return validationInsecure, nil
 	}
-	start := name
+	last := name
 	if aliased && name != "." {
-		// Asking for an alias's SOA follows the alias, and with a long chain
-		// that resolves the whole chain again, once for every zone in it. An
-		// alias is never a zone's apex, so its parent is in the same zone.
-		start = parentFQDN(name)
+		// An alias is never a zone's apex, and a DS query for it would
+		// follow the alias, so the walk stops at its parent.
+		last = parentFQDN(name)
 	}
-	var soa *dns.SOA
-	for candidate := start; ; candidate = parentFQDN(candidate) {
-		response, err := query(ctx, candidate, dns.TypeSOA)
-		if err != nil {
-			return validationBogus, fmt.Errorf("discover zone for unsigned name %s: %w", name, err)
-		}
-		for _, section := range [][]dns.RR{response.Answer, response.Ns} {
-			for _, record := range section {
-				if typed, ok := record.(*dns.SOA); ok && dns.IsSubDomain(normalizeFQDN(typed.Hdr.Name), name) {
-					soa = typed
-					break
-				}
-			}
-			if soa != nil {
-				break
-			}
-		}
-		if soa != nil {
-			break
-		}
-		if candidate == "." {
+	// names runs from last up to the root.
+	labels := dns.SplitDomainName(last)
+	names := make([]string, 0, len(labels)+1)
+	for index := range labels {
+		names = append(names, strings.Join(labels[index:], ".")+".")
+	}
+	names = append(names, ".")
+	start := len(names) - 1
+	for index, candidate := range names {
+		if len(validator.trustAnchors(candidate)) > 0 {
+			start = index
 			break
 		}
 	}
-	if soa == nil {
-		return validationBogus, fmt.Errorf("cannot discover authoritative zone for unsigned name %s", name)
+	for index := start; index >= 0; index-- {
+		zone, err := validator.zoneKeys(ctx, names[index], query)
+		switch {
+		case errors.Is(err, errNotZoneCut):
+			continue
+		case err != nil:
+			return validationBogus, fmt.Errorf("prove %s unsigned: %w", name, err)
+		case zone.state == validationInsecure:
+			return validationInsecure, nil
+		}
 	}
-	zone, err := validator.zoneKeys(ctx, soa.Hdr.Name, query)
-	if err != nil {
-		return validationBogus, err
-	}
-	return zone.state, nil
+	return validationSecure, nil
 }
 
 // validationExempt reports whether name is out of reach of DNSSEC validation,
