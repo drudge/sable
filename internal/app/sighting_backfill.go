@@ -45,6 +45,37 @@ func backfillAppRollups(ctx context.Context, backfill func(context.Context) (boo
 	}
 }
 
+// queryLogSearchInterval is how often the query log search index drops the
+// entries of pruned rows.
+const queryLogSearchInterval = 15 * time.Minute
+
+// maintainQueryLogSearch keeps the query log search index whole until the
+// runtime stops. The first pass indexes any log written without it, such as
+// the log from before an upgrade, which takes a while on a large database;
+// searches read the whole log until it is done. Later passes clear entries
+// for rows that retention pruned.
+func maintainQueryLogSearch(ctx context.Context, build func(context.Context) (bool, error), every time.Duration, logger *slog.Logger) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		built, err := build(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logger.Warn("index the query log for search", "error", err)
+		case built:
+			logger.Info("indexed the query log for search")
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
 // rollupCompactionInterval is how often settled query log minutes are summed
 // into hours and days.
 const rollupCompactionInterval = 5 * time.Minute

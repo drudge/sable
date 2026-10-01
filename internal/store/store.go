@@ -26,6 +26,12 @@ type Store struct {
 	// trackingOff stops client sightings and identities from being recorded
 	// while Insights is off.
 	trackingOff atomic.Bool
+	// searchIndexed reports that the SQLite query log search index covers
+	// the whole log; see query_log_search.go.
+	searchIndexed atomic.Bool
+	// postgresSearchTried keeps the PostgreSQL trigram indexes to one
+	// attempt per start.
+	postgresSearchTried atomic.Bool
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -167,6 +173,9 @@ ON sable_server_log (occurred_at)`}
 	if err := store.migrateQueryLogIndexes(ctx); err != nil {
 		return fmt.Errorf("migrate %s query log indexes: %w", store.driver, err)
 	}
+	if err := store.migrateQueryLogSearch(ctx); err != nil {
+		return fmt.Errorf("migrate %s query log search: %w", store.driver, err)
+	}
 	if err := store.migrateActivityMarkers(ctx); err != nil {
 		return fmt.Errorf("migrate %s database: %w", store.driver, err)
 	}
@@ -305,13 +314,14 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 		return fmt.Errorf("prepare query log insert: %w", err)
 	}
 	defer statement.Close()
-	for _, event := range events {
+	var first, last int64
+	for index, event := range events {
 		decision, err := json.Marshal(event.Decision)
 		if err != nil {
 			_ = transaction.Rollback()
 			return fmt.Errorf("encode query decision: %w", err)
 		}
-		if _, err := statement.ExecContext(
+		result, err := statement.ExecContext(
 			ctx,
 			event.OccurredAt.UTC(),
 			event.ClientIP,
@@ -326,10 +336,24 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 			event.Answer,
 			string(decision),
 			event.Duration.Microseconds(),
-		); err != nil {
+		)
+		if err != nil {
 			_ = transaction.Rollback()
 			return fmt.Errorf("insert query log event: %w", err)
 		}
+		if store.driver == "sqlite" {
+			if last, err = result.LastInsertId(); err != nil {
+				_ = transaction.Rollback()
+				return fmt.Errorf("read query log event ID: %w", err)
+			}
+			if index == 0 {
+				first = last
+			}
+		}
+	}
+	if err := store.indexQueryLogBatch(ctx, transaction, first, last); err != nil {
+		_ = transaction.Rollback()
+		return err
 	}
 	if err := store.writeQueryLogRollups(ctx, transaction, events); err != nil {
 		_ = transaction.Rollback()
@@ -444,25 +468,43 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 		arguments = append(arguments, value)
 		conditions = append(conditions, column+" "+operator+" "+store.placeholder(len(arguments)))
 	}
+	// Text found anywhere in a column, as opposed to an exact value, comes
+	// from the search index when it can; see query_log_search.go.
+	var textSearches [][]textMatch
 	if value := strings.TrimSpace(filter.ClientIP); value != "" {
 		if filter.Exact || filter.ExactClient {
 			addCondition("client_ip_key", "=", queryLogClientKey(value))
 		} else {
-			addCondition("client_ip_key", "LIKE", "%"+queryLogClientKey(value)+"%")
+			textSearches = append(textSearches, []textMatch{{"client_ip_key", queryLogClientKey(value)}})
 		}
 	}
 	if value := strings.TrimSpace(filter.Name); value != "" {
 		if filter.Exact {
 			addCondition(queryLogDomainExpression, "=", queryLogDomainKey(value))
 		} else {
-			addCondition(queryLogDomainExpression, "LIKE", "%"+queryLogDomainKey(value)+"%")
+			textSearches = append(textSearches, []textMatch{{queryLogDomainExpression, queryLogDomainKey(value)}})
 		}
 	}
 	if value := strings.ToLower(strings.TrimSpace(filter.Search)); value != "" {
-		arguments = append(arguments, "%"+queryLogDomainKey(value)+"%", "%"+queryLogClientKey(value)+"%", "%"+value+"%")
-		count := len(arguments)
-		conditions = append(conditions, "("+queryLogDomainExpression+" LIKE "+store.placeholder(count-2)+
-			" OR client_ip_key LIKE "+store.placeholder(count-1)+" OR LOWER(answer) LIKE "+store.placeholder(count)+")")
+		textSearches = append(textSearches, []textMatch{
+			{queryLogDomainExpression, queryLogDomainKey(value)},
+			{"client_ip_key", queryLogClientKey(value)},
+			{"answer", value},
+		})
+	}
+	from, idColumn := " FROM sable_query_log", "id"
+	if expression, indexed := store.indexedTextSearch(textSearches); indexed {
+		// The index leads, so a page stops after its rows and a count reads
+		// only the matches. Joining the log leaves out rows pruned since.
+		from = " FROM " + queryLogSearchTable + " JOIN sable_query_log ON sable_query_log.id = " + queryLogSearchTable + ".rowid"
+		idColumn = queryLogSearchTable + ".rowid"
+		addCondition(queryLogSearchTable, "MATCH", expression)
+	} else {
+		for _, matches := range textSearches {
+			condition, values := store.likeTextSearch(len(arguments)+1, matches)
+			conditions = append(conditions, condition)
+			arguments = append(arguments, values...)
+		}
 	}
 	if !filter.Since.IsZero() {
 		addCondition("occurred_at", ">=", filter.Since.UTC())
@@ -492,12 +534,12 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	countArguments := append([]any(nil), arguments...)
 	if filter.Incremental {
 		countArguments = append(countArguments, filter.AfterID)
-		countConditions = append(countConditions, "id > "+store.placeholder(len(countArguments)))
+		countConditions = append(countConditions, idColumn+" > "+store.placeholder(len(countArguments)))
 	}
 	if !filter.UseKnownTotal || filter.Incremental {
 		countWhere := queryLogWhere(countConditions)
 		var counted int
-		if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_query_log"+countWhere, countArguments...).Scan(&counted); err != nil {
+		if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*)"+from+countWhere, countArguments...).Scan(&counted); err != nil {
 			return querylog.Page{}, fmt.Errorf("count query events: %w", err)
 		}
 		if filter.Incremental {
@@ -520,12 +562,12 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	case "older":
 		if filter.Cursor > 0 {
 			selectArguments = append(selectArguments, filter.Cursor)
-			selectConditions = append(selectConditions, "id < "+store.placeholder(len(selectArguments)))
+			selectConditions = append(selectConditions, idColumn+" < "+store.placeholder(len(selectArguments)))
 		}
 	case "newer":
 		if filter.Cursor > 0 {
 			selectArguments = append(selectArguments, filter.Cursor)
-			selectConditions = append(selectConditions, "id > "+store.placeholder(len(selectArguments)))
+			selectConditions = append(selectConditions, idColumn+" > "+store.placeholder(len(selectArguments)))
 			order = "ASC"
 		}
 	case "oldest":
@@ -541,8 +583,8 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	selectArguments = append(selectArguments, selectionLimit)
 	query := `
 	SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
-	FROM sable_query_log` + selectWhere + `
-	ORDER BY id ` + order + `
+	` + from + selectWhere + `
+	ORDER BY ` + idColumn + ` ` + order + `
 	LIMIT ` + store.placeholder(len(selectArguments))
 	if useOffset {
 		selectArguments = append(selectArguments, (filter.Page-1)*filter.PageSize)

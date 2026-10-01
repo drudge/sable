@@ -425,6 +425,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	})
 	runRuntimeWorker(func(context.Context) { attachedNetworks.Run(runtimeContext, readInterfaces, logger) })
 	runRuntimeWorker(func(context.Context) {
+		maintainQueryLogSearch(runtimeContext, database.BuildQueryLogSearch, queryLogSearchInterval, logger)
+	})
+	runRuntimeWorker(func(context.Context) {
 		// One after the other: each reads through the whole query history.
 		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
 		backfillBlockedClientRollups(runtimeContext, database.BackfillBlockedClientRollups, logger)
