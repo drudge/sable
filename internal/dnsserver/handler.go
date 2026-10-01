@@ -1458,6 +1458,16 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	if route != "" {
 		handler.routedQueries.Add(1)
 	}
+	// A name only a local network can answer never goes to the internet. A
+	// route or a forwarder zone for it still wins, since that names a server
+	// that does know it.
+	if len(forwarders) == 0 && runtime.mode == "recursive" {
+		if zone, found := locallyServedZone(request.Question[0].Name); found {
+			handler.localAnswers.Add(1)
+			return resolution{response: locallyServedResponse(request, zone), source: querylog.SourceLocal,
+				decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Cache: querylog.CacheMiss, Resolver: querylog.ResolverLocallyServed}}
+		}
+	}
 	release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
 	if !admitted {
 		return recursionRefused(request)

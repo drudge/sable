@@ -50,6 +50,9 @@ const (
 	// ResolverNotAllowed marks a lookup refused because the recursion policy
 	// doesn't cover the client.
 	ResolverNotAllowed ResolverDecision = "not_allowed"
+	// ResolverLocallyServed marks a name reserved for local networks, such as
+	// service.arpa or a private reverse zone, that Sable answered itself.
+	ResolverLocallyServed ResolverDecision = "locally_served"
 )
 
 type DNSSECDecision string

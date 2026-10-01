@@ -165,6 +165,15 @@ longer budget. A lookup that outlasts `timeout` still runs to completion in the
 background, so a retry is answered from it. Files written before 1.5.1 saved
 the old 2-second default, so raise it by hand in recursive mode.
 
+Names reserved for local networks never go to the internet in recursive mode.
+These are `home.arpa`, `service.arpa`, `resolver.arpa`, `local`, `localhost`,
+`invalid`, `test`, `onion`, `alt`, `internal`, and the reverse zones for
+private, link-local, loopback, and documentation addresses (RFC 6303). Sable
+answers them itself with NXDOMAIN. The IANA servers for some of them never
+reply, so asking them used to cost the whole `timeout` and end in SERVFAIL. A
+zone, local host, route, or forwarder zone for one of these names still
+answers it as before.
+
 `timeout` is the budget for the whole query, not for one upstream. In forward
 mode it is split evenly across the forwarders that have not been tried yet, so a
 forwarder that stops answering cannot spend the entire budget on its own retries

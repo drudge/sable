@@ -2,6 +2,7 @@ package dnsserver
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/miekg/dns"
 )
@@ -13,6 +14,15 @@ import (
 // root proves the name does not exist at all. Validating either shape turns
 // ordinary local traffic into SERVFAIL, so these names stay outside DNSSEC.
 var locallyServedZones = buildLocallyServedZones()
+
+// locallyServedSet holds the same zones for a lookup by name.
+var locallyServedSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(locallyServedZones))
+	for _, zone := range locallyServedZones {
+		set[zone] = struct{}{}
+	}
+	return set
+}()
 
 func buildLocallyServedZones() []string {
 	zones := []string{
@@ -64,11 +74,52 @@ func buildLocallyServedZones() []string {
 // isLocallyServedZone reports whether name sits inside a zone that is only ever
 // answered locally.
 func isLocallyServedZone(name string) bool {
-	name = normalizeFQDN(name)
-	for _, zone := range locallyServedZones {
-		if dns.IsSubDomain(zone, name) {
-			return true
-		}
-	}
-	return false
+	_, found := locallyServedZone(name)
+	return found
 }
+
+// locallyServedZone returns the locally served zone that holds name. It runs
+// for every recursive cache miss, so a lowercase name with its final dot, as
+// clients send, is checked without allocating.
+func locallyServedZone(name string) (string, bool) {
+	name = strings.ToLower(dns.Fqdn(strings.TrimSpace(name)))
+	for current := name; current != "."; {
+		if _, found := locallyServedSet[current]; found {
+			return current, true
+		}
+		separator := strings.IndexByte(current, '.')
+		if separator < 0 || separator == len(current)-1 {
+			break
+		}
+		current = current[separator+1:]
+	}
+	return "", false
+}
+
+// locallyServedResponse answers a name in a locally served zone the way RFC
+// 6303 asks a recursive resolver to: the name does not exist, with the zone's
+// SOA so the client caches that. Nothing on the internet can answer these
+// names. The IANA blackhole servers that hold some of them, such as
+// service.arpa and the private reverse zones, often never reply at all, so
+// asking them costs the client the whole timeout and then a SERVFAIL.
+func locallyServedResponse(request *dns.Msg, zone string) *dns.Msg {
+	response := new(dns.Msg)
+	response.SetRcode(request, dns.RcodeNameError)
+	response.Authoritative = true
+	response.RecursionAvailable = true
+	response.Ns = []dns.RR{&dns.SOA{
+		Hdr:     dns.RR_Header{Name: zone, Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: locallyServedNegativeTTL},
+		Ns:      "localhost.",
+		Mbox:    "nobody.invalid.",
+		Serial:  1,
+		Refresh: 3600,
+		Retry:   1200,
+		Expire:  604800,
+		Minttl:  locallyServedNegativeTTL,
+	}}
+	return response
+}
+
+// locallyServedNegativeTTL is the SOA minimum RFC 6303 section 3 gives these
+// zones.
+const locallyServedNegativeTTL = 10800
