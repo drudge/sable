@@ -278,9 +278,58 @@ func TestDNSSECUnsignedZoneDiscoveryClimbsPastCNAME(t *testing.T) {
 		validatorQueryKey("alias.unsigned.demo.", dns.TypeSOA): aliasSOAResponse,
 		validatorQueryKey("unsigned.demo.", dns.TypeSOA):       zoneSOAResponse,
 	})
-	state, err := validator.unsignedNameState(context.Background(), "alias.unsigned.demo.", query)
+	state, err := validator.unsignedNameState(context.Background(), "alias.unsigned.demo.", query, false)
 	if err != nil || state != validationInsecure {
 		t.Fatalf("unsignedNameState() = %v, %v; want insecure", state, err)
+	}
+}
+
+// An unsigned alias's zone is found from its parent. Asking for the alias's own
+// SOA would follow the alias, and down a long chain such as Ring's that
+// resolves the whole chain again for every zone in it.
+func TestDNSSECUnsignedAliasZoneDiscoveryStartsAtItsParent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	parent := newValidatorTestKey(t, "demo.")
+	validator := validatorWithAnchor(t, parent, now)
+	denial := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: "unsigned.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 300},
+		NextDomain: "z.demo.",
+		TypeBitMap: []uint16{dns.TypeNS, dns.TypeRRSIG, dns.TypeNSEC},
+	}
+	parentSOA := validatorSOA("demo.")
+	dsResponse := new(dns.Msg)
+	dsResponse.SetQuestion("unsigned.demo.", dns.TypeDS)
+	dsResponse.SetReply(dsResponse)
+	dsResponse.Ns = []dns.RR{
+		parentSOA, signValidatorRRSet(t, now, parent, []dns.RR{parentSOA}),
+		denial, signValidatorRRSet(t, now, parent, []dns.RR{denial}),
+	}
+	zoneSOAResponse := new(dns.Msg)
+	zoneSOAResponse.SetQuestion("unsigned.demo.", dns.TypeSOA)
+	zoneSOAResponse.SetReply(zoneSOAResponse)
+	zoneSOAResponse.Answer = []dns.RR{validatorSOA("unsigned.demo.")}
+	targetSOAResponse := new(dns.Msg)
+	targetSOAResponse.SetQuestion("target.unsigned.demo.", dns.TypeSOA)
+	targetSOAResponse.SetReply(targetSOAResponse)
+	targetSOAResponse.Ns = []dns.RR{validatorSOA("unsigned.demo.")}
+	// No answer for alias.unsigned.demo. SOA: asking it fails validation.
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("demo.", dns.TypeDNSKEY):              validatorDNSKEYResponse(t, now, parent),
+		validatorQueryKey("unsigned.demo.", dns.TypeDS):         dsResponse,
+		validatorQueryKey("unsigned.demo.", dns.TypeSOA):        zoneSOAResponse,
+		validatorQueryKey("target.unsigned.demo.", dns.TypeSOA): targetSOAResponse,
+	})
+	response := new(dns.Msg)
+	response.SetQuestion("alias.unsigned.demo.", dns.TypeA)
+	response.SetReply(response)
+	response.Answer = []dns.RR{
+		&dns.CNAME{Hdr: dns.RR_Header{Name: "alias.unsigned.demo.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: "target.unsigned.demo."},
+		validatorA("target.unsigned.demo.", "192.0.2.20"),
+	}
+	state, err := validator.validate(context.Background(), response, response.Question[0], query)
+	if err != nil || state != validationInsecure {
+		t.Fatalf("validate() = %v, %v; want insecure without asking for the alias's own SOA", state, err)
 	}
 }
 

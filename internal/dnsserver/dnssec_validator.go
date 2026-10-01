@@ -230,7 +230,7 @@ func (validator *dnssecValidator) validateRRSet(
 	query dnssecQuery,
 ) (validationState, error) {
 	if len(signatures) == 0 {
-		state, err := validator.unsignedNameState(ctx, rrset[0].Header().Name, query)
+		state, err := validator.unsignedNameState(ctx, rrset[0].Header().Name, query, rrset[0].Header().Rrtype == dns.TypeCNAME)
 		if err != nil {
 			return validationBogus, err
 		}
@@ -480,13 +480,22 @@ func (validator *dnssecValidator) verifyDenialRRsets(response *dns.Msg, keys []*
 	return nil
 }
 
-func (validator *dnssecValidator) unsignedNameState(ctx context.Context, name string, query dnssecQuery) (validationState, error) {
+// unsignedNameState finds the zone that holds an unsigned name and reports
+// whether that zone is signed. aliased says the name owns a CNAME.
+func (validator *dnssecValidator) unsignedNameState(ctx context.Context, name string, query dnssecQuery, aliased bool) (validationState, error) {
 	name = normalizeFQDN(name)
 	if validator.validationExempt(name) || validator.cachedInsecureAncestor(name) {
 		return validationInsecure, nil
 	}
+	start := name
+	if aliased && name != "." {
+		// Asking for an alias's SOA follows the alias, and with a long chain
+		// that resolves the whole chain again, once for every zone in it. An
+		// alias is never a zone's apex, so its parent is in the same zone.
+		start = parentFQDN(name)
+	}
 	var soa *dns.SOA
-	for candidate := name; ; candidate = parentFQDN(candidate) {
+	for candidate := start; ; candidate = parentFQDN(candidate) {
 		response, err := query(ctx, candidate, dns.TypeSOA)
 		if err != nil {
 			return validationBogus, fmt.Errorf("discover zone for unsigned name %s: %w", name, err)
