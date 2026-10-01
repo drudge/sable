@@ -363,6 +363,12 @@ minimizing:
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
 }
 
+// authorityAttemptTimeout is how long an authoritative server is waited on
+// before the next server for the zone is asked. Authorities answer in tens of
+// milliseconds from almost anywhere, so this is several round trips even on a
+// slow path.
+const authorityAttemptTimeout = 800 * time.Millisecond
+
 // minimumFairTurn is the least time an authoritative server must have had
 // before a failure counts against it.
 const minimumFairTurn = 500 * time.Millisecond
@@ -474,7 +480,15 @@ func (handler *Handler) exchangeIterative(
 		budget.remaining--
 		attemptContext, release := forwarderBudget(ctx, len(servers)-offset)
 		fair := attemptGotFairTurn(attemptContext)
-		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, runtime.retryTimeout, runtime.retries)
+		// The zone's other servers are its retries: one that is silent for
+		// authorityAttemptTimeout is passed over for the next, rather than
+		// asked again at the full retry timeout. Only the last server left
+		// gets the configured retries.
+		retryTimeout, retries := min(runtime.retryTimeout, authorityAttemptTimeout), 1
+		if offset == len(ordered)-1 {
+			retryTimeout, retries = runtime.retryTimeout, runtime.retries
+		}
+		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, retryTimeout, retries)
 		release()
 		if err != nil {
 			// A server is only held against when it had a fair turn: the

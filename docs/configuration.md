@@ -169,6 +169,13 @@ gets SERVFAIL, but that failure isn't cached, so it can't hide the answer from
 the retry. Files written before 1.5.1 saved the old 2-second default, so raise
 it by hand in recursive mode.
 
+An authoritative server gets 800 milliseconds, or `retry_timeout` if that is
+shorter, before Sable asks the zone's next server; only the last server left
+gets the full `retries`. A server that times out is asked last for 10 seconds,
+and that doubles each time it fails again, up to 15 minutes. Some name servers
+never answer from a given network, often only over IPv6, and this keeps one
+from costing every lookup its wait.
+
 Names reserved for local networks never go to the internet in recursive mode.
 These are `home.arpa`, `service.arpa`, `resolver.arpa`, `local`, `localhost`,
 `invalid`, `test`, `onion`, `alt`, `internal`, and the reverse zones for

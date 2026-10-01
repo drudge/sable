@@ -736,7 +736,7 @@ func NewHandler(runtime *Runtime) *Handler {
 	backgroundContext, backgroundCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
-		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newUpstreamHealthTracker(), inflight: newInflightGroup(),
+		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newAuthorityHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),
@@ -2891,6 +2891,12 @@ func forwarderBudget(ctx context.Context, untried int) (context.Context, context
 // upstream is probed again and cleared on the next success.
 const upstreamUnhealthyCooldown = 10 * time.Second
 
+// authorityUnhealthyCooldownLimit is the longest an authoritative server that
+// keeps failing is tried last. Some name servers never answer from a given
+// network, often only over IPv6, and a lookup every few minutes would
+// otherwise find each one again as soon as its cooldown ended.
+const authorityUnhealthyCooldownLimit = 15 * time.Minute
+
 // upstreamHealthTracker remembers which forwarders recently failed so a query
 // does not keep starting at a dead upstream and stalling on it for the whole
 // per-attempt timeout. The common case (nothing failing) takes only a read lock
@@ -2898,11 +2904,24 @@ const upstreamUnhealthyCooldown = 10 * time.Second
 type upstreamHealthTracker struct {
 	mu         sync.RWMutex
 	retryAfter map[string]time.Time
-	now        func() time.Time
+	// failures counts each server's failures in a row, which double its
+	// cooldown up to cooldownLimit.
+	failures      map[string]int
+	cooldownLimit time.Duration
+	now           func() time.Time
 }
 
 func newUpstreamHealthTracker() *upstreamHealthTracker {
-	return &upstreamHealthTracker{retryAfter: make(map[string]time.Time), now: time.Now}
+	return &upstreamHealthTracker{retryAfter: make(map[string]time.Time), failures: make(map[string]int),
+		cooldownLimit: upstreamUnhealthyCooldown, now: time.Now}
+}
+
+// newAuthorityHealthTracker tracks authoritative servers, whose cooldown grows
+// while they keep failing.
+func newAuthorityHealthTracker() *upstreamHealthTracker {
+	tracker := newUpstreamHealthTracker()
+	tracker.cooldownLimit = authorityUnhealthyCooldownLimit
+	return tracker
 }
 
 func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) []string {
@@ -2932,13 +2951,19 @@ func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) [
 func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
 	tracker.mu.Lock()
 	now := tracker.now()
-	tracker.retryAfter[forwarder] = now.Add(upstreamUnhealthyCooldown)
+	tracker.failures[forwarder]++
+	cooldown := upstreamUnhealthyCooldown
+	for range min(tracker.failures[forwarder]-1, 16) {
+		cooldown = min(2*cooldown, tracker.cooldownLimit)
+	}
+	tracker.retryAfter[forwarder] = now.Add(cooldown)
 	// Authoritative servers are many, so forget ones whose cooldown ended
 	// rather than keep every server that ever failed.
 	if len(tracker.retryAfter) > maximumTrackedUnhealthy {
 		for server, until := range tracker.retryAfter {
 			if !now.Before(until) {
 				delete(tracker.retryAfter, server)
+				delete(tracker.failures, server)
 			}
 		}
 	}
@@ -2958,6 +2983,7 @@ func (tracker *upstreamHealthTracker) markHealthy(forwarder string) {
 	}
 	tracker.mu.Lock()
 	delete(tracker.retryAfter, forwarder)
+	delete(tracker.failures, forwarder)
 	tracker.mu.Unlock()
 }
 
