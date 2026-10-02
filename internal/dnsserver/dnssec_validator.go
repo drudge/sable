@@ -870,16 +870,52 @@ func provesNoData(records []dns.RR, name string, recordType uint16) bool {
 	for _, record := range records {
 		switch typed := record.(type) {
 		case *dns.NSEC:
-			if normalizeFQDN(typed.Hdr.Name) == name && !hasType(typed.TypeBitMap, recordType) && !hasType(typed.TypeBitMap, dns.TypeCNAME) {
+			if normalizeFQDN(typed.Hdr.Name) == name && lacksType(typed.TypeBitMap, recordType) {
 				return true
 			}
 		case *dns.NSEC3:
-			if typed.Match(name) && !hasType(typed.TypeBitMap, recordType) && !hasType(typed.TypeBitMap, dns.TypeCNAME) {
+			if typed.Match(name) && lacksType(typed.TypeBitMap, recordType) {
 				return true
 			}
 		}
 	}
-	return false
+	return provesWildcardNoData(records, name, recordType)
+}
+
+// lacksType reports a type bitmap without the type, or a CNAME that would
+// answer for it.
+func lacksType(bitmap []uint16, recordType uint16) bool {
+	return !hasType(bitmap, recordType) && !hasType(bitmap, dns.TypeCNAME)
+}
+
+// provesWildcardNoData proves NODATA for a name that doesn't exist itself
+// but falls under a wildcard that lacks the type: the next closer name is
+// denied and the wildcard at the closest encloser is shown without the type
+// (RFC 4035 section 3.1.3.4 for NSEC, RFC 5155 section 7.2.5 for NSEC3).
+// WordPress VIP's go-vip.net answers HTTPS queries this way.
+func provesWildcardNoData(records []dns.RR, name string, recordType uint16) bool {
+	for closest := parentFQDN(name); ; closest = parentFQDN(closest) {
+		wildcard := normalizeFQDN("*." + closest)
+		if closest == "." {
+			wildcard = "*."
+		}
+		next := nextCloserFQDN(name, closest)
+		for _, record := range records {
+			switch typed := record.(type) {
+			case *dns.NSEC:
+				if normalizeFQDN(typed.Hdr.Name) == wildcard && lacksType(typed.TypeBitMap, recordType) && coversNSECName(records, next) {
+					return true
+				}
+			case *dns.NSEC3:
+				if typed.Match(wildcard) && lacksType(typed.TypeBitMap, recordType) && hasMatchingNSEC3(records, closest) && coversNSEC3Name(records, next) {
+					return true
+				}
+			}
+		}
+		if closest == "." {
+			return false
+		}
+	}
 }
 
 func provesNameError(records []dns.RR, name string) bool {

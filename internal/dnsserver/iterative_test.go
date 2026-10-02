@@ -856,3 +856,53 @@ func TestIterativeResolverRemembersAZoneItsParentServes(t *testing.T) {
 		t.Fatalf("closest known zone for a third name = %q at %v, want co.uk at the uk servers", zone, servers)
 	}
 }
+
+// A zone's servers only speak for that zone. Records they add about zones
+// above it, unsigned while those zones are signed, are dropped rather than
+// passed on, where DNSSEC validation called the whole answer bogus.
+func TestIterativeResolverDropsRecordsOutsideTheZone(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && question.Qtype == dns.TypeNS && question.Name == "arpa.":
+			return referralResponse(request, "94.19.96.in-addr.arpa.", "ns.reverse.example.", "192.0.2.3"), nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "82.94.19.96.in-addr.arpa.":
+			response := new(dns.Msg)
+			response.SetReply(request)
+			response.Authoritative = true
+			response.Answer = []dns.RR{&dns.PTR{Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypePTR, Class: dns.ClassINET, Ttl: 300}, Ptr: "host.example.net."}}
+			response.Ns = []dns.RR{
+				&dns.NS{Hdr: dns.RR_Header{Name: "19.96.in-addr.arpa.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 300}, Ns: "ns.reverse.example."},
+				&dns.NS{Hdr: dns.RR_Header{Name: "94.19.96.in-addr.arpa.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 300}, Ns: "ns.reverse.example."},
+			}
+			response.Extra = []dns.RR{&dns.A{Hdr: dns.RR_Header{Name: "ns.reverse.example.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: netIP("192.0.2.3")}}
+			return response, nil
+		case endpoint == "udp://192.0.2.3:53" && question.Name == "244.94.19.96.in-addr.arpa.":
+			response := new(dns.Msg)
+			response.SetRcode(request, dns.RcodeNameError)
+			response.Authoritative = true
+			response.Ns = []dns.RR{validatorSOA("in-addr.arpa.")}
+			return response, nil
+		default:
+			return noDataResponse(request, "."), nil
+		}
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("82.94.19.96.in-addr.arpa.", dns.TypePTR)
+	response, err := handler.resolveNetwork(request, runtime, nil)
+	if err != nil || len(response.Answer) != 1 {
+		t.Fatalf("resolveNetwork = %v, %v", response, err)
+	}
+	if len(response.Ns) != 1 || response.Ns[0].Header().Name != "94.19.96.in-addr.arpa." || len(response.Extra) != 0 {
+		t.Fatalf("authority %v, additional %v; want only the zone's own name servers", response.Ns, response.Extra)
+	}
+	request.SetQuestion("244.94.19.96.in-addr.arpa.", dns.TypePTR)
+	response, err = handler.resolveNetwork(request, runtime, nil)
+	if err != nil || response.Rcode != dns.RcodeNameError || len(response.Ns) != 0 {
+		t.Fatalf("NXDOMAIN = %v, %v; want it without the SOA for in-addr.arpa", response, err)
+	}
+}

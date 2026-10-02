@@ -79,6 +79,89 @@ func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 	}
 }
 
+// A name that doesn't exist, under a wildcard without the type asked for,
+// is NODATA: one NSEC covers the name and another shows the wildcard's
+// types. WordPress VIP's go-vip.net answers HTTPS queries this way, and
+// Sable called the answer bogus.
+func TestDNSSECValidatorProvesWildcardNoData(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	zone := newValidatorTestKey(t, "go-vip.demo.")
+	validator := validatorWithAnchor(t, zone, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("go-vip.demo.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, zone),
+	})
+	soa := validatorSOA("go-vip.demo.")
+	covering := &dns.NSEC{
+		Hdr:        dns.RR_Header{Name: "lotus.go-vip.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 60},
+		NextDomain: "ns1.go-vip.demo.", TypeBitMap: []uint16{dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC},
+	}
+	answer := func(wildcardTypes []uint16, withCovering bool) *dns.Msg {
+		wildcard := &dns.NSEC{
+			Hdr:        dns.RR_Header{Name: "*.go-vip.demo.", Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 60},
+			NextDomain: "_acme-challenge.go-vip.demo.", TypeBitMap: wildcardTypes,
+		}
+		response := new(dns.Msg)
+		response.SetQuestion("macworld.go-vip.demo.", dns.TypeHTTPS)
+		response.SetReply(response)
+		response.Authoritative = true
+		response.Ns = []dns.RR{soa, signValidatorRRSet(t, now, zone, []dns.RR{soa}), wildcard, signValidatorRRSet(t, now, zone, []dns.RR{wildcard})}
+		if withCovering {
+			response.Ns = append(response.Ns, covering, signValidatorRRSet(t, now, zone, []dns.RR{covering}))
+		}
+		return response
+	}
+	plain := []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeRRSIG, dns.TypeNSEC}
+	if state, err := validator.validate(context.Background(), answer(plain, true), dns.Question{Name: "macworld.go-vip.demo.", Qtype: dns.TypeHTTPS, Qclass: dns.ClassINET}, query); err != nil || state != validationSecure {
+		t.Fatalf("wildcard NODATA validate() = %v, %v; want secure", state, err)
+	}
+	// The wildcard has the type after all, so it should have answered.
+	if state, _ := validator.validate(context.Background(), answer(append(plain, dns.TypeHTTPS), true), dns.Question{Name: "macworld.go-vip.demo.", Qtype: dns.TypeHTTPS, Qclass: dns.ClassINET}, query); state != validationBogus {
+		t.Fatalf("a wildcard with the type validated as %v, want bogus", state)
+	}
+	// Nothing proves the name itself doesn't exist.
+	if state, _ := validator.validate(context.Background(), answer(plain, false), dns.Question{Name: "macworld.go-vip.demo.", Qtype: dns.TypeHTTPS, Qclass: dns.ClassINET}, query); state != validationBogus {
+		t.Fatalf("a wildcard NODATA without the denial validated as %v, want bogus", state)
+	}
+}
+
+// The NSEC3 form proves the closest encloser, denies the next closer name,
+// and matches the wildcard without the type.
+func TestNSEC3ProvesWildcardNoData(t *testing.T) {
+	t.Parallel()
+	const salt = "AABB"
+	hash := func(name string) string { return dns.HashName(name, dns.SHA1, 0, salt) }
+	nsec3 := func(owner, next string, types ...uint16) *dns.NSEC3 {
+		return &dns.NSEC3{
+			Hdr:  dns.RR_Header{Name: strings.ToLower(owner) + ".go-vip.demo.", Rrtype: dns.TypeNSEC3, Class: dns.ClassINET, Ttl: 60},
+			Hash: dns.SHA1, Iterations: 0, SaltLength: 2, Salt: salt, HashLength: 20, NextDomain: next, TypeBitMap: types,
+		}
+	}
+	// A record covering a hash: from just below it to just above it.
+	cover := func(name string) *dns.NSEC3 {
+		target := hash(name)
+		lower := []byte(target)
+		lower[len(lower)-1]--
+		upper := []byte(target)
+		upper[len(upper)-1]++
+		return nsec3(string(lower), string(upper))
+	}
+	records := []dns.RR{
+		nsec3(hash("go-vip.demo."), hash("go-vip.demo."), dns.TypeSOA, dns.TypeNS),
+		cover("macworld.go-vip.demo."),
+		nsec3(hash("*.go-vip.demo."), hash("*.go-vip.demo."), dns.TypeA, dns.TypeAAAA),
+	}
+	if !provesNoData(records, "macworld.go-vip.demo.", dns.TypeHTTPS) {
+		t.Fatal("the NSEC3 wildcard NODATA proof didn't prove NODATA")
+	}
+	if provesNoData(records, "macworld.go-vip.demo.", dns.TypeA) {
+		t.Fatal("a wildcard with the type proved NODATA")
+	}
+	if provesNoData(records[1:], "macworld.go-vip.demo.", dns.TypeHTTPS) {
+		t.Fatal("NODATA was proved without the closest encloser")
+	}
+}
+
 func TestDNSSECValidatorRecognizesAuthenticatedInsecureDelegation(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
