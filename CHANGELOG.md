@@ -8,6 +8,112 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1] - 2026-10-02
+
+Sable 1.6.1 makes recursive mode more dependable: devices on your own network
+that ask over IPv6 get answers, slow and failing lookups through long alias
+chains are fixed, and DNSSEC stops failing names that public resolvers answer.
+The query log search box searches the whole log through an index, and
+Insights gains an **Apps** tab.
+
+### Upgrading from 1.6.0
+
+- Private recursion access now also covers the IPv6 networks Sable is
+  attached to. To keep the old behavior, choose **Listed clients only** in
+  **Settings → Recursion** and list your private ranges.
+- The new **Lookups refused** finding adds `lookups_refused` to
+  `[insights.findings]`. In a cluster, upgrade replicas before the primary. An
+  older replica rejects a configuration that has it.
+- On SQLite, the first start indexes the query log already stored, in the
+  background and newest first, about 30 seconds per million queries on fast
+  hardware. Searches read the whole log until it finishes. The index takes
+  about 340 MB per million queries kept. On PostgreSQL, Sable builds `pg_trgm`
+  indexes once. If the extension can't be enabled, it logs a warning and
+  searches as before.
+- The **Apps** tab fills in app counts from the query log already stored, once
+  and in the background. App failures count from the upgrade on.
+
+### Recursion
+
+- Answer devices on your own network that ask from a global IPv6 address.
+  Under private access, Sable refused them, since their addresses come from
+  your ISP's prefix rather than a private range. It now also admits the IPv6
+  networks on its own interfaces, as long as the interface also has a private
+  IPv4 or ULA address. **Settings → Recursion** lists them under **This
+  Network**, and replicas admit the primary's networks too.
+- Say why a lookup was refused. A query refused by recursion access reads
+  **Refused: recursion not allowed** in its details.
+- Answer names only a local network can answer without asking the internet:
+  `service.arpa`, `home.arpa`, `resolver.arpa`, `local`, `localhost`,
+  `invalid`, `test`, `onion`, `alt`, `internal`, and the reverse zones for
+  private, link-local, loopback, and documentation addresses. The IANA servers
+  for some of them never reply over IPv6, so lookups such as
+  `_matter._tcp.default.service.arpa` waited out the timeout and failed. Sable
+  now says at once that they don't exist, and the query log calls these
+  **Answered as a local-only name**. A zone, local host, route, or forwarder
+  zone for one of these names still answers it.
+- Let a device's retry wait its own time. A retry that joined a lookup still
+  running gave up when the first question did, and the failure was cached, so
+  a retry after the lookup finished failed too. Now each retry waits its own
+  timeout, the failure isn't cached, and a lookup that finishes after everyone
+  stopped waiting caches its answer, so the next retry is answered at once.
+- Pass over a name server that doesn't answer after 800 milliseconds instead
+  of 1.5 seconds, and ask it last for longer each time it fails again, up to 15
+  minutes.
+- Look up the name servers of zones such as Route 53's and Akamai's in
+  parallel, and stop asking the `uk` servers about `co.uk` again for every name
+  under it. A cold lookup through a long alias chain that took 5 to 7 seconds
+  takes about 3.
+
+### DNSSEC
+
+- Prove an unsigned name unsigned the way BIND does: check for a DS record at
+  each label from the trust anchor down. Sable used to look for the name's
+  zone with an SOA lookup, which some servers answer misleadingly, and failed
+  names such as some reverse lookups. An empty answer from an unsigned zone is
+  accepted too.
+- Accept a wildcard's proof that a record type doesn't exist. Sable didn't
+  know that proof and failed the answer, such as HTTPS lookups for sites under
+  WordPress VIP.
+- Ignore records a zone's servers have no say over. Some servers add unsigned
+  records about zones above their own, and Sable failed the whole answer over
+  them. Like BIND and Unbound, it now drops them.
+
+### Logs
+
+- Search the whole query log from the search box above the table. It matches
+  the domain, the client address, or the answer, keeps the filters you set,
+  and stays in the page address. The **Domain** filter still matches domains
+  only. **Search Query Logs** in the command palette gains an **All** option.
+- Search the query log through an index, so the search box and the **Domain**
+  and **Client** filters no longer read every row. A search for something rare,
+  which took over a second per million queries, takes a few milliseconds.
+  Searches shorter than 3 characters still read every row.
+- Show a spinner in a log search box while a search runs, keep what you type
+  while it does, and drop a search that is still running when you type more.
+- Stop logging a request the browser gave up on as an error. It's recorded at
+  debug level instead, saying the browser stopped waiting.
+
+### Insights
+
+- Add an **Apps** tab that lists every app your network used, counted from
+  every lookup. Search it, filter it by category, or show only apps that are
+  failing, blocked, or new. An app's drawer lists its failed lookups, each
+  linked to those queries in the log, and which devices hit them.
+- Mark an app **Failing** when at least 1% of its lookups in the last hour
+  failed, and at least 5 of them, or when a device is refused outright. Its
+  **Failed** column then shows that hour's rate, and the badge's tooltip says
+  how many lookups failed.
+- Report a local device that keeps getting refused as **Lookups refused**. It
+  takes at least 10 refused lookups across at least 2 hours of the last day.
+  The finding clears once recursion access covers the device.
+- Open Insights on the range you picked last. The sidebar and the command
+  palette reset it to **Month**. A range in the page address still wins.
+- Leave out an address a computer gave itself because DHCP hadn't answered
+  yet, such as `169.254.203.47`, unless Sable can tie it to a hardware
+  address. It was listed as a new device for a few seconds of a laptop waking
+  up. Its lookups stay in the query log.
+
 ## [1.6.1-beta.7] - 2026-10-02
 
 Sable 1.6.1-beta.7 fixes DNSSEC failures on names that public resolvers
