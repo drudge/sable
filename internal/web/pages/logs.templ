@@ -127,7 +127,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 		// for the settle, and focus returns to the box before it gives it back,
 		// so the box would show the term before the last one typed.
 		<form class="log-search-bar" id="runtime-log-search-bar" hx-get="/ui/logs/runtime" hx-target="#runtime-logs-panel" hx-swap="outerHTML settle:0" hx-trigger="submit, input delay:400ms from:#runtime-log-search, change from:[data-runtime-level]" hx-sync="this:replace" hx-include="[data-runtime-level]">
-			@SearchField("Search server logs", "Search server logs...", view.Search, "", templ.Attributes{"id": "runtime-log-search", "name": "search"})
+			@SearchField("Search server logs", "Search server logs...", view.Search, "", templ.Attributes{"id": "runtime-log-search", "name": "search", "hx-preserve": true})
 			<input type="hidden" name="live" value={ ifThen(view.Live, "1", "0") } data-log-live-input/>
 			<input type="hidden" name="page_size" value={ fmt.Sprint(view.PageSize) }/>
 			<div class="log-result-actions"><button class="icon-button" type="button" data-copy-target="runtime-log-copy" aria-label="Copy current entries" title="Copy current entries">@Icon("copy")</button><a class="icon-button" href={ templ.SafeURL(runtimeExportURL(view)) } aria-label="Export server logs" title="Export server logs">@Icon("download")</a></div>
@@ -220,9 +220,10 @@ templ QueryLogsPanel(view QueryLogsView) {
 		// applied and lands back on the first page of what it found. It swaps
 		// without a settle for the reason the server log search does. A search
 		// of a large log takes a moment, so a newer one replaces any still
-		// running, and the box shows a spinner until it lands.
+		// running, and the box shows a spinner until it lands. The box itself
+		// survives the swap (hx-preserve), so typing during a search is kept.
 		<form class="log-search-bar" id="query-log-search-bar" hx-get="/ui/logs/queries" hx-target="#query-logs-panel" hx-swap="outerHTML settle:0" hx-trigger="submit, input delay:400ms from:#query-log-search" hx-sync="this:replace">
-			@SearchField("Search query logs", "Search domains, clients, or answers...", view.Search, "", templ.Attributes{"id": "query-log-search", "name": "q"})
+			@SearchField("Search query logs", "Search domains, clients, or answers...", view.Search, "", templ.Attributes{"id": "query-log-search", "name": "q", "hx-preserve": true})
 			for _, field := range queryFilterFields(view) {
 				<input type="hidden" name={ field.Key } value={ field.Value }/>
 			}

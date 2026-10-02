@@ -2929,6 +2929,26 @@
 	document.addEventListener("input", (event) => {
 	  if (event.target.matches?.("[data-search-clearable]")) syncSearchClear(event.target);
 	});
+	// A log search box keeps what is typed while a search runs. The box
+	// itself survives the panel's swap (hx-preserve), and an answer for a term
+	// the box no longer holds is dropped: the search for what it holds now is
+	// still waiting out its delay, and lands instead.
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const input = ctx?.sourceElement?.closest?.("form.log-search-bar")?.querySelector("[data-search-clearable]");
+	  if (!input) return;
+	  ctx.sableSearchInput = input;
+	  ctx.sableSearchTerm = input.value.trim();
+	});
+	document.body.addEventListener("htmx:before:swap", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (ctx?.sableSearchInput && ctx.sableSearchInput.value.trim() !== ctx.sableSearchTerm) event.preventDefault();
+	});
+	// The clear button comes back drawn for the term the server searched,
+	// which a preserved box may have moved past.
+	document.body.addEventListener("htmx:after:swap", () => {
+	  document.querySelectorAll(".log-search-bar [data-search-clearable]").forEach(syncSearchClear);
+	});
 	document.addEventListener("click", (event) => {
 	  const button = event.target.closest?.("[data-search-clear]");
 	  if (!button) return;
