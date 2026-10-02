@@ -8,6 +8,19 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.6] - 2026-10-01
+
+Sable 1.6.1-beta.6 keeps what you type in a log search box while a search
+runs.
+
+### Logs
+
+- Keep typing in the query log and server log search boxes while a search
+  runs. A short search reads every row and can take seconds on a large log,
+  and its answer used to put the box back to the term it searched, dropping
+  what was typed since. The box now keeps it, an answer for an older term is
+  dropped, and the search for what the box holds lands instead.
+
 ## [1.6.1-beta.5] - 2026-10-01
 
 Sable 1.6.1-beta.5 makes searching the query log fast on a large log, and
