@@ -8,6 +8,31 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.1-beta.7] - 2026-10-02
+
+Sable 1.6.1-beta.7 fixes DNSSEC failures on names that public resolvers
+answer, and keeps abandoned requests out of the error log.
+
+### DNSSEC
+
+- Accept a wildcard's proof that a record type doesn't exist. A signed zone
+  can answer "no such record" for a name that falls under a wildcard by
+  showing the wildcard lacks the type. Sable didn't know that proof and
+  failed the answer, such as HTTPS lookups for WordPress VIP sites under
+  `go-vip.net`.
+- Ignore records a zone's servers have no say over. Some servers add
+  unsigned records about zones above their own, such as name servers for a
+  parent reverse zone or an SOA for all of `in-addr.arpa`. Sable checked
+  them and failed the whole answer; like BIND and Unbound, it now drops them.
+  This fixes reverse lookups for some Comcast and Vultr addresses.
+
+### Logs
+
+- Stop logging a request the browser gave up on as an error. When a newer
+  search replaces one still running, or a page is left before it loads, the
+  server log said `context canceled` at the error level. It now records that
+  at debug level, saying the browser stopped waiting.
+
 ## [1.6.1-beta.6] - 2026-10-01
 
 Sable 1.6.1-beta.6 keeps what you type in a log search box while a search
