@@ -434,6 +434,7 @@ minimizing:
 			return targetResponse, nil
 		}
 		if iterativeTerminal(response) {
+			scrubOutOfBailiwick(response, closestZone)
 			if len(cnameChain) > 0 {
 				response.Answer = append(cnameChain, response.Answer...)
 			}
@@ -470,6 +471,22 @@ const minimumFairTurn = 500 * time.Millisecond
 func attemptGotFairTurn(ctx context.Context) bool {
 	deadline, bounded := ctx.Deadline()
 	return !bounded || time.Until(deadline) >= minimumFairTurn
+}
+
+// scrubOutOfBailiwick drops the authority and additional records a zone's
+// servers have no say over, as BIND and Unbound do before trusting or
+// validating anything. Some servers add them anyway: Comcast's for
+// 94.19.96.in-addr.arpa list name servers for 19.96.in-addr.arpa above it,
+// and Vultr's for a single address's reverse zone give an SOA for all of
+// in-addr.arpa. Neither is signed, while the zones they name are, so the
+// answer failed DNSSEC validation over records that weren't part of it.
+func scrubOutOfBailiwick(response *dns.Msg, zone string) {
+	zone = dns.Fqdn(zone)
+	outside := func(record dns.RR) bool {
+		return record.Header().Rrtype != dns.TypeOPT && !dns.IsSubDomain(zone, dns.Fqdn(record.Header().Name))
+	}
+	response.Ns = slices.DeleteFunc(response.Ns, outside)
+	response.Extra = slices.DeleteFunc(response.Extra, outside)
 }
 
 // aliasRecords returns the CNAME an answer gives name, with the RRSIGs that
