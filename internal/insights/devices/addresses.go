@@ -29,6 +29,18 @@ func hardwareFromAddress(address string) (string, bool) {
 	return mac.String(), true
 }
 
+// selfAssignedRange is IPv4 link-local, 169.254.0.0/16 (RFC 3927).
+var selfAssignedRange = netip.MustParsePrefix("169.254.0.0/16")
+
+// SelfAssigned reports an IPv4 address a device gave itself because no DHCP
+// server answered it yet. A computer waking up or docking can ask for a few
+// seconds from one before its real address arrives, so on its own it is no
+// device worth naming.
+func SelfAssigned(address string) bool {
+	parsed, err := netip.ParseAddr(address)
+	return err == nil && selfAssignedRange.Contains(parsed.Unmap())
+}
+
 // privacyAddress reports an IPv6 address with a random interface identifier:
 // a temporary address phones and computers make for themselves and replace
 // about once a day (RFC 8981), or a stable random one they keep for each

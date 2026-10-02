@@ -272,7 +272,8 @@ func (server *Server) insightsAppPanel(writer http.ResponseWriter, request *http
 
 // appDeviceViews lists the devices behind an app's clients, busiest first,
 // each with its queries and failures summed across its addresses. An address
-// no device claims is listed as itself.
+// no device claims is listed as itself, unless it is self-assigned, which
+// devices.Build leaves out as a moment before DHCP answered.
 func appDeviceViews(clients map[string]querylog.AppCounts, report deviceReport) ([]pages.InsightAppDeviceView, int) {
 	byDevice := make(map[string]*pages.InsightAppDeviceView)
 	order := make([]*pages.InsightAppDeviceView, 0)
@@ -299,7 +300,7 @@ func appDeviceViews(clients map[string]querylog.AppCounts, report deviceReport) 
 		}
 	}
 	for client, counts := range clients {
-		if claimed[client] {
+		if claimed[client] || devices.SelfAssigned(client) {
 			continue
 		}
 		order = append(order, &pages.InsightAppDeviceView{Key: client, Label: client, Queries: counts.Queries, Failed: counts.Failed})

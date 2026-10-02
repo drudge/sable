@@ -1214,3 +1214,16 @@ func TestInsightsRemembersTheRangePickedLast(t *testing.T) {
 		t.Fatal("a range Insights doesn't offer should fall back to the default")
 	}
 }
+
+// An app's drawer lists an address no device claims as itself, but not a
+// self-assigned one, which is a moment before DHCP answered.
+func TestAppDeviceViewsLeaveOutSelfAssignedAddresses(t *testing.T) {
+	t.Parallel()
+	views, more := appDeviceViews(map[string]querylog.AppCounts{
+		"169.254.203.47": {Queries: 11},
+		"10.0.7.99":      {Queries: 4},
+	}, deviceReport{})
+	if len(views) != 1 || views[0].Label != "10.0.7.99" || more != 0 {
+		t.Fatalf("views = %+v, more %d; want only the unclaimed ordinary address", views, more)
+	}
+}

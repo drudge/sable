@@ -385,6 +385,31 @@ func TestBuildTiesALinkLocalClientThroughItsZone(t *testing.T) {
 	}
 }
 
+// A computer that asks before DHCP answers it uses an address it gave
+// itself, for a few seconds. Unclaimed, that is no device; tied to hardware,
+// its lookups count toward that device.
+func TestBuildLeavesOutUnclaimedSelfAssignedAddresses(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	built := Build(Input{
+		Activity: querylog.ClientActivityReport{Clients: []querylog.ClientActivity{
+			{Client: "169.254.203.47", Queries: 29}, {Client: "169.254.10.9", Queries: 5}, {Client: "10.0.7.80", Queries: 30},
+		}},
+		Identities: []querylog.ClientIdentity{
+			{Address: "169.254.10.9", MAC: "66:ca:20:91:ab:fb", Source: identityNeighbor, LastSeen: now},
+			{Address: "10.0.7.80", MAC: "66:ca:20:91:ab:fb", Source: identityUniFi, Hostname: "Mac", LastSeen: now},
+		},
+	})
+	if len(built) != 1 || built[0].Name != "Mac" || built[0].Queries != 35 || len(built[0].Addresses) != 2 {
+		t.Fatalf("devices = %+v; want only the Mac, with its self-assigned address's lookups", built)
+	}
+	for address, want := range map[string]bool{"169.254.203.47": true, "169.254.0.1": true, "10.0.7.80": false, "fe80::1": false, "::ffff:169.254.1.1": true, "garbage": false} {
+		if got := SelfAssigned(address); got != want {
+			t.Errorf("SelfAssigned(%q) = %t, want %t", address, got, want)
+		}
+	}
+}
+
 // Two UniFi sightings of one address at the same moment, such as a stale
 // reservation and the device now on that address, settle the same way
 // whichever order the store returns them in.
