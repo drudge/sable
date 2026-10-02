@@ -3,7 +3,8 @@ const {chromium} = require('playwright');
 
 // Each keystroke pause sends the search, and the answer replaces the panel
 // around the box. The box has to keep everything typed, not the term the
-// previous answer carried, and stay focused so typing can carry on.
+// previous answer carried, and stay focused so typing can carry on. That
+// holds when an answer arrives in the middle of more typing, too.
 (async () => {
   const [baseURL] = process.argv.slice(2);
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -20,9 +21,7 @@ const {chromium} = require('playwright');
       });
       await page.locator(selector).pressSequentially(text);
       await answered;
-      await page.locator(`${selector}[value="${expected}"]`).waitFor();
-      // htmx lends the new box the old value for a moment; wait past that.
-      await page.waitForTimeout(50);
+      await page.waitForFunction(() => !document.querySelector('form.log-search-bar.htmx-request'));
       assert.equal(await page.locator(selector).inputValue(), expected, `the box keeps ${JSON.stringify(expected)}`);
       assert.equal(await page.evaluate(id => document.activeElement?.id, selector.slice(1)), selector.slice(1), 'the box keeps focus');
     };
@@ -37,6 +36,30 @@ const {chromium} = require('playwright');
     // A reload shows the same search.
     await page.reload();
     assert.equal(await page.locator('#query-log-search').inputValue(), 'example.com', 'a reload keeps the search');
+
+    // A slow answer lands while the next word is still being typed. On a
+    // large log a short search reads every row and takes seconds.
+    await page.goto(`${baseURL}/logs?tab=queries`);
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    await page.route(url => url.pathname === '/ui/logs/queries' && url.searchParams.get('q') === 're', async route => {
+      await held;
+      await route.continue();
+    });
+    await page.locator('#query-log-search').click();
+    const slow = page.waitForRequest(request => new URL(request.url()).searchParams.get('q') === 're');
+    await page.locator('#query-log-search').pressSequentially('re');
+    const slowRequest = await slow;
+    await page.locator('#query-log-search').pressSequentially('mark', {delay: 50});
+    release();
+    // Its answer is either dropped, or never sent because the next search
+    // replaced it; either way the box keeps the typing.
+    await Promise.race([slowRequest.response(), page.waitForEvent('requestfailed', request => request === slowRequest)]);
+    await page.waitForFunction(() => !document.querySelector('form.log-search-bar.htmx-request'));
+    assert.equal(await page.locator('#query-log-search').inputValue(), 'remark', 'a slow answer keeps what was typed after it was sent');
+    await typeAndSettle('#query-log-search', '/ui/logs/queries', 'q', 'able', 'remarkable');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'remarkable');
+    await page.unrouteAll();
 
     await page.goto(`${baseURL}/logs`);
     await page.locator('#runtime-log-search').click();
