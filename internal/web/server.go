@@ -229,6 +229,7 @@ func New(
 	secureCookies bool,
 ) (*Server, error) {
 	runtimeContext, runtimeCancel := context.WithCancel(context.Background())
+	logger = quietAbandoned(logger)
 	server := &Server{
 		logger: logger, stats: stats, config: configuration, zones: zones, database: database,
 		queryLog: queryLog, queries: queries, reload: reload,
