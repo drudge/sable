@@ -202,6 +202,11 @@ func Build(input Input) []Device {
 	for _, activity := range input.Activity.Clients {
 		address := activity.Client
 		mac, fromAddress, identified := given.hardware(address)
+		// A self-assigned address no hardware address claims is a moment
+		// before DHCP answered, not a device of its own.
+		if !identified && SelfAssigned(address) {
+			continue
+		}
 		key := "ip:" + address
 		if identified {
 			key = "mac:" + mac

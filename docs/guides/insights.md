@@ -33,7 +33,7 @@ Insights reports:
 
 ## Devices
 
-The **Devices** tab lists every device that sent queries in the range. Sable keeps a device's addresses together through the names you give it, UniFi, and the server's neighbor table, so a laptop's IPv4 and changing IPv6 addresses count as one device.
+The **Devices** tab lists every device that sent queries in the range. Sable keeps a device's addresses together through the names you give it, UniFi, and the server's neighbor table, so a laptop's IPv4 and changing IPv6 addresses count as one device. An address a device gave itself because DHCP hadn't answered yet, such as `169.254.203.47`, is counted with its device when Sable can tie it to a hardware address, and otherwise left out: it's a few seconds of a computer waking up, not a new device. Its lookups stay in the query log.
 
 The machine Sable runs on is marked **This server**, and the rest of its cluster **Sable node**. What Sable looks up for itself on a timer, such as its dynamic DNS updates, UniFi sync, and block list downloads, never counts as a check-in.
 
