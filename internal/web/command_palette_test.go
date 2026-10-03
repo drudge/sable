@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/drudge/sable/internal/auth"
@@ -119,5 +120,38 @@ func TestCommandPaletteClusterQuickActionFollowsLocalState(t *testing.T) {
 	readOnly := server.commandPaletteEntities(request, snapshot, view)
 	if hasCommand(readOnly, "command-action-configure-node") || hasCommand(readOnly, "command-action-add-replica") || hasCommand(readOnly, "command-action-initialize-cluster") {
 		t.Fatalf("read-only cluster commands = %+v", readOnly)
+	}
+}
+
+// refTestZones offers the manager's copy-free read, which turns on the
+// palette cache.
+type refTestZones struct {
+	snapshot zone.Snapshot
+}
+
+func (zones *refTestZones) Current() zone.Snapshot    { return zones.snapshot }
+func (zones *refTestZones) CurrentRef() zone.Snapshot { return zones.snapshot }
+
+func TestCommandPaletteZonesRebuildOnlyForANewRevision(t *testing.T) {
+	t.Parallel()
+	zones := &refTestZones{snapshot: zone.Snapshot{Revision: 1, Zones: []zone.Zone{{ID: "b", Name: "b.test", Type: "primary"}, {ID: "a", Name: "a.test", Type: "primary"}}}}
+	server := &Server{zones: zones}
+	names := func() []string {
+		var labels []string
+		for _, entry := range server.commandZoneEntries() {
+			labels = append(labels, entry.commands[0].Label)
+		}
+		return labels
+	}
+	if got := names(); !slices.Equal(got, []string{"a.test", "b.test"}) {
+		t.Fatalf("palette zones = %v", got)
+	}
+	zones.snapshot.Zones = append(zones.snapshot.Zones, zone.Zone{ID: "c", Name: "c.test", Type: "primary"})
+	if got := names(); len(got) != 2 {
+		t.Fatalf("palette rebuilt without a new revision: %v", got)
+	}
+	zones.snapshot.Revision = 2
+	if got := names(); !slices.Equal(got, []string{"a.test", "b.test", "c.test"}) {
+		t.Fatalf("palette after a new revision = %v", got)
 	}
 }

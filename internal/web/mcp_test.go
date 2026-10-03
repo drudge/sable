@@ -699,3 +699,24 @@ func TestMCPClientName(t *testing.T) {
 func addMCPTools(configuration *editableTestConfiguration, groups ...string) {
 	configuration.snapshot.Config.MCP.Tools = append(configuration.snapshot.Config.MCP.Tools, groups...)
 }
+
+func TestMCPUseIsCountedInMemoryAndSavedOnFlush(t *testing.T) {
+	t.Parallel()
+	server, _ := newMCPTestServer(t)
+	queries := server.queries.(*mcpTestQueries)
+	for range 3 {
+		if _, failure := callMCPToolForTest(t, server, "sable_pat_reader", "list_zones", map[string]any{}); failure != "" {
+			t.Fatalf("list_zones failed: %s", failure)
+		}
+	}
+	if use := server.lastMCPUse(t.Context()); use.Tool != "list_zones" || use.Username != "reader" || use.CallsSince(time.Time{}) != 3 {
+		t.Fatalf("last use = %+v, want three list_zones calls by reader", use)
+	}
+	if saved, _ := queries.LoadMCPUse(t.Context()); !saved.At.IsZero() {
+		t.Fatalf("a tool call waited on a save: %+v", saved)
+	}
+	server.flushMCPUse(t.Context())
+	if saved, _ := queries.LoadMCPUse(t.Context()); saved.Tool != "list_zones" || saved.CallsSince(time.Time{}) != 3 {
+		t.Fatalf("saved use = %+v, want the three calls", saved)
+	}
+}

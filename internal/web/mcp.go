@@ -204,39 +204,71 @@ type mcpUseStore interface {
 }
 
 // recordMCPUse notes who last called a tool, with what, so the card can show
-// an assistant is really connected. A failure to save never fails the call.
+// an assistant is really connected. The count lives in memory and
+// flushMCPUse saves it with the statistics, so a call never waits on the
+// database.
 func (server *Server) recordMCPUse(request *http.Request, tool string) {
-	uses, ok := server.queries.(mcpUseStore)
-	if !ok {
+	if _, ok := server.queries.(mcpUseStore); !ok {
 		return
 	}
 	username := ""
 	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok {
 		username = principal.Username
 	}
-	// Calls are counted by reading, adding one, and saving, so concurrent
-	// calls take turns rather than overwrite each other's count.
 	server.mcpUseMu.Lock()
 	defer server.mcpUseMu.Unlock()
-	use, err := uses.LoadMCPUse(request.Context())
-	if err != nil {
-		server.logger.Warn("load MCP use", "error", err)
-	}
-	use.RecordCall(time.Now(), username, mcpClientName(request.UserAgent()), tool)
-	if err := uses.SaveMCPUse(request.Context(), use); err != nil {
-		server.logger.Warn("record MCP use", "error", err)
-	}
+	server.loadMCPUseLocked(request.Context())
+	server.mcpUse.RecordCall(time.Now(), username, mcpClientName(request.UserAgent()), tool)
+	server.mcpUseDirty = true
 }
 
-func (server *Server) lastMCPUse(ctx context.Context) store.MCPUse {
+// loadMCPUseLocked reads the saved use once, so counting carries on from
+// where the last run stopped. The caller holds mcpUseMu.
+func (server *Server) loadMCPUseLocked(ctx context.Context) {
+	if server.mcpUseLoaded {
+		return
+	}
 	uses, ok := server.queries.(mcpUseStore)
 	if !ok {
-		return store.MCPUse{}
+		return
 	}
 	use, err := uses.LoadMCPUse(ctx)
 	if err != nil {
 		server.logger.Warn("load MCP use", "error", err)
 	}
+	server.mcpUse, server.mcpUseLoaded = use, true
+}
+
+// flushMCPUse saves calls counted since the last flush. A failed save is
+// kept for the next one.
+func (server *Server) flushMCPUse(ctx context.Context) {
+	uses, ok := server.queries.(mcpUseStore)
+	if !ok {
+		return
+	}
+	server.mcpUseMu.Lock()
+	if !server.mcpUseDirty {
+		server.mcpUseMu.Unlock()
+		return
+	}
+	use := server.mcpUse
+	use.Calls = slices.Clone(use.Calls)
+	server.mcpUseDirty = false
+	server.mcpUseMu.Unlock()
+	if err := uses.SaveMCPUse(ctx, use); err != nil {
+		server.logger.Warn("record MCP use", "error", err)
+		server.mcpUseMu.Lock()
+		server.mcpUseDirty = true
+		server.mcpUseMu.Unlock()
+	}
+}
+
+func (server *Server) lastMCPUse(ctx context.Context) store.MCPUse {
+	server.mcpUseMu.Lock()
+	defer server.mcpUseMu.Unlock()
+	server.loadMCPUseLocked(ctx)
+	use := server.mcpUse
+	use.Calls = slices.Clone(use.Calls)
 	return use
 }
 

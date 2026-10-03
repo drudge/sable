@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -232,7 +233,19 @@ type statsHistory struct {
 	retention     time.Duration
 	lifetime      lifetimeCounters
 	lifetimeDirty bool
+	// storeReads keeps persisted buckets briefly, so every open dashboard
+	// polling the same window shares one store read.
+	storeReads shortCache[statsReadKey, []store.QueryStatsBucket]
 }
+
+type statsReadKey struct {
+	start, end int64
+	width      time.Duration
+}
+
+// dashboardReadCacheTTL is shorter than the dashboard's ten-second poll, so each
+// poll still sees fresh rows while tabs polling together share a read.
+const dashboardReadCacheTTL = 5 * time.Second
 
 type chartPoint struct {
 	at            time.Time
@@ -348,7 +361,10 @@ func (history *statsHistory) flush(ctx context.Context) error {
 	history.lifetimeDirty = false
 	history.mu.Unlock()
 
-	if err := backing.RecordQueryStats(ctx, buckets, totals.storeTotals()); err != nil {
+	err := backing.RecordQueryStats(ctx, buckets, totals.storeTotals())
+	// The flushed buckets left pending, so a cached read would now miss them.
+	history.storeReads.clear()
+	if err != nil {
 		history.mu.Lock()
 		for _, bucket := range buckets {
 			key := bucket.Start.Unix()
@@ -371,7 +387,9 @@ func (history *statsHistory) prune(ctx context.Context, now time.Time) error {
 	if backing == nil {
 		return nil
 	}
-	return backing.PruneQueryStats(ctx, now.Add(-retention))
+	err := backing.PruneQueryStats(ctx, now.Add(-retention))
+	history.storeReads.clear()
+	return err
 }
 
 // totals reports the cumulative counters the stat cards display: everything
@@ -559,7 +577,13 @@ func (history *statsHistory) readBuckets(ctx context.Context, start, end time.Ti
 	var buckets []store.QueryStatsBucket
 	var err error
 	if backing != nil {
-		buckets, err = backing.QueryStats(ctx, start, end, width)
+		key := statsReadKey{start: start.Unix(), end: end.Unix(), width: width}
+		buckets, err = history.storeReads.get(key, time.Now(), dashboardReadCacheTTL, func() ([]store.QueryStatsBucket, error) {
+			read, err := backing.QueryStats(ctx, start, end, width)
+			// Clipped, so appending the pending buckets below copies rather
+			// than writing into the shared slice.
+			return slices.Clip(read), err
+		})
 	}
 	history.mu.RLock()
 	source := history.pending
@@ -646,6 +670,7 @@ func (server *Server) flushStatsHistory() {
 	if err := server.history.flush(ctx); err != nil {
 		server.logger.Warn("persist query statistics", "error", err)
 	}
+	server.flushMCPUse(ctx)
 }
 
 func bucketKey(at time.Time) int64 {

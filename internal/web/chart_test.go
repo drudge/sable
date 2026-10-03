@@ -26,6 +26,7 @@ type fakeStatsStore struct {
 	writes   int
 	failNext bool
 	prunedAt time.Time
+	reads    int
 }
 
 func newFakeStatsStore() *fakeStatsStore {
@@ -59,6 +60,7 @@ func (fake *fakeStatsStore) RecordQueryStats(_ context.Context, buckets []store.
 func (fake *fakeStatsStore) QueryStats(_ context.Context, start, end time.Time, width time.Duration) ([]store.QueryStatsBucket, error) {
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
+	fake.reads++
 	seconds := int64(width / time.Second)
 	slots := make(map[int64]store.QueryStatsDelta)
 	for key, delta := range fake.buckets {
