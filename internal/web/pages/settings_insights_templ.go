@@ -8,6 +8,8 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 // SettingsInsightsView is the Insights switch at the top of Settings >
 // General, with what Insights holds right now.
 type SettingsInsightsView struct {
@@ -108,7 +110,7 @@ func SettingsInsights(view SettingsInsightsView) templ.Component {
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(view.Data)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings_insights.templ`, Line: 30, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings_insights.templ`, Line: 32, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -178,31 +180,46 @@ func SettingsInsightsDialogs() templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<dialog class=\"custom-server-dialog confirmation-dialog\" id=\"insights-off-dialog\" aria-labelledby=\"insights-off-title\"><div class=\"dialog-header\"><h2 id=\"insights-off-title\">Turn Off Insights?</h2><p>Stop watching the devices on your network</p></div><button class=\"dialog-close\" type=\"button\" data-dialog-close aria-label=\"Close\">")
+		templ_7745c5c3_Var5 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<input type=\"hidden\" name=\"enabled\" value=\"false\"><label class=\"settings-insights-delete\"><input type=\"checkbox\" name=\"delete\" value=\"true\" checked><span>Also delete what Insights has collected</span></label>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = components.ConfirmDialog(components.ConfirmDialogProps{
+			ID:          "insights-off-dialog",
+			TitleID:     "insights-off-title",
+			Title:       "Turn Off Insights?",
+			Description: "Stop watching the devices on your network",
+			Message:     "Sable stops collecting device data and hides Insights. Dashboard names from UniFi and the neighbor table go away.",
+			Action:      "Turn Off",
+			Form:        templ.Attributes{"data-insights-form": true, "hx-post": "/ui/settings/insights", "hx-target": "#settings-insights", "hx-swap": "outerHTML", "hx-disable": "find button"},
+		}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("x").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</button><form data-insights-form hx-post=\"/ui/settings/insights\" hx-target=\"#settings-insights\" hx-swap=\"outerHTML\" hx-disable=\"find button\"><input type=\"hidden\" name=\"enabled\" value=\"false\"><div class=\"isotope-dialog-body\"><p>Sable stops collecting device data and hides Insights. Dashboard names from UniFi and the neighbor table go away.</p><label class=\"settings-insights-delete\"><input type=\"checkbox\" name=\"delete\" value=\"true\" checked><span>Also delete what Insights has collected</span></label></div><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button destructive\" type=\"submit\">Turn Off</button></footer></form></dialog> <dialog class=\"custom-server-dialog confirmation-dialog\" id=\"insights-delete-dialog\" aria-labelledby=\"insights-delete-title\"><div class=\"dialog-header\"><h2 id=\"insights-delete-title\">Delete Insights Data?</h2><p>Forget what Insights has learned</p></div><button class=\"dialog-close\" type=\"button\" data-dialog-close aria-label=\"Close\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = Icon("x").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</button><form data-insights-form hx-post=\"/ui/settings/insights/delete\" hx-target=\"#settings-insights\" hx-swap=\"outerHTML\" hx-disable=\"find button\"><div class=\"isotope-dialog-body\"><p>Sable forgets every device it has seen, the hardware behind each address, and the findings you hid. The query log stays.</p></div><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button destructive\" type=\"submit\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = Icon("trash").Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<span>Delete Data</span></button></footer></form></dialog>")
+		templ_7745c5c3_Err = components.ConfirmDialog(components.ConfirmDialogProps{
+			ID:          "insights-delete-dialog",
+			TitleID:     "insights-delete-title",
+			Title:       "Delete Insights Data?",
+			Description: "Forget what Insights has learned",
+			Message:     "Sable forgets every device it has seen, the hardware behind each address, and the findings you hid. The query log stays.",
+			Action:      "Delete Data",
+			ActionIcon:  "trash",
+			Form:        templ.Attributes{"data-insights-form": true, "hx-post": "/ui/settings/insights/delete", "hx-target": "#settings-insights", "hx-swap": "outerHTML", "hx-disable": "find button"},
+		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -228,9 +245,9 @@ func InsightsOffPage(console DashboardView) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var5 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var5 == nil {
-			templ_7745c5c3_Var5 = templ.NopComponent
+		templ_7745c5c3_Var6 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var6 == nil {
+			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = AppDocument(console, documentTitle("Insights"), "insights", insightsOffDocument(console)).Render(ctx, templ_7745c5c3_Buffer)
@@ -257,12 +274,12 @@ func insightsOffDocument(console DashboardView) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var6 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var6 == nil {
-			templ_7745c5c3_Var6 = templ.NopComponent
+		templ_7745c5c3_Var7 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var7 == nil {
+			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<div class=\"page-stack insights-off-page\"><header class=\"page-heading\"><h1>Insights</h1><p>Understand what's happening on your network</p></header><section class=\"card\"><div class=\"cluster-empty-state\"><span class=\"cluster-empty-icon\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"page-stack insights-off-page\"><header class=\"page-heading\"><h1>Insights</h1><p>Understand what's happening on your network</p></header><section class=\"card\"><div class=\"cluster-empty-state\"><span class=\"cluster-empty-icon\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -270,12 +287,12 @@ func insightsOffDocument(console DashboardView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</span><h3>Insights Is Off</h3><p>Sable is not recording which devices use it, so there is nothing to show.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span><h3>Insights Is Off</h3><p>Sable is not recording which devices use it, so there is nothing to show.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if console.CanSettings {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div class=\"cluster-empty-actions\"><a class=\"button\" href=\"/settings?tab=general#settings-insights\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"cluster-empty-actions\"><a class=\"button\" href=\"/settings?tab=general#settings-insights\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -283,12 +300,12 @@ func insightsOffDocument(console DashboardView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span>Open Settings</span></a></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<span>Open Settings</span></a></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

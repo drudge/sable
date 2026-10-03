@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/auth"
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type AdministrationPageView struct {
@@ -249,7 +250,8 @@ templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
 templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</small></article> }
 
 templ CreateTokenDialog(view AdministrationPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog" id="create-token-dialog" aria-labelledby="create-token-title"><div class="dialog-header"><h2 id="create-token-title">Create API Token</h2><p>Choose an owner, expiration, and groups to define exactly what this token can access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
+	@components.Dialog(components.DialogProps{ID: "create-token-dialog", TitleID: "create-token-title", Title: "Create API Token", Description: "Choose an owner, expiration, and groups to define exactly what this token can access", Class: "isotope-form-dialog"}) {
+		<form hx-post="/ui/api-tokens" hx-target="#api-token-result" hx-swap="innerHTML"><div class="isotope-dialog-body"><div class="token-creation-fields" data-token-fields><label><span>Name</span><input name="name" maxlength="100" placeholder="automation" autocomplete="off" required/></label>
 		<label><span>Expiration</span><select name="expiration" data-styled-select required>
 			<option value="default" selected>Default ({ tokenLifetimeLabel(view.DefaultTokenTTL) })</option>
 			<option value="1d">1 day</option>
@@ -274,27 +276,39 @@ templ CreateTokenDialog(view AdministrationPageView) {
 		for _, role := range tokenRoles(view) {
 			<label data-token-group-row hidden?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }><input type="checkbox" name="groups" value={ role.Name } data-token-group-users={ tokenRoleUserIDs(view, role.Name) } disabled?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }/><span><strong>{ role.Name }</strong><small>{ apiGrantSummary(role) }</small></span></label>
 		}
-	</div></fieldset><p class="field-help">Only groups assigned to the owner are shown. Removing the owner from a group immediately removes that token access.</p></div><div class="api-token-result" id="api-token-result">The token secret will be shown once.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form></dialog>
+	</div></fieldset><p class="field-help">Only groups assigned to the owner are shown. Removing the owner from a group immediately removes that token access.</p></div><div class="api-token-result" id="api-token-result">The token secret will be shown once.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form>
+	}
 }
 
 templ CreateUserDialog(roles []auth.Role, readOnly bool) {
-	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id="create-user-dialog" data-dialog-tabs aria-labelledby="create-user-title">
-		<div class="dialog-header"><h2 id="create-user-title">Add User</h2><p>Create a user or API-only identity</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "create-user-dialog", TitleID: "create-user-title", Title: "Add User", Description: "Create a user or API-only identity", Class: "isotope-form-dialog user-edit-dialog", Attrs: templ.Attributes{"data-dialog-tabs": true}}) {
 		<div class="dialog-tab-list" role="tablist" aria-label="New user settings"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Group Membership</button></div>
 		<form class="user-dialog-content" hx-post="/ui/administration/users" hx-target="#administration-content" hx-swap="outerHTML" data-create-user-form>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="info"><div class="field-grid two"><label class="field-control"><span>Display Name</span><input name="display_name" maxlength="128" autocomplete="name"/></label><label class="field-control"><span>Username</span><input name="username" minlength="3" maxlength="64" pattern="[a-z0-9._-]+" autocomplete="off" aria-describedby="create-user-username-help create-user-username-error" required data-user-username/><small id="create-user-username-help">3–64 lowercase letters, numbers, dots, underscores, or hyphens.</small><small class="field-error" id="create-user-username-error" data-username-error hidden></small></label></div><label class="field-control"><span>Email</span><input type="email" name="email" maxlength="254" placeholder="name@example.com" autocomplete="email"/></label><div class="field-grid two" data-web-access-passwords hidden><label class="field-control"><span>Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" aria-describedby="create-user-password-help create-user-password-error" disabled data-user-password/></label><label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" disabled data-user-password-confirm/></label><p class="field-help" id="create-user-password-help">A password of at least 12 characters is required because the selected groups grant Web UI access.</p><p class="field-error field-grid-message" id="create-user-password-error" data-password-error hidden></p></div></section>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="groups" hidden><div class="form-section-heading"><h3>Group Membership</h3><p>Choose at least one group. Groups determine Web UI and API permissions.</p></div><fieldset class="group-membership-fieldset" data-group-fieldset aria-describedby="create-user-group-status create-user-group-error"><legend class="sr-only">Member of groups</legend>@RoleChecks(roles, nil)</fieldset><div class="group-access-status" id="create-user-group-status" data-group-access-status aria-live="polite"><strong>Select at least one group</strong><span>Password requirements depend on the selected group permissions.</span></div><p class="field-error" id="create-user-group-error" data-group-error hidden>Select at least one group before adding the user.</p></section>
 			<footer class="dialog-footer user-dialog-footer"><div></div><div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ readOnly }>Add User</button></div></footer>
 		</form>
-	</dialog>
+	}
 }
 
 templ CreateGroupDialog(view AdministrationPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id="create-group-dialog" aria-labelledby="create-group-title"><div class="dialog-header"><h2 id="create-group-title">Add Group</h2><p>Create a group with separate Web UI and API permissions</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button></footer></form></dialog>
+	@components.Dialog(components.DialogProps{ID: "create-group-dialog", TitleID: "create-group-title", Title: "Add Group", Description: "Create a group with separate Web UI and API permissions", Class: "isotope-form-dialog group-edit-dialog"}) {
+		<form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button>
+			}
+		</form>
+	}
 }
 
 templ EditGroupDialog(view AdministrationPageView, role auth.Role) {
-	<dialog class="custom-server-dialog isotope-form-dialog group-edit-dialog" id={ adminGroupDialogID(role.ID) } aria-labelledby={ adminGroupDialogID(role.ID) + "-title" }><div class="dialog-header"><h2 id={ adminGroupDialogID(role.ID) + "-title" }>Edit Group</h2><p>{ role.Name } permissions and zone access</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button></footer></form></dialog>
+	@components.Dialog(components.DialogProps{ID: adminGroupDialogID(role.ID), Title: "Edit Group", Description: role.Name + " permissions and zone access", Class: "isotope-form-dialog group-edit-dialog"}) {
+		<form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button>
+			}
+		</form>
+	}
 }
 
 templ GroupGrantFields(view AdministrationPageView, role *auth.Role) {
@@ -317,9 +331,7 @@ templ SurfaceGrantFields(view AdministrationPageView, role *auth.Role, surface a
 }
 
 templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
-	<dialog class="custom-server-dialog isotope-form-dialog user-edit-dialog" id={ adminUserDialogID(user.ID) } aria-labelledby={ adminUserDialogID(user.ID) + "-title" } data-dialog-tabs>
-		<div class="dialog-header"><h2 id={ adminUserDialogID(user.ID) + "-title" }>Edit User</h2><p>Update user account details</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: adminUserDialogID(user.ID), Title: "Edit User", Description: "Update user account details", Class: "isotope-form-dialog user-edit-dialog", Attrs: templ.Attributes{"data-dialog-tabs": true}}) {
 		<div class="dialog-tab-list four" role="tablist" aria-label="User settings">
 			<button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="info">User Info</button>
 			<button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="groups">Groups</button>
@@ -367,7 +379,7 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 			</div>
 			<div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" form={ adminUserProfileFormID(user.ID) } data-dialog-save="info" disabled?={ view.Console.ControlPlaneReadOnly }>Save User Info</button><button class="button" type="submit" form={ adminUserGroupsFormID(user.ID) } data-dialog-save="groups" disabled?={ view.Console.ControlPlaneReadOnly } hidden>Save Groups</button></div>
 		</footer>
-	</dialog>
+	}
 }
 
 templ UserTokensPanel(view AdministrationPageView, user auth.ManagedUser) {

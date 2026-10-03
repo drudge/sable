@@ -2,6 +2,8 @@ package pages
 
 import "strings"
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 // InsightSettingsView is Insights settings: what Insights does with each kind
 // of finding, and whether its alerts go anywhere.
 type InsightSettingsView struct {
@@ -110,11 +112,9 @@ templ InsightSettingsButton() {
 // InsightSettingsDialog holds Insights settings. Saving swaps the form in
 // place, so the dialog stays open on the result.
 templ InsightSettingsDialog(view InsightSettingsView) {
-	<dialog class="custom-server-dialog isotope-form-dialog insight-settings-dialog" id="insight-settings-dialog" aria-labelledby="insight-settings-title">
-		<div class="dialog-header"><h2 id="insight-settings-title">Insights Settings</h2><p>Choose what Insights looks for and what it alerts you about</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "insight-settings-dialog", TitleID: "insight-settings-title", Title: "Insights Settings", Description: "Choose what Insights looks for and what it alerts you about", Class: "isotope-form-dialog insight-settings-dialog"}) {
 		@InsightSettings(view)
-	</dialog>
+	}
 }
 
 // InsightSettings is the settings form. Save is its only submit button, so

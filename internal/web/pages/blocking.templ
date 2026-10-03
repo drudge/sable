@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type BlockingPageView struct {
@@ -220,8 +221,7 @@ templ BlockingTab(tab tabOption, active string) { <button type="button" role="ta
 templ BlockingGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
 
 templ AddBlockListDialog(existing []BlockListSourceView) {
-	<dialog class="custom-server-dialog blocking-dialog catalog-dialog" id="add-block-list-dialog" aria-labelledby="add-block-list-title">
-		<div class="dialog-header"><h2 id="add-block-list-title">Add Block List</h2><p>Choose from popular block lists or enter a custom URL</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog"}) {
 		<div class="catalog-tabs" role="tablist" aria-label="Block list categories">
 			for _, category := range []string{"popular", "ads", "malware", "privacy", "social", "custom"} {
 				<button type="button" role="tab" id={ "catalog-tab-" + category } class={ ifThen(category == "popular", "active", "") } aria-selected={ fmt.Sprint(category == "popular") } aria-controls={ "catalog-panel-" + category } tabindex={ ifThen(category == "popular", "0", "-1") } data-catalog-tab={ category }>{ strings.ToUpper(category[:1]) + category[1:] }</button>
@@ -245,7 +245,7 @@ templ AddBlockListDialog(existing []BlockListSourceView) {
 				<div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div>
 			</div>
 		</div>
-	</dialog>
+	}
 }
 
 templ BlockListAddLabel() {
@@ -263,9 +263,23 @@ templ CatalogRow(item BlockListCatalogItem, added bool) {
 	</article>
 }
 
-templ DomainDialog(id, title, endpoint, action, description string) { <dialog class="custom-server-dialog blocking-dialog" id={ id } aria-labelledby={ id + "-title" }><div class="dialog-header"><h2 id={ id + "-title" }>{ title }</h2><p>{ description }</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button><form class="blocking-dialog-form" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Domain</span><input name="domain" placeholder="telemetry.example" autocomplete="off" required/></label><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">{ action }</button></footer></form></dialog> }
+templ DomainDialog(id, title, endpoint, action, description string) {
+	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: description, Class: "blocking-dialog"}) {
+		<form class="blocking-dialog-form" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Domain</span><input name="domain" placeholder="telemetry.example" autocomplete="off" required/></label>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">{ action }</button>
+			}
+		</form>
+	}
+}
 
-templ FlushDomainDialog(id, title, endpoint string, count int) { <dialog class="custom-server-dialog blocking-dialog" id={ id } aria-labelledby={ id + "-title" }><div class="dialog-header"><h2 id={ id + "-title" }>{ title }</h2><p>This removes all { formatNumber(uint64(count)) } custom entries. Block-list subscriptions are not affected.</p></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="button" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML">Clear Domains</button></footer></dialog> }
+templ FlushDomainDialog(id, title, endpoint string, count int) {
+	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: "This removes all " + formatNumber(uint64(count)) + " custom entries. Block-list subscriptions are not affected.", Class: "blocking-dialog", NoClose: true}) {
+		@components.DialogFooter("Cancel") {
+			<button class="button destructive" type="button" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML">Clear Domains</button>
+		}
+	}
+}
 
 func blockListAdded(existing []BlockListSourceView, url string) bool { for _, list := range existing { if list.URL == url { return true } }; return false }
 func blockListHealthDescription(degraded int) string { if degraded == 0 { return "Enabled block list sources" }; return fmt.Sprintf("%d %s failing to update", degraded, ifThen(degraded == 1, "source", "sources")) }

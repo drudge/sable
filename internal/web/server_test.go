@@ -1600,7 +1600,7 @@ func TestAdministrationPageRendersIsotopeAdministrationControls(t *testing.T) {
 		`aria-label="Web UI permission selection"`, `aria-label="API permission selection"`,
 		`data-permission-select="all"`, `data-permission-select="none"`, "Select all", "Select none",
 		`value="API Administrator"`, `data-token-group-row`, `data-token-fields`, `data-token-submit`, `data-token-close`,
-		`id="create-user-dialog" data-dialog-tabs`, "Create a user or API-only identity", `data-web-access-passwords`, `data-role-web="true"`,
+		`id="create-user-dialog" aria-labelledby="create-user-title" data-dialog-tabs`, "Create a user or API-only identity", `data-web-access-passwords`, `data-role-web="true"`,
 		`data-create-user-form`, `pattern="[a-z0-9._-]+"`, `data-username-error`, `data-group-error`, `data-group-access-status`,
 		"Choose at least one group", "Password requirements depend on the selected group permissions",
 		`name="user_id"`, `data-token-owner`, "Owner", `data-token-group-users="1"`,

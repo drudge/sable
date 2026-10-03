@@ -2,6 +2,8 @@ package pages
 
 import "fmt"
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 type CachePageView struct {
 	Console      DashboardView
 	Entries      int
@@ -86,11 +88,7 @@ templ CacheContent(view CachePageView) {
 }
 
 templ CacheBrowserDialog(domains []CacheDomainView) {
-	<dialog class="cache-dialog cache-browser-dialog" id="cache-browser-dialog" aria-labelledby="cache-browser-title">
-		<header class="cache-dialog-header">
-			<div><h2 id="cache-browser-title">@Icon("folder")<span>Cache Browser</span></h2><p>Browse and inspect cached DNS responses by domain</p></div>
-			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		</header>
+	@components.Dialog(components.DialogProps{ID: "cache-browser-dialog", TitleID: "cache-browser-title", Title: "Cache Browser", Description: "Browse and inspect cached DNS responses by domain", Class: "cache-browser-dialog"}) {
 		<div class="cache-browser-body">
 			@SearchField("Search cached domains", "Enter domain name or search...", "", "cache-browser-search", templ.Attributes{"data-cache-search": true})
 			<div class="cache-domain-list">
@@ -128,20 +126,19 @@ templ CacheBrowserDialog(domains []CacheDomainView) {
 				<div class="cache-domain-empty" data-cache-empty hidden>No cached domains match your search.</div>
 			</div>
 		</div>
-		<footer class="cache-dialog-footer"><button class="button outline" type="button" data-dialog-close>Close</button></footer>
-	</dialog>
+	}
 }
 
 templ CacheFlushDialog(entries int) {
-	<dialog class="cache-dialog cache-flush-dialog" id="cache-flush-dialog" aria-labelledby="cache-flush-title">
-		<div class="cache-flush-content">
-			<h2 id="cache-flush-title">Clear DNS Cache?</h2>
-			<p>This will remove all { formatNumber(uint64(entries)) } cached DNS responses from the server.</p>
-			<div><p>After clearing the cache:</p><ul><li>All DNS queries will require fresh lookups</li><li>Response times will temporarily increase</li><li>The cache will automatically rebuild over time</li></ul></div>
-			<strong>This action cannot be undone.</strong>
-		</div>
-		<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="button" hx-post="/ui/cache/flush" hx-target="#cache-content" hx-swap="outerHTML">Clear Cache</button></footer>
-	</dialog>
+	@components.ConfirmDialog(components.ConfirmDialogProps{
+		ID:          "cache-flush-dialog",
+		Title:       "Clear DNS Cache?",
+		Description: "This will remove all " + formatNumber(uint64(entries)) + " cached DNS responses from the server.",
+		Action:      "Clear Cache",
+		Form:        templ.Attributes{"hx-post": "/ui/cache/flush", "hx-target": "#cache-content", "hx-swap": "outerHTML"},
+	}) {
+		<div class="cache-flush-notes"><p>After clearing the cache:</p><ul><li>All DNS queries will require fresh lookups</li><li>Response times will temporarily increase</li><li>The cache will automatically rebuild over time</li></ul><strong>This action cannot be undone.</strong></div>
+	}
 }
 
 func formatNumber(value uint64) string {

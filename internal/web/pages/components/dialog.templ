@@ -1,0 +1,115 @@
+package components
+
+// DialogProps describes a native <dialog> with the console's header and close
+// button. Its children follow the header: usually a form holding an
+// .isotope-dialog-body and a DialogFooter.
+type DialogProps struct {
+	ID string
+	// TitleID names the heading for aria-labelledby. It defaults to ID + "-title".
+	TitleID     string
+	Title       string
+	Description string
+	// DescriptionContent replaces Description when the line needs markup, such
+	// as a zone name in <code>.
+	DescriptionContent templ.Component
+	// Class adds classes after custom-server-dialog.
+	Class string
+	Attrs templ.Attributes
+	// CloseHref makes the close X a link, for dialogs that own a page address.
+	CloseHref string
+	// NoClose leaves out the close X, for short confirmations closed from the footer.
+	NoClose bool
+}
+
+func (p DialogProps) titleID() string {
+	if p.TitleID != "" {
+		return p.TitleID
+	}
+	return p.ID + "-title"
+}
+
+templ Dialog(p DialogProps) {
+	<dialog class={ "custom-server-dialog", p.Class } id={ p.ID } aria-labelledby={ p.titleID() } { p.Attrs... }>
+		if p.Title != "" {
+			@DialogHeader(p)
+		}
+		{ children... }
+	</dialog>
+}
+
+// DialogHeader draws a dialog's title, description, and close X. Dialog draws
+// it for you; a form that swaps in whole, header and all, draws its own and
+// leaves Dialog's Title empty.
+templ DialogHeader(p DialogProps) {
+	<div class="dialog-header">
+		<h2 id={ p.titleID() }>{ p.Title }</h2>
+		if p.DescriptionContent != nil {
+			<p>
+				@p.DescriptionContent
+			</p>
+		} else if p.Description != "" {
+			<p>{ p.Description }</p>
+		}
+	</div>
+	if p.CloseHref != "" {
+		<a class="dialog-close" href={ templ.SafeURL(p.CloseHref) } aria-label="Close">
+			@Icon("x")
+		</a>
+	} else if !p.NoClose {
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">
+			@Icon("x")
+		</button>
+	}
+}
+
+// DialogFooter holds a dialog's actions, with the main one last. cancel labels
+// a button that closes the dialog; leave it empty for a footer without one.
+templ DialogFooter(cancel string) {
+	<footer class="dialog-footer">
+		if cancel != "" {
+			<button class="button outline" type="button" data-dialog-close>{ cancel }</button>
+		}
+		{ children... }
+	</footer>
+}
+
+// ConfirmDialogProps describes a dialog that asks before one action.
+type ConfirmDialogProps struct {
+	ID          string
+	TitleID     string
+	Title       string
+	Description string
+	// Message explains what the action does, in the dialog body.
+	Message string
+	// Action labels the confirm button, and ActionIcon gives it an icon.
+	Action     string
+	ActionIcon string
+	// Safe draws the confirm button as a primary action instead of a destructive one.
+	Safe bool
+	// Form carries the request the confirm button sends, such as hx-post and hx-target.
+	Form templ.Attributes
+}
+
+// ConfirmDialog asks before an action, with Cancel and a confirm button. Its
+// children go in the body after Message, for options and hidden inputs.
+templ ConfirmDialog(p ConfirmDialogProps) {
+	@Dialog(DialogProps{ID: p.ID, TitleID: p.TitleID, Title: p.Title, Description: p.Description, Class: "confirmation-dialog"}) {
+		<form { p.Form... }>
+			<div class="isotope-dialog-body">
+				if p.Message != "" {
+					<p>{ p.Message }</p>
+				}
+				{ children... }
+			</div>
+			@DialogFooter("Cancel") {
+				<button class={ "button", templ.KV("destructive", !p.Safe) } type="submit">
+					if p.ActionIcon != "" {
+						@Icon(p.ActionIcon)<span>{ p.Action }</span>
+					} else {
+						{ p.Action }
+					}
+				</button>
+			}
+		</form>
+	}
+}

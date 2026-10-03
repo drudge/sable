@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/drudge/sable/internal/web/pages/components"
 	"github.com/miekg/dns"
 )
 
@@ -737,8 +738,7 @@ templ ZoneDetailView(zone ZoneView) {
 }
 
 templ ZoneHistoryDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog zone-history-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<header class="zone-history-header"><div><span>Change Center</span><h2 id={ id + "-title" }>{ zone.Name }</h2><p>Review durable zone snapshots and restore an earlier state as a new revision.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close change history">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{ID: id, Title: "Change Center", DescriptionContent: zoneHistoryLead(zone.Name), Class: "zone-history-dialog"}) {
 		<div class="zone-history-list" id={ id + "-list" }>
 			if zone.HistoryLazy {
 				<div class="zone-history-empty"><span class="zone-history-loading">Loading history…</span></div>
@@ -746,7 +746,7 @@ templ ZoneHistoryDialog(zone ZoneView, id string) {
 				@ZoneHistoryEntries(zone, id)
 			}
 		</div>
-	</dialog>
+	}
 }
 
 // ZoneHistoryEntries is the body of a zone's history dialog. The zone list
@@ -767,6 +767,10 @@ templ ZoneHistoryEntries(zone ZoneView, id string) {
 			<div class="zone-history-diff" id={ zoneHistoryRevisionID(id, revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
 		</details>
 	}
+}
+
+templ zoneHistoryLead(name string) {
+	Revisions of <code>{ name }</code>
 }
 
 func zoneHasHistory(zone ZoneView) bool {
@@ -899,8 +903,7 @@ templ TSIGKeySelect(keys []string, selected string) {
 }
 
 templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog" id="create-zone-dialog" aria-labelledby="create-zone-title">
-		<div class="dialog-header"><h2 id="create-zone-title">Create Zone</h2><p>Add a new DNS zone to your server.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "create-zone-dialog", TitleID: "create-zone-title", Title: "Create Zone", Description: "Add a new DNS zone to your server.", Class: "isotope-zone-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
 			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
 			<label><span>Zone Type</span><select name="type" data-zone-create-type data-styled-select>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
@@ -924,14 +927,15 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 				<input type="hidden" name="dnssec_validation_present" value="1" disabled/>
 				<label class="zone-dynamic-toggle"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked disabled/><span></span></span></label>
 			</section>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Create Zone</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Create Zone</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ AddZoneRecordDialog(zone ZoneView) {
-	<dialog class="custom-server-dialog isotope-record-dialog" id="add-zone-record-dialog" aria-labelledby="add-zone-record-title">
-		<header class="dialog-header isotope-record-dialog-header"><h2 id="add-zone-record-title">Add DNS Record</h2><p>Add a new DNS record to { zone.Name }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{ID: "add-zone-record-dialog", TitleID: "add-zone-record-title", Title: "Add DNS Record", Description: "Add a new DNS record to " + zone.Name, Class: "isotope-record-dialog"}) {
 		<form class="isotope-record-form" hx-post="/ui/zones/records/add" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<div class="isotope-record-dialog-body">
@@ -944,9 +948,11 @@ templ AddZoneRecordDialog(zone ZoneView) {
                 }
 				@RecordAdvancedOptions("", zone.DefaultTTL, 0, "", false)
 			</div>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Add Record</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Add Record</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ RecordTypePicker() {
@@ -974,8 +980,13 @@ templ RecordTypeOptions(includeAll bool) {
 }
 
 templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
-	<dialog class="custom-server-dialog isotope-record-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-url={ zoneRecordEditPath(zone, record) } data-dialog-base-url={ "/zones/" + url.PathEscape(zone.Name) }>
-		<header class="dialog-header isotope-record-dialog-header"><h2 id={ id + "-title" }>{ zoneRecordDialogTitle(zone, record) }</h2><p>{ zoneRecordDialogSubtitle(zone, record) }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{
+		ID:          id,
+		Title:       zoneRecordDialogTitle(zone, record),
+		Description: zoneRecordDialogSubtitle(zone, record),
+		Class:       "isotope-record-dialog",
+		Attrs:       templ.Attributes{"data-dialog-url": zoneRecordEditPath(zone, record), "data-dialog-base-url": "/zones/" + url.PathEscape(zone.Name)},
+	}) {
 		<form class="isotope-record-form" hx-post="/ui/zones/records/update" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/><input type="hidden" name="name" value={ record.Name }/><input type="hidden" name="type" value={ record.Type }/><input type="hidden" name="value" value={ record.Value }/><input type="hidden" name="ttl" value={ fmt.Sprint(record.TTL) }/>
 			<fieldset class="isotope-record-fieldset" disabled?={ zoneRecordReadOnly(zone, record) }>
@@ -1006,7 +1017,7 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 				</footer>
 			}
 		</form>
-	</dialog>
+	}
 }
 
 templ RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string, hideComments bool) {
@@ -1088,8 +1099,7 @@ templ ZoneDNSSECDialog(zone ZoneView, id string) {
 }
 
 templ ZoneValidationDNSSECDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog zone-dnssec-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<div class="dialog-header"><h2 id={ id + "-title" }>DNSSEC</h2><p>Validate the answers <code>{ zone.Name }</code> receives from its upstream servers.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: id, Title: "DNSSEC", DescriptionContent: zoneDialogLead("Validate the answers ", zone.Name, " receives from its upstream servers."), Class: "isotope-zone-dialog zone-dnssec-dialog"}) {
 		<form class="blocking-dialog-form zone-dnssec-form" hx-post="/ui/zones/dnssec" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<input type="hidden" name="dnssec_validation_present" value="1"/>
@@ -1098,14 +1108,15 @@ templ ZoneValidationDNSSECDialog(zone ZoneView, id string) {
 				<span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked?={ !zone.DNSSECValidationDisabled }/><span></span></span>
 			</label>
 			<div class="zone-dnssec-note">Sable answers this zone from its upstream servers rather than signing it, so there are no keys to manage here.</div>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save DNSSEC</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Save DNSSEC</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog zone-dnssec-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<div class="dialog-header"><h2 id={ id + "-title" }>DNSSEC</h2><p>Sign <code>{ zone.Name }</code> and publish authenticated denial of existence.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: id, Title: "DNSSEC", DescriptionContent: zoneDialogLead("Sign ", zone.Name, " and publish authenticated denial of existence."), Class: "isotope-zone-dialog zone-dnssec-dialog"}) {
 		<form class="blocking-dialog-form zone-dnssec-form" hx-post="/ui/zones/dnssec" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<label class="zone-dynamic-toggle">
@@ -1158,14 +1169,15 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 			} else {
 				<div class="zone-dnssec-note">Separate KSK and ZSK material will be generated when you save. Publish the KSK DS at the parent only after confirming the signed zone is serving correctly.</div>
 			}
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save DNSSEC</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Save DNSSEC</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ ZoneSettingsDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog zone-settings-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-tabs>
-		<div class="dialog-header"><h2 id={ id + "-title" }>Zone Settings</h2><p>Configure serving and transfer policy for <code>{ zone.Name }</code>.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: id, Title: "Zone Settings", DescriptionContent: zoneDialogLead("Configure serving and transfer policy for ", zone.Name, "."), Class: "isotope-zone-dialog zone-settings-dialog", Attrs: templ.Attributes{"data-dialog-tabs": true}}) {
 		<div class="dialog-tab-list zone-settings-tabs" role="tablist" aria-label="Zone settings sections"><button class="dialog-tab active" type="button" role="tab" aria-selected="true" data-dialog-tab="general">General</button><button class="dialog-tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-dialog-tab="transfers">Transfers &amp; Updates</button></div>
 		<form class="blocking-dialog-form zone-settings-form" hx-post="/ui/zones/settings" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
@@ -1248,27 +1260,29 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 					</section>
 				}
 			</section>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save Settings</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Save Settings</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ CloneZoneDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<div class="dialog-header"><h2 id={ id + "-title" }>Clone Zone</h2><p>Copy all records and settings from <code>{ zone.Name }</code>.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: id, Title: "Clone Zone", DescriptionContent: zoneDialogLead("Copy all records and settings from ", zone.Name, "."), Class: "isotope-zone-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/zones/clone" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<label><span>New Zone Name</span><input class="mono-input" name="name" placeholder="clone.example.com" autocomplete="off" required/></label>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Clone Zone</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Clone Zone</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ DeleteZoneDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<div class="dialog-header"><h2 id={ id + "-title" }>Delete Zone?</h2><p>Are you sure you want to delete “{ zone.Name }”? This will permanently delete all records in this zone. This action cannot be undone.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: id, Title: "Delete Zone?", Description: "Are you sure you want to delete “" + zone.Name + "”? This will permanently delete all records in this zone. This action cannot be undone.", Class: "isotope-zone-dialog"}) {
 		<form hx-post="/ui/zones/delete" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit">Delete Zone</button></footer></form>
-	</dialog>
+	}
 }
 
 templ ZoneImportSource(id string, placeholder string) {
@@ -1300,56 +1314,32 @@ templ ZoneImportSource(id string, placeholder string) {
 	</div>
 }
 
-templ ImportZoneDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog isotope-zone-import-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<div class="dialog-header">
-			<h2 id={ id + "-title" }>Import Zone File</h2>
-			<p>Paste or upload records to import into <code>{ zone.Name }</code>.</p>
-		</div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
-			<input type="hidden" name="zone" value={ zone.Name }/>
-			@ZoneImportSource(id, "$ORIGIN " + zone.Name + ".\n@  3600  IN  A  192.0.2.1")
-			<div class="zone-import-options">
-				<label class="zone-import-option">
-					<input type="checkbox" name="overwrite" value="true" checked/>
-					<span><strong>Overwrite existing record sets</strong><small>Replace records with the same name and type.</small></span>
-				</label>
-				<label class="zone-import-option">
-					<input type="checkbox" name="overwrite_soa_serial" value="true"/>
-					<span><strong>Overwrite SOA serial</strong><small>Use the serial from the imported zone file.</small></span>
-				</label>
-				<label class="zone-import-option danger">
-					<input type="checkbox" name="overwrite_zone" value="true"/>
-					<span><strong>Overwrite entire zone</strong><small>Delete every existing record before importing. The imported file must contain a valid SOA and NS record.</small></span>
-				</label>
-			</div>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Records</button></footer>
-		</form>
-	</dialog>
-}
-
 templ ImportNewZoneDialog() {
-	<dialog class="custom-server-dialog isotope-zone-import-dialog" id="import-new-zone-dialog" aria-labelledby="import-new-zone-title">
-		<div class="dialog-header">
-			<h2 id="import-new-zone-title">Import Zone</h2>
-			<p>Create a primary zone from a BIND or Technitium zone file.</p>
-		</div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "import-new-zone-dialog", TitleID: "import-new-zone-title", Title: "Import Zone", Description: "Create a primary zone from a BIND or Technitium zone file.", Class: "isotope-zone-import-dialog"}) {
 		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import-new" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
 			@ZoneImportSource("import-new-zone", "$ORIGIN example.com.\n@  3600  IN  SOA  ns1.example.com. hostmaster.example.com. 1 3600 600 1209600 300")
 			<label><span>Zone name <small>Optional</small></span><input class="mono-input" name="zone" placeholder="example.com" autocomplete="off" data-zone-import-name aria-describedby="import-new-zone-help"/></label>
 			<p class="zone-import-help" id="import-new-zone-help" data-zone-name-help aria-live="polite">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 
+// zoneDialogLead sets a zone name in code inside a dialog's description.
+templ zoneDialogLead(before, name, after string) {
+	{ before }<code>{ name }</code>{ after }
+}
+
+// zoneConversionLead names the zone a conversion makes writable.
+templ zoneConversionLead(name string) {
+	Make Sable the writable source for <strong>{ name }</strong>.
+}
+
 templ ConvertPrimaryDialog(zone ZoneView, id string) {
- <dialog class="custom-server-dialog isotope-zone-dialog zone-conversion-dialog" id={ id } aria-labelledby={ id + "-title" }>
-  <div class="dialog-header"><h2 id={ id + "-title" }>{ ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary Zone") }</h2><p>Make Sable the writable source for <strong>{ zone.Name }</strong>.</p></div>
-  <button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+ @components.Dialog(components.DialogProps{ID: id, Title: ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary Zone"), DescriptionContent: zoneConversionLead(zone.Name), Class: "isotope-zone-dialog zone-conversion-dialog"}) {
   <form class="blocking-dialog-form zone-conversion-form" hx-post="/ui/zones/convert-primary" hx-target="#zones-content" hx-swap="outerHTML">
    <input type="hidden" name="zone" value={ zone.Name }/>
    <input type="hidden" name="confirmation" value={ zone.ConversionFingerprint }/>
@@ -1393,7 +1383,7 @@ templ ConvertPrimaryDialog(zone ZoneView, id string) {
  }
  </footer>
   </form>
- </dialog>
+ }
 }
 
 // Shared by conversion and catalog import blockers.
