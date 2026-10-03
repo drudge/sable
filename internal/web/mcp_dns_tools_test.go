@@ -2,7 +2,6 @@ package web
 
 import (
 	"net"
-	"slices"
 	"strings"
 	"testing"
 
@@ -94,10 +93,6 @@ func TestMCPDomainRules(t *testing.T) {
 	t.Parallel()
 	server, configuration := newMCPTestServer(t)
 	const token = "sable_pat_blocking"
-	lists := func() (blocked, allowed []string) {
-		policy := configuration.snapshot.Config.Blocking
-		return policy.Domains, policy.AllowedDomains
-	}
 	change := func(tool, domain string) map[string]any {
 		t.Helper()
 		result, failure := callMCPToolForTest(t, server, token, tool, map[string]any{"domain": domain})
@@ -114,22 +109,13 @@ func TestMCPDomainRules(t *testing.T) {
 	if result := change("allow_domain", "shop.example"); result["changed"] != false || configuration.snapshot.Revision != revision {
 		t.Fatalf("repeated allow = %v, revision %d -> %d", result, revision, configuration.snapshot.Revision)
 	}
-	// Blocking an allowed domain must drop the allow entry, or the block would
-	// do nothing.
+	// The lists' rules are tested on the policy service; this checks the
+	// tools reach it.
 	if result := change("block_domain", "shop.example"); result["changed"] != true || !strings.Contains(result["message"].(string), "allow list") {
 		t.Fatalf("block = %v", result)
 	}
-	if blocked, allowed := lists(); !slices.Contains(blocked, "shop.example") || slices.Contains(allowed, "shop.example") {
-		t.Fatalf("after block: blocked=%v allowed=%v", blocked, allowed)
-	}
 	if result := change("remove_domain_rule", "shop.example"); result["changed"] != true {
 		t.Fatalf("remove = %v", result)
-	}
-	if blocked, allowed := lists(); slices.Contains(blocked, "shop.example") || slices.Contains(allowed, "shop.example") {
-		t.Fatalf("after remove: blocked=%v allowed=%v", blocked, allowed)
-	}
-	if result := change("remove_domain_rule", "shop.example"); result["changed"] != false {
-		t.Fatalf("second remove = %v", result)
 	}
 
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_reader", "block_domain", map[string]any{"domain": "x.example"}); !strings.Contains(failure, "blocking.write") {
