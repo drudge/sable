@@ -11,13 +11,11 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/drudge/sable/internal/auth"
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
-	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 const (
@@ -138,37 +136,18 @@ func (server *Server) mcpDeleteZone(request *http.Request, arguments json.RawMes
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	if server.mcpReplica() {
-		return nil, errors.New(replicaWriteMessage)
-	}
+	// The confirmation is checked against the zone the token can see, so a
+	// zone it cannot read still answers as missing.
 	current, err := server.mcpReadableZone(request, input.Zone)
 	if err != nil {
 		return nil, err
 	}
-	if !server.authorizeZoneRequest(request, auth.PermissionZonesDelete, current) {
-		return nil, fmt.Errorf("this token needs zones.delete to delete zone %s", current.Name)
-	}
 	if normalizeZoneName(input.Confirm) != current.Name {
 		return nil, fmt.Errorf("confirm must repeat the zone name %s exactly; a deleted zone cannot be restored from the console", current.Name)
 	}
-	editor, ok := server.zones.(zoneEditor)
-	if !ok {
-		return nil, errors.New("this configuration source is read-only")
-	}
-	err = editor.UpdateZones(request.Context(), func(zones *[]zonemodel.Zone) error {
-		index := slices.IndexFunc(*zones, func(zone zonemodel.Zone) bool { return zone.Name == current.Name })
-		// The zone ID pins the delete to the zone that was checked.
-		if index < 0 || (*zones)[index].ID != current.ID {
-			return fmt.Errorf("zone %s was not found", current.Name)
-		}
-		*zones = slices.Delete(*zones, index, index+1)
-		return nil
-	})
-	server.logMCPZoneOperation(request, "zone.delete", current.Name, err)
-	if err != nil {
+	if _, err := server.zoneService().DeleteZone(request.Context(), requestActor(request, "mcp"), current.Name); err != nil {
 		return nil, err
 	}
-	server.auditMCPZoneMutation(request, "zone.delete", current.Name)
 	return map[string]any{
 		"zone": current.Name, "deleted": true,
 		"message": "Zone deleted. It cannot be restored from the console; a backup can bring it back.",

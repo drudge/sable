@@ -24,7 +24,7 @@ Sable also supports zero-address and custom-address responses. Choose these in b
 
 ## 3. Add a narrow exception
 
-When a needed service breaks, identify the exact blocked host in the query log. Use the query explanation's allow action or add it under **Allowed**. Allowed domains override matching list and custom blocking rules.
+When a needed service breaks, identify the exact blocked host in the query log. Use the query explanation's allow action or add it under **Allowed**. Allowed domains override matching list and custom blocking rules. A domain is on one of your own lists at a time: allowing a blocked domain takes it off **Blocked**, and blocking an allowed one takes it off **Allowed**. Importing a file works the same way.
 
 ![Allowed-domain overrides in the DNS Blocking page](../assets/guide-screenshots/blocking-allowed.webp "Use an allowed-domain entry for an intentional exception, rather than disabling the entire policy.")
 
