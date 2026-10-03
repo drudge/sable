@@ -211,3 +211,31 @@ func TestStaleAnswerHoldsAdmissionUntilRefreshFinishes(t *testing.T) {
 	close(hold)
 	waitForAdmission(t, handler, 0)
 }
+
+func BenchmarkAdmissionAcquire(b *testing.B) {
+	var admission resolutionAdmission
+	b.ReportAllocs()
+	for b.Loop() {
+		release, admitted := admission.acquire("192.0.2.44", defaultMaxConcurrent, defaultMaxConcurrentPerClient)
+		if !admitted {
+			b.Fatal("not admitted")
+		}
+		release()
+	}
+}
+
+func TestCanonicalClient(t *testing.T) {
+	t.Parallel()
+	for client, want := range map[string]string{
+		"192.0.2.1":        "192.0.2.1",
+		"::ffff:192.0.2.1": "192.0.2.1",
+		"2001:DB8::1":      "2001:db8::1",
+		"fe80::1%eth0":     "fe80::1",
+		"":                 "",
+		"not-an-address":   "not-an-address",
+	} {
+		if got := canonicalClient(client); got != want {
+			t.Errorf("canonicalClient(%q) = %q, want %q", client, got, want)
+		}
+	}
+}

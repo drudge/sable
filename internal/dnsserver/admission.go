@@ -23,9 +23,7 @@ type resolutionAdmission struct {
 }
 
 func (admission *resolutionAdmission) acquire(client string, totalLimit, clientLimit int) (func(), bool) {
-	if address, err := netip.ParseAddr(client); err == nil {
-		client = address.Unmap().WithZone("").String()
-	}
+	client = canonicalClient(client)
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
 	if admission.active >= totalLimit {
@@ -56,4 +54,20 @@ func (admission *resolutionAdmission) snapshot() (active, clients int, rejectedG
 	admission.mu.Lock()
 	defer admission.mu.Unlock()
 	return admission.active, len(admission.clients), admission.rejectedGlobal, admission.rejectedClient
+}
+
+// canonicalClient writes an address client in one form, so the IPv4 and
+// IPv4-mapped forms of one address share a limit. Clients usually arrive in
+// that form already, and then it's returned without allocating.
+func canonicalClient(client string) string {
+	address, err := netip.ParseAddr(client)
+	if err != nil {
+		return client
+	}
+	var buffer [64]byte
+	canonical := address.Unmap().WithZone("").AppendTo(buffer[:0])
+	if string(canonical) == client {
+		return client
+	}
+	return string(canonical)
 }
