@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -196,6 +197,18 @@ func (server *doqServer) serveConnection(connection *quic.Conn) {
 
 func (server *doqServer) serveStream(connection *quic.Conn, stream *quic.Stream) {
 	defer stream.Close()
+	// Each stream runs on its own goroutine, so a panic here would take down
+	// the whole process rather than one query.
+	defer func() {
+		if value := recover(); value != nil {
+			server.logger.Error(
+				"DoQ stream panicked",
+				"client", connection.RemoteAddr().String(),
+				"panic", fmt.Sprint(value),
+				"stack", string(debug.Stack()),
+			)
+		}
+	}()
 	_ = stream.SetDeadline(time.Now().Add(doqStreamTimeout))
 
 	wire, err := readDoQMessage(stream)
