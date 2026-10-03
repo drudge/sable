@@ -134,7 +134,9 @@ its master key is stored outside the database with owner-only permissions.
 ## Persistence
 
 `internal/store` presents one storage boundary backed by pure-Go SQLite or
-PostgreSQL through pgx. Schema migrations execute inside the application. Zones,
+PostgreSQL through pgx. Schema migrations execute inside the application as
+numbered steps that each run once; `sable_schema_version` records the steps a
+database has taken, so a start on a current database changes nothing. Zones,
 ordered records, and retained zone revisions live in the selected durable
 backend without leaking SQL into DNS handlers. TOML remains node/bootstrap
 configuration; zone files remain import/export interchange.
