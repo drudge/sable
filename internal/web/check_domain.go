@@ -148,19 +148,20 @@ func (server *Server) checkDomainRule(writer http.ResponseWriter, request *http.
 		return
 	}
 	// The page beneath turns to the list the domain went on.
-	action, change, tab := "blocking.blocked_domain.add", blockDomainRule, "domains"
-	if request.FormValue("action") == "allow" {
-		action, change, tab = "blocking.allowed_domain.add", allowDomainRule, "allowed"
+	allowed := request.FormValue("action") == "allow"
+	tab := "domains"
+	if allowed {
+		tab = "allowed"
 	}
 	domain := request.FormValue("domain")
-	result, err := server.changeDomainRule(request, domain, action, "console", change)
+	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), domain, allowed)
 	query := request.URL.Query()
 	query.Set("domain", domain)
 	request.URL.RawQuery = query.Encode()
 	view := server.checkDomainView(request)
 	status := http.StatusOK
 	if err != nil {
-		view.Error, status = err.Error(), http.StatusUnprocessableEntity
+		view.Error, status = err.Error(), serviceStatus(err)
 	} else {
 		view.Message = result.Message + "."
 	}

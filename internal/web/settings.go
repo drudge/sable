@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/durationfmt"
@@ -624,20 +623,5 @@ func formLines(value string) []string {
 }
 
 func (server *Server) recordControlPlaneAudit(request *http.Request, action, details string) {
-	recorder, ok := server.queries.(interface {
-		RecordAuditEvent(context.Context, auth.AuditEvent) error
-	})
-	if !ok {
-		return
-	}
-	event := auth.AuditEvent{
-		OccurredAt: time.Now(), Action: action, ClientIP: requestClientIP(request),
-		UserAgent: request.UserAgent(), Details: details,
-	}
-	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok && principal.UserID != 0 {
-		event.UserID = &principal.UserID
-	}
-	if err := recorder.RecordAuditEvent(request.Context(), event); err != nil {
-		server.logger.Warn("record control-plane audit event", "action", action, "error", err)
-	}
+	server.audit(request.Context(), requestActor(request, ""), action, details)
 }

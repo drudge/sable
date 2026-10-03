@@ -115,6 +115,20 @@ type mcpTestQueries struct {
 	mu     sync.Mutex
 	use    store.MCPUse
 	filter querylog.Filter
+	audit  []auth.AuditEvent
+}
+
+func (queries *mcpTestQueries) RecordAuditEvent(_ context.Context, event auth.AuditEvent) error {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	queries.audit = append(queries.audit, event)
+	return nil
+}
+
+func (queries *mcpTestQueries) auditEvents() []auth.AuditEvent {
+	queries.mu.Lock()
+	defer queries.mu.Unlock()
+	return append([]auth.AuditEvent(nil), queries.audit...)
 }
 
 func (queries *mcpTestQueries) LoadMCPUse(context.Context) (store.MCPUse, error) {

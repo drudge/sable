@@ -1,18 +1,17 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/auth"
-	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 )
@@ -34,12 +33,6 @@ type mcpAnswer struct {
 	Type  string `json:"type"`
 	TTL   uint32 `json:"ttl"`
 	Value string `json:"value"`
-}
-
-type mcpDomainRuleChange struct {
-	Domain  string `json:"domain"`
-	Changed bool   `json:"changed"`
-	Message string `json:"message"`
 }
 
 var mcpDNSTools = []mcpTool{
@@ -272,73 +265,21 @@ func (server *Server) servingZone(request *http.Request, domain string) string {
 }
 
 func (server *Server) mcpAllowDomain(request *http.Request, arguments json.RawMessage) (any, error) {
-	return server.mcpChangeDomainRule(request, arguments, "blocking.allowed_domain.add", allowDomainRule)
+	return server.mcpChangeDomainRule(request, arguments, server.policyService().Allow)
 }
 
 func (server *Server) mcpBlockDomain(request *http.Request, arguments json.RawMessage) (any, error) {
-	return server.mcpChangeDomainRule(request, arguments, "blocking.blocked_domain.add", blockDomainRule)
-}
-
-// allowDomainRule puts a domain on the allow list and takes it off the
-// block list.
-func allowDomainRule(policy *config.Blocking, domain string) (bool, string) {
-	added := mcpAddPolicyEntry(&policy.AllowedDomains, domain)
-	unblocked := mcpRemovePolicyEntry(&policy.Domains, domain)
-	switch {
-	case added && unblocked:
-		return true, domain + " is now allowed and was taken off the block list"
-	case added:
-		return true, domain + " is now allowed"
-	case unblocked:
-		return true, domain + " was already allowed and was taken off the block list"
-	}
-	return false, domain + " was already allowed"
-}
-
-// blockDomainRule puts a domain on the block list and takes it off the
-// allow list.
-func blockDomainRule(policy *config.Blocking, domain string) (bool, string) {
-	if strings.HasPrefix(domain, "*.") {
-		// Block list entries already cover every name beneath them.
-		domain = strings.TrimPrefix(domain, "*.")
-	}
-	added := mcpAddPolicyEntry(&policy.Domains, domain)
-	disallowed := mcpRemovePolicyEntry(&policy.AllowedDomains, domain)
-	switch {
-	case added && disallowed:
-		return true, domain + " is now blocked and was taken off the allow list"
-	case added:
-		return true, domain + " is now blocked"
-	case disallowed:
-		return true, domain + " was already on the block list and was taken off the allow list"
-	}
-	return false, domain + " was already blocked"
+	return server.mcpChangeDomainRule(request, arguments, server.policyService().Block)
 }
 
 func (server *Server) mcpRemoveDomainRule(request *http.Request, arguments json.RawMessage) (any, error) {
-	return server.mcpChangeDomainRule(request, arguments, "blocking.domain_rule.remove", func(policy *config.Blocking, domain string) (bool, string) {
-		unblocked := mcpRemovePolicyEntry(&policy.Domains, domain)
-		disallowed := mcpRemovePolicyEntry(&policy.AllowedDomains, domain)
-		switch {
-		case unblocked && disallowed:
-			return true, domain + " was taken off the block list and the allow list"
-		case unblocked:
-			return true, domain + " was taken off the block list"
-		case disallowed:
-			return true, domain + " was taken off the allow list"
-		}
-		return false, domain + " is not on the allow list or the block list"
-	})
+	return server.mcpChangeDomainRule(request, arguments, server.policyService().RemoveRule)
 }
 
-// mcpChangeDomainRule edits the allow and block lists through the same
-// validated configuration transaction as the console. The change is worked
-// out against the current lists first, so a repeated call writes nothing.
 func (server *Server) mcpChangeDomainRule(
 	request *http.Request,
 	arguments json.RawMessage,
-	action string,
-	change func(*config.Blocking, string) (bool, string),
+	change func(context.Context, actor, string) (domainRuleChange, error),
 ) (any, error) {
 	var input struct {
 		Domain string `json:"domain"`
@@ -346,67 +287,7 @@ func (server *Server) mcpChangeDomainRule(
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	if server.mcpReplica() {
-		return nil, errors.New(replicaWriteMessage)
-	}
-	return server.changeDomainRule(request, input.Domain, action, "mcp", change)
-}
-
-// changeDomainRule makes one change to the allow and block lists, for MCP or
-// the console, which via names. The caller has checked the request may.
-func (server *Server) changeDomainRule(
-	request *http.Request,
-	raw string,
-	action string,
-	via string,
-	change func(*config.Blocking, string) (bool, string),
-) (mcpDomainRuleChange, error) {
-	domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(raw), "."))
-	if err != nil {
-		return mcpDomainRuleChange{}, fmt.Errorf("domain is invalid: %w", err)
-	}
-	editor, ok := server.config.(blockingEditor)
-	if !ok {
-		return mcpDomainRuleChange{}, errors.New("this configuration source is read-only")
-	}
-	preview := server.config.Current().Config.Blocking
-	preview.Domains = slices.Clone(preview.Domains)
-	preview.AllowedDomains = slices.Clone(preview.AllowedDomains)
-	changed, message := change(&preview, domain)
-	if changed {
-		err = editor.UpdateBlocking(request.Context(), func(policy *config.Blocking) error {
-			changed, message = change(policy, domain)
-			return nil
-		})
-	}
-	attributes := []any{"operation", action, "domain", domain, "client", requestClientIP(request), "via", via}
-	if err != nil {
-		server.logger.Warn("blocking operation failed", append(attributes, "error", err)...)
-		return mcpDomainRuleChange{}, err
-	}
-	if changed {
-		server.logger.Info("blocking operation completed", attributes...)
-		server.recordControlPlaneAudit(request, action, message+" via="+via)
-	}
-	return mcpDomainRuleChange{Domain: domain, Changed: changed, Message: message}, nil
-}
-
-func mcpAddPolicyEntry(entries *[]string, domain string) bool {
-	if slices.Contains(*entries, domain) {
-		return false
-	}
-	*entries = append(*entries, domain)
-	slices.Sort(*entries)
-	return true
-}
-
-func mcpRemovePolicyEntry(entries *[]string, domain string) bool {
-	index := slices.Index(*entries, domain)
-	if index < 0 {
-		return false
-	}
-	*entries = slices.Delete(*entries, index, index+1)
-	return true
+	return change(request.Context(), requestActor(request, "mcp"), input.Domain)
 }
 
 func mcpQuestionName(value string) (string, error) {

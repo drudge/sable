@@ -2610,7 +2610,7 @@ func TestBlockingEditorUpdatesTheRenderedPolicy(t *testing.T) {
 		return response
 	}
 	response := postDomain(true)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Blocked domain added") ||
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "telemetry.example is now blocked") ||
 		!strings.Contains(response.Body.String(), "telemetry.example") {
 		t.Fatalf("add blocked domain response = %d %s", response.Code, response.Body.String())
 	}
