@@ -1062,24 +1062,89 @@ func (handler *Handler) ReverseLookup(ctx context.Context, address netip.Addr) (
 	if err != nil {
 		return "", fmt.Errorf("reverse name for %s: %w", address, err)
 	}
-	request := new(dns.Msg)
-	request.SetQuestion(reverseName, dns.TypePTR)
-	request.RecursionDesired = true
-	if response, found := runtime.authoritativeResponse(request); found {
-		return firstPTRTarget(response), nil
-	}
-	if response, found := runtime.localResponse(request); found {
-		return firstPTRTarget(response), nil
-	}
-	if response, found := runtime.cache.Get(request); found {
-		return firstPTRTarget(response), nil
-	}
-	forwarders, _ := runtime.forwardersFor(reverseName)
-	response, err := handler.resolveNetworkContext(ctx, request, runtime, forwarders)
+	response, err := handler.lookupUnrecorded(ctx, runtime, reverseName, dns.TypePTR)
 	if err != nil {
-		return "", fmt.Errorf("resolve %s: %w", reverseName, err)
+		return "", err
 	}
 	return firstPTRTarget(response), nil
+}
+
+// LookupAddresses resolves a host name to its IPv4 and IPv6 addresses through
+// Sable's own resolution path, the same way ReverseLookup does. Sable's own
+// outbound HTTPS uses it so that reaching GitHub and other services does not
+// depend on the host's resolver, which on some networks is a router that drops
+// queries. Like ReverseLookup it bypasses blocking and stays out of the query
+// log and counters.
+func (handler *Handler) LookupAddresses(ctx context.Context, host string) ([]netip.Addr, error) {
+	runtime := handler.runtime.Load()
+	if runtime == nil {
+		return nil, errors.New("DNS runtime is unavailable")
+	}
+	type answer struct {
+		response *dns.Msg
+		err      error
+	}
+	recordTypes := []uint16{dns.TypeA, dns.TypeAAAA}
+	answers := make([]answer, len(recordTypes))
+	var group sync.WaitGroup
+	for index, recordType := range recordTypes {
+		group.Go(func() {
+			response, err := handler.lookupUnrecorded(ctx, runtime, host, recordType)
+			answers[index] = answer{response: response, err: err}
+		})
+	}
+	group.Wait()
+	var addresses []netip.Addr
+	var failures []error
+	for _, answer := range answers {
+		if answer.err != nil {
+			failures = append(failures, answer.err)
+			continue
+		}
+		for _, record := range answer.response.Answer {
+			var address netip.Addr
+			switch record := record.(type) {
+			case *dns.A:
+				address, _ = netip.AddrFromSlice(record.A.To4())
+			case *dns.AAAA:
+				address, _ = netip.AddrFromSlice(record.AAAA)
+			}
+			if address.IsValid() {
+				addresses = append(addresses, address)
+			}
+		}
+	}
+	if len(addresses) > 0 {
+		return addresses, nil
+	}
+	if len(failures) > 0 {
+		return nil, errors.Join(failures...)
+	}
+	return nil, fmt.Errorf("resolve %s: no addresses", host)
+}
+
+// lookupUnrecorded answers one question the way a client query would, from the
+// authoritative zones, then the host overrides, then the cache, and only then
+// the network, without touching blocking, the query log, or the counters.
+func (handler *Handler) lookupUnrecorded(ctx context.Context, runtime *Runtime, name string, recordType uint16) (*dns.Msg, error) {
+	request := new(dns.Msg)
+	request.SetQuestion(dns.Fqdn(name), recordType)
+	request.RecursionDesired = true
+	if response, found := runtime.authoritativeResponse(request); found {
+		return response, nil
+	}
+	if response, found := runtime.localResponse(request); found {
+		return response, nil
+	}
+	if response, found := runtime.cache.Get(request); found {
+		return response, nil
+	}
+	forwarders, _ := runtime.forwardersFor(name)
+	response, err := handler.resolveNetworkContext(ctx, request, runtime, forwarders)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", name, err)
+	}
+	return response, nil
 }
 
 func firstPTRTarget(response *dns.Msg) string {
