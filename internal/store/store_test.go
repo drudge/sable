@@ -249,6 +249,7 @@ func TestOpenSQLiteMigratesTokenExpirationToNullable(t *testing.T) {
 	if _, _, err := service.CreateAPIToken(ctx, administrator, administrator.UserID, "existing", []string{"Administrator"}, auth.APITokenExpiration{}, "192.0.2.1", "test"); err != nil {
 		t.Fatal(err)
 	}
+	forgetSchemaVersion(t, opened)
 	if err := opened.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -901,6 +902,7 @@ func TestOpenSQLiteMigratesSightingAndRollupIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	forgetSchemaVersion(t, opened)
 	opened.Close()
 
 	opened, err = Open(ctx, "sqlite", path)

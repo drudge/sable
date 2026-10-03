@@ -140,6 +140,12 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 - Configuration is decoded strictly, so an unknown key is an error. A build that doesn't know a key can't read a file that has it. Clusters mix versions during upgrades, and configuration replicates from the primary, so plan for older nodes when you add a key. Say what to do in the release notes' "Upgrading" section.
 - Only the primary accepts writes. A new write path must refuse on a replica the way existing ones do (`primaryWriteControl`, and `mcpReplica` for MCP tools).
 
+## Storage
+
+- A schema change is a new step at the end of `migrations` in `internal/store/migrate.go`. Never change, renumber, or remove a step that has shipped.
+- A step runs outside a transaction and is recorded only once it finishes, so it must be safe to run again. Backfill a large table in chunks of IDs, and build an index on a large PostgreSQL table with `createIndexConcurrently`.
+- Test a schema change against both SQLite and PostgreSQL (`SABLE_TEST_POSTGRES_DSN`).
+
 ## Insights
 
 - Findings come from stored data, never from the DNS path. A new area implements `insights.Analyzer` and returns `insights.Finding` values with a typed `Subject` and evidence (reasons and facts). Don't build one-off pages.

@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -315,31 +318,26 @@ SELECT EXISTS (
 	return false, rows.Err()
 }
 
-func (store *Store) seedAuthorization(ctx context.Context) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin authorization seed: %w", err)
-	}
-	defer transaction.Rollback()
-	now := time.Now().UTC()
+// builtInRolesKey holds a fingerprint of the built-in roles' grants as this
+// database last stored them.
+const builtInRolesKey = "built_in_roles"
+
+// builtInRoleGrant is one grant a built-in role holds.
+type builtInRoleGrant struct {
+	Permission, Surface, ResourceType, ResourceID string
+}
+
+type builtInRole struct {
+	Name, Description string
+	Grants            []builtInRoleGrant
+}
+
+// builtInRoles expands the built-in role definitions into the grants they
+// store.
+func builtInRoles() []builtInRole {
+	roles := make([]builtInRole, 0, len(auth.BuiltInRoles))
 	for _, definition := range auth.BuiltInRoles {
-		if _, err := transaction.ExecContext(ctx, `
-INSERT INTO sable_roles (name, description, built_in, created_at)
-VALUES (`+store.placeholders(4)+`)
-ON CONFLICT(name) DO UPDATE SET description = excluded.description, built_in = excluded.built_in`,
-			definition.Name, definition.Description, true, now,
-		); err != nil {
-			return fmt.Errorf("seed role %q: %w", definition.Name, err)
-		}
-		var roleID int64
-		if err := transaction.QueryRowContext(ctx,
-			"SELECT id FROM sable_roles WHERE name = "+store.placeholder(1), definition.Name,
-		).Scan(&roleID); err != nil {
-			return fmt.Errorf("read seeded role %q: %w", definition.Name, err)
-		}
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
-			return fmt.Errorf("reset grants for role %q: %w", definition.Name, err)
-		}
+		role := builtInRole{Name: definition.Name, Description: definition.Description}
 		surfaces := definition.Surfaces
 		if len(surfaces) == 0 {
 			surfaces = []auth.Surface{auth.SurfaceWeb, auth.SurfaceAPI}
@@ -350,19 +348,92 @@ ON CONFLICT(name) DO UPDATE SET description = excluded.description, built_in = e
 				if strings.HasPrefix(permission, "zones.") && permission != auth.PermissionZonesCreate {
 					resourceType, resourceID = auth.ResourceZone, auth.ResourceAll
 				}
-				if _, err := transaction.ExecContext(ctx, `
+				role.Grants = append(role.Grants, builtInRoleGrant{permission, string(surface), resourceType, resourceID})
+			}
+		}
+		roles = append(roles, role)
+	}
+	return roles
+}
+
+// syncBuiltInRoles writes the built-in roles and their grants when they
+// differ from what this build defines, which a start notices from the stored
+// fingerprint without writing anything.
+func (store *Store) syncBuiltInRoles(ctx context.Context) error {
+	roles := builtInRoles()
+	encoded, err := json.Marshal(roles)
+	if err != nil {
+		return fmt.Errorf("encode built-in roles: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	fingerprint := hex.EncodeToString(sum[:])
+	var stored string
+	err = store.database.QueryRowContext(ctx,
+		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), builtInRolesKey,
+	).Scan(&stored)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read built-in roles fingerprint: %w", err)
+	}
+	if stored == fingerprint {
+		return nil
+	}
+	transaction, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin built-in roles: %w", err)
+	}
+	defer transaction.Rollback()
+	now := time.Now().UTC()
+	for _, role := range roles {
+		if _, err := transaction.ExecContext(ctx, `
+INSERT INTO sable_roles (name, description, built_in, created_at)
+VALUES (`+store.placeholders(4)+`)
+ON CONFLICT(name) DO UPDATE SET description = excluded.description, built_in = excluded.built_in`,
+			role.Name, role.Description, true, now,
+		); err != nil {
+			return fmt.Errorf("seed role %q: %w", role.Name, err)
+		}
+		var roleID int64
+		if err := transaction.QueryRowContext(ctx,
+			"SELECT id FROM sable_roles WHERE name = "+store.placeholder(1), role.Name,
+		).Scan(&roleID); err != nil {
+			return fmt.Errorf("read seeded role %q: %w", role.Name, err)
+		}
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
+			return fmt.Errorf("reset grants for role %q: %w", role.Name, err)
+		}
+		for _, grant := range role.Grants {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
-VALUES (`+store.placeholders(5)+`)`, roleID, permission, surface, resourceType, resourceID); err != nil {
-					return fmt.Errorf("seed %s grant %q for role %q: %w", surface, permission, definition.Name, err)
-				}
+VALUES (`+store.placeholders(5)+`)`, roleID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
+				return fmt.Errorf("seed %s grant %q for role %q: %w", grant.Surface, grant.Permission, role.Name, err)
 			}
 		}
 	}
+	if _, err := transaction.ExecContext(ctx,
+		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+		builtInRolesKey, fingerprint,
+	); err != nil {
+		return fmt.Errorf("record built-in roles fingerprint: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit built-in roles: %w", err)
+	}
+	return nil
+}
+
+// backfillUserAuthorization gives accounts from before profiles and roles
+// existed a profile, and makes them administrators, as they were then.
+func (store *Store) backfillUserAuthorization(ctx context.Context) error {
+	transaction, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin authorization backfill: %w", err)
+	}
+	defer transaction.Rollback()
 	if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, disabled, updated_at)
 SELECT id, username, FALSE, `+store.placeholder(1)+` FROM sable_users
 WHERE 1 = 1
-ON CONFLICT(user_id) DO NOTHING`, now); err != nil {
+ON CONFLICT(user_id) DO NOTHING`, time.Now().UTC()); err != nil {
 		return fmt.Errorf("seed user profiles: %w", err)
 	}
 	if _, err := transaction.ExecContext(ctx, `
@@ -376,7 +447,7 @@ ON CONFLICT(user_id, role_id) DO NOTHING`); err != nil {
 		return fmt.Errorf("seed administrator assignments: %w", err)
 	}
 	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit authorization seed: %w", err)
+		return fmt.Errorf("commit authorization backfill: %w", err)
 	}
 	return nil
 }
