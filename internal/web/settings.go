@@ -36,7 +36,6 @@ func (server *Server) settingsPage(writer http.ResponseWriter, request *http.Req
 }
 
 func (server *Server) updateSettings(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderSettingsMutation(writer, request, http.StatusBadRequest, "", "Invalid settings form.")
 		return
@@ -347,7 +346,6 @@ func (server *Server) renewCertificate(writer http.ResponseWriter, request *http
 }
 
 func (server *Server) generateManualCertificate(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderCertificateMutation(writer, request, http.StatusBadRequest, "", "Invalid certificate form.")
 		return
@@ -382,7 +380,6 @@ func (server *Server) generateManualCertificate(writer http.ResponseWriter, requ
 }
 
 func (server *Server) importManualCertificate(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderCertificateMutation(writer, request, http.StatusBadRequest, "", "Invalid certificate form.")
 		return

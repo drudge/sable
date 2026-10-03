@@ -429,7 +429,6 @@ func (server *Server) saveAlertDestination(writer http.ResponseWriter, request *
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertDestinationProblem(writer, request, http.StatusBadRequest, "Sable could not read the form.")
 		return
@@ -535,7 +534,6 @@ func (server *Server) removeAlertDestination(writer http.ResponseWriter, request
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return
@@ -591,7 +589,6 @@ func (server *Server) testAlertDestination(writer http.ResponseWriter, request *
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return
@@ -640,7 +637,6 @@ func (server *Server) previewAlertDestination(writer http.ResponseWriter, reques
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return
@@ -706,7 +702,6 @@ func (server *Server) setAlertsPaused(writer http.ResponseWriter, request *http.
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return
@@ -741,7 +736,6 @@ func (server *Server) saveAlertGroups(writer http.ResponseWriter, request *http.
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return
@@ -830,7 +824,6 @@ func (server *Server) addAlertBrowser(writer http.ResponseWriter, request *http.
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return
@@ -889,7 +882,6 @@ func (server *Server) removeAlertBrowser(writer http.ResponseWriter, request *ht
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAlertsPanel(writer, request, console, http.StatusBadRequest, "", "Sable could not read the form.")
 		return

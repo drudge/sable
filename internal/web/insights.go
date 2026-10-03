@@ -128,10 +128,6 @@ func insightDeviceFilter(request *http.Request) pages.InsightDeviceFilterView {
 	return filter
 }
 
-func insightsRoute(path string) bool {
-	return path == "/insights" || strings.HasPrefix(path, "/insights/") || strings.HasPrefix(path, "/ui/insights/")
-}
-
 // insightsDrawerOpen reports whether the page htmx is working on is the
 // address of a drawer, such as a device's, rather than Insights itself.
 func insightsDrawerOpen(request *http.Request) bool {

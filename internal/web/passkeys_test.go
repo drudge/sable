@@ -321,12 +321,12 @@ func TestPasskeyRequestRejectsCrossOriginAndInsecureHosts(t *testing.T) {
 		t.Fatalf("HTTPS proxy configuration: %s %v", origin, err)
 	}
 	for _, path := range []string{passkeyLoginBegin, passkeyLoginFinish} {
-		if !publicRequest(path) || !replicaLocalWrite(path) {
+		if current := routeAt(t, http.MethodPost, path); !current.public || !current.replicaLocal {
 			t.Fatalf("passkey login unavailable on replicas: %s", path)
 		}
 	}
 	for _, path := range []string{"/ui/profile/passkeys/begin", "/ui/profile/passkeys/finish", "/ui/profile/passkeys/remove", "/ui/profile/password/disable", "/ui/profile/password/enable"} {
-		if publicRequest(path) || replicaLocalWrite(path) {
+		if current := routeAt(t, http.MethodPost, path); current.public || current.replicaLocal {
 			t.Fatalf("unprotected credential mutation: %s", path)
 		}
 	}

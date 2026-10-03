@@ -310,7 +310,6 @@ func (server *Server) nameInsightsDevice(writer http.ResponseWriter, request *ht
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return
@@ -360,7 +359,6 @@ func (server *Server) typeInsightsDevice(writer http.ResponseWriter, request *ht
 		server.authenticationFailure(writer, request, http.StatusForbidden, "")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return

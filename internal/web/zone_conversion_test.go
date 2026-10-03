@@ -173,7 +173,7 @@ func TestPrimaryConversionFinalSynchronization(t *testing.T) {
 
 func TestPrimaryConversionRequiresPrimaryAndZonePermissions(t *testing.T) {
 	for _, path := range []string{"/api/v1/zones/convert-primary", "/ui/zones/convert-primary"} {
-		if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, path) {
+		if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, routeAt(t, http.MethodPost, path)) {
 			t.Fatal("replica permits conversion")
 		}
 	}

@@ -30,7 +30,6 @@ func (server *Server) startClusterUpdate(writer http.ResponseWriter, request *ht
 		http.Error(writer, "Cluster and update permissions are required", http.StatusForbidden)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		http.Error(writer, "Invalid update request", http.StatusBadRequest)
 		return

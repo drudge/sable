@@ -179,9 +179,6 @@ func (server *Server) mcpListBlockLists(request *http.Request, arguments json.Ra
 	if err := decodeMCPArguments(arguments, &struct{}{}); err != nil {
 		return nil, err
 	}
-	if !server.mcpHasPermission(request, auth.PermissionBlockingRead) {
-		return nil, errors.New("this token needs blocking.read to list block lists")
-	}
 	snapshot := server.config.Current().Config.Blocking
 	stats := server.stats.Stats()
 	accepted := make(map[string]int, len(stats.BlockSources))
@@ -321,9 +318,6 @@ func (server *Server) mcpRefreshBlockLists(request *http.Request, arguments json
 // mcpBlockListEditor checks everything a block-list change needs before any
 // download starts.
 func (server *Server) mcpBlockListEditor(request *http.Request) (blockingEditor, error) {
-	if !server.mcpHasPermission(request, auth.PermissionBlockingWrite) {
-		return nil, errors.New("this token needs blocking.write to change block lists")
-	}
 	if server.mcpReplica() {
 		return nil, errors.New(replicaWriteMessage)
 	}
@@ -377,9 +371,6 @@ func (server *Server) mcpListFindings(request *http.Request, arguments json.RawM
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionLogsRead) {
-		return nil, errors.New("this token needs logs.read to read Insights findings")
 	}
 	if !server.insightsEnabled() {
 		return nil, errInsightsOff
@@ -487,9 +478,6 @@ func (server *Server) mcpSearchQueries(request *http.Request, arguments json.Raw
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionLogsRead) {
-		return nil, errors.New("this token needs logs.read to search the query log")
 	}
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {

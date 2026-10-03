@@ -262,7 +262,6 @@ func (server *Server) revokeAPIToken(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) administrationMutation(writer http.ResponseWriter, request *http.Request, success string, mutate func(auth.Principal) error) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderAdministration(writer, request, http.StatusBadRequest, "", "Invalid administration form.")
 		return

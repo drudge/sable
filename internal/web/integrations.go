@@ -198,7 +198,6 @@ func (server *Server) syncUniFiNow(writer http.ResponseWriter, request *http.Req
 }
 
 func (server *Server) setUniFiEnabled(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return
@@ -379,7 +378,6 @@ func (server *Server) runUniFiWizard(writer http.ResponseWriter, request *http.R
 		server.renderIntegrationsMutation(writer, request, http.StatusNotImplemented, "", "The UniFi synchronizer is unavailable.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid setup form.")
 		return
