@@ -427,3 +427,36 @@ func BenchmarkQueryLogInsightsHundredThousandEvents(b *testing.B) {
 		}
 	})
 }
+
+func TestQueryLogInsightsReadsRollupsForAnOpenWindow(t *testing.T) {
+	t.Parallel()
+
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Minute)
+	opened := openQueryLogStore(t, nil)
+	insertRawQueryEvent(t, opened, querylog.Event{
+		OccurredAt: base.Add(time.Minute), ClientIP: "192.0.2.1", Name: "legacy.example.",
+		RecordType: dns.TypeA, Class: dns.ClassINET, ResponseCode: dns.RcodeSuccess, Source: querylog.SourceCache, Protocol: "UDP",
+	})
+	if err := opened.WriteQueryEvents(context.Background(), []querylog.Event{
+		{OccurredAt: base.Add(3 * time.Minute), ClientIP: "192.0.2.3", Name: "first.example.", RecordType: dns.TypeA, Class: dns.ClassINET, ResponseCode: dns.RcodeSuccess, Source: querylog.SourceBlocked, Protocol: "UDP"},
+		{OccurredAt: base.Add(10*time.Minute + 10*time.Second), ClientIP: "192.0.2.4", Name: "rolled.example.", RecordType: dns.TypeA, Class: dns.ClassINET, ResponseCode: dns.RcodeNameError, Source: querylog.SourceUpstream, Protocol: "TCP"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// With its raw row gone, the rolled-up minute can only be counted from
+	// the rollups.
+	if _, err := opened.database.Exec("DELETE FROM sable_query_log WHERE name = 'rolled.example.'"); err != nil {
+		t.Fatal(err)
+	}
+
+	insights, err := opened.QueryLogInsights(context.Background(), time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if insights.Domains["rolled.example"] != 1 || insights.Domains["legacy.example"] != 1 || insights.Domains["first.example"] != 1 {
+		t.Fatalf("all-time domains = %+v, want the legacy row, the boundary row, and the rolled-up row", insights.Domains)
+	}
+	if totalCounts(insights.Clients) != 3 || insights.Blocked["first.example"] != 1 {
+		t.Fatalf("all-time insights = %+v %+v", insights.Clients, insights.Blocked)
+	}
+}
