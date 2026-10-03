@@ -324,7 +324,9 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 				return err
 			}
 		}
-		handler.Activate(candidateRuntime)
+		if err := handler.Activate(candidateRuntime); err != nil {
+			return err
+		}
 		queryRecorder.SetEnabled(candidate.QueryLog.Enabled)
 		if err := switchInsights(reloadContext, database, active.Insights.Enabled, candidate.Insights.Enabled, time.Now()); err != nil {
 			return err

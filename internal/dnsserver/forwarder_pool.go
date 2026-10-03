@@ -324,6 +324,30 @@ func (pool *forwarderPool) take(key string) *dns.Conn {
 	return nil
 }
 
+// reapIdle closes idle connections that have passed their deadline. take only
+// discards expired connections for the endpoint it is asked about, so without
+// this an endpoint that stops being used holds its sockets open indefinitely.
+func (pool *forwarderPool) reapIdle(now time.Time) {
+	var expired []*dns.Conn
+	pool.mu.Lock()
+	for key, connections := range pool.idle {
+		kept := connections[:0]
+		for _, connection := range connections {
+			if now.Before(connection.expiry) {
+				kept = append(kept, connection)
+			} else {
+				expired = append(expired, connection.connection)
+			}
+		}
+		clear(connections[len(kept):])
+		pool.store(key, kept)
+	}
+	pool.mu.Unlock()
+	for _, connection := range expired {
+		_ = connection.Close()
+	}
+}
+
 // put returns a healthy connection to the idle pool, or closes it when the pool
 // for that endpoint is already full.
 func (pool *forwarderPool) put(key string, connection *dns.Conn) {

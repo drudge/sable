@@ -51,12 +51,12 @@ func TestListenerKeysIncludeEveryProtocolAndTLSVersion(t *testing.T) {
 
 func TestDynamicUpdateAcceptFuncAdmitsUpdateMessages(t *testing.T) {
 	header := dns.Header{Bits: uint16(dns.OpcodeUpdate << 11), Qdcount: 1, Ancount: 8, Nscount: 16, Arcount: 1}
-	if got := dynamicUpdateAcceptFunc(header); got != dns.MsgAccept {
-		t.Fatalf("dynamicUpdateAcceptFunc() = %v, want MsgAccept", got)
+	if got := acceptRequestHeader(header); got != dns.MsgAccept {
+		t.Fatalf("acceptRequestHeader() = %v, want MsgAccept", got)
 	}
 	header.Qdcount = 2
-	if got := dynamicUpdateAcceptFunc(header); got != dns.MsgReject {
-		t.Fatalf("dynamicUpdateAcceptFunc() = %v, want MsgReject", got)
+	if got := acceptRequestHeader(header); got != dns.MsgReject {
+		t.Fatalf("acceptRequestHeader() = %v, want MsgReject", got)
 	}
 }
 

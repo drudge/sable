@@ -3,6 +3,7 @@ package dnsserver
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,8 @@ const (
 	// maximumUDPReaders caps the sockets sharing a port. Past one per core the
 	// readers only contend with the goroutines doing the actual resolving.
 	maximumUDPReaders = 16
+	// dnsHeaderLength is the fixed size of a DNS message header.
+	dnsHeaderLength = 12
 )
 
 type ListenerConfig struct {
@@ -114,6 +117,10 @@ type ListenerGroup struct {
 	openListener func(listenerTarget) (*activeListener, error)
 	mu           sync.Mutex
 	listeners    map[string]*activeListener
+	// streamSlots and doqSlots outlive any one listener, so a reload that
+	// replaces listeners keeps counting the connections the old ones hold.
+	streamSlots connectionSlots
+	doqSlots    connectionSlots
 }
 
 type protocolHandler struct {
@@ -134,9 +141,11 @@ func (writer protocolResponseWriter) QueryProtocol() string { return writer.prot
 
 func NewListenerGroup(handler dns.Handler, logger *slog.Logger) *ListenerGroup {
 	group := &ListenerGroup{
-		handler:   handler,
-		logger:    logger,
-		listeners: make(map[string]*activeListener),
+		handler:     handler,
+		logger:      logger,
+		listeners:   make(map[string]*activeListener),
+		streamSlots: newConnectionSlots(maximumStreamConnections),
+		doqSlots:    newConnectionSlots(maximumDoQConnections),
 	}
 	group.openListener = group.open
 	return group
@@ -268,7 +277,7 @@ func (group *ListenerGroup) openUDP(target listenerTarget) (*activeListener, err
 			ReadTimeout:       dnsReadTimeout,
 			WriteTimeout:      dnsWriteTimeout,
 			TsigProvider:      tsigProvider(group.handler),
-			MsgAcceptFunc:     dynamicUpdateAcceptFunc,
+			MsgAcceptFunc:     acceptRequestHeader,
 			NotifyStartedFunc: notifyStarted,
 		})
 	}
@@ -298,6 +307,7 @@ func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, err
 	if err != nil {
 		return nil, fmt.Errorf("listen tcp %s: %w", target.address, err)
 	}
+	listener = limitListener(listener, group.streamSlots)
 	server := &dns.Server{
 		Net:           "tcp",
 		Handler:       group.handler,
@@ -305,7 +315,7 @@ func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, err
 		ReadTimeout:   dnsReadTimeout,
 		WriteTimeout:  dnsWriteTimeout,
 		TsigProvider:  tsigProvider(group.handler),
-		MsgAcceptFunc: dynamicUpdateAcceptFunc,
+		MsgAcceptFunc: acceptRequestHeader,
 	}
 	started := make(chan struct{})
 	server.NotifyStartedFunc = func() { close(started) }
@@ -322,7 +332,7 @@ func (group *ListenerGroup) openDoT(target listenerTarget) (*activeListener, err
 	if err != nil {
 		return nil, fmt.Errorf("listen dot %s: %w", target.address, err)
 	}
-	tlsListener := tls.NewListener(listener, group.tlsConfig(target.minimumTLS, []string{"dot"}))
+	tlsListener := tls.NewListener(limitListener(listener, group.streamSlots), group.tlsConfig(target.minimumTLS, []string{"dot"}))
 	server := &dns.Server{
 		Net:           "tcp-tls",
 		Handler:       protocolHandler{handler: group.handler, protocol: "TLS"},
@@ -330,7 +340,7 @@ func (group *ListenerGroup) openDoT(target listenerTarget) (*activeListener, err
 		ReadTimeout:   dnsReadTimeout,
 		WriteTimeout:  dnsWriteTimeout,
 		TsigProvider:  tsigProvider(group.handler),
-		MsgAcceptFunc: dynamicUpdateAcceptFunc,
+		MsgAcceptFunc: acceptRequestHeader,
 	}
 	started := make(chan struct{})
 	server.NotifyStartedFunc = func() { close(started) }
@@ -347,7 +357,12 @@ func tsigProvider(handler dns.Handler) dns.TsigProvider {
 	return provider
 }
 
-func dynamicUpdateAcceptFunc(header dns.Header) dns.MsgAcceptAction {
+// acceptRequestHeader decides from the header alone whether a request reaches
+// the handler. Every listener uses it: miekg/dns applies it to UDP, TCP, and
+// DoT, and screenRequest applies it to DoH and DoQ. It is miekg/dns's default
+// policy plus dynamic updates, which carry their prerequisites and changes in
+// the answer and authority sections.
+func acceptRequestHeader(header dns.Header) dns.MsgAcceptAction {
 	if header.Bits&0x8000 == 0 && int(header.Bits>>11)&0xf == dns.OpcodeUpdate {
 		if header.Qdcount != 1 || header.Arcount > 2 {
 			return dns.MsgReject
@@ -357,11 +372,50 @@ func dynamicUpdateAcceptFunc(header dns.Header) dns.MsgAcceptAction {
 	return dns.DefaultMsgAcceptFunc(header)
 }
 
+// screenRequest applies acceptRequestHeader to a raw request from a listener
+// that miekg/dns does not run, so DoH and DoQ refuse what UDP, TCP, and DoT
+// refuse. The request may reach the handler only when the action is
+// dns.MsgAccept. For a rejected request it also returns the reply dns.Server
+// would send: FORMERR or NOTIMP with the request's ID and opcode and no
+// question. An ignored request, or one too short to hold a header, gets no
+// reply at all.
+func screenRequest(wire []byte) (dns.MsgAcceptAction, *dns.Msg) {
+	if len(wire) < dnsHeaderLength {
+		return dns.MsgIgnore, nil
+	}
+	action := acceptRequestHeader(dns.Header{
+		Id:      binary.BigEndian.Uint16(wire[0:]),
+		Bits:    binary.BigEndian.Uint16(wire[2:]),
+		Qdcount: binary.BigEndian.Uint16(wire[4:]),
+		Ancount: binary.BigEndian.Uint16(wire[6:]),
+		Nscount: binary.BigEndian.Uint16(wire[8:]),
+		Arcount: binary.BigEndian.Uint16(wire[10:]),
+	})
+	if action != dns.MsgReject && action != dns.MsgRejectNotImplemented {
+		return action, nil
+	}
+	// Only the header is trusted here, so unpack it alone with the section
+	// counts cleared, as dns.Server does before it replies.
+	header := append([]byte(nil), wire[:dnsHeaderLength]...)
+	clear(header[4:])
+	request := new(dns.Msg)
+	if err := request.Unpack(header); err != nil {
+		return dns.MsgIgnore, nil
+	}
+	reply := new(dns.Msg).SetRcodeFormatError(request)
+	if action == dns.MsgRejectNotImplemented {
+		reply.Opcode = request.Opcode
+		reply.Rcode = dns.RcodeNotImplemented
+	}
+	return action, reply
+}
+
 func (group *ListenerGroup) openDoH(target listenerTarget) (*activeListener, error) {
 	listener, err := net.Listen("tcp", target.address)
 	if err != nil {
 		return nil, fmt.Errorf("listen doh %s: %w", target.address, err)
 	}
+	listener = limitListener(listener, group.streamSlots)
 	server := &http.Server{
 		Handler:           NewDoHHandler(group.handler),
 		TLSConfig:         group.tlsConfig(target.minimumTLS, []string{"h2", "http/1.1"}),
@@ -394,6 +448,7 @@ func (group *ListenerGroup) openDoQ(target listenerTarget) (*activeListener, err
 		return nil, fmt.Errorf("listen doq %s: %w", target.address, err)
 	}
 	server := newDoQServer(group.handler, group.logger, transport, listener, packets)
+	server.slots = group.doqSlots
 	return &activeListener{
 		target:     target,
 		quicServer: server,

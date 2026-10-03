@@ -537,7 +537,7 @@ func TestHandlerAcceptsSignedDynamicUpdateAndRefusesUnsignedRequest(t *testing.T
 		t.Fatal(err)
 	}
 	server := &dns.Server{
-		PacketConn: packet, Handler: handler, TsigProvider: handler, MsgAcceptFunc: dynamicUpdateAcceptFunc,
+		PacketConn: packet, Handler: handler, TsigProvider: handler, MsgAcceptFunc: acceptRequestHeader,
 	}
 	started := make(chan struct{})
 	server.NotifyStartedFunc = func() { close(started) }
