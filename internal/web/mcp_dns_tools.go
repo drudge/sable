@@ -129,24 +129,25 @@ var mcpDNSTools = []mcpTool{
 	},
 }
 
-// mcpMayResolve limits lookups to tokens that can already see DNS state.
-// In-process lookups skip the recursion grant a network client would need,
-// so an unrelated token, such as one that only reads metrics, may not use
-// Sable as a resolver.
-func (server *Server) mcpMayResolve(request *http.Request) bool {
-	if !server.securityEnabled {
-		return true
-	}
-	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
-	return hasAnyPermission(principal, []string{auth.PermissionZonesRead, auth.PermissionBlockingRead, auth.PermissionSettingsRead})
-}
-
+// mcpHasPermission reports whether the caller holds a permission outright,
+// not scoped to particular zones.
 func (server *Server) mcpHasPermission(request *http.Request, permission string) bool {
 	if !server.securityEnabled {
 		return true
 	}
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
 	return auth.Authorize(principal, permission, "", "")
+}
+
+// mcpGranted reports whether the caller holds a tool's grant anywhere. A zone
+// grant may cover only some zones, so a zone tool still checks the zone it
+// is asked about.
+func (server *Server) mcpGranted(request *http.Request, permission string) bool {
+	if !server.securityEnabled {
+		return true
+	}
+	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	return auth.HasPermission(principal, permission)
 }
 
 func (server *Server) mcpLookup(request *http.Request, arguments json.RawMessage) (any, error) {
@@ -156,9 +157,6 @@ func (server *Server) mcpLookup(request *http.Request, arguments json.RawMessage
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpMayResolve(request) {
-		return nil, errors.New("this token needs zones.read, blocking.read, or settings.read to look up names")
 	}
 	name, err := mcpQuestionName(input.Name)
 	if err != nil {
@@ -209,9 +207,6 @@ func (server *Server) mcpPurgeCache(request *http.Request, arguments json.RawMes
 		return nil, err
 	}
 	// The console and the API hold cache purges to the same permission.
-	if !server.mcpHasPermission(request, auth.PermissionSettingsWrite) {
-		return nil, errors.New("this token needs settings.write to clear the cache")
-	}
 	name, err := mcpQuestionName(input.Name)
 	if err != nil {
 		return nil, err
@@ -231,9 +226,6 @@ func (server *Server) mcpCheckDomain(request *http.Request, arguments json.RawMe
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionBlockingRead) {
-		return nil, errors.New("this token needs blocking.read to check blocking")
 	}
 	check, err := server.checkDomain(request, input.Domain)
 	if err != nil {
@@ -353,9 +345,6 @@ func (server *Server) mcpChangeDomainRule(
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionBlockingWrite) {
-		return nil, errors.New("this token needs blocking.write to change the allow or block list")
 	}
 	if server.mcpReplica() {
 		return nil, errors.New(replicaWriteMessage)

@@ -129,7 +129,6 @@ func (server *Server) insightFeedbackRequest(writer http.ResponseWriter, request
 		writeFragmentStatus(writer, http.StatusServiceUnavailable)
 		return nil, false
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil || strings.TrimSpace(request.FormValue("id")) == "" {
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return nil, false

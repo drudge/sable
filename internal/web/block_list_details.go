@@ -85,7 +85,6 @@ func (server *Server) blockListFileChanged(list pages.BlockListSourceView) time.
 // the same response.
 func (server *Server) refreshBlockList(writer http.ResponseWriter, request *http.Request) {
 	started := time.Now()
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)

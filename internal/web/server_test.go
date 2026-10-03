@@ -834,26 +834,6 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 	}
 }
 
-func TestRequestBodyTimeoutReservesTheLongWindowForBoundedUploads(t *testing.T) {
-	t.Parallel()
-	for _, path := range []string{
-		"/ui/backup/restore",
-		"/ui/zones/import",
-		"/ui/zones/import-new",
-		"/ui/blocking/domains/import",
-		"/ui/blocking/allowed/import",
-	} {
-		if timeout := requestBodyTimeout(path); timeout != webReadTimeout {
-			t.Errorf("requestBodyTimeout(%q) = %s, want %s", path, timeout, webReadTimeout)
-		}
-	}
-	for _, path := range []string{"/setup", "/login", "/api/v1/cluster/enroll", "/dns-query"} {
-		if timeout := requestBodyTimeout(path); timeout != webRequestBodyTimeout {
-			t.Errorf("requestBodyTimeout(%q) = %s, want %s", path, timeout, webRequestBodyTimeout)
-		}
-	}
-}
-
 func TestSharedHTTPSListenerServesUnauthenticatedDoHOnlyOverTLS(t *testing.T) {
 	t.Parallel()
 
@@ -1038,7 +1018,7 @@ func TestRequiredPermissionCoversControlPlaneRoutes(t *testing.T) {
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(test.method, test.path, nil)
-		if permission := requiredPermission(request); permission != test.permission {
+		if permission := routeFor(request).perm; permission != test.permission {
 			t.Errorf("%s %s permission = %q, want %q", test.method, test.path, permission, test.permission)
 		}
 	}

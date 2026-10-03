@@ -111,7 +111,6 @@ func (server *Server) passkeyRelyingParty(request *http.Request) (*webauthn.WebA
 
 func (server *Server) passkeyRequest(writer http.ResponseWriter, request *http.Request) bool {
 	writer.Header().Set("Cache-Control", "no-store")
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	// A custom header prevents simple cross-site form submissions. Explicit
 	// origin matching also protects login ceremonies before a session exists.
 	if !server.securityEnabled || server.passkeyAuth() == nil || server.setupRequired.Load() || request.Header.Get("X-Sable-Passkey") != "1" || !server.requestOriginAllowed(request) || request.Header.Get("Origin") != strings.TrimSuffix(absoluteURL(request, "/"), "/") {

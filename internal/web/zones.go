@@ -355,7 +355,6 @@ func (server *Server) updateZones(
 	success string,
 	mutate func(*[]zonemodel.Zone) error,
 ) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logZoneOperation(request, *selected, err)
 		server.renderZoneMutation(writer, request, http.StatusBadRequest, *selected, "", "Invalid zone form.")
@@ -387,60 +386,34 @@ func (server *Server) updateZones(
 	server.renderZoneMutation(writer, request, http.StatusOK, *selected, success, "")
 }
 
+// authorizeZoneMutation checks the permissions the route declares for its
+// zone change, against the exact zone the form names. A route that declares
+// none is refused.
 func (server *Server) authorizeZoneMutation(request *http.Request) error {
 	if !server.securityEnabled {
 		return nil
 	}
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
-	permission := map[string]string{
-		"/ui/zones/add":               auth.PermissionZonesCreate,
-		"/ui/zones/import-new":        auth.PermissionZonesCreate,
-		"/ui/zones/delete":            auth.PermissionZonesDelete,
-		"/ui/zones/settings":          auth.PermissionZonesSettings,
-		"/ui/zones/toggle":            auth.PermissionZonesSettings,
-		"/ui/zones/dnssec":            auth.PermissionZonesDNSSEC,
-		"/ui/zones/dnssec/rollover":   auth.PermissionZonesDNSSEC,
-		"/ui/zones/dnssec/confirm-ds": auth.PermissionZonesDNSSEC,
-		"/ui/zones/resync":            auth.PermissionZonesTransfer,
-		"/ui/zones/import":            auth.PermissionZonesImport,
-		"/ui/zones/records/add":       auth.PermissionZonesRecords,
-		"/ui/zones/records/update":    auth.PermissionZonesRecords,
-		"/ui/zones/records/delete":    auth.PermissionZonesRecords,
-		"/ui/zones/rollback":          auth.PermissionZonesRecords,
-	}[request.URL.Path]
-	if request.URL.Path == "/ui/zones/convert-primary" || request.URL.Path == "/api/v1/zones/convert-primary" {
-		if request.FormValue("final_sync") == "true" {
-			if err := server.authorizeExistingZone(principal, auth.PermissionZonesTransfer, request.FormValue("zone")); err != nil {
-				return err
-			}
-		}
-		if err := server.authorizeExistingZone(principal, auth.PermissionZonesRecords, request.FormValue("zone")); err != nil {
-			return err
-		}
-		return server.authorizeExistingZone(principal, auth.PermissionZonesSettings, request.FormValue("zone"))
+	var mutation zoneMutation
+	if current := requestRoute(request); current != nil {
+		mutation = current.zone
 	}
-	if request.URL.Path == "/ui/zones/rollback" {
-		if err := server.authorizeExistingZone(principal, auth.PermissionZonesRecords, request.FormValue("zone")); err != nil {
-			return err
-		}
-		return server.authorizeExistingZone(principal, auth.PermissionZonesSettings, request.FormValue("zone"))
-	}
-	if request.URL.Path == "/ui/zones/clone" {
-		if !auth.Authorize(principal, auth.PermissionZonesCreate, "", "") {
-			return auth.ErrForbidden
-		}
-		return server.authorizeExistingZone(principal, auth.PermissionZonesRead, request.FormValue("zone"))
-	}
-	if permission == auth.PermissionZonesCreate {
-		if auth.Authorize(principal, permission, "", "") {
-			return nil
-		}
+	if !mutation.create && len(mutation.perms) == 0 {
 		return auth.ErrForbidden
 	}
-	if permission == "" {
+	if mutation.create && !auth.Authorize(principal, auth.PermissionZonesCreate, "", "") {
 		return auth.ErrForbidden
 	}
-	return server.authorizeExistingZone(principal, permission, request.FormValue("zone"))
+	permissions := mutation.perms
+	if mutation.action == "zone.convert_primary" && request.FormValue("final_sync") == "true" {
+		permissions = append([]string{auth.PermissionZonesTransfer}, permissions...)
+	}
+	for _, permission := range permissions {
+		if err := server.authorizeExistingZone(principal, permission, request.FormValue("zone")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (server *Server) authorizeExistingZone(principal auth.Principal, permission, name string) error {
@@ -453,7 +426,7 @@ func (server *Server) authorizeExistingZone(principal auth.Principal, permission
 
 func (server *Server) logZoneOperation(request *http.Request, zoneName string, operationErr error) {
 	attributes := []any{
-		"operation", zoneMutationAction(request.URL.Path),
+		"operation", zoneMutationAction(request),
 		"zone", zoneName,
 		"client", requestClientIP(request),
 	}
@@ -465,31 +438,11 @@ func (server *Server) logZoneOperation(request *http.Request, zoneName string, o
 	server.logger.Info("zone operation completed", attributes...)
 }
 
-func zoneMutationAction(path string) string {
-	if path == "/ui/zones/import-catalog" {
-		return "zone.catalog_import"
-	}
-	actions := map[string]string{
-		"/ui/zones/convert-primary":     "zone.convert_primary",
-		"/api/v1/zones/convert-primary": "zone.convert_primary",
-		"/ui/zones/add":                 "zone.create",
-		"/ui/zones/delete":              "zone.delete",
-		"/ui/zones/settings":            "zone.settings",
-		"/ui/zones/toggle":              "zone.toggle",
-		"/ui/zones/clone":               "zone.clone",
-		"/ui/zones/resync":              "zone.resync",
-		"/ui/zones/import":              "zone.import",
-		"/ui/zones/import-new":          "zone.import_new",
-		"/ui/zones/records/add":         "zone.record.create",
-		"/ui/zones/records/update":      "zone.record.update",
-		"/ui/zones/records/delete":      "zone.record.delete",
-		"/ui/zones/dnssec":              "zone.dnssec.settings",
-		"/ui/zones/dnssec/rollover":     "zone.dnssec.rollover",
-		"/ui/zones/dnssec/confirm-ds":   "zone.dnssec.confirm_ds",
-		"/ui/zones/rollback":            "zone.rollback",
-	}
-	if action := actions[path]; action != "" {
-		return action
+// zoneMutationAction names the zone change a request makes, as its route
+// declares it, for the log and the audit trail.
+func zoneMutationAction(request *http.Request) string {
+	if current := requestRoute(request); current != nil && current.zone.action != "" {
+		return current.zone.action
 	}
 	return "zone.update"
 }
@@ -501,7 +454,7 @@ func (server *Server) auditZoneMutation(request *http.Request, zone string) {
 	if !ok {
 		return
 	}
-	action := zoneMutationAction(request.URL.Path)
+	action := zoneMutationAction(request)
 	event := auth.AuditEvent{
 		OccurredAt: time.Now(), Action: action, ClientIP: requestClientIP(request),
 		UserAgent: request.UserAgent(), Details: "zone=" + zone,
@@ -540,7 +493,7 @@ func (server *Server) renderZoneMutation(
 	status int,
 	selected, message, errorMessage string,
 ) {
-	if request.URL.Path == "/api/v1/zones/convert-primary" {
+	if tokenRequest(request.URL.Path) {
 		if errorMessage != "" {
 			writeJSON(writer, status, map[string]string{"error": errorMessage})
 		} else {
@@ -1818,7 +1771,6 @@ func (server *Server) importNewZone(writer http.ResponseWriter, request *http.Re
 }
 
 func readZoneImportText(writer http.ResponseWriter, request *http.Request) (string, error) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumZoneImportBytes+maximumFormBytes)
 	if err := request.ParseMultipartForm(maximumZoneImportBytes); err != nil {
 		return "", errors.New("the zone file is too large or invalid")
 	}

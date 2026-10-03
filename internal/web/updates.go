@@ -48,7 +48,6 @@ func (server *Server) automaticUpdateCheck(writer http.ResponseWriter, request *
 }
 
 func (server *Server) updatePreferences(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		http.Error(writer, "Invalid preferences", http.StatusBadRequest)
 		return
@@ -209,7 +208,6 @@ func (server *Server) updateStatus() update.Status {
 // updatePreReleaseRequested reports whether the operator asked for
 // pre-release builds. A malformed form falls back to stable releases.
 func updatePreReleaseRequested(writer http.ResponseWriter, request *http.Request) bool {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		return false
 	}

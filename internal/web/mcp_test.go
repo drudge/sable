@@ -461,7 +461,7 @@ func TestMCPFollowsZoneGrants(t *testing.T) {
 	}
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_reader", "add_record", map[string]any{
 		"zone": "example.test", "name": "x", "type": "A", "value": "192.0.2.40",
-	}); !strings.Contains(failure, "not change its records") {
+	}); failure != "this token needs zones.records.write to use add_record" {
 		t.Fatalf("reader write failure = %q", failure)
 	}
 	// A zone outside the token's grants looks exactly like a missing one.
