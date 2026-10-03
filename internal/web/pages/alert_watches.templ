@@ -133,11 +133,11 @@ templ alertWatchRow(watch AlertWatchView, canEdit bool) {
 // AlertWatchDialog holds the Add and Edit Watch form. It opens on an empty
 // form; Add Watch, each Edit button, and a Watch link load a fresh one first.
 templ AlertWatchDialog(view AlertsView) {
-	<dialog class="custom-server-dialog isotope-form-dialog alert-destination-dialog alert-watch-dialog" id="alert-watch-dialog" aria-labelledby="alert-watch-title">
+	@components.Dialog(components.DialogProps{ID: "alert-watch-dialog", TitleID: "alert-watch-title", Class: "isotope-form-dialog alert-destination-dialog alert-watch-dialog"}) {
 		<div class="alert-destination-content" id="alert-watch-content">
 			@AlertWatchForm(view.NewWatch)
 		</div>
-	</dialog>
+	}
 	if view.OpenWatch != "" {
 		<span hidden hx-get={ view.OpenWatch } hx-trigger="load" hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" data-alert-watch-open></span>
 	}
@@ -148,11 +148,7 @@ templ AlertWatchDialog(view AlertsView) {
 // alone.
 templ AlertWatchForm(form AlertWatchFormView) {
 	<form class="alert-destination-form alert-watch-form" hx-post="/ui/settings/alerts/watches/save" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-alert-watch-form>
-		<div class="dialog-header">
-			<h2 id="alert-watch-title">{ ifThen(form.ID == "", "Add Watch", "Edit Watch") }</h2>
-			<p>Sable checks for new lookups about once a minute.</p>
-		</div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		@components.DialogHeader(components.DialogProps{TitleID: "alert-watch-title", Title: ifThen(form.ID == "", "Add Watch", "Edit Watch"), Description: "Sable checks for new lookups about once a minute."})
 		if form.ID != "" {
 			<input type="hidden" name="id" value={ form.ID }/>
 		}

@@ -30,27 +30,36 @@ func (p DialogProps) titleID() string {
 
 templ Dialog(p DialogProps) {
 	<dialog class={ "custom-server-dialog", p.Class } id={ p.ID } aria-labelledby={ p.titleID() } { p.Attrs... }>
-		<div class="dialog-header">
-			<h2 id={ p.titleID() }>{ p.Title }</h2>
-			if p.DescriptionContent != nil {
-				<p>
-					@p.DescriptionContent
-				</p>
-			} else if p.Description != "" {
-				<p>{ p.Description }</p>
-			}
-		</div>
-		if p.CloseHref != "" {
-			<a class="dialog-close" href={ templ.SafeURL(p.CloseHref) } aria-label="Close">
-				@Icon("x")
-			</a>
-		} else if !p.NoClose {
-			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">
-				@Icon("x")
-			</button>
+		if p.Title != "" {
+			@DialogHeader(p)
 		}
 		{ children... }
 	</dialog>
+}
+
+// DialogHeader draws a dialog's title, description, and close X. Dialog draws
+// it for you; a form that swaps in whole, header and all, draws its own and
+// leaves Dialog's Title empty.
+templ DialogHeader(p DialogProps) {
+	<div class="dialog-header">
+		<h2 id={ p.titleID() }>{ p.Title }</h2>
+		if p.DescriptionContent != nil {
+			<p>
+				@p.DescriptionContent
+			</p>
+		} else if p.Description != "" {
+			<p>{ p.Description }</p>
+		}
+	</div>
+	if p.CloseHref != "" {
+		<a class="dialog-close" href={ templ.SafeURL(p.CloseHref) } aria-label="Close">
+			@Icon("x")
+		</a>
+	} else if !p.NoClose {
+		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">
+			@Icon("x")
+		</button>
+	}
 }
 
 // DialogFooter holds a dialog's actions, with the main one last. cancel labels

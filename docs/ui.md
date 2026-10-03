@@ -105,6 +105,8 @@ once because htmx can process a newly swapped subtree at any time.
   routed URLs, history state, and deep links without duplicating dialog logic.
   Build dialogs with `components.Dialog`, `components.DialogFooter`, and
   `components.ConfirmDialog` so every header, close button, and footer matches.
+  A form that swaps in whole, header and all, draws its header with
+  `components.DialogHeader`.
 - Local tab strips support arrow-key navigation, update the relevant document
   title, and preserve a meaningful URL when the selected tab is shareable.
 - Dashboard chart range, ranking, and query-log links must describe the same

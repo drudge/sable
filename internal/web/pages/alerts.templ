@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // AlertsState is whether alerts go out, as Settings > Alerts and the Insights
@@ -565,11 +567,11 @@ templ alertBrowsersPanel(view AlertsView) {
 // AlertDestinationDialog holds the Add and Edit Destination form. It opens on
 // an empty form; Add Destination and each Edit button load a fresh one first.
 templ AlertDestinationDialog(form AlertDestinationFormView) {
-	<dialog class="custom-server-dialog isotope-form-dialog alert-destination-dialog" id="alert-destination-dialog" aria-labelledby="alert-destination-title">
+	@components.Dialog(components.DialogProps{ID: "alert-destination-dialog", TitleID: "alert-destination-title", Class: "isotope-form-dialog alert-destination-dialog"}) {
 		<div class="alert-destination-content" id="alert-destination-content">
 			@AlertDestinationForm(form)
 		</div>
-	</dialog>
+	}
 }
 
 // alertFormKind is the format a form sends, with a plain JSON webhook as the
@@ -635,11 +637,7 @@ func alertBrowsersUnavailable(form AlertDestinationFormView) string {
 // what was typed alone.
 templ AlertDestinationForm(form AlertDestinationFormView) {
 	<form class="alert-destination-form" hx-post="/ui/settings/alerts/destinations/save" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-alert-destination-form>
-		<div class="dialog-header">
-			<h2 id="alert-destination-title">{ ifThen(form.ID == "", "Add Destination", "Edit Destination") }</h2>
-			<p>{ ifThen(form.ID == "", "Choose where Sable sends alerts.", "Secrets you leave blank stay as they are.") }</p>
-		</div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		@components.DialogHeader(components.DialogProps{TitleID: "alert-destination-title", Title: ifThen(form.ID == "", "Add Destination", "Edit Destination"), Description: ifThen(form.ID == "", "Choose where Sable sends alerts.", "Secrets you leave blank stay as they are.")})
 		if form.ID != "" {
 			<input type="hidden" name="id" value={ form.ID }/>
 		}
@@ -714,11 +712,11 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 			</details>
 		</div>
 		<div class="alert-preview" id="alert-destination-preview" popover role="dialog" aria-label="Preview of a sample alert" data-alert-preview-popover></div>
-		<div class="dialog-footer">
+		@components.DialogFooter("") {
 			<button class="button outline alert-preview-button" type="button" hx-post="/ui/settings/alerts/destinations/preview" hx-target="#alert-destination-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="alert-destination-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
 			<button class="button outline" type="button" data-dialog-close>Cancel</button>
 			<button class="button" type="submit" data-replica-primary-action>Save</button>
-		</div>
+		}
 	</form>
 }
 

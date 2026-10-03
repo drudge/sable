@@ -735,8 +735,7 @@ templ ZoneDetailView(zone ZoneView) {
 }
 
 templ ZoneHistoryDialog(zone ZoneView, id string) {
-	<dialog class="custom-server-dialog zone-history-dialog" id={ id } aria-labelledby={ id + "-title" }>
-		<header class="zone-history-header"><div><span>Change Center</span><h2 id={ id + "-title" }>{ zone.Name }</h2><p>Review durable zone snapshots and restore an earlier state as a new revision.</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close change history">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{ID: id, Title: "Change Center", DescriptionContent: zoneHistoryLead(zone.Name), Class: "zone-history-dialog"}) {
 		<div class="zone-history-list">
 			if zone.HistoryError != "" {
 				<div class="zone-history-empty">{ zone.HistoryError }</div>
@@ -754,7 +753,11 @@ templ ZoneHistoryDialog(zone ZoneView, id string) {
 				</details>
 			}
 		</div>
-	</dialog>
+	}
+}
+
+templ zoneHistoryLead(name string) {
+	Review durable snapshots of <code>{ name }</code> and restore an earlier state as a new revision.
 }
 
 func zoneHistoryRevisionID(dialogID string, revision uint64) string {
@@ -909,8 +912,7 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 }
 
 templ AddZoneRecordDialog(zone ZoneView) {
-	<dialog class="custom-server-dialog isotope-record-dialog" id="add-zone-record-dialog" aria-labelledby="add-zone-record-title">
-		<header class="dialog-header isotope-record-dialog-header"><h2 id="add-zone-record-title">Add DNS Record</h2><p>Add a new DNS record to { zone.Name }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{ID: "add-zone-record-dialog", TitleID: "add-zone-record-title", Title: "Add DNS Record", Description: "Add a new DNS record to " + zone.Name, Class: "isotope-record-dialog"}) {
 		<form class="isotope-record-form" hx-post="/ui/zones/records/add" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<div class="isotope-record-dialog-body">
@@ -927,7 +929,7 @@ templ AddZoneRecordDialog(zone ZoneView) {
 				<button class="button" type="submit">Add Record</button>
 			}
 		</form>
-	</dialog>
+	}
 }
 
 templ RecordTypePicker() {
@@ -955,8 +957,13 @@ templ RecordTypeOptions(includeAll bool) {
 }
 
 templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
-	<dialog class="custom-server-dialog isotope-record-dialog" id={ id } aria-labelledby={ id + "-title" } data-dialog-url={ zoneRecordEditPath(zone, record) } data-dialog-base-url={ "/zones/" + url.PathEscape(zone.Name) }>
-		<header class="dialog-header isotope-record-dialog-header"><h2 id={ id + "-title" }>{ zoneRecordDialogTitle(zone, record) }</h2><p>{ zoneRecordDialogSubtitle(zone, record) }</p><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button></header>
+	@components.Dialog(components.DialogProps{
+		ID:          id,
+		Title:       zoneRecordDialogTitle(zone, record),
+		Description: zoneRecordDialogSubtitle(zone, record),
+		Class:       "isotope-record-dialog",
+		Attrs:       templ.Attributes{"data-dialog-url": zoneRecordEditPath(zone, record), "data-dialog-base-url": "/zones/" + url.PathEscape(zone.Name)},
+	}) {
 		<form class="isotope-record-form" hx-post="/ui/zones/records/update" hx-target="#zones-content" hx-swap="outerHTML">
 			<input type="hidden" name="zone" value={ zone.Name }/><input type="hidden" name="name" value={ record.Name }/><input type="hidden" name="type" value={ record.Type }/><input type="hidden" name="value" value={ record.Value }/><input type="hidden" name="ttl" value={ fmt.Sprint(record.TTL) }/>
 			<fieldset class="isotope-record-fieldset" disabled?={ zoneRecordReadOnly(zone, record) }>
@@ -987,7 +994,7 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 				</footer>
 			}
 		</form>
-	</dialog>
+	}
 }
 
 templ RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string, hideComments bool) {
