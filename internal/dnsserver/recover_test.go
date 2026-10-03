@@ -95,7 +95,7 @@ func TestInflightPanicReleasesWaiters(t *testing.T) {
 
 	next := make(chan resolution, 1)
 	go func() {
-		result, _ := group.doContext(context.Background(), key, func() resolution {
+		result, _, _ := group.doContext(context.Background(), key, func() resolution {
 			return resolution{response: new(dns.Msg)}
 		})
 		next <- result

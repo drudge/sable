@@ -20,6 +20,7 @@ func (observer *recordingObserver) Enabled() bool { return true }
 func (observer *recordingObserver) Record(event querylog.Event) {
 	observer.mutex.Lock()
 	defer observer.mutex.Unlock()
+	event.ResolveAnswer()
 	observer.collected = append(observer.collected, event)
 }
 

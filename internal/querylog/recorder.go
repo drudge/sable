@@ -177,6 +177,7 @@ func (recorder *Recorder) run() {
 		}
 		select {
 		case event := <-recorder.events:
+			event.ResolveAnswer()
 			batch = append(batch, event)
 			if len(batch) >= recorder.batchSize && recorder.lifetime.Err() == nil {
 				batch = recorder.writeNormal(batch)
@@ -233,6 +234,7 @@ func (recorder *Recorder) drain(ctx context.Context, batch []Event) []Event {
 	for len(batch) < shutdownDrainBatchSize {
 		select {
 		case event := <-recorder.events:
+			event.ResolveAnswer()
 			batch = append(batch, event)
 		default:
 			return batch

@@ -99,6 +99,36 @@ func TestRecorderFlushesBatchAndShutdownRemainder(t *testing.T) {
 	}
 }
 
+type fixedAnswer string
+
+func (answer fixedAnswer) QueryAnswer() string { return string(answer) }
+
+func TestRecorderFormatsAnswerBeforeWriting(t *testing.T) {
+	t.Parallel()
+
+	writer := &memoryWriter{}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 16, BatchSize: 2, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	recorder.Record(Event{Name: "one.example", AnswerSource: fixedAnswer("A 192.0.2.1")})
+	recorder.Record(Event{Name: "two.example", Answer: "A 192.0.2.2"})
+	recorder.Record(Event{Name: "three.example", AnswerSource: fixedAnswer("A 192.0.2.3")})
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	want := []string{"A 192.0.2.1", "A 192.0.2.2", "A 192.0.2.3"}
+	if len(writer.events) != len(want) {
+		t.Fatalf("persisted %d events, want %d", len(writer.events), len(want))
+	}
+	for index, event := range writer.events {
+		if event.Answer != want[index] || event.AnswerSource != nil {
+			t.Fatalf("event %d answer = %q, source = %v; want %q and no source", index, event.Answer, event.AnswerSource, want[index])
+		}
+	}
+}
+
 func TestRecorderDropsInsteadOfBlockingWhenBufferIsFull(t *testing.T) {
 	t.Parallel()
 

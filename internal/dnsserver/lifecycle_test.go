@@ -293,13 +293,18 @@ func TestInflightFollowerCancellationPreservesLeaderResult(t *testing.T) {
 	t.Cleanup(releaseLeader)
 	leaderDone := make(chan resolution, 1)
 	go func() {
-		result, shared := group.doContext(context.Background(), key, func() resolution {
+		result, follower, shared := group.doContext(context.Background(), key, func() resolution {
 			close(started)
 			<-release
 			return resolution{response: new(dns.Msg)}
 		})
-		if shared {
-			t.Errorf("leader shared = true, want false")
+		if follower {
+			t.Errorf("leader follower = true, want false")
+		}
+		// The canceled follower joined before giving up, so the leader
+		// cannot know it stopped reading and must treat its result as shared.
+		if !shared {
+			t.Errorf("leader shared = false after a follower joined, want true")
 		}
 		leaderDone <- result
 	}()
@@ -313,12 +318,12 @@ func TestInflightFollowerCancellationPreservesLeaderResult(t *testing.T) {
 	cancel()
 	followerDone := make(chan struct{}, 1)
 	go func() {
-		follower, shared := group.doContext(ctx, key, func() resolution {
+		follower, waited, shared := group.doContext(ctx, key, func() resolution {
 			t.Error("canceled follower became leader")
 			return resolution{}
 		})
-		if !shared || follower.response != nil {
-			t.Errorf("canceled follower = %+v, shared=%v; want no response and shared", follower, shared)
+		if !waited || !shared || follower.response != nil {
+			t.Errorf("canceled follower = %+v, waited=%v shared=%v; want no response, waited and shared", follower, waited, shared)
 		}
 		followerDone <- struct{}{}
 	}()
@@ -423,4 +428,14 @@ func TestConcurrentStaleRefreshAdmissionAndShutdown(t *testing.T) {
 		}
 	}
 	waitForAdmission(t, handler, 0)
+}
+
+func TestInflightLeaderAloneOwnsItsResult(t *testing.T) {
+	group := newInflightGroup()
+	result, follower, shared := group.doContext(context.Background(), inflightKey{name: "alone.example."}, func() resolution {
+		return resolution{response: new(dns.Msg)}
+	})
+	if result.response == nil || follower || shared {
+		t.Fatalf("lone leader = %+v, follower=%v shared=%v; want its response, unshared", result, follower, shared)
+	}
 }
