@@ -80,6 +80,7 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		{name: "sable_dns_authoritative_answers_total", help: "DNS queries answered by authoritative zones.", metricType: "counter", value: dnsStats.AuthoritativeAnswers},
 		{name: "sable_dns_response_write_failures_total", help: "DNS response write failures.", metricType: "counter", value: dnsStats.Failures},
 		{name: "sable_dns_upstream_errors_total", help: "Queries for which every upstream attempt failed.", metricType: "counter", value: dnsStats.UpstreamErrors},
+		{name: "sable_dns_panics_total", help: "DNS queries whose handling panicked and answered SERVFAIL.", metricType: "counter", value: dnsStats.Panics},
 		{name: "sable_dns_routed_queries_total", help: "Queries using a conditional forwarding route.", metricType: "counter", value: dnsStats.RoutedQueries},
 		{name: "sable_dnssec_secure_total", help: "Recursive responses authenticated as DNSSEC secure.", metricType: "counter", value: dnsStats.DNSSECSecure},
 		{name: "sable_dnssec_insecure_total", help: "Recursive responses proven to be DNSSEC insecure.", metricType: "counter", value: dnsStats.DNSSECInsecure},

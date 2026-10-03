@@ -114,6 +114,9 @@ Watch at least:
 
 - `sable_dns_upstream_errors_total` and
   `sable_dns_response_write_failures_total` for serving failures;
+- `sable_dns_panics_total` for queries that hit a bug and answered SERVFAIL.
+  It should stay at zero; the log line `dns query handler panicked` carries
+  the stack;
 - `sable_dns_response_duration_seconds` for latency by response source,
   protocol, cache result, and response code;
 - `sable_query_log_dropped_total` and
