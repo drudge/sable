@@ -68,6 +68,14 @@ type Runtime struct {
 	dnssec              *dnssecValidator
 	zoneInsecure        []string
 	managedTrustAnchors bool
+	// zoneSource and keySource are the inputs the authoritative data above
+	// was compiled from, kept so a later activation can recompile it against
+	// different forwarding routes or TSIG keys.
+	zoneSource []AuthoritativeZone
+	keySource  []TSIGKey
+	// zoneGeneration counts ActivateZones calls behind this runtime. Zero
+	// means its zones came from Compile and no zone change has landed since.
+	zoneGeneration uint64
 }
 
 type managedZone struct {
@@ -293,7 +301,11 @@ type Handler struct {
 	dnssecSecure         atomic.Uint64
 	dnssecInsecure       atomic.Uint64
 	dnssecBogus          atomic.Uint64
-	trustAnchorManager   *trustanchor.Manager
+	trustAnchorManager   atomic.Pointer[trustanchor.Manager]
+	// activationMu serializes every writer of runtime. Each one rebuilds from
+	// the runtime it finds under the lock, so no writer can store a runtime
+	// built from one that another writer has already replaced.
+	activationMu         sync.Mutex
 	upstreamIndex        atomic.Uint64
 	pausedUntil          atomic.Int64
 	startedAt            time.Time
@@ -728,6 +740,8 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		dnssec:              validator,
 		zoneInsecure:        zoneInsecure,
 		managedTrustAnchors: configuration.DNSSECValidation && configuration.DNSSECTrustAnchorUpdates && len(configuration.DNSSECTrustAnchors) == 0,
+		zoneSource:          configuration.Zones,
+		keySource:           configuration.TSIGKeys,
 	}, nil
 }
 
@@ -761,8 +775,9 @@ func (handler *Handler) StartMaintenance() {
 }
 
 // maintainCache runs the cache upkeep that no client request can do on its own:
-// reaping entries whose fresh and stale windows have both closed, and renewing
-// popular entries before they expire. Refreshing on a client hit only reaches
+// reaping entries whose fresh and stale windows have both closed, closing
+// forwarder sockets that sat idle past their deadline, and renewing popular
+// entries before they expire. Refreshing on a client hit only reaches
 // entries that happen to be queried inside the trigger window, so without this
 // the hottest records still go cold and make somebody wait for the upstream.
 func (handler *Handler) maintainCache() {
@@ -775,8 +790,11 @@ func (handler *Handler) maintainCache() {
 		select {
 		case <-handler.maintenanceStop:
 			return
-		case <-sweep.C:
+		case now := <-sweep.C:
 			handler.runtime.Load().cache.SweepExpired()
+			if handler.forwarderConnections != nil {
+				handler.forwarderConnections.reapIdle(now)
+			}
 		case <-refresh.C:
 			runtime := handler.runtime.Load()
 			for _, request := range runtime.cache.PrefetchCandidates(maximumPrefetchBatch) {
@@ -844,21 +862,39 @@ func (handler *Handler) RestoreCache(entries []PersistedResponse) (int, error) {
 	return handler.runtime.Load().cache.Restore(entries)
 }
 
-func (handler *Handler) Activate(runtime *Runtime) {
+// Activate swaps in a runtime compiled from configuration. A configuration
+// reload compiles zones it read before the swap, so when ActivateZones has run
+// since the handler started, the active zones are recompiled onto the new
+// runtime instead. Otherwise a reload that raced a zone change would put the
+// replaced zones back. The zone manager follows every change it commits with
+// ActivateZones, so a change still on its way lands after this one.
+func (handler *Handler) Activate(runtime *Runtime) error {
+	handler.activationMu.Lock()
+	defer handler.activationMu.Unlock()
 	active := handler.runtime.Load()
+	if active.zoneGeneration != 0 {
+		rebuilt, err := withZones(runtime, active.zoneSource, runtime.keySource)
+		if err != nil {
+			return fmt.Errorf("apply active zones to new runtime: %w", err)
+		}
+		rebuilt.zoneGeneration = active.zoneGeneration
+		runtime = rebuilt
+	}
 	if active.upstreams == runtime.upstreams && active.cache.Compatible(runtime.cache) {
 		runtime.cache = active.cache
 		runtime.delegations = active.delegations
 		runtime.zoneCuts = active.zoneCuts
 		runtime.nameServers = active.nameServers
 	}
-	if runtime.managedTrustAnchors && runtime.dnssec != nil && handler.trustAnchorManager != nil {
-		if anchors, initialized := handler.trustAnchorManager.ActiveAnchors(); initialized {
+	// runtime came from Compile or withZones, so its validator is not yet
+	// visible to any query and is safe to change in place.
+	if manager := handler.trustAnchorManager.Load(); manager != nil && runtime.managedTrustAnchors && runtime.dnssec != nil {
+		if anchors, initialized := manager.ActiveAnchors(); initialized {
 			runtime.dnssec.replaceManagedTrustPoint(".", anchors, len(anchors) == 0)
 		}
 	}
-	handler.recordRuntimeChanges(active, runtime, time.Now())
-	handler.runtime.Store(runtime)
+	handler.swapRuntime(active, runtime)
+	return nil
 }
 
 // ActivateZones compiles only authoritative data and atomically swaps it into
@@ -867,45 +903,69 @@ func (handler *Handler) Activate(runtime *Runtime) {
 // are unchanged, so a zone mutation does not rebuild large policy lists or put
 // SQL on the DNS request path.
 func (handler *Handler) ActivateZones(zones []AuthoritativeZone, keys []TSIGKey) error {
+	handler.activationMu.Lock()
+	defer handler.activationMu.Unlock()
 	active := handler.runtime.Load()
+	candidate, err := withZones(active, zones, keys)
+	if err != nil {
+		return err
+	}
+	candidate.zoneGeneration = active.zoneGeneration + 1
+	handler.swapRuntime(active, candidate)
+	return nil
+}
+
+// swapRuntime publishes next in place of active. The caller holds
+// activationMu.
+func (handler *Handler) swapRuntime(active, next *Runtime) {
+	handler.recordRuntimeChanges(active, next, time.Now())
+	handler.runtime.Store(next)
+}
+
+// withZones returns a copy of base serving zones, with keys available for
+// zone TSIG. base, and everything it shares with queries already running, is
+// left untouched; a changed set of zone-derived DNSSEC exceptions gets a new
+// validator rather than a change to the shared one.
+func withZones(base *Runtime, zones []AuthoritativeZone, keys []TSIGKey) (*Runtime, error) {
 	compiled, err := Compile(RuntimeConfig{
-		Mode:       active.mode,
-		Forwarders: append([]string(nil), active.forwarders...),
-		RootHints:  append([]string(nil), active.rootHints...),
-		Routes:     cloneForwardingRoutes(active.baseRoutes),
-		Timeout:    active.timeout,
-		CacheSize:  active.cache.Capacity(),
+		Mode:       base.mode,
+		Forwarders: append([]string(nil), base.forwarders...),
+		RootHints:  append([]string(nil), base.rootHints...),
+		Routes:     cloneForwardingRoutes(base.baseRoutes),
+		Timeout:    base.timeout,
+		CacheSize:  base.cache.Capacity(),
 		Zones:      zones,
 		TSIGKeys:   keys,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	candidate := *active
+	candidate := *base
 	candidate.routes = compiled.routes
 	candidate.zones = compiled.zones
 	candidate.managedZones = compiled.managedZones
 	candidate.tsigKeys = compiled.tsigKeys
 	candidate.zoneCount = compiled.zoneCount
 	candidate.zoneInsecure = compiled.zoneInsecure
-	routesChanged := !forwardingRouteMapsEqual(active.routes, candidate.routes)
-	zoneInsecureChanged := !slices.Equal(active.zoneInsecure, candidate.zoneInsecure)
-	if candidate.dnssec != nil {
-		candidate.dnssec.setZoneInsecure(compiled.zoneInsecure)
+	candidate.zoneSource = zones
+	candidate.keySource = keys
+	routesChanged := !forwardingRouteMapsEqual(base.routes, candidate.routes)
+	zoneInsecureChanged := !slices.Equal(base.zoneInsecure, candidate.zoneInsecure)
+	if zoneInsecureChanged && base.dnssec != nil {
+		candidate.dnssec = base.dnssec.withZoneInsecure(compiled.zoneInsecure)
 	}
 	if routesChanged || zoneInsecureChanged {
-		candidate.upstreams = active.upstreams + "|zone-routes=" + upstreamSignature(nil, candidate.routes) +
+		candidate.upstreams = base.upstreams + "|zone-routes=" + upstreamSignature(nil, candidate.routes) +
 			"|zone-insecure=" + strings.Join(candidate.zoneInsecure, ",")
 		// Zone-derived routes and DNSSEC policy change the meaning of recursive
 		// answers. Do not reuse the active cache, since an in-flight resolver can
 		// still publish into it after this runtime is activated.
-		candidate.cache = NewResponseCacheWithOptions(active.cache.Capacity(), active.cache.options)
+		candidate.cache = NewResponseCacheWithOptions(base.cache.Capacity(), base.cache.options)
 		candidate.delegations = compiled.delegations
 		candidate.zoneCuts = compiled.zoneCuts
 		candidate.nameServers = compiled.nameServers
 	}
-	handler.Activate(&candidate)
-	return nil
+	return &candidate, nil
 }
 
 func forwardingRouteMapsEqual(left, right map[string][]string) bool {
@@ -930,7 +990,7 @@ func cloneForwardingRoutes(routes []ForwardingRoute) []ForwardingRoute {
 }
 
 func (handler *Handler) SetTrustAnchorManager(manager *trustanchor.Manager) {
-	handler.trustAnchorManager = manager
+	handler.trustAnchorManager.Store(manager)
 	if manager == nil {
 		return
 	}
@@ -945,29 +1005,27 @@ func (handler *Handler) DNSSECTrustAnchorUpdatesEnabled() bool {
 }
 
 func (handler *Handler) ApplyManagedTrustAnchors(anchors []string, deleted bool) {
-	for {
-		active := handler.runtime.Load()
-		if active == nil || !active.managedTrustAnchors || active.dnssec == nil {
-			return
-		}
-		if active.dnssec.managedTrustPointEqual(".", anchors, deleted) {
-			return
-		}
-		validator, err := newDNSSECValidator(anchors, active.dnssec.negativeAnchors)
-		if err != nil {
-			return
-		}
-		validator.setZoneInsecure(active.dnssec.zoneInsecureDomains())
-		if deleted {
-			validator.replaceManagedTrustPoint(".", nil, true)
-		}
-		candidate := *active
-		candidate.dnssec = validator
-		candidate.cache = NewResponseCache(active.cache.Capacity())
-		if handler.runtime.CompareAndSwap(active, &candidate) {
-			return
-		}
+	handler.activationMu.Lock()
+	defer handler.activationMu.Unlock()
+	active := handler.runtime.Load()
+	if active == nil || !active.managedTrustAnchors || active.dnssec == nil {
+		return
 	}
+	if active.dnssec.managedTrustPointEqual(".", anchors, deleted) {
+		return
+	}
+	validator, err := newDNSSECValidator(anchors, active.dnssec.negativeAnchors)
+	if err != nil {
+		return
+	}
+	validator.setZoneInsecure(active.dnssec.zoneInsecureDomains())
+	if deleted {
+		validator.replaceManagedTrustPoint(".", nil, true)
+	}
+	candidate := *active
+	candidate.dnssec = validator
+	candidate.cache = NewResponseCache(active.cache.Capacity())
+	handler.runtime.Store(&candidate)
 }
 
 func (handler *Handler) DNSSECTrustAnchorQuery(ctx context.Context, name string, recordType uint16) (*dns.Msg, error) {
@@ -1103,10 +1161,9 @@ func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dn
 		return false
 	}
 	zone := runtime.zones[normalizeName(question.Name)]
-	// The DoH response writer cannot verify a TSIG MAC (its TsigStatus is always
-	// nil), so a transfer over DoH would treat any request bearing the key name
-	// as authenticated. Refuse DoH outright, as serveDynamicUpdate and
-	// serveNotify already do, so TSIG stays the authenticator it is meant to be.
+	// A transfer streams many messages, but a DoH response carries exactly one,
+	// so DoH is refused even though its local address is a TCP socket. TSIG is
+	// not the reason: DoH reports a signed request as unverified.
 	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(clientIP) ||
 		writer.LocalAddr() == nil || !strings.HasPrefix(writer.LocalAddr().Network(), "tcp") ||
 		handler.zoneExpired(runtime, question.Name) {
@@ -1929,8 +1986,8 @@ func (handler *Handler) Stats() Stats {
 	active, clients, rejectedGlobal, rejectedClient := handler.admission.snapshot()
 	runtime := handler.runtime.Load()
 	anchorStatus := trustanchor.Status{}
-	if runtime.managedTrustAnchors && handler.trustAnchorManager != nil {
-		anchorStatus = handler.trustAnchorManager.Status()
+	if manager := handler.trustAnchorManager.Load(); runtime.managedTrustAnchors && manager != nil {
+		anchorStatus = manager.Status()
 	}
 	return Stats{
 		ResolutionInflight: active, ResolutionClients: clients, ResolutionRejectedGlobal: rejectedGlobal, ResolutionRejectedClient: rejectedClient,

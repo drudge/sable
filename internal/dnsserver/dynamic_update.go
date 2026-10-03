@@ -86,7 +86,7 @@ func (handler *Handler) serveDynamicUpdate(
 			result.Rcode = dns.RcodeRefused
 		case zone.tsigKey == "":
 			result.Rcode = dns.RcodeRefused
-		case isDoHWriter(writer) || !tsigRequestAuthenticated(writer, request, zone.tsigKey):
+		case !tsigRequestAuthenticated(writer, request, zone.tsigKey):
 			result.Rcode = dns.RcodeRefused
 		case !validUpdateAdditionalSection(request.Extra):
 			result.Rcode = dns.RcodeFormatError
@@ -132,9 +132,4 @@ func validUpdateAdditionalSection(records []dns.RR) bool {
 		}
 	}
 	return true
-}
-
-func isDoHWriter(writer dns.ResponseWriter) bool {
-	_, ok := writer.(*dohResponseWriter)
-	return ok
 }

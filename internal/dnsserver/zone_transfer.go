@@ -220,7 +220,7 @@ func (handler *Handler) serveNotify(writer dns.ResponseWriter, request *dns.Msg,
 		_ = writer.WriteMsg(response)
 		return true
 	}
-	if _, doh := writer.(*dohResponseWriter); doh || !tsigRequestAuthenticated(writer, request, managed.tsigKey) {
+	if !tsigRequestAuthenticated(writer, request, managed.tsigKey) {
 		response.Rcode = dns.RcodeRefused
 		handler.recordResponseCode(response.Rcode)
 		_ = writer.WriteMsg(response)

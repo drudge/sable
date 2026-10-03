@@ -49,6 +49,9 @@ type doqServer struct {
 	listener  *quic.Listener
 	packets   net.PacketConn
 	tsig      dns.TsigProvider
+	// slots caps open connections. It is shared with the group's other DoQ
+	// listeners; nil means no cap, which only tests use.
+	slots connectionSlots
 
 	connections sync.WaitGroup
 	closeOnce   sync.Once
@@ -147,15 +150,27 @@ func (server *doqServer) serve() error {
 			server.connections.Wait()
 			return err
 		}
+		if server.slots != nil && !server.slots.tryAcquire() {
+			_ = connection.CloseWithError(doqExcessiveLoad, "too many connections")
+			continue
+		}
 		if !server.track(connection) {
+			server.releaseSlot()
 			_ = connection.CloseWithError(doqNoError, "server shutting down")
 			continue
 		}
 		server.connections.Add(1)
 		go func() {
 			defer server.connections.Done()
+			defer server.releaseSlot()
 			server.serveConnection(connection)
 		}()
+	}
+}
+
+func (server *doqServer) releaseSlot() {
+	if server.slots != nil {
+		server.slots.release()
 	}
 }
 
@@ -191,6 +206,17 @@ func (server *doqServer) serveStream(connection *quic.Conn, stream *quic.Stream)
 	request := new(dns.Msg)
 	if err := request.Unpack(wire); err != nil {
 		server.abort(connection, doqProtocolError, "unpack DoQ query", err)
+		return
+	}
+	action, reply := screenRequest(wire)
+	if reply != nil {
+		writer := newDoQResponseWriter(connection, stream, nil)
+		_ = writer.WriteMsg(reply)
+		return
+	}
+	if action != dns.MsgAccept {
+		// dns.Server sends nothing back for a message that is not a request,
+		// since any reply could be used to reflect traffic.
 		return
 	}
 	if hasEDNSTCPKeepalive(request) {

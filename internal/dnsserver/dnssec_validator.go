@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -584,6 +585,31 @@ func (validator *dnssecValidator) setZoneInsecure(names []string) {
 	}
 	validator.zoneInsecure = normalized
 	validator.zones = make(map[string]validatedZone)
+}
+
+// withZoneInsecure returns a copy of the validator holding names as its
+// zone-derived negative trust anchors, with nothing cached. The receiver is
+// left alone because queries running against the active runtime still use it.
+func (validator *dnssecValidator) withZoneInsecure(names []string) *dnssecValidator {
+	validator.mu.RLock()
+	anchors := make(map[string][]dns.RR, len(validator.anchors))
+	for owner, records := range validator.anchors {
+		anchors[owner] = slices.Clone(records)
+	}
+	deleted := maps.Clone(validator.deletedTrustPoints)
+	if deleted == nil {
+		deleted = make(map[string]struct{})
+	}
+	clone := &dnssecValidator{
+		anchors:            anchors,
+		deletedTrustPoints: deleted,
+		negativeAnchors:    slices.Clone(validator.negativeAnchors),
+		now:                validator.now,
+		zones:              make(map[string]validatedZone),
+	}
+	validator.mu.RUnlock()
+	clone.setZoneInsecure(names)
+	return clone
 }
 
 func (validator *dnssecValidator) zoneInsecureDomains() []string {

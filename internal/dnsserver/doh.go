@@ -34,22 +34,48 @@ func (handler *dohHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		writeDoHError(writer, err)
 		return
 	}
+	// A body that does not parse is an HTTP-level error. One that parses but
+	// fails the header check gets the DNS reply any other listener would send.
 	message := new(dns.Msg)
 	if err := message.Unpack(wire); err != nil {
 		http.Error(writer, "invalid DNS message", http.StatusBadRequest)
 		return
 	}
+	action, reply := screenRequest(wire)
+	if reply != nil {
+		packed, err := reply.Pack()
+		if err != nil {
+			http.Error(writer, "invalid DNS message", http.StatusBadRequest)
+			return
+		}
+		writeDoHMessage(writer, packed, "no-store")
+		return
+	}
+	if action != dns.MsgAccept {
+		http.Error(writer, "DNS message is not a request", http.StatusBadRequest)
+		return
+	}
 
 	response := newDoHResponseWriter(request)
+	if message.IsTsig() != nil {
+		// Nothing on this path verifies a TSIG MAC, so a signed request must
+		// read as unverified. Zone transfers, NOTIFY, and dynamic updates
+		// then refuse it the same way they refuse a bad MAC on any listener.
+		response.tsigStatus = errDoHTSIG
+	}
 	handler.dnsHandler.ServeDNS(response, message)
 	packed, err := response.pack()
 	if err != nil {
 		http.Error(writer, "DNS handler did not produce a valid response", http.StatusInternalServerError)
 		return
 	}
-	writer.Header().Set("Content-Type", dohContentType)
 	// DNS answers depend on the source client; shared HTTP caches must not reuse them.
-	writer.Header().Set("Cache-Control", response.httpCacheControl())
+	writeDoHMessage(writer, packed, response.httpCacheControl())
+}
+
+func writeDoHMessage(writer http.ResponseWriter, packed []byte, cacheControl string) {
+	writer.Header().Set("Content-Type", dohContentType)
+	writer.Header().Set("Cache-Control", cacheControl)
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(packed)
@@ -59,6 +85,7 @@ var (
 	errDoHMethod      = errors.New("DNS-over-HTTPS requires GET or POST")
 	errDoHContentType = errors.New("DNS-over-HTTPS POST requires application/dns-message")
 	errDoHMissingData = errors.New("DNS-over-HTTPS GET requires the dns query parameter")
+	errDoHTSIG        = errors.New("TSIG is not verified over DNS-over-HTTPS")
 )
 
 func readDoHRequest(writer http.ResponseWriter, request *http.Request) ([]byte, error) {
@@ -105,6 +132,7 @@ type dohResponseWriter struct {
 	remoteAddress net.Addr
 	message       *dns.Msg
 	wire          []byte
+	tsigStatus    error
 }
 
 func newDoHResponseWriter(request *http.Request) *dohResponseWriter {
@@ -131,7 +159,7 @@ func (writer *dohResponseWriter) Write(wire []byte) (int, error) {
 }
 
 func (writer *dohResponseWriter) Close() error        { return nil }
-func (writer *dohResponseWriter) TsigStatus() error   { return nil }
+func (writer *dohResponseWriter) TsigStatus() error   { return writer.tsigStatus }
 func (writer *dohResponseWriter) TsigTimersOnly(bool) {}
 func (writer *dohResponseWriter) Hijack()             {}
 
@@ -152,6 +180,11 @@ func (writer *dohResponseWriter) httpCacheControl() string {
 		}
 	}
 	return "no-store"
+}
+
+func isDoHWriter(writer dns.ResponseWriter) bool {
+	_, ok := writer.(*dohResponseWriter)
+	return ok
 }
 
 func parseRemoteAddress(address string) net.Addr {
