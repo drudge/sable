@@ -116,7 +116,6 @@ func (server *Server) updateBackupSchedule(writer http.ResponseWriter, request *
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Scheduled backups are unavailable on this node.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid scheduled backup form.")
 		return
@@ -160,7 +159,6 @@ func (server *Server) downloadBackup(writer http.ResponseWriter, request *http.R
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Backups are unavailable on this node.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid backup form.")
 		return
@@ -270,7 +268,6 @@ func (server *Server) deleteLocalBackup(writer http.ResponseWriter, request *htt
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Local backups are unavailable on this node.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid local backup request.")
 		return
@@ -289,7 +286,6 @@ func (server *Server) restoreBackup(writer http.ResponseWriter, request *http.Re
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Restore is unavailable on this node.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumBackupUploadBytes)
 	if err := request.ParseMultipartForm(maximumBackupUploadBytes); err != nil {
 		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid restore form.")
 		return
@@ -343,7 +339,6 @@ func (server *Server) restoreLocalBackup(writer http.ResponseWriter, request *ht
 		server.renderBackupPanel(writer, request, http.StatusServiceUnavailable, "", "Local restore is unavailable on this node.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderBackupPanel(writer, request, http.StatusBadRequest, "", "Invalid local restore form.")
 		return

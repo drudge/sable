@@ -369,9 +369,9 @@ func TestSignInPageHidesTheButtonWithoutAProvider(t *testing.T) {
 }
 
 func TestSignInRoutesAreReachableWithoutASession(t *testing.T) {
-	for _, path := range []string{ssoStartPath, ssoCallbackPath} {
-		if !publicRequest(path) {
-			t.Fatalf("%s requires a session, so no one could ever sign in through it", path)
+	for _, pattern := range []string{"POST " + ssoStartPath, "GET " + ssoCallbackPath} {
+		if !routesByPattern[pattern].public {
+			t.Fatalf("%s requires a session, so no one could ever sign in through it", pattern)
 		}
 	}
 }

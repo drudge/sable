@@ -625,7 +625,7 @@ func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
 		"/ui/updates/cluster":         auth.PermissionUpdatesApply,
 		"/ui/updates/cluster/stop":    auth.PermissionUpdatesApply,
 	} {
-		if got := requiredPermission(httptest.NewRequest(http.MethodPost, path, nil)); got != permission {
+		if got := routeAt(t, http.MethodPost, path).perm; got != permission {
 			t.Errorf("%s permission = %s", path, got)
 		}
 	}
@@ -638,7 +638,7 @@ func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
 			t.Fatalf("permissions %v allowed = %v", permissions, got)
 		}
 	}
-	if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, "/ui/updates/cluster") {
+	if !writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RoleReplica}, http.MethodPost, routeAt(t, http.MethodPost, "/ui/updates/cluster")) {
 		t.Fatal("replica can start a cluster rollout")
 	}
 }

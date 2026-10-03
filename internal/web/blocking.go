@@ -135,7 +135,6 @@ func formatApproximateDuration(remaining time.Duration) string {
 
 func (server *Server) updateBlocking(writer http.ResponseWriter, request *http.Request, activeTab, success string, mutate func(*config.Blocking) error) {
 	started := time.Now()
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
@@ -225,7 +224,6 @@ func (server *Server) addAllowedDomain(writer http.ResponseWriter, request *http
 }
 
 func (server *Server) addQueryPolicyDomain(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err)
 		_ = pages.Toast("Invalid domain action.", "error").Render(request.Context(), writer)
@@ -361,7 +359,6 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 	if allowed {
 		tab, kind = "allowed", "allowed"
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumDomainImportBytes)
 	if err := request.ParseMultipartForm(maximumDomainImportBytes); err != nil {
 		server.logBlockingOperation(request, err, "kind", kind)
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
@@ -510,7 +507,6 @@ func (server *Server) exportPolicyDomains(writer http.ResponseWriter, request *h
 }
 
 func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err)
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
@@ -600,7 +596,6 @@ func (server *Server) toggleBlocking(writer http.ResponseWriter, request *http.R
 
 func (server *Server) pauseBlocking(writer http.ResponseWriter, request *http.Request) {
 	started := time.Now()
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)

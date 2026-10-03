@@ -261,7 +261,6 @@ func (server *Server) insightSettingsRequest(writer http.ResponseWriter, request
 		server.renderInsightSettings(writer, request, view)
 		return console, nil, false
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
 		return console, nil, false

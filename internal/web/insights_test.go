@@ -424,15 +424,15 @@ func TestInsightsOverviewShowsEvidenceThatReproducesInTheQueryLog(t *testing.T) 
 	}
 }
 
-func TestRequiredAnyPermissionCoversInsightsRoutes(t *testing.T) {
+func TestInsightsRoutesOpenWithEitherReadPermission(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"/insights", "/insights/devices/mac:3c:22:fb:01:02:03", "/ui/insights/overview"} {
-		permissions := requiredAnyPermission(httptest.NewRequest(http.MethodGet, path, nil))
+		permissions := routeFor(httptest.NewRequest(http.MethodGet, path, nil)).anyPerm
 		if len(permissions) != 2 || permissions[0] != auth.PermissionBlockingRead || permissions[1] != auth.PermissionLogsRead {
 			t.Errorf("%s permissions = %v", path, permissions)
 		}
 	}
-	if permissions := requiredAnyPermission(httptest.NewRequest(http.MethodGet, "/insightsx", nil)); permissions != nil {
+	if permissions := routeFor(httptest.NewRequest(http.MethodGet, "/insightsx", nil)).anyPerm; permissions != nil {
 		t.Errorf("unrelated path permissions = %v", permissions)
 	}
 }

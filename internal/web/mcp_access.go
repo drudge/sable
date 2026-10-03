@@ -142,7 +142,6 @@ func mcpRoleGrants(permissions []string) []auth.Grant {
 // in line with the chosen tools, and remembers it. It answers with the
 // Access step's group section, so the wizard stays open.
 func (server *Server) saveMCPGroup(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		http.Error(writer, "invalid request", http.StatusBadRequest)
 		return
@@ -259,7 +258,6 @@ func (server *Server) mcpMembership(request *http.Request, group string) (bool, 
 // createMCPToken makes an API token for the operator that uses the group the
 // wizard made, and shows it once in the Access step.
 func (server *Server) createMCPToken(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		http.Error(writer, "invalid request", http.StatusBadRequest)
 		return

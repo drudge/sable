@@ -137,9 +137,6 @@ func (server *Server) mcpGetVersion(request *http.Request, arguments json.RawMes
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	if !server.mcpHasPermission(request, auth.PermissionUpdatesRead) {
-		return nil, errors.New("this token needs updates.read to read Sable's version")
-	}
 	build := version.Current()
 	preRelease := server.config.Current().Config.Updates.PreRelease
 	channel := "stable"
@@ -287,9 +284,6 @@ func (server *Server) mcpGetStats(request *http.Request, arguments json.RawMessa
 	}{}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionMetricsRead) {
-		return nil, errors.New("this token needs metrics.read to read DNS statistics")
 	}
 	rangeName := strings.ToLower(strings.TrimSpace(input.Range))
 	if rangeName == "" {
@@ -452,9 +446,6 @@ func (server *Server) mcpGetDynamicDNS(request *http.Request, arguments json.Raw
 	if err := decodeMCPArguments(arguments, &struct{}{}); err != nil {
 		return nil, err
 	}
-	if !server.mcpHasPermission(request, auth.PermissionSettingsRead) {
-		return nil, errors.New("this token needs settings.read to read Dynamic DNS")
-	}
 	settings := server.config.Current().Config.DynamicDNS
 	publishers := settings.ConfiguredPublishers()
 	records := []mcpDynamicDNSRecord{}
@@ -517,9 +508,6 @@ func (server *Server) mcpGetDynamicDNS(request *http.Request, arguments json.Raw
 func (server *Server) mcpSyncDynamicDNS(request *http.Request, arguments json.RawMessage) (any, error) {
 	if err := decodeMCPArguments(arguments, &struct{}{}); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionSettingsWrite) {
-		return nil, errors.New("this token needs settings.write to update Dynamic DNS")
 	}
 	if server.mcpReplica() {
 		return nil, errors.New("Dynamic DNS runs only on the cluster primary; connect to the primary to update it")
@@ -634,9 +622,6 @@ func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionClusterRead) {
-		return nil, errors.New("this token needs cluster.read to read the cluster")
 	}
 	if server.cluster == nil {
 		return map[string]any{"mode": "not-configured", "summary": "This server is not in a cluster."}, nil

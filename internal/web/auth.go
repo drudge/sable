@@ -29,142 +29,55 @@ const (
 
 type principalContextKey struct{}
 
-func (server *Server) accessControl(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !server.securityEnabled {
-			next.ServeHTTP(writer, request)
-			return
-		}
-		if publicRequest(request.URL.Path) {
-			next.ServeHTTP(writer, request)
-			return
-		}
-		if server.setupRequired.Load() {
-			server.authenticationFailure(writer, request, http.StatusServiceUnavailable, "/setup")
-			return
-		}
+// authorizeRoute applies a route's access policy. It answers the request
+// itself and reports false when the caller may not continue; otherwise it
+// returns the request carrying the signed-in principal.
+func (server *Server) authorizeRoute(writer http.ResponseWriter, request *http.Request, current *route) (*http.Request, bool) {
+	if !server.securityEnabled || current.public {
+		return request, true
+	}
+	if server.setupRequired.Load() {
+		server.authenticationFailure(writer, request, http.StatusServiceUnavailable, "/setup")
+		return nil, false
+	}
 
-		principal, err := server.authenticateRequest(request)
-		if err != nil {
-			status := http.StatusUnauthorized
-			if errors.Is(err, auth.ErrForbidden) {
-				status = http.StatusForbidden
-			} else if !errors.Is(err, auth.ErrUnauthorized) {
-				server.logger.Error("authenticate console request", "error", err)
-				status = http.StatusInternalServerError
-			}
-			server.authenticationFailure(writer, request, status, "/login")
-			return
+	principal, err := server.authenticateRequest(request)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if errors.Is(err, auth.ErrForbidden) {
+			status = http.StatusForbidden
+		} else if !errors.Is(err, auth.ErrUnauthorized) {
+			server.logger.Error("authenticate console request", "error", err)
+			status = http.StatusInternalServerError
 		}
-		if permission := requiredPermission(request); permission != "" && !auth.HasPermission(principal, permission) {
-			server.authenticationFailure(writer, request, http.StatusForbidden, "")
-			return
-		}
-		if permissions := requiredAnyPermission(request); len(permissions) > 0 && !hasAnyPermission(principal, permissions) {
-			server.authenticationFailure(writer, request, http.StatusForbidden, "")
-			return
-		}
-		if !safeMethod(request.Method) {
-			csrfToken := request.Header.Get("X-CSRF-Token")
-			if csrfToken == "" && nativeProfileRequest(request) {
-				if !server.requestOriginAllowed(request) {
-					server.authenticationFailure(writer, request, http.StatusForbidden, "")
-					return
-				}
-				var ok bool
-				csrfToken, ok = nativeProfileCSRFToken(writer, request)
-				if !ok {
-					server.authenticationFailure(writer, request, http.StatusForbidden, "")
-					return
-				}
-			}
-			if !server.auth.ValidateCSRF(principal, csrfToken) {
+		server.authenticationFailure(writer, request, status, "/login")
+		return nil, false
+	}
+	if !current.permits(principal) {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return nil, false
+	}
+	if !safeMethod(request.Method) {
+		csrfToken := request.Header.Get("X-CSRF-Token")
+		if csrfToken == "" && nativeProfileRequest(request) {
+			if !server.requestOriginAllowed(request) {
 				server.authenticationFailure(writer, request, http.StatusForbidden, "")
-				return
+				return nil, false
+			}
+			var ok bool
+			csrfToken, ok = nativeProfileCSRFToken(request)
+			if !ok {
+				server.authenticationFailure(writer, request, http.StatusForbidden, "")
+				return nil, false
 			}
 		}
-		writer.Header().Set("Cache-Control", "no-store")
-		next.ServeHTTP(writer, request.WithContext(context.WithValue(
-			request.Context(), principalContextKey{}, principal,
-		)))
-	})
-}
-
-func requiredPermission(request *http.Request) string {
-	path := request.URL.Path
-	write := !safeMethod(request.Method)
-	switch {
-	case strings.HasPrefix(path, "/ui/integrations/sso/"):
-		// Changing the identity provider can delegate every permission on the node.
-		return auth.PermissionUsersWrite
-	case path == "/settings" || path == "/cache" || path == "/integrations" ||
-		strings.HasPrefix(path, "/ui/settings") || strings.HasPrefix(path, "/ui/integrations/") ||
-		strings.HasPrefix(path, "/ui/certificates/") ||
-		strings.HasPrefix(path, "/ui/cache/") || strings.HasPrefix(path, "/api/v1/config/") ||
-		strings.HasPrefix(path, "/api/v1/cache/"):
-		if write {
-			return auth.PermissionSettingsWrite
+		if !server.auth.ValidateCSRF(principal, csrfToken) {
+			server.authenticationFailure(writer, request, http.StatusForbidden, "")
+			return nil, false
 		}
-		return auth.PermissionSettingsRead
-	case strings.HasPrefix(path, "/ui/backup/restore"):
-		// Restoring replaces every user, role, and token on the node, so it is
-		// held apart from the permission that only lets an operator take one.
-		return auth.PermissionBackupRestore
-	case strings.HasPrefix(path, "/ui/backup"):
-		return auth.PermissionBackupCreate
-	case path == "/administration" || strings.HasPrefix(path, "/ui/administration"):
-		if write {
-			return auth.PermissionUsersWrite
-		}
-		return auth.PermissionUsersRead
-	case path == "/cluster" || strings.HasPrefix(path, pages.ClusterNodeRoute) || strings.HasPrefix(path, "/ui/cluster/") || strings.HasPrefix(path, "/api/v1/cluster"):
-		if write {
-			return auth.PermissionClusterWrite
-		}
-		return auth.PermissionClusterRead
-	case path == "/zones" || strings.HasPrefix(path, "/zones/") || strings.HasPrefix(path, "/ui/zones") || strings.HasPrefix(path, "/api/v1/zones"):
-		if write {
-			// Zone mutations authorize their exact action and immutable zone ID
-			// after parsing the form. A broad middleware check would reject
-			// legitimate delete-only or DNSSEC-only groups.
-			return ""
-		}
-		if path == "/api/v1/zones/export" || path == "/api/v1/zones/ds" {
-			return auth.PermissionZonesExport
-		}
-		return auth.PermissionZonesRead
-	case path == "/blocked" || strings.HasPrefix(path, pages.BlockListRoute) || strings.HasPrefix(path, pages.CheckDomainRoute) || strings.HasPrefix(path, "/ui/blocking") ||
-		strings.HasPrefix(path, "/api/v1/blocking") || path == "/api/v1/policy":
-		if write {
-			return auth.PermissionBlockingWrite
-		}
-		return auth.PermissionBlockingRead
-	case path == "/logs" || strings.HasPrefix(path, pages.QueryRoute) || strings.HasPrefix(path, "/ui/query-log") ||
-		strings.HasPrefix(path, "/ui/logs/") || strings.HasPrefix(path, "/api/v1/query-log") ||
-		strings.HasPrefix(path, "/api/v1/logs/"):
-		return auth.PermissionLogsRead
-	case path == "/metrics" || path == technitiumStatsPath:
-		return auth.PermissionMetricsRead
-	case path == "/ui/updates" || path == "/ui/updates/check" || path == "/ui/updates/command-check" || path == "/ui/updates/automatic-check":
-		// Checking reaches out to GitHub but changes nothing locally.
-		return auth.PermissionUpdatesRead
-	case strings.HasPrefix(path, "/ui/updates/"):
-		// Installing replaces the running executable, so it is a separate
-		// permission from reading the available release.
-		return auth.PermissionUpdatesApply
-	default:
-		return ""
 	}
-}
-
-// requiredAnyPermission lists permissions any one of which opens a route. It
-// serves pages that combine several areas and show each section only to an
-// operator who may read it.
-func requiredAnyPermission(request *http.Request) []string {
-	if insightsRoute(request.URL.Path) {
-		return insightsPermissions
-	}
-	return nil
+	writer.Header().Set("Cache-Control", "no-store")
+	return request.WithContext(context.WithValue(request.Context(), principalContextKey{}, principal)), true
 }
 
 func hasAnyPermission(principal auth.Principal, permissions []string) bool {
@@ -213,7 +126,6 @@ func (server *Server) setup(writer http.ResponseWriter, request *http.Request) {
 		http.Redirect(writer, request, "/", http.StatusSeeOther)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		server.renderAuthPage(writer, request, true, "Invalid setup form.", http.StatusBadRequest)
 		return
@@ -323,7 +235,6 @@ func (server *Server) login(writer http.ResponseWriter, request *http.Request) {
 		http.Redirect(writer, request, "/setup", http.StatusSeeOther)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		server.renderAuthPage(writer, request, false, "Invalid login form.", http.StatusBadRequest)
 		return
@@ -413,7 +324,6 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 		http.NotFound(writer, request)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		writer.WriteHeader(http.StatusBadRequest)
 		_ = pages.APITokenResult("", "", "Invalid token form.").Render(request.Context(), writer)
@@ -505,12 +415,6 @@ func clearSessionCookie(writer http.ResponseWriter, request *http.Request, name 
 		Name: name, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: forceSecure || request.TLS != nil, SameSite: http.SameSiteStrictMode,
 	})
-}
-
-func publicRequest(path string) bool {
-	return path == passkeyLoginBegin || path == passkeyLoginFinish || path == "/setup" || path == "/login" || path == ssoStartPath || path == ssoCallbackPath ||
-		path == "/api/v1/health" || path == "/api/v1/cluster/enroll" || path == "/api/v1/cluster/sync" || strings.HasPrefix(path, "/assets/") ||
-		path == serviceWorkerPath || path == webManifestPath
 }
 
 func tokenRequest(path string) bool {
@@ -660,12 +564,11 @@ func nativeProfileRequest(request *http.Request) bool {
 		request.Header.Get("HX-Request") != "true" && request.Header.Get("X-CSRF-Token") == ""
 }
 
-func nativeProfileCSRFToken(writer http.ResponseWriter, request *http.Request) (string, bool) {
+func nativeProfileCSRFToken(request *http.Request) (string, bool) {
 	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/x-www-form-urlencoded" {
 		return "", false
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		return "", false
 	}

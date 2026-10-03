@@ -16,7 +16,7 @@ import (
 const (
 	ssoStateCookieName = "sable_sso_state"
 	// ssoStartPath and ssoCallbackPath are reachable without a session, so
-	// both are listed in publicRequest.
+	// both routes are public.
 	ssoStartPath = "/auth/oidc/start"
 	// The callback path is fixed and shared: a node derives its own redirect
 	// URL from it, so the router and the derivation cannot drift apart.
@@ -85,7 +85,6 @@ func (server *Server) startSSO(writer http.ResponseWriter, request *http.Request
 		http.Redirect(writer, request, "/setup", http.StatusSeeOther)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		server.renderAuthPage(writer, request, false, "Invalid sign-in form.", http.StatusBadRequest)
 		return

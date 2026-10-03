@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/serverlog"
 )
 
@@ -62,9 +61,6 @@ func (server *Server) mcpSearchServerLogs(request *http.Request, arguments json.
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
-	}
-	if !server.mcpHasPermission(request, auth.PermissionLogsRead) {
-		return nil, errors.New("this token needs logs.read to search the runtime log")
 	}
 	level := strings.ToLower(strings.TrimSpace(input.Level))
 	if level == "" {
