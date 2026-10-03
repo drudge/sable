@@ -501,7 +501,7 @@ templ alertInsightKinds(view AlertsView) {
 
 // alertGroupSwitch is one group's switch. Its id lets other pages link to it.
 templ alertGroupSwitch(group, title, description string, on, canEdit bool) {
-	<label class="field-control switch-row setting-switch-row" id={ "alerts-group-" + group }><span><strong>{ title }</strong><small>{ description }</small></span><input type="checkbox" role="switch" name={ group } value="true" checked?={ on } disabled?={ !canEdit }/></label>
+	@components.SwitchField(components.SwitchFieldProps{ID: "alerts-group-" + group + "-switch", Title: title, Description: description, Name: group, Checked: on, Disabled: !canEdit, Attrs: templ.Attributes{"id": "alerts-group-" + group}})
 }
 
 // alertBackupsOption is one choice of which backups send alerts.
@@ -643,7 +643,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 		}
 		<div class="isotope-dialog-body alert-destination-body">
 			<div class="alert-destination-notice" id="alert-destination-notice"></div>
-			<label class="field-control"><span>Name (Optional)</span><input name="name" value={ form.Name } placeholder="Phone" maxlength="64" autocomplete="off"/><small>What the list calls it. Leave it blank to use the format's name.</small></label>
+			@components.Field(components.FieldProps{ID: "alert-destination-name", Label: "Name (Optional)", Help: "What the list calls it. Leave it blank to use the format's name.", Input: templ.Attributes{"name": "name", "value": form.Name, "placeholder": "Phone", "maxlength": "64", "autocomplete": "off"}})
 			<fieldset class="field-control alert-formats">
 				<legend>Format</legend>
 				<div class="alert-format-tabs">
@@ -671,8 +671,8 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 				<small data-alert-for="text" hidden?={ !alertFormFor(form, "text") }>Sent as plain text with a title, which ntfy shows as a notification.</small>
 			</label>
 			<div class="field-grid two" data-alert-for="pushover" hidden?={ !alertFormFor(form, "pushover") }>
-				<label class="field-control"><span>Application Token</span><input type="password" name="pushover_token" placeholder={ alertSavedPlaceholder(form.SavedPushoverToken, "Your application's token") } autocomplete="new-password" spellcheck="false"/><small>From the application you made for Sable.</small></label>
-				<label class="field-control"><span>User Key</span><input type="password" name="pushover_user" placeholder={ alertSavedPlaceholder(form.SavedPushoverUser, "Your user or group key") } autocomplete="new-password" spellcheck="false"/><small>Your user key, or a group key.</small></label>
+				@components.Field(components.FieldProps{ID: "alert-pushover-token", Label: "Application Token", Help: "From the application you made for Sable.", Input: templ.Attributes{"type": "password", "name": "pushover_token", "placeholder": alertSavedPlaceholder(form.SavedPushoverToken, "Your application's token"), "autocomplete": "new-password", "spellcheck": "false"}})
+				@components.Field(components.FieldProps{ID: "alert-pushover-user", Label: "User Key", Help: "Your user key, or a group key.", Input: templ.Attributes{"type": "password", "name": "pushover_user", "placeholder": alertSavedPlaceholder(form.SavedPushoverUser, "Your user or group key"), "autocomplete": "new-password", "spellcheck": "false"}})
 			</div>
 			<p class="alert-destination-note" data-alert-for="browser" hidden?={ !alertFormFor(form, "browser") }>Alerts go to every browser that turned them on. Once this is saved, turn them on from the Browsers row.</p>
 			<fieldset class="field-control alert-sends">
@@ -696,7 +696,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 			<details class="settings-advanced alert-destination-advanced" data-alert-for="json text" hidden?={ !alertFormFor(form, "json text") } open?={ form.NtfyReceipt || len(form.Headers) > 0 }>
 				<summary>@Icon("sliders")<span>Advanced</span>@Icon("chevron-down")</summary>
 				<div class="alert-destination-advanced-body">
-					<label class="field-control switch-row setting-switch-row" data-alert-for="text" hidden?={ !alertFormFor(form, "text") }><span><strong>Check for an ntfy Receipt</strong><small>Only count a send when ntfy answers with a message ID.</small></span><input type="checkbox" role="switch" name="ntfy_receipt" value="true" checked?={ form.NtfyReceipt }/></label>
+					@components.SwitchField(components.SwitchFieldProps{ID: "alert-ntfy-receipt", Title: "Check for an ntfy Receipt", Description: "Only count a send when ntfy answers with a message ID.", Name: "ntfy_receipt", Checked: form.NtfyReceipt, Attrs: templ.Attributes{"data-alert-for": "text", "hidden": !alertFormFor(form, "text")}})
 					<div class="field-control">
 						<span>Headers</span>
 						<div class="alert-headers" data-alert-headers>

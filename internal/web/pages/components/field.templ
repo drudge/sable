@@ -1,0 +1,120 @@
+package components
+
+// FieldProps describes a labelled form control with optional help text.
+type FieldProps struct {
+	// ID names the field. The label and help text take ids built from it, so
+	// it must be unique on the page.
+	ID    string
+	Label string
+	// Help is one short sentence under the control.
+	Help string
+	// Input, when set, makes Field draw an <input> with these attributes and
+	// link it to the label and help. Leave it nil to pass the control as
+	// children and spread FieldAttrs on it.
+	Input templ.Attributes
+	// Class adds classes after field-control.
+	Class string
+	Attrs templ.Attributes
+}
+
+// FieldAttrs links a control passed to Field as children to the field's label
+// and help text. Without help, the wrapping label already names the control.
+func FieldAttrs(p FieldProps) templ.Attributes {
+	if p.Help == "" {
+		return nil
+	}
+	return templ.Attributes{"aria-labelledby": labelID(p.ID), "aria-describedby": helpID(p.ID)}
+}
+
+func fieldClass(base, extra string) string {
+	if extra == "" {
+		return base
+	}
+	return base + " " + extra
+}
+
+func labelID(id string) string { return id + "-label" }
+
+func helpID(id string) string { return id + "-help" }
+
+// Field wraps a control in its label. The help text sits inside the label too,
+// so the control names itself by the label text alone and reads the help as
+// its description.
+templ Field(p FieldProps) {
+	<label class={ fieldClass("field-control", p.Class) } { p.Attrs... }>
+		<span id={ labelID(p.ID) }>{ p.Label }</span>
+		if p.Input != nil {
+			<input { FieldAttrs(p)... } { p.Input... }/>
+		}
+		{ children... }
+		if p.Help != "" {
+			<small id={ helpID(p.ID) }>{ p.Help }</small>
+		}
+	</label>
+}
+
+// SwitchFieldProps describes an on/off setting drawn as a switch row.
+type SwitchFieldProps struct {
+	// ID names the row. The title and description take ids built from it.
+	ID          string
+	Title       string
+	Description string
+	// Name and Value are what the form sends while the switch is on. Value
+	// defaults to "true".
+	Name     string
+	Value    string
+	Checked  bool
+	Disabled bool
+	// Class adds classes after the row's own, and Attrs go on the row.
+	Class string
+	Attrs templ.Attributes
+	// InputAttrs go on the checkbox, such as form, hx-post, or data hooks.
+	InputAttrs templ.Attributes
+	// Plain draws a native checkbox instead of the console's switch.
+	Plain bool
+}
+
+func (p SwitchFieldProps) class() string {
+	class := "field-control switch-row"
+	if !p.Plain {
+		class += " setting-switch-row"
+	}
+	return fieldClass(class, p.Class)
+}
+
+func (p SwitchFieldProps) value() string {
+	if p.Value == "" {
+		return "true"
+	}
+	return p.Value
+}
+
+// SwitchField is a setting that turns on or off: a title and description with
+// the switch at the end of the row.
+templ SwitchField(p SwitchFieldProps) {
+	<label class={ p.class() } { p.Attrs... }>
+		<span>
+			<strong id={ labelID(p.ID) }>{ p.Title }</strong>
+			if p.Description != "" {
+				<small id={ helpID(p.ID) }>{ p.Description }</small>
+			}
+		</span>
+		<input
+			type="checkbox"
+			if !p.Plain {
+				role="switch"
+			}
+			if p.Name != "" {
+				name={ p.Name }
+				value={ p.value() }
+			}
+			checked?={ p.Checked }
+			{ p.InputAttrs... }
+			disabled?={ p.Disabled }
+			aria-labelledby={ labelID(p.ID) }
+			if p.Description != "" {
+				aria-describedby={ helpID(p.ID) }
+			}
+		/>
+	</label>
+}

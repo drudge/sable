@@ -72,38 +72,22 @@ func SettingsInsights(view SettingsInsightsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.Enabled {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "  <label class=\"field-control switch-row setting-switch-row\" id=\"settings-insights-switch\"><span><strong>Insights</strong><small>Record which devices use Sable and what hardware they are.</small></span><input type=\"checkbox\" role=\"switch\" checked data-insights-off=\"insights-off-dialog\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "  ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if !view.CanEdit {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " disabled")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " data-replica-primary-action></label> ")
+				templ_7745c5c3_Err = components.SwitchField(components.SwitchFieldProps{ID: "settings-insights-enabled", Title: "Insights", Description: "Record which devices use Sable and what hardware they are.", Checked: true, Disabled: !view.CanEdit, Attrs: templ.Attributes{"id": "settings-insights-switch"}, InputAttrs: templ.Attributes{"data-insights-off": "insights-off-dialog", "data-replica-primary-action": true}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<label class=\"field-control switch-row setting-switch-row\" id=\"settings-insights-switch\"><span><strong>Insights</strong><small>Off. Sable records nothing about your devices.</small></span><input type=\"checkbox\" role=\"switch\" name=\"enabled\" value=\"true\" hx-post=\"/ui/settings/insights\" hx-trigger=\"change\" hx-target=\"#settings-insights\" hx-swap=\"outerHTML\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if !view.CanEdit {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, " disabled")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " data-replica-primary-action></label> ")
+				templ_7745c5c3_Err = components.SwitchField(components.SwitchFieldProps{ID: "settings-insights-enabled", Title: "Insights", Description: "Off. Sable records nothing about your devices.", Name: "enabled", Disabled: !view.CanEdit, Attrs: templ.Attributes{"id": "settings-insights-switch"}, InputAttrs: templ.Attributes{"hx-post": "/ui/settings/insights", "hx-trigger": "change", "hx-target": "#settings-insights", "hx-swap": "outerHTML", "data-replica-primary-action": true}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if view.Data != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<div class=\"settings-insights-data\"><p><strong>Device data:</strong> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"settings-insights-data\"><p><strong>Device data:</strong> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -116,12 +100,12 @@ func SettingsInsights(view SettingsInsightsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if view.CanEdit {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"insights-delete-dialog\" data-replica-primary-action>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<button class=\"button outline destructive\" type=\"button\" data-dialog-open=\"insights-delete-dialog\" data-replica-primary-action>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -129,17 +113,17 @@ func SettingsInsights(view SettingsInsightsView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span>Delete Insights Data</span></button>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>Delete Insights Data</span></button>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -149,7 +133,7 @@ func SettingsInsights(view SettingsInsightsView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -192,7 +176,7 @@ func SettingsInsightsDialogs() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<input type=\"hidden\" name=\"enabled\" value=\"false\"><label class=\"settings-insights-delete\"><input type=\"checkbox\" name=\"delete\" value=\"true\" checked><span>Also delete what Insights has collected</span></label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<input type=\"hidden\" name=\"enabled\" value=\"false\"><label class=\"settings-insights-delete\"><input type=\"checkbox\" name=\"delete\" value=\"true\" checked><span>Also delete what Insights has collected</span></label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -279,7 +263,7 @@ func insightsOffDocument(console DashboardView) templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"page-stack insights-off-page\"><header class=\"page-heading\"><h1>Insights</h1><p>Understand what's happening on your network</p></header><section class=\"card\"><div class=\"cluster-empty-state\"><span class=\"cluster-empty-icon\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<div class=\"page-stack insights-off-page\"><header class=\"page-heading\"><h1>Insights</h1><p>Understand what's happening on your network</p></header><section class=\"card\"><div class=\"cluster-empty-state\"><span class=\"cluster-empty-icon\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -287,12 +271,12 @@ func insightsOffDocument(console DashboardView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span><h3>Insights Is Off</h3><p>Sable is not recording which devices use it, so there is nothing to show.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span><h3>Insights Is Off</h3><p>Sable is not recording which devices use it, so there is nothing to show.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if console.CanSettings {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"cluster-empty-actions\"><a class=\"button\" href=\"/settings?tab=general#settings-insights\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"cluster-empty-actions\"><a class=\"button\" href=\"/settings?tab=general#settings-insights\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -300,12 +284,12 @@ func insightsOffDocument(console DashboardView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<span>Open Settings</span></a></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span>Open Settings</span></a></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</div></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

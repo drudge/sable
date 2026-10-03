@@ -68,6 +68,17 @@ func TestAlertsTabRendersGroupsAsSwitchesAndNamesEveryControl(t *testing.T) {
 			t.Errorf("the destination dialog lacks %q", want)
 		}
 	}
+	// Help text describes its control rather than joining its name.
+	for _, want := range []string{
+		`<span id="alert-destination-name-label">Name (Optional)</span>`,
+		`aria-describedby="alert-destination-name-help" aria-labelledby="alert-destination-name-label"`,
+		`<small id="alert-destination-name-help">`,
+		`aria-labelledby="alert-ntfy-receipt-label" aria-describedby="alert-ntfy-receipt-help"`,
+	} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the destination dialog lacks %q", want)
+		}
+	}
 	// The ntfy parts show for ntfy, and the others wait hidden.
 	for _, part := range []string{
 		`<span data-alert-for="text">Topic URL</span>`,

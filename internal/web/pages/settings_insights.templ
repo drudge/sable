@@ -23,9 +23,9 @@ templ SettingsInsights(view SettingsInsightsView) {
 				if view.Enabled {
 					// Turning it off asks first, so the switch stays on until the
 					// dialog says otherwise.
-					<label class="field-control switch-row setting-switch-row" id="settings-insights-switch"><span><strong>Insights</strong><small>Record which devices use Sable and what hardware they are.</small></span><input type="checkbox" role="switch" checked data-insights-off="insights-off-dialog" disabled?={ !view.CanEdit } data-replica-primary-action/></label>
+					@components.SwitchField(components.SwitchFieldProps{ID: "settings-insights-enabled", Title: "Insights", Description: "Record which devices use Sable and what hardware they are.", Checked: true, Disabled: !view.CanEdit, Attrs: templ.Attributes{"id": "settings-insights-switch"}, InputAttrs: templ.Attributes{"data-insights-off": "insights-off-dialog", "data-replica-primary-action": true}})
 				} else {
-					<label class="field-control switch-row setting-switch-row" id="settings-insights-switch"><span><strong>Insights</strong><small>Off. Sable records nothing about your devices.</small></span><input type="checkbox" role="switch" name="enabled" value="true" hx-post="/ui/settings/insights" hx-trigger="change" hx-target="#settings-insights" hx-swap="outerHTML" disabled?={ !view.CanEdit } data-replica-primary-action/></label>
+					@components.SwitchField(components.SwitchFieldProps{ID: "settings-insights-enabled", Title: "Insights", Description: "Off. Sable records nothing about your devices.", Name: "enabled", Disabled: !view.CanEdit, Attrs: templ.Attributes{"id": "settings-insights-switch"}, InputAttrs: templ.Attributes{"hx-post": "/ui/settings/insights", "hx-trigger": "change", "hx-target": "#settings-insights", "hx-swap": "outerHTML", "data-replica-primary-action": true}})
 				}
 				if view.Data != "" {
 					<div class="settings-insights-data">
