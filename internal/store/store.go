@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/drudge/sable/internal/querylog"
 )
@@ -32,6 +34,9 @@ type Store struct {
 	// postgresSearchTried keeps the PostgreSQL trigram indexes to one
 	// attempt per start.
 	postgresSearchTried atomic.Bool
+	// pruneChunk overrides how many rows one prune statement deletes; zero
+	// means pruneChunkRows. Tests set it to force several chunks.
+	pruneChunk int
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -88,6 +93,11 @@ var sqlitePragmas = [][2]string{
 // unenforced. The driver applies DSN pragmas to every connection it opens.
 // Anything the operator configured already wins, under either the _pragma form
 // or the driver's shorthand keys.
+//
+// Transactions begin IMMEDIATE. A DEFERRED transaction that reads first and
+// writes later cannot wait for the write lock: WAL mode answers its upgrade
+// with SQLITE_BUSY at once, whatever busy_timeout says. Taking the lock at
+// BEGIN makes every writer wait its turn under busy_timeout instead.
 func sqliteDSN(dsn string) string {
 	query := ""
 	if separator := strings.IndexByte(dsn, '?'); separator >= 0 {
@@ -103,6 +113,9 @@ func sqliteDSN(dsn string) string {
 			continue
 		}
 		settings = append(settings, "_pragma="+url.QueryEscape(pragma[0]+"("+pragma[1]+")"))
+	}
+	if !configured.Has("_txlock") {
+		settings = append(settings, "_txlock=immediate")
 	}
 	if len(settings) == 0 {
 		return dsn
@@ -261,9 +274,10 @@ func (store *Store) migrateQueryLogIndexes(ctx context.Context) error {
 CREATE INDEX IF NOT EXISTS sable_query_log_client_key_idx
 ON sable_query_log (client_ip_key, id DESC)`, `
 CREATE INDEX IF NOT EXISTS sable_query_log_name_key_idx
-ON sable_query_log (name_key, id DESC)`, `
-CREATE INDEX IF NOT EXISTS sable_query_log_rollup_bucket_idx
-ON sable_query_log_rollup (bucket_start)`} {
+ON sable_query_log (name_key, id DESC)`,
+		// The rollup primary key already leads with bucket_start, so this
+		// index only cost every batch an extra write.
+		"DROP INDEX IF EXISTS sable_query_log_rollup_bucket_idx"} {
 		if _, err := store.database.ExecContext(ctx, statement); err != nil {
 			return err
 		}
@@ -300,10 +314,21 @@ SELECT EXISTS (
 	return false, rows.Err()
 }
 
+// WriteQueryEvents stores a batch in one transaction. A batch that meets
+// SQLITE_BUSY after busy_timeout runs out is retried once, since a failed
+// batch is dropped by the recorder.
 func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+	err := store.writeQueryEvents(ctx, events)
+	if store.driver == "sqlite" && sqliteBusy(err) && ctx.Err() == nil {
+		err = store.writeQueryEvents(ctx, events)
+	}
+	return err
+}
+
+func (store *Store) writeQueryEvents(ctx context.Context, events []querylog.Event) error {
 	transaction, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin query log batch: %w", err)
@@ -369,35 +394,70 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 	return nil
 }
 
+// PruneQueryEvents removes query log history from before the cutoff: the raw
+// rows, the minute rollups and their tiers, and client sightings. Each table is
+// pruned on its own, in chunks that each commit on their own, so a large
+// backlog never holds the write lock for long and never meets one statement
+// timeout. The query log writer lands its batches between chunks.
 func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query log prune: %w", err)
-	}
-	placeholder := store.placeholder(1)
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log WHERE occurred_at < "+placeholder, before.UTC()); err != nil {
-		_ = transaction.Rollback()
+	before = before.UTC()
+	if err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before); err != nil {
 		return fmt.Errorf("prune query log: %w", err)
 	}
 	// Drop the cutoff minute as well because its aggregate can include rows
 	// from before the exact cutoff. Surviving rows in that partial minute remain
 	// available through the raw log boundary query.
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log_rollup WHERE bucket_start <= "+placeholder, before.UTC().Truncate(time.Minute)); err != nil {
-		_ = transaction.Rollback()
+	bucket := before.Truncate(time.Minute)
+	if err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
 		return fmt.Errorf("prune query log rollups: %w", err)
 	}
-	if err := store.pruneRollupTiers(ctx, transaction, before.UTC().Truncate(time.Minute)); err != nil {
-		_ = transaction.Rollback()
+	if err := store.pruneRollupTiers(ctx, bucket); err != nil {
 		return err
 	}
-	if err := store.pruneClientSightings(ctx, transaction, before); err != nil {
-		_ = transaction.Rollback()
-		return err
+	return store.pruneClientSightings(ctx, before)
+}
+
+const (
+	// pruneChunkRows is how many rows one prune statement deletes.
+	pruneChunkRows = 5_000
+	// pruneChunkTimeout bounds one chunk rather than a whole prune, so a
+	// backlog of any size finishes as long as each chunk does.
+	pruneChunkTimeout = 30 * time.Second
+)
+
+// deleteInChunks deletes the rows of table that match condition, at most
+// pruneChunkRows at a time, each chunk in its own statement and transaction.
+// Rows are picked by their physical key: on SQLite the rowid, which is the
+// query log's id, and on PostgreSQL the ctid, which the ANY(ARRAY(...)) form
+// turns into a direct tuple lookup instead of a scan.
+func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) error {
+	chunk := store.pruneChunk
+	if chunk <= 0 {
+		chunk = pruneChunkRows
 	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query log prune: %w", err)
+	limit := " WHERE " + condition + " LIMIT " + strconv.Itoa(chunk)
+	statement := "DELETE FROM " + table + " WHERE rowid IN (SELECT rowid FROM " + table + limit + ")"
+	if store.driver == "postgres" {
+		statement = "DELETE FROM " + table + " WHERE ctid = ANY(ARRAY(SELECT ctid FROM " + table + limit + "))"
 	}
-	return nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		chunkContext, cancel := context.WithTimeout(ctx, pruneChunkTimeout)
+		result, err := store.database.ExecContext(chunkContext, statement, arguments...)
+		cancel()
+		if err != nil {
+			return err
+		}
+		deleted, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if deleted < int64(chunk) {
+			return nil
+		}
+	}
 }
 
 func (store *Store) RecentQueryEvents(ctx context.Context, limit int) ([]querylog.Entry, error) {
@@ -691,6 +751,13 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	return `INSERT INTO sable_query_log
 (occurred_at, client_ip, client_ip_key, name, name_key, record_type, class, response_code, source, protocol, answer, decision, duration_us)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+}
+
+// sqliteBusy reports whether err is SQLite's database-locked error, under its
+// primary code or any extended one.
+func sqliteBusy(err error) bool {
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && sqliteError.Code()&0xff == sqlite3.SQLITE_BUSY
 }
 
 func databaseDriverName(driver string) (string, error) {

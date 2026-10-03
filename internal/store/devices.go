@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS sable_client_seen (
     first_seen TIMESTAMP NOT NULL,
     last_seen TIMESTAMP NOT NULL
 )`, `
+CREATE INDEX IF NOT EXISTS sable_client_seen_last_idx
+ON sable_client_seen (last_seen)`, `
 CREATE TABLE IF NOT EXISTS sable_client_domain_seen (
     client_key TEXT NOT NULL,
     name_key TEXT NOT NULL,
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS sable_client_domain_seen (
 )`, `
 CREATE INDEX IF NOT EXISTS sable_client_domain_seen_first_idx
 ON sable_client_domain_seen (first_seen)`, `
+CREATE INDEX IF NOT EXISTS sable_client_domain_seen_last_idx
+ON sable_client_domain_seen (last_seen)`, `
 CREATE TABLE IF NOT EXISTS sable_client_identity (
     address TEXT NOT NULL,
     mac TEXT NOT NULL,
@@ -53,7 +57,9 @@ CREATE TABLE IF NOT EXISTS sable_client_identity (
     first_seen TIMESTAMP NOT NULL,
     last_seen TIMESTAMP NOT NULL,
     PRIMARY KEY (address, mac, source)
-)`}
+)`, `
+CREATE INDEX IF NOT EXISTS sable_client_identity_last_idx
+ON sable_client_identity (last_seen)`}
 }
 
 type sightingSpan struct{ first, last time.Time }
@@ -181,9 +187,9 @@ func (store *Store) upsertSpans(ctx context.Context, executor interface {
 
 // pruneClientSightings drops spans that ended before the query log retention
 // cutoff, so first-seen history never outlives the queries behind it.
-func (store *Store) pruneClientSightings(ctx context.Context, transaction *sql.Tx, before time.Time) error {
+func (store *Store) pruneClientSightings(ctx context.Context, before time.Time) error {
 	for _, table := range []string{"sable_client_seen", "sable_client_domain_seen", "sable_client_identity"} {
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM "+table+" WHERE last_seen < "+store.placeholder(1), before.UTC()); err != nil {
+		if err := store.deleteInChunks(ctx, table, "last_seen < "+store.placeholder(1), before.UTC()); err != nil {
 			return fmt.Errorf("prune %s: %w", table, err)
 		}
 	}
