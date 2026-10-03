@@ -1198,6 +1198,10 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	observer := handler.activeQueryObserver()
 	handler.queries.Add(1)
 	runtime := handler.runtime.Load()
+	// Every step below matches on the lowercase name, so it is worked out once
+	// here rather than again in each one. A 0x20 mixed-case query would
+	// otherwise allocate a fresh copy at every step.
+	name := questionName(request)
 	if handler.serveDynamicUpdate(writer, request, runtime, observer, client, startedAt) {
 		return
 	}
@@ -1207,25 +1211,25 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	if handler.serveZoneTransfer(writer, request, runtime, client.ip) {
 		return
 	}
-	if len(request.Question) == 1 && handler.zoneExpired(runtime, request.Question[0].Name) {
+	if len(request.Question) == 1 && handler.zoneExpired(runtime, name) {
 		result := resolution{response: errorResponse(request, dns.RcodeServerFailure), source: querylog.SourceError}
 		latencyResponseCode = result.response.Rcode
 		handler.logResolutionFailure(request, client.ip, "authoritative zone expired")
 		handler.recordResponseCode(result.response.Rcode)
 		handler.writeResponse(writer, request, result.response)
 		if observer != nil {
-			handler.recordQuery(observer, client, request, result, startedAt)
+			handler.recordQuery(observer, client, request, name, result, startedAt)
 		}
 		return
 	}
-	result := handler.resolveForClient(request, runtime, client.ip)
+	result := handler.resolveNameForClient(request, name, runtime, client.ip)
 	latencySource = result.source
 	latencyCache = result.decision.Cache
 	latencyResponseCode = result.response.Rcode
 	handler.recordResponseCode(result.response.Rcode)
 	handler.writeResponse(writer, request, result.response)
 	if observer != nil {
-		handler.recordQuery(observer, client, request, result, startedAt)
+		handler.recordQuery(observer, client, request, name, result, startedAt)
 	}
 }
 
@@ -1535,15 +1539,21 @@ func (handler *Handler) recordResponseCode(code int) {
 
 func (handler *Handler) resolve(request *dns.Msg, runtime *Runtime) resolution {
 	// In-process lookups do not inherit a network client's recursion grant.
-	return handler.resolveRequest(request, runtime, "", true)
+	return handler.resolveRequest(request, questionName(request), runtime, "", true)
 }
 
 func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, clientIP string) resolution {
+	return handler.resolveNameForClient(request, questionName(request), runtime, clientIP)
+}
+
+// resolveNameForClient is resolveForClient for a caller that already holds the
+// normalized question name.
+func (handler *Handler) resolveNameForClient(request *dns.Msg, name string, runtime *Runtime, clientIP string) resolution {
 	var attached []netip.Prefix
 	if networks := handler.attached.Load(); networks != nil {
 		attached = *networks
 	}
-	return handler.resolveRequest(request, runtime, clientIP, runtime.recursion.AllowsFrom(clientIP, attached))
+	return handler.resolveRequest(request, name, runtime, clientIP, runtime.recursion.AllowsFrom(clientIP, attached))
 }
 
 // SetAttachedNetworks replaces the IPv6 networks private recursion admits
@@ -1553,7 +1563,9 @@ func (handler *Handler) SetAttachedNetworks(networks []netip.Prefix) {
 	handler.attached.Store(&networks)
 }
 
-func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clientIP string, recursionAllowed bool) (result resolution) {
+// resolveRequest answers request. name is its question name as questionName
+// returns it.
+func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *Runtime, clientIP string, recursionAllowed bool) (result resolution) {
 	defer func() {
 		if result.response != nil {
 			result.response.RecursionAvailable = recursionAllowed
@@ -1563,17 +1575,17 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 		return resolution{response: errorResponse(request, dns.RcodeFormatError), source: querylog.SourceError,
 			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}}
 	}
-	if response, found := handler.resolveANAME(request, runtime, clientIP); found {
+	if response, found := handler.resolveANAME(request, name, runtime, clientIP); found {
 		handler.authoritativeAnswers.Add(1)
 		return resolution{response: response, source: querylog.SourceAuthoritative,
 			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
 	}
-	if response, found := runtime.authoritativeResponse(request); found {
+	if response, found := runtime.authoritativeResponseFor(request, name); found {
 		handler.authoritativeAnswers.Add(1)
 		return resolution{response: response, source: querylog.SourceAuthoritative,
 			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
 	}
-	if response, found := runtime.localResponse(request); found {
+	if response, found := runtime.localResponseFor(request, name); found {
 		handler.localAnswers.Add(1)
 		return resolution{response: response, source: querylog.SourceLocal,
 			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverLocal}}
@@ -1584,7 +1596,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	if !recursionAllowed {
 		return recursionNotAllowed(request)
 	}
-	policy, policyRule, policySources := runtime.policyDecision(request.Question[0].Name, clientIP, handler.BlockingPaused())
+	policy, policyRule, policySources := runtime.policyDecision(name, clientIP, handler.BlockingPaused())
 	if policy == querylog.PolicyBlocked {
 		handler.blocked.Add(1)
 		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
@@ -1607,7 +1619,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 	}
 	handler.cacheMisses.Add(1)
 
-	forwarders, route := runtime.forwardersAndRouteFor(request.Question[0].Name)
+	forwarders, route := runtime.forwardersAndRouteFor(name)
 	if route != "" {
 		handler.routedQueries.Add(1)
 	}
@@ -1626,10 +1638,10 @@ func (handler *Handler) resolveRequest(request *dns.Msg, runtime *Runtime, clien
 		return recursionRefused(request)
 	}
 	if runtime.staleMaxWait > 0 && runtime.cache.HasStale(request) {
-		result = handler.resolveWithStaleWait(request, runtime, forwarders, clientIP, release)
+		result = handler.resolveWithStaleWait(request, name, runtime, forwarders, clientIP, release)
 	} else {
 		defer release()
-		result = handler.resolveShared(request, runtime, forwarders, true, clientIP)
+		result = handler.resolveShared(request, name, runtime, forwarders, true, clientIP)
 	}
 	result.decision.Policy = policy
 	result.decision.PolicyRule = policyRule
@@ -1681,18 +1693,18 @@ func dnssecDecision(validation validationState) querylog.DNSSECDecision {
 // Only the leader runs the resolution, so a failure is logged against the client
 // that started it. Followers asking the same question at the same moment share
 // that outcome without appearing in the line.
-func (handler *Handler) resolveShared(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	return handler.resolveSharedContext(context.Background(), request, runtime, forwarders, staleFallback, clientIP)
+func (handler *Handler) resolveShared(request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+	return handler.resolveSharedContext(context.Background(), request, name, runtime, forwarders, staleFallback, clientIP)
 }
 
-func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	arrived := time.Now()
-	key := coalesceKey(request)
+	key := coalesceKeyFor(request, name)
 	key.runtime = runtime
-	result, shared := handler.inflight.doContext(ctx, key, func() resolution {
+	result, follower, shared := handler.inflight.doContext(ctx, key, func() resolution {
 		return handler.resolveLiveUpstreamContext(ctx, request, runtime, forwarders, staleFallback, clientIP)
 	})
-	if shared && result.stillRunning {
+	if follower && result.stillRunning {
 		// The client that started the lookup stopped waiting, but this one
 		// asked later, often as that device's own retry. It waits on the same
 		// recursive lookup for the rest of its own time instead of ending
@@ -1704,9 +1716,13 @@ func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.M
 	if result.response == nil {
 		return result
 	}
-	// Every caller, including the leader, owns its copy: client-specific flags
-	// must not mutate the result while followers are copying it.
-	response := result.response.Copy()
+	// A shared result is copied by every caller, the leader included, so
+	// client-specific flags never change it while another caller is copying
+	// it. A leader nobody joined owns its response outright.
+	response := result.response
+	if shared {
+		response = response.Copy()
+	}
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	prepareResponseForClient(response, request)
@@ -1734,6 +1750,9 @@ type inflightKey struct {
 type inflightCall struct {
 	wait   chan struct{}
 	result resolution
+	// followers counts the callers that joined this one. It changes only
+	// under the group's lock, while the call is still in the map.
+	followers int
 }
 
 func newInflightGroup() *inflightGroup {
@@ -1741,18 +1760,21 @@ func newInflightGroup() *inflightGroup {
 }
 
 // doContext runs fn for key unless a call is already in flight, in which case
-// it waits for that call, or for ctx, and returns its result. The bool reports
-// whether the result was shared with an in-flight call (true for waiters), so
-// the caller knows it must copy a shared response before mutating it.
-func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn func() resolution) (resolution, bool) {
+// it waits for that call, or for ctx, and returns its result. follower reports
+// that this caller waited on another's call. shared reports whether another
+// caller holds the same result: always for a follower, and for the caller that
+// ran fn when anyone joined it. A caller must copy a shared response before
+// changing it.
+func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn func() resolution) (result resolution, follower, shared bool) {
 	group.mu.Lock()
 	if call, ok := group.calls[key]; ok {
+		call.followers++
 		group.mu.Unlock()
 		select {
 		case <-call.wait:
-			return call.result, true
+			return call.result, true, true
 		case <-ctx.Done():
-			return resolution{}, true
+			return resolution{}, true, true
 		}
 	}
 	call := &inflightCall{wait: make(chan struct{})}
@@ -1761,28 +1783,36 @@ func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn f
 
 	// Release the key and the waiters even if fn panics. Waiters reached
 	// through resolveShared wait on context.Background, so a call left in the
-	// map would hang every later identical query.
+	// map would hang every later identical query. Once the key is gone nobody
+	// else can join, so the follower count read here is final.
 	defer func() {
 		group.mu.Lock()
 		delete(group.calls, key)
+		shared = call.followers > 0
 		group.mu.Unlock()
 		close(call.wait)
 	}()
 	call.result = fn()
-	return call.result, false
+	return call.result, false, false
 }
 
 // coalesceKey identifies queries that share an upstream answer: the same name,
 // type, and class, and the same DNSSEC intent (DO/CD), since those change what a
 // resolver returns and caches.
 func coalesceKey(request *dns.Msg) inflightKey {
+	return coalesceKeyFor(request, normalizeName(request.Question[0].Name))
+}
+
+// coalesceKeyFor is coalesceKey for a request whose question name is already
+// normalized.
+func coalesceKeyFor(request *dns.Msg, name string) inflightKey {
 	question := request.Question[0]
 	dnssecOK := false
 	if option := request.IsEdns0(); option != nil {
 		dnssecOK = option.Do()
 	}
 	return inflightKey{
-		name:             normalizeName(question.Name),
+		name:             name,
 		recordType:       question.Qtype,
 		class:            question.Qclass,
 		dnssecOK:         dnssecOK,
@@ -1790,7 +1820,7 @@ func coalesceKey(request *dns.Msg) inflightKey {
 	}
 }
 
-func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime, forwarders []string, clientIP string, release func()) resolution {
+func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runtime *Runtime, forwarders []string, clientIP string, release func()) resolution {
 	if !handler.startBackground() {
 		release()
 		return handler.resolveUpstreamFailure(request, runtime)
@@ -1800,7 +1830,7 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 		defer handler.backgroundWG.Done()
 		// Keep the permit until work finishes, even after a stale answer returns.
 		defer release()
-		result <- handler.resolveSharedContext(handler.backgroundContext, request.Copy(), runtime, forwarders, false, clientIP)
+		result <- handler.resolveSharedContext(handler.backgroundContext, request.Copy(), name, runtime, forwarders, false, clientIP)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
 	defer timer.Stop()
@@ -1833,8 +1863,8 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
 		if !request.CheckingDisabled {
-			handler.logResolutionFailure(request, clientIP, "DNSSEC validation failed",
-				upstreamFailureFields(runtime, forwarders, validationErr)...)
+			handler.logUpstreamFailure(request, clientIP, "DNSSEC validation failed",
+				upstreamFailure{runtime: runtime, forwarders: forwarders, err: validationErr})
 			decision.Resolver = querylog.ResolverError
 			return resolution{response: dnssecBogusResponse(request, validationErr), source: querylog.SourceError, decision: decision}
 		}
@@ -1845,8 +1875,8 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 	}
 	if validationErr != nil && validation != validationBogus {
 		handler.upstreamErrors.Add(1)
-		handler.logResolutionFailure(request, clientIP, "upstream resolution failed",
-			upstreamFailureFields(runtime, forwarders, validationErr)...)
+		handler.logUpstreamFailure(request, clientIP, "upstream resolution failed",
+			upstreamFailure{runtime: runtime, forwarders: forwarders, err: validationErr})
 		// A lookup still running will answer a retry, so its failure is
 		// neither cached nor final.
 		stillRunning := errors.Is(validationErr, errStillRunning)
@@ -1858,8 +1888,8 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 	}
 	if response == nil {
 		handler.upstreamErrors.Add(1)
-		handler.logResolutionFailure(request, clientIP, "upstream returned no response",
-			upstreamFailureFields(runtime, forwarders, nil)...)
+		handler.logUpstreamFailure(request, clientIP, "upstream returned no response",
+			upstreamFailure{runtime: runtime, forwarders: forwarders})
 		if !staleFallback {
 			decision.Resolver = querylog.ResolverError
 			return resolution{response: errorResponse(request, fallbackErrorCode), source: querylog.SourceError, decision: decision, transientFailure: true}
@@ -1867,8 +1897,8 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 		return handler.resolveUpstreamFailure(request, runtime)
 	}
 	if response.Rcode == dns.RcodeServerFailure {
-		handler.logResolutionFailure(request, clientIP, "upstream answered SERVFAIL",
-			upstreamFailureFields(runtime, forwarders, nil)...)
+		handler.logUpstreamFailure(request, clientIP, "upstream answered SERVFAIL",
+			upstreamFailure{runtime: runtime, forwarders: forwarders})
 	}
 	runtime.cacheUpstreamAnswer(request, response, validation)
 	prepareResponseForClient(response, request)
@@ -1965,8 +1995,8 @@ func (handler *Handler) staleResponse(request *dns.Msg, runtime *Runtime) (resol
 		decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}, true
 }
 
-func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
-	alias, found := runtime.authoritativeANAMEFor(request)
+func (handler *Handler) resolveANAME(request *dns.Msg, name string, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
+	alias, found := runtime.authoritativeANAMEFor(request, name)
 	if !found {
 		return nil, false
 	}
@@ -1997,8 +2027,8 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientI
 		targetResponse, validation, err = handler.resolveUpstream(targetRequest, runtime, forwarders)
 		if err != nil {
 			handler.upstreamErrors.Add(1)
-			handler.logResolutionFailure(request, clientIP, "ANAME target resolution failed",
-				append([]any{"target", alias.target}, upstreamFailureFields(runtime, forwarders, err)...)...)
+			handler.logUpstreamFailure(request, clientIP, "ANAME target resolution failed",
+				upstreamFailure{runtime: runtime, forwarders: forwarders, err: err}, "target", alias.target)
 			return errorResponse(request, fallbackErrorCode), true
 		}
 		if validation == validationBogus {
@@ -2028,7 +2058,7 @@ func (handler *Handler) resolveANAME(request *dns.Msg, runtime *Runtime, clientI
 		response.Answer = append(response.Answer, clone)
 	}
 	if len(response.Answer) == 0 {
-		if zone := runtime.authoritativeZoneFor(normalizeName(request.Question[0].Name)); zone != nil {
+		if zone := runtime.authoritativeZoneFor(name); zone != nil {
 			response.Ns = cloneRecords(zone.soa, "", time.Now())
 		}
 	}
@@ -2125,6 +2155,12 @@ func authoritativeOwner(zoneName, recordName string) (string, error) {
 }
 
 func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool) {
+	return runtime.authoritativeResponseFor(request, questionName(request))
+}
+
+// authoritativeResponseFor is authoritativeResponse for a caller that already
+// holds the normalized question name.
+func (runtime *Runtime) authoritativeResponseFor(request *dns.Msg, queryName string) (*dns.Msg, bool) {
 	if request.Opcode != dns.OpcodeQuery || len(request.Question) != 1 {
 		return nil, false
 	}
@@ -2132,7 +2168,6 @@ func (runtime *Runtime) authoritativeResponse(request *dns.Msg) (*dns.Msg, bool)
 	if question.Qclass != dns.ClassINET && question.Qclass != dns.ClassANY {
 		return nil, false
 	}
-	queryName := normalizeName(question.Name)
 	zone := runtime.authoritativeZoneFor(queryName)
 	if zone == nil {
 		return nil, false
@@ -2591,7 +2626,7 @@ func compareCanonicalWireName(left, right string) int {
 func (zone *authoritativeZone) forwardsQuestion(name string, qtype uint16, now time.Time) bool {
 	if zonemodel.IsForwarderType(zone.kind) {
 		records, _, _ := zone.recordsAt(name, now)
-		if len(cloneRecords(records[qtype], "", now)) > 0 || len(cloneRecords(records[dns.TypeCNAME], "", now)) > 0 || qtype == dns.TypeANY && hasActiveRecords(records, now) {
+		if anyActive(records[qtype], now) || anyActive(records[dns.TypeCNAME], now) || qtype == dns.TypeANY && hasActiveRecords(records, now) {
 			return false
 		}
 	}
@@ -2615,7 +2650,7 @@ func (zone *authoritativeZone) forwards(name string) bool {
 	return false
 }
 
-func (runtime *Runtime) authoritativeANAMEFor(request *dns.Msg) (authoritativeANAME, bool) {
+func (runtime *Runtime) authoritativeANAMEFor(request *dns.Msg, queryName string) (authoritativeANAME, bool) {
 	if request.Opcode != dns.OpcodeQuery || len(request.Question) != 1 {
 		return authoritativeANAME{}, false
 	}
@@ -2623,7 +2658,6 @@ func (runtime *Runtime) authoritativeANAMEFor(request *dns.Msg) (authoritativeAN
 	if question.Qclass != dns.ClassINET || (question.Qtype != dns.TypeA && question.Qtype != dns.TypeAAAA) {
 		return authoritativeANAME{}, false
 	}
-	queryName := normalizeName(question.Name)
 	zone := runtime.authoritativeZoneFor(queryName)
 	if zone == nil {
 		return authoritativeANAME{}, false
@@ -2667,10 +2701,19 @@ func (zone *authoritativeZone) wildcardRecords(name string, now time.Time) (map[
 
 func hasActiveRecords(records map[uint16][]authoritativeRecord, now time.Time) bool {
 	for _, typed := range records {
-		for _, record := range typed {
-			if record.expiresAt.IsZero() || record.expiresAt.After(now) {
-				return true
-			}
+		if anyActive(typed, now) {
+			return true
+		}
+	}
+	return false
+}
+
+// anyActive reports whether any of records has not expired, the same test
+// cloneRecords applies, without copying them.
+func anyActive(records []authoritativeRecord, now time.Time) bool {
+	for _, record := range records {
+		if record.expiresAt.IsZero() || record.expiresAt.After(now) {
+			return true
 		}
 	}
 	return false
@@ -2692,6 +2735,12 @@ func cloneRecords(records []authoritativeRecord, owner string, now time.Time) []
 }
 
 func (runtime *Runtime) localResponse(request *dns.Msg) (*dns.Msg, bool) {
+	return runtime.localResponseFor(request, questionName(request))
+}
+
+// localResponseFor is localResponse for a caller that already holds the
+// normalized question name.
+func (runtime *Runtime) localResponseFor(request *dns.Msg, name string) (*dns.Msg, bool) {
 	if request.Opcode != dns.OpcodeQuery || len(request.Question) != 1 {
 		return nil, false
 	}
@@ -2699,7 +2748,7 @@ func (runtime *Runtime) localResponse(request *dns.Msg) (*dns.Msg, bool) {
 	if question.Qclass != dns.ClassINET {
 		return nil, false
 	}
-	records, found := runtime.localHostFor(question.Name)
+	records, found := runtime.hosts[name]
 	if !found {
 		return nil, false
 	}
@@ -2804,6 +2853,7 @@ func (handler *Handler) recordQuery(
 	observer querylog.Observer,
 	client queryClient,
 	request *dns.Msg,
+	name string,
 	result resolution,
 	startedAt time.Time,
 ) {
@@ -2821,16 +2871,26 @@ func (handler *Handler) recordQuery(
 	observer.Record(querylog.Event{
 		OccurredAt:   startedAt,
 		ClientIP:     client.ip,
-		Name:         normalizeName(question.Name),
+		Name:         name,
 		RecordType:   question.Qtype,
 		Class:        question.Qclass,
 		ResponseCode: result.response.Rcode,
 		Source:       result.source,
 		Protocol:     client.protocol,
-		Answer:       queryAnswer(result.response),
 		Duration:     time.Since(startedAt),
 		Decision:     decision,
+		AnswerSource: (*loggedResponse)(result.response),
 	})
+}
+
+// loggedResponse hands a written response to the query log, which formats its
+// answer on the log writer's goroutine rather than the one serving the query.
+// Nothing changes a response once the handler has written it, so the writer
+// can read it later without a copy.
+type loggedResponse dns.Msg
+
+func (response *loggedResponse) QueryAnswer() string {
+	return queryAnswer((*dns.Msg)(response))
 }
 
 func resolverDecisionForSource(source querylog.Source) querylog.ResolverDecision {
@@ -3064,28 +3124,35 @@ func newAuthorityHealthTracker() *upstreamHealthTracker {
 	return tracker
 }
 
+// order rotates forwarders to begin at start, then moves the ones cooling
+// down after the healthy ones, keeping the rotation within each group. The
+// result is only read, so a single server comes back as given.
 func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) []string {
+	if len(forwarders) <= 1 {
+		return forwarders
+	}
 	rotated := make([]string, len(forwarders))
 	for offset := range forwarders {
 		rotated[offset] = forwarders[(start+uint64(offset))%uint64(len(forwarders))]
 	}
 	tracker.mu.RLock()
+	defer tracker.mu.RUnlock()
 	if len(tracker.retryAfter) == 0 {
-		tracker.mu.RUnlock()
 		return rotated
 	}
 	now := tracker.now()
-	healthy := make([]string, 0, len(rotated))
+	healthy := 0
 	var cooling []string
 	for _, forwarder := range rotated {
 		if until, found := tracker.retryAfter[forwarder]; found && now.Before(until) {
 			cooling = append(cooling, forwarder)
 		} else {
-			healthy = append(healthy, forwarder)
+			rotated[healthy] = forwarder
+			healthy++
 		}
 	}
-	tracker.mu.RUnlock()
-	return append(healthy, cooling...)
+	copy(rotated[healthy:], cooling)
+	return rotated
 }
 
 func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
@@ -3530,6 +3597,15 @@ func (runtime *Runtime) blockedResponse(request *dns.Msg) *dns.Msg {
 
 func normalizeName(name string) string {
 	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
+}
+
+// questionName is the normalized name of a request's first question, or ""
+// when it has none.
+func questionName(request *dns.Msg) string {
+	if len(request.Question) == 0 {
+		return ""
+	}
+	return normalizeName(request.Question[0].Name)
 }
 
 // isCanonicalDomain reports whether name is already the lowercase, ASCII,

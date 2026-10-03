@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -520,9 +521,20 @@ func relativeUpdateOwner(zone, owner string) (string, bool) {
 	return strings.TrimSuffix(owner, suffix), true
 }
 
+// isEmptyUpdateMetaRecord reports whether record carries no RDATA, the form
+// RFC 2136 uses for class ANY and NONE meta records. A locally built message
+// holds a *dns.ANY, but miekg/dns unpacks zero-length RDATA into the concrete
+// type named by the header, so "delete the A RRset" arrives as an empty *dns.A.
 func isEmptyUpdateMetaRecord(record dns.RR) bool {
-	_, ok := record.(*dns.ANY)
-	return ok
+	if _, ok := record.(*dns.ANY); ok {
+		return true
+	}
+	var empty dns.RR = &dns.RFC3597{}
+	if newRR, ok := dns.TypeToRR[record.Header().Rrtype]; ok {
+		empty = newRR()
+	}
+	*empty.Header() = *record.Header()
+	return reflect.DeepEqual(empty, record)
 }
 
 func isMetaRecordType(recordType uint16) bool {

@@ -114,7 +114,7 @@ func (handler *Handler) serveDynamicUpdate(
 	handler.recordResponseCode(response.Rcode)
 	handler.writeResponse(writer, request, response)
 	if observer != nil {
-		handler.recordQuery(observer, client, request, resolution{response: response, source: querylog.SourceAuthoritative}, startedAt)
+		handler.recordQuery(observer, client, request, questionName(request), resolution{response: response, source: querylog.SourceAuthoritative}, startedAt)
 	}
 	return true
 }
