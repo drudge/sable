@@ -70,13 +70,17 @@ const catalogConsumerFormType = "secondary_catalog"
 
 func (server *Server) zonesView(request *http.Request, message, errorMessage, selected string) pages.ZonesPageView {
 	console := server.consoleView(request)
-	zones := server.zones.Current().Zones
+	// The page only reads the zones, so it skips the copy Current makes.
+	zones := server.currentZonesRef().Zones
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	readable := func(zone zonemodel.Zone) bool {
+		return !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID)
+	}
 	tsigKeys := server.tsigKeyNames(request.Context())
 	aliasSources := make([]string, 0, len(zones))
 	catalogTargets := make([]string, 0, len(zones))
 	for _, zone := range zones {
-		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+		if !readable(zone) {
 			continue
 		}
 		if zonemodel.IsProducerCatalog(zone) {
@@ -87,9 +91,16 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		}
 		aliasSources = append(aliasSources, zone.Name)
 	}
+	// A selected zone renders on its own, so a record change reads that one
+	// zone's DNSSEC keys and history however many zones there are.
+	if !slices.ContainsFunc(zones, func(zone zonemodel.Zone) bool { return zone.Name == selected && readable(zone) }) {
+		selected = ""
+	}
+	_, historyAvailable := server.zones.(zoneRevisionStore)
+	catalogs := newZoneCatalogIndex(zones)
 	views := make([]pages.ZoneView, 0, len(zones))
 	for _, zone := range zones {
-		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+		if !readable(zone) || (selected != "" && zone.Name != selected) {
 			continue
 		}
 		zoneView := pages.ZoneView{
@@ -102,8 +113,8 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,
 			CatalogTargets:        catalogZoneChoices(catalogTargets, zone),
 			CatalogRole:           catalogRoleLabel(zone),
-			CatalogManager:        catalogManagingZone(zones, zone),
-			CatalogMembers:        catalogMemberNames(zones, zone),
+			CatalogManager:        catalogs.manager(zone),
+			CatalogMembers:        catalogs.members(zone),
 			AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
 			TSIGKey:               zone.TSIGKey, TSIGKeys: tsigKeys, DynamicUpdates: zone.DynamicUpdates,
 			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
@@ -149,28 +160,15 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 				SourceLabel: zoneRecordSourceLabel(record.Source),
 			})
 		}
-		views = append(views, zoneView)
-	}
-	if !slices.ContainsFunc(views, func(zone pages.ZoneView) bool { return zone.Name == selected }) {
-		selected = ""
-	}
-	if history, ok := server.zones.(zoneRevisionStore); ok {
-		for index := range views {
-			zoneView := &views[index]
-			if selected != "" && zoneView.Name != selected {
-				continue
-			}
-			revisions, err := history.ListZoneRevisions(request.Context(), zoneView.Name, 20)
-			if errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
-				break
-			}
-			if err != nil {
-				zoneView.HistoryError = "Change history is temporarily unavailable."
-				server.logger.Warn("load zone revision history", "zone", zoneView.Name, "error", err)
-				continue
-			}
-			zoneView.History = zoneRevisionViews(server.readableZoneRevisions(request, revisions), zoneView.Revision, console.TimeDisplay)
+		switch {
+		case selected != "":
+			server.loadZoneHistory(request, &zoneView, console.TimeDisplay)
+		case historyAvailable && zone.Revision > 0:
+			// The list fetches a zone's history when its dialog opens rather
+			// than reading every zone's revisions to draw the rows.
+			zoneView.HistoryLazy = true
 		}
+		views = append(views, zoneView)
 	}
 	return pages.ZonesPageView{
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
@@ -178,6 +176,70 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		AliasSources: aliasSources,
 		TSIGKeys:     tsigKeys,
 	}
+}
+
+// loadZoneHistory fills a zone's recent revisions. A zone source without
+// history leaves both fields empty, which hides the History action.
+func (server *Server) loadZoneHistory(request *http.Request, view *pages.ZoneView, display pages.TimeDisplay) {
+	history, ok := server.zones.(zoneRevisionStore)
+	if !ok {
+		return
+	}
+	revisions, err := history.ListZoneRevisions(request.Context(), view.Name, 20)
+	if errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
+		return
+	}
+	if err != nil {
+		view.HistoryError = "Change history is temporarily unavailable."
+		server.logger.Warn("load zone revision history", "zone", view.Name, "error", err)
+		return
+	}
+	view.History = zoneRevisionViews(server.readableZoneRevisions(request, revisions), view.Revision, display)
+}
+
+// zoneCatalogIndex answers catalog membership for every zone on the page from
+// one pass over the zones, instead of rescanning them for each row.
+type zoneCatalogIndex struct {
+	zones       map[string]zonemodel.Zone
+	memberNames map[string][]string
+}
+
+func newZoneCatalogIndex(zones []zonemodel.Zone) zoneCatalogIndex {
+	index := zoneCatalogIndex{zones: make(map[string]zonemodel.Zone, len(zones)), memberNames: make(map[string][]string)}
+	for _, zone := range zones {
+		if _, seen := index.zones[zone.Name]; !seen {
+			index.zones[zone.Name] = zone
+		}
+		if zone.CatalogZone != "" {
+			index.memberNames[zone.CatalogZone] = append(index.memberNames[zone.CatalogZone], zone.Name)
+		}
+	}
+	for _, names := range index.memberNames {
+		slices.Sort(names)
+	}
+	return index
+}
+
+// members lists the zones a catalog carries, so the console can show
+// membership without making the operator read the raw PTR records.
+func (index zoneCatalogIndex) members(current zonemodel.Zone) []string {
+	if current.Type != "catalog" {
+		return nil
+	}
+	return append(make([]string, 0, len(index.memberNames[current.Name])), index.memberNames[current.Name]...)
+}
+
+// manager names the consumer catalog that provisioned a zone, like
+// catalogManagingZone.
+func (index zoneCatalogIndex) manager(current zonemodel.Zone) string {
+	if current.CatalogZone == "" {
+		return ""
+	}
+	owner, found := index.zones[current.CatalogZone]
+	if !found || !zonemodel.IsConsumerCatalog(owner) {
+		return ""
+	}
+	return owner.Name
 }
 
 // catalogRoleLabel describes which side of RFC 9432 a catalog zone sits on.
@@ -205,22 +267,6 @@ func catalogZoneChoices(targets []string, current zonemodel.Zone) []string {
 	}
 	slices.Sort(choices)
 	return choices
-}
-
-// catalogMemberNames lists the zones a catalog carries, so the console can show
-// membership without making the operator read the raw PTR records.
-func catalogMemberNames(zones []zonemodel.Zone, current zonemodel.Zone) []string {
-	if current.Type != "catalog" {
-		return nil
-	}
-	members := make([]string, 0)
-	for _, candidate := range zones {
-		if candidate.CatalogZone == current.Name {
-			members = append(members, candidate.Name)
-		}
-	}
-	slices.Sort(members)
-	return members
 }
 
 // aliasZoneChoices returns the source zones offered in an alias zone's settings
