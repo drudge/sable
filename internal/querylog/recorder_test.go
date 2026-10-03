@@ -2,6 +2,7 @@ package querylog
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -224,6 +225,43 @@ func TestRecorderCloseCancelsBlockedPrune(t *testing.T) {
 	}
 	if stats := recorder.Stats(); stats.WriteErrors != 1 {
 		t.Fatalf("canceled prune stats = %+v, want one error", stats)
+	}
+}
+
+// A prune that runs long never holds up the writer: batches keep landing
+// until it finishes.
+func TestRecorderKeepsWritingWhilePruneRuns(t *testing.T) {
+	t.Parallel()
+
+	pruneGate := make(chan struct{})
+	writer := &memoryWriter{pruneGate: pruneGate, pruneStarted: make(chan struct{})}
+	recorder := newTestRecorder(t, writer, Options{
+		Enabled: true, BufferSize: 16, BatchSize: 1, FlushInterval: time.Hour, Retention: 24 * time.Hour,
+	})
+	select {
+	case <-writer.pruneStarted:
+	case <-time.After(time.Second):
+		t.Fatal("pruner did not start")
+	}
+	for index := range 5 {
+		recorder.Record(Event{Name: fmt.Sprintf("during-prune-%d.example", index)})
+	}
+	deadline := time.Now().Add(time.Second)
+	for writer.count() < 5 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := writer.count(); got != 5 {
+		t.Fatalf("persisted %d events while a prune was running, want 5", got)
+	}
+	if got := writer.pruneCount(); got != 0 {
+		t.Fatalf("prune finished %d times before it was released", got)
+	}
+	close(pruneGate)
+	if err := recorder.Close(context.Background()); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if stats := recorder.Stats(); stats.Dropped != 0 || stats.WriteErrors != 0 {
+		t.Fatalf("stats = %+v, want nothing dropped", stats)
 	}
 }
 

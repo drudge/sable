@@ -370,37 +370,54 @@ func (store *Store) insertTierRows(ctx context.Context, transaction interface {
 
 // pruneRollupTiers drops every coarser bucket that summed a pruned minute and
 // moves each tier's start past them, so what survives of a bucket cut in two
-// is counted from its remaining minutes.
-func (store *Store) pruneRollupTiers(ctx context.Context, transaction *sql.Tx, through time.Time) error {
+// is counted from its remaining minutes. The start moves first, in a short
+// transaction of its own, so a read between the chunked deletes never counts
+// on a tier bucket that is half gone.
+func (store *Store) pruneRollupTiers(ctx context.Context, through time.Time) error {
 	for _, tier := range rollupTiers {
+		if err := store.moveTierStart(ctx, tier, through.UTC().Truncate(tier.size).Add(tier.size)); err != nil {
+			return err
+		}
 		var arguments []any
 		bind := func(value any) string {
 			arguments = append(arguments, value)
 			return store.placeholder(len(arguments))
 		}
-		statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(queryLogRollupDimensions, bind) +
-			" AND bucket_start <= " + bind(through)
-		if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
+		condition := store.dimensionCondition(queryLogRollupDimensions, bind) + " AND bucket_start <= " + bind(through)
+		if err := store.deleteInChunks(ctx, tier.table, condition, arguments...); err != nil {
 			return fmt.Errorf("prune %s: %w", tier.table, err)
 		}
-		first := through.UTC().Truncate(tier.size).Add(tier.size)
-		for _, key := range []string{tier.fromKey, tier.untilKey} {
-			var raw string
-			err := transaction.QueryRowContext(ctx, "SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), key).Scan(&raw)
-			if errors.Is(err, sql.ErrNoRows) {
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("read %s: %w", key, err)
-			}
-			if moment, err := time.Parse(time.RFC3339Nano, raw); err == nil && !moment.Before(first) {
-				continue
-			}
-			if _, err := transaction.ExecContext(ctx, "UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-				first.Format(time.RFC3339Nano), key); err != nil {
-				return fmt.Errorf("move %s: %w", key, err)
-			}
+	}
+	return nil
+}
+
+// moveTierStart moves a tier's coverage bounds up to first where they sit
+// before it.
+func (store *Store) moveTierStart(ctx context.Context, tier rollupTier, first time.Time) error {
+	transaction, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin %s prune: %w", tier.table, err)
+	}
+	defer transaction.Rollback()
+	for _, key := range []string{tier.fromKey, tier.untilKey} {
+		var raw string
+		err := transaction.QueryRowContext(ctx, "SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), key).Scan(&raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
 		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", key, err)
+		}
+		if moment, err := time.Parse(time.RFC3339Nano, raw); err == nil && !moment.Before(first) {
+			continue
+		}
+		if _, err := transaction.ExecContext(ctx, "UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
+			first.Format(time.RFC3339Nano), key); err != nil {
+			return fmt.Errorf("move %s: %w", key, err)
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit %s prune: %w", tier.table, err)
 	}
 	return nil
 }
