@@ -296,6 +296,7 @@ func TestZoneStoreAddsDNSSECValidationColumnToExistingDatabase(t *testing.T) {
 		storage.Close()
 		t.Fatalf("simulate pre-upgrade schema: %v", err)
 	}
+	forgetSchemaVersion(t, storage)
 	if err := storage.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -350,6 +351,7 @@ func TestZoneStoreAddsRecordSourceColumnToExistingDatabase(t *testing.T) {
 		storage.Close()
 		t.Fatalf("simulate pre-upgrade schema: %v", err)
 	}
+	forgetSchemaVersion(t, storage)
 	if err := storage.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -422,6 +424,7 @@ func TestZoneStoreAddsAliasColumnToExistingDatabase(t *testing.T) {
 		storage.Close()
 		t.Fatalf("simulate pre-upgrade schema: %v", err)
 	}
+	forgetSchemaVersion(t, storage)
 	if err := storage.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -491,6 +494,7 @@ func TestZoneStoreAddsCatalogColumnsToExistingDatabase(t *testing.T) {
 			t.Fatalf("simulate pre-upgrade schema: %v", err)
 		}
 	}
+	forgetSchemaVersion(t, storage)
 	if err := storage.Close(); err != nil {
 		t.Fatal(err)
 	}

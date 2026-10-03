@@ -53,67 +53,61 @@ var queryLogSearchColumns = map[string]string{
 const queryLogSearchInsert = "INSERT INTO " + queryLogSearchTable + ` (rowid, domain, client, answers)
 SELECT id, name_key, client_ip_key, LOWER(answer) FROM sable_query_log WHERE id > ? AND id <= ?`
 
-func (store *Store) migrateQueryLogSearch(ctx context.Context) error {
+// createQueryLogSearch creates the SQLite index. checkQueryLogSearch then
+// finds the log it doesn't cover yet.
+func (store *Store) createQueryLogSearch(ctx context.Context) error {
 	if store.driver != "sqlite" {
 		// PostgreSQL builds its indexes in the background; see
 		// BuildQueryLogSearch.
 		return nil
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query log search index: %w", err)
-	}
-	defer transaction.Rollback()
-	var existing int
-	if err := transaction.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", queryLogSearchTable,
-	).Scan(&existing); err != nil {
-		return fmt.Errorf("inspect query log search index: %w", err)
-	}
-	var newest sql.NullInt64
-	if err := transaction.QueryRowContext(ctx, "SELECT MAX(id) FROM sable_query_log").Scan(&newest); err != nil {
-		return fmt.Errorf("find the newest query log row: %w", err)
-	}
-	// Rows above the newest one indexed were written without the index: the
-	// whole log on the upgrade that adds it, or what an older Sable wrote
-	// after a downgrade.
-	indexedThrough := int64(0)
-	if existing == 0 {
-		if _, err := transaction.ExecContext(ctx, `
-CREATE VIRTUAL TABLE `+queryLogSearchTable+` USING fts5(
+	if _, err := store.database.ExecContext(ctx, `
+CREATE VIRTUAL TABLE IF NOT EXISTS `+queryLogSearchTable+` USING fts5(
     domain, client, answers,
     content='', contentless_delete=1, tokenize='trigram'
 )`); err != nil {
-			return fmt.Errorf("create query log search index: %w", err)
-		}
-	} else {
-		var highest sql.NullInt64
-		if err := transaction.QueryRowContext(ctx,
-			"SELECT rowid FROM "+queryLogSearchTable+" ORDER BY rowid DESC LIMIT 1",
-		).Scan(&highest); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("find the newest indexed row: %w", err)
-		}
-		indexedThrough = highest.Int64
+		return fmt.Errorf("create query log search index: %w", err)
 	}
-	after, through, pending, err := queryLogSearchPendingIn(ctx, transaction)
+	return nil
+}
+
+// checkQueryLogSearch runs at every start, after the migrations. Rows above
+// the newest one indexed were written without the index: the whole log on
+// the upgrade that adds it, or what an older Sable wrote after a downgrade.
+// They are recorded for BuildQueryLogSearch to index, and searches read the
+// whole log until it has. When nothing is missing it only reads.
+func (store *Store) checkQueryLogSearch(ctx context.Context) error {
+	if store.driver != "sqlite" {
+		return nil
+	}
+	var newest, indexedThrough sql.NullInt64
+	if err := store.database.QueryRowContext(ctx, "SELECT MAX(id) FROM sable_query_log").Scan(&newest); err != nil {
+		return fmt.Errorf("find the newest query log row: %w", err)
+	}
+	if err := store.database.QueryRowContext(ctx,
+		"SELECT rowid FROM "+queryLogSearchTable+" ORDER BY rowid DESC LIMIT 1",
+	).Scan(&indexedThrough); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("find the newest indexed row: %w", err)
+	}
+	after, through, pending, err := queryLogSearchPendingIn(ctx, store.database)
 	if err != nil {
 		return err
 	}
-	if newest.Int64 > indexedThrough {
+	if newest.Int64 > indexedThrough.Int64 {
 		// A gap still waiting from an earlier start is widened, not lost.
-		if !pending {
-			after = indexedThrough
+		wantAfter, wantThrough := indexedThrough.Int64, newest.Int64
+		if pending {
+			wantAfter, wantThrough = min(after, wantAfter), max(through, wantThrough)
 		}
-		after, through, pending = min(after, indexedThrough), max(through, newest.Int64), true
-		if _, err := transaction.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-			queryLogSearchPendingKey, formatQueryLogSearchRange(after, through),
-		); err != nil {
-			return fmt.Errorf("record query log rows to index: %w", err)
+		if !pending || wantAfter != after || wantThrough != through {
+			if _, err := store.database.ExecContext(ctx,
+				"INSERT INTO sable_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				queryLogSearchPendingKey, formatQueryLogSearchRange(wantAfter, wantThrough),
+			); err != nil {
+				return fmt.Errorf("record query log rows to index: %w", err)
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query log search index: %w", err)
+		pending = true
 	}
 	store.searchIndexed.Store(!pending)
 	return nil
@@ -313,30 +307,11 @@ func (store *Store) buildPostgresQueryLogSearch(ctx context.Context) (bool, erro
 	}
 	built := false
 	for _, index := range postgresQueryLogSearchIndexes {
-		// A build that was interrupted leaves an invalid index behind,
-		// which IF NOT EXISTS would keep forever.
-		var valid bool
-		err := store.database.QueryRowContext(ctx, `
-SELECT index_state.indisvalid FROM pg_index index_state
-JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
-WHERE index_class.relname = $1 AND index_class.relnamespace = to_regnamespace(current_schema())`, index[0]).Scan(&valid)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-		case err != nil:
-			return built, fmt.Errorf("inspect %s: %w", index[0], err)
-		case valid:
-			continue
-		default:
-			if _, err := store.database.ExecContext(ctx, "DROP INDEX CONCURRENTLY IF EXISTS "+index[0]); err != nil {
-				return built, fmt.Errorf("drop unfinished %s: %w", index[0], err)
-			}
+		indexBuilt, err := store.createIndexConcurrently(ctx, index[0], "ON sable_query_log USING gin ("+index[1]+")")
+		built = built || indexBuilt
+		if err != nil {
+			return built, err
 		}
-		if _, err := store.database.ExecContext(ctx,
-			"CREATE INDEX CONCURRENTLY IF NOT EXISTS "+index[0]+" ON sable_query_log USING gin ("+index[1]+")",
-		); err != nil {
-			return built, fmt.Errorf("build %s: %w", index[0], err)
-		}
-		built = true
 	}
 	return built, nil
 }
