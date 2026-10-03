@@ -195,6 +195,10 @@ func (store *Store) migrateZoneIdentitySchema(ctx context.Context) error {
 		}
 		names = append(names, name)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("list zones missing identities: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}

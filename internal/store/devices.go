@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS sable_client_seen (
     first_seen TIMESTAMP NOT NULL,
     last_seen TIMESTAMP NOT NULL
 )`, `
+CREATE INDEX IF NOT EXISTS sable_client_seen_last_idx
+ON sable_client_seen (last_seen)`, `
 CREATE TABLE IF NOT EXISTS sable_client_domain_seen (
     client_key TEXT NOT NULL,
     name_key TEXT NOT NULL,
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS sable_client_domain_seen (
 )`, `
 CREATE INDEX IF NOT EXISTS sable_client_domain_seen_first_idx
 ON sable_client_domain_seen (first_seen)`, `
+CREATE INDEX IF NOT EXISTS sable_client_domain_seen_last_idx
+ON sable_client_domain_seen (last_seen)`, `
 CREATE TABLE IF NOT EXISTS sable_client_identity (
     address TEXT NOT NULL,
     mac TEXT NOT NULL,
@@ -53,7 +57,9 @@ CREATE TABLE IF NOT EXISTS sable_client_identity (
     first_seen TIMESTAMP NOT NULL,
     last_seen TIMESTAMP NOT NULL,
     PRIMARY KEY (address, mac, source)
-)`}
+)`, `
+CREATE INDEX IF NOT EXISTS sable_client_identity_last_idx
+ON sable_client_identity (last_seen)`}
 }
 
 type sightingSpan struct{ first, last time.Time }

@@ -227,3 +227,27 @@ func TestQueryLogSearchForgetsPrunedRows(t *testing.T) {
 		t.Fatalf("the index holds %d entries after its pass, want the one the log kept", got)
 	}
 }
+
+// LIKE wildcards in a search are matched as text, whether the search reads
+// every row or the index.
+func TestQueryLogSearchMatchesWildcardsLiterally(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	events := append(searchTestEvents(now), querylog.Event{
+		OccurredAt: now, ClientIP: "10.0.7.23", Name: "_dmarc.example.", RecordType: dns.TypeTXT,
+		Class: dns.ClassINET, Source: querylog.SourceUpstream, Protocol: "UDP", Answer: "TXT v=DMARC1",
+	})
+	opened := openQueryLogStore(t, events)
+	for search, want := range map[string]int{"_": 1, "_dmarc": 1, "%": 0, `\`: 0, "a_": 0} {
+		for _, indexed := range []bool{true, false} {
+			opened.searchIndexed.Store(indexed)
+			page, err := opened.QueryEvents(context.Background(), querylog.Filter{Search: search})
+			if err != nil {
+				t.Fatalf("search %q: %v", search, err)
+			}
+			if page.TotalEntries != want {
+				t.Errorf("search %q (indexed %t) found %d rows, want %d", search, indexed, page.TotalEntries, want)
+			}
+		}
+	}
+}
