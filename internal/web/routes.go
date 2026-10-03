@@ -240,6 +240,7 @@ func routeTable() []route {
 		{pattern: "GET /zones/{zone}", handler: (*Server).zonesPage, perm: auth.PermissionZonesRead},
 		{pattern: "GET /zones/{zone}/records/{record}/edit", handler: (*Server).zonesPage, perm: auth.PermissionZonesRead},
 		{pattern: "GET /zones/import-catalog", handler: (*Server).importCatalog, perm: auth.PermissionZonesRead},
+		{pattern: "GET /ui/zones/history", handler: (*Server).zoneHistoryList, perm: auth.PermissionZonesRead},
 		{pattern: "GET /ui/zones/history/diff", handler: (*Server).zoneRevisionDiff, perm: auth.PermissionZonesRead},
 		{pattern: "GET /api/v1/zones", handler: (*Server).zonesAPI, perm: auth.PermissionZonesRead},
 		{pattern: "GET /api/v1/zones/dnssec", handler: (*Server).zoneDNSSECStatus, perm: auth.PermissionZonesRead},

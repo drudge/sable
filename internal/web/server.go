@@ -36,6 +36,7 @@ import (
 	"github.com/drudge/sable/internal/notices"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
+	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web/pages"
 	"github.com/drudge/sable/internal/zone"
@@ -139,6 +140,15 @@ type Server struct {
 	restartRequested      atomic.Bool
 	instanceID            string
 	demoLogin             devDemoAutoLoginState
+
+	// mcpUse is the MCP call count, saved by flushMCPUse under mcpUseMu.
+	mcpUse       store.MCPUse
+	mcpUseLoaded bool
+	mcpUseDirty  bool
+	// commandZones and dashboardClients keep reads every console page or
+	// dashboard poll repeats.
+	commandZones     commandZoneCache
+	dashboardClients shortCache[struct{}, int]
 }
 
 type devDemoAutoLoginState struct {
@@ -455,11 +465,10 @@ func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
 	if !view.CanLogs {
 		return view
 	}
-	entries, err := server.queries.RecentQueryEvents(request.Context(), dashboardInsightEvents)
-	if err != nil {
+	if clients, err := server.dashboardClientCount(request.Context()); err != nil {
 		server.logger.Warn("count dashboard clients", "error", err)
 	} else {
-		view.Stats.Clients = dashboardClientSample(entries)
+		view.Stats.Clients = clients
 	}
 	view.Stats.Dropped = server.queryLog.Stats().Dropped
 	// The rankings open on whatever range the chart opens on, so the panels and
@@ -740,43 +749,12 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 
 	if view.CanZones && server.zones != nil {
 		principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
-		zones := append([]zone.Zone(nil), server.zones.Current().Zones...)
-		sort.SliceStable(zones, func(left, right int) bool { return zones[left].Name < zones[right].Name })
-		for _, current := range zones {
-			if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, current.ID) {
+		for _, entry := range server.commandZoneEntries() {
+			if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, entry.zoneID) {
 				continue
 			}
-			description := commandZoneDescription(current.Type)
-			if current.Disabled {
-				description += " · Disabled"
-			}
-			commandID := ""
-			if current.ID != "" {
-				commandID = "command-entity-zone-" + current.ID
-			}
-			add(pages.CommandEntityView{
-				ID: commandID, Label: current.Name, Description: description, Icon: "globe", Kind: "Zone",
-				Keywords: "dns zone " + current.Type, Href: "/zones/" + url.PathEscape(current.Name),
-			})
-			searchCommandID := ""
-			if current.ID != "" {
-				searchCommandID = "command-entity-zone-search-" + current.ID
-			}
-			add(pages.CommandEntityView{
-				ID: searchCommandID, Label: "Search in " + current.Name, Description: "Filter records in this zone", Icon: "search", Kind: "Search",
-				Keywords: "dns zone records " + current.Type, Route: "/zones/" + url.PathEscape(current.Name), Focus: "[data-record-search]",
-				SearchPrompt: "Search records in " + current.Name + "…",
-			})
-			if current.Revision > 0 {
-				historyCommandID := ""
-				if current.ID != "" {
-					historyCommandID = "command-entity-zone-history-" + current.ID
-				}
-				add(pages.CommandEntityView{
-					ID: historyCommandID, Label: "View history for " + current.Name, Description: "Review revisions and restore an earlier zone state", Icon: "clock", Kind: "Action",
-					Keywords: "dns zone history revisions changes change control rollback restore " + current.Type,
-					Route:    "/zones/" + url.PathEscape(current.Name), Dialog: "zone-history-dialog",
-				})
+			for _, command := range entry.commands {
+				add(command)
 			}
 		}
 	}
@@ -968,11 +946,10 @@ func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
 	// dashboard performs or those two would drop to zero every poll.
 	if server.canReadLogs(request) {
 		view.Dropped = server.queryLog.Stats().Dropped
-		entries, err := server.queries.RecentQueryEvents(request.Context(), dashboardInsightEvents)
-		if err != nil {
+		if clients, err := server.dashboardClientCount(request.Context()); err != nil {
 			server.logger.Warn("count dashboard clients", "error", err)
 		} else {
-			view.Clients = dashboardClientSample(entries)
+			view.Clients = clients
 		}
 	}
 	return view

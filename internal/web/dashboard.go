@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -155,6 +156,19 @@ func dashboardInsights(
 // dashboardClientSample counts the distinct clients in a sample of the newest
 // query log rows. The stat card it feeds sits with lifetime counters rather
 // than with the ranged rankings, so it deliberately keeps its own window.
+// dashboardClientCount counts the clients among the newest query log rows.
+// Each open dashboard asks on every poll, so the count is shared for a few
+// seconds.
+func (server *Server) dashboardClientCount(ctx context.Context) (int, error) {
+	return server.dashboardClients.get(struct{}{}, time.Now(), dashboardReadCacheTTL, func() (int, error) {
+		entries, err := server.queries.RecentQueryEvents(ctx, dashboardInsightEvents)
+		if err != nil {
+			return 0, err
+		}
+		return dashboardClientSample(entries), nil
+	})
+}
+
 func dashboardClientSample(entries []querylog.Entry) int {
 	clients := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {

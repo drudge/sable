@@ -2,9 +2,11 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -38,18 +40,8 @@ func (*zoneHistoryListStore) PreviousZoneRevision(context.Context, string, uint6
 	return zonemodel.Revision{}, zonemodel.ErrRevisionNotFound
 }
 
-func TestZonesListLoadsHistoryForEveryZoneMenu(t *testing.T) {
-	t.Parallel()
-	store := &zoneHistoryListStore{
-		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{
-			{ID: "zone-one", Name: "one.test", Type: "primary", Revision: 2},
-			{ID: "zone-two", Name: "two.test", Type: "primary", Revision: 1},
-		}},
-		histories: map[string][]zonemodel.Revision{
-			"one.test": {{ZoneName: "one.test", Number: 2, ChangeKind: "updated", CreatedAt: time.Now()}},
-			"two.test": {{ZoneName: "two.test", Number: 1, ChangeKind: "created", CreatedAt: time.Now()}},
-		},
-	}
+func newZoneHistoryTestServer(t *testing.T, store *zoneHistoryListStore) *Server {
+	t.Helper()
 	server, err := New(
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}},
@@ -67,6 +59,22 @@ func TestZonesListLoadsHistoryForEveryZoneMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return server
+}
+
+func TestZonesListLoadsHistoryWhenItsDialogOpens(t *testing.T) {
+	t.Parallel()
+	store := &zoneHistoryListStore{
+		snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{
+			{ID: "zone-one", Name: "one.test", Type: "primary", Revision: 2},
+			{ID: "zone-two", Name: "two.test", Type: "primary", Revision: 1},
+		}},
+		histories: map[string][]zonemodel.Revision{
+			"one.test": {{ZoneName: "one.test", Number: 2, ChangeKind: "updated", CreatedAt: time.Now()}},
+			"two.test": {{ZoneName: "two.test", Number: 1, ChangeKind: "created", CreatedAt: time.Now()}},
+		},
+	}
+	server := newZoneHistoryTestServer(t, store)
 
 	response := serveRequest(server, http.MethodGet, "/zones")
 	if response.Code != http.StatusOK {
@@ -74,15 +82,55 @@ func TestZonesListLoadsHistoryForEveryZoneMenu(t *testing.T) {
 	}
 	markup := response.Body.String()
 	for _, expected := range []string{
-		`data-dialog-open="zone-history-0"`, `id="zone-history-0"`,
-		`data-dialog-open="zone-history-1"`, `id="zone-history-1"`,
+		`data-dialog-open="zone-history-0"`, `id="zone-history-0"`, `hx-get="/ui/zones/history?zone=one.test&amp;dialog=zone-history-0"`,
+		`data-dialog-open="zone-history-1"`, `id="zone-history-1"`, `hx-target="#zone-history-1-list"`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("zones page does not contain %q", expected)
 		}
 	}
-	if strings.Join(store.listed, ",") != "one.test,two.test" {
-		t.Fatalf("history loaded for %q, want both listed zones", store.listed)
+	if len(store.listed) != 0 {
+		t.Fatalf("the zone list read history for %q before any dialog opened", store.listed)
+	}
+
+	response = serveRequest(server, http.MethodGet, "/ui/zones/history?zone=one.test&dialog=zone-history-0")
+	if response.Code != http.StatusOK {
+		t.Fatalf("history status = %d", response.Code)
+	}
+	if body := response.Body.String(); !strings.Contains(body, "Revision 2") || !strings.Contains(body, `id="zone-history-0-revision-2"`) {
+		t.Fatalf("history fragment = %s", body)
+	}
+	if strings.Join(store.listed, ",") != "one.test" {
+		t.Fatalf("history loaded for %q, want only the opened zone", store.listed)
+	}
+
+	for _, target := range []string{
+		"/ui/zones/history?zone=missing.test&dialog=zone-history-0",
+		"/ui/zones/history?zone=one.test&dialog=%22%3E%3Cscript%3E",
+	} {
+		if response := serveRequest(server, http.MethodGet, target); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", target, response.Code)
+		}
+	}
+}
+
+// A record change renders only the zone it changed, so its reads stay the
+// same however many zones the server holds.
+func TestSelectedZoneViewReadsOnlyThatZonesHistory(t *testing.T) {
+	t.Parallel()
+	zones := make([]zonemodel.Zone, 0, 50)
+	for index := range 50 {
+		zones = append(zones, zonemodel.Zone{ID: fmt.Sprintf("zone-%d", index), Name: fmt.Sprintf("zone%d.test", index), Type: "primary", Revision: 1})
+	}
+	store := &zoneHistoryListStore{snapshot: zonemodel.Snapshot{Zones: zones}}
+	server := newZoneHistoryTestServer(t, store)
+
+	view := server.zonesView(httptest.NewRequest(http.MethodPost, "/ui/zones/records/add", nil), "Record added", "", "zone7.test")
+	if view.Selected != "zone7.test" || len(view.Zones) != 1 || view.Zones[0].Name != "zone7.test" {
+		t.Fatalf("selected view = %q with %d zones", view.Selected, len(view.Zones))
+	}
+	if strings.Join(store.listed, ",") != "zone7.test" {
+		t.Fatalf("history loaded for %q, want only the selected zone", store.listed)
 	}
 }
 

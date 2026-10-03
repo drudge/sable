@@ -57,6 +57,12 @@ type scheduledBackupService struct {
 	lastError   string
 	lastErrorAt time.Time
 	wake        chan struct{}
+
+	// The console asks whether a passphrase is stored on every page, so the
+	// answer is kept until UpdateBackupSchedule, the only writer, changes it.
+	passphraseMu     sync.Mutex
+	passphraseKnown  bool
+	passphraseStored bool
 }
 
 func newScheduledBackupService(configurationPath string, manager backupConfiguration, vault backupSecretVault, logger *slog.Logger, policy config.Backup) (*scheduledBackupService, error) {
@@ -136,12 +142,34 @@ func (service *scheduledBackupService) StageRestore(ctx context.Context, content
 
 func (service *scheduledBackupService) BackupSchedule(ctx context.Context) (backup.Schedule, error) {
 	schedule := service.schedule()
-	_, stored, err := service.passphrase(ctx)
+	stored, err := service.hasPassphrase(ctx)
 	if err != nil {
 		return backup.Schedule{}, err
 	}
 	schedule.PassphraseStored = stored
 	return schedule, nil
+}
+
+// hasPassphrase reports whether a passphrase is stored without reading the
+// vault each time.
+func (service *scheduledBackupService) hasPassphrase(ctx context.Context) (bool, error) {
+	service.passphraseMu.Lock()
+	defer service.passphraseMu.Unlock()
+	if service.passphraseKnown {
+		return service.passphraseStored, nil
+	}
+	_, stored, err := service.passphrase(ctx)
+	if err != nil {
+		return false, err
+	}
+	service.passphraseKnown, service.passphraseStored = true, stored
+	return stored, nil
+}
+
+func (service *scheduledBackupService) forgetPassphraseState() {
+	service.passphraseMu.Lock()
+	service.passphraseKnown = false
+	service.passphraseMu.Unlock()
 }
 
 // schedule is the policy and how it has run, all but PassphraseStored, which
@@ -159,6 +187,7 @@ func (service *scheduledBackupService) schedule() backup.Schedule {
 }
 
 func (service *scheduledBackupService) UpdateBackupSchedule(ctx context.Context, update backup.ScheduleUpdate) error {
+	defer service.forgetPassphraseState()
 	oldSecret, hadOldSecret, err := service.passphrase(ctx)
 	if err != nil {
 		return err

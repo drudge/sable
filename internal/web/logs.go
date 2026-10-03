@@ -472,8 +472,8 @@ func (server *Server) exportQueryLogs(writer http.ResponseWriter, request *http.
 		return
 	}
 	filter, _ := queryLogFilter(request)
-	filter.Page = 1
-	filter.PageSize = 250
+	filter.Page, filter.PageSize = 1, queryLogExportPageSize
+	filter.Cursor, filter.Direction, filter.Incremental = 0, "", false
 	result, err := pager.QueryEvents(request.Context(), filter)
 	if err != nil {
 		server.logger.Error("export query log", "error", err)
@@ -482,23 +482,46 @@ func (server *Server) exportQueryLogs(writer http.ResponseWriter, request *http.
 	}
 	writer.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	writer.Header().Set("Content-Disposition", `attachment; filename="sable-query-log.csv"`)
+	if err := writeQueryLogCSV(request.Context(), writer, pager, filter, result); err != nil {
+		server.logger.Error("export query log", "error", err)
+		// The status has gone out, so abort the response rather than end it
+		// cleanly. The download then fails instead of saving a short file
+		// that looks complete.
+		panic(http.ErrAbortHandler)
+	}
+}
+
+const queryLogExportPageSize = 250
+
+// writeQueryLogCSV writes every row that matched when the export began, newest
+// first. Each page continues below the last ID written, so rows logged during
+// the export neither shift the pages nor appear twice, and no page recounts
+// or skips over the rows before it.
+func writeQueryLogCSV(ctx context.Context, writer io.Writer, pager queryEventPager, filter querylog.Filter, first querylog.Page) error {
 	output := csv.NewWriter(writer)
-	_ = output.Write([]string{"timestamp", "client_ip", "domain", "type", "response", "status", "protocol", "answer", "duration"})
+	if err := output.Write([]string{"timestamp", "client_ip", "domain", "type", "response", "status", "protocol", "answer", "duration"}); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+	filter.KnownTotal, filter.UseKnownTotal, filter.Direction = first.TotalEntries, true, "older"
+	result := first
 	for {
 		for _, entry := range result.Entries {
-			_ = output.Write(queryLogCSVRow(entry))
+			if err := output.Write(queryLogCSVRow(entry)); err != nil {
+				return fmt.Errorf("write row %d: %w", entry.ID, err)
+			}
 		}
-		if result.Page >= result.TotalPages {
+		if len(result.Entries) < filter.PageSize {
 			break
 		}
-		filter.Page++
-		result, err = pager.QueryEvents(request.Context(), filter)
+		filter.Cursor = result.Entries[len(result.Entries)-1].ID
+		next, err := pager.QueryEvents(ctx, filter)
 		if err != nil {
-			server.logger.Error("continue query log export", "error", err, "page", filter.Page)
-			break
+			return fmt.Errorf("read rows older than %d: %w", filter.Cursor, err)
 		}
+		result = next
 	}
 	output.Flush()
+	return output.Error()
 }
 
 func queryLogCSVRow(entry querylog.Entry) []string {
