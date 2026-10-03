@@ -3707,8 +3707,8 @@
 	  };
 	  syncCacheExplainer();
 	  cacheExplainerMedia.addEventListener("change", syncCacheExplainer);
-	  document.body.addEventListener("htmx:afterSwap", (event) => {
-	    if (event.detail?.target?.id === "cache-content") syncCacheExplainer();
+	  document.body.addEventListener("htmx:after:swap", (event) => {
+	    if (event.detail?.ctx?.target?.id === "cache-content") syncCacheExplainer();
 	  });
 
 	  const closeAccountMenus = (except = null, restoreFocus = false) => {
