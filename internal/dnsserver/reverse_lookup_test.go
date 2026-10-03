@@ -3,6 +3,7 @@ package dnsserver
 import (
 	"context"
 	"net/netip"
+	"slices"
 	"sync"
 	"testing"
 
@@ -89,5 +90,45 @@ func TestReverseLookupReturnsNothingForAnAddressWithNoPointer(t *testing.T) {
 	}
 	if name != "" {
 		t.Fatalf("ReverseLookup() = %q, want an empty name", name)
+	}
+}
+
+// Sable's own outbound HTTPS resolves through this lookup, so it has to answer
+// from Sable's zones and overrides without recording a query.
+func TestLookupAddressesAnswersBothFamiliesWithoutRecordingAQuery(t *testing.T) {
+	t.Parallel()
+
+	name := "home.arpa"
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: name, Type: "primary", ZoneTransfer: "deny",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1." + name + ". hostmaster." + name + ". 1 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1." + name + "."},
+			{Name: "releases", Type: "A", TTL: 300, Value: "10.0.7.20"},
+			{Name: "releases", Type: "AAAA", TTL: 300, Value: "fd00::20"},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	observer := &recordingObserver{}
+	handler.SetQueryObserver(observer)
+
+	addresses, err := handler.LookupAddresses(context.Background(), "releases.home.arpa")
+	if err != nil {
+		t.Fatalf("LookupAddresses() error = %v", err)
+	}
+	want := []netip.Addr{netip.MustParseAddr("10.0.7.20"), netip.MustParseAddr("fd00::20")}
+	if !slices.Equal(addresses, want) {
+		t.Fatalf("LookupAddresses() = %v, want %v", addresses, want)
+	}
+	if events := observer.events(); len(events) != 0 {
+		t.Fatalf("address lookup recorded %d query log events", len(events))
+	}
+	if handler.Stats().Queries != 0 {
+		t.Fatalf("address lookup counted %d queries", handler.Stats().Queries)
 	}
 }

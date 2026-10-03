@@ -449,6 +449,7 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	runRuntimeWorker(func(context.Context) { dynamicDNS.Run(zoneRefreshContext) })
 	updateManager := newUpdateManager(update.Options{
 		ReleaseStore:   database,
+		Resolver:       handler,
 		Logger:         logger,
 		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
 		RestartManaged: initial.Updates.RestartManaged,
