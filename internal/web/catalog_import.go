@@ -27,7 +27,6 @@ func (server *Server) importCatalog(writer http.ResponseWriter, request *http.Re
 	}
 	view := pages.CatalogImportView{Console: server.consoleView(request), Protocol: "tcp", TSIGKeys: server.tsigKeyNames(request.Context())}
 	if request.Method == http.MethodPost {
-		request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 		if err := request.ParseForm(); err != nil {
 			http.Error(writer, "Invalid import form", 400)
 			return
@@ -178,7 +177,7 @@ func (server *Server) stageCatalogMember(ctx context.Context, request *http.Requ
 		return current, fmt.Errorf("invalid transferred zone; no zone created: %w", err)
 	}
 	err = editor.UpdateZones(ctx, func(zones *[]zonemodel.Zone) error {
-		if server.cluster != nil && writeRequiresPrimary(server.cluster.Snapshot(), http.MethodPost, request.URL.Path) {
+		if server.cluster != nil && controlPlaneReadOnly(server.cluster.Snapshot()) {
 			return errors.New("import requires the cluster primary")
 		}
 		if findZone(*zones, name) != nil {

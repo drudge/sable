@@ -610,26 +610,24 @@ func TestBackupRestoreRejectsAForeignFileUpFront(t *testing.T) {
 }
 
 func TestBackupPathsRequireTheirOwnPermissions(t *testing.T) {
-	for path, expected := range map[string]string{
-		"/ui/backup":                 auth.PermissionBackupCreate,
-		"/ui/backup/progress":        auth.PermissionBackupCreate,
-		"/ui/backup/download":        auth.PermissionBackupCreate,
-		"/ui/backup/download/abc123": auth.PermissionBackupCreate,
-		"/ui/backup/run":             auth.PermissionBackupCreate,
-		"/ui/backup/local":           auth.PermissionBackupCreate,
-		"/ui/backup/delete-local":    auth.PermissionBackupCreate,
-		"/ui/backup/schedule":        auth.PermissionBackupCreate,
-		"/ui/backup/restore":         auth.PermissionBackupRestore,
-		"/ui/backup/restore-local":   auth.PermissionBackupRestore,
+	for _, test := range []struct{ method, path, permission string }{
+		{http.MethodGet, "/ui/backup", auth.PermissionBackupCreate},
+		{http.MethodGet, "/ui/backup/progress", auth.PermissionBackupCreate},
+		{http.MethodPost, "/ui/backup/download", auth.PermissionBackupCreate},
+		{http.MethodGet, "/ui/backup/download/abc123", auth.PermissionBackupCreate},
+		{http.MethodPost, "/ui/backup/run", auth.PermissionBackupCreate},
+		{http.MethodGet, "/ui/backup/local", auth.PermissionBackupCreate},
+		{http.MethodPost, "/ui/backup/delete-local", auth.PermissionBackupCreate},
+		{http.MethodPost, "/ui/backup/schedule", auth.PermissionBackupCreate},
+		{http.MethodPost, "/ui/backup/restore", auth.PermissionBackupRestore},
+		{http.MethodPost, "/ui/backup/restore-local", auth.PermissionBackupRestore},
 	} {
-		request := httptest.NewRequest(http.MethodPost, "http://sable.test"+path, nil)
-		if permission := requiredPermission(request); permission != expected {
-			t.Fatalf("requiredPermission(%q) = %q, want %q", path, permission, expected)
+		if permission := routeAt(t, test.method, "http://sable.test"+test.path).perm; permission != test.permission {
+			t.Fatalf("permission for %s %s = %q, want %q", test.method, test.path, permission, test.permission)
 		}
 	}
 	// Settings write must not be enough to walk off with every private key.
-	settings := httptest.NewRequest(http.MethodPost, "http://sable.test/ui/settings", nil)
-	if permission := requiredPermission(settings); permission == auth.PermissionBackupCreate {
+	if permission := routeAt(t, http.MethodPost, "http://sable.test/ui/settings").perm; permission == auth.PermissionBackupCreate {
 		t.Fatal("the settings path grants the backup permission")
 	}
 }

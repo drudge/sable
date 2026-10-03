@@ -292,7 +292,6 @@ func (server *Server) saveDynamicDNS(writer http.ResponseWriter, request *http.R
 		server.renderIntegrationsMutation(writer, request, http.StatusNotImplemented, "", "The dynamic DNS publisher is unavailable.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid dynamic DNS settings.")
 		return
@@ -450,7 +449,6 @@ func (server *Server) setDynamicDNSEnabled(writer http.ResponseWriter, request *
 		server.renderIntegrationsMutation(writer, request, http.StatusNotImplemented, "", "The dynamic DNS publisher is unavailable.")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return

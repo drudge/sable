@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/web/pages"
@@ -10,71 +9,33 @@ import (
 
 const replicaWriteMessage = "This node is a replica. Make control-plane changes on the cluster primary."
 
-func (server *Server) primaryWriteControl(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if server.cluster == nil || !writeRequiresPrimary(server.cluster.Snapshot(), request.Method, request.URL.Path) {
-			next.ServeHTTP(writer, request)
-			return
-		}
-		server.logger.Warn("rejected control-plane write on replica", "path", request.URL.Path, "client", requestClientIP(request))
-		if tokenRequest(request.URL.Path) {
-			writeJSON(writer, http.StatusConflict, map[string]string{"error": replicaWriteMessage})
-			return
-		}
-		if request.Header.Get("HX-Request") == "true" {
-			writer.WriteHeader(http.StatusConflict)
-			if err := pages.Toast(replicaWriteMessage, "error").Render(request.Context(), writer); err != nil {
-				server.logger.Error("render replica write rejection", "error", err)
-			}
-			return
-		}
-		http.Error(writer, replicaWriteMessage, http.StatusConflict)
-	})
-}
-
-func writeRequiresPrimary(state cluster.State, method, path string) bool {
-	if safeMethod(method) || !controlPlaneReadOnly(state) {
+// refuseReplicaWrite answers a control-plane write that reached a replica,
+// reporting true when it did. Such writes belong on the cluster primary.
+func (server *Server) refuseReplicaWrite(writer http.ResponseWriter, request *http.Request, current *route) bool {
+	if server.cluster == nil || !writeRequiresPrimary(server.cluster.Snapshot(), request.Method, current) {
 		return false
 	}
-	return !replicaLocalWrite(path)
+	server.logger.Warn("rejected control-plane write on replica", "path", request.URL.Path, "client", requestClientIP(request))
+	switch {
+	case tokenRequest(request.URL.Path):
+		writeJSON(writer, http.StatusConflict, map[string]string{"error": replicaWriteMessage})
+	case request.Header.Get("HX-Request") == "true":
+		writer.WriteHeader(http.StatusConflict)
+		if err := pages.Toast(replicaWriteMessage, "error").Render(request.Context(), writer); err != nil {
+			server.logger.Error("render replica write rejection", "error", err)
+		}
+	default:
+		http.Error(writer, replicaWriteMessage, http.StatusConflict)
+	}
+	return true
+}
+
+// writeRequiresPrimary reports whether a write to the route must be made on
+// the cluster primary, which it must on a replica unless it is replicaLocal.
+func writeRequiresPrimary(state cluster.State, method string, current *route) bool {
+	return !safeMethod(method) && controlPlaneReadOnly(state) && !current.replicaLocal
 }
 
 func controlPlaneReadOnly(state cluster.State) bool {
 	return state.Initialized && state.LocalRole == cluster.RoleReplica
-}
-
-func replicaLocalWrite(path string) bool {
-	switch {
-	// Sessions are node-local by design, so signing in to a replica's own
-	// console is a local write, not a control-plane change. Starting single
-	// sign-on belongs with /login for exactly that reason: without it a
-	// replica offers the button and then refuses the click, while password
-	// sign-in on the same page works. The callback is a GET and never reaches
-	// this gate.
-	case path == passkeyLoginBegin, path == passkeyLoginFinish, path == "/login", path == "/logout", path == ssoStartPath,
-		path == "/ui/administration/sessions/revoke", path == "/ui/query":
-		return true
-	// Release channels, executable replacements, and restarts affect only
-	// this process, not the cluster's replicated control-plane state.
-	case path == "/ui/updates/check", path == "/ui/updates/command-check",
-		path == "/ui/updates/automatic-check", path == "/ui/settings/updates",
-		path == "/ui/updates/install", path == "/ui/updates/restart":
-		return true
-	case strings.HasPrefix(path, "/ui/cache/"), strings.HasPrefix(path, "/api/v1/cache/"):
-		return true
-	// Every MCP message is a POST, reads included. The write tools refuse on
-	// a replica themselves, with the same message, so reads keep working. A
-	// replica's GET stream announces tool changes replicated from the primary.
-	case path == mcpPath:
-		return true
-	case strings.HasPrefix(path, "/ui/certificates/"):
-		return true
-	case path == "/ui/cluster/settings", path == "/ui/cluster/leave", path == "/ui/cluster/restart", path == "/api/v1/cluster/membership", path == "/api/v1/cluster/sync":
-		return true
-	case strings.HasSuffix(path, "/promote") &&
-		(strings.HasPrefix(path, "/ui/cluster/nodes/") || strings.HasPrefix(path, "/api/v1/cluster/nodes/")):
-		return true
-	default:
-		return false
-	}
 }

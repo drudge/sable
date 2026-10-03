@@ -79,7 +79,6 @@ func (server *Server) initializeCluster(writer http.ResponseWriter, request *htt
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "Configure an HTTPS Console / API URL before initializing a cluster")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusBadRequest, "", "Invalid cluster form")
 		return
@@ -107,7 +106,6 @@ func (server *Server) updateClusterSettings(writer http.ResponseWriter, request 
 		server.renderClusterMutation(writer, request, http.StatusNotImplemented, "", "Cluster settings are read-only")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusBadRequest, "", "Invalid cluster settings form")
 		return
@@ -153,7 +151,6 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 		server.renderClusterMutation(writer, request, http.StatusNotImplemented, "", "Cluster settings are read-only")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusBadRequest, "", "Invalid cluster onboarding form")
 		return
@@ -361,7 +358,6 @@ func (server *Server) createClusterEnrollmentToken(writer http.ResponseWriter, r
 	if !server.clusterAvailable(writer, request) {
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusBadRequest, "", "Invalid enrollment token form")
 		return
@@ -396,7 +392,6 @@ func (server *Server) joinCluster(writer http.ResponseWriter, request *http.Requ
 		server.renderClusterUIFailure(writer, request, http.StatusConflict, "Restart Sable to activate the saved node identity before joining a cluster")
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderClusterUIFailure(writer, request, http.StatusBadRequest, "Invalid cluster join form")
 		return
@@ -490,7 +485,6 @@ func (server *Server) initializeClusterAPI(writer http.ResponseWriter, request *
 		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": "configure an HTTPS advertised URL before initializing a cluster"})
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	var input struct {
 		Domain    string   `json:"domain"`
 		Addresses []string `json:"addresses"`
@@ -540,7 +534,6 @@ func (server *Server) createClusterEnrollmentTokenAPI(writer http.ResponseWriter
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid enrollment token request"})
 		return
@@ -563,7 +556,6 @@ func (server *Server) enrollClusterNodeAPI(writer http.ResponseWriter, request *
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	var input cluster.JoinRequest
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
@@ -587,7 +579,6 @@ func (server *Server) clusterSyncAPI(writer http.ResponseWriter, request *http.R
 		return
 	}
 	// A replica's lookups make a heartbeat larger than a form.
-	request.Body = http.MaxBytesReader(writer, request.Body, cluster.MaximumHeartbeatBytes)
 	var heartbeat cluster.Heartbeat
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()

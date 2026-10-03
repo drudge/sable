@@ -86,7 +86,7 @@ func (server *Server) mcp(writer http.ResponseWriter, request *http.Request) {
 		writeMCPError(writer, http.StatusBadRequest, nil, mcpInvalidRequest, "unsupported MCP protocol version "+requested)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, mcpMaximumBodyBytes))
+	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		writeMCPError(writer, http.StatusRequestEntityTooLarge, nil, mcpInvalidRequest, "request body is too large")
 		return
@@ -170,6 +170,11 @@ func (server *Server) callMCPTool(request *http.Request, params json.RawMessage)
 	// off, so say so plainly instead of calling the tool unknown.
 	if reason := mcpToolOff(tool, server.config.Current().Config.MCP); reason != "" {
 		return mcpToolFailure(errors.New(reason)), nil
+	}
+	// The token must hold the tool's grant before the tool sees its
+	// arguments. Zone tools then check the exact zone themselves.
+	if !server.mcpGranted(request, tool.grant) {
+		return mcpToolFailure(fmt.Errorf("this token needs %s to use %s", tool.grant, tool.Name)), nil
 	}
 	arguments := input.Arguments
 	if len(arguments) == 0 || bytes.Equal(arguments, []byte("null")) {
@@ -280,7 +285,6 @@ const mcpDisabledMessage = "Sable's MCP server is off. Set it up under Integrati
 // cluster-wide setting, so a replica refuses it before it gets here and takes
 // the primary's value instead.
 func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return
@@ -313,7 +317,6 @@ func (server *Server) setMCPEnabled(writer http.ResponseWriter, request *http.Re
 // never resumes a paused server. Like the server itself it is
 // cluster-wide, so only the primary accepts it.
 func (server *Server) saveMCPSetup(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid request.")
 		return

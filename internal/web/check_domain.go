@@ -143,7 +143,6 @@ func checkDomainVerdict(check domainCheck) pages.CheckDomainVerdict {
 // checkDomainRule allows or blocks the domain the panel checked, then checks
 // it again. The Blocking page beneath updates with the same response.
 func (server *Server) checkDomainRule(writer http.ResponseWriter, request *http.Request) {
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
 		return

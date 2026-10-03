@@ -45,7 +45,6 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/updates/command-check", false},
 		{http.MethodPost, "/ui/updates/install", false},
 		{http.MethodPost, "/ui/updates/restart", false},
-		{http.MethodPost, "/ui/updates/unknown", true},
 		{http.MethodPost, "/ui/certificates/renew", false},
 		// Integration settings are cluster-scoped and replicate from the
 		// primary, so configuring them on a replica would be overwritten on the
@@ -61,11 +60,11 @@ func TestReplicaWriteControl(t *testing.T) {
 		{http.MethodPost, "/ui/cluster/nodes/local/promote", false},
 	}
 	for _, test := range tests {
-		if got := writeRequiresPrimary(replica, test.method, test.path); got != test.blocked {
+		if got := writeRequiresPrimary(replica, test.method, routeAt(t, test.method, test.path)); got != test.blocked {
 			t.Errorf("%s %s blocked = %t, want %t", test.method, test.path, got, test.blocked)
 		}
 	}
-	if writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RolePrimary}, http.MethodPost, "/ui/settings") {
+	if writeRequiresPrimary(cluster.State{Initialized: true, LocalRole: cluster.RolePrimary}, http.MethodPost, routeAt(t, http.MethodPost, "/ui/settings")) {
 		t.Fatal("primary write was blocked")
 	}
 }

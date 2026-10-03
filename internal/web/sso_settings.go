@@ -228,7 +228,6 @@ func (server *Server) setSSOEnabled(writer http.ResponseWriter, request *http.Re
 		http.NotFound(writer, request)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, authFormLimit)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid form.")
 		return
@@ -256,7 +255,6 @@ func (server *Server) runSSOWizard(writer http.ResponseWriter, request *http.Req
 		http.NotFound(writer, request)
 		return
 	}
-	request.Body = http.MaxBytesReader(writer, request.Body, maximumFormBytes)
 	if err := request.ParseForm(); err != nil {
 		server.renderIntegrationsMutation(writer, request, http.StatusBadRequest, "", "Invalid setup form.")
 		return

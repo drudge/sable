@@ -150,7 +150,8 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 - Provider credentials, webhook URLs, and tokens live in the encrypted vault, not in `sable.toml`.
 - A secret must never reach a log line, an error message, or the console. Go's HTTP client errors include the full request URL, so drop the URL when it carries a key.
 - Never print API tokens, or command lines and environment variables that hold them. That includes the `mcp-remote` processes on a developer's machine.
-- MCP tools check their grant inside the handler. Write tools refuse on replicas. See [docs/guides/mcp.md](docs/guides/mcp.md).
+- Declare every HTTP route once, in `routeTable` in `internal/web/routes.go`. Its entry says who may call it, its body limit and timeout, and whether a replica accepts it. A route without an access policy stops the server from starting. Don't call `http.MaxBytesReader` in a handler; set `bodyLimit` on the route.
+- `callMCPTool` refuses a call whose token lacks the tool's `grant` before the tool runs. A zone tool still checks the zone it is asked about. Write tools refuse on replicas. See [docs/guides/mcp.md](docs/guides/mcp.md).
 
 ## Docs and writing
 
