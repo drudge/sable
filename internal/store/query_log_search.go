@@ -395,8 +395,8 @@ func (store *Store) likeTextSearch(firstPlaceholder int, group []textMatch) (str
 		if column == "answer" {
 			column = "LOWER(answer)"
 		}
-		conditions = append(conditions, column+" LIKE "+store.placeholder(firstPlaceholder+index))
-		arguments = append(arguments, "%"+match.text+"%")
+		conditions = append(conditions, column+" LIKE "+store.placeholder(firstPlaceholder+index)+` ESCAPE '\'`)
+		arguments = append(arguments, "%"+escapeLike(match.text)+"%")
 	}
 	if len(conditions) == 1 {
 		return conditions[0], arguments

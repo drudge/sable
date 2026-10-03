@@ -136,3 +136,47 @@ func TestQueryLogSearchWithoutPgTrgmStillSearches(t *testing.T) {
 		t.Fatalf("search found %d, %v; want the rows", page.TotalEntries, err)
 	}
 }
+
+// PostgreSQL matches search wildcards as text too, and gets the sightings
+// indexes the prune reads.
+func TestQueryLogSearchMatchesWildcardsLiterallyOnPostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	ctx := context.Background()
+	opened := openPostgresTestStore(t, dsn)
+	if err := opened.WriteQueryEvents(ctx, append(searchTestEvents(time.Now().UTC()), querylog.Event{
+		OccurredAt: time.Now().UTC(), ClientIP: "10.0.7.23", Name: "_dmarc.example.", Protocol: "UDP", Answer: "TXT v=DMARC1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	for search, want := range map[string]int{"_": 1, "_dmarc": 1, "%": 0, `\`: 0, "a_": 0} {
+		page, err := opened.QueryEvents(ctx, querylog.Filter{Search: search})
+		if err != nil {
+			t.Fatalf("search %q: %v", search, err)
+		}
+		if page.TotalEntries != want {
+			t.Errorf("search %q found %d rows, want %d", search, page.TotalEntries, want)
+		}
+	}
+	var indexes []string
+	rows, err := opened.database.QueryContext(ctx, "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname LIKE '%last_idx' OR indexname = 'sable_query_log_rollup_bucket_idx' AND schemaname = current_schema() ORDER BY indexname")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		indexes = append(indexes, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(indexes, ","), "sable_client_domain_seen_last_idx,sable_client_identity_last_idx,sable_client_seen_last_idx"; got != want {
+		t.Fatalf("indexes = %s, want %s", got, want)
+	}
+}
