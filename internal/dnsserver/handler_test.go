@@ -26,7 +26,11 @@ type eventCollector struct {
 
 func (collector *eventCollector) Enabled() bool { return true }
 
-func (collector *eventCollector) Record(event querylog.Event) { collector.events <- event }
+// Record formats the answer as the query-log recorder does before it writes.
+func (collector *eventCollector) Record(event querylog.Event) {
+	event.ResolveAnswer()
+	collector.events <- event
+}
 
 type responseCapture struct {
 	message *dns.Msg
@@ -68,12 +72,15 @@ func (writer *countingRemoteWriter) RemoteAddr() net.Addr {
 // rather than the copy responseCapture makes to inspect it.
 type discardWriter struct{}
 
-func (discardWriter) LocalAddr() net.Addr {
-	return &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8053}
-}
-func (discardWriter) RemoteAddr() net.Addr {
-	return &net.UDPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}
-}
+// The addresses are built once, as a real listener's are, so benchmarks don't
+// count the writer's own allocations as the handler's.
+var (
+	discardLocalAddress  net.Addr = &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8053}
+	discardRemoteAddress net.Addr = &net.UDPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}
+)
+
+func (discardWriter) LocalAddr() net.Addr              { return discardLocalAddress }
+func (discardWriter) RemoteAddr() net.Addr             { return discardRemoteAddress }
 func (discardWriter) WriteMsg(*dns.Msg) error          { return nil }
 func (discardWriter) Write(buffer []byte) (int, error) { return len(buffer), nil }
 func (discardWriter) Close() error                     { return nil }
@@ -1963,7 +1970,7 @@ func TestApplyManagedTrustAnchorsKeepsCacheWhenAnchorsUnchanged(t *testing.T) {
 	}
 }
 
-func benchmarkCacheHitHandler(b *testing.B) (*Handler, *dns.Msg) {
+func benchmarkCacheHitHandler(b testing.TB) (*Handler, *dns.Msg) {
 	b.Helper()
 	configuration := testRuntimeConfig()
 	configuration.CacheSize = 10_000
@@ -2008,6 +2015,37 @@ func BenchmarkServeDNSCacheHitWithLogging(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		handler.ServeDNS(discardWriter{}, request)
+	}
+}
+
+// BenchmarkServeDNSCacheHitMixedCase is the logged cache hit for a query that
+// uses 0x20 mixed case, as many recursive resolvers send.
+func BenchmarkServeDNSCacheHitMixedCase(b *testing.B) {
+	handler, _ := benchmarkCacheHitHandler(b)
+	handler.SetQueryObserver(benchmarkQueryObserver{})
+	request := cacheRequest("ExAmPlE.CoM.", 1)
+	b.ReportAllocs()
+	for b.Loop() {
+		handler.ServeDNS(discardWriter{}, request)
+	}
+}
+
+// BenchmarkServeDoHCacheHit is the logged cache hit over DoH, through to the
+// packed reply and its HTTP cache lifetime.
+func BenchmarkServeDoHCacheHit(b *testing.B) {
+	handler, request := benchmarkCacheHitHandler(b)
+	handler.SetQueryObserver(benchmarkQueryObserver{})
+	ctx := context.WithValue(context.Background(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 443})
+	httpRequest := httptest.NewRequest(http.MethodPost, "/dns-query", nil).WithContext(ctx)
+	httpRequest.RemoteAddr = "192.0.2.44:53000"
+	b.ReportAllocs()
+	for b.Loop() {
+		writer := newDoHResponseWriter(httpRequest)
+		handler.ServeDNS(writer, request)
+		if _, err := writer.pack(); err != nil {
+			b.Fatal(err)
+		}
+		_ = writer.httpCacheControl()
 	}
 }
 
@@ -2467,5 +2505,31 @@ func TestConvertedPrimaryIgnoresLateSecondaryExpiry(t *testing.T) {
 	handler.ServeDNS(response, request)
 	if response.message == nil || response.message.Rcode != dns.RcodeSuccess || !response.message.Authoritative || len(response.message.Answer) != 1 {
 		t.Fatalf("converted primary unavailable: %+v", response.message)
+	}
+}
+
+type rawEventObserver struct{ event querylog.Event }
+
+func (*rawEventObserver) Enabled() bool { return true }
+
+func (observer *rawEventObserver) Record(event querylog.Event) { observer.event = event }
+
+func TestServeDNSLeavesAnswerFormattingToTheQueryLog(t *testing.T) {
+	t.Parallel()
+	handler, _ := benchmarkCacheHitHandler(t)
+	observer := &rawEventObserver{}
+	handler.SetQueryObserver(observer)
+	handler.ServeDNS(discardWriter{}, cacheRequest("ExAmPlE.CoM.", 7))
+
+	event := observer.event
+	if event.Name != "example.com" {
+		t.Fatalf("event name = %q, want example.com", event.Name)
+	}
+	if event.Answer != "" || event.AnswerSource == nil {
+		t.Fatalf("event answer = %q, source = %v; want it left to the log writer", event.Answer, event.AnswerSource)
+	}
+	event.ResolveAnswer()
+	if event.Answer != "A 192.0.2.1" || event.AnswerSource != nil {
+		t.Fatalf("resolved answer = %q, source = %v; want A 192.0.2.1 and no source", event.Answer, event.AnswerSource)
 	}
 }

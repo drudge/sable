@@ -178,7 +178,7 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 	if !now.Before(entry.expiresAt) {
 		if cache.options.ServeStale && now.Before(entry.retryAfter) && now.Before(entry.staleUntil) {
 			shard.recency.MoveToFront(element)
-			response := entry.response.Copy()
+			response := copyCachedResponse(entry.response)
 			shard.mu.Unlock()
 			prepareCachedResponse(response, request)
 			setResponseTTLs(response, max(cache.options.StaleAnswerTTL, 1))
@@ -197,7 +197,7 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 	storedAt := entry.storedAt
 	shard.mu.Unlock()
 
-	response := storedResponse.Copy()
+	response := copyCachedResponse(storedResponse)
 	prepareCachedResponse(response, request)
 	decrementTTLs(response, uint32(now.Sub(storedAt)/time.Second))
 	return response, true, prefetch
@@ -232,7 +232,7 @@ func (cache *ResponseCache) GetStale(request *dns.Msg) (*dns.Msg, bool) {
 	}
 	shard.recency.MoveToFront(element)
 	entry.retryAfter = now.Add(time.Duration(max(cache.options.StaleResetTTL, 1)) * time.Second)
-	response := entry.response.Copy()
+	response := copyCachedResponse(entry.response)
 	shard.mu.Unlock()
 	prepareCachedResponse(response, request)
 	setResponseTTLs(response, max(cache.options.StaleAnswerTTL, 1))
@@ -366,6 +366,47 @@ func (cache *ResponseCache) PrefetchCandidates(limit int) []*dns.Msg {
 		}
 	}
 	return requests
+}
+
+// copyCachedResponse copies a stored response for one client, who gets its
+// own header, sections, and records, since serving rewrites TTLs and flags.
+// It leaves out the question, which prepareCachedResponse takes from the
+// request. An A or AAAA record's address is never changed in place, so its copy
+// shares the stored bytes; every other record is copied in full.
+func copyCachedResponse(stored *dns.Msg) *dns.Msg {
+	response := &dns.Msg{MsgHdr: stored.MsgHdr, Compress: stored.Compress}
+	total := len(stored.Answer) + len(stored.Ns) + len(stored.Extra)
+	if total == 0 {
+		return response
+	}
+	records := make([]dns.RR, 0, total)
+	section := func(stored []dns.RR) []dns.RR {
+		if len(stored) == 0 {
+			return nil
+		}
+		start := len(records)
+		for _, record := range stored {
+			records = append(records, copyCachedRecord(record))
+		}
+		return records[start:len(records):len(records)]
+	}
+	response.Answer = section(stored.Answer)
+	response.Ns = section(stored.Ns)
+	response.Extra = section(stored.Extra)
+	return response
+}
+
+func copyCachedRecord(record dns.RR) dns.RR {
+	switch record := record.(type) {
+	case *dns.A:
+		clone := *record
+		return &clone
+	case *dns.AAAA:
+		clone := *record
+		return &clone
+	default:
+		return dns.Copy(record)
+	}
 }
 
 func prepareCachedResponse(response, request *dns.Msg) {

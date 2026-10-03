@@ -146,9 +146,15 @@ func newDoHResponseWriter(request *http.Request) *dohResponseWriter {
 func (writer *dohResponseWriter) LocalAddr() net.Addr  { return writer.localAddress }
 func (writer *dohResponseWriter) RemoteAddr() net.Addr { return writer.remoteAddress }
 
+// WriteMsg packs the response straight away, so the writer never needs its own
+// copy of it. The message is kept only to work out the HTTP cache lifetime.
 func (writer *dohResponseWriter) WriteMsg(message *dns.Msg) error {
-	writer.message = message.Copy()
-	writer.wire = nil
+	wire, err := message.Pack()
+	if err != nil {
+		writer.message, writer.wire = nil, nil
+		return err
+	}
+	writer.message, writer.wire = message, wire
 	return nil
 }
 
@@ -164,9 +170,6 @@ func (writer *dohResponseWriter) TsigTimersOnly(bool) {}
 func (writer *dohResponseWriter) Hijack()             {}
 
 func (writer *dohResponseWriter) pack() ([]byte, error) {
-	if writer.message != nil {
-		return writer.message.Pack()
-	}
 	if len(writer.wire) == 0 {
 		return nil, errors.New("empty DNS response")
 	}

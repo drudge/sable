@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -775,5 +777,50 @@ func TestHandlerCloseWithoutMaintenanceDoesNotBlock(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close() blocked waiting on a maintenance goroutine that never started")
+	}
+}
+
+func TestCopyCachedResponseKeepsStoredRecordsIntact(t *testing.T) {
+	t.Parallel()
+	stored := new(dns.Msg)
+	stored.SetQuestion("example.com.", dns.TypeA)
+	stored.Rcode = dns.RcodeSuccess
+	for _, value := range []string{
+		"example.com. 300 IN A 192.0.2.10",
+		"example.com. 300 IN AAAA 2001:db8::10",
+		`example.com. 300 IN TXT "v=spf1 -all"`,
+		"example.com. 300 IN NS ns1.example.com.",
+		"ns1.example.com. 300 IN A 192.0.2.53",
+	} {
+		record, err := dns.NewRR(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case strings.Contains(value, " NS "):
+			stored.Ns = append(stored.Ns, record)
+		case strings.HasPrefix(value, "ns1."):
+			stored.Extra = append(stored.Extra, record)
+		default:
+			stored.Answer = append(stored.Answer, record)
+		}
+	}
+	before := stored.String()
+
+	served := copyCachedResponse(stored)
+	if served.Question != nil {
+		t.Fatalf("copy question = %v, want it left for prepareCachedResponse", served.Question)
+	}
+	if len(served.Answer) != 3 || len(served.Ns) != 1 || len(served.Extra) != 1 {
+		t.Fatalf("copy sections = %d/%d/%d, want 3/1/1", len(served.Answer), len(served.Ns), len(served.Extra))
+	}
+	for _, record := range slices.Concat(served.Answer, served.Ns, served.Extra) {
+		record.Header().Ttl = 1
+	}
+	served.Answer = append(served.Answer, served.Extra[0])
+	served.Extra = slices.DeleteFunc(served.Extra, func(dns.RR) bool { return true })
+	served.Id = 99
+	if after := stored.String(); after != before {
+		t.Fatalf("stored response changed:\n%s\nwant\n%s", after, before)
 	}
 }
