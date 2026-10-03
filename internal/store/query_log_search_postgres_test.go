@@ -17,6 +17,18 @@ import (
 // SABLE_TEST_POSTGRES_DSN names, or skips the test without one.
 func openPostgresTestStore(t *testing.T, dsn string) *Store {
 	t.Helper()
+	opened, err := Open(context.Background(), "postgres", postgresTestSchema(t, dsn))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { opened.Close() })
+	return opened
+}
+
+// postgresTestSchema creates a schema of its own on the database dsn names,
+// drops it when the test ends, and returns a DSN that works in it.
+func postgresTestSchema(t *testing.T, dsn string) string {
+	t.Helper()
 	ctx := context.Background()
 	schema := fmt.Sprintf("sable_test_%d", time.Now().UnixNano())
 	admin, err := sql.Open("pgx", dsn)
@@ -41,12 +53,7 @@ func openPostgresTestStore(t *testing.T, dsn string) *Store {
 	query := parsed.Query()
 	query.Set("search_path", schema)
 	parsed.RawQuery = query.Encode()
-	opened, err := Open(ctx, "postgres", parsed.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { opened.Close() })
-	return opened
+	return parsed.String()
 }
 
 // On PostgreSQL the search is the same LIKE, and pg_trgm indexes serve it.
