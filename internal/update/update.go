@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/drudge/sable/internal/outbound"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -64,8 +65,12 @@ type Options struct {
 	// The root CLI uses it for an opt-in systemd service whose executable lives
 	// outside the system PATH.
 	MirrorBinaryPath string
-	Client           *http.Client
-	Output           io.Writer
+	// Resolver resolves GitHub's host names before the host's resolver is
+	// tried. The running server passes its own DNS handler. It is ignored
+	// when Client is set.
+	Resolver outbound.Resolver
+	Client   *http.Client
+	Output   io.Writer
 }
 
 type Result struct {
@@ -94,7 +99,7 @@ func (options Options) withDefaults() Options {
 		options.APIBaseURL = defaultAPIBaseURL
 	}
 	if options.Client == nil {
-		options.Client = &http.Client{Timeout: downloadTimeout}
+		options.Client = outbound.HTTPClient(options.Resolver, downloadTimeout)
 	}
 	if options.Output == nil {
 		options.Output = io.Discard

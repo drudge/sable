@@ -21,6 +21,7 @@ Sable is a DNS server written in Go. One static binary holds the DNS server, the
 | `internal/store` | SQLite and PostgreSQL storage |
 | `internal/insights` | Insights findings, with `devices` and `blocking` analyzers |
 | `internal/alerts`, `internal/cluster`, `internal/unifi`, `internal/dynamicdns`, `internal/update` | The features their names say |
+| `internal/outbound` | HTTP clients for Sable's own outbound calls that resolve names through Sable before the host's resolver |
 | `scripts/demo` | The Vandelay Industries demo: three nodes, a mock UniFi controller, and 30 days of traffic |
 | `scripts/browser` | Playwright browser tests and the screenshot engine (`screenshots.cjs`) |
 | `docs/` | Architecture, UI and accessibility contracts, configuration, guides, API reference, and releasing |
