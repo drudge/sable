@@ -162,6 +162,7 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 
 ## Commits, pull requests, and releases
 
+- Commit as Nicholas Penree <nick@penree.com>, never as the container's `Claude` identity. Cloud sessions get this from `.claude/hooks/git-identity.sh` at start; if `git config user.email` isn't `nick@penree.com` before your first commit, run that script. Leave out `Co-Authored-By` and `Claude-Session` trailers, and the "Generated with Claude Code" line in PR descriptions.
 - Use one branch and one PR per feature or fix. Two changes in one PR get two commits; list them in the PR description.
 - A PR that changes the console includes screenshots from the Vandelay demo. For UI that already exists, show before (`main`) and after (your branch) of the same view. For new UI, show dark and light, and a phone where it matters.
   - Take them with `scripts/browser/screenshots.cjs`: `buildDemo`, `startDemo`, `capture`, and `stopDemo`. A shot's `open(page)` can open a dialog or drawer before the picture.
