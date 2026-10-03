@@ -53,8 +53,64 @@ func TestDynamicUpdatePrerequisites(t *testing.T) {
 			if got := evaluateUpdatePrerequisites(zone.Name, records, message.Answer); got != test.want {
 				t.Fatalf("evaluateUpdatePrerequisites() = %s, want %s", dns.RcodeToString[got], dns.RcodeToString[test.want])
 			}
+			if got := evaluateUpdatePrerequisites(zone.Name, records, overTheWire(t, message).Answer); got != test.want {
+				t.Fatalf("evaluateUpdatePrerequisites() over the wire = %s, want %s", dns.RcodeToString[got], dns.RcodeToString[test.want])
+			}
 		})
 	}
+}
+
+// Deletes that carry no RDATA must survive the wire, where miekg/dns decodes
+// them as the concrete record type rather than *dns.ANY.
+func TestApplyDynamicZoneUpdateDeletesFromTheWire(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		make    func(*dns.Msg)
+		want    int
+		wantWWW bool
+	}{
+		{"rrset", func(message *dns.Msg) {
+			message.RemoveRRset([]dns.RR{mustRR(t, "www.example.test. 0 IN A 192.0.2.10")})
+		}, dns.RcodeSuccess, false},
+		{"name", func(message *dns.Msg) {
+			message.RemoveName([]dns.RR{mustRR(t, "www.example.test. 0 IN A 192.0.2.10")})
+		}, dns.RcodeSuccess, false},
+		{"exact record", func(message *dns.Msg) {
+			message.Remove([]dns.RR{mustRR(t, "www.example.test. 0 IN A 192.0.2.10")})
+		}, dns.RcodeSuccess, false},
+		{"exact record without data", func(message *dns.Msg) {
+			message.Ns = append(message.Ns, &dns.A{Hdr: dns.RR_Header{Name: "www.example.test.", Rrtype: dns.TypeA, Class: dns.ClassNONE}})
+		}, dns.RcodeFormatError, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			zone := dynamicUpdateTestZone()
+			message := new(dns.Msg)
+			message.SetUpdate("example.test.")
+			test.make(message)
+			_, rcode, err := applyDynamicZoneUpdate(&zone, nil, overTheWire(t, message).Ns, time.Now())
+			if err != nil || rcode != test.want {
+				t.Fatalf("applyDynamicZoneUpdate() = rcode %s, error %v, want %s", dns.RcodeToString[rcode], err, dns.RcodeToString[test.want])
+			}
+			if got := hasConfiguredRecord(zone, "www", "A", "192.0.2.10"); got != test.wantWWW {
+				t.Fatalf("www A present = %t, want %t: %+v", got, test.wantWWW, zone.Records)
+			}
+		})
+	}
+}
+
+func overTheWire(t *testing.T, message *dns.Msg) *dns.Msg {
+	t.Helper()
+	wire, err := message.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
+	received := new(dns.Msg)
+	if err := received.Unpack(wire); err != nil {
+		t.Fatal(err)
+	}
+	return received
 }
 
 func TestApplyDynamicZoneUpdateMutatesOnceAndProtectsAuthority(t *testing.T) {
