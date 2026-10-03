@@ -8,6 +8,66 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.6.2-beta.1] - 2026-10-03
+
+Sable 1.6.2-beta.1 is a stability release. Update checks work on networks
+whose router drops DNS, the query log prunes without stalling, a lookup that
+hits a bug answers instead of hanging, and every MCP tool enforces the access
+its token was granted.
+
+### Upgrading from 1.6.1
+
+- The MCP `lookup` tool now needs `zones.read`. It used to accept a token
+  with `zones.read`, `blocking.read`, or `settings.read`. A token that only
+  has blocking or settings access gets "this token needs zones.read to use
+  lookup". Groups made by the MCP setup in **Integrations** already have it.
+  For a group you built yourself, add `zones.read` to its API access.
+- A TSIG-signed zone transfer, NOTIFY, or dynamic update sent over
+  DNS-over-HTTPS is now refused. Sable never checked the signature on that
+  path. Send them over UDP, TCP, or DoT, where it does.
+
+### Updates
+
+- Look up GitHub through Sable's own resolution path when checking for
+  updates, and fall back to the host's resolver only when Sable has no
+  answer. On hosts whose resolver drops queries, such as Starlink routers
+  answering over IPv6, the check failed with an i/o timeout even though
+  Sable resolved fine. `sable update` on the command line still uses the
+  host's resolver.
+
+### DNS
+
+- Answer SERVFAIL when a lookup hits a bug, log the stack, and count it in
+  `sable_dns_panics_total`. The query died instead, and the same question
+  from other devices could hang until they gave up.
+- Keep serve-stale, prefetch, and the TTL limits after a DNSSEC trust anchor
+  rollover. The cache came back with default settings.
+- Stop a prefetch from replacing a validated cached answer with an
+  unvalidated one when local DNSSEC validation is off.
+- Cap open connections at 1,024 across TCP, DoT, and DoH, and at 256 for
+  DNS-over-QUIC. A client that opened connections and never closed them
+  could use up memory. Over the cap, Sable closes the new connection.
+- Check DoH and DoQ requests the same way as UDP, TCP, and DoT, and answer
+  a malformed one with the same DNS reply.
+- Apply configuration reloads and zone changes one at a time, so a reload
+  can no longer bring back zones that a zone change had just replaced.
+- Close idle forwarder connections on the cache sweep.
+
+### Logs
+
+- Prune old queries in small batches, away from the writer. A large
+  retention cut or a long outage made one huge delete that could time out
+  and start over every hour, drop new queries while it ran, and hold the
+  SQLite write lock the whole time.
+- Match `_` and `%` literally in query log search.
+- On SQLite, take the write lock at the start of a transaction, and retry a
+  query log batch once when the database is busy, instead of failing it.
+
+### Console
+
+- Keep the cache explainer collapsed on phones after a refresh or flush.
+- Limit the size of every form the console accepts. Five forms had no limit.
+
 ## [1.6.1] - 2026-10-02
 
 Sable 1.6.1 adds an **Apps** tab to Insights: every app your network uses,
