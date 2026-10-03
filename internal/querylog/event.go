@@ -93,6 +93,26 @@ type Event struct {
 	Answer       string        `json:"answer"`
 	Duration     time.Duration `json:"duration_ns"`
 	Decision     Decision      `json:"decision,omitempty"`
+	// AnswerSource, when set, supplies Answer later. The DNS handler passes
+	// the response itself so the answer is formatted on the log writer's
+	// goroutine instead of the one serving the query.
+	AnswerSource AnswerSource `json:"-"`
+}
+
+// AnswerSource formats an answer for the query log. Its value must not change
+// once it is recorded, since it is read on another goroutine.
+type AnswerSource interface {
+	QueryAnswer() string
+}
+
+// ResolveAnswer fills Answer from AnswerSource, then drops the source so the
+// response it points at can be collected.
+func (event *Event) ResolveAnswer() {
+	if event.AnswerSource == nil {
+		return
+	}
+	event.Answer = event.AnswerSource.QueryAnswer()
+	event.AnswerSource = nil
 }
 
 type Entry struct {
