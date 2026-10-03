@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/drudge/sable/internal/notices"
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 const shortCommitLength = 7
@@ -153,12 +154,7 @@ templ AboutContent(view AboutPageView) {
 // and opens from the MIT License dialog in its place. Each license's text
 // loads the first time its row opens.
 templ thirdPartyLicensesDialog(all []notices.Notice) {
-	<dialog class="custom-server-dialog license-dialog third-party-licenses-dialog" id="third-party-licenses-dialog" aria-labelledby="third-party-licenses-dialog-title">
-		<div class="dialog-header">
-			<h2 id="third-party-licenses-dialog-title">Third-Party Licenses</h2>
-			<p>Sable loves open source and stands on the shoulders of giants. Thank you to everyone who builds these projects.</p>
-		</div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "third-party-licenses-dialog", Title: "Third-Party Licenses", Description: "Sable loves open source and stands on the shoulders of giants. Thank you to everyone who builds these projects.", Class: "license-dialog third-party-licenses-dialog"}) {
 		<div class="scroll-fade-frame">
 			<div class="release-notes-content license-content third-party-licenses" data-scroll-fade>
 				<section aria-labelledby="third-party-licenses-console">
@@ -183,7 +179,7 @@ templ thirdPartyLicensesDialog(all []notices.Notice) {
 		<div class="dialog-footer">
 			<button class="button" type="button" data-dialog-close>Done</button>
 		</div>
-	</dialog>
+	}
 }
 
 templ thirdPartyLicenseRow(index int, notice notices.Notice) {

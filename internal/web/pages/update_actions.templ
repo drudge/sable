@@ -1,5 +1,7 @@
 package pages
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 const aboutUpdateNotesDialogID = "update-release-notes-dialog"
 const notificationUpdateNotesDialogID = "notification-release-notes-dialog"
 const clusterUpdateNotesDialogID = "cluster-release-notes-dialog"
@@ -101,9 +103,7 @@ templ updateScopeButton(view UpdateView, fromNotification bool) {
 
 templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
 	if view.ReleaseNotes != "" {
-		<dialog class="custom-server-dialog update-release-dialog" id={ dialogID } aria-labelledby={ dialogID + "-title" }>
-			<div class="dialog-header"><h2 id={ dialogID + "-title" }>Sable v{ view.LatestVersion }</h2><p>Release notes</p></div>
-			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+		@components.Dialog(components.DialogProps{ID: dialogID, Title: "Sable v" + view.LatestVersion, Description: "Release notes", Class: "update-release-dialog"}) {
 			<div class="scroll-fade-frame">
 				<div class="release-notes-content" data-scroll-fade>
 					@templ.Raw(releaseNotesHTML(view.ReleaseNotes))
@@ -116,6 +116,6 @@ templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
 				}
 				<button class="button" type="button" data-dialog-close>Done</button>
 			</div>
-		</dialog>
+		}
 	}
 }

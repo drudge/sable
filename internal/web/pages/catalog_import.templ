@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
  "strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type CatalogImportMember struct {
@@ -37,8 +39,7 @@ func catalogImportStep(view CatalogImportView) int {
 }
 
 templ CatalogImportContent(view CatalogImportView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog catalog-import-dialog" id="catalog-import-dialog" aria-labelledby="catalog-import-title" data-dialog-auto-open="true">
-		<div class="dialog-header"><h2 id="catalog-import-title">Import from Catalog</h2><p>Bring catalog members into Sable as independent zones.</p></div>
+	@components.Dialog(components.DialogProps{ID: "catalog-import-dialog", TitleID: "catalog-import-title", Title: "Import from Catalog", Description: "Bring catalog members into Sable as independent zones.", Class: "isotope-form-dialog unifi-wizard-dialog catalog-import-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": "true"}, NoClose: true}) {
 		<button type="button" class="dialog-close" data-dialog-close="catalog-import-dialog" aria-label="Close">
 			@Icon("x")
 		</button>
@@ -96,7 +97,7 @@ templ CatalogImportContent(view CatalogImportView) {
 				</div>
 			</div>
 		</form>
-	</dialog>
+	}
 }
 
 func catalogImportHasAvailable(view CatalogImportView) bool {

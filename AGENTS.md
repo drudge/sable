@@ -16,6 +16,7 @@ Sable is a DNS server written in Go. One static binary holds the DNS server, the
 | `internal/dnsserver` | The DNS data plane: query handling, cache, and the blocking decision |
 | `internal/web` | HTTP server, console handlers, JSON API, and the MCP server (`mcp*.go`) |
 | `internal/web/pages` | Console components in templ (`*.templ`) and their generated `*_templ.go` |
+| `internal/web/pages/components` | Shared console building blocks, such as `Icon` and `Dialog`, used across pages |
 | `internal/web/assets` | `app.js`, `app.css`, vendored htmx, and fonts, embedded and fingerprinted |
 | `internal/config` | The TOML configuration and its validation |
 | `internal/store` | SQLite and PostgreSQL storage |
@@ -101,6 +102,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `StatCard`, `RankedPanel`
   - `SearchField`, `Toast`, `UpdateIndicator`
   - `CopyButton`, `CopyLinkButton`, `ScrollFadeHint`, `Icon`
+  - `components.Dialog` with `components.DialogFooter`, and `components.ConfirmDialog` for a dialog that asks before one action
 
   Use the shared classes too: `.button` (with `outline`, `compact`, and `destructive`), `.card`, `.status-badge`, `.count-badge`, and `.field-help`.
 

@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type ClusterPageView struct {
@@ -180,8 +182,7 @@ templ ClusterContent(view ClusterPageView) {
 }
 
 templ ClusterSettingsDialog(view ClusterPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog" id="cluster-settings-dialog" aria-labelledby="cluster-settings-title">
-		<div class="dialog-header"><h2 id="cluster-settings-title">Cluster Node Configuration</h2><p>Configure how this server identifies itself to other nodes</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "cluster-settings-dialog", TitleID: "cluster-settings-title", Title: "Cluster Node Configuration", Description: "Configure how this server identifies itself to other nodes", Class: "isotope-form-dialog cluster-dialog"}) {
 		<form hx-post="/ui/cluster/settings" hx-target="#cluster-content" hx-swap="outerHTML">
 			<div class="isotope-dialog-body">
 				<label><span>Node Name</span><input name="node_name" value={ view.NodeName } placeholder="dns-1" autocomplete="off" required/><small>A human-readable name shown to cluster administrators.</small></label>
@@ -189,9 +190,11 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 				<label><span>Local Cluster State Directory</span><input class="mono-input" name="data_dir" value={ view.DataDirectory } placeholder="data/cluster" autocomplete="off" required disabled?={ view.Initialized }/><small>{ ifThen(view.Initialized, "The state directory cannot be moved while this node belongs to a cluster.", "Stores the stable node identity and synchronized generation manifest.") }</small></label>
 				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>Use the public certificate settings</strong><span>The advertised URL must use the Sable HTTPS endpoint with a certificate trusted by the other nodes.</span></p></div>
 			</div>
-			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Save &amp; Restart Later</button></div>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Save &amp; Restart Later</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 templ ClusterLiveStatusUpdate(view ClusterPageView) {
@@ -269,8 +272,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 }
 
 templ InitializeClusterDialog(view ClusterPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog cluster-onboarding-dialog" id="initialize-cluster-dialog" aria-labelledby="initialize-cluster-title" data-dialog-auto-open={ fmt.Sprint(view.OnboardingMode == "primary") }>
-		<div class="dialog-header"><h2 id="initialize-cluster-title">Initialize Primary</h2><p>Create a cluster with this server as its writable primary</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "initialize-cluster-dialog", TitleID: "initialize-cluster-title", Title: "Initialize Primary", Description: "Create a cluster with this server as its writable primary", Class: "isotope-form-dialog cluster-dialog cluster-onboarding-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": fmt.Sprint(view.OnboardingMode == "primary")}}) {
 		if view.RestartRequired {
 			@ClusterRestartStep(view, "primary")
 		} else if !view.NetworkReady || view.ConfigureNode {
@@ -278,11 +280,11 @@ templ InitializeClusterDialog(view ClusterPageView) {
 		} else {
 			<form hx-post="/ui/cluster/initialize" hx-target="#cluster-content" hx-swap="outerHTML"><input type="hidden" name="workflow" value="primary"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "primary")<div class="cluster-wizard-heading"><span>@Icon("cluster")</span><div><strong>Create the cluster</strong><small>Set the identity and DNS addresses for this primary.</small></div></div><label><span>Cluster Domain</span><input name="domain" placeholder="cluster.example.com" autocomplete="off" required/><small>A stable DNS name that identifies this cluster.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.10\n[2001:db8::10]:53" } required>{ view.DNSServiceAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=primary&amp;configure=https" hx-get="/cluster?onboarding=primary&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button" type="submit">Initialize Primary</button></div></form>
 		}
-	</dialog>
+	}
 }
 
 templ JoinClusterDialog(view ClusterPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog cluster-onboarding-dialog" id="join-cluster-dialog" aria-labelledby="join-cluster-title" data-dialog-auto-open={ fmt.Sprint(view.OnboardingMode == "join") }><div class="dialog-header"><h2 id="join-cluster-title">Join Existing Cluster</h2><p>Enroll this server as an independently serving replica</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "join-cluster-dialog", TitleID: "join-cluster-title", Title: "Join Existing Cluster", Description: "Enroll this server as an independently serving replica", Class: "isotope-form-dialog cluster-dialog cluster-onboarding-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": fmt.Sprint(view.OnboardingMode == "join")}}) {
 		if view.RestartRequired {
 			@ClusterRestartStep(view, "join")
 		} else if !view.NetworkReady || view.ConfigureNode {
@@ -294,7 +296,7 @@ templ JoinClusterDialog(view ClusterPageView) {
 				}
 				<label><span>Primary URL</span><input name="primary_url" type="url" value={ view.JoinPrimaryURL } placeholder="https://dns-1.example.com:5380" autocomplete="off" required/></label><label><span>Enrollment Token</span><input class="mono-input" name="token" type="password" value={ view.JoinToken } autocomplete="off" required/><small>Short-lived, single-use token created on the primary.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.11\n127.0.0.1:8054" } required>{ view.JoinAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=join&amp;configure=https" hx-get="/cluster?onboarding=join&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button cluster-join-submit" type="submit"><span class="cluster-join-submit-idle">@Icon("log-in")<span>Join as Replica</span></span><span class="cluster-join-submit-pending" aria-live="polite">@Icon("refresh")<span>Joining &amp; syncing…</span></span></button></div></form>
 		}
-	</dialog>
+	}
 }
 
 templ ClusterRestartStep(view ClusterPageView, workflow string) {
@@ -373,8 +375,7 @@ templ ClusterACMECredentialFields(view ClusterPageView) {
 }
 
 templ EnrollmentTokenDialog(view ClusterPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog cluster-dialog" id="enrollment-token-dialog" aria-labelledby="enrollment-token-title" data-dialog-auto-open={ fmt.Sprint(view.EnrollmentToken != "") }>
-		<div class="dialog-header"><h2 id="enrollment-token-title">Add Replica</h2><p>Create a short-lived, single-use enrollment token</p></div>
+	@components.Dialog(components.DialogProps{ID: "enrollment-token-dialog", TitleID: "enrollment-token-title", Title: "Add Replica", Description: "Create a short-lived, single-use enrollment token", Class: "isotope-form-dialog cluster-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": fmt.Sprint(view.EnrollmentToken != "")}, NoClose: true}) {
 		if view.EnrollmentToken == "" {
 			<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
 		} else {
@@ -385,7 +386,7 @@ templ EnrollmentTokenDialog(view ClusterPageView) {
 		} else {
 			<div class="isotope-dialog-body"><label><span>Enrollment Token</span><div class="cluster-token-value"><code id="cluster-enrollment-token">{ view.EnrollmentToken }</code><button class="button outline compact cluster-copy-token" type="button" data-copy-target="cluster-enrollment-token" aria-label="Copy enrollment token" title="Copy enrollment token">@CopyIcons()<span data-copy-label>Copy token</span></button></div><small>Expires { FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeDisplay, true) }. This secret will not be shown again.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class="dialog-footer"><button class="button" type="button" hx-get="/cluster" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" data-enrollment-token-dismiss>Done</button></div>
 		}
-	</dialog>
+	}
 }
 
 templ ClusterGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }

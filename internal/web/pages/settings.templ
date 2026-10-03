@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type SettingsPageView struct {
@@ -351,8 +353,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 }
 
 templ ManualCertificateDialogs() {
-	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="generate-certificate-dialog" aria-labelledby="generate-certificate-title">
-		<div class="dialog-header"><h2 id="generate-certificate-title">Generate Self-Signed Certificate</h2><p>Create and configure a node-local certificate for Web, DoH, and DoT</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "generate-certificate-dialog", TitleID: "generate-certificate-title", Title: "Generate Self-Signed Certificate", Description: "Create and configure a node-local certificate for Web, DoH, and DoT", Class: "isotope-form-dialog certificate-dialog"}) {
 		<form hx-post="/ui/certificates/generate" hx-target="#settings-content" hx-swap="outerHTML">
 			<input type="hidden" name="settings_tab" value="protocols"/>
 			<div class="isotope-dialog-body">
@@ -360,11 +361,12 @@ templ ManualCertificateDialogs() {
 				<div class="field-grid two"><label><span>Validity (days)</span><input type="number" name="manual_certificate_valid_days" value="365" min="1" max="3650" required/></label><label><span>Protected Storage Directory</span><input class="mono-input" name="manual_certificate_storage_dir" value="data/tls/manual" required/><small>Must remain inside the Sable configuration directory.</small></label></div>
 				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>ECDSA P-256 identity</strong><span>The private key is written with owner-only permissions and is never stored in TOML or returned by the API.</span></p></div>
 			</div>
-			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Generate &amp; Use Certificate</button></div>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Generate &amp; Use Certificate</button>
+			}
 		</form>
-	</dialog>
-	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="import-certificate-dialog" aria-labelledby="import-certificate-title">
-		<div class="dialog-header"><h2 id="import-certificate-title">Import Certificate</h2><p>Validate and store an existing PEM certificate chain and private key</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	}
+	@components.Dialog(components.DialogProps{ID: "import-certificate-dialog", TitleID: "import-certificate-title", Title: "Import Certificate", Description: "Validate and store an existing PEM certificate chain and private key", Class: "isotope-form-dialog certificate-dialog"}) {
 		<form hx-post="/ui/certificates/import" hx-target="#settings-content" hx-swap="outerHTML">
 			<input type="hidden" name="settings_tab" value="protocols"/>
 			<div class="isotope-dialog-body">
@@ -373,9 +375,11 @@ templ ManualCertificateDialogs() {
 				<label><span>Protected Storage Directory</span><input class="mono-input" name="manual_import_storage_dir" value="data/tls/manual" required/></label>
 				<div class="cluster-dialog-note">@Icon("lock")<p><strong>Validated before activation</strong><span>Sable verifies the key pair and validity period before committing either file. The private key is never rendered back into the UI.</span></p></div>
 			</div>
-			<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Import &amp; Use Certificate</button></div>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Import &amp; Use Certificate</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 // AttachedNetworkView is one IPv6 network private recursion covers, with the
@@ -596,9 +600,7 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 }
 
 templ AddTSIGKeyDialog(view SettingsPageView) {
-	<dialog class="custom-server-dialog blocking-dialog" id="add-tsig-key-dialog" aria-labelledby="add-tsig-key-title">
-		<div class="dialog-header"><h2 id="add-tsig-key-title">Add TSIG Key</h2><p>Leave the secret blank and Sable generates one sized to the algorithm. Paste a secret instead when another server already owns the key.</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "add-tsig-key-dialog", TitleID: "add-tsig-key-title", Title: "Add TSIG Key", Description: "Leave the secret blank and Sable generates one sized to the algorithm. Paste a secret instead when another server already owns the key.", Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/settings/tsig/save" hx-target="#settings-content" hx-swap="outerHTML">
 			<label><span>Key Name</span><input class="mono-input" name="tsig_name" placeholder="transfer-key" autocomplete="off" required/><small>A DNS name. Both servers must agree on it exactly.</small></label>
 			<label><span>Algorithm</span><select name="tsig_algorithm" data-styled-select>
@@ -607,9 +609,11 @@ templ AddTSIGKeyDialog(view SettingsPageView) {
 				}
 			</select><small>HMAC-SHA256 suits almost everything.</small></label>
 			<label><span>Secret (optional)</span><input class="mono-input" type="password" name="tsig_secret" autocomplete="new-password" placeholder="Generate one for me"/><small>Base64, at least 128 bits. Sable shows a generated secret once.</small></label>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Add Key</button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit">Add Key</button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 // SettingsTSIGKeyRow follows the block-list row: an icon, the name, one muted
@@ -886,39 +890,43 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 // RunLocalBackupDialog collects a one-off passphrase only when the operator
 // chooses to create an archive; the finished file appears in local history.
 templ RunLocalBackupDialog() {
-	<dialog class="custom-server-dialog blocking-dialog" id="run-local-backup-dialog" aria-labelledby="run-local-backup-title">
-		<div class="dialog-header"><h2 id="run-local-backup-title">Backup Now</h2><p>Create a durable local backup outside the scheduled rotation set.</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "run-local-backup-dialog", TitleID: "run-local-backup-title", Title: "Backup Now", Description: "Create a durable local backup outside the scheduled rotation set.", Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/backup/run" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-passphrase-pair data-local-backup-run-form>
 			<label><span>Backup Passphrase</span><input type="password" name="passphrase" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters" data-passphrase/><small>Sable cannot recover this. Store it wherever you keep credentials, not beside the archive.</small></label>
 			<label><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" required placeholder="Repeat the passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" data-passphrase-submit disabled>@Icon("play")<span>Backup Now</span></button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button" type="submit" data-passphrase-submit disabled>@Icon("play")<span>Backup Now</span></button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 // LocalBackupRestoreDialog keeps credentials and restore policy out of the
 // history list. A row's Restore button supplies only the selected archive name.
 templ LocalBackupRestoreDialog() {
-	<dialog class="custom-server-dialog blocking-dialog" id="local-backup-restore-dialog" aria-labelledby="local-backup-restore-title">
-		<div class="dialog-header"><h2 id="local-backup-restore-title">Restore Local Backup</h2><p>Stage <strong data-local-backup-restore-name></strong> before a controlled restart.</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "local-backup-restore-dialog", TitleID: "local-backup-restore-title", Title: "Restore Local Backup", DescriptionContent: localBackupRestoreLead(), Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/backup/restore-local" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-local-backup-restore-form>
 			<input type="hidden" name="name" data-local-backup-restore-input/>
 			@BackupRestoreWarning("Zones, users, roles, API tokens, and secrets are validated and staged while this node keeps serving its current state.")
 			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" data-local-backup-passphrase/><small data-local-backup-passphrase-note></small></label>
 			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore Backup</span></button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore Backup</span></button>
+			}
 		</form>
-	</dialog>
+	}
+}
+
+// localBackupRestoreLead names the backup the restore dialog stages; app.js
+// fills in the name when the dialog opens.
+templ localBackupRestoreLead() {
+	Stage <strong data-local-backup-restore-name></strong> before a controlled restart.
 }
 
 // UploadBackupRestoreDialog mirrors local restore, changing only how the
 // archive is selected and requiring the passphrase that sealed the file.
 templ UploadBackupRestoreDialog() {
-	<dialog class="custom-server-dialog blocking-dialog" id="upload-backup-restore-dialog" aria-labelledby="upload-backup-restore-title">
-		<div class="dialog-header"><h2 id="upload-backup-restore-title">Restore Backup</h2><p>Choose a Sable archive and stage it before a controlled restart.</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "upload-backup-restore-dialog", TitleID: "upload-backup-restore-title", Title: "Restore Backup", Description: "Choose a Sable archive and stage it before a controlled restart.", Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form backup-form" hx-post="/ui/backup/restore" hx-target="#backup-panel" hx-swap="outerHTML" hx-encoding="multipart/form-data" hx-disable="find button[type='submit']" data-backup-restore-form data-upload-backup-restore-form>
 			@BackupRestoreWarning("Zones, users, roles, API tokens, and secrets are validated and staged while this node keeps serving its current state.")
 			<div class="backup-file-upload" data-backup-file-upload data-file-dropzone-root data-file-dropzone-state="empty">
@@ -942,9 +950,11 @@ templ UploadBackupRestoreDialog() {
 			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" required placeholder="The passphrase this backup was sealed with"/></label>
 			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
 			@BackupUploadMeter()
-			<footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit" data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button></footer>
+			@components.DialogFooter("Cancel") {
+				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button>
+			}
 		</form>
-	</dialog>
+	}
 }
 
 func BackupSchedulePassphrasePlaceholder(stored bool) string {
@@ -1060,8 +1070,7 @@ func coveredNamesSummary(names []string) string {
 }
 
 templ CertificateDetailsDialog(view SettingsPageView) {
-	<dialog class="custom-server-dialog isotope-form-dialog certificate-dialog" id="certificate-details-dialog" aria-labelledby="certificate-details-title">
-		<div class="dialog-header"><h2 id="certificate-details-title">Certificate Details</h2><p>The certificate currently installed for Web, DoH, DoT, and DoQ</p></div><button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
+	@components.Dialog(components.DialogProps{ID: "certificate-details-dialog", TitleID: "certificate-details-title", Title: "Certificate Details", Description: "The certificate currently installed for Web, DoH, DoT, and DoQ", Class: "isotope-form-dialog certificate-dialog"}) {
 		<div class="dialog-body certificate-details-body">
 			<div class="certificate-detail-grid">
 				<div class="certificate-detail"><span>Issued by</span><strong>{ ifThen(view.ACMEIssuer != "", view.ACMEIssuer, "Unknown") }</strong></div>
@@ -1118,6 +1127,8 @@ templ CertificateDetailsDialog(view SettingsPageView) {
 				}
 			</div>
 		</div>
-		<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Close</button></div>
-	</dialog>
+		@components.DialogFooter("Close") {
+			
+		}
+	}
 }

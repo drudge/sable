@@ -3,6 +3,8 @@ package pages
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // AlertWatchView is one domain watch as the Watches card lists it.
@@ -203,9 +205,8 @@ templ AlertWatchForm(form AlertWatchFormView) {
 				<small>After an alert, the same device stays quiet this long for this watch.</small>
 			</label>
 		</div>
-		<div class="dialog-footer">
-			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+		@components.DialogFooter("Cancel") {
 			<button class="button" type="submit" data-replica-primary-action>Save</button>
-		</div>
+		}
 	</form>
 }

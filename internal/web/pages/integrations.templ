@@ -4,6 +4,8 @@ import "fmt"
 import "strconv"
 import "strings"
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 type IntegrationsPageView struct {
 	Console DashboardView
 	Message string
@@ -500,18 +502,20 @@ templ DynamicDNSCardActionButtons(view DynamicDNSAppView) {
 }
 
 templ RemoveDynamicDNSDialog() {
-	<dialog class="custom-server-dialog confirmation-dialog" id="remove-dynamic-dns-dialog" aria-labelledby="remove-dynamic-dns-title">
-		<div class="dialog-header"><h2 id="remove-dynamic-dns-title">Remove Dynamic DNS</h2><p>Stop publishing public addresses</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="isotope-dialog-body"><p>Sable will remove the integration settings but leave existing external records in place. Shared provider credentials are retained because certificate automation may still use them.</p></div>
-		<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><form hx-post="/ui/integrations/dynamic-dns/remove" hx-target="#integrations-content" hx-swap="outerHTML"><button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button></form></div>
-	</dialog>
+	@components.ConfirmDialog(components.ConfirmDialogProps{
+		ID:          "remove-dynamic-dns-dialog",
+		TitleID:     "remove-dynamic-dns-title",
+		Title:       "Remove Dynamic DNS",
+		Description: "Stop publishing public addresses",
+		Message:     "Sable will remove the integration settings but leave existing external records in place. Shared provider credentials are retained because certificate automation may still use them.",
+		Action:      "Remove Integration",
+		ActionIcon:  "trash",
+		Form:        templ.Attributes{"hx-post": "/ui/integrations/dynamic-dns/remove", "hx-target": "#integrations-content", "hx-swap": "outerHTML"},
+	})
 }
 
 templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="dynamic-dns-setup-dialog" aria-labelledby="dynamic-dns-setup-title" data-dialog-auto-open="true" data-certificate-settings data-dynamic-dns-editor>
-		<div class="dialog-header"><h2 id="dynamic-dns-setup-title">Set Up Dynamic DNS</h2><p>Publish this deployment's public addresses to external DNS</p></div>
-		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+	@components.Dialog(components.DialogProps{ID: "dynamic-dns-setup-dialog", TitleID: "dynamic-dns-setup-title", Title: "Set Up Dynamic DNS", Description: "Publish this deployment's public addresses to external DNS", Class: "isotope-form-dialog unifi-wizard-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": "true", "data-certificate-settings": true, "data-dynamic-dns-editor": true}, CloseHref: "/integrations"}) {
 		<form hx-post="/ui/integrations/dynamic-dns/save" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				<section class="wizard-panel compact">
@@ -536,7 +540,7 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 			</div>
 			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>Save &amp; Publish</span></button></div>
 		</form>
-	</dialog>
+	}
 }
 
 templ DynamicDNSAddProviderMenu() {
@@ -863,18 +867,20 @@ func mcpOutOfBand(outOfBand bool) templ.Attributes {
 }
 
 templ RemoveMCPDialog() {
-	<dialog class="custom-server-dialog confirmation-dialog" id="remove-mcp-dialog" aria-labelledby="remove-mcp-title">
-		<div class="dialog-header"><h2 id="remove-mcp-title">Remove MCP Server</h2><p>Stop serving AI assistants</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="isotope-dialog-body"><p>Sable will turn the MCP server off and forget its setup. API tokens stay in place; revoke any you made for an assistant in Administration.</p></div>
-		<div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><form hx-post="/ui/integrations/mcp/remove" hx-target="#integrations-content" hx-swap="outerHTML"><button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button></form></div>
-	</dialog>
+	@components.ConfirmDialog(components.ConfirmDialogProps{
+		ID:          "remove-mcp-dialog",
+		TitleID:     "remove-mcp-title",
+		Title:       "Remove MCP Server",
+		Description: "Stop serving AI assistants",
+		Message:     "Sable will turn the MCP server off and forget its setup. API tokens stay in place; revoke any you made for an assistant in Administration.",
+		Action:      "Remove Integration",
+		ActionIcon:  "trash",
+		Form:        templ.Attributes{"hx-post": "/ui/integrations/mcp/remove", "hx-target": "#integrations-content", "hx-swap": "outerHTML"},
+	})
 }
 
 templ MCPSetupDialog(view MCPAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog mcp-setup-dialog" id="mcp-setup-dialog" aria-labelledby="mcp-setup-title" data-dialog-tabs data-dialog-auto-open="true">
-		<div class="dialog-header"><h2 id="mcp-setup-title">Set Up MCP Server</h2><p>Let AI assistants manage DNS with an API token</p></div>
-		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+	@components.Dialog(components.DialogProps{ID: "mcp-setup-dialog", TitleID: "mcp-setup-title", Title: "Set Up MCP Server", Description: "Let AI assistants manage DNS with an API token", Class: "isotope-form-dialog mcp-setup-dialog", Attrs: templ.Attributes{"data-dialog-tabs": true, "data-dialog-auto-open": "true"}, CloseHref: "/integrations"}) {
 		<div class="wizard-progress mcp-wizard-progress" role="tablist" aria-label="Setup steps">
 			<button class="active" type="button" role="tab" aria-selected="true" data-dialog-tab="tools"><span>1</span><small>Tools</small></button>
 			<i></i>
@@ -942,7 +948,7 @@ templ MCPSetupDialog(view MCPAppView) {
 				</div>
 			</div>
 		</form>
-	</dialog>
+	}
 }
 
 templ MCPClientSnippet(label, id, snippet, help string) {
@@ -1017,20 +1023,18 @@ templ SSOMappingTable(view SSOAppView) {
 }
 
 templ RemoveSSODialog(view SSOAppView) {
-	<dialog class="custom-server-dialog confirmation-dialog" id="remove-sso-dialog" aria-labelledby="remove-sso-title">
-		<div class="dialog-header"><h2 id="remove-sso-title">Remove Single Sign-On</h2><p>Stop using { view.Label }</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="isotope-dialog-body">
-			<p>Sable will forget the provider and delete the stored client secret. Accounts it created stay, along with the link between them and the provider, so reconnecting the same provider picks up where it left off.</p>
-			<p>Anyone who turned off password sign-in will not be able to get in until you turn it back on for them from the administration page.</p>
-		</div>
-		<div class="dialog-footer">
-			<button class="button outline" type="button" data-dialog-close>Cancel</button>
-			<form hx-post="/ui/integrations/sso/remove" hx-target="#integrations-content" hx-swap="outerHTML">
-				<button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button>
-			</form>
-		</div>
-	</dialog>
+	@components.ConfirmDialog(components.ConfirmDialogProps{
+		ID:          "remove-sso-dialog",
+		TitleID:     "remove-sso-title",
+		Title:       "Remove Single Sign-On",
+		Description: "Stop using " + view.Label,
+		Message:     "Sable will forget the provider and delete the stored client secret. Accounts it created stay, along with the link between them and the provider, so reconnecting the same provider picks up where it left off.",
+		Action:      "Remove Integration",
+		ActionIcon:  "trash",
+		Form:        templ.Attributes{"hx-post": "/ui/integrations/sso/remove", "hx-target": "#integrations-content", "hx-swap": "outerHTML"},
+	}) {
+		<p>Anyone who turned off password sign-in will not be able to get in until you turn it back on for them from the administration page.</p>
+	}
 }
 
 templ UniFiCard(view UniFiAppView) {
@@ -1106,19 +1110,16 @@ templ UniFiCardActionButtons(view UniFiAppView) {
 }
 
 templ RemoveUniFiDialog() {
-	<dialog class="custom-server-dialog confirmation-dialog" id="remove-unifi-dialog" aria-labelledby="remove-unifi-title">
-		<div class="dialog-header"><h2 id="remove-unifi-title">Remove UniFi Host Sync</h2><p>Start over with a clean slate</p></div>
-		<button class="dialog-close" type="button" data-dialog-close aria-label="Close">@Icon("x")</button>
-		<div class="isotope-dialog-body">
-			<p>Sable will forget the controller, delete the stored credentials, and remove every record it published. Zones it created stay, along with anything you added to them by hand.</p>
-		</div>
-		<div class="dialog-footer">
-			<button class="button outline" type="button" data-dialog-close>Cancel</button>
-			<form hx-post="/ui/integrations/unifi/remove" hx-target="#integrations-content" hx-swap="outerHTML">
-				<button class="button destructive" type="submit">@Icon("trash")<span>Remove Integration</span></button>
-			</form>
-		</div>
-	</dialog>
+	@components.ConfirmDialog(components.ConfirmDialogProps{
+		ID:          "remove-unifi-dialog",
+		TitleID:     "remove-unifi-title",
+		Title:       "Remove UniFi Host Sync",
+		Description: "Start over with a clean slate",
+		Message:     "Sable will forget the controller, delete the stored credentials, and remove every record it published. Zones it created stay, along with anything you added to them by hand.",
+		Action:      "Remove Integration",
+		ActionIcon:  "trash",
+		Form:        templ.Attributes{"hx-post": "/ui/integrations/unifi/remove", "hx-target": "#integrations-content", "hx-swap": "outerHTML"},
+	})
 }
 
 templ UniFiStatusPanel(view UniFiAppView) {
@@ -1195,9 +1196,7 @@ templ UniFiMappingRows(view UniFiAppView) {
 }
 
 templ UniFiWizardDialog(view UniFiAppView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog" id="unifi-setup-dialog" aria-labelledby="unifi-setup-title" data-dialog-auto-open="true">
-		<div class="dialog-header"><h2 id="unifi-setup-title">Set Up UniFi Host Sync</h2><p>Publish UniFi hosts into zones Sable is authoritative for</p></div>
-		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+	@components.Dialog(components.DialogProps{ID: "unifi-setup-dialog", TitleID: "unifi-setup-title", Title: "Set Up UniFi Host Sync", Description: "Publish UniFi hosts into zones Sable is authoritative for", Class: "isotope-form-dialog unifi-wizard-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": "true"}, CloseHref: "/integrations"}) {
 		<form hx-post="/ui/integrations/unifi/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				@UniFiWizardProgress(view.Wizard.Step)
@@ -1217,7 +1216,7 @@ templ UniFiWizardDialog(view UniFiAppView) {
 			</div>
 			@UniFiWizardFooter(view.Wizard)
 		</form>
-	</dialog>
+	}
 }
 
 templ UniFiWizardProgress(step string) {
@@ -1824,9 +1823,7 @@ func ssoCheckSummary(check SSOCheckView) string {
 
 
 templ SSOWizardDialog(wizard SSOWizardView) {
-	<dialog class="custom-server-dialog isotope-form-dialog unifi-wizard-dialog sso-wizard-dialog" id="sso-setup-dialog" aria-labelledby="sso-setup-title" data-dialog-auto-open="true">
-		<div class="dialog-header"><h2 id="sso-setup-title">Set Up Single Sign-On</h2><p>{ ssoWizardSubtitle(wizard.Step) }</p></div>
-		<a class="dialog-close" href="/integrations" aria-label="Close">@Icon("x")</a>
+	@components.Dialog(components.DialogProps{ID: "sso-setup-dialog", TitleID: "sso-setup-title", Title: "Set Up Single Sign-On", Description: ssoWizardSubtitle(wizard.Step), Class: "isotope-form-dialog unifi-wizard-dialog sso-wizard-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": "true"}, CloseHref: "/integrations"}) {
 		<form hx-post="/ui/integrations/sso/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			<div class="isotope-dialog-body">
 				@SSOWizardProgress(wizard.Step)
@@ -1846,7 +1843,7 @@ templ SSOWizardDialog(wizard SSOWizardView) {
 			</div>
 			@SSOWizardFooter(wizard)
 		</form>
-	</dialog>
+	}
 }
 
 templ SSOWizardProgress(step string) {
