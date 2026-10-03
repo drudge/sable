@@ -71,7 +71,7 @@ func (server *Server) initializeCluster(writer http.ResponseWriter, request *htt
 	if !server.clusterAvailable(writer, request) {
 		return
 	}
-	if server.clusterView(request, "", "").RestartRequired {
+	if server.clusterRestartRequired(request) {
 		server.renderClusterMutation(writer, request, http.StatusConflict, "", "Restart Sable to activate the saved node identity before initializing a cluster")
 		return
 	}
@@ -312,7 +312,7 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 	query := request.URL.Query()
 	query.Set("resume", "ready")
 	request.URL.RawQuery = query.Encode()
-	restartRequired := server.clusterView(request, "", "").RestartRequired
+	restartRequired := server.clusterRestartRequired(request)
 	writer.Header().Set("HX-Replace-Url", "/cluster?onboarding="+workflow+"&resume=ready")
 	server.logger.Info("cluster onboarding staged", "client", requestClientIP(request), "workflow", workflow, "https_source", source, "restart_required", restartRequired)
 	server.recordControlPlaneAudit(request, "cluster.onboarding.configure", "configured node identity and HTTPS for cluster onboarding")
@@ -388,7 +388,7 @@ func (server *Server) joinCluster(writer http.ResponseWriter, request *http.Requ
 	if !server.clusterAvailable(writer, request) {
 		return
 	}
-	if server.clusterView(request, "", "").RestartRequired {
+	if server.clusterRestartRequired(request) {
 		server.renderClusterUIFailure(writer, request, http.StatusConflict, "Restart Sable to activate the saved node identity before joining a cluster")
 		return
 	}
@@ -477,7 +477,7 @@ func (server *Server) initializeClusterAPI(writer http.ResponseWriter, request *
 		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
 		return
 	}
-	if server.clusterView(request, "", "").RestartRequired {
+	if server.clusterRestartRequired(request) {
 		writeJSON(writer, http.StatusConflict, map[string]string{"error": "restart Sable to activate the saved node identity before initializing a cluster"})
 		return
 	}
@@ -717,8 +717,7 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 			view.JoinAddresses = strings.TrimSpace(request.FormValue("addresses"))
 		}
 	}
-	view.RestartRequired = active.DataDirectory != server.config.Current().Config.ClusterDataPath(baseDirectory) || active.NodeName != view.NodeName || active.AdvertiseURL != view.AdvertiseURL || active.HTTPSListen != configuration.Server.HTTPSListen || active.TrustAnchorFile != configuration.ClusterTrustAnchorPath(baseDirectory)
-	view.RestartRequired = view.RestartRequired || active.TrustRestartRequired
+	view.RestartRequired = clusterRestartRequired(active, configuration, baseDirectory, view.NodeName, view.AdvertiseURL)
 	populateClusterStateView(&view, state)
 	return view
 }
@@ -858,4 +857,31 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// clusterRestartRequired reports what clusterView's RestartRequired does
+// without building the rest of the page.
+func (server *Server) clusterRestartRequired(request *http.Request) bool {
+	if server.cluster == nil {
+		return false
+	}
+	active := server.cluster.LocalConfiguration()
+	configuration := server.config.Current().Config
+	baseDirectory := "."
+	if located, ok := server.config.(interface{ BaseDirectory() string }); ok {
+		baseDirectory = located.BaseDirectory()
+	}
+	nodeName := firstNonEmpty(configuration.Cluster.NodeName, active.NodeName)
+	advertiseURL := firstNonEmpty(configuration.Cluster.AdvertiseURL, active.AdvertiseURL)
+	if clusterWorkflow(request) != "" && request.Form != nil {
+		nodeName = firstNonEmpty(strings.TrimSpace(request.FormValue("node_name")), nodeName)
+		advertiseURL = firstNonEmpty(strings.TrimSpace(request.FormValue("advertise_url")), advertiseURL)
+	}
+	return clusterRestartRequired(active, configuration, baseDirectory, nodeName, advertiseURL)
+}
+
+func clusterRestartRequired(active cluster.LocalConfiguration, configuration config.Config, baseDirectory, nodeName, advertiseURL string) bool {
+	return active.TrustRestartRequired || active.DataDirectory != configuration.ClusterDataPath(baseDirectory) ||
+		active.NodeName != nodeName || active.AdvertiseURL != advertiseURL ||
+		active.HTTPSListen != configuration.Server.HTTPSListen || active.TrustAnchorFile != configuration.ClusterTrustAnchorPath(baseDirectory)
 }

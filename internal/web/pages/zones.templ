@@ -79,6 +79,9 @@ type ZoneView struct {
 	Revision     uint64
 	History      []ZoneRevisionView
 	HistoryError string
+	// HistoryLazy marks a zone list row whose history loads when its dialog
+	// opens, so drawing the list doesn't read every zone's revisions.
+	HistoryLazy bool
 	CanSettings  bool
 	CanRecords   bool
 	CanTransfer  bool
@@ -640,7 +643,7 @@ templ ZoneListView(view ZonesPageView) {
 				if zone.CanDelete {
 					@DeleteZoneDialog(zone, zoneElementID("delete", index))
 				}
-				if len(zone.History) > 0 || zone.HistoryError != "" {
+				if zoneHasHistory(zone) {
 					@ZoneHistoryDialog(zone, zoneElementID("history", index))
 				}
 			}
@@ -728,7 +731,7 @@ templ ZoneDetailView(zone ZoneView) {
 		if zone.CanDelete {
 			@DeleteZoneDialog(zone, "delete-selected-zone-dialog")
 		}
-		if len(zone.History) > 0 || zone.HistoryError != "" {
+		if zoneHasHistory(zone) {
 			@ZoneHistoryDialog(zone, "zone-history-dialog")
 		}
 	</div>
@@ -736,28 +739,46 @@ templ ZoneDetailView(zone ZoneView) {
 
 templ ZoneHistoryDialog(zone ZoneView, id string) {
 	@components.Dialog(components.DialogProps{ID: id, Title: "Change Center", DescriptionContent: zoneHistoryLead(zone.Name), Class: "zone-history-dialog"}) {
-		<div class="zone-history-list">
-			if zone.HistoryError != "" {
-				<div class="zone-history-empty">{ zone.HistoryError }</div>
-			} else if len(zone.History) == 0 {
-				<div class="zone-history-empty">No revisions have been recorded for this zone.</div>
-			}
-			for _, revision := range zone.History {
-				<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#" + zoneHistoryRevisionID(id, revision.Number) } hx-swap="innerHTML">
-					<summary><span class={ "zone-history-marker " + revision.Kind } aria-hidden="true"></span><div><span><strong>Revision { fmt.Sprint(revision.Number) }</strong><span class={ "zone-history-kind " + revision.Kind }>{ revision.KindLabel }</span>
-						if revision.Current {
-							<span class="current-badge">Current</span>
-						}
-					</span><small>{ revision.OccurredAt }</small></div>@Icon("chevron-down")</summary>
-					<div class="zone-history-diff" id={ zoneHistoryRevisionID(id, revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
-				</details>
+		<div class="zone-history-list" id={ id + "-list" }>
+			if zone.HistoryLazy {
+				<div class="zone-history-empty"><span class="zone-history-loading">Loading history…</span></div>
+			} else {
+				@ZoneHistoryEntries(zone, id)
 			}
 		</div>
 	}
 }
 
+// ZoneHistoryEntries is the body of a zone's history dialog. The zone list
+// loads it on demand from zoneHistoryURL.
+templ ZoneHistoryEntries(zone ZoneView, id string) {
+	if zone.HistoryError != "" {
+		<div class="zone-history-empty">{ zone.HistoryError }</div>
+	} else if len(zone.History) == 0 {
+		<div class="zone-history-empty">No revisions have been recorded for this zone.</div>
+	}
+	for _, revision := range zone.History {
+		<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#" + zoneHistoryRevisionID(id, revision.Number) } hx-swap="innerHTML">
+			<summary><span class={ "zone-history-marker " + revision.Kind } aria-hidden="true"></span><div><span><strong>Revision { fmt.Sprint(revision.Number) }</strong><span class={ "zone-history-kind " + revision.Kind }>{ revision.KindLabel }</span>
+				if revision.Current {
+					<span class="current-badge">Current</span>
+				}
+			</span><small>{ revision.OccurredAt }</small></div>@Icon("chevron-down")</summary>
+			<div class="zone-history-diff" id={ zoneHistoryRevisionID(id, revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>
+		</details>
+	}
+}
+
 templ zoneHistoryLead(name string) {
 	Revisions of <code>{ name }</code>
+}
+
+func zoneHasHistory(zone ZoneView) bool {
+	return zone.HistoryLazy || len(zone.History) > 0 || zone.HistoryError != ""
+}
+
+func zoneHistoryURL(name, dialogID string) string {
+	return "/ui/zones/history?zone=" + url.QueryEscape(name) + "&dialog=" + url.QueryEscape(dialogID)
 }
 
 func zoneHistoryRevisionID(dialogID string, revision uint64) string {
@@ -812,7 +833,9 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 			if zone.CanSettings {
 				<button type="button" data-dialog-open={ settingsID }>@Icon("sliders")<span>Zone Settings</span></button>
 			}
-			if historyID != "" && (len(zone.History) > 0 || zone.HistoryError != "") {
+			if historyID != "" && zone.HistoryLazy {
+				<button type="button" data-dialog-open={ historyID } hx-get={ templ.SafeURL(zoneHistoryURL(zone.Name, historyID)) } hx-target={ "#" + historyID + "-list" } hx-swap="innerHTML">@Icon("clock")<span>History</span></button>
+			} else if historyID != "" && zoneHasHistory(zone) {
 				<button type="button" data-dialog-open={ historyID }>@Icon("clock")<span>History</span></button>
 			}
 			if zone.CanManagePermissions {

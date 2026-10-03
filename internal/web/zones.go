@@ -70,13 +70,17 @@ const catalogConsumerFormType = "secondary_catalog"
 
 func (server *Server) zonesView(request *http.Request, message, errorMessage, selected string) pages.ZonesPageView {
 	console := server.consoleView(request)
-	zones := server.zones.Current().Zones
+	// The page only reads the zones, so it skips the copy Current makes.
+	zones := server.currentZonesRef().Zones
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
+	readable := func(zone zonemodel.Zone) bool {
+		return !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID)
+	}
 	tsigKeys := server.tsigKeyNames(request.Context())
 	aliasSources := make([]string, 0, len(zones))
 	catalogTargets := make([]string, 0, len(zones))
 	for _, zone := range zones {
-		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+		if !readable(zone) {
 			continue
 		}
 		if zonemodel.IsProducerCatalog(zone) {
@@ -87,9 +91,16 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		}
 		aliasSources = append(aliasSources, zone.Name)
 	}
+	// A selected zone renders on its own, so a record change reads that one
+	// zone's DNSSEC keys and history however many zones there are.
+	if !slices.ContainsFunc(zones, func(zone zonemodel.Zone) bool { return zone.Name == selected && readable(zone) }) {
+		selected = ""
+	}
+	_, historyAvailable := server.zones.(zoneRevisionStore)
+	catalogs := newZoneCatalogIndex(zones)
 	views := make([]pages.ZoneView, 0, len(zones))
 	for _, zone := range zones {
-		if server.securityEnabled && !auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID) {
+		if !readable(zone) || (selected != "" && zone.Name != selected) {
 			continue
 		}
 		zoneView := pages.ZoneView{
@@ -102,8 +113,8 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 			CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,
 			CatalogTargets:        catalogZoneChoices(catalogTargets, zone),
 			CatalogRole:           catalogRoleLabel(zone),
-			CatalogManager:        catalogManagingZone(zones, zone),
-			CatalogMembers:        catalogMemberNames(zones, zone),
+			CatalogManager:        catalogs.manager(zone),
+			CatalogMembers:        catalogs.members(zone),
 			AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
 			TSIGKey:               zone.TSIGKey, TSIGKeys: tsigKeys, DynamicUpdates: zone.DynamicUpdates,
 			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
@@ -149,28 +160,15 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 				SourceLabel: zoneRecordSourceLabel(record.Source),
 			})
 		}
-		views = append(views, zoneView)
-	}
-	if !slices.ContainsFunc(views, func(zone pages.ZoneView) bool { return zone.Name == selected }) {
-		selected = ""
-	}
-	if history, ok := server.zones.(zoneRevisionStore); ok {
-		for index := range views {
-			zoneView := &views[index]
-			if selected != "" && zoneView.Name != selected {
-				continue
-			}
-			revisions, err := history.ListZoneRevisions(request.Context(), zoneView.Name, 20)
-			if errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
-				break
-			}
-			if err != nil {
-				zoneView.HistoryError = "Change history is temporarily unavailable."
-				server.logger.Warn("load zone revision history", "zone", zoneView.Name, "error", err)
-				continue
-			}
-			zoneView.History = zoneRevisionViews(server.readableZoneRevisions(request, revisions), zoneView.Revision, console.TimeDisplay)
+		switch {
+		case selected != "":
+			server.loadZoneHistory(request, &zoneView, console.TimeDisplay)
+		case historyAvailable && zone.Revision > 0:
+			// The list fetches a zone's history when its dialog opens rather
+			// than reading every zone's revisions to draw the rows.
+			zoneView.HistoryLazy = true
 		}
+		views = append(views, zoneView)
 	}
 	return pages.ZonesPageView{
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
@@ -178,6 +176,70 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		AliasSources: aliasSources,
 		TSIGKeys:     tsigKeys,
 	}
+}
+
+// loadZoneHistory fills a zone's recent revisions. A zone source without
+// history leaves both fields empty, which hides the History action.
+func (server *Server) loadZoneHistory(request *http.Request, view *pages.ZoneView, display pages.TimeDisplay) {
+	history, ok := server.zones.(zoneRevisionStore)
+	if !ok {
+		return
+	}
+	revisions, err := history.ListZoneRevisions(request.Context(), view.Name, 20)
+	if errors.Is(err, zonemodel.ErrRevisionHistoryUnavailable) {
+		return
+	}
+	if err != nil {
+		view.HistoryError = "Change history is temporarily unavailable."
+		server.logger.Warn("load zone revision history", "zone", view.Name, "error", err)
+		return
+	}
+	view.History = zoneRevisionViews(server.readableZoneRevisions(request, revisions), view.Revision, display)
+}
+
+// zoneCatalogIndex answers catalog membership for every zone on the page from
+// one pass over the zones, instead of rescanning them for each row.
+type zoneCatalogIndex struct {
+	zones       map[string]zonemodel.Zone
+	memberNames map[string][]string
+}
+
+func newZoneCatalogIndex(zones []zonemodel.Zone) zoneCatalogIndex {
+	index := zoneCatalogIndex{zones: make(map[string]zonemodel.Zone, len(zones)), memberNames: make(map[string][]string)}
+	for _, zone := range zones {
+		if _, seen := index.zones[zone.Name]; !seen {
+			index.zones[zone.Name] = zone
+		}
+		if zone.CatalogZone != "" {
+			index.memberNames[zone.CatalogZone] = append(index.memberNames[zone.CatalogZone], zone.Name)
+		}
+	}
+	for _, names := range index.memberNames {
+		slices.Sort(names)
+	}
+	return index
+}
+
+// members lists the zones a catalog carries, so the console can show
+// membership without making the operator read the raw PTR records.
+func (index zoneCatalogIndex) members(current zonemodel.Zone) []string {
+	if current.Type != "catalog" {
+		return nil
+	}
+	return append(make([]string, 0, len(index.memberNames[current.Name])), index.memberNames[current.Name]...)
+}
+
+// manager names the consumer catalog that provisioned a zone, like
+// catalogManagingZone.
+func (index zoneCatalogIndex) manager(current zonemodel.Zone) string {
+	if current.CatalogZone == "" {
+		return ""
+	}
+	owner, found := index.zones[current.CatalogZone]
+	if !found || !zonemodel.IsConsumerCatalog(owner) {
+		return ""
+	}
+	return owner.Name
 }
 
 // catalogRoleLabel describes which side of RFC 9432 a catalog zone sits on.
@@ -205,22 +267,6 @@ func catalogZoneChoices(targets []string, current zonemodel.Zone) []string {
 	}
 	slices.Sort(choices)
 	return choices
-}
-
-// catalogMemberNames lists the zones a catalog carries, so the console can show
-// membership without making the operator read the raw PTR records.
-func catalogMemberNames(zones []zonemodel.Zone, current zonemodel.Zone) []string {
-	if current.Type != "catalog" {
-		return nil
-	}
-	members := make([]string, 0)
-	for _, candidate := range zones {
-		if candidate.CatalogZone == current.Name {
-			members = append(members, candidate.Name)
-		}
-	}
-	slices.Sort(members)
-	return members
 }
 
 // aliasZoneChoices returns the source zones offered in an alias zone's settings
@@ -425,17 +471,7 @@ func (server *Server) authorizeExistingZone(principal auth.Principal, permission
 }
 
 func (server *Server) logZoneOperation(request *http.Request, zoneName string, operationErr error) {
-	attributes := []any{
-		"operation", zoneMutationAction(request),
-		"zone", zoneName,
-		"client", requestClientIP(request),
-	}
-	if operationErr != nil {
-		attributes = append(attributes, "error", operationErr)
-		server.logger.Warn("zone operation failed", attributes...)
-		return
-	}
-	server.logger.Info("zone operation completed", attributes...)
+	server.logZoneChange(requestActor(request, ""), zoneMutationAction(request), zoneName, operationErr)
 }
 
 // zoneMutationAction names the zone change a request makes, as its route
@@ -448,26 +484,11 @@ func zoneMutationAction(request *http.Request) string {
 }
 
 func (server *Server) auditZoneMutation(request *http.Request, zone string) {
-	recorder, ok := server.queries.(interface {
-		RecordAuditEvent(context.Context, auth.AuditEvent) error
-	})
-	if !ok {
-		return
-	}
-	action := zoneMutationAction(request)
-	event := auth.AuditEvent{
-		OccurredAt: time.Now(), Action: action, ClientIP: requestClientIP(request),
-		UserAgent: request.UserAgent(), Details: "zone=" + zone,
-	}
+	action, details := zoneMutationAction(request), "zone="+zone
 	if action == "zone.rollback" {
-		event.Details += " revision=" + request.FormValue("revision")
+		details += " revision=" + request.FormValue("revision")
 	}
-	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok && principal.UserID != 0 {
-		event.UserID = &principal.UserID
-	}
-	if err := recorder.RecordAuditEvent(request.Context(), event); err != nil {
-		server.logger.Warn("record zone audit event", "action", action, "zone", zone, "error", err)
-	}
+	server.recordControlPlaneAudit(request, action, details)
 }
 
 func (server *Server) notifyZoneChange(ctx context.Context, zoneName string) {
@@ -515,155 +536,61 @@ func (server *Server) renderZoneMutation(
 }
 
 func (server *Server) addZone(writer http.ResponseWriter, request *http.Request) {
-	selected := ""
-	server.updateZones(writer, request, &selected, "Authoritative zone created", func(zones *[]zonemodel.Zone) error {
-		name, err := dnsname.Normalize(request.FormValue("name"))
-		if err != nil {
-			return fmt.Errorf("zone name: %w", err)
+	if !server.parseZoneForm(writer, request) {
+		return
+	}
+	input := zoneCreate{
+		Name: request.FormValue("name"), Type: request.FormValue("type"),
+		PrimaryNS: request.FormValue("primary_ns"), Responsible: request.FormValue("responsible"),
+		TSIGKey: request.FormValue("tsig_key"), AliasZone: request.FormValue("alias_zone"),
+		ForwarderProtocol: request.FormValue("forwarder_protocol"), ForwarderPriority: request.FormValue("forwarder_priority"),
+		ForwarderAddress: request.FormValue("forwarder_address"),
+		PrimaryProtocol:  request.FormValue("primary_protocol"), PrimaryServers: request.FormValue("primary_servers"),
+	}
+	if request.Form.Has("dnssec_validation_present") {
+		validation := request.FormValue("dnssec_validation") == "true"
+		input.DNSSECValidation = &validation
+	}
+	ttl, err := formTTL(request.FormValue("default_ttl"), 0)
+	input.DefaultTTL = ttl
+	selected := normalizeZoneName(input.Name)
+	if err == nil {
+		var created zonemodel.Zone
+		created, err = server.zoneService().CreateZone(request.Context(), requestActor(request, ""), input)
+		if err == nil {
+			selected = created.Name
 		}
-		selected = name
-		if slices.ContainsFunc(*zones, func(zone zonemodel.Zone) bool { return zone.Name == name }) {
-			return errors.New("zone already exists")
-		}
-		zoneType := strings.ToLower(strings.TrimSpace(request.FormValue("type")))
-		if zoneType == "" {
-			zoneType = "primary"
-		}
-		// The two catalog roles are one zone type that differs only in whether
-		// the catalog is transferred from somewhere else, but they are separate
-		// choices in the form because they behave nothing alike.
-		consumeCatalog := zoneType == catalogConsumerFormType
-		if consumeCatalog {
-			zoneType = "catalog"
-		}
-		if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" &&
-			zoneType != "forwarder" && zoneType != "alias" && zoneType != "catalog" {
-			return errors.New("unsupported zone type")
-		}
-		primaryNSValue := strings.TrimSpace(request.FormValue("primary_ns"))
-		if primaryNSValue == "" {
-			// RFC 9432 recommends an apex NS of "invalid." because a catalog
-			// zone is only ever transferred, never resolved.
-			primaryNSValue = "ns1." + name
-			if zoneType == "catalog" {
-				primaryNSValue = "invalid."
-			}
-		}
-		primaryNS, err := dnsname.Normalize(primaryNSValue)
-		if err != nil {
-			return fmt.Errorf("primary name server: %w", err)
-		}
-		responsibleValue := strings.TrimSpace(request.FormValue("responsible"))
-		if responsibleValue == "" {
-			responsibleValue = "hostmaster@" + name
-		}
-		responsible, err := soaResponsibleName(responsibleValue)
-		if err != nil {
-			return err
-		}
-		ttl, err := formTTL(request.FormValue("default_ttl"), defaultZoneTTL)
-		if err != nil {
-			return err
-		}
-		zone := zonemodel.Zone{
-			Name: name, Type: zoneType, DefaultTTL: ttl,
-			TSIGKey: strings.TrimSpace(request.FormValue("tsig_key")),
-		}
-		if (zoneType == "forwarder" || zoneType == "stub") && request.Form.Has("dnssec_validation_present") {
-			zone.DNSSECValidationDisabled = request.FormValue("dnssec_validation") != "true"
-		}
-		soa := newZoneSOA(primaryNS, responsible, ttl, time.Now())
-		switch zoneType {
-		case "primary":
-			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)}}
-		case "alias":
-			source, aliasErr := aliasSourceZone(*zones, request.FormValue("alias_zone"), name)
-			if aliasErr != nil {
-				return aliasErr
-			}
-			zone.AliasZone = source
-			// The mirrored records, including the apex NS set, are filled in
-			// when the catalog reconciles this zone against its source.
-			zone.Records = []zonemodel.Record{soa}
-		case "forwarder":
-			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("forwarder_protocol")))
-			if protocol == "" {
-				protocol = "udp"
-			}
-			priority := strings.TrimSpace(request.FormValue("forwarder_priority"))
-			if priority == "" {
-				priority = "0"
-			}
-			forwarder, forwarderErr := forwarding.NewRecord(protocol, priority, request.FormValue("forwarder_address"))
-			if forwarderErr != nil {
-				return fmt.Errorf("forwarder: %w", forwarderErr)
-			}
-			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "FWD", TTL: ttl, Value: forwarder.String()}}
-		case "catalog":
-			zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)}}
-			if !consumeCatalog {
-				break
-			}
-			// A subscribed catalog is transferred exactly like a secondary, so
-			// its first transfer happens here and the operator sees a bad
-			// address or a rejected TSIG key immediately.
-			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
-			if protocol == "" {
-				protocol = "tcp"
-			}
-			if protocol != "tcp" && protocol != "tls" {
-				return errors.New("catalog zone transfer protocol must be TCP or DNS-over-TLS")
-			}
-			primaries, primaryErr := normalizeZonePrimaryServers(request.FormValue("primary_servers"), protocol)
-			if primaryErr != nil {
-				return primaryErr
-			}
-			synchronizer, ok := any(server.stats).(zoneSynchronizer)
-			if !ok {
-				return errors.New("zone synchronization is unavailable")
-			}
-			transferred, transferErr := synchronizer.FetchZone(request.Context(), name, "catalog", primaries, protocol, zone.TSIGKey)
-			if transferErr != nil {
-				return transferErr
-			}
-			zone.PrimaryServers, zone.PrimaryProtocol = primaries, protocol
-			zone.Records = configuredZoneRecords(transferred)
-			if _, parseErr := zonemodel.ParseCatalog(name, zone.Records); parseErr != nil {
-				return fmt.Errorf("the transferred zone is not a usable catalog: %w", parseErr)
-			}
-		case "secondary", "stub":
-			protocol := strings.ToLower(strings.TrimSpace(request.FormValue("primary_protocol")))
-			if protocol == "" {
-				if zoneType == "stub" {
-					protocol = "udp"
-				} else {
-					protocol = "tcp"
-				}
-			}
-			if zoneType == "secondary" && protocol != "tcp" && protocol != "tls" {
-				return errors.New("secondary zone transfer protocol must be TCP or DNS-over-TLS")
-			}
-			if zoneType == "stub" && protocol != "udp" && protocol != "tcp" && protocol != "tls" {
-				return errors.New("stub zone primary protocol must be UDP, TCP, or DNS-over-TLS")
-			}
-			primaries, primaryErr := normalizeZonePrimaryServers(request.FormValue("primary_servers"), protocol)
-			if primaryErr != nil {
-				return primaryErr
-			}
-			synchronizer, ok := any(server.stats).(zoneSynchronizer)
-			if !ok {
-				return errors.New("zone synchronization is unavailable")
-			}
-			transferred, transferErr := synchronizer.FetchZone(request.Context(), name, zoneType, primaries, protocol, zone.TSIGKey)
-			if transferErr != nil {
-				return transferErr
-			}
-			zone.PrimaryServers, zone.PrimaryProtocol = primaries, protocol
-			zone.Records = configuredZoneRecords(transferred)
-		}
-		*zones = append(*zones, zone)
-		return nil
-	})
+	}
+	server.renderZoneChange(writer, request, selected, "Authoritative zone created", err)
+}
+
+// parseZoneForm parses a console zone form, and answers the request itself
+// when it cannot.
+func (server *Server) parseZoneForm(writer http.ResponseWriter, request *http.Request) bool {
+	if err := request.ParseForm(); err != nil {
+		server.logZoneOperation(request, "", err)
+		server.renderZoneMutation(writer, request, http.StatusBadRequest, "", "", "Invalid zone form.")
+		return false
+	}
+	return true
+}
+
+// recordFormError prefers the reason the zone refuses record changes to a
+// problem reading the record form.
+func (server *Server) recordFormError(request *http.Request, zoneName string, formErr error) error {
+	if err := server.zoneService().RecordsWritable(requestActor(request, ""), zoneName); err != nil {
+		return err
+	}
+	return formErr
+}
+
+// renderZoneChange shows the zone after a change the zone service made.
+func (server *Server) renderZoneChange(writer http.ResponseWriter, request *http.Request, selected, message string, err error) {
+	if err != nil {
+		server.renderZoneMutation(writer, request, serviceStatus(err), selected, "", sentence(err.Error()))
+		return
+	}
+	server.renderZoneMutation(writer, request, http.StatusOK, selected, message, "")
 }
 
 // newZoneSOA is the SOA record every new zone starts with.
@@ -720,16 +647,11 @@ func configuredZoneRecords(records []dnsserver.ZoneRecord) []zonemodel.Record {
 }
 
 func (server *Server) deleteZone(writer http.ResponseWriter, request *http.Request) {
-	selected := ""
-	server.updateZones(writer, request, &selected, "Authoritative zone deleted", func(zones *[]zonemodel.Zone) error {
-		name := normalizeZoneName(request.FormValue("zone"))
-		index := slices.IndexFunc(*zones, func(zone zonemodel.Zone) bool { return zone.Name == name })
-		if index < 0 {
-			return errors.New("zone was not found")
-		}
-		*zones = slices.Delete(*zones, index, index+1)
-		return nil
-	})
+	if !server.parseZoneForm(writer, request) {
+		return
+	}
+	_, err := server.zoneService().DeleteZone(request.Context(), requestActor(request, ""), request.FormValue("zone"))
+	server.renderZoneChange(writer, request, "", "Authoritative zone deleted", err)
 }
 
 func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *http.Request) {
@@ -1090,160 +1012,112 @@ func (server *Server) toggleZone(writer http.ResponseWriter, request *http.Reque
 }
 
 func (server *Server) addZoneRecord(writer http.ResponseWriter, request *http.Request) {
-	selected := ""
-	server.updateZones(writer, request, &selected, "Record added and SOA serial advanced", func(zones *[]zonemodel.Zone) error {
-		selected = normalizeZoneName(request.FormValue("zone"))
-		zone := findZone(*zones, selected)
-		if zone == nil {
-			return errors.New("zone was not found")
+	if !server.parseZoneForm(writer, request) {
+		return
+	}
+	zoneName := normalizeZoneName(request.FormValue("zone"))
+	input, err := consoleRecordInput(request)
+	if err != nil {
+		err = server.recordFormError(request, zoneName, err)
+	} else {
+		var result recordChange
+		result, err = server.zoneService().AddRecord(request.Context(), requestActor(request, ""), zoneName, input)
+		if err == nil && !result.Changed {
+			err = errors.New("that record already exists")
 		}
-		if !zoneRecordsEditable(zone.Type) {
-			return errors.New("records synchronized from a primary server are read-only")
-		}
-		ttl, err := formTTL(request.FormValue("ttl"), zone.DefaultTTL)
-		if err != nil {
-			return err
-		}
-		recordType := strings.ToUpper(strings.TrimSpace(request.FormValue("type")))
-		value, err := zoneRecordValueFromForm(request, recordType, "")
-		if err != nil {
-			return err
-		}
-		value = zonemodel.QualifyRecordValue(zone.Name, recordType, value)
-		record := zonemodel.Record{
-			Name:  normalizeZoneRecordOwner(zone.Name, request.FormValue("name")),
-			Type:  recordType,
-			Value: value, TTL: ttl,
-			Comments: strings.TrimSpace(request.FormValue("comments")),
-		}
-		record.ExpiresAt, err = formExpiry(request.FormValue("expiry_ttl"), time.Now())
-		if err != nil {
-			return err
-		}
-		if record.Name == "" {
-			record.Name = "@"
-		}
-		if record.Type == "SOA" {
-			return errors.New("Sable manages the zone SOA record")
-		}
-		zone.Records = append(zone.Records, record)
-		if err := zonemodel.CheckCNAMEExclusivity(*zone, record.Name, time.Now()); err != nil {
-			return err
-		}
-		if record.Type == "NS" {
-			if err := syncZoneNSGlue(zone, "", record.Value, request.FormValue("glue_addresses")); err != nil {
-				return err
-			}
-		}
-		advanceSOASerial(zone, time.Now())
-		return nil
-	})
+	}
+	server.renderZoneChange(writer, request, zoneName, "Record added and SOA serial advanced", err)
+}
+
+func consoleRecordInput(request *http.Request) (recordInput, error) {
+	ttl, err := formTTL(request.FormValue("ttl"), 0)
+	if err != nil {
+		return recordInput{}, err
+	}
+	recordType := strings.ToUpper(strings.TrimSpace(request.FormValue("type")))
+	value, err := zoneRecordValueFromForm(request, recordType, "")
+	if err != nil {
+		return recordInput{}, err
+	}
+	expiresAt, err := formExpiry(request.FormValue("expiry_ttl"), time.Now())
+	if err != nil {
+		return recordInput{}, err
+	}
+	glue := request.FormValue("glue_addresses")
+	return recordInput{
+		Name: request.FormValue("name"), Type: recordType, Value: value, TTL: ttl,
+		Comment: request.FormValue("comments"), ExpiresAt: expiresAt, Glue: &glue,
+	}, nil
+}
+
+// consoleRecordKey is the record a row's form names. Its TTL picks between
+// records that differ in nothing else.
+func consoleRecordKey(request *http.Request) (recordKey, error) {
+	ttl, err := strconv.ParseUint(request.FormValue("ttl"), 10, 32)
+	if err != nil {
+		return recordKey{}, errors.New("record TTL is invalid")
+	}
+	return recordKey{
+		Name: request.FormValue("name"), Type: request.FormValue("type"),
+		Value: request.FormValue("value"), TTL: uint32(ttl),
+	}, nil
 }
 
 func (server *Server) deleteZoneRecord(writer http.ResponseWriter, request *http.Request) {
-	selected := ""
-	server.updateZones(writer, request, &selected, "Record removed and SOA serial advanced", func(zones *[]zonemodel.Zone) error {
-		selected = normalizeZoneName(request.FormValue("zone"))
-		zone := findZone(*zones, selected)
-		if zone == nil {
-			return errors.New("zone was not found")
-		}
-		if !zoneRecordsEditable(zone.Type) {
-			return errors.New("records synchronized from a primary server are read-only")
-		}
-		ttl, err := strconv.ParseUint(request.FormValue("ttl"), 10, 32)
-		if err != nil {
-			return errors.New("record TTL is invalid")
-		}
-		name := request.FormValue("name")
-		recordType := request.FormValue("type")
-		value := request.FormValue("value")
-		if recordType == "SOA" {
-			return errors.New("the zone SOA record cannot be removed")
-		}
-		index := slices.IndexFunc(zone.Records, func(record zonemodel.Record) bool {
-			return record.Name == name && record.Type == recordType && record.Value == value && record.TTL == uint32(ttl)
-		})
-		if index < 0 {
-			return errors.New("record was not found")
-		}
-		if strings.HasPrefix(zone.Records[index].Comments, "sable:dnssec") {
-			return errors.New("DNSSEC records are managed automatically")
-		}
-		if err := recordSourceEditable(zone.Records[index]); err != nil {
-			return err
-		}
-		zone.Records = slices.Delete(zone.Records, index, index+1)
-		advanceSOASerial(zone, time.Now())
-		return nil
-	})
+	if !server.parseZoneForm(writer, request) {
+		return
+	}
+	zoneName := normalizeZoneName(request.FormValue("zone"))
+	key, err := consoleRecordKey(request)
+	if err != nil {
+		err = server.recordFormError(request, zoneName, err)
+	} else {
+		_, err = server.zoneService().DeleteRecord(request.Context(), requestActor(request, ""), zoneName, key)
+	}
+	server.renderZoneChange(writer, request, zoneName, "Record removed and SOA serial advanced", err)
 }
 
 func (server *Server) updateZoneRecord(writer http.ResponseWriter, request *http.Request) {
-	selected := ""
-	server.updateZones(writer, request, &selected, "Record updated", func(zones *[]zonemodel.Zone) error {
-		selected = normalizeZoneName(request.FormValue("zone"))
-		zone := findZone(*zones, selected)
-		if zone == nil {
-			return errors.New("zone was not found")
-		}
-		if !zoneRecordsEditable(zone.Type) {
-			return errors.New("records synchronized from a primary server are read-only")
-		}
-		originalTTL, err := strconv.ParseUint(request.FormValue("ttl"), 10, 32)
-		if err != nil {
-			return errors.New("record TTL is invalid")
-		}
-		originalName := request.FormValue("name")
-		recordType := strings.ToUpper(strings.TrimSpace(request.FormValue("type")))
-		originalValue := request.FormValue("value")
-		index := slices.IndexFunc(zone.Records, func(record zonemodel.Record) bool {
-			return record.Name == originalName && record.Type == recordType && record.Value == originalValue && record.TTL == uint32(originalTTL)
-		})
-		if index < 0 {
-			return errors.New("record was not found")
-		}
-		if strings.HasPrefix(zone.Records[index].Comments, "sable:dnssec") {
-			return errors.New("DNSSEC records are managed automatically")
-		}
-		if err := recordSourceEditable(zone.Records[index]); err != nil {
-			return err
-		}
-		newTTL, err := formTTL(request.FormValue("new_ttl"), zone.DefaultTTL)
-		if err != nil {
-			return err
-		}
-		newName := normalizeZoneRecordOwner(zone.Name, request.FormValue("new_name"))
-		if recordType == "SOA" && newName != "@" {
-			return errors.New("the SOA record must remain at the zone apex")
-		}
-		newValue, err := zoneRecordValueFromForm(request, recordType, "new_")
-		if err != nil {
-			return err
-		}
-		newValue = zonemodel.QualifyRecordValue(zone.Name, recordType, newValue)
-		expiresAt, err := formExpiry(request.FormValue("new_expiry_ttl"), time.Now())
-		if err != nil {
-			return err
-		}
-		zone.Records[index] = zonemodel.Record{
-			Name: newName, Type: recordType, Value: newValue, TTL: newTTL,
-			Comments: strings.TrimSpace(request.FormValue("new_comments")),
-			Disabled: recordType != "SOA" && request.FormValue("enabled") != "true", ExpiresAt: expiresAt,
-		}
-		if err := zonemodel.CheckCNAMEExclusivity(*zone, newName, time.Now()); err != nil {
-			return err
-		}
-		if recordType == "NS" {
-			if err := syncZoneNSGlue(zone, originalValue, newValue, request.FormValue("new_glue_addresses")); err != nil {
-				return err
-			}
-		}
-		if recordType != "SOA" {
-			advanceSOASerial(zone, time.Now())
-		}
-		return nil
-	})
+	if !server.parseZoneForm(writer, request) {
+		return
+	}
+	zoneName := normalizeZoneName(request.FormValue("zone"))
+	update, err := consoleRecordUpdate(request)
+	if err != nil {
+		err = server.recordFormError(request, zoneName, err)
+	} else {
+		_, err = server.zoneService().UpdateRecord(request.Context(), requestActor(request, ""), zoneName, update)
+	}
+	server.renderZoneChange(writer, request, zoneName, "Record updated", err)
+}
+
+// consoleRecordUpdate reads the record edit form, which always sends every
+// field.
+func consoleRecordUpdate(request *http.Request) (recordUpdate, error) {
+	key, err := consoleRecordKey(request)
+	if err != nil {
+		return recordUpdate{}, err
+	}
+	recordType := strings.ToUpper(strings.TrimSpace(key.Type))
+	key.Type = recordType
+	ttl, err := formTTL(request.FormValue("new_ttl"), 0)
+	if err != nil {
+		return recordUpdate{}, err
+	}
+	value, err := zoneRecordValueFromForm(request, recordType, "new_")
+	if err != nil {
+		return recordUpdate{}, err
+	}
+	expiresAt, err := formExpiry(request.FormValue("new_expiry_ttl"), time.Now())
+	if err != nil {
+		return recordUpdate{}, err
+	}
+	name, comment, glue := request.FormValue("new_name"), request.FormValue("new_comments"), request.FormValue("new_glue_addresses")
+	enabled := recordType == "SOA" || request.FormValue("enabled") == "true"
+	return recordUpdate{
+		Key: key, Name: &name, Value: &value, TTL: &ttl, Comment: &comment,
+		Enabled: &enabled, ExpiresAt: &expiresAt, Glue: &glue,
+	}, nil
 }
 
 func zoneRecordValueFromForm(request *http.Request, recordType, prefix string) (string, error) {

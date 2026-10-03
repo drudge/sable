@@ -43,7 +43,7 @@ func (store *Store) QueryLogInsights(ctx context.Context, since, until time.Time
 	if err != nil {
 		return querylog.Insights{}, err
 	}
-	if !found || since.IsZero() || until.IsZero() || !since.Before(until) {
+	if !found || (!since.IsZero() && !until.IsZero() && !since.Before(until)) {
 		if err := store.queryRawLogInsights(ctx, since, until, true, &insights); err != nil {
 			return querylog.Insights{}, err
 		}
@@ -53,8 +53,14 @@ func (store *Store) QueryLogInsights(ctx context.Context, since, until time.Time
 	// The first rolled-up minute may also contain rows written before an
 	// existing database was upgraded. Read that boundary minute from the raw
 	// log so those legacy rows and the first new rows are each counted once.
+	// An open start or end still reads the rollups for the minutes they
+	// cover, so an all-time count doesn't group the whole raw log.
 	fullStart := ceilMinute(maxTime(since.UTC(), rollupStart.Add(time.Minute)))
-	fullEnd := until.UTC().Truncate(time.Minute)
+	end := until
+	if end.IsZero() {
+		end = time.Now()
+	}
+	fullEnd := end.UTC().Truncate(time.Minute)
 	if !fullStart.Before(fullEnd) {
 		if err := store.queryRawLogInsights(ctx, since, until, true, &insights); err != nil {
 			return querylog.Insights{}, err
@@ -208,12 +214,24 @@ func (store *Store) queryMixedLogInsights(
 		arguments = append(arguments, value)
 		return store.placeholder(len(arguments))
 	}
+	// A zero since or until leaves that side of the raw edges open.
+	// SQLite placeholders are positional, so each value is bound in the
+	// order it appears in the query.
+	before := ""
+	if !since.IsZero() {
+		before = `occurred_at >= ` + bind(since.UTC()) + ` AND `
+	}
+	before += `occurred_at < ` + bind(fullStart.UTC())
+	after := `occurred_at >= ` + bind(fullEnd.UTC())
+	if !until.IsZero() {
+		after += ` AND occurred_at <= ` + bind(until.UTC())
+	}
 	boundary := `
 WITH boundary AS (
     SELECT client_ip_key, name_key, record_type, source, response_code
     FROM sable_query_log
-    WHERE (occurred_at >= ` + bind(since.UTC()) + ` AND occurred_at < ` + bind(fullStart.UTC()) + `)
-       OR (occurred_at >= ` + bind(fullEnd.UTC()) + ` AND occurred_at <= ` + bind(until.UTC()) + `)
+    WHERE (` + before + `)
+       OR (` + after + `)
 ), combined (dimension, value, hits) AS (`
 	var rolled strings.Builder
 	for _, span := range spans {

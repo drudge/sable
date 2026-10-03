@@ -19,7 +19,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `create_zone` | Off | Creates a Primary zone | `zones.create` |
 | `delete_zone` | Off | Deletes a zone and its records | `zones.delete` |
 | `check_domain` | On | Says whether blocking stops a domain, and why | `blocking.read` |
-| `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists | `blocking.write` |
+| `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists. Allowing a domain takes it off the block list, and blocking takes it off the allow list | `blocking.write` |
 | `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
@@ -33,7 +33,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `sync_dynamic_dns` | Off | Updates the Dynamic DNS records now | `settings.write` |
 | `get_cluster_status` | On | Which node leads, which are online and caught up, their versions and problems, and any rolling update | `cluster.read` |
 
-`add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
+`add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. The tools change records through the same code as the console, so a name matches however it is typed: `www`, `WWW`, and `www.example.com.` are the same record. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 
 `delete_zone` can delete any zone the token's groups may delete. The tool tells the assistant to ask you first, and the call must repeat the zone name. A deleted zone cannot be restored from the console; only a backup brings it back. To keep an assistant from deleting zones, leave the tool off or keep `zones.delete` out of its group. A new zone answers devices that use Sable right away; the internet sees it only once the domain's registrar or parent zone delegates it to your name servers. See [Delegation](delegation.md).
 
@@ -145,7 +145,7 @@ Most assistants ask before calling a tool that changes something. Keep that appr
 | 415 | The request was not JSON |
 | 406 | A `GET` did not accept `text/event-stream` |
 | `zone … was not found` | The zone does not exist, or the token's groups cannot read it |
-| `may read zone … but not change its records` | The group lacks `zones.records.write` for that zone |
+| `you need … for zone …` | The group lacks the named grant for that zone, such as `zones.records.write` |
 | `this token needs …` | The group lacks the named grant |
 | `This node is a replica` | Point the assistant at the cluster's primary |
 

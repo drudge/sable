@@ -1,21 +1,16 @@
 package web
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/netip"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/miekg/dns"
-
 	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
-	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/web/pages"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
@@ -283,12 +278,12 @@ func (server *Server) mcpListRecords(request *http.Request, arguments json.RawMe
 	}
 	owner := ""
 	if strings.TrimSpace(input.Name) != "" {
-		owner = mcpOwnerFQDN(current.Name, input.Name)
+		owner = ownerFQDN(current.Name, input.Name)
 	}
 	recordType := strings.ToUpper(strings.TrimSpace(input.Type))
 	records := []mcpRecord{}
 	for _, record := range current.Records {
-		if owner != "" && mcpOwnerFQDN(current.Name, record.Name) != owner {
+		if owner != "" && ownerFQDN(current.Name, record.Name) != owner {
 			continue
 		}
 		if recordType != "" && record.Type != recordType {
@@ -311,28 +306,15 @@ func (server *Server) mcpAddRecord(request *http.Request, arguments json.RawMess
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	var added zonemodel.Record
-	result, err := server.mcpChangeRecords(request, input.Zone, "zone.record.create", func(zone *zonemodel.Zone) (bool, error) {
-		record, err := mcpNewRecord(*zone, input.Name, input.Type, input.Value, input.TTL, input.Comment)
-		if err != nil {
-			return false, err
-		}
-		added = record
-		if index := slices.IndexFunc(zone.Records, func(existing zonemodel.Record) bool { return mcpSameRecord(*zone, existing, record) }); index >= 0 {
-			if zone.Records[index].Disabled {
-				return false, errors.New("that record exists but is disabled; call update_record with enabled true to serve it")
-			}
-			return false, nil
-		}
-		zone.Records = append(zone.Records, record)
-		return true, zonemodel.CheckCNAMEExclusivity(*zone, record.Name, time.Now())
+	change, err := server.zoneService().AddRecord(request.Context(), requestActor(request, "mcp"), input.Zone, recordInput{
+		Name: input.Name, Type: input.Type, Value: input.Value, TTL: input.TTL, Comment: input.Comment,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if result.Changed {
+	result := mcpChangeView(change)
+	if change.Changed {
 		result.Message = "Record added"
-		result.Added = []mcpRecord{mcpRecordView(zonemodel.Zone{Name: result.Zone}, added)}
 	} else {
 		result.Message = "That record already exists, so nothing changed"
 	}
@@ -354,74 +336,16 @@ func (server *Server) mcpSetRecords(request *http.Request, arguments json.RawMes
 	if len(input.Values) == 0 {
 		return nil, errors.New("values must hold at least one value; use delete_record to remove records")
 	}
-	var added, removed, kept []zonemodel.Record
-	result, err := server.mcpChangeRecords(request, input.Zone, "zone.record.set", func(zone *zonemodel.Zone) (bool, error) {
-		desired := make([]zonemodel.Record, 0, len(input.Values))
-		for _, value := range input.Values {
-			record, err := mcpNewRecord(*zone, input.Name, input.Type, value, input.TTL, input.Comment)
-			if err != nil {
-				return false, err
-			}
-			if !slices.ContainsFunc(desired, func(other zonemodel.Record) bool { return mcpSameRecord(*zone, other, record) }) {
-				desired = append(desired, record)
-			}
-		}
-		if desired[0].Type == "CNAME" && len(desired) > 1 {
-			return false, errors.New("a CNAME record set holds exactly one value")
-		}
-		owner := mcpOwnerFQDN(zone.Name, desired[0].Name)
-		changed := false
-		next := make([]zonemodel.Record, 0, len(zone.Records)+len(desired))
-		matched := make([]bool, len(desired))
-		for _, existing := range zone.Records {
-			if existing.Type != desired[0].Type || mcpOwnerFQDN(zone.Name, existing.Name) != owner {
-				next = append(next, existing)
-				continue
-			}
-			if err := mcpRecordEditable(existing); err != nil {
-				return false, err
-			}
-			index := slices.IndexFunc(desired, func(record zonemodel.Record) bool { return mcpSameRecord(*zone, existing, record) })
-			if index < 0 || matched[index] {
-				removed = append(removed, existing)
-				changed = true
-				continue
-			}
-			matched[index] = true
-			if input.TTL != 0 && existing.TTL != input.TTL {
-				existing.TTL = input.TTL
-				changed = true
-			}
-			if existing.Disabled {
-				existing.Disabled = false
-				changed = true
-			}
-			kept = append(kept, existing)
-			next = append(next, existing)
-		}
-		for index, record := range desired {
-			if matched[index] {
-				continue
-			}
-			added = append(added, record)
-			next = append(next, record)
-			changed = true
-		}
-		zone.Records = next
-		if !changed {
-			return false, nil
-		}
-		return true, zonemodel.CheckCNAMEExclusivity(*zone, desired[0].Name, time.Now())
+	change, err := server.zoneService().SetRecords(request.Context(), requestActor(request, "mcp"), input.Zone, recordSet{
+		Name: input.Name, Type: input.Type, Values: input.Values, TTL: input.TTL, Comment: input.Comment,
 	})
 	if err != nil {
 		return nil, err
 	}
-	view := zonemodel.Zone{Name: result.Zone}
-	result.Added = mcpRecordViews(view, added)
-	result.Removed = mcpRecordViews(view, removed)
-	result.Records = mcpRecordViews(view, append(kept, added...))
-	if result.Changed {
-		result.Message = fmt.Sprintf("Record set updated: %d added, %d removed", len(added), len(removed))
+	result := mcpChangeView(change)
+	result.Records = mcpRecordViews(zonemodel.Zone{Name: change.Zone}, append(change.Kept, change.Added...))
+	if change.Changed {
+		result.Message = fmt.Sprintf("Record set updated: %d added, %d removed", len(change.Added), len(change.Removed))
 	} else {
 		result.Message = "The record set already matches, so nothing changed"
 	}
@@ -446,59 +370,23 @@ func (server *Server) mcpUpdateRecord(request *http.Request, arguments json.RawM
 	if input.NewTTL != nil && *input.NewTTL == 0 {
 		return nil, errors.New("new_ttl must be at least 1 second")
 	}
-	var before, after zonemodel.Record
-	result, err := server.mcpChangeRecords(request, input.Zone, "zone.record.update", func(zone *zonemodel.Zone) (bool, error) {
-		index, err := mcpFindRecord(*zone, input.Name, input.Type, input.Value)
-		if err != nil {
-			return false, err
-		}
-		before = zone.Records[index]
-		after = before
-		if input.NewName != nil {
-			after.Name = mcpStoredOwner(zone.Name, *input.NewName)
-		}
-		if input.NewValue != nil {
-			after.Value, err = mcpRecordValue(zone.Name, after.Type, *input.NewValue)
-			if err != nil {
-				return false, err
-			}
-		}
-		if input.NewTTL != nil {
-			after.TTL = *input.NewTTL
-		}
-		if input.NewComment != nil {
-			after.Comments = strings.TrimSpace(*input.NewComment)
-		}
-		if input.Enabled != nil {
-			after.Disabled = !*input.Enabled
-		}
-		if after == before {
-			return false, nil
-		}
-		if _, err := zonemodel.ParseRecord(*zone, after); err != nil {
-			return false, err
-		}
-		zone.Records[index] = after
-		if after.Name != before.Name || after.Value != before.Value {
-			for other, record := range zone.Records {
-				if other != index && mcpSameRecord(*zone, record, after) {
-					return false, errors.New("another record already has that name and value")
-				}
-			}
-		}
-		return true, zonemodel.CheckCNAMEExclusivity(*zone, after.Name, time.Now())
+	// The console may edit the SOA's timers; an assistant may not.
+	if strings.EqualFold(strings.TrimSpace(input.Type), "SOA") {
+		return nil, errors.New("Sable manages the zone SOA record automatically")
+	}
+	change, err := server.zoneService().UpdateRecord(request.Context(), requestActor(request, "mcp"), input.Zone, recordUpdate{
+		Key:  recordKey{Name: input.Name, Type: input.Type, Value: input.Value},
+		Name: input.NewName, Value: input.NewValue, TTL: input.NewTTL, Comment: input.NewComment, Enabled: input.Enabled,
 	})
 	if err != nil {
-		return nil, err
+		return nil, mcpRecordHint(err)
 	}
-	view := zonemodel.Zone{Name: result.Zone}
-	if result.Changed {
+	result := mcpChangeView(change)
+	if change.Changed {
 		result.Message = "Record updated"
-		result.Removed = []mcpRecord{mcpRecordView(view, before)}
-		result.Added = []mcpRecord{mcpRecordView(view, after)}
 	} else {
 		result.Message = "The record already matches, so nothing changed"
-		result.Records = []mcpRecord{mcpRecordView(view, before)}
+		result.Records = mcpRecordViews(zonemodel.Zone{Name: change.Zone}, change.Kept)
 	}
 	return result, nil
 }
@@ -513,21 +401,14 @@ func (server *Server) mcpDeleteRecord(request *http.Request, arguments json.RawM
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	var removed zonemodel.Record
-	result, err := server.mcpChangeRecords(request, input.Zone, "zone.record.delete", func(zone *zonemodel.Zone) (bool, error) {
-		index, err := mcpFindRecord(*zone, input.Name, input.Type, input.Value)
-		if err != nil {
-			return false, err
-		}
-		removed = zone.Records[index]
-		zone.Records = slices.Delete(zone.Records, index, index+1)
-		return true, nil
+	change, err := server.zoneService().DeleteRecord(request.Context(), requestActor(request, "mcp"), input.Zone, recordKey{
+		Name: input.Name, Type: input.Type, Value: input.Value,
 	})
 	if err != nil {
-		return nil, err
+		return nil, mcpRecordHint(err)
 	}
+	result := mcpChangeView(change)
 	result.Message = "Record removed"
-	result.Removed = []mcpRecord{mcpRecordView(zonemodel.Zone{Name: result.Zone}, removed)}
 	return result, nil
 }
 
@@ -541,63 +422,19 @@ func (server *Server) mcpCreateZone(request *http.Request, arguments json.RawMes
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	// Creating a zone is not tied to any existing zone, so only a grant that
-	// covers every zone allows it, exactly as in the console.
-	if !server.mcpHasPermission(request, auth.PermissionZonesCreate) {
-		return nil, errors.New("this token needs zones.create to create zones")
-	}
-	if server.mcpReplica() {
-		return nil, errors.New(replicaWriteMessage)
-	}
-	name, err := dnsname.Normalize(input.Name)
-	if err != nil {
-		return nil, fmt.Errorf("zone name: %w", err)
-	}
-	primaryNS := strings.TrimSpace(input.PrimaryNS)
-	if primaryNS == "" {
-		primaryNS = "ns1." + name
-	}
-	if primaryNS, err = dnsname.Normalize(primaryNS); err != nil {
-		return nil, fmt.Errorf("primary name server: %w", err)
-	}
-	responsible := strings.TrimSpace(input.Responsible)
-	if responsible == "" {
-		responsible = "hostmaster@" + name
-	}
-	if responsible, err = soaResponsibleName(responsible); err != nil {
-		return nil, err
-	}
-	ttl := input.DefaultTTL
-	if ttl == 0 {
-		ttl = defaultZoneTTL
-	}
-	editor, ok := server.zones.(zoneEditor)
-	if !ok {
-		return nil, errors.New("this configuration source is read-only")
-	}
-	err = editor.UpdateZones(request.Context(), func(zones *[]zonemodel.Zone) error {
-		if findZone(*zones, name) != nil {
-			return fmt.Errorf("zone %s already exists", name)
-		}
-		*zones = append(*zones, zonemodel.Zone{Name: name, Type: "primary", DefaultTTL: ttl, Records: []zonemodel.Record{
-			newZoneSOA(primaryNS, responsible, ttl, time.Now()),
-			{Name: "@", Type: "NS", TTL: ttl, Value: dns.Fqdn(primaryNS)},
-		}})
-		return nil
+	created, err := server.zoneService().CreateZone(request.Context(), requestActor(request, "mcp"), zoneCreate{
+		Name: input.Name, Type: "primary", PrimaryNS: input.PrimaryNS, Responsible: input.Responsible, DefaultTTL: input.DefaultTTL,
 	})
-	server.logMCPZoneOperation(request, "zone.create", name, err)
 	if err != nil {
 		return nil, err
 	}
-	server.auditMCPZoneMutation(request, "zone.create", name)
-	created := findZone(server.zones.Current().Zones, name)
-	if created == nil {
-		return nil, fmt.Errorf("zone %s was created but is not active yet", name)
+	if findZone(server.zones.Current().Zones, created.Name) == nil {
+		return nil, fmt.Errorf("zone %s was created but is not active yet", created.Name)
 	}
-	result := map[string]any{"zone": name, "serial": mcpZoneSerial(*created), "records": mcpRecordViews(*created, created.Records)}
+	result := map[string]any{"zone": created.Name, "serial": mcpZoneSerial(created), "records": mcpRecordViews(created, created.Records)}
 	// A token limited to chosen zones cannot see a zone that did not exist
 	// when its group was set up, so say so rather than fail on the next call.
-	if server.authorizeZoneRequest(request, auth.PermissionZonesRecords, *created) {
+	if server.authorizeZoneRequest(request, auth.PermissionZonesRecords, created) {
 		result["message"] = "Zone created"
 	} else {
 		result["message"] = "Zone created, but this token cannot change its records. Add the zone to the token's group in Administration."
@@ -605,62 +442,22 @@ func (server *Server) mcpCreateZone(request *http.Request, arguments json.RawMes
 	return result, nil
 }
 
-// mcpChangeRecords applies one record change through the same path the
-// console uses: zone-scoped authorization, the zone manager's validation and
-// persistence, an SOA serial bump, the audit log, and NOTIFY to secondaries.
-// The mutation reports whether it changed anything so a repeated call leaves
-// the serial and the audit log alone.
-func (server *Server) mcpChangeRecords(
-	request *http.Request,
-	zoneName, action string,
-	mutate func(*zonemodel.Zone) (bool, error),
-) (mcpChange, error) {
-	if server.mcpReplica() {
-		return mcpChange{}, errors.New(replicaWriteMessage)
+// mcpRecordHint points an assistant that named a missing record at the tool
+// that lists what exists.
+func mcpRecordHint(err error) error {
+	if missing := (*missingRecordError)(nil); errors.As(err, &missing) {
+		return fmt.Errorf("%w; call list_records to see what exists", err)
 	}
-	current, err := server.mcpReadableZone(request, zoneName)
-	if err != nil {
-		return mcpChange{}, err
+	return err
+}
+
+// mcpChangeView is a record change as the tools report it.
+func mcpChangeView(change recordChange) mcpChange {
+	zone := zonemodel.Zone{Name: change.Zone}
+	return mcpChange{
+		Zone: change.Zone, Changed: change.Changed, Serial: change.Serial,
+		Added: mcpRecordViews(zone, change.Added), Removed: mcpRecordViews(zone, change.Removed),
 	}
-	if !server.authorizeZoneRequest(request, auth.PermissionZonesRecords, current) {
-		return mcpChange{}, fmt.Errorf("this token may read zone %s but not change its records", current.Name)
-	}
-	if !zoneRecordsEditable(current.Type) {
-		return mcpChange{}, fmt.Errorf("zone %s is a %s zone; only Primary and Forwarder zones have editable records", current.Name, current.Type)
-	}
-	editor, ok := server.zones.(zoneEditor)
-	if !ok {
-		return mcpChange{}, errors.New("this configuration source is read-only")
-	}
-	changed := false
-	err = editor.UpdateZones(request.Context(), func(zones *[]zonemodel.Zone) error {
-		zone := findZone(*zones, current.Name)
-		// The zone ID pins authorization to the zone that was checked, even if
-		// it was deleted and recreated under the same name in the meantime.
-		if zone == nil || zone.ID != current.ID {
-			return fmt.Errorf("zone %s was not found", current.Name)
-		}
-		var mutateErr error
-		changed, mutateErr = mutate(zone)
-		if mutateErr != nil || !changed {
-			return mutateErr
-		}
-		advanceSOASerial(zone, time.Now())
-		return nil
-	})
-	server.logMCPZoneOperation(request, action, current.Name, err)
-	if err != nil {
-		return mcpChange{}, err
-	}
-	result := mcpChange{Zone: current.Name, Changed: changed}
-	if updated := findZone(server.zones.Current().Zones, current.Name); updated != nil {
-		result.Serial = mcpZoneSerial(*updated)
-	}
-	if changed {
-		server.auditMCPZoneMutation(request, action, current.Name)
-		server.notifyZoneChange(request.Context(), current.Name)
-	}
-	return result, nil
 }
 
 // mcpReadableZone hides zones the token cannot read behind the same message
@@ -681,124 +478,6 @@ func (server *Server) mcpReplica() bool {
 	return server.cluster != nil && controlPlaneReadOnly(server.cluster.Snapshot())
 }
 
-func (server *Server) logMCPZoneOperation(request *http.Request, action, zoneName string, operationErr error) {
-	attributes := []any{"operation", action, "zone", zoneName, "client", requestClientIP(request), "via", "mcp"}
-	if operationErr != nil {
-		server.logger.Warn("zone operation failed", append(attributes, "error", operationErr)...)
-		return
-	}
-	server.logger.Info("zone operation completed", attributes...)
-}
-
-func (server *Server) auditMCPZoneMutation(request *http.Request, action, zoneName string) {
-	recorder, ok := server.queries.(interface {
-		RecordAuditEvent(context.Context, auth.AuditEvent) error
-	})
-	if !ok {
-		return
-	}
-	event := auth.AuditEvent{
-		OccurredAt: time.Now(), Action: action, ClientIP: requestClientIP(request),
-		UserAgent: request.UserAgent(), Details: "zone=" + zoneName + " via=mcp",
-	}
-	if principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal); ok && principal.UserID != 0 {
-		event.UserID = &principal.UserID
-	}
-	if err := recorder.RecordAuditEvent(request.Context(), event); err != nil {
-		server.logger.Warn("record zone audit event", "action", action, "zone", zoneName, "error", err)
-	}
-}
-
-// mcpNewRecord builds a record from assistant input and checks it parses, so
-// a bad value is reported against the field that caused it.
-func mcpNewRecord(zone zonemodel.Zone, name, recordType, value string, ttl uint32, comment string) (zonemodel.Record, error) {
-	recordType = strings.ToUpper(strings.TrimSpace(recordType))
-	if recordType == "" {
-		return zonemodel.Record{}, errors.New("type is required")
-	}
-	normalized, err := mcpRecordValue(zone.Name, recordType, value)
-	if err != nil {
-		return zonemodel.Record{}, err
-	}
-	if ttl == 0 {
-		ttl = zone.DefaultTTL
-	}
-	record := zonemodel.Record{
-		Name: mcpStoredOwner(zone.Name, name), Type: recordType, Value: normalized, TTL: ttl,
-		Comments: strings.TrimSpace(comment),
-	}
-	if _, err := zonemodel.ParseRecord(zone, record); err != nil {
-		return zonemodel.Record{}, err
-	}
-	return record, nil
-}
-
-// mcpRecordValue accepts the forms an assistant is likely to send and stores
-// them the way the console would: canonical addresses, quoted TXT text, and
-// bare in-zone targets qualified against the zone.
-func mcpRecordValue(zoneName, recordType, value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", errors.New("value is required")
-	}
-	switch recordType {
-	case "SOA":
-		return "", errors.New("Sable manages the zone SOA record")
-	case "RRSIG", "DNSKEY", "NSEC", "NSEC3", "NSEC3PARAM":
-		return "", errors.New("DNSSEC records are managed automatically")
-	case "A", "AAAA":
-		address, err := netip.ParseAddr(value)
-		if err != nil || (recordType == "A" && !address.Is4()) || (recordType == "AAAA" && !address.Is6()) {
-			return "", fmt.Errorf("%s is not a valid %s address", value, recordType)
-		}
-		return address.String(), nil
-	case "TXT", "SPF":
-		if !strings.HasPrefix(value, `"`) {
-			value = quoteDNSString(value)
-		}
-	}
-	return zonemodel.QualifyRecordValue(zoneName, recordType, value), nil
-}
-
-func mcpFindRecord(zone zonemodel.Zone, name, recordType, value string) (int, error) {
-	recordType = strings.ToUpper(strings.TrimSpace(recordType))
-	target, err := mcpNewRecord(zone, name, recordType, value, 0, "")
-	if err != nil {
-		// The stored value may predate today's input rules, so fall back to an
-		// exact match before giving up.
-		target = zonemodel.Record{Name: mcpStoredOwner(zone.Name, name), Type: recordType, Value: strings.TrimSpace(value)}
-	}
-	var matches []int
-	for index, record := range zone.Records {
-		if mcpSameRecord(zone, record, target) {
-			matches = append(matches, index)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return 0, fmt.Errorf("no %s record %s with value %s was found in zone %s; call list_records to see what exists",
-			recordType, mcpOwnerFQDN(zone.Name, name), strings.TrimSpace(value), zone.Name)
-	case 1:
-	default:
-		return 0, errors.New("more than one record matches; change it in the Sable console")
-	}
-	if err := mcpRecordEditable(zone.Records[matches[0]]); err != nil {
-		return 0, err
-	}
-	return matches[0], nil
-}
-
-func mcpRecordEditable(record zonemodel.Record) error {
-	switch mcpRecordManager(record) {
-	case "":
-		return nil
-	case "sable":
-		return fmt.Errorf("Sable manages this %s record automatically", record.Type)
-	default:
-		return recordSourceEditable(record)
-	}
-}
-
 func mcpRecordManager(record zonemodel.Record) string {
 	switch {
 	case record.Type == "SOA", strings.HasPrefix(record.Comments, "sable:dnssec"):
@@ -808,49 +487,9 @@ func mcpRecordManager(record zonemodel.Record) string {
 	}
 }
 
-// mcpSameRecord compares owner, type, and data the way DNS does, so a value
-// spelled with different case or spacing still finds the stored record. TTL
-// is not part of a record's identity.
-func mcpSameRecord(zone zonemodel.Zone, left, right zonemodel.Record) bool {
-	if left.Type != right.Type || mcpOwnerFQDN(zone.Name, left.Name) != mcpOwnerFQDN(zone.Name, right.Name) {
-		return false
-	}
-	leftRR, leftErr := zonemodel.ParseRecord(zone, left)
-	rightRR, rightErr := zonemodel.ParseRecord(zone, right)
-	if leftErr != nil || rightErr != nil {
-		return strings.TrimSpace(left.Value) == strings.TrimSpace(right.Value)
-	}
-	return dns.IsDuplicate(leftRR, rightRR)
-}
-
-func mcpStoredOwner(zoneName, name string) string {
-	owner := normalizeZoneRecordOwner(zoneName, name)
-	if owner == "" {
-		return "@"
-	}
-	return strings.ToLower(owner)
-}
-
-// mcpOwnerFQDN expands an owner name the way the zone file does: @ is the
-// apex, a trailing dot is absolute, and anything else is relative to the zone
-// unless it already ends with the zone name.
-func mcpOwnerFQDN(zoneName, name string) string {
-	name = strings.ToLower(strings.TrimSpace(name))
-	switch {
-	case name == "" || name == "@":
-		return dns.Fqdn(zoneName)
-	case strings.HasSuffix(name, "."):
-		return name
-	case name == zoneName || strings.HasSuffix(name, "."+zoneName):
-		return dns.Fqdn(name)
-	default:
-		return dns.Fqdn(name + "." + zoneName)
-	}
-}
-
 func mcpRecordView(zone zonemodel.Zone, record zonemodel.Record) mcpRecord {
 	view := mcpRecord{
-		Name: record.Name, FQDN: strings.TrimSuffix(mcpOwnerFQDN(zone.Name, record.Name), "."),
+		Name: record.Name, FQDN: strings.TrimSuffix(ownerFQDN(zone.Name, record.Name), "."),
 		Type: record.Type, Value: record.Value, TTL: record.TTL, Enabled: !record.Disabled,
 		Comment: record.Comments, ManagedBy: mcpRecordManager(record),
 	}
@@ -873,12 +512,7 @@ func mcpRecordViews(zone zonemodel.Zone, records []zonemodel.Record) []mcpRecord
 }
 
 func mcpZoneSerial(zone zonemodel.Zone) uint32 {
-	for _, record := range zone.Records {
-		if record.Type == "SOA" && (record.Name == "@" || record.Name == "") {
-			return zoneRecordSOASerial(record.Value)
-		}
-	}
-	return 0
+	return zoneRecordSOASerial(apexSOA(zone))
 }
 
 // mcpToolSections are the setup wizard's sections, in order.

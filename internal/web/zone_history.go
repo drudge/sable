@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -402,4 +403,27 @@ func formatStringList(values []string) string {
 		return "None"
 	}
 	return strings.Join(values, ", ")
+}
+
+// zoneHistoryDialogID matches the dialog IDs the zone list gives its history
+// dialogs. The ID comes back in the request and lands in element IDs and a CSS
+// selector, so anything else is refused.
+var zoneHistoryDialogID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+
+// zoneHistoryList renders one zone's history for the zone list, which asks for
+// it when the operator opens the zone's History dialog.
+func (server *Server) zoneHistoryList(writer http.ResponseWriter, request *http.Request) {
+	name := normalizeZoneName(request.URL.Query().Get("zone"))
+	dialogID := request.URL.Query().Get("dialog")
+	current := findZone(server.zones.Current().Zones, name)
+	if current == nil || !zoneHistoryDialogID.MatchString(dialogID) || !server.authorizeZoneRequest(request, auth.PermissionZonesRead, *current) {
+		writeFragmentStatus(writer, http.StatusNotFound)
+		_ = pages.ZoneHistoryEntries(pages.ZoneView{HistoryError: "This zone's history is not available."}, "zone-history").Render(request.Context(), writer)
+		return
+	}
+	view := pages.ZoneView{Name: current.Name, Revision: current.Revision}
+	server.loadZoneHistory(request, &view, requestTimeDisplay(request))
+	if err := pages.ZoneHistoryEntries(view, dialogID).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render zone history", "zone", name, "error", err)
+	}
 }

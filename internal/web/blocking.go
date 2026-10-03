@@ -230,66 +230,16 @@ func (server *Server) addQueryPolicyDomain(writer http.ResponseWriter, request *
 		return
 	}
 	allowed := request.FormValue("action") == "allow"
-	domain, err := normalizePolicyEntry(request.FormValue("domain"))
+	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), request.FormValue("domain"), allowed)
 	if err != nil {
-		server.logBlockingOperation(request, err)
 		_ = pages.Toast(err.Error(), "error").Render(request.Context(), writer)
 		return
 	}
-	editor, ok := server.config.(blockingEditor)
-	if !ok {
-		server.logBlockingOperation(request, errors.New("configuration source is read-only"))
-		_ = pages.Toast("This configuration source is read-only.", "error").Render(request.Context(), writer)
-		return
-	}
-	err = editor.UpdateBlocking(request.Context(), func(policy *config.Blocking) error {
-		target := &policy.Domains
-		if allowed {
-			target = &policy.AllowedDomains
-		}
-		if !slices.Contains(*target, domain) {
-			*target = append(*target, domain)
-			slices.Sort(*target)
-		}
-		return nil
-	})
-	if err != nil {
-		server.logBlockingOperation(request, err)
-		_ = pages.Toast(err.Error(), "error").Render(request.Context(), writer)
-		return
-	}
-	action := "blocked"
-	if allowed {
-		action = "allowed"
-	}
-	server.logBlockingOperation(request, nil, "action", action)
-	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), domain+" marked "+action)
-	_ = pages.Toast(domain+" is now "+action+".", "success").Render(request.Context(), writer)
+	_ = pages.Toast(sentence(result.Message)+".", "success").Render(request.Context(), writer)
 }
 
 func (server *Server) addPolicyDomain(writer http.ResponseWriter, request *http.Request, allowed bool) {
-	tab, success := "domains", "Blocked domain added"
-	if allowed {
-		tab, success = "allowed", "Allowed domain added"
-	}
-	server.updateBlocking(writer, request, tab, success, func(policy *config.Blocking) error {
-		domain, err := normalizePolicyEntry(request.FormValue("domain"))
-		if err != nil {
-			return err
-		}
-		target := &policy.Domains
-		if allowed {
-			target = &policy.AllowedDomains
-		}
-		if slices.Contains(*target, domain) {
-			if allowed {
-				return errors.New("domain is already allowed")
-			}
-			return errors.New("domain is already blocked")
-		}
-		*target = append(*target, domain)
-		return nil
-	})
+	server.changePolicyDomain(writer, request, allowed, server.policyService().Add)
 }
 
 func (server *Server) deleteBlockedDomain(writer http.ResponseWriter, request *http.Request) {
@@ -301,26 +251,54 @@ func (server *Server) deleteAllowedDomain(writer http.ResponseWriter, request *h
 }
 
 func (server *Server) deletePolicyDomain(writer http.ResponseWriter, request *http.Request, allowed bool) {
-	tab, success := "domains", "Blocked domain removed"
-	if allowed {
-		tab, success = "allowed", "Allowed domain removed"
+	server.changePolicyDomain(writer, request, allowed, server.policyService().Remove)
+}
+
+// changePolicyDomain adds a domain to one list or takes it off, and shows the
+// list. A change that would do nothing is an error here, because the person
+// expected the list to change.
+func (server *Server) changePolicyDomain(
+	writer http.ResponseWriter,
+	request *http.Request,
+	allowed bool,
+	change func(context.Context, actor, string, bool) (domainRuleChange, error),
+) {
+	tab := policyTab(allowed)
+	if err := request.ParseForm(); err != nil {
+		server.renderPolicyChange(writer, request, tab, "", refuse(http.StatusBadRequest, "Invalid blocking form."))
+		return
 	}
-	server.updateBlocking(writer, request, tab, success, func(policy *config.Blocking) error {
-		domain, err := normalizePolicyEntry(request.FormValue("domain"))
-		if err != nil {
-			return err
-		}
-		target := &policy.Domains
-		if allowed {
-			target = &policy.AllowedDomains
-		}
-		index := slices.Index(*target, domain)
-		if index < 0 {
-			return errors.New("domain was not found")
-		}
-		*target = slices.Delete(*target, index, index+1)
-		return nil
-	})
+	result, err := change(request.Context(), requestActor(request, ""), request.FormValue("domain"), allowed)
+	if err == nil && !result.Changed {
+		err = refuse(http.StatusUnprocessableEntity, "%s", sentence(result.Message))
+	}
+	server.renderPolicyChange(writer, request, tab, sentence(result.Message), err)
+}
+
+// renderPolicyChange shows the Blocking page after a list change.
+func (server *Server) renderPolicyChange(writer http.ResponseWriter, request *http.Request, tab, message string, err error) {
+	if err != nil {
+		writeBlockingErrorStatus(writer, request, serviceStatus(err))
+		_ = pages.BlockingContent(server.blockingView(request, "", sentence(err.Error()), tab)).Render(request.Context(), writer)
+		return
+	}
+	_ = pages.BlockingContent(server.blockingView(request, message, "", tab)).Render(request.Context(), writer)
+}
+
+func policyTab(allowed bool) string {
+	if allowed {
+		return "allowed"
+	}
+	return "domains"
+}
+
+// sentence capitalizes a message for the console, where messages start a
+// sentence. A message that opens with a domain name keeps its case.
+func sentence(message string) string {
+	if first, _, _ := strings.Cut(message, " "); first == "" || strings.Contains(first, ".") {
+		return message
+	}
+	return strings.ToUpper(message[:1]) + message[1:]
 }
 
 func (server *Server) flushBlockedDomains(writer http.ResponseWriter, request *http.Request) {
@@ -332,18 +310,8 @@ func (server *Server) flushAllowedDomains(writer http.ResponseWriter, request *h
 }
 
 func (server *Server) flushPolicyDomains(writer http.ResponseWriter, request *http.Request, allowed bool) {
-	tab, success := "domains", "Custom blocked domains cleared"
-	if allowed {
-		tab, success = "allowed", "Allowed domains cleared"
-	}
-	server.updateBlocking(writer, request, tab, success, func(policy *config.Blocking) error {
-		if allowed {
-			policy.AllowedDomains = nil
-		} else {
-			policy.Domains = nil
-		}
-		return nil
-	})
+	message, err := server.policyService().Clear(request.Context(), requestActor(request, ""), allowed)
+	server.renderPolicyChange(writer, request, policyTab(allowed), message, err)
 }
 
 func (server *Server) importBlockedDomains(writer http.ResponseWriter, request *http.Request) {
@@ -389,47 +357,8 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 		_ = pages.BlockingContent(server.blockingView(request, "", "The selected file does not contain any valid domains.", tab)).Render(request.Context(), writer)
 		return
 	}
-	editor, ok := server.config.(blockingEditor)
-	if !ok {
-		server.logBlockingOperation(request, errors.New("configuration source is read-only"), "kind", kind)
-		writeBlockingErrorStatus(writer, request, http.StatusNotImplemented)
-		_ = pages.BlockingContent(server.blockingView(request, "", "This configuration source is read-only.", tab)).Render(request.Context(), writer)
-		return
-	}
-	added := 0
-	err = editor.UpdateBlocking(request.Context(), func(policy *config.Blocking) error {
-		target := &policy.Domains
-		if allowed {
-			target = &policy.AllowedDomains
-		}
-		existing := make(map[string]struct{}, len(*target)+len(domains))
-		for _, domain := range *target {
-			existing[domain] = struct{}{}
-		}
-		for _, domain := range domains {
-			if _, duplicate := existing[domain]; duplicate {
-				continue
-			}
-			existing[domain] = struct{}{}
-			*target = append(*target, domain)
-			added++
-		}
-		slices.Sort(*target)
-		return nil
-	})
-	if err != nil {
-		server.logBlockingOperation(request, err, "kind", kind)
-		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), tab)).Render(request.Context(), writer)
-		return
-	}
-	message := fmt.Sprintf("Imported %d domains to the %s list", added, kind)
-	if invalid > 0 {
-		message += fmt.Sprintf(" (%d invalid lines skipped)", invalid)
-	}
-	server.logBlockingOperation(request, nil, "kind", kind, "added", added, "invalid", invalid)
-	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), message)
-	_ = pages.BlockingContent(server.blockingView(request, message, "", tab)).Render(request.Context(), writer)
+	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), domains, invalid, allowed)
+	server.renderPolicyChange(writer, request, tab, message, err)
 }
 
 func parseImportedDomains(reader io.Reader) ([]string, int, error) {
