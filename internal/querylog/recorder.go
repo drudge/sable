@@ -158,12 +158,14 @@ func (recorder *Recorder) Close(ctx context.Context) error {
 
 func (recorder *Recorder) run() {
 	defer close(recorder.done)
+	// Pruning runs beside the writer so a long prune never stops batches
+	// from landing. Shutdown cancels it, then waits for it to stop.
+	var pruner sync.WaitGroup
+	defer pruner.Wait()
 	defer recorder.cancel()
-	recorder.prune()
+	pruner.Go(recorder.pruneLoop)
 	ticker := time.NewTicker(recorder.flushEvery)
 	defer ticker.Stop()
-	retentionTicker := time.NewTicker(retentionSweepInterval)
-	defer retentionTicker.Stop()
 	batch := make([]Event, 0, recorder.batchSize)
 	for {
 		select {
@@ -183,14 +185,6 @@ func (recorder *Recorder) run() {
 			if recorder.lifetime.Err() == nil {
 				batch = recorder.writeNormal(batch)
 			}
-		case <-retentionTicker.C:
-			if recorder.lifetime.Err() == nil {
-				recorder.prune()
-			}
-		case <-recorder.pruneNow:
-			if recorder.lifetime.Err() == nil {
-				recorder.prune()
-			}
 		case ctx := <-recorder.shutdown:
 			batch = recorder.drain(ctx, batch)
 			recorder.write(ctx, batch)
@@ -199,11 +193,31 @@ func (recorder *Recorder) run() {
 	}
 }
 
+// pruneLoop prunes at start, every retentionSweepInterval, and whenever the
+// retention changes, until the recorder closes.
+func (recorder *Recorder) pruneLoop() {
+	ticker := time.NewTicker(retentionSweepInterval)
+	defer ticker.Stop()
+	for {
+		recorder.prune()
+		select {
+		case <-ticker.C:
+		case <-recorder.pruneNow:
+		case <-recorder.lifetime.Done():
+			return
+		}
+	}
+}
+
+// prune has no overall deadline: the writer bounds each chunk of a prune
+// instead, so a large backlog can take as long as it needs while the writer
+// keeps draining events.
 func (recorder *Recorder) prune() {
-	ctx, cancel := context.WithTimeout(recorder.lifetime, recorderOperationTimeout)
-	defer cancel()
+	if recorder.lifetime.Err() != nil {
+		return
+	}
 	retention := time.Duration(recorder.retention.Load())
-	if err := recorder.writer.PruneQueryEvents(ctx, time.Now().Add(-retention)); err != nil {
+	if err := recorder.writer.PruneQueryEvents(recorder.lifetime, time.Now().Add(-retention)); err != nil {
 		recorder.writeErrors.Add(1)
 		recorder.logger.Error("prune query log", "error", err)
 	}

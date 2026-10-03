@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,9 @@ type Store struct {
 	// postgresSearchTried keeps the PostgreSQL trigram indexes to one
 	// attempt per start.
 	postgresSearchTried atomic.Bool
+	// pruneChunk overrides how many rows one prune statement deletes; zero
+	// means pruneChunkRows. Tests set it to force several chunks.
+	pruneChunk int
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -369,35 +373,70 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 	return nil
 }
 
+// PruneQueryEvents removes query log history from before the cutoff: the raw
+// rows, the minute rollups and their tiers, and client sightings. Each table is
+// pruned on its own, in chunks that each commit on their own, so a large
+// backlog never holds the write lock for long and never meets one statement
+// timeout. The query log writer lands its batches between chunks.
 func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query log prune: %w", err)
-	}
-	placeholder := store.placeholder(1)
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log WHERE occurred_at < "+placeholder, before.UTC()); err != nil {
-		_ = transaction.Rollback()
+	before = before.UTC()
+	if err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before); err != nil {
 		return fmt.Errorf("prune query log: %w", err)
 	}
 	// Drop the cutoff minute as well because its aggregate can include rows
 	// from before the exact cutoff. Surviving rows in that partial minute remain
 	// available through the raw log boundary query.
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_query_log_rollup WHERE bucket_start <= "+placeholder, before.UTC().Truncate(time.Minute)); err != nil {
-		_ = transaction.Rollback()
+	bucket := before.Truncate(time.Minute)
+	if err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
 		return fmt.Errorf("prune query log rollups: %w", err)
 	}
-	if err := store.pruneRollupTiers(ctx, transaction, before.UTC().Truncate(time.Minute)); err != nil {
-		_ = transaction.Rollback()
+	if err := store.pruneRollupTiers(ctx, bucket); err != nil {
 		return err
 	}
-	if err := store.pruneClientSightings(ctx, transaction, before); err != nil {
-		_ = transaction.Rollback()
-		return err
+	return store.pruneClientSightings(ctx, before)
+}
+
+const (
+	// pruneChunkRows is how many rows one prune statement deletes.
+	pruneChunkRows = 5_000
+	// pruneChunkTimeout bounds one chunk rather than a whole prune, so a
+	// backlog of any size finishes as long as each chunk does.
+	pruneChunkTimeout = 30 * time.Second
+)
+
+// deleteInChunks deletes the rows of table that match condition, at most
+// pruneChunkRows at a time, each chunk in its own statement and transaction.
+// Rows are picked by their physical key: on SQLite the rowid, which is the
+// query log's id, and on PostgreSQL the ctid, which the ANY(ARRAY(...)) form
+// turns into a direct tuple lookup instead of a scan.
+func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) error {
+	chunk := store.pruneChunk
+	if chunk <= 0 {
+		chunk = pruneChunkRows
 	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query log prune: %w", err)
+	limit := " WHERE " + condition + " LIMIT " + strconv.Itoa(chunk)
+	statement := "DELETE FROM " + table + " WHERE rowid IN (SELECT rowid FROM " + table + limit + ")"
+	if store.driver == "postgres" {
+		statement = "DELETE FROM " + table + " WHERE ctid = ANY(ARRAY(SELECT ctid FROM " + table + limit + "))"
 	}
-	return nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		chunkContext, cancel := context.WithTimeout(ctx, pruneChunkTimeout)
+		result, err := store.database.ExecContext(chunkContext, statement, arguments...)
+		cancel()
+		if err != nil {
+			return err
+		}
+		deleted, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if deleted < int64(chunk) {
+			return nil
+		}
+	}
 }
 
 func (store *Store) RecentQueryEvents(ctx context.Context, limit int) ([]querylog.Entry, error) {
