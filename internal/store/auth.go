@@ -235,6 +235,9 @@ WHERE table_schema = current_schema() AND table_name = 'sable_api_tokens' AND co
 			return notNull == 0, nil
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("inspect API token expiration: %w", err)
+	}
 	return false, errors.New("API token expiration column is missing")
 }
 

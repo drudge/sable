@@ -842,7 +842,7 @@ func TestSQLiteDSNLeavesOperatorPragmasAlone(t *testing.T) {
 	}{
 		"plain path": {
 			dsn:  "data/sable.db",
-			want: []string{"_pragma=journal_mode%28WAL%29", "_pragma=busy_timeout%285000%29", "_pragma=foreign_keys%281%29"},
+			want: []string{"_pragma=journal_mode%28WAL%29", "_pragma=busy_timeout%285000%29", "_pragma=foreign_keys%281%29", "_txlock=immediate"},
 		},
 		"pragma form": {
 			dsn:  "data/sable.db?_pragma=busy_timeout(20000)",
@@ -850,7 +850,11 @@ func TestSQLiteDSNLeavesOperatorPragmasAlone(t *testing.T) {
 		},
 		"shorthand form": {
 			dsn:  "data/sable.db?_busy_timeout=20000&_fk=0",
-			want: []string{"_pragma=journal_mode%28WAL%29"},
+			want: []string{"_pragma=journal_mode%28WAL%29", "_txlock=immediate"},
+		},
+		"transaction lock": {
+			dsn:  "data/sable.db?_txlock=deferred",
+			want: []string{"_pragma=busy_timeout%285000%29"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -865,12 +869,104 @@ func TestSQLiteDSNLeavesOperatorPragmasAlone(t *testing.T) {
 					t.Fatalf("sqliteDSN(%q) = %q, want it to carry %s", test.dsn, got, want)
 				}
 			}
-			if strings.Count(got, "_pragma=busy_timeout") > 1 || strings.Count(got, "_pragma=foreign_keys") > 1 {
+			if strings.Count(got, "_pragma=busy_timeout") > 1 || strings.Count(got, "_pragma=foreign_keys") > 1 || strings.Count(got, "_txlock=") > 1 {
 				t.Fatalf("sqliteDSN(%q) = %q, want no repeated pragma", test.dsn, got)
 			}
 			if strings.Count(got, "?") != 1 {
 				t.Fatalf("sqliteDSN(%q) = %q, want the settings appended to one query", test.dsn, got)
 			}
 		})
+	}
+}
+
+// Opening a database adds the last_seen indexes the sightings prune reads and
+// drops the rollup index the primary key already covers.
+func TestOpenSQLiteMigratesSightingAndRollupIndexes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sable.db")
+	opened, err := Open(ctx, "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put the database back the way an older release left it.
+	for _, statement := range []string{
+		"DROP INDEX sable_client_seen_last_idx",
+		"DROP INDEX sable_client_domain_seen_last_idx",
+		"DROP INDEX sable_client_identity_last_idx",
+		"CREATE INDEX sable_query_log_rollup_bucket_idx ON sable_query_log_rollup (bucket_start)",
+	} {
+		if _, err := opened.database.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opened.Close()
+
+	opened, err = Open(ctx, "sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	indexes := map[string]bool{}
+	rows, err := opened.database.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'index'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		indexes[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"sable_client_seen_last_idx", "sable_client_domain_seen_last_idx", "sable_client_identity_last_idx"} {
+		if !indexes[name] {
+			t.Errorf("index %s is missing after upgrade", name)
+		}
+	}
+	if indexes["sable_query_log_rollup_bucket_idx"] {
+		t.Error("the redundant rollup bucket index survived the upgrade")
+	}
+}
+
+// A query log batch that can't get the write lock fails with an error the
+// retry recognises.
+func TestWriteQueryEventsReportsSQLiteBusy(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "sable.db")
+	opened, err := Open(ctx, "sqlite", path+"?_pragma=busy_timeout(0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	holder, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	connection, err := holder.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	if _, err := connection.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	defer connection.ExecContext(ctx, "ROLLBACK")
+
+	event := querylog.Event{OccurredAt: time.Now().UTC(), ClientIP: "10.0.7.20", Name: "example.com.", Protocol: "UDP"}
+	err = opened.WriteQueryEvents(ctx, []querylog.Event{event})
+	if !sqliteBusy(err) {
+		t.Fatalf("WriteQueryEvents() error = %v, want SQLITE_BUSY", err)
+	}
+	if sqliteBusy(errors.New("database is locked")) || sqliteBusy(nil) {
+		t.Fatal("sqliteBusy matched an error that isn't SQLite's")
 	}
 }

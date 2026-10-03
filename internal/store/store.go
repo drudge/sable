@@ -15,7 +15,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/drudge/sable/internal/querylog"
 )
@@ -88,6 +89,11 @@ var sqlitePragmas = [][2]string{
 // unenforced. The driver applies DSN pragmas to every connection it opens.
 // Anything the operator configured already wins, under either the _pragma form
 // or the driver's shorthand keys.
+//
+// Transactions begin IMMEDIATE. A DEFERRED transaction that reads first and
+// writes later cannot wait for the write lock: WAL mode answers its upgrade
+// with SQLITE_BUSY at once, whatever busy_timeout says. Taking the lock at
+// BEGIN makes every writer wait its turn under busy_timeout instead.
 func sqliteDSN(dsn string) string {
 	query := ""
 	if separator := strings.IndexByte(dsn, '?'); separator >= 0 {
@@ -103,6 +109,9 @@ func sqliteDSN(dsn string) string {
 			continue
 		}
 		settings = append(settings, "_pragma="+url.QueryEscape(pragma[0]+"("+pragma[1]+")"))
+	}
+	if !configured.Has("_txlock") {
+		settings = append(settings, "_txlock=immediate")
 	}
 	if len(settings) == 0 {
 		return dsn
@@ -261,9 +270,10 @@ func (store *Store) migrateQueryLogIndexes(ctx context.Context) error {
 CREATE INDEX IF NOT EXISTS sable_query_log_client_key_idx
 ON sable_query_log (client_ip_key, id DESC)`, `
 CREATE INDEX IF NOT EXISTS sable_query_log_name_key_idx
-ON sable_query_log (name_key, id DESC)`, `
-CREATE INDEX IF NOT EXISTS sable_query_log_rollup_bucket_idx
-ON sable_query_log_rollup (bucket_start)`} {
+ON sable_query_log (name_key, id DESC)`,
+		// The rollup primary key already leads with bucket_start, so this
+		// index only cost every batch an extra write.
+		"DROP INDEX IF EXISTS sable_query_log_rollup_bucket_idx"} {
 		if _, err := store.database.ExecContext(ctx, statement); err != nil {
 			return err
 		}
@@ -300,10 +310,21 @@ SELECT EXISTS (
 	return false, rows.Err()
 }
 
+// WriteQueryEvents stores a batch in one transaction. A batch that meets
+// SQLITE_BUSY after busy_timeout runs out is retried once, since a failed
+// batch is dropped by the recorder.
 func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+	err := store.writeQueryEvents(ctx, events)
+	if store.driver == "sqlite" && sqliteBusy(err) && ctx.Err() == nil {
+		err = store.writeQueryEvents(ctx, events)
+	}
+	return err
+}
+
+func (store *Store) writeQueryEvents(ctx context.Context, events []querylog.Event) error {
 	transaction, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin query log batch: %w", err)
@@ -691,6 +712,13 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	return `INSERT INTO sable_query_log
 (occurred_at, client_ip, client_ip_key, name, name_key, record_type, class, response_code, source, protocol, answer, decision, duration_us)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+}
+
+// sqliteBusy reports whether err is SQLite's database-locked error, under its
+// primary code or any extended one.
+func sqliteBusy(err error) bool {
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && sqliteError.Code()&0xff == sqlite3.SQLITE_BUSY
 }
 
 func databaseDriverName(driver string) (string, error) {
