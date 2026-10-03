@@ -355,6 +355,9 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 		"DELETE FROM sable_user_roles",
 		"DELETE FROM sable_role_grants",
 		"DELETE FROM sable_roles",
+		// The incoming built-in roles may come from another Sable version,
+		// so the next start writes this build's again, as it always did.
+		"DELETE FROM sable_metadata WHERE key = '" + builtInRolesKey + "'",
 	} {
 		if _, err := transaction.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("clear replicated authorization state: %w", err)

@@ -91,7 +91,7 @@ func TestQueryLogSearchIndexesAnUpgradedLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Take the log back to before the index existed.
-	for _, statement := range []string{"DROP TABLE " + queryLogSearchTable} {
+	for _, statement := range []string{"DROP TABLE " + queryLogSearchTable, "DROP TABLE " + schemaVersionTable} {
 		if _, err := opened.database.ExecContext(ctx, statement); err != nil {
 			t.Fatal(err)
 		}
