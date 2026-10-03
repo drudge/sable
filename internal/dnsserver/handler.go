@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -241,6 +242,7 @@ type Stats struct {
 	UpstreamErrors           uint64                `json:"upstream_errors"`
 	CacheHits                uint64                `json:"cache_hits"`
 	CacheMisses              uint64                `json:"cache_misses"`
+	Panics                   uint64                `json:"panics"`
 	CacheEntries             int                   `json:"cache_entries"`
 	RoutedQueries            uint64                `json:"routed_queries"`
 	LocalAnswers             uint64                `json:"local_answers"`
@@ -276,6 +278,7 @@ type Handler struct {
 	upstreamErrors       atomic.Uint64
 	cacheHits            atomic.Uint64
 	cacheMisses          atomic.Uint64
+	panics               atomic.Uint64
 	maintenanceStop      chan struct{}
 	maintenanceDone      chan struct{}
 	maintenanceStarted   atomic.Bool
@@ -963,7 +966,7 @@ func (handler *Handler) ApplyManagedTrustAnchors(anchors []string, deleted bool)
 		}
 		candidate := *active
 		candidate.dnssec = validator
-		candidate.cache = NewResponseCache(active.cache.Capacity())
+		candidate.cache = NewResponseCacheWithOptions(active.cache.Capacity(), active.cache.options)
 		if handler.runtime.CompareAndSwap(active, &candidate) {
 			return
 		}
@@ -1059,6 +1062,15 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	defer func() {
 		handler.latency.observe(latencySource, protocol, latencyCache, latencyResponseCode, time.Since(startedAt))
 	}()
+	// Runs before the latency observer so a recovered query is timed as the
+	// SERVFAIL it answers.
+	defer func() {
+		if value := recover(); value != nil {
+			latencySource = querylog.SourceError
+			latencyResponseCode = dns.RcodeServerFailure
+			handler.recoverQuery(writer, request, client.ip, value)
+		}
+	}()
 
 	observer := handler.activeQueryObserver()
 	handler.queries.Add(1)
@@ -1092,6 +1104,22 @@ func (handler *Handler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
 	if observer != nil {
 		handler.recordQuery(observer, client, request, result, startedAt)
 	}
+}
+
+// recoverQuery answers a query whose handling panicked with SERVFAIL, so one
+// odd packet cannot take down the UDP, TCP, DoT, or DoQ listeners. DoH already
+// survives through net/http, but this answers it properly too.
+func (handler *Handler) recoverQuery(writer dns.ResponseWriter, request *dns.Msg, clientIP string, value any) {
+	handler.panics.Add(1)
+	handler.recordResponseCode(dns.RcodeServerFailure)
+	if logger := handler.logger.Load(); logger != nil {
+		name, recordType := questionDescription(request)
+		logger.Error("dns query handler panicked", "name", name, "type", recordType, "client", clientIP,
+			"panic", fmt.Sprint(value), "stack", string(debug.Stack()))
+	}
+	// The writer may be what panicked. Writing the SERVFAIL is best effort.
+	defer func() { _ = recover() }()
+	handler.writeResponse(writer, request, errorResponse(request, dns.RcodeServerFailure))
 }
 
 func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime, clientIP string) bool {
@@ -1590,14 +1618,10 @@ func newInflightGroup() *inflightGroup {
 	return &inflightGroup{calls: make(map[inflightKey]*inflightCall)}
 }
 
-// do runs fn for key unless a call is already in flight, in which case it waits
-// for that call and returns its result. The bool reports whether the result was
-// shared with an in-flight call (true for waiters), so the caller knows it must
-// copy a shared response before mutating it.
-func (group *inflightGroup) do(key inflightKey, fn func() resolution) (resolution, bool) {
-	return group.doContext(context.Background(), key, fn)
-}
-
+// doContext runs fn for key unless a call is already in flight, in which case
+// it waits for that call, or for ctx, and returns its result. The bool reports
+// whether the result was shared with an in-flight call (true for waiters), so
+// the caller knows it must copy a shared response before mutating it.
 func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn func() resolution) (resolution, bool) {
 	group.mu.Lock()
 	if call, ok := group.calls[key]; ok {
@@ -1613,12 +1637,16 @@ func (group *inflightGroup) doContext(ctx context.Context, key inflightKey, fn f
 	group.calls[key] = call
 	group.mu.Unlock()
 
+	// Release the key and the waiters even if fn panics. Waiters reached
+	// through resolveShared wait on context.Background, so a call left in the
+	// map would hang every later identical query.
+	defer func() {
+		group.mu.Lock()
+		delete(group.calls, key)
+		group.mu.Unlock()
+		close(call.wait)
+	}()
 	call.result = fn()
-
-	group.mu.Lock()
-	delete(group.calls, key)
-	group.mu.Unlock()
-	close(call.wait)
 	return call.result, false
 }
 
@@ -1669,10 +1697,6 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, runtime *Runtime,
 		}
 		return <-result
 	}
-}
-
-func (handler *Handler) resolveLiveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	return handler.resolveLiveUpstreamContext(context.Background(), request, runtime, forwarders, staleFallback, clientIP)
 }
 
 func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
@@ -1729,8 +1753,9 @@ func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request 
 	return resolution{response: response, source: querylog.SourceUpstream, decision: decision}
 }
 
-// cacheUpstreamAnswer readies a fetched answer for request and caches it.
-func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validation validationState) {
+// cacheUpstreamAnswer readies a fetched answer for request and caches it. It
+// reports whether the answer was stored.
+func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validation validationState) bool {
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	response.CheckingDisabled = request.CheckingDisabled
@@ -1741,9 +1766,10 @@ func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validati
 	// reach here, so a CD client's answer is what everyone else would get and is
 	// safe to share. With validation off the upstream did the validating and a CD
 	// fetch went around it, so that answer stays private to the client that asked.
-	if validation != validationBogus && (runtime.dnssec != nil || !request.CheckingDisabled) {
-		runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
+	if validation == validationBogus || (runtime.dnssec == nil && request.CheckingDisabled) {
+		return false
 	}
+	return runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 }
 
 func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
@@ -1763,15 +1789,7 @@ func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
 		defer release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
 		response, validation, err := handler.resolveUpstreamContext(handler.backgroundContext, request, runtime, forwarders)
-		if err != nil || response == nil || validation == validationBogus {
-			runtime.cache.CancelPrefetch(request)
-			return
-		}
-		response.Id = request.Id
-		response.Question = append(response.Question[:0], request.Question...)
-		response.CheckingDisabled = request.CheckingDisabled
-		response.AuthenticatedData = validation == validationSecure
-		if !runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request)) {
+		if err != nil || response == nil || !runtime.cacheUpstreamAnswer(request, response, validation) {
 			runtime.cache.CancelPrefetch(request)
 		}
 	}()
@@ -1944,6 +1962,7 @@ func (handler *Handler) Stats() Stats {
 		UpstreamErrors:           handler.upstreamErrors.Load(),
 		CacheHits:                handler.cacheHits.Load(),
 		CacheMisses:              handler.cacheMisses.Load(),
+		Panics:                   handler.panics.Load(),
 		CacheEntries:             runtime.cache.Len(),
 		RoutedQueries:            handler.routedQueries.Load(),
 		LocalAnswers:             handler.localAnswers.Load(),
@@ -2821,12 +2840,6 @@ func (handler *Handler) activeQueryObserver() querylog.Observer {
 		return nil
 	}
 	return holder.observer
-}
-
-func (handler *Handler) exchange(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), runtime.timeout)
-	defer cancel()
-	return handler.exchangeContext(ctx, request, runtime, forwarders)
 }
 
 func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
