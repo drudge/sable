@@ -3597,7 +3597,7 @@ func APITokenResult(token string, expires string, errorMessage string) templ.Com
 	})
 }
 
-func ifThen(condition bool, whenTrue, whenFalse string) string {
+func ifThen[T any](condition bool, whenTrue, whenFalse T) T {
 	if condition {
 		return whenTrue
 	}

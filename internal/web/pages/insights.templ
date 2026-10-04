@@ -781,7 +781,7 @@ templ InsightFindings(view InsightsOverviewView) {
 	@components.Card(components.CardProps{ID: "insight-findings", Class: "isotope-data-card insight-findings", Attrs: templ.Attributes{"aria-labelledby": "insight-findings-title"}}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Worth a Look", TitleID: "insight-findings-title", Description: view.RangeLabel, HeadingClass: "ranking-heading", Class: "isotope-data-header"}) {
 			if len(view.Findings) > 0 {
-				<span class="count-badge">{ fmt.Sprint(len(view.Findings)) } { insights.Plural(len(view.Findings), "finding", "findings") }</span>
+				@components.Badge(components.BadgeProps{Label: fmt.Sprint(len(view.Findings)) + " " + insights.Plural(len(view.Findings), "finding", "findings"), Tone: components.BadgeCount})
 			}
 		}
 		if len(view.Findings) == 0 {
@@ -981,7 +981,9 @@ func insightEvidenceHeader(finding InsightFindingView, rangeName, rangeLabel str
 
 // insightNameSource says where a device's name came from, beside the name.
 templ insightNameSource(source string) {
-	<span class="status-badge insight-name-source" title={ "Name from " + source }><span class="sr-only">Name from </span>{ source }</span>
+	@components.Badge(components.BadgeProps{Title: "Name from " + source, Class: "insight-name-source"}) {
+		<span class="sr-only">Name from </span>{ source }
+	}
 }
 
 templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewView) {
@@ -1024,7 +1026,7 @@ templ InsightContribution(view InsightsOverviewView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card insight-contribution", Attrs: templ.Attributes{"aria-labelledby": "insight-contribution-title"}}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Block List Contribution", TitleID: "insight-contribution-title", Description: "Compared from cached list contents", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
 			if view.Contribution != nil && len(view.Contribution.Lists) > 0 {
-				<span class="count-badge">{ fmt.Sprint(len(view.Contribution.Lists)) } { insights.Plural(len(view.Contribution.Lists), "list", "lists") }</span>
+				@components.Badge(components.BadgeProps{Label: fmt.Sprint(len(view.Contribution.Lists)) + " " + insights.Plural(len(view.Contribution.Lists), "list", "lists"), Tone: components.BadgeCount})
 			}
 		}
 		if view.Contribution == nil {
@@ -1436,7 +1438,7 @@ templ InsightDevices(view InsightsOverviewView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card insight-entity-card", Attrs: templ.Attributes{"aria-labelledby": "insight-devices-title", "data-list-filter-root": true, "data-list-nouns": "device devices"}}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Devices", TitleID: "insight-devices-title", Description: view.RangeLabel, HeadingClass: "ranking-heading", Class: "isotope-data-header"}) {
 			if len(view.Devices) > 0 {
-				<span class="count-badge" data-list-count={ fmt.Sprint(len(view.Devices)) }>{ formatNumber(uint64(len(view.Devices))) } { insights.Plural(len(view.Devices), "device", "devices") }</span>
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Devices))) + " " + insights.Plural(len(view.Devices), "device", "devices"), Tone: components.BadgeCount, Attrs: templ.Attributes{"data-list-count": fmt.Sprint(len(view.Devices))}})
 			}
 		}
 		if view.DevicesUnavailable {
@@ -1599,10 +1601,10 @@ func insightAppFailingTitle(app InsightAppRowView) string {
 
 templ insightAppBadges(app InsightAppRowView) {
 	if app.New {
-		<span class="status-badge active">New</span>
+		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive})
 	}
 	if app.FailingNow {
-		<span class="status-badge warning" title={ insightAppFailingTitle(app) }>Failing</span>
+		@components.Badge(components.BadgeProps{Label: "Failing", Tone: components.BadgeWarning, Title: insightAppFailingTitle(app)})
 	}
 }
 
@@ -1612,7 +1614,7 @@ templ InsightApps(view InsightsOverviewView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card insight-entity-card insight-apps", Attrs: templ.Attributes{"aria-labelledby": "insight-apps-title", "data-list-filter-root": true, "data-list-nouns": "app apps"}}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Apps", TitleID: "insight-apps-title", Description: view.RangeLabel, HeadingClass: "ranking-heading", Class: "isotope-data-header"}) {
 			if len(view.Apps) > 0 {
-				<span class="count-badge" data-list-count={ fmt.Sprint(len(view.Apps)) }>{ formatNumber(uint64(len(view.Apps))) } { insights.Plural(len(view.Apps), "app", "apps") }</span>
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Apps))) + " " + insights.Plural(len(view.Apps), "app", "apps"), Tone: components.BadgeCount, Attrs: templ.Attributes{"data-list-count": fmt.Sprint(len(view.Apps))}})
 			}
 		}
 		if view.AppsUnavailable {
@@ -1691,22 +1693,22 @@ templ InsightApps(view InsightsOverviewView) {
 // source beside the title instead, so it leaves that badge out.
 templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 	if device.New {
-		<span class="status-badge active">New</span>
+		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive})
 	}
 	if nameSource && device.NameSource != "" {
-		<span class="status-badge">{ device.NameSource }</span>
+		@components.Badge(components.BadgeProps{Label: device.NameSource})
 	}
 	if device.Server != "" {
-		<span class="status-badge">{ device.Server }</span>
+		@components.Badge(components.BadgeProps{Label: device.Server})
 	}
 	if !nameSource && device.NameNetwork != "" {
-		<span class="status-badge">Named for { device.NameNetwork }</span>
+		@components.Badge(components.BadgeProps{Label: "Named for " + device.NameNetwork})
 	}
 	if device.PrivateMAC {
-		<span class="status-badge" title="The device uses a randomized hardware address on this network">Private address</span>
+		@components.Badge(components.BadgeProps{Label: "Private address", Title: "The device uses a randomized hardware address on this network"})
 	}
 	if device.NotUsingSable != "" {
-		<span class="status-badge warning" title={ device.NotUsingSable }>Not using Sable</span>
+		@components.Badge(components.BadgeProps{Label: "Not using Sable", Tone: components.BadgeWarning, Title: device.NotUsingSable})
 	}
 }
 
@@ -2186,7 +2188,7 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 		<div class="insight-type-summary">
 			if view.Device.TypeLabel != "" {
 				<strong>{ view.Device.TypeLabel }</strong>
-				<span class={ "status-badge", templ.KV("active", view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high") }>{ insightConfidenceText(view.Device.TypeConfidence) }</span>
+				@components.Badge(components.BadgeProps{Label: insightConfidenceText(view.Device.TypeConfidence), Tone: ifThen(view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high", components.BadgeActive, components.BadgeNeutral)})
 			} else {
 				<strong class="insight-type-unknown">Sable can't tell yet</strong>
 			}

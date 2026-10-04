@@ -122,7 +122,7 @@ func TestAdministrationMobileRowsOnlyShowAvailableActions(t *testing.T) {
 	}))
 	for _, expected := range []string{
 		`<article class="admin-mobile-row admin-mobile-group-row static">`,
-		`class="built-in-badge">Built in</span>`,
+		`class="status-badge built-in-badge">Built in</span>`,
 	} {
 		if !strings.Contains(builtInGroup, expected) {
 			t.Errorf("built-in mobile group row does not include %q", expected)

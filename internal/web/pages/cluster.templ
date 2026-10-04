@@ -93,7 +93,7 @@ templ ClusterContent(view ClusterPageView) {
 				if !view.Initialized {
 					@components.Card(components.CardProps{Class: "cluster-status-card"}) {
 						@components.CardHeader(components.CardHeaderProps{Icon: "cluster", Title: "Cluster Status", Description: "This server is operating independently"}) {
-							<span class="status-badge">Not configured</span>
+							@components.Badge(components.BadgeProps{Label: "Not configured"})
 						}
 						@components.EmptyState(components.EmptyStateProps{Icon: "server", IconBox: true, Title: "No Cluster Configured", Description: "Create a primary or join this server to an existing Sable primary as a replica.", Class: "cluster-empty-state"}) {
 							if view.RestartRequired {
@@ -149,9 +149,9 @@ templ ClusterContent(view ClusterPageView) {
 				@components.Card(components.CardProps{Class: "cluster-details"}) {
 					@components.CardHeader(components.CardHeaderProps{Title: "Local Node"}) {
 						if view.RestartRequired {
-							<span class="status-badge warning">Restart required</span>
+							@components.Badge(components.BadgeProps{Label: "Restart required", Tone: components.BadgeWarning})
 						} else if view.NetworkReady {
-							<span class="status-badge active">Ready</span>
+							@components.Badge(components.BadgeProps{Label: "Ready", Tone: components.BadgeActive})
 						}
 					}
 					@components.FactList(components.FactListProps{}) {
@@ -232,7 +232,9 @@ templ ClusterLiveStatus(view ClusterPageView) {
 		}
 		@components.Card(components.CardProps{Class: "cluster-nodes-card"}) {
 			@components.CardHeader(components.CardHeaderProps{Title: "Node Sync Status", Description: "Connection health and configuration generation by node"}) {
-				<span class="status-badge cluster-updated-badge">@Icon("clock")<span data-stat-key="cluster-updated">Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span>
+				@components.Badge(components.BadgeProps{Icon: "clock", Class: "cluster-updated-badge"}) {
+					<span data-stat-key="cluster-updated">Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span>
+				}
 			}
 			<div class="cluster-node-list">
 				for _, node := range view.Nodes {
@@ -249,7 +251,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 							<div class="cluster-node-copy">
 								<div><button class="cluster-node-name" type="button" { drawerOpener(ClusterNodeDrawerLink(node))... } aria-label={ "View details for " + node.Name }>{ node.Name }</button>
 									if node.Local {
-										<span class="current-badge">This node</span>
+										@components.Badge(components.BadgeProps{Label: "This node", Tone: components.BadgeCurrent})
 									}
 									<span class={ nodeSyncBadge(node.SyncState) }>{ syncStateLabel(node.SyncState) }</span>
 								</div>
@@ -521,7 +523,7 @@ templ ClusterNodeDrawer(view ClusterNodeDrawerView) {
 templ ClusterNodeDetails(view ClusterNodeDrawerView) {
 	<div class="cluster-node-details" id="cluster-node-details" data-live-refresh hx-get={ clusterNodePanelURL(view.Key, true) } hx-trigger="every 5s" hx-target="this" hx-swap="outerHTML">
 		if view.Node.Local {
-			<div class="query-detail-result insight-device-badges"><span class="current-badge">This node</span></div>
+			<div class="query-detail-result insight-device-badges">@components.Badge(components.BadgeProps{Label: "This node", Tone: components.BadgeCurrent})</div>
 		}
 		<section class="query-detail-answer" aria-labelledby="cluster-node-problems">
 			<h3 id="cluster-node-problems">Open problems</h3>
