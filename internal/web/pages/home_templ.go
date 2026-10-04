@@ -1589,17 +1589,6 @@ func DistributionPanel(title string, items []DistributionItemView) templ.Compone
 	})
 }
 
-func compactNumber(value uint64) string {
-	switch {
-	case value >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(value)/1_000_000)
-	case value >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(value)/1_000)
-	default:
-		return fmt.Sprint(value)
-	}
-}
-
 func firstRanked(items []RankedStatView, limit int) []RankedStatView {
 	return items[:min(len(items), limit)]
 }

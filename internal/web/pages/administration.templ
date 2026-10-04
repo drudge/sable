@@ -115,7 +115,7 @@ templ UsersPanel(view AdministrationPageView) {
 						for _, role := range user.Roles {
 							<span>{ role }</span>
 						}
-					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td><button class="icon-button" type="button" data-dialog-open={ adminUserDialogID(user.ID) } aria-label={ "Edit " + user.Username }>@Icon("chevron-right")</button></td></tr>
+					</div></td><td class="muted-cell">{ FormatDateTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td><button class="icon-button" type="button" data-dialog-open={ adminUserDialogID(user.ID) } aria-label={ "Edit " + user.Username }>@Icon("chevron-right")</button></td></tr>
 				}
 			}
 		}
@@ -133,9 +133,9 @@ templ GroupsPanel(view AdministrationPageView) {
 			<div class="admin-mobile-list">
 				for _, role := range view.Roles {
 					if role.BuiltIn {
-						<article class="admin-mobile-row admin-mobile-group-row static"><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})@components.Badge(components.BadgeProps{Label: "Built in", Class: "built-in-badge"})</div></article>
+						<article class="admin-mobile-row admin-mobile-group-row static"><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + plural(role.Users, "member", "members"), Tone: components.BadgeCount})@components.Badge(components.BadgeProps{Label: "Built in", Class: "built-in-badge"})</div></article>
 					} else {
-						<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open={ adminGroupDialogID(role.ID) }><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})@Icon("chevron-right")</div></button>
+						<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open={ adminGroupDialogID(role.ID) }><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + plural(role.Users, "member", "members"), Tone: components.BadgeCount})@Icon("chevron-right")</div></button>
 					}
 				}
 			</div>
@@ -145,7 +145,7 @@ templ GroupsPanel(view AdministrationPageView) {
 						if role.BuiltIn {
 							@components.Badge(components.BadgeProps{Label: "Built in", Class: "built-in-badge"})
 						}
-					</td><td>@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})</td><td class="muted-cell">{ role.Description }</td><td>
+					</td><td>@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + plural(role.Users, "member", "members"), Tone: components.BadgeCount})</td><td class="muted-cell">{ role.Description }</td><td>
 						if !role.BuiltIn {
 							<div class="row-actions"><button class="icon-button" type="button" data-dialog-open={ adminGroupDialogID(role.ID) } aria-label={ "Edit " + role.Name }>@Icon("settings")</button><form hx-post="/ui/administration/roles/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete group " + role.Name + "?" }><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Delete " + role.Name }>@Icon("trash")</button></form></div>
 						}
@@ -201,7 +201,7 @@ templ SessionsPanel(view AdministrationPageView) {
 						if session.Current {
 							<span class="current-text">(current)</span>
 						}
-					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ adminTime(session.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(session.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
+					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ FormatDateTime(session.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ FormatDateTime(session.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
 				}
 			}
 		}
@@ -227,7 +227,7 @@ templ TokensPanel(view AdministrationPageView) {
 						for _, group := range token.Groups {
 							<span>{ group }</span>
 						}
-					</div></td><td class="muted-cell">{ adminTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
+					</div></td><td class="muted-cell">{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ FormatDateTime(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
 				}
 			}
 		}
@@ -245,9 +245,9 @@ templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
 			<span class="current-text">(current)</span>
 		}
 		<form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) }>@Icon("log-out")</button></form>
-	</div><code>[{ session.HashPrefix }]</code><small>Expires { adminTime(session.ExpiresAt, view.Console.TimeDisplay) }</small></article>
+	</div><code>[{ session.HashPrefix }]</code><small>Expires { FormatDateTime(session.ExpiresAt, view.Console.TimeDisplay) }</small></article>
 }
-templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) } · Expires { adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</small></article> }
+templ TokenMobileRow(view AdministrationPageView, token auth.APIToken) { <article class="session-mobile-row"><div><strong>{ token.Username }</strong><span class="token-type-badge">API Token</span><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name }>@Icon("trash")</button></form></div><code>{ token.Name }</code><small>Last used { tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) } · Expires { FormatDateTime(token.ExpiresAt, view.Console.TimeDisplay) }</small></article> }
 
 templ CreateTokenDialog(view AdministrationPageView) {
 	@components.Dialog(components.DialogProps{ID: "create-token-dialog", TitleID: "create-token-title", Title: "Create API Token", Description: "Choose an owner, expiration, and groups to define exactly what this token can access", Class: "isotope-form-dialog"}) {
@@ -414,7 +414,7 @@ templ UserTokensContent(view AdministrationPageView, user auth.ManagedUser) {
 								<span>{ group }</span>
 							}
 						</div>
-						<div class="user-token-meta"><span><small>Created</small>{ adminTime(token.CreatedAt, view.Console.TimeDisplay) }</span><span><small>Expires</small>{ adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</span><span><small>Last used</small>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</span></div>
+						<div class="user-token-meta"><span><small>Created</small>{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</span><span><small>Expires</small>{ FormatDateTime(token.ExpiresAt, view.Console.TimeDisplay) }</span><span><small>Last used</small>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</span></div>
 					</article>
 				}
 			}
@@ -440,8 +440,7 @@ func administrationUserName(user auth.ManagedUser) string { if user.DisplayName 
 func roleHasSurface(role auth.Role, surface auth.Surface) bool { for _, grant := range role.Grants { if grant.Surface == surface { return true } }; return false }
 func userHasWebAccess(view AdministrationPageView, user auth.ManagedUser) bool { for _, role := range view.Roles { if adminContains(user.Roles, role.Name) && roleHasSurface(role, auth.SurfaceWeb) { return true } }; return false }
 func adminContains(values []string, value string) bool { for _, item := range values { if item == value { return true } }; return false }
-func adminTime(value time.Time, display TimeDisplay) string { return FormatDateTime(value, display) }
-func tokenLastUsed(value time.Time, display TimeDisplay) string { if value.IsZero() { return "Never used" }; return adminTime(value, display) }
+func tokenLastUsed(value time.Time, display TimeDisplay) string { if value.IsZero() { return "Never used" }; return FormatDateTime(value, display) }
 func userTokenCount(view AdministrationPageView, userID int64) int { count := 0; for _, token := range view.Tokens { if token.UserID == userID { count++ } }; return count }
 
 func tokenLifetimeLabel(value time.Duration) string {
@@ -453,7 +452,6 @@ func tokenLifetimeLabel(value time.Duration) string {
 	}
 	return value.String()
 }
-func adminPlural(count int, singular, plural string) string { if count == 1 { return singular }; return plural }
 func adminUserDialogID(id int64) string { return fmt.Sprintf("edit-user-%d-dialog", id) }
 func adminUserProfileFormID(id int64) string { return fmt.Sprintf("edit-user-%d-profile", id) }
 func adminUserGroupsFormID(id int64) string { return fmt.Sprintf("edit-user-%d-groups", id) }
@@ -498,7 +496,7 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 				<div class="signin-method-row">
 					<div>
 						<strong>{ ssoIssuerLabel(identity.Issuer) }</strong>
-						<span>{ identitySignInSummary(identity) }</span>
+						<span>{ identitySignInSummary(identity, view.Console.TimeDisplay) }</span>
 						<span class="signin-method-subject" title={ identity.Subject }>{ identity.Subject }</span>
 					</div>
 					<form hx-post="/ui/administration/users/unlink" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Unlink " + user.Username + " from this identity provider?" }>
@@ -524,11 +522,11 @@ func userIdentitySummary(user auth.ManagedUser) string {
 	return "Signs in through " + strings.Join(issuers, ", ")
 }
 
-func identitySignInSummary(identity auth.LinkedIdentity) string {
+func identitySignInSummary(identity auth.LinkedIdentity, display TimeDisplay) string {
 	if identity.LastLoginAt.IsZero() {
 		return "Never signed in"
 	}
-	return "Last signed in " + identity.LastLoginAt.UTC().Format("2 Jan 2006, 15:04 UTC")
+	return "Last signed in " + FormatDateTime(identity.LastLoginAt, display)
 }
 
 // ssoIssuerLabel drops the scheme so the row reads as a provider name rather

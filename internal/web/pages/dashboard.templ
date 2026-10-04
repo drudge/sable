@@ -1102,12 +1102,6 @@ func successfulQueries(view StatsView) uint64 {
 	return view.Queries - failed
 }
 
-func percent(value, total uint64) string {
-	if total == 0 {
-		return "0.00%"
-	}
-	return fmt.Sprintf("%.2f%%", float64(value)*100/float64(total))
-}
 
 func displayUsername(username string) string {
 	if username == "" {

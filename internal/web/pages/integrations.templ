@@ -1539,7 +1539,7 @@ func dynamicDNSPublisherOverview(view DynamicDNSPublisherView) string {
 	for _, zone := range view.Zones {
 		names += len(dynamicDNSNames(zone.Names))
 	}
-	return fmt.Sprintf("%d %s · %d %s", len(view.Zones), dynamicDNSPlural(len(view.Zones), "zone", "zones"), names, dynamicDNSPlural(names, "host", "hosts"))
+	return fmt.Sprintf("%d %s · %d %s", len(view.Zones), plural(len(view.Zones), "zone", "zones"), names, plural(names, "host", "hosts"))
 }
 
 func dynamicDNSPublisherHeading(view DynamicDNSPublisherView) string {
@@ -1551,7 +1551,7 @@ func dynamicDNSPublisherHeading(view DynamicDNSPublisherView) string {
 
 func dynamicDNSZoneOverview(view DynamicDNSZoneView) string {
 	names := len(dynamicDNSNames(view.Names))
-	return fmt.Sprintf("%d %s · %s", names, dynamicDNSPlural(names, "host", "hosts"), dynamicDNSZoneTypeLabel(view))
+	return fmt.Sprintf("%d %s · %s", names, plural(names, "host", "hosts"), dynamicDNSZoneTypeLabel(view))
 }
 
 func dynamicDNSZoneHeading(view DynamicDNSZoneView) string {
@@ -1561,12 +1561,6 @@ func dynamicDNSZoneHeading(view DynamicDNSZoneView) string {
 	return view.Zone
 }
 
-func dynamicDNSPlural(count int, singular, plural string) string {
-	if count == 1 {
-		return singular
-	}
-	return plural
-}
 
 func dynamicDNSProviderLabel(provider string) string {
 	switch provider {

@@ -135,13 +135,6 @@ func daysBeforeLabel(days int) string {
 	return fmt.Sprintf("%d days before", days)
 }
 
-func countLabel(count uint64, singular, plural string) string {
-	if count == 1 {
-		return "1 " + singular
-	}
-	return formatNumber(count) + " " + plural
-}
-
 // hourChartView is an HourChart laid out: the usual day in the muted fill and
 // the unusual hours of the last day in the finding's color. Focus is the slot
 // a keyboard reading starts on, the first unusual hour.

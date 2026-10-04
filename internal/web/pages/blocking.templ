@@ -218,7 +218,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 			}
 			<div class="blocking-filter-empty" data-domain-empty={ value } hidden>No domains match your search.</div>
 		</div>
-		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { pluralizeDomain(len(domains)) } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
+		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { plural(len(domains), "domain", "domains") } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
 	</div>
 }
 
@@ -297,7 +297,6 @@ func blockListLocation(list BlockListSourceView) string { return BlockListLocati
 // scheme for a subscription, or its file path for a local list.
 func BlockListLocation(sourceURL, path string) string { if sourceURL != "" { parsed := strings.TrimPrefix(strings.TrimPrefix(sourceURL, "https://"), "http://"); return strings.TrimSuffix(parsed, "/") }; return path }
 func blockingStatusDescription(view BlockingPageView) string { if !view.Enabled { return "DNS blocking is currently disabled" }; if !view.PausedUntil.IsZero() { return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeDisplay, false) }; return "DNS blocking is active and protecting your network" }
-func pluralizeDomain(count int) string { if count == 1 { return "domain" }; return "domains" }
 func domainPolicyKind(allowed bool) string { if allowed { return "allowed" }; return "blocked" }
 func blockingNavigationPage(view BlockingPageView) string { if view.ActiveTab == "allowed" { return "allowed" }; return "blocked" }
 

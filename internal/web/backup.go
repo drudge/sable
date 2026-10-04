@@ -540,17 +540,6 @@ func (server *Server) takeBackup(token string) (pendingBackup, bool) {
 	return pending, true
 }
 
-func humanBackupSize(size int) string {
-	switch {
-	case size >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(size)/(1<<20))
-	case size >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(size)/(1<<10))
-	default:
-		return fmt.Sprintf("%d bytes", size)
-	}
-}
-
 // sectionLabels give each archive section a name fit for a sentence. The keys
 // are a wire format and reading "trust_anchors" back to an operator is sloppy.
 var sectionLabels = map[string]string{
@@ -652,9 +641,9 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 			view.ScheduleRunAt = schedule.RunAt
 			view.ScheduleRetentionCount = schedule.RetentionCount
 			view.SchedulePassphraseStored = schedule.PassphraseStored
-			view.ScheduleNextRun = humanBackupScheduleTime(schedule.NextRun, display)
+			view.ScheduleNextRun = humanBackupTime(schedule.NextRun, display)
 			view.ScheduleNextRunCompact = compactBackupScheduleTime(schedule.NextRun, display)
-			view.ScheduleLastSuccess = humanBackupScheduleTime(schedule.LastSuccess, display)
+			view.ScheduleLastSuccess = humanBackupTime(schedule.LastSuccess, display)
 			view.ScheduleLastSuccessCompact = compactBackupScheduleTime(schedule.LastSuccess, display)
 			view.ScheduleLastError = schedule.LastError
 		}
@@ -669,7 +658,7 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 				for _, archive := range local {
 					view.LocalBackups = append(view.LocalBackups, pages.SettingsLocalBackupView{
 						Name: archive.Name, Created: humanBackupTime(archive.CreatedAt, display), Hostname: archive.Hostname,
-						SableVersion: archive.SableVersion, Size: humanBackupSize64(archive.Size), Scheduled: archive.Scheduled,
+						SableVersion: archive.SableVersion, Size: pages.FormatByteSize(archive.Size), Scheduled: archive.Scheduled,
 					})
 				}
 			}
@@ -695,7 +684,7 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 	if pending, ok := server.peekBackup(); ok && view.CanCreate {
 		view.DownloadToken = pending.token
 		view.DownloadName = pending.name
-		view.DownloadSize = humanBackupSize(len(pending.contents))
+		view.DownloadSize = pages.FormatByteSize(int64(len(pending.contents)))
 		view.DownloadExpiry = humanBackupExpiry(time.Until(pending.expiresAt))
 		view.DownloadExpiresAt = pending.expiresAt.UnixMilli()
 	}
@@ -703,16 +692,6 @@ func (server *Server) backupView(request *http.Request, message, errorMessage st
 }
 
 func humanBackupTime(value time.Time, display pages.TimeDisplay) string {
-	if value.IsZero() {
-		return ""
-	}
-	if display.TwentyFourHour() {
-		return display.In(value).Format("Jan 2, 2006 at 15:04")
-	}
-	return display.In(value).Format("Jan 2, 2006 at 3:04 PM")
-}
-
-func humanBackupScheduleTime(value time.Time, display pages.TimeDisplay) string {
 	if value.IsZero() {
 		return ""
 	}
@@ -730,13 +709,6 @@ func compactBackupScheduleTime(value time.Time, display pages.TimeDisplay) strin
 		return display.In(value).Format("Jan 2 · 15:04")
 	}
 	return display.In(value).Format("Jan 2 · 3:04 PM")
-}
-
-func humanBackupSize64(size int64) string {
-	if size > int64(^uint(0)>>1) {
-		return fmt.Sprintf("%.1f GiB", float64(size)/(1<<30))
-	}
-	return humanBackupSize(int(size))
 }
 
 // humanBackupExpiry says how much longer the staged link works. The archive is

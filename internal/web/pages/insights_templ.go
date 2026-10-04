@@ -5627,7 +5627,7 @@ func InsightDeviceDrawer(view InsightDeviceDrawerView) templ.Component {
 					for index, app := range view.Apps {
 						templ_7745c5c3_Err = InsightListRow(InsightListRowView{
 							ID: fmt.Sprintf("insight-device-app-%d", index), Value: app.Name, Plain: true,
-							Detail:  app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + pluralizeDomain(app.Domains),
+							Detail:  app.Category + " · " + formatNumber(uint64(app.Domains)) + " " + plural(app.Domains, "domain", "domains"),
 							Count:   formatNumber(app.Queries),
 							Leading: AppIcon(app.ID, app.Category),
 							Drawer:  AppDrawerLink(app.ID, view.Range),

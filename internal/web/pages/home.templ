@@ -288,16 +288,6 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 	}
 }
 
-func compactNumber(value uint64) string {
-	switch {
-	case value >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(value)/1_000_000)
-	case value >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(value)/1_000)
-	default:
-		return fmt.Sprint(value)
-	}
-}
 
 func firstRanked(items []RankedStatView, limit int) []RankedStatView { return items[:min(len(items), limit)] }
 func rankedTotal(items []RankedStatView) uint64 { var total uint64; for _, item := range items { total += item.Value }; return total }
