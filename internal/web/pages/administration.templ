@@ -100,16 +100,16 @@ templ UsersPanel(view AdministrationPageView) {
 						}
 					</div></div></div><div class="admin-mobile-user-trailing"><div class="admin-mobile-user-statuses">
 						if len(user.Identities) > 0 {
-							<span class="status-badge sso-badge" title={ userIdentitySummary(user) }>SSO</span>
+							@components.Badge(components.BadgeProps{Label: "SSO", Title: userIdentitySummary(user), Class: "sso-badge"})
 						}
-						<span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span></div>@Icon("chevron-right")</div></button>
+						@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)})</div>@Icon("chevron-right")</div></button>
 				}
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Users</caption><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>
 				for _, user := range view.Users {
-					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td><span class={ ifThen(user.Disabled, "status-badge disabled", "status-badge active") }>{ ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")) }</span>
+					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td>@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)})
 						if len(user.Identities) > 0 {
-							<span class="status-badge sso-badge" title={ userIdentitySummary(user) }>SSO</span>
+							@components.Badge(components.BadgeProps{Label: "SSO", Title: userIdentitySummary(user), Class: "sso-badge"})
 						}
 					</td><td><div class="table-badges">
 						for _, role := range user.Roles {
@@ -133,9 +133,9 @@ templ GroupsPanel(view AdministrationPageView) {
 			<div class="admin-mobile-list">
 				for _, role := range view.Roles {
 					if role.BuiltIn {
-						<article class="admin-mobile-row admin-mobile-group-row static"><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing"><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span><span class="built-in-badge">Built in</span></div></article>
+						<article class="admin-mobile-row admin-mobile-group-row static"><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})@components.Badge(components.BadgeProps{Label: "Built in", Class: "built-in-badge"})</div></article>
 					} else {
-						<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open={ adminGroupDialogID(role.ID) }><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing"><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span>@Icon("chevron-right")</div></button>
+						<button type="button" class="admin-mobile-row admin-mobile-group-row" data-dialog-open={ adminGroupDialogID(role.ID) }><div class="admin-mobile-group-copy"><strong>{ role.Name }</strong><small>{ role.Description }</small></div><div class="admin-mobile-group-trailing">@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})@Icon("chevron-right")</div></button>
 					}
 				}
 			</div>
@@ -143,9 +143,9 @@ templ GroupsPanel(view AdministrationPageView) {
 				for _, role := range view.Roles {
 					<tr><td><strong>{ role.Name }</strong>
 						if role.BuiltIn {
-							<span class="built-in-badge">Built in</span>
+							@components.Badge(components.BadgeProps{Label: "Built in", Class: "built-in-badge"})
 						}
-					</td><td><span class="count-badge">{ fmt.Sprint(role.Users) } { adminPlural(role.Users, "member", "members") }</span></td><td class="muted-cell">{ role.Description }</td><td>
+					</td><td>@components.Badge(components.BadgeProps{Label: fmt.Sprint(role.Users) + " " + adminPlural(role.Users, "member", "members"), Tone: components.BadgeCount})</td><td class="muted-cell">{ role.Description }</td><td>
 						if !role.BuiltIn {
 							<div class="row-actions"><button class="icon-button" type="button" data-dialog-open={ adminGroupDialogID(role.ID) } aria-label={ "Edit " + role.Name }>@Icon("settings")</button><form hx-post="/ui/administration/roles/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete group " + role.Name + "?" }><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Delete " + role.Name }>@Icon("trash")</button></form></div>
 						}
@@ -240,7 +240,7 @@ templ TokensPanelFragment(view AdministrationPageView) {
 }
 
 templ SessionMobileRow(view AdministrationPageView, session auth.Session) {
-	<article class="session-mobile-row"><div><strong>{ session.Username }</strong><span class="count-badge">Standard</span>
+	<article class="session-mobile-row"><div><strong>{ session.Username }</strong>@components.Badge(components.BadgeProps{Label: "Standard", Tone: components.BadgeCount})
 		if session.Current {
 			<span class="current-text">(current)</span>
 		}

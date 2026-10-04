@@ -412,9 +412,9 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 
 templ DynamicDNSBadge(view DynamicDNSAppView, outOfBand bool) {
 	if outOfBand {
-		<span id="dynamic-dns-badge" class={ dynamicDNSBadgeClass(view) } hx-swap-oob="true">{ dynamicDNSBadgeLabel(view) }</span>
+		@components.Badge(components.BadgeProps{Label: dynamicDNSBadgeLabel(view), Tone: dynamicDNSBadgeTone(view), Attrs: templ.Attributes{"id": "dynamic-dns-badge", "hx-swap-oob": "true"}})
 	} else {
-		<span id="dynamic-dns-badge" class={ dynamicDNSBadgeClass(view) }>{ dynamicDNSBadgeLabel(view) }</span>
+		@components.Badge(components.BadgeProps{Label: dynamicDNSBadgeLabel(view), Tone: dynamicDNSBadgeTone(view), Attrs: templ.Attributes{"id": "dynamic-dns-badge"}})
 	}
 }
 
@@ -557,7 +557,7 @@ templ DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, remova
 	<details class="dynamic-dns-publisher" data-dynamic-dns-publisher data-publisher-index={ key } data-acme-provider-root data-acme-provider-selected={ view.Provider } open?={ !view.CredentialsConfigured }>
 		<summary>
 			<div class="dynamic-dns-publisher-summary"><strong data-dynamic-dns-publisher-label>{ dynamicDNSPublisherHeading(view) }</strong><small data-dynamic-dns-publisher-overview>{ dynamicDNSPublisherOverview(view) }</small></div>
-			<div class="dynamic-dns-publisher-tools"><span class={ ifThen(view.CredentialsConfigured, "status-badge success", "status-badge") }>{ ifThen(view.CredentialsConfigured, "Configured", "Needs credentials") }</span><span class="dynamic-dns-publisher-chevron">@Icon("chevron-down")</span></div>
+			<div class="dynamic-dns-publisher-tools">@components.Badge(components.BadgeProps{Label: ifThen(view.CredentialsConfigured, "Configured", "Needs credentials"), Tone: ifThen(view.CredentialsConfigured, components.BadgeSuccess, components.BadgeNeutral)})<span class="dynamic-dns-publisher-chevron">@Icon("chevron-down")</span></div>
 		</summary>
 		<div class="dynamic-dns-publisher-body">
 			<input type="hidden" name={ "publisher_" + key + "_provider" } value={ view.Provider } data-acme-provider/>
@@ -606,7 +606,7 @@ templ DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) {
 templ SSOCard(view SSOAppView) {
 	@components.Card(components.CardProps{ID: "sso-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
 		@components.CardHeader(components.CardHeaderProps{Glyph: "key-round", Title: "Single Sign-On", Description: "Signs operators in through an OpenID Connect provider and maps their groups to Sable roles."}) {
-			<span class={ ssoBadgeClass(view) }>{ ssoBadgeLabel(view) }</span>
+			@components.Badge(components.BadgeProps{Label: ssoBadgeLabel(view), Tone: ssoBadgeTone(view)})
 		}
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
@@ -667,7 +667,7 @@ templ SSOCard(view SSOAppView) {
 templ MCPCard(view MCPAppView) {
 	@components.Card(components.CardProps{ID: "mcp-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
 		@components.CardHeader(components.CardHeaderProps{Glyph: "mcp-server", Title: "MCP Server", Description: "Lets Claude, ChatGPT, and other AI assistants manage records and blocking with an API token."}) {
-			<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
+			@components.Badge(components.BadgeProps{Label: mcpBadgeLabel(view), Tone: mcpBadgeTone(view)})
 		}
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
@@ -944,11 +944,11 @@ templ MCPClientSnippet(label, id, snippet, help string) {
 	</div>
 }
 
-func mcpBadgeClass(view MCPAppView) string {
+func mcpBadgeTone(view MCPAppView) components.BadgeTone {
 	if view.Configured && view.Enabled {
-		return "status-badge success"
+		return components.BadgeSuccess
 	}
-	return "status-badge"
+	return components.BadgeNeutral
 }
 
 func mcpBadgeLabel(view MCPAppView) string {
@@ -1025,7 +1025,7 @@ templ RemoveSSODialog(view SSOAppView) {
 templ UniFiCard(view UniFiAppView) {
 	@components.Card(components.CardProps{ID: "unifi-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
 		@components.CardHeader(components.CardHeaderProps{Glyph: "wifi-sync", Title: "UniFi Host Sync", Description: "Publishes UniFi reservations and connected clients as A, AAAA, and PTR records."}) {
-			<span class={ unifiBadgeClass(view) }>{ unifiBadgeLabel(view) }</span>
+			@components.Badge(components.BadgeProps{Label: unifiBadgeLabel(view), Tone: unifiBadgeTone(view)})
 		}
 		if !view.Available {
 			<div class="integration-card-body"><p class="muted-cell">The synchronizer is not running on this node.</p></div>
@@ -1166,7 +1166,7 @@ templ UniFiMappingRows(view UniFiAppView) {
 					<td><code class="muted-cell">{ mapping.Preview }</code></td>
 					<td>{ fmt.Sprint(mapping.TTL) }</td>
 					<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
-					<td><span class={ ifThen(mapping.Enabled, "status-badge success", "status-badge") }>{ ifThen(mapping.Enabled, "Active", "Paused") }</span></td>
+					<td>@components.Badge(components.BadgeProps{Label: ifThen(mapping.Enabled, "Active", "Paused"), Tone: ifThen(mapping.Enabled, components.BadgeSuccess, components.BadgeNeutral)})</td>
 				</tr>
 			}
 		</tbody>
@@ -1621,14 +1621,14 @@ func dynamicDNSStatusPoll(running bool) string {
 	return "every 30s"
 }
 
-func dynamicDNSBadgeClass(view DynamicDNSAppView) string {
+func dynamicDNSBadgeTone(view DynamicDNSAppView) components.BadgeTone {
 	if !view.Available || !view.Configured || !view.Enabled {
-		return "status-badge"
+		return components.BadgeNeutral
 	}
 	if view.Status.LastError != "" || !view.CredentialsConfigured {
-		return "status-badge danger"
+		return components.BadgeDanger
 	}
-	return "status-badge success"
+	return components.BadgeSuccess
 }
 
 func dynamicDNSBadgeLabel(view DynamicDNSAppView) string {
@@ -1668,16 +1668,16 @@ func unifiRowTTL(ttl uint32) uint32 {
 	return ttl
 }
 
-func unifiBadgeClass(view UniFiAppView) string {
+func unifiBadgeTone(view UniFiAppView) components.BadgeTone {
 	switch {
 	case !view.Configured:
-		return "status-badge"
+		return components.BadgeNeutral
 	case view.Status.LastError != "":
-		return "status-badge danger"
+		return components.BadgeDanger
 	case view.Enabled:
-		return "status-badge success"
+		return components.BadgeSuccess
 	default:
-		return "status-badge"
+		return components.BadgeNeutral
 	}
 }
 
@@ -1732,16 +1732,16 @@ func SSOPresets() []SSOPreset {
 	}
 }
 
-func ssoBadgeClass(view SSOAppView) string {
+func ssoBadgeTone(view SSOAppView) components.BadgeTone {
 	switch {
 	case !view.Configured:
-		return "status-badge"
+		return components.BadgeNeutral
 	case !view.SecretStored:
-		return "status-badge danger"
+		return components.BadgeDanger
 	case view.Enabled:
-		return "status-badge success"
+		return components.BadgeSuccess
 	default:
-		return "status-badge"
+		return components.BadgeNeutral
 	}
 }
 

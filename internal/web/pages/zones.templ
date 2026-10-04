@@ -762,7 +762,7 @@ templ ZoneHistoryEntries(zone ZoneView, id string) {
 		<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#" + zoneHistoryRevisionID(id, revision.Number) } hx-swap="innerHTML">
 			<summary><span class={ "zone-history-marker " + revision.Kind } aria-hidden="true"></span><div><span><strong>Revision { fmt.Sprint(revision.Number) }</strong><span class={ "zone-history-kind " + revision.Kind }>{ revision.KindLabel }</span>
 				if revision.Current {
-					<span class="current-badge">Current</span>
+					@components.Badge(components.BadgeProps{Label: "Current", Tone: components.BadgeCurrent})
 				}
 			</span><small>{ revision.OccurredAt }</small></div>@Icon("chevron-down")</summary>
 			<div class="zone-history-diff" id={ zoneHistoryRevisionID(id, revision.Number) }><span class="zone-history-loading">Loading changes…</span></div>

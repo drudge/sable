@@ -1,0 +1,79 @@
+package components
+
+import "strings"
+
+// BadgeTone colors a status badge.
+type BadgeTone int
+
+const (
+	// BadgeNeutral is the gray badge for a plain fact, such as "Not set up".
+	BadgeNeutral BadgeTone = iota
+	// BadgeSuccess is green, for something working: "On", "Configured".
+	BadgeSuccess
+	// BadgeActive is the darker green used for a user, node, or item that is
+	// live: "Active", "Ready", "New".
+	BadgeActive
+	// BadgeWarning is amber, for something that needs a look: "Paused",
+	// "Restart required".
+	BadgeWarning
+	// BadgeDanger is red, for something broken: "Needs attention".
+	BadgeDanger
+	// BadgeDisabled is the red used for a disabled account.
+	BadgeDisabled
+	// BadgeCurrent is blue, for the item the reader is on: "This node",
+	// "Current".
+	BadgeCurrent
+	// BadgeCount is the outlined chip that counts what a card holds:
+	// "3 lists", "2 members".
+	BadgeCount
+)
+
+// BadgeProps describes a small rounded label beside a title or in a row.
+type BadgeProps struct {
+	Label string
+	Tone  BadgeTone
+	// Icon names an Icon drawn before the label.
+	Icon string
+	// Title is the tooltip, for a badge that abbreviates something longer.
+	Title string
+	// Class adds classes for where the badge sits. Attrs go on the element,
+	// such as an id for an out-of-band swap or a data hook.
+	Class string
+	Attrs templ.Attributes
+}
+
+// badgeClass lists a badge's classes for its tone.
+func badgeClass(p BadgeProps) string {
+	var base string
+	switch p.Tone {
+	case BadgeSuccess:
+		base = "status-badge success"
+	case BadgeActive:
+		base = "status-badge active"
+	case BadgeWarning:
+		base = "status-badge warning"
+	case BadgeDanger:
+		base = "status-badge danger"
+	case BadgeDisabled:
+		base = "status-badge disabled"
+	case BadgeCurrent:
+		base = "current-badge"
+	case BadgeCount:
+		base = "count-badge"
+	default:
+		base = "status-badge"
+	}
+	return strings.TrimSpace(base + " " + p.Class)
+}
+
+// Badge draws a badge. Children follow the label, for markup such as a
+// screen-reader prefix or a value that script updates.
+templ Badge(p BadgeProps) {
+	<span class={ badgeClass(p) } if p.Title != "" { title={ p.Title } } { p.Attrs... }>
+		if p.Icon != "" {
+			@Icon(p.Icon)
+		}
+		{ p.Label }
+		{ children... }
+	</span>
+}

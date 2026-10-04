@@ -156,12 +156,12 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 		{
 			name:     "not configured",
 			view:     DynamicDNSAppView{Available: true},
-			expected: `class="status-badge">Not set up</span>`,
+			expected: `class="status-badge" id="dynamic-dns-badge">Not set up</span>`,
 		},
 		{
 			name:     "active",
 			view:     DynamicDNSAppView{Available: true, Configured: true, Enabled: true, CredentialsConfigured: true},
-			expected: `class="status-badge success">Active</span>`,
+			expected: `class="status-badge success" id="dynamic-dns-badge">Active</span>`,
 		},
 		{
 			name: "failed publication",
@@ -169,7 +169,7 @@ func TestDynamicDNSCardUsesSharedStatusBadges(t *testing.T) {
 				Available: true, Configured: true, Enabled: true, CredentialsConfigured: true,
 				Status: DynamicDNSStatusView{LastError: "provider rejected the request"},
 			},
-			expected: `class="status-badge danger">Needs attention</span>`,
+			expected: `class="status-badge danger" id="dynamic-dns-badge">Needs attention</span>`,
 		},
 	}
 	for _, test := range tests {

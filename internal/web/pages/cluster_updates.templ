@@ -80,7 +80,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 			@components.Card(components.CardProps{Class: "cluster-update-card"}) {
 				@components.CardHeader(components.CardHeaderProps{Title: "Rolling Updates"}) {
 					if view.DisplayVersion() != "" {
-						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("installing", view.Rollout.Active()), templ.KV("current", view.UpToDate()) }>
+						@components.Badge(components.BadgeProps{Class: clusterUpdateVersionClass(view)}) {
 							if view.UpdateAvailable() {
 								@Icon("sparkles")
 								<span class="sr-only">Update available: </span>
@@ -92,7 +92,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 								<span class="sr-only">Up to date: </span>
 							}
 							{ view.DisplayVersion() }
-						</span>
+						}
 					}
 				}
 				<div class="cluster-update-content">
@@ -266,5 +266,20 @@ func rolloutPhaseLabel(phase string) string {
 		return "Not updated"
 	default:
 		return phase
+	}
+}
+
+// clusterUpdateVersionClass colors the version badge on the Rolling Updates
+// card for whether an update is available, installing, or done.
+func clusterUpdateVersionClass(view ClusterUpdateView) string {
+	switch {
+	case view.UpdateAvailable():
+		return "cluster-update-version available"
+	case view.Rollout.Active():
+		return "cluster-update-version installing"
+	case view.UpToDate():
+		return "cluster-update-version current"
+	default:
+		return "cluster-update-version"
 	}
 }

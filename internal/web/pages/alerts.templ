@@ -269,7 +269,7 @@ templ alertsStatusCard(view AlertsView) {
 		<div class={ "alerts-status", string(view.State) }>
 			<span class="alerts-status-icon">@Icon(alertsStateIcon(view.State))</span>
 			<div class="alerts-status-detail">
-				<div class="alerts-status-heading"><strong>Alerts</strong><span class={ alertsStateBadgeClass(view.State) }>{ alertsStateLabel(view.State) }</span></div>
+				<div class="alerts-status-heading"><strong>Alerts</strong>@components.Badge(components.BadgeProps{Label: alertsStateLabel(view.State), Tone: alertsStateBadgeTone(view.State)})</div>
 				<span>{ alertsStateSummary(view) }</span>
 			</div>
 			// Only alerts that go out can be paused, and only paused ones
@@ -307,16 +307,16 @@ func alertsStateLabel(state AlertsState) string {
 	}
 }
 
-// alertsStateBadgeClass colors the state's badge: green when on, amber when
+// alertsStateBadgeTone colors the state's badge: green when on, amber when
 // paused, and gray when off.
-func alertsStateBadgeClass(state AlertsState) string {
+func alertsStateBadgeTone(state AlertsState) components.BadgeTone {
 	switch state {
 	case AlertsOn:
-		return "status-badge success"
+		return components.BadgeSuccess
 	case AlertsPaused:
-		return "status-badge warning"
+		return components.BadgeWarning
 	default:
-		return "status-badge"
+		return components.BadgeNeutral
 	}
 }
 
