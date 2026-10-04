@@ -5211,9 +5211,11 @@
 	  const bothBlank = first.value === "" && second.value === "";
 	  if (submit) submit.disabled = message !== "" || (!optional && bothBlank) || (!bothBlank && (first.value === "" || second.value === ""));
 	};
+	// formatFileSize matches pages.FormatByteSize, so a file reads the same
+	// size before upload as in the backup list after it.
 	const formatFileSize = (bytes) => {
-	  const unitSize = 1000;
-	  const units = ["bytes", "KB", "MB", "GB", "TB"];
+	  const unitSize = 1024;
+	  const units = ["bytes", "KiB", "MiB", "GiB", "TiB"];
 	  const unit = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(unitSize)), units.length - 1) : 0;
 	  const size = new Intl.NumberFormat(undefined, {maximumFractionDigits: unit === 0 ? 0 : 1}).format(bytes / unitSize ** unit);
 	  return `${size} ${bytes === 1 ? "byte" : units[unit]}`;

@@ -543,12 +543,4 @@ func CacheFlushDialog(entries int) templ.Component {
 	})
 }
 
-func formatNumber(value uint64) string {
-	text := fmt.Sprint(value)
-	for index := len(text) - 3; index > 0; index -= 3 {
-		text = text[:index] + "," + text[index:]
-	}
-	return text
-}
-
 var _ = templruntime.GeneratedTemplate

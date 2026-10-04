@@ -44,7 +44,7 @@ module.exports = async (browser, baseURL) => {
     await file.setInputFiles({name: 'records.zone', mimeType: 'text/plain', buffer: Buffer.from('@ IN A 192.0.2.1')});
     await page.waitForFunction(() => document.querySelector('[data-zone-name-help]').textContent.includes('No zone name detected'));
     assert.equal(await zoneName.inputValue(), '');
-    for (const [size, label] of [[1, '1 byte'], [12776, '12.8 KB'], [1500000, '1.5 MB']]) {
+    for (const [size, label] of [[1, '1 byte'], [12776, '12.5 KiB'], [1500000, '1.4 MiB']]) {
       await file.setInputFiles({name: 'example.zone', mimeType: 'text/plain', buffer: Buffer.alloc(size, 'a')});
       assert.equal(await dialog.locator('[data-zone-file-size]').innerText(), `${label} · Ready to import`);
     }

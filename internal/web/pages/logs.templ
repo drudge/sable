@@ -155,7 +155,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 	@components.Card(components.CardProps{ID: "query-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "query-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": queryPanelLiveURL(view), "data-page-url": queryFilterURL(view)}}) {
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
-				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }</span></div>
+				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatNumber(view.TotalEntries)) }</span></div>
 				if len(tokens) > 0 {
 					<div class="query-filter-tokens">
 						for _, token := range tokens {
@@ -670,7 +670,7 @@ func queryRangeLabel(view QueryLogsView) string {
 	}
 	return "Any time"
 }
-func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s–%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries)) }
+func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s–%s of %s", formatNumber(first), formatNumber(last), formatNumber(view.TotalEntries)) }
 func logSourceLabel(source string) string { switch source { case "cache": return "Cached"; case "upstream": return "Recursive"; case "authoritative": return "Authoritative"; case "local": return "Local"; case "blocked": return "Blocked"; case "error": return "Error"; default: return source } }
 // runtimeLogURL names the same slice of the log for the panel and for the
 // export. The follow flag is spelled out rather than left off when paused,
@@ -693,8 +693,8 @@ func runtimeLogURL(view RuntimeLogsView, path string, follow bool) string {
 }
 
 func runtimePanelURL(view RuntimeLogsView) string { return runtimeLogURL(view, "/ui/logs/runtime", true) }
-func runtimeLogCount(view RuntimeLogsView) string { if view.Persisted { return fmt.Sprintf("%s entries", formatCount(view.TotalEntries)) }; return fmt.Sprintf("%s entries", formatCount(view.Count)) }
-func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s\u2013%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries)) }
+func runtimeLogCount(view RuntimeLogsView) string { if view.Persisted { return fmt.Sprintf("%s entries", formatNumber(view.TotalEntries)) }; return fmt.Sprintf("%s entries", formatNumber(view.Count)) }
+func runtimePageSummary(view RuntimeLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s\u2013%s of %s", formatNumber(first), formatNumber(last), formatNumber(view.TotalEntries)) }
 func runtimeExportURL(view RuntimeLogsView) string { return runtimeLogURL(view, "/api/v1/logs/runtime/export", false) }
 func queryPanelLiveURL(view QueryLogsView) string {
 	values := url.Values{"page": []string{"1"}, "page_size": []string{fmt.Sprint(view.PageSize)}}
@@ -718,7 +718,6 @@ func queryPanelLiveURL(view QueryLogsView) string {
 }
 func urlQueryEscape(value string) string { return url.QueryEscape(value) }
 func hasAnswers(answers []string) bool { for _, answer := range answers { if answer != "" { return true } }; return false }
-func formatCount(value int) string { if value < 1_000 { return fmt.Sprint(value) }; whole := fmt.Sprintf("%d", value); for index := len(whole)-3; index > 0; index -= 3 { whole = whole[:index]+","+whole[index:] }; return whole }
 
 // logsSettingsLink sits in the Logs page header and opens the logging
 // settings.

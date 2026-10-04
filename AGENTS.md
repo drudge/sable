@@ -114,6 +114,8 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.Menu` for a dropdown menu: its trigger, with the panel as children; it closes on an outside click or Escape
   - `components.ChartTooltip` for a chart's hover reading, filled and placed by `chartTooltipRow` and `placeChartTooltip` in `app.js`
 
+  Format numbers, byte sizes, and plurals with the helpers in `pages/format.go`, and times with `pages/time.go`, rather than writing another one.
+
   Use the shared `.field-help` class too. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` or `components.Menu` cannot draw, such as a file `<label>`.
 
   If a pattern shows up twice, make it a component and use it in both places. Add a parameter to a shared component instead of copying its markup.

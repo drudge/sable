@@ -138,10 +138,3 @@ templ CacheFlushDialog(entries int) {
 	}
 }
 
-func formatNumber(value uint64) string {
-	text := fmt.Sprint(value)
-	for index := len(text) - 3; index > 0; index -= 3 {
-		text = text[:index] + "," + text[index:]
-	}
-	return text
-}

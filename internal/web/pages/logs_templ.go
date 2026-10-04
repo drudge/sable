@@ -797,9 +797,9 @@ func QueryLogsPanel(view QueryLogsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s entries", formatCount(view.TotalEntries)))
+			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s entries", formatNumber(view.TotalEntries)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 158, Col: 179}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `logs.templ`, Line: 158, Col: 180}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {
@@ -3925,7 +3925,7 @@ func queryPageSummary(view QueryLogsView) string {
 	}
 	first := (view.Page-1)*view.PageSize + 1
 	last := min(view.TotalEntries, view.Page*view.PageSize)
-	return fmt.Sprintf("%s–%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries))
+	return fmt.Sprintf("%s–%s of %s", formatNumber(first), formatNumber(last), formatNumber(view.TotalEntries))
 }
 func logSourceLabel(source string) string {
 	switch source {
@@ -3971,9 +3971,9 @@ func runtimePanelURL(view RuntimeLogsView) string {
 }
 func runtimeLogCount(view RuntimeLogsView) string {
 	if view.Persisted {
-		return fmt.Sprintf("%s entries", formatCount(view.TotalEntries))
+		return fmt.Sprintf("%s entries", formatNumber(view.TotalEntries))
 	}
-	return fmt.Sprintf("%s entries", formatCount(view.Count))
+	return fmt.Sprintf("%s entries", formatNumber(view.Count))
 }
 func runtimePageSummary(view RuntimeLogsView) string {
 	if view.TotalEntries == 0 {
@@ -3981,7 +3981,7 @@ func runtimePageSummary(view RuntimeLogsView) string {
 	}
 	first := (view.Page-1)*view.PageSize + 1
 	last := min(view.TotalEntries, view.Page*view.PageSize)
-	return fmt.Sprintf("%s\u2013%s of %s", formatCount(first), formatCount(last), formatCount(view.TotalEntries))
+	return fmt.Sprintf("%s\u2013%s of %s", formatNumber(first), formatNumber(last), formatNumber(view.TotalEntries))
 }
 func runtimeExportURL(view RuntimeLogsView) string {
 	return runtimeLogURL(view, "/api/v1/logs/runtime/export", false)
@@ -4014,16 +4014,6 @@ func hasAnswers(answers []string) bool {
 		}
 	}
 	return false
-}
-func formatCount(value int) string {
-	if value < 1_000 {
-		return fmt.Sprint(value)
-	}
-	whole := fmt.Sprintf("%d", value)
-	for index := len(whole) - 3; index > 0; index -= 3 {
-		whole = whole[:index] + "," + whole[index:]
-	}
-	return whole
 }
 
 // logsSettingsLink sits in the Logs page header and opens the logging
