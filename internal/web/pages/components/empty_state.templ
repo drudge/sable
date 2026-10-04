@@ -1,0 +1,43 @@
+package components
+
+// EmptyStateProps describes the message a list or panel shows when it has
+// nothing in it: an icon, a title, a line saying why, and any actions.
+type EmptyStateProps struct {
+	// Icon names an Icon drawn above the title.
+	Icon string
+	// IconBox draws the icon in a rounded tile (.empty-state-icon) rather than
+	// on its own.
+	IconBox bool
+	Title   string
+	// Description is the one line under the title. Leave it empty and pass a
+	// <p> as a child when the line needs markup, such as a code span.
+	Description string
+	// Class adds classes after "empty-state", which set the size and spacing
+	// for where the message sits. Attrs go on the element, such as hidden or a
+	// data hook.
+	Class string
+	Attrs templ.Attributes
+}
+
+// EmptyState draws an empty-state message. Children follow the description,
+// usually one or two buttons.
+templ EmptyState(p EmptyStateProps) {
+	<div class={ fieldClass("empty-state", p.Class) } { p.Attrs... }>
+		if p.Icon != "" {
+			if p.IconBox {
+				<span class="empty-state-icon">
+					@Icon(p.Icon)
+				</span>
+			} else {
+				@Icon(p.Icon)
+			}
+		}
+		if p.Title != "" {
+			<h3>{ p.Title }</h3>
+		}
+		if p.Description != "" {
+			<p>{ p.Description }</p>
+		}
+		{ children... }
+	</div>
+}

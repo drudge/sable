@@ -491,17 +491,9 @@ templ insightsDocument(view InsightsOverviewView) {
 templ insightMissingFinding(view InsightsOverviewView, missing InsightLinkedMissingView) {
 	@DetailDrawer(insightMissingHeader(view, missing), insightMissingFooter(view, missing)) {
 		if missing.Hidden != nil {
-			<div class="insight-findings-empty insight-link-missing">
-				<span>@Icon("eye-off")</span>
-				<strong>You hid this finding</strong>
-				<p>{ insightHiddenExplanation(*missing.Hidden) }</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "eye-off", IconBox: true, Title: "You hid this finding", Description: insightHiddenExplanation(*missing.Hidden), Class: "insight-findings-empty insight-link-missing"})
 		} else {
-			<div class="insight-findings-empty insight-link-missing">
-				<span>@Icon("search")</span>
-				<strong>Not in the { strings.ToLower(view.RangeLabel) }</strong>
-				<p>It may have cleared up, or it happened earlier.{ ifThen(missing.Wider != "", " A longer range may still show it.", "") }</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "search", IconBox: true, Title: "Not in the " + strings.ToLower(view.RangeLabel), Description: "It may have cleared up, or it happened earlier." + ifThen(missing.Wider != "", " A longer range may still show it.", ""), Class: "insight-findings-empty insight-link-missing"})
 		}
 	}
 }
@@ -793,11 +785,7 @@ templ InsightFindings(view InsightsOverviewView) {
 			}
 		}
 		if len(view.Findings) == 0 {
-			<div class="insight-findings-empty">
-				<span>@Icon("check-circle")</span>
-				<strong>Nothing needs your attention</strong>
-				<p>{ view.CheckedSummary }</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "check-circle", IconBox: true, Title: "Nothing needs your attention", Description: view.CheckedSummary, Class: "insight-findings-empty"})
 		} else {
 			<ol class="insight-finding-list">
 				for _, finding := range view.Findings {
@@ -1047,18 +1035,11 @@ templ InsightContribution(view InsightsOverviewView) {
 			}
 		}
 		if view.Contribution == nil {
-			<div class="insight-section-empty">
-				@Icon("alert-triangle")
-				<strong>Block lists could not be compared</strong>
-				<p>Sable could not read the cached list files right now. Try again in a moment.</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "alert-triangle", Title: "Block lists could not be compared", Description: "Sable could not read the cached list files right now. Try again in a moment.", Class: "insight-section-empty"})
 		} else if len(view.Contribution.Lists) == 0 {
-			<div class="insight-section-empty">
-				@Icon("list")
-				<strong>No block lists configured</strong>
-				<p>Add a block list to see how much each one contributes.</p>
+			@components.EmptyState(components.EmptyStateProps{Icon: "list", Title: "No block lists configured", Description: "Add a block list to see how much each one contributes.", Class: "insight-section-empty"}) {
 				@components.Button(components.ButtonProps{Label: "Block Lists", Variant: components.ButtonOutline, Compact: true, Href: "/blocked?tab=lists"})
-			</div>
+			}
 		} else {
 			<div class="admin-mobile-list insight-list-mobile">
 				for _, list := range view.Contribution.Lists {
@@ -1466,17 +1447,9 @@ templ InsightDevices(view InsightsOverviewView) {
 			}
 		}
 		if view.DevicesUnavailable {
-			<div class="insight-section-empty">
-				@Icon("alert-triangle")
-				<strong>Devices could not be loaded</strong>
-				<p>Sable could not read device activity from query history right now. Try again in a moment.</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "alert-triangle", Title: "Devices could not be loaded", Description: "Sable could not read device activity from query history right now. Try again in a moment.", Class: "insight-section-empty"})
 		} else if len(view.Devices) == 0 {
-			<div class="insight-section-empty">
-				@Icon("monitor-smartphone")
-				<strong>No devices in this period</strong>
-				<p>Devices appear here once they send queries that Sable records in query history.</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "monitor-smartphone", Title: "No devices in this period", Description: "Devices appear here once they send queries that Sable records in query history.", Class: "insight-section-empty"})
 		} else {
 			@insightDeviceFilters(view)
 			<div class="admin-mobile-list insight-entity-mobile" data-list-results>
@@ -1529,11 +1502,9 @@ templ InsightDevices(view InsightsOverviewView) {
 					</tbody>
 				</table>
 			</div>
-			<div class="insight-section-empty" hidden data-list-filter-empty>
-				@Icon("search")
-				<strong>No devices match</strong>
+			@components.EmptyState(components.EmptyStateProps{Icon: "search", Title: "No devices match", Class: "insight-section-empty", Attrs: templ.Attributes{"hidden": true, "data-list-filter-empty": true}}) {
 				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
-			</div>
+			}
 			<footer class="insight-card-note">
 				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
 			</footer>
@@ -1652,17 +1623,9 @@ templ InsightApps(view InsightsOverviewView) {
 			}
 		}
 		if view.AppsUnavailable {
-			<div class="insight-section-empty">
-				@Icon("alert-triangle")
-				<strong>Apps could not be loaded</strong>
-				<p>Sable could not read app activity from query history right now. Try again in a moment.</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "alert-triangle", Title: "Apps could not be loaded", Description: "Sable could not read app activity from query history right now. Try again in a moment.", Class: "insight-section-empty"})
 		} else if len(view.Apps) == 0 {
-			<div class="insight-section-empty">
-				@Icon("apps")
-				<strong>No apps in this period</strong>
-				<p>Apps appear here once devices look up names that Sable knows an app by.</p>
-			</div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "apps", Title: "No apps in this period", Description: "Apps appear here once devices look up names that Sable knows an app by.", Class: "insight-section-empty"})
 		} else {
 			@insightAppFilters(view)
 			<div class="admin-mobile-list insight-entity-mobile" data-list-results>
@@ -1715,11 +1678,9 @@ templ InsightApps(view InsightsOverviewView) {
 					</tbody>
 				</table>
 			</div>
-			<div class="insight-section-empty" hidden data-list-filter-empty>
-				@Icon("search")
-				<strong>No apps match</strong>
+			@components.EmptyState(components.EmptyStateProps{Icon: "search", Title: "No apps match", Class: "insight-section-empty", Attrs: templ.Attributes{"hidden": true, "data-list-filter-empty": true}}) {
 				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
-			</div>
+			}
 			<footer class="insight-card-note">
 				<p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it, and an app is <strong>Failing</strong> while at least 1% of its lookups in the last hour failed, and at least 5 of them.</p>
 				if !view.AppsFailedSince.IsZero() {

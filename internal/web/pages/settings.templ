@@ -591,7 +591,7 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 			}
 			<div class="isotope-card-content">
 				if len(view.TSIGKeys) == 0 {
-					<div class="tsig-empty">@Icon("key")<h3>No TSIG keys yet</h3><p>Zones without a key fall back to source-IP and transfer-policy authorization.</p></div>
+					@components.EmptyState(components.EmptyStateProps{Icon: "key", Title: "No TSIG keys yet", Description: "Zones without a key fall back to source-IP and transfer-policy authorization.", Class: "tsig-empty"})
 				} else {
 					<div class="tsig-key-list isotope-source-list">
 						for _, key := range view.TSIGKeys {
@@ -778,7 +778,9 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 						if !view.CanCreate && !view.CanRestore {
 							<div class="certificate-manual-note">@Icon("lock")<span>Your role cannot download or restore local backups.</span></div>
 						} else if len(view.LocalBackups) == 0 {
-							<div class="backup-local-empty">@Icon("hard-drive")<strong>No local backups yet</strong><span>Enable the schedule above or place a valid <code>.sablebackup</code> archive in the configured directory.</span></div>
+							@components.EmptyState(components.EmptyStateProps{Icon: "hard-drive", Title: "No local backups yet", Class: "backup-local-empty"}) {
+								<p>Enable the schedule above or place a valid <code>.sablebackup</code> archive in the configured directory.</p>
+							}
 						} else {
 							<div class="backup-local-list">
 								for _, archive := range view.LocalBackups {

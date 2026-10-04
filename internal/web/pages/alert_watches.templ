@@ -94,7 +94,7 @@ templ alertsWatchesCard(view AlertsView) {
 				<p class="alert-browser-note alert-watch-note">@Icon("info")<span>The query log is off, so watches cannot see lookups. Turn it on in Logging.</span></p>
 			}
 			if len(view.Watches) == 0 {
-				<div class="alerts-empty">@Icon("eye")<h3>No watches yet</h3><p>Pick domains, such as a game or a site you know is bad, and hear when a device looks one up.</p></div>
+				@components.EmptyState(components.EmptyStateProps{Icon: "eye", Title: "No watches yet", Description: "Pick domains, such as a game or a site you know is bad, and hear when a device looks one up.", Class: "alerts-empty"})
 			} else {
 				<div class="alert-destination-list alert-watch-list">
 					for _, watch := range view.Watches {

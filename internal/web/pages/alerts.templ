@@ -345,7 +345,7 @@ templ alertsDestinationsCard(view AlertsView) {
 		}
 		<div class="isotope-card-content">
 			if len(view.Destinations) == 0 {
-				<div class="alerts-empty">@Icon("bell")<h3>No destinations yet</h3><p>Send alerts to ntfy, Pushover, Slack, Discord, a webhook, or your browsers.</p></div>
+				@components.EmptyState(components.EmptyStateProps{Icon: "bell", Title: "No destinations yet", Description: "Send alerts to ntfy, Pushover, Slack, Discord, a webhook, or your browsers.", Class: "alerts-empty"})
 			} else {
 				<div class="alert-destination-list">
 					for _, destination := range view.Destinations {

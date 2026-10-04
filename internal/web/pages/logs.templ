@@ -423,11 +423,7 @@ templ QueryDetail(view QueryDetailView) {
 // the log. It offers a search for the domain the address carried.
 templ queryMissing(view QueryDetailView) {
 	@DetailDrawerContent(DetailDrawerView{ID: "query-detail-dialog", TitleID: "query-detail-title", Eyebrow: "Query details", Title: "Not showing right now", CloseLabel: "Close query details"}, queryMissingFooter(view)) {
-		<div class="insight-findings-empty insight-link-missing">
-			<span>@Icon("search")</span>
-			<strong>This query is no longer in the log</strong>
-			<p>Sable only keeps queries for a while, so it may have aged out.{ ifThen(view.Name != "", " Newer queries for "+view.Name+" may still be there.", "") }</p>
-		</div>
+		@components.EmptyState(components.EmptyStateProps{Icon: "search", IconBox: true, Title: "This query is no longer in the log", Description: "Sable only keeps queries for a while, so it may have aged out." + ifThen(view.Name != "", " Newer queries for "+view.Name+" may still be there.", ""), Class: "insight-findings-empty insight-link-missing"})
 	}
 }
 

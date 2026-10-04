@@ -76,16 +76,13 @@ templ insightsOffDocument(console DashboardView) {
 	<div class="page-stack insights-off-page">
 		<header class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></header>
 		@components.Card(components.CardProps{}) {
-			<div class="cluster-empty-state">
-				<span class="cluster-empty-icon">@Icon("lightbulb")</span>
-				<h3>Insights Is Off</h3>
-				<p>Sable is not recording which devices use it, so there is nothing to show.</p>
+			@components.EmptyState(components.EmptyStateProps{Icon: "lightbulb", IconBox: true, Title: "Insights Is Off", Description: "Sable is not recording which devices use it, so there is nothing to show.", Class: "cluster-empty-state"}) {
 				if console.CanSettings {
 					<div class="cluster-empty-actions">
 						@components.Button(components.ButtonProps{Label: "Open Settings", Icon: "settings-2", Href: "/settings?tab=general#settings-insights"})
 					</div>
 				}
-			</div>
+			}
 		}
 	</div>
 }

@@ -1573,11 +1573,7 @@ templ QueryResult(view QueryView) {
 					@RecordSection("Additional", "globe", view.Additional)
 				}
 				if len(view.Answers) == 0 && len(view.Authority) == 0 && len(view.Additional) == 0 {
-					<div class="no-records">
-						@Icon("search")
-						<h3>No Records Found</h3>
-						<p>The query returned no answer, authority, or additional records.</p>
-					</div>
+					@components.EmptyState(components.EmptyStateProps{Icon: "search", Title: "No Records Found", Description: "The query returned no answer, authority, or additional records.", Class: "no-records"})
 				}
 				<details class="raw-response"><summary>Raw DNS response</summary><pre id="raw-dns-response">{ view.Response }</pre></details>
 			</div>
