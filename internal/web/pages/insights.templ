@@ -934,8 +934,7 @@ func (view InsightsOverviewView) canHide(finding InsightFindingView) bool {
 // everyone who opens Insights, and a finding hidden for a while comes back
 // when the time is up if it still applies.
 templ insightHideMenu(finding InsightFindingView) {
-	<details class="insight-hide-menu">
-		<summary class="button outline compact" data-replica-primary-action>@Icon("eye-off")<span>Hide Finding</span></summary>
+	@components.Menu(components.MenuProps{Label: "Hide Finding", Icon: "eye-off", Variant: components.ButtonOutline, Compact: true, Class: "insight-hide-menu", TriggerAttrs: templ.Attributes{"data-replica-primary-action": true}}) {
 		<form hx-post="/ui/insights/feedback" hx-swap="none">
 			<input type="hidden" name="id" value={ finding.FindingID }/>
 			<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
@@ -952,7 +951,7 @@ templ insightHideMenu(finding InsightFindingView) {
 				<input type="hidden" name="member_label" value={ member.Label }/>
 			}
 		</form>
-	</details>
+	}
 }
 
 func insightEvidenceHeader(finding InsightFindingView, rangeName, rangeLabel string) DetailDrawerView {

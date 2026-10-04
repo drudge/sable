@@ -759,10 +759,9 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 											@components.Button(components.ButtonProps{Label: "Backup Now", Icon: "play", Compact: true, Type: "submit", Disabled: view.Busy(), Attrs: templ.Attributes{"data-replica-primary-action": true}})
 										</form>
 										if !view.Busy() {
-											<details class="backup-run-menu">
-												<summary class="button compact" aria-label="More backup options" title="More backup options">@Icon("chevron-down")</summary>
+											@components.Menu(components.MenuProps{Icon: "chevron-down", Compact: true, Class: "backup-run-menu", TriggerAttrs: templ.Attributes{"aria-label": "More backup options", "title": "More backup options"}}) {
 												<div><button type="button" data-dialog-open="run-local-backup-dialog" data-run-local-backup>@Icon("key")<span>Use a different passphrase…</span></button></div>
-											</details>
+											}
 										}
 									</div>
 								} else {

@@ -703,9 +703,10 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .blocking-quick-actions > small { display: grid; gap: .15rem; margin-left: auto; color: var(--muted-foreground); font-size: .7rem; text-align: right; }
 .blocking-quick-actions > small span { font-size: .68rem; font-weight: 600; }
 .blocking-quick-actions > small strong { color: var(--foreground); font-size: .75rem; font-weight: 600; }
+/* A Menu is a details element; its summary is the trigger. */
+[data-menu] > summary { list-style: none; cursor: pointer; }
+[data-menu] > summary::-webkit-details-marker { display: none; }
 .pause-menu { position: relative; }
-.pause-menu > summary { list-style: none; cursor: pointer; }
-.pause-menu > summary::-webkit-details-marker { display: none; }
 .pause-menu > div { position: absolute; top: calc(100% + .35rem); left: 0; z-index: 50; display: grid; width: calc(100% - .5rem); min-width: 9rem; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground)); padding: .3rem; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .48), 0 .2rem .5rem rgb(0 0 0 / .28); }
 .pause-menu > div button { min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; padding: 0 .65rem; color: inherit; font-size: .76rem; text-align: left; white-space: nowrap; }
 .pause-menu > div button:hover { background: var(--muted); }
@@ -1490,8 +1491,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .zone-row-chevron .nav-icon { width: 1rem; height: 1rem; }
 .zone-action-menu { position: relative; z-index: 4; }
 .zone-action-menu[open] { z-index: 30; }
-.zone-action-menu > summary { list-style: none; }
-.zone-action-menu > summary::-webkit-details-marker { display: none; }
 .zone-more-button { opacity: 0; border-color: transparent; background: transparent; transition: opacity 120ms; }
 .isotope-zone-row:hover .zone-more-button, .zone-action-menu[open] .zone-more-button, .zone-more-button:focus-visible { opacity: 1; }
 .zone-menu-content { position: absolute; top: calc(100% + .3rem); right: 0; z-index: 20; display: grid; width: 14rem; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 1px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 12px 28px rgb(0 0 0 / .22); }
@@ -2985,8 +2984,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-update-split > .button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 /* summary.button, not summary: .button.compact carries its own inline padding
    and icon size, and would otherwise win and squeeze the caret. */
-.about-update-menu > summary.button { display: inline-flex; width: 2rem; flex: 0 0 2rem; align-items: center; justify-content: center; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 0; list-style: none; cursor: pointer; }
-.about-update-menu > summary.button::-webkit-details-marker { display: none; }
+.about-update-menu > summary.button { display: inline-flex; width: 2rem; flex: 0 0 2rem; align-items: center; justify-content: center; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 0; }
 .about-update-menu > summary.button .nav-icon { width: .875rem; height: .875rem; flex: none; transition: transform 120ms ease; }
 .about-update-menu[open] > summary.button { background: var(--accent); }
 .about-update-menu[open] > summary.button .nav-icon { transform: rotate(180deg); }
@@ -3524,8 +3522,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .dynamic-dns-add-provider-menu, .dynamic-dns-add-zone { justify-self: start; }
 .dynamic-dns-add-provider-menu { position: relative; z-index: 10; margin-top: .35rem; }
 .dynamic-dns-add-provider-menu[open] { z-index: 70; }
-.dynamic-dns-add-provider-menu > summary { display: inline-flex; list-style: none; cursor: pointer; }
-.dynamic-dns-add-provider-menu > summary::-webkit-details-marker { display: none; }
+.dynamic-dns-add-provider-menu > summary { display: inline-flex; }
 .dynamic-dns-add-provider-menu[open] > summary .styled-select-chevron { transform: translateY(.15rem) rotate(225deg); }
 .dynamic-dns-add-provider-menu > div { position: absolute; top: calc(100% + .35rem); left: 0; z-index: 70; display: grid; width: min(20rem, calc(100vw - 3rem)); max-height: min(21rem, 50vh); overflow-y: auto; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); background: var(--popover); padding: .3rem; color: var(--popover-foreground); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .38), 0 .2rem .6rem rgb(0 0 0 / .22); transform-origin: top left; animation: resolver-popover-in 120ms ease-out; }
 .dynamic-dns-add-provider-menu[data-side="top"] > div { top: auto; bottom: calc(100% + .35rem); transform-origin: bottom left; }
@@ -3746,8 +3743,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .backup-run-split > form { display: flex; margin: 0; }
 .backup-run-split > form .button { border-radius: var(--radius) 0 0 var(--radius); }
 .backup-run-menu { position: relative; }
-.backup-run-menu > summary { width: 2.15rem; height: 100%; border-left-color: color-mix(in oklch, currentColor 25%, transparent); border-radius: 0 var(--radius) var(--radius) 0; padding: 0; list-style: none; cursor: pointer; }
-.backup-run-menu > summary::-webkit-details-marker { display: none; }
+.backup-run-menu > summary { width: 2.15rem; height: 100%; border-left-color: color-mix(in oklch, currentColor 25%, transparent); border-radius: 0 var(--radius) var(--radius) 0; padding: 0; }
 .backup-run-menu > summary .nav-icon { width: .8rem; height: .8rem; }
 .backup-run-menu[open] > summary .nav-icon { rotate: 180deg; }
 .backup-run-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; min-width: 13rem; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); padding: .3rem; color: var(--popover-foreground, var(--foreground)); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .35); }
@@ -4296,8 +4292,7 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-why-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .insight-why-heading.has-hide-menu { margin-top: -.5rem; }
 .insight-hide-menu { position: relative; }
-.insight-hide-menu > summary.button { display: flex; list-style: none; cursor: pointer; }
-.insight-hide-menu > summary::-webkit-details-marker { display: none; }
+.insight-hide-menu > summary.button { display: flex; }
 .insight-hide-menu[open] > summary { background: var(--accent); color: var(--accent-foreground); }
 .insight-hide-menu > form { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 20; display: grid; width: 16rem; max-width: calc(100vw - 2.5rem); margin: 0; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); padding: .375rem; color: var(--popover-foreground); box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
 .insight-hide-menu[data-side="top"] > form { top: auto; bottom: calc(100% + .35rem); }
