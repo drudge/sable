@@ -99,7 +99,7 @@ func TestInsightsExplainAFindingLinkTheyCannotOpen(t *testing.T) {
 	gone := overview("/insights/findings/0123456789ab?range=day")
 	for _, expected := range []string{
 		`id="insight-finding-missing"`, `data-drawer-fallback="true" data-drawer-route="/insights/findings/"`,
-		"Not in the last 24 hours", `href="/insights/findings/0123456789ab?range=week">Try Last 7 Days</a>`, `href="/insights?range=day">Open Insights</a>`,
+		"Not in the last 24 hours", `href="/insights/findings/0123456789ab?range=week"><span>Try Last 7 Days</span></a>`, `href="/insights?range=day"><span>Open Insights</span></a>`,
 	} {
 		if !strings.Contains(gone, expected) {
 			t.Errorf("a gone finding's stand-in is missing %s", expected)
