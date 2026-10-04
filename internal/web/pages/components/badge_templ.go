@@ -16,18 +16,15 @@ type BadgeTone int
 const (
 	// BadgeNeutral is the gray badge for a plain fact, such as "Not set up".
 	BadgeNeutral BadgeTone = iota
-	// BadgeSuccess is green, for something working: "On", "Configured".
+	// BadgeSuccess is green, for something working or live: "On",
+	// "Configured", "Active", "Ready".
 	BadgeSuccess
-	// BadgeActive is the darker green used for a user, node, or item that is
-	// live: "Active", "Ready", "New".
-	BadgeActive
 	// BadgeWarning is amber, for something that needs a look: "Paused",
 	// "Restart required".
 	BadgeWarning
-	// BadgeDanger is red, for something broken: "Needs attention".
+	// BadgeDanger is red, for something broken or shut off: "Needs
+	// attention", "Disabled".
 	BadgeDanger
-	// BadgeDisabled is the red used for a disabled account.
-	BadgeDisabled
 	// BadgeCurrent is blue, for the item the reader is on: "This node",
 	// "Current".
 	BadgeCurrent
@@ -56,14 +53,10 @@ func badgeClass(p BadgeProps) string {
 	switch p.Tone {
 	case BadgeSuccess:
 		base = "status-badge success"
-	case BadgeActive:
-		base = "status-badge active"
 	case BadgeWarning:
 		base = "status-badge warning"
 	case BadgeDanger:
 		base = "status-badge danger"
-	case BadgeDisabled:
-		base = "status-badge disabled"
 	case BadgeCurrent:
 		base = "current-badge"
 	case BadgeCount:
@@ -127,7 +120,7 @@ func Badge(p BadgeProps) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/badge.templ`, Line: 72, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/badge.templ`, Line: 65, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -155,7 +148,7 @@ func Badge(p BadgeProps) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(p.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/badge.templ`, Line: 76, Col: 11}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `components/badge.templ`, Line: 69, Col: 11}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {

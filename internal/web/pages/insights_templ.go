@@ -4756,7 +4756,7 @@ func insightAppBadges(app InsightAppRowView) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if app.New {
-			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeSuccess}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5237,7 +5237,7 @@ func insightDeviceBadges(device InsightDeviceView, nameSource bool) templ.Compon
 		}
 		ctx = templ.ClearChildren(ctx)
 		if device.New {
-			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeSuccess}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -6796,7 +6796,7 @@ func insightDeviceType(view InsightDeviceDrawerView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: insightConfidenceText(view.Device.TypeConfidence), Tone: ifThen(view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high", components.BadgeActive, components.BadgeNeutral)}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: insightConfidenceText(view.Device.TypeConfidence), Tone: ifThen(view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high", components.BadgeSuccess, components.BadgeNeutral)}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
