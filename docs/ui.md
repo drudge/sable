@@ -115,6 +115,9 @@ once because htmx can process a newly swapped subtree at any time.
   `` `30d` ``. Script that rewrites the help finds it by a hook passed in
   `HelpAttrs`. A radio button or checkbox with a title and description uses
   `components.ChoiceCard`.
+- Labeled buttons use `components.Button`, which draws the icon and label and
+  sets `outline`, `compact`, and `destructive` from its props. A button that
+  navigates or downloads sets `Href` and renders as a link styled the same way.
 - Local tab strips support arrow-key navigation, update the relevant document
   title, and preserve a meaningful URL when the selected tab is shareable.
 - Dashboard chart range, ranking, and query-log links must describe the same

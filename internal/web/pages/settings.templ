@@ -204,7 +204,7 @@ templ SettingsGeneralPanel(view SettingsPageView) {
 		}
 		@SettingsInsights(view.Insights)
 		@SettingsUpdatePreferences(view.UpdatePreferences)
-		<div class="settings-panel-save"><button class="button" type="submit" form="settings-form" name="settings_tab" value="general">Save Settings</button></div>
+		<div class="settings-panel-save">@components.Button(components.ButtonProps{Label: "Save Settings", Type: "submit", Attrs: templ.Attributes{"form": "settings-form", "name": "settings_tab", "value": "general"}})</div>
 	</div>
 }
 
@@ -303,7 +303,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 					<div class="certificate-mode-control" role="radiogroup" aria-label="Certificate source"><label class={ ifThen(view.CertificateMode != "acme", "active", "") }><input type="radio" name="certificate_mode" value="manual" checked?={ view.CertificateMode != "acme" }/><span>Manual Certificate</span></label><label class={ ifThen(view.CertificateMode == "acme", "active", "") }><input type="radio" name="certificate_mode" value="acme" checked?={ view.CertificateMode == "acme" }/><span>Let's Encrypt (ACME)</span></label></div>
 					<div class="manual-certificate-settings" data-certificate-manual hidden?={ view.CertificateMode == "acme" }>
 						<div class="field-grid two"><label class="field-control"><span>Certificate File</span><input name="certificate_file" value={ view.CertificateFile } placeholder="/etc/sable/tls/fullchain.pem"/></label><label class="field-control"><span>Private Key File</span><input name="private_key_file" value={ view.PrivateKeyFile } placeholder="/etc/sable/tls/privkey.pem"/></label></div>
-						<div class="certificate-manual-actions"><button class="button secondary" type="button" data-dialog-open="generate-certificate-dialog" data-replica-primary-action>@Icon("key")<span>Generate Self-Signed</span></button><button class="button outline" type="button" data-dialog-open="import-certificate-dialog" data-replica-primary-action>@Icon("upload")<span>Import PEM</span></button></div>
+						<div class="certificate-manual-actions">@components.Button(components.ButtonProps{Label: "Generate Self-Signed", Icon: "key", Attrs: templ.Attributes{"data-dialog-open": "generate-certificate-dialog", "data-replica-primary-action": true}})@components.Button(components.ButtonProps{Label: "Import PEM", Icon: "upload", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-open": "import-certificate-dialog", "data-replica-primary-action": true}})</div>
 						<div class="certificate-manual-note">@Icon("info")<span>Generated certificates are useful for private deployments but remain untrusted until their identity is added to client trust stores.</span></div>
 					</div>
 					<div class="acme-settings" data-certificate-acme hidden?={ view.CertificateMode != "acme" }>
@@ -331,7 +331,7 @@ templ SettingsProtocolsPanel(view SettingsPageView) {
 									<span>No certificate has been issued yet. Complete the settings below, save, then issue one.</span>
 								}
 							</div>
-							<button class="button secondary certificate-renew-button" type="submit" formaction="/ui/certificates/renew" hx-post="/ui/certificates/renew" hx-target="#settings-content" hx-swap="outerHTML" disabled?={ view.ACMERenewing } data-replica-primary-action>@Icon("refresh")<span>{ ifThen(view.ACMERenewing, "Issuing…", ifThen(view.ACMEIssuer != "", "Renew Now", "Issue Certificate")) }</span></button>
+							@components.Button(components.ButtonProps{Label: ifThen(view.ACMERenewing, "Issuing…", ifThen(view.ACMEIssuer != "", "Renew Now", "Issue Certificate")), Icon: "refresh", Type: "submit", Disabled: view.ACMERenewing, Class: "certificate-renew-button", Attrs: templ.Attributes{"formaction": "/ui/certificates/renew", "hx-post": "/ui/certificates/renew", "hx-target": "#settings-content", "hx-swap": "outerHTML", "data-replica-primary-action": true}})
 						</div>
 						if view.ACMELastError != "" {
 							<div class="certificate-error" role="alert">@Icon("alert-triangle")<span>{ view.ACMELastError }</span></div>
@@ -376,7 +376,7 @@ templ ManualCertificateDialogs() {
 				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>ECDSA P-256 identity</strong><span>The private key is written with owner-only permissions and is never stored in TOML or returned by the API.</span></p></div>
 			</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Generate &amp; Use Certificate</button>
+				@components.Button(components.ButtonProps{Label: "Generate & Use Certificate", Type: "submit"})
 			}
 		</form>
 	}
@@ -390,7 +390,7 @@ templ ManualCertificateDialogs() {
 				<div class="cluster-dialog-note">@Icon("lock")<p><strong>Validated before activation</strong><span>Sable verifies the key pair and validity period before committing either file. The private key is never rendered back into the UI.</span></p></div>
 			</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Import &amp; Use Certificate</button>
+				@components.Button(components.ButtonProps{Label: "Import & Use Certificate", Type: "submit"})
 			}
 		</form>
 	}
@@ -493,7 +493,7 @@ templ SettingsBlockingPanel(view SettingsPageView) {
 		@SettingsCard("sliders", "Advanced Options", "Additional blocking response behavior") {
 			<div class="isotope-card-content">@components.SwitchField(components.SwitchFieldProps{ID: "settings-blocking-allow-txt-report", Title: "Allow TXT Blocking Report", Description: "Return blocking information when a blocked name is queried for TXT records.", Name: "blocking_allow_txt_report", Checked: view.BlockingAllowTXTReport})</div>
 		}
-		<div class="settings-blocking-actions"><a class="button outline" href="/blocked">@Icon("shield")<span>Manage Block Lists and Domains</span></a><button class="button" type="submit" name="settings_tab" value="blocking">Save Settings</button></div>
+		<div class="settings-blocking-actions">@components.Button(components.ButtonProps{Label: "Manage Block Lists and Domains", Icon: "shield", Variant: components.ButtonOutline, Href: "/blocked"})@components.Button(components.ButtonProps{Label: "Save Settings", Type: "submit", Attrs: templ.Attributes{"name": "settings_tab", "value": "blocking"}})</div>
 	</div>
 }
 
@@ -596,7 +596,7 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 		<section class="card settings-source-card settings-action-card">
 			<header>
 				<div><h2>@Icon("key")<span>TSIG Keys</span></h2><p>Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml.</p></div>
-				<button class="button compact" type="button" data-dialog-open="add-tsig-key-dialog" data-replica-primary-action>@Icon("plus")<span>Add Key</span></button>
+				@components.Button(components.ButtonProps{Label: "Add Key", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "add-tsig-key-dialog", "data-replica-primary-action": true}})
 			</header>
 			<div class="isotope-card-content">
 				if len(view.TSIGKeys) == 0 {
@@ -624,7 +624,7 @@ templ AddTSIGKeyDialog(view SettingsPageView) {
 			</select><small>HMAC-SHA256 suits almost everything.</small></label>
 			<label><span>Secret (optional)</span><input class="mono-input" type="password" name="tsig_secret" autocomplete="new-password" placeholder="Generate one for me"/><small>Base64, at least 128 bits. Sable shows a generated secret once.</small></label>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Add Key</button>
+				@components.Button(components.ButtonProps{Label: "Add Key", Type: "submit"})
 			}
 		</form>
 	}
@@ -643,7 +643,7 @@ templ SettingsTSIGKeyRow(key SettingsTSIGKeyView) {
 				<small class="tsig-key-warning" title="Add the key again with its secret, or rotate it to generate a new one.">@Icon("alert-triangle")<span>No secret stored</span></small>
 			}
 		</div>
-		<button class="button outline compact" type="button" hx-post="/ui/settings/tsig/save" hx-vals={ fmt.Sprintf("{\"tsig_name\":%q,\"tsig_algorithm\":%q,\"tsig_rotate\":\"true\"}", key.Name, key.Algorithm) } hx-target="#settings-content" hx-swap="outerHTML" hx-confirm={ "Generate a new secret for " + TSIGDisplayName(key.Name) + "? Every server using this key must be updated." }>@Icon("refresh")<span>Rotate</span></button>
+		@components.Button(components.ButtonProps{Label: "Rotate", Icon: "refresh", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-post": "/ui/settings/tsig/save", "hx-vals": fmt.Sprintf("{\"tsig_name\":%q,\"tsig_algorithm\":%q,\"tsig_rotate\":\"true\"}", key.Name, key.Algorithm), "hx-target": "#settings-content", "hx-swap": "outerHTML", "hx-confirm": "Generate a new secret for " + TSIGDisplayName(key.Name) + "? Every server using this key must be updated."}})
 		<button class="icon-button danger" type="button" hx-post="/ui/settings/tsig/delete" hx-vals={ fmt.Sprintf("{\"tsig_name\":%q}", key.Name) } hx-target="#settings-content" hx-swap="outerHTML" hx-confirm={ "Remove " + TSIGDisplayName(key.Name) + "? The stored secret is destroyed." } aria-label={ "Remove " + TSIGDisplayName(key.Name) }>@Icon("trash")</button>
 	</article>
 }
@@ -748,7 +748,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 											<span class="error"><strong>Last error</strong>{ view.ScheduleLastError }</span>
 										}
 									</div>
-									<button class="button compact" type="submit" data-passphrase-submit><span>Save Schedule</span></button>
+									@components.Button(components.ButtonProps{Label: "Save Schedule", Compact: true, Type: "submit", Attrs: templ.Attributes{"data-passphrase-submit": true}})
 								</div>
 							</form>
 						}
@@ -759,14 +759,14 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 						<div><h2>@Icon("hard-drive")<span>Local Backups</span></h2><p>Encrypted backups stored on this node, ready to download or restore.</p></div>
 						<div class="backup-history-header-actions">
 							if view.CanRestore {
-								<button class="button outline compact" type="button" disabled?={ view.Busy() } data-dialog-open="upload-backup-restore-dialog" data-upload-backup-restore data-replica-primary-action>@Icon("upload")<span>Restore from File…</span></button>
+								@components.Button(components.ButtonProps{Label: "Restore from File…", Icon: "upload", Variant: components.ButtonOutline, Compact: true, Disabled: view.Busy(), Attrs: templ.Attributes{"data-dialog-open": "upload-backup-restore-dialog", "data-upload-backup-restore": true, "data-replica-primary-action": true}})
 							}
 							if view.CanCreate {
 								if view.SchedulePassphraseStored {
 									<div class="backup-run-split">
 										<form hx-post="/ui/backup/run" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" data-local-backup-run-stored-form>
 											<input type="hidden" name="use_stored_passphrase" value="on"/>
-											<button class="button compact" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("play")<span>Backup Now</span></button>
+											@components.Button(components.ButtonProps{Label: "Backup Now", Icon: "play", Compact: true, Type: "submit", Disabled: view.Busy(), Attrs: templ.Attributes{"data-replica-primary-action": true}})
 										</form>
 										if !view.Busy() {
 											<details class="backup-run-menu">
@@ -776,7 +776,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 										}
 									</div>
 								} else {
-									<button class="button compact" type="button" disabled?={ view.Busy() } data-dialog-open="run-local-backup-dialog" data-run-local-backup>@Icon("play")<span>Backup Now</span></button>
+									@components.Button(components.ButtonProps{Label: "Backup Now", Icon: "play", Compact: true, Disabled: view.Busy(), Attrs: templ.Attributes{"data-dialog-open": "run-local-backup-dialog", "data-run-local-backup": true}})
 								}
 							}
 						</div>
@@ -797,15 +797,15 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 										<div class="backup-local-detail"><strong>{ archive.Name }</strong><span>{ archive.Created } · { archive.Size } · { archive.Hostname }</span><span>Sable { archive.SableVersion }{ BackupKindLabel(archive.Scheduled) }</span></div>
 										<div class="backup-local-actions">
 											if view.CanCreate {
-												<a class="button outline compact" href={ LocalBackupDownloadURL(archive.Name) } download={ archive.Name }>@Icon("download")<span>Download</span></a>
+												@components.Button(components.ButtonProps{Label: "Download", Icon: "download", Variant: components.ButtonOutline, Compact: true, Href: LocalBackupDownloadURL(archive.Name), Attrs: templ.Attributes{"download": archive.Name}})
 										}
 										if view.CanRestore {
-											<button class="button outline compact" type="button" disabled?={ view.Busy() } data-dialog-open="local-backup-restore-dialog" data-local-backup-restore data-local-backup-name={ archive.Name } data-local-backup-scheduled={ fmt.Sprint(archive.Scheduled) } data-replica-primary-action>@Icon("rotate-ccw")<span>Restore</span></button>
+											@components.Button(components.ButtonProps{Label: "Restore", Icon: "rotate-ccw", Variant: components.ButtonOutline, Compact: true, Disabled: view.Busy(), Attrs: templ.Attributes{"data-dialog-open": "local-backup-restore-dialog", "data-local-backup-restore": true, "data-local-backup-name": archive.Name, "data-local-backup-scheduled": fmt.Sprint(archive.Scheduled), "data-replica-primary-action": true}})
 										}
 										if view.CanCreate {
 											<form hx-post="/ui/backup/delete-local" hx-target="#backup-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm={ "Delete " + archive.Name + "? This local backup cannot be recovered." } data-confirm-title="Delete local backup?" data-confirm-action="Delete Backup">
 												<input type="hidden" name="name" value={ archive.Name }/>
-												<button class="button outline compact backup-local-delete" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("trash")<span>Delete</span></button>
+												@components.Button(components.ButtonProps{Label: "Delete", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Type: "submit", Disabled: view.Busy(), Class: "backup-local-delete", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 											</form>
 										}
 										</div>
@@ -837,13 +837,13 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 								<label class="field-control"><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" required placeholder="Repeat the passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
 							</div>
 							<div class="backup-actions">
-								<button class="button" type="submit" disabled?={ view.Busy() } data-passphrase-submit>@Icon("download")<span>Create Backup</span></button>
+								@components.Button(components.ButtonProps{Label: "Create Backup", Icon: "download", Type: "submit", Disabled: view.Busy(), Attrs: templ.Attributes{"data-passphrase-submit": true}})
 							</div>
 						</form>
 						if view.DownloadToken != "" {
 							<div class="backup-download">
 								<div class="backup-download-file">@Icon("hard-drive")<div><strong>{ view.DownloadName }</strong><span>{ view.DownloadSize } · <span data-backup-expiry data-expires-at={ fmt.Sprint(view.DownloadExpiresAt) }>{ view.DownloadExpiry }</span></span></div></div>
-								<a class="button" href={ templ.SafeURL("/ui/backup/download/" + view.DownloadToken) } download={ view.DownloadName }>@Icon("download")<span>Save File</span></a>
+								@components.Button(components.ButtonProps{Label: "Save File", Icon: "download", Href: templ.SafeURL("/ui/backup/download/" + view.DownloadToken), Attrs: templ.Attributes{"download": view.DownloadName}})
 							</div>
 						}
 						<details class="settings-advanced">
@@ -890,7 +890,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 							</div>
 							@BackupUploadMeter()
 							<div class="backup-actions">
-								<button class="button destructive" type="submit" disabled?={ view.Busy() } data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button>
+								@components.Button(components.ButtonProps{Label: "Restore Backup", Icon: "upload", Destructive: true, Type: "submit", Disabled: view.Busy(), Attrs: templ.Attributes{"data-replica-primary-action": true}})
 							</div>
 						</form>
 					}
@@ -909,7 +909,7 @@ templ RunLocalBackupDialog() {
 			<label><span>Backup Passphrase</span><input type="password" name="passphrase" autocomplete="new-password" minlength="12" required placeholder="At least 12 characters" data-passphrase/><small>Sable cannot recover this. Store it wherever you keep credentials, not beside the archive.</small></label>
 			<label><span>Confirm Passphrase</span><input type="password" name="passphrase_confirmation" autocomplete="new-password" minlength="12" required placeholder="Repeat the passphrase" data-passphrase-confirmation/><small class="field-note" data-passphrase-note hidden></small></label>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit" data-passphrase-submit disabled>@Icon("play")<span>Backup Now</span></button>
+				@components.Button(components.ButtonProps{Label: "Backup Now", Icon: "play", Type: "submit", Disabled: true, Attrs: templ.Attributes{"data-passphrase-submit": true}})
 			}
 		</form>
 	}
@@ -925,7 +925,7 @@ templ LocalBackupRestoreDialog() {
 			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" data-local-backup-passphrase/><small data-local-backup-passphrase-note></small></label>
 			@components.ChoiceCard(components.ChoiceCardProps{ID: "local-backup-restore-keep-configuration", Title: "Keep this node's configuration", Description: "Restore data while leaving local listeners, storage, and paths alone.", Style: components.ChoiceRow, Name: "keep_configuration"})
 			@components.DialogFooter("Cancel") {
-				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore Backup</span></button>
+				@components.Button(components.ButtonProps{Label: "Restore Backup", Icon: "rotate-ccw", Destructive: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			}
 		</form>
 	}
@@ -965,7 +965,7 @@ templ UploadBackupRestoreDialog() {
 			@components.ChoiceCard(components.ChoiceCardProps{ID: "upload-backup-restore-keep-configuration", Title: "Keep this node's configuration", Description: "Restore data while leaving local listeners, storage, and paths alone.", Style: components.ChoiceRow, Name: "keep_configuration"})
 			@BackupUploadMeter()
 			@components.DialogFooter("Cancel") {
-				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button>
+				@components.Button(components.ButtonProps{Label: "Restore Backup", Icon: "upload", Destructive: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			}
 		</form>
 	}
@@ -1042,7 +1042,7 @@ func SettingsCardID(title string) string {
 	return strings.Join(words, "-")
 }
 
-templ SettingsSaveButton(tab string) { <div class="settings-panel-save"><button class="button" type="submit" name="settings_tab" value={ tab }>Save Settings</button></div> }
+templ SettingsSaveButton(tab string) { <div class="settings-panel-save">@components.Button(components.ButtonProps{Label: "Save Settings", Type: "submit", Attrs: templ.Attributes{"name": "settings_tab", "value": tab}})</div> }
 
 // SettingsDangerCard marks a card whose action cannot be casually undone. The
 // restore card looks different from the download card on purpose: one produces
