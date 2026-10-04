@@ -1,5 +1,7 @@
 package pages
 
+import "github.com/drudge/sable/internal/web/pages/components"
+
 // NotificationOptions configures the shared notification card. The surrounding
 // region remains the server-owned HTMX fragment, while this component owns the
 // visual and interaction contract shared by transient toasts and live notices.
@@ -102,20 +104,7 @@ templ toastNotice(message string, variant string, action ToastAction, persistent
 				HasActions: action.Present(),
 			}) {
 				if action.Present() {
-					<button
-						class="button compact"
-						type="button"
-						hx-post={ action.Post }
-						hx-swap="none"
-						hx-confirm={ action.Confirm }
-						data-confirm-title={ action.ConfirmTitle }
-						data-confirm-action={ action.ConfirmAction }
-					>
-						if action.Icon != "" {
-							@Icon(action.Icon)
-						}
-						<span>{ action.Label }</span>
-					</button>
+					@components.Button(components.ButtonProps{Label: action.Label, Icon: action.Icon, Compact: true, Attrs: templ.Attributes{"hx-post": action.Post, "hx-swap": "none", "hx-confirm": action.Confirm, "data-confirm-title": action.ConfirmTitle, "data-confirm-action": action.ConfirmAction}})
 				}
 			}
 		</div>

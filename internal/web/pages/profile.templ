@@ -80,7 +80,7 @@ templ ProfileAccountSettings(view ProfilePageView) {
 						<label class="field-control"><span>Email</span><input type="email" name="email" value={ view.User.Email } maxlength="254" placeholder="name@example.com" autocomplete="email"/></label>
 					</div>
 				</div>
-				<footer class="profile-card-footer"><button class="button" type="submit">Save Changes</button></footer>
+				<footer class="profile-card-footer">@components.Button(components.ButtonProps{Label: "Save Changes", Type: "submit"})</footer>
 			</form>
 		</section>
 		@ProfilePasskeys(view)
@@ -88,9 +88,9 @@ templ ProfileAccountSettings(view ProfilePageView) {
 			<header class="isotope-data-header profile-password-header">
 				<div><h2>Password</h2><span>{ ifThen(view.User.PasswordLogin, "Password sign-in is enabled", ifThen(view.HasPassword, "Password sign-in is disabled. Your existing password is saved.", "Set a password below to enable password sign-in.")) }</span></div>
 				if view.User.PasswordLogin && len(view.Passkeys) > 0 && !view.PasskeysDisabled {
-					<button class="button compact outline" type="button" data-passkey-action="disable-password" disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("pause")<span>Disable password sign-in</span></button>
+					@components.Button(components.ButtonProps{Label: "Disable password sign-in", Icon: "pause", Variant: components.ButtonOutline, Compact: true, Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "disable-password"}})
 				} else if !view.User.PasswordLogin && view.HasPassword {
- <button class="button compact outline" type="button" data-passkey-action="enable-password" disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("play")<span>Enable password sign-in</span></button>
+ @components.Button(components.ButtonProps{Label: "Enable password sign-in", Icon: "play", Variant: components.ButtonOutline, Compact: true, Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "enable-password"}})
  }
 			</header>
 			<form class="profile-settings-form" hx-post="/ui/profile/password" hx-target="#profile-content" hx-swap="outerHTML">
@@ -105,7 +105,7 @@ templ ProfileAccountSettings(view ProfilePageView) {
 					<p role="status" data-passkey-status></p>
 					<div class="profile-security-note">@Icon("info")<span>Setting a password enables password sign-in and signs out all active browser sessions.</span></div>
 				</div>
-				<footer class="profile-card-footer"><button class="button" type="submit">{ ifThen(view.User.PasswordLogin, "Change Password", "Set new password and enable sign-in") }</button></footer>
+				<footer class="profile-card-footer">@components.Button(components.ButtonProps{Label: ifThen(view.User.PasswordLogin, "Change Password", "Set new password and enable sign-in"), Type: "submit"})</footer>
 			</form>
 		</section>
 	</div>
@@ -120,7 +120,7 @@ templ ProfileTokenSettings(view ProfilePageView) {
 
 templ ProfileTokens(view ProfilePageView) {
 	<section class="card isotope-data-card profile-token-list" id="profile-token-list" hx-get="/ui/profile/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
-		<header class="isotope-data-header"><div><h2>API Tokens</h2><span>{ fmt.Sprintf("%d active", len(view.Tokens)) }</span></div><button class="button compact" type="button" data-dialog-open="create-token-dialog">@Icon("plus")<span>Create Token</span></button></header>
+		<header class="isotope-data-header"><div><h2>API Tokens</h2><span>{ fmt.Sprintf("%d active", len(view.Tokens)) }</span></div>@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})</header>
 		if len(view.Tokens) == 0 {
 			<div class="admin-empty profile-token-empty"><div>@Icon("key")</div><strong>No API tokens yet</strong><span>Create a token for scripts, integrations, and other API clients.</span></div>
 		} else {
@@ -166,7 +166,7 @@ templ ProfileCreateTokenDialog(view ProfilePageView) {
 					}
 				}
 			</div></fieldset><p class="field-help">Tokens can use only groups currently assigned to your account.</p>
-		</div><div class="api-token-result" id="api-token-result">The token secret will be shown once. Store it somewhere safe.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form>
+		</div><div class="api-token-result" id="api-token-result">The token secret will be shown once. Store it somewhere safe.</div></div><footer class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true, "data-token-close": true}})@components.Button(components.ButtonProps{Label: "Create Token", Type: "submit", Disabled: true, Attrs: templ.Attributes{"data-token-submit": true}})</footer></form>
 	}
 }
 
@@ -185,7 +185,7 @@ templ ProfilePasskeys(view ProfilePageView) {
  }
    for _, key := range view.Passkeys {
     <div class="profile-passkey-row"><div class="profile-passkey-details"><strong>{ key.Name }</strong><small>{ key.RPID } · Added { FormatDateTime(key.CreatedAt, view.Console.TimeDisplay) } · Last used { tokenLastUsed(key.LastUsedAt, view.Console.TimeDisplay) }</small></div>
-     <button class="button compact outline destructive" type="button" data-passkey-action="remove" data-passkey-id={ key.ID } disabled?={ view.Console.ControlPlaneReadOnly }>@Icon("trash")<span>Remove</span></button>
+     @components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "remove", "data-passkey-id": key.ID}})
     </div>
    }
    if !view.PasskeysDisabled {
@@ -195,7 +195,7 @@ templ ProfilePasskeys(view ProfilePageView) {
   </div>
   if !view.PasskeysDisabled {
  <footer class="profile-card-footer" data-passkey-capability>
-   <button class="button" type="button" data-passkey-action="register" disabled?={ view.Console.ControlPlaneReadOnly }>Add passkey</button>
+   @components.Button(components.ButtonProps{Label: "Add passkey", Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "register"}})
   </footer>
  }
  </section>

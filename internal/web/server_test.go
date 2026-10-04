@@ -1252,7 +1252,7 @@ func TestClusterOnboardingStaysInWizardAcrossRestart(t *testing.T) {
 	continued := httptest.NewRecorder()
 	server.httpServer.Handler.ServeHTTP(continued, httptest.NewRequest(http.MethodGet, "/cluster?onboarding=primary&resume=ready", nil))
 	continuedBody := continued.Body.String()
-	for _, expected := range []string{"Cluster Domain", "Initialize Primary", `data-dialog-auto-open="true"`, `/cluster?onboarding=primary&amp;configure=https`, `>Back</a>`} {
+	for _, expected := range []string{"Cluster Domain", "Initialize Primary", `data-dialog-auto-open="true"`, `/cluster?onboarding=primary&amp;configure=https`, `><span>Back</span></a>`} {
 		if !strings.Contains(continuedBody, expected) {
 			t.Fatalf("continued onboarding missing %q: %s", expected, continuedBody)
 		}
@@ -1610,9 +1610,9 @@ func TestAdministrationPageRendersIsotopeAdministrationControls(t *testing.T) {
 		`data-control-plane-read-only="true"`, `data-cluster-primary-url="https://dns-1.example.test"`,
 		`Replica · Read-only`, `View and troubleshoot here. Make configuration changes on the primary.`,
 		`class="replica-primary-link"`, `href="https://dns-1.example.test"`, `Open Primary`,
-		`type="submit" disabled>Add User`, `type="submit" disabled>Add Group`,
-		`data-dialog-save="info" disabled>Save User Info`, `data-dialog-save="groups" disabled hidden>Save Groups`,
-		`data-token-submit disabled>Create Token`,
+		`type="submit" disabled><span>Add User</span>`, `type="submit" disabled><span>Add Group</span>`,
+		`type="submit" disabled data-dialog-save="info"`, `type="submit" disabled data-dialog-save="groups" form="edit-user-1-groups" hidden>`,
+		`type="submit" disabled data-token-submit><span>Create Token</span>`,
 		`data-dialog-tab="tokens"`, `data-dialog-panel="tokens"`, `hx-get="/ui/administration/tokens?user_id=1"`,
 		`hx-trigger="dialogTabShown"`, `id="edit-user-1-token-count"`, "Tokens owned by admin", "Never used",
 	} {

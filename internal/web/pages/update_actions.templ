@@ -25,11 +25,11 @@ func updateRestartAttributes(view UpdateView, continueURL string) templ.Attribut
 
 templ updatePrimaryAction(view UpdateView, fromNotification bool) {
 	if view.Busy {
-		<button class="button compact update-install-progress" type="button" disabled>@Icon("refresh")<span>{ ifThen(view.Phase == "checking", "Checking…", "Installing…") }</span></button>
+		@components.Button(components.ButtonProps{Label: ifThen(view.Phase == "checking", "Checking…", "Installing…"), Icon: "refresh", Compact: true, Disabled: true, Class: "update-install-progress"})
 	} else {
 		switch updateAction(view) {
 			case "restart":
-				<button class="button compact" type="button" data-sable-restart-button>@Icon("power")<span>Restart Sable</span></button>
+				@components.Button(components.ButtonProps{Label: "Restart Sable", Icon: "power", Compact: true, Attrs: templ.Attributes{"data-sable-restart-button": true}})
 			case "install":
 				if view.CanUpdateCluster {
 					@updateScopeButton(view, fromNotification)
@@ -42,7 +42,7 @@ templ updatePrimaryAction(view UpdateView, fromNotification bool) {
 
 templ updateReleaseNotesButton(view UpdateView, dialogID string) {
 	if view.ReleaseNotes != "" {
-		<button id={ dialogID + "-open" } class="button outline compact" type="button" data-dialog-open={ dialogID }>Release notes</button>
+		@components.Button(components.ButtonProps{Label: "Release notes", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"id": dialogID + "-open", "data-dialog-open": dialogID}})
 	} else if view.Available && !view.Installed && view.ReleaseURL != "" {
 		<a id={ dialogID + "-open" } class="button outline compact" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>Release notes</span>@Icon("external-link")</a>
 	}
@@ -50,7 +50,7 @@ templ updateReleaseNotesButton(view UpdateView, dialogID string) {
 
 templ updateInstallButton(view UpdateView, fromNotification bool) {
 	@updateInstallForm(view, fromNotification) {
-		<button class="button compact" type="submit">@Icon("download")<span>{ ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion) }</span></button>
+		@components.Button(components.ButtonProps{Label: ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion), Icon: "download", Compact: true, Type: "submit"})
 	}
 }
 
@@ -81,12 +81,12 @@ templ updateScopeButton(view UpdateView, fromNotification bool) {
 	<div class="update-split-button" data-update-scope>
 		<div data-update-scope-action="node">
 			@updateInstallForm(view, fromNotification) {
-				<button id={ prefix + "-update-node" } class="button compact" type="submit">{ ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion) }</button>
+				@components.Button(components.ButtonProps{Label: ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion), Compact: true, Type: "submit", Attrs: templ.Attributes{"id": prefix + "-update-node"}})
 			}
 		</div>
 		<div data-update-scope-action="cluster" hidden>
 			@clusterUpdateForm(view.LatestVersion, prefix) {
-				<button id={ prefix + "-update-cluster" } class="button compact" type="submit">Update cluster</button>
+				@components.Button(components.ButtonProps{Label: "Update cluster", Compact: true, Type: "submit", Attrs: templ.Attributes{"id": prefix + "-update-cluster"}})
 			}
 		</div>
 		<button id={ prefix + "-update-scope" } class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls={ prefix + "-update-scope-menu" } data-update-scope-trigger>@Icon("chevron-down")</button>
@@ -114,7 +114,7 @@ templ updateReleaseNotesDialog(view UpdateView, dialogID string) {
 				if view.ReleaseURL != "" {
 					<a class="button outline" href={ templ.URL(view.ReleaseURL) } target="_blank" rel="noopener noreferrer"><span>View release</span>@Icon("external-link")</a>
 				}
-				<button class="button" type="button" data-dialog-close>Done</button>
+				@components.Button(components.ButtonProps{Label: "Done", Attrs: templ.Attributes{"data-dialog-close": true}})
 			</div>
 		}
 	}
