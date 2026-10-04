@@ -10,6 +10,9 @@ New screens and components must preserve Isotope's:
 - information architecture and navigation order;
 - responsive 256px sidebar and compact/mobile states;
 - shadcn surface, text, border, input, and radius tokens;
+- status tokens for state colors: `--success`, `--warning`, `--danger`, and
+  `--info`, with `--success-strong` and `--warning-strong` for text on a
+  light tint;
 - 4px spacing scale and established page/card density;
 - typography hierarchy and monospace treatment of DNS data;
 - Lucide icon language, colored metric cards, and bordered depth model;
