@@ -3,6 +3,8 @@ package pages
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // insightChart pictures a finding's evidence under its fact cards, marking
@@ -79,7 +81,7 @@ templ insightChartFrame(id string, summary string, readings []chartReading, focu
 		aria-describedby={ id + "-reading" }
 	>
 		{ children... }
-		<div class="chart-tooltip insight-chart-tooltip" data-chart-tooltip aria-hidden="true" hidden></div>
+		@components.ChartTooltip(components.ChartTooltipProps{Class: "insight-chart-tooltip"})
 		<span class="sr-only" id={ id + "-reading" } aria-live="polite" aria-atomic="true" data-chart-keyboard-status></span>
 	</div>
 }
