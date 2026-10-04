@@ -909,7 +909,7 @@ templ LocalBackupRestoreDialog() {
 			<input type="hidden" name="name" data-local-backup-restore-input/>
 			@BackupRestoreWarning("Zones, users, roles, API tokens, and secrets are validated and staged while this node keeps serving its current state.")
 			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" data-local-backup-passphrase/><small data-local-backup-passphrase-note></small></label>
-			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
+			@components.ChoiceCard(components.ChoiceCardProps{ID: "local-backup-restore-keep-configuration", Title: "Keep this node's configuration", Description: "Restore data while leaving local listeners, storage, and paths alone.", Style: components.ChoiceRow, Name: "keep_configuration"})
 			@components.DialogFooter("Cancel") {
 				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore Backup</span></button>
 			}
@@ -948,7 +948,7 @@ templ UploadBackupRestoreDialog() {
 				<p class="zone-import-help" data-file-dropzone-status role="status" aria-live="polite"></p>
 			</div>
 			<label><span>Passphrase</span><input type="password" name="passphrase" autocomplete="off" required placeholder="The passphrase this backup was sealed with"/></label>
-			<label class="zone-import-option"><input type="checkbox" name="keep_configuration"/><span><strong>Keep this node's configuration</strong><small>Restore data while leaving local listeners, storage, and paths alone.</small></span></label>
+			@components.ChoiceCard(components.ChoiceCardProps{ID: "upload-backup-restore-keep-configuration", Title: "Keep this node's configuration", Description: "Restore data while leaving local listeners, storage, and paths alone.", Style: components.ChoiceRow, Name: "keep_configuration"})
 			@BackupUploadMeter()
 			@components.DialogFooter("Cancel") {
 				<button class="button destructive" type="submit" data-replica-primary-action>@Icon("upload")<span>Restore Backup</span></button>

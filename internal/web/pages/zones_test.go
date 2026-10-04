@@ -179,3 +179,19 @@ func TestPrimaryConversionDialogReviewsSnapshotAndBlocksUnsupportedZones(t *test
 		t.Fatal("unsupported conversion is actionable")
 	}
 }
+
+func TestZoneConversionNamesItsConfirmation(t *testing.T) {
+	t.Parallel()
+	zone := ZoneView{Name: "standalone.example", Type: "secondary", PrimaryServers: []string{"192.0.2.53"}, CanTransfer: true}
+	markup := renderComponent(t, ConvertPrimaryDialog(zone, "convert"))
+	for _, want := range []string{
+		`<label class="zone-import-option">`,
+		`name="freeze_confirmed" value="true" required aria-labelledby="zone-convert-freeze-label" aria-describedby="zone-convert-freeze-help"`,
+		`<strong id="zone-convert-freeze-label">Source writes are paused</strong>`,
+		`<small id="zone-convert-freeze-help">`,
+	} {
+		if !strings.Contains(markup, want) {
+			t.Errorf("the conversion dialog lacks %q", want)
+		}
+	}
+}

@@ -1367,10 +1367,7 @@ templ ConvertPrimaryDialog(zone ZoneView, id string) {
     </select></label>
     <p class="zone-import-help">If synchronization fails, the zone stays Secondary. A stored snapshot may contain stale or expired data.</p>
     <div class="zone-import-options">
-     <label class="zone-import-option">
-      <input type="checkbox" name="freeze_confirmed" value="true" required/>
-      <span><strong>Source writes are paused</strong><small>I have stopped edits and automatic updates on the current source.</small></span>
-     </label>
+     @components.ChoiceCard(components.ChoiceCardProps{ID: "zone-convert-freeze", Title: "Source writes are paused", Description: "I have stopped edits and automatic updates on the current source.", Style: components.ChoiceRow, Name: "freeze_confirmed", Value: "true", Required: true})
     </div>
     <p class="zone-import-help">Before moving clients, verify Sable and its replicas. SOA and NS targets remain unchanged; review them before retiring the source.</p>
    }
