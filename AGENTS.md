@@ -111,8 +111,9 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.PageHeader` for a page's title and description, with any `Actions` beside them
   - `components.DataTable` for a desktop table: its caption and column headings, with the body rows as children
   - `components.Badge` for a status label (pick a `Tone`) or a count chip (`BadgeCount`)
+  - `components.Menu` for a dropdown menu: its trigger, with the panel as children; it closes on an outside click or Escape
 
-  Use the shared `.field-help` class too. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
+  Use the shared `.field-help` class too. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` or `components.Menu` cannot draw, such as a file `<label>`.
 
   If a pattern shows up twice, make it a component and use it in both places. Add a parameter to a shared component instead of copying its markup.
 - **Give every control all its states:** hover, visible keyboard focus, pressed, disabled, and loading.

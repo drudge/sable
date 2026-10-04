@@ -5803,7 +5803,7 @@
 	  if (action && !action.disabled) action.closest("details").removeAttribute("open");
 	});
 
-	const openMenus = ".pause-menu[open], .zone-action-menu[open], .about-update-menu[open], .backup-run-menu[open], .dynamic-dns-add-provider-menu[open], .insight-hide-menu[open]";
+	const openMenus = "[data-menu][open]";
 	document.addEventListener("pointerdown", (event) => {
 	  document.querySelectorAll(openMenus).forEach((menu) => {
 		if (!menu.contains(event.target)) menu.removeAttribute("open");

@@ -260,13 +260,12 @@ templ UpdatePanel(view UpdateView) {
 				>
 					<div class="about-update-split">
 						<button class="button outline compact" type="submit">@Icon("refresh")<span class="about-update-check-idle">{ ifThen(view.Checked, "Check Again", "Check for Updates") }</span><span class="about-update-check-pending" role="status">Checking…</span></button>
-						<details class="about-update-menu">
-							<summary class="button outline compact" aria-label="Release channel options" title="Release channel options">@Icon("chevron-down")</summary>
+						@components.Menu(components.MenuProps{Icon: "chevron-down", Variant: components.ButtonOutline, Compact: true, Class: "about-update-menu", TriggerAttrs: templ.Attributes{"aria-label": "Release channel options", "title": "Release channel options"}}) {
 							<div>
 								<label class="about-update-channel"><input type="checkbox" name="pre_release" value="true" checked?={ view.PreferredPreRelease }/><span>Include pre-releases</span></label>
 								<small>This node only · checks again when changed.</small>
 							</div>
-						</details>
+						}
 					</div>
 				</form>
 			}

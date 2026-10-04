@@ -531,8 +531,7 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 }
 
 templ DynamicDNSAddProviderMenu() {
-	<details class="dynamic-dns-add-provider-menu" data-dynamic-dns-add-provider-menu>
-		<summary class="button outline compact">@Icon("plus")<span>Add Provider</span><span class="styled-select-chevron" aria-hidden="true"></span></summary>
+	@components.Menu(components.MenuProps{Label: "Add Provider", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Caret: true, Class: "dynamic-dns-add-provider-menu", Attrs: templ.Attributes{"data-dynamic-dns-add-provider-menu": true}}) {
 		<div role="menu" aria-label="Choose a Dynamic DNS provider">
 			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="cloudflare">Cloudflare</button>
 			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="porkbun">Porkbun</button>
@@ -544,7 +543,7 @@ templ DynamicDNSAddProviderMenu() {
 			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="ovh">OVHcloud</button>
 			<button type="button" role="menuitem" data-dynamic-dns-add-publisher data-provider="rfc2136">RFC 2136 Dynamic Update</button>
 		</div>
-	</details>
+	}
 }
 
 templ DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removable bool) {

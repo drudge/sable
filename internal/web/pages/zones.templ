@@ -814,8 +814,7 @@ templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
 func zoneHistoryChangeSymbol(kind string) string { if kind == "added" { return "+" }; if kind == "removed" { return "−" }; return "~" }
 
 templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, cloneID, deleteID string) {
-	<details class={ "zone-action-menu " + className }>
-		<summary class={ ifThen(className == "", "icon-button zone-more-button", "icon-button") } aria-label={ "Actions for " + zone.Name }>@Icon("more-vertical")</summary>
+	@components.Menu(components.MenuProps{Icon: "more-vertical", IconButton: true, TriggerClass: ifThen(className == "", "zone-more-button", ""), Class: strings.TrimSpace("zone-action-menu " + className), TriggerAttrs: templ.Attributes{"aria-label": "Actions for " + zone.Name}}) {
 		<div class="zone-menu-content">
 			if zone.CanSettings {
 				<button type="button" data-dialog-open={ settingsID }>@Icon("sliders")<span>Zone Settings</span></button>
@@ -854,7 +853,7 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 				<button class="danger" type="button" data-dialog-open={ deleteID } data-replica-primary-action>@Icon("trash")<span>Delete Zone</span></button>
 			}
 		</div>
-	</details>
+	}
 }
 
 templ ZoneCopyableText(id, text, className string) {
@@ -1388,13 +1387,12 @@ templ DNSSECMigrationSteps() {
 templ zoneListActions(view ZonesPageView) {
 	if view.CanCreate {
 		<div class="zone-heading-actions">
-			<details class="pause-menu zone-import-menu">
-				<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import</span>@Icon("chevron-down")</summary>
+			@components.Menu(components.MenuProps{Label: "Import", Icon: "upload", TrailingIcon: "chevron-down", Variant: components.ButtonOutline, TriggerClass: "zone-import-trigger", Class: "pause-menu zone-import-menu", TriggerAttrs: templ.Attributes{"aria-label": "Import options"}}) {
 				<div>
 					<button type="button" aria-label="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("file-text")<span><strong>From file or text</strong><small>Upload a zone file or paste records</small></span></button>
 					<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>
 				</div>
-			</details>
+			}
 			@components.Button(components.ButtonProps{Label: "Add Zone", Icon: "plus", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Add zone", "title": "Add zone", "data-dialog-open": "create-zone-dialog", "data-replica-primary-action": true}})
 		</div>
 	}

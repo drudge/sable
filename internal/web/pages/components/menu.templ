@@ -1,0 +1,64 @@
+package components
+
+// MenuProps describes a dropdown menu: a details element whose summary is
+// the trigger and whose children are the panel that opens below it.
+type MenuProps struct {
+	// Label and Icon draw the trigger like a Button. A trigger with only an
+	// icon names itself through an aria-label in TriggerAttrs.
+	Label   string
+	Icon    string
+	Variant ButtonVariant
+	Compact bool
+	// IconButton draws the round icon-only trigger used in rows instead.
+	IconButton bool
+	// TrailingIcon names an Icon drawn after the label, and Caret draws the
+	// select-style chevron there instead.
+	TrailingIcon string
+	Caret        bool
+	// TriggerClass adds classes to the summary, and TriggerAttrs go on it.
+	TriggerClass string
+	TriggerAttrs templ.Attributes
+	// Class names the menu for its panel's styling, and Attrs go on the
+	// details element, such as data hooks.
+	Class string
+	Attrs templ.Attributes
+}
+
+func (p MenuProps) triggerClass() string {
+	if p.IconButton {
+		return fieldClass("icon-button", p.TriggerClass)
+	}
+	return ButtonProps{Variant: p.Variant, Compact: p.Compact, Class: p.TriggerClass}.class()
+}
+
+// Menu draws a dropdown menu. The console closes an open menu on a click
+// outside it or on Escape.
+templ Menu(p MenuProps) {
+	<details class={ p.Class } data-menu { p.Attrs... }>
+		<summary class={ p.triggerClass() } { p.TriggerAttrs... }>@menuTrigger(p)</summary>
+		{ children... }
+	</details>
+}
+
+templ menuTrigger(p MenuProps) {
+	if p.Icon != "" {
+		@Icon(p.Icon)
+	}
+	if p.Label != "" {
+		@menuLabel(p.Label)
+	}
+	if p.TrailingIcon != "" {
+		@Icon(p.TrailingIcon)
+	}
+	if p.Caret {
+		@menuCaret()
+	}
+}
+
+templ menuLabel(label string) {
+	<span>{ label }</span>
+}
+
+templ menuCaret() {
+	<span class="styled-select-chevron" aria-hidden="true"></span>
+}
