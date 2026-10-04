@@ -69,8 +69,8 @@ templ ProfileContent(view ProfilePageView) {
 
 templ ProfileAccountSettings(view ProfilePageView) {
 	<div class="profile-account-stack">
-		<section class="card isotope-data-card profile-settings-card">
-			<header class="isotope-data-header"><div><h2>Account details</h2><span>Your name and contact information</span></div></header>
+		@components.Card(components.CardProps{Class: "isotope-data-card profile-settings-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Title: "Account details", Description: "Your name and contact information", Class: "isotope-data-header"})
 			<form class="profile-settings-form" method="post" action="/ui/profile" hx-post="/ui/profile" hx-target="#profile-content" hx-swap="outerHTML">
 				<input type="hidden" name="csrf_token" value={ view.Console.CSRFToken }/>
 				<div class="profile-settings-body">
@@ -82,17 +82,16 @@ templ ProfileAccountSettings(view ProfilePageView) {
 				</div>
 				<footer class="profile-card-footer">@components.Button(components.ButtonProps{Label: "Save Changes", Type: "submit"})</footer>
 			</form>
-		</section>
+		}
 		@ProfilePasskeys(view)
-		<section class="card isotope-data-card profile-settings-card" data-passkeys data-csrf-token={ view.Console.CSRFToken }>
-			<header class="isotope-data-header profile-password-header">
-				<div><h2>Password</h2><span>{ ifThen(view.User.PasswordLogin, "Password sign-in is enabled", ifThen(view.HasPassword, "Password sign-in is disabled. Your existing password is saved.", "Set a password below to enable password sign-in.")) }</span></div>
+		@components.Card(components.CardProps{Class: "isotope-data-card profile-settings-card", Attrs: templ.Attributes{"data-passkeys": true, "data-csrf-token": view.Console.CSRFToken}}) {
+			@components.CardHeader(components.CardHeaderProps{Title: "Password", Description: ifThen(view.User.PasswordLogin, "Password sign-in is enabled", ifThen(view.HasPassword, "Password sign-in is disabled. Your existing password is saved.", "Set a password below to enable password sign-in.")), Class: "isotope-data-header profile-password-header"}) {
 				if view.User.PasswordLogin && len(view.Passkeys) > 0 && !view.PasskeysDisabled {
 					@components.Button(components.ButtonProps{Label: "Disable password sign-in", Icon: "pause", Variant: components.ButtonOutline, Compact: true, Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "disable-password"}})
 				} else if !view.User.PasswordLogin && view.HasPassword {
  @components.Button(components.ButtonProps{Label: "Enable password sign-in", Icon: "play", Variant: components.ButtonOutline, Compact: true, Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "enable-password"}})
  }
-			</header>
+			}
 			<form class="profile-settings-form" hx-post="/ui/profile/password" hx-target="#profile-content" hx-swap="outerHTML">
 				<div class="profile-settings-body">
 					if view.User.PasswordLogin {
@@ -107,7 +106,7 @@ templ ProfileAccountSettings(view ProfilePageView) {
 				</div>
 				<footer class="profile-card-footer">@components.Button(components.ButtonProps{Label: ifThen(view.User.PasswordLogin, "Change Password", "Set new password and enable sign-in"), Type: "submit"})</footer>
 			</form>
-		</section>
+		}
 	</div>
 }
 
@@ -119,8 +118,10 @@ templ ProfileTokenSettings(view ProfilePageView) {
 }
 
 templ ProfileTokens(view ProfilePageView) {
-	<section class="card isotope-data-card profile-token-list" id="profile-token-list" hx-get="/ui/profile/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
-		<header class="isotope-data-header"><div><h2>API Tokens</h2><span>{ fmt.Sprintf("%d active", len(view.Tokens)) }</span></div>@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})</header>
+	@components.Card(components.CardProps{ID: "profile-token-list", Class: "isotope-data-card profile-token-list", Attrs: templ.Attributes{"hx-get": "/ui/profile/tokens", "hx-trigger": "apiTokensChanged from:body", "hx-target": "this", "hx-swap": "outerHTML"}}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "API Tokens", Description: fmt.Sprintf("%d active", len(view.Tokens)), Class: "isotope-data-header"}) {
+			@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})
+		}
 		if len(view.Tokens) == 0 {
 			<div class="admin-empty profile-token-empty"><div>@Icon("key")</div><strong>No API tokens yet</strong><span>Create a token for scripts, integrations, and other API clients.</span></div>
 		} else {
@@ -139,7 +140,7 @@ templ ProfileTokens(view ProfilePageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) {
@@ -175,8 +176,8 @@ func profileTokenExpiration(value time.Time, display TimeDisplay) string { if va
 
 
 templ ProfilePasskeys(view ProfilePageView) {
- <section class="card isotope-data-card profile-settings-card" data-passkeys data-csrf-token={ view.Console.CSRFToken }>
-  <header class="isotope-data-header"><div><h2>Passkeys</h2><span>Sign in with your fingerprint, face, device PIN, or security key</span></div></header>
+ @components.Card(components.CardProps{Class: "isotope-data-card profile-settings-card", Attrs: templ.Attributes{"data-passkeys": true, "data-csrf-token": view.Console.CSRFToken}}) {
+  @components.CardHeader(components.CardHeaderProps{Title: "Passkeys", Description: "Sign in with your fingerprint, face, device PIN, or security key", Class: "isotope-data-header"})
   <div class="profile-settings-body">
    if view.PasskeysDisabled {
  <p>Passkey sign-in is disabled by your administrator. Your saved passkeys are preserved.</p>
@@ -198,5 +199,5 @@ templ ProfilePasskeys(view ProfilePageView) {
    @components.Button(components.ButtonProps{Label: "Add passkey", Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"data-passkey-action": "register"}})
   </footer>
  }
- </section>
+ }
 }

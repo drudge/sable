@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // UpdateIndicator floats above a page while a range change loads, so the
@@ -112,16 +114,10 @@ templ DashboardInsights(view DashboardInsightsView, outOfBand bool) {
 }
 
 templ RankedPanelSkeleton(title string, rangeLabel string) {
-	<article class="card ranking-card ranking-card-skeleton">
-		<header>
-			<div class="ranking-heading">
-				<h2>{ title }</h2>
-				if rangeLabel != "" {
-					<small>{ rangeLabel }</small>
-				}
-			</div>
+	@components.Card(components.CardProps{Article: true, Class: "ranking-card ranking-card-skeleton"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: title, Description: rangeLabel, HeadingClass: "ranking-heading"}) {
 			<span class="ranking-skeleton-action insights-skeleton-block"></span>
-		</header>
+		}
 		<div class="ranking-list">
 			for range 5 {
 				<div class="ranking-row ranking-skeleton-row">
@@ -133,12 +129,12 @@ templ RankedPanelSkeleton(title string, rangeLabel string) {
 				</div>
 			}
 		</div>
-	</article>
+	}
 }
 
 templ DistributionPanelSkeleton(title string) {
-	<article class="card distribution-card distribution-card-skeleton">
-		<header><h2>{ title }</h2></header>
+	@components.Card(components.CardProps{Article: true, Class: "distribution-card distribution-card-skeleton"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: title})
 		<div class="distribution-content">
 			<div class="donut-wrap">
 				<span class="distribution-skeleton-donut insights-skeleton-block"></span>
@@ -153,23 +149,17 @@ templ DistributionPanelSkeleton(title string) {
 				}
 			</div>
 		</div>
-	</article>
+	}
 }
 
 templ RankedPanel(title string, kind string, items []RankedStatView, insights DashboardInsightsView) {
-	<article class="card ranking-card">
-		<header>
-			<div class="ranking-heading">
-				<h2>{ title }</h2>
-				if insights.RangeLabel != "" {
-					<small>{ insights.RangeLabel }</small>
-				}
-			</div>
+	@components.Card(components.CardProps{Article: true, Class: "ranking-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: title, Description: insights.RangeLabel, HeadingClass: "ranking-heading"}) {
 			<button class="button outline compact ranking-view-all" type="button" data-dialog-open={ "top-stats-" + kind + "-dialog" }>
 				<span>View all</span>
 				@Icon("chevron-right")
 			</button>
-		</header>
+		}
 		<div class="ranking-list">
 			if len(items) == 0 {
 				<div class="dashboard-empty">No queries in this range</div>
@@ -190,7 +180,7 @@ templ RankedPanel(title string, kind string, items []RankedStatView, insights Da
 				}
 			}
 		</div>
-	</article>
+	}
 	@TopStatsDialog(title, kind, items, insights)
 }
 
@@ -260,8 +250,8 @@ templ topStatsRowContent(index int, item RankedStatView) {
 }
 
 templ DistributionPanel(title string, items []DistributionItemView) {
-	<article class="card distribution-card">
-		<header><h2>{ title }</h2></header>
+	@components.Card(components.CardProps{Article: true, Class: "distribution-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: title})
 		<div class="distribution-content" data-donut>
 			<div class="donut-wrap">
 				<svg viewBox="0 0 120 120" aria-hidden="true">
@@ -295,7 +285,7 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 				<div class="chart-tooltip donut-tooltip" data-donut-tooltip aria-hidden="true" hidden></div>
 			}
 		</div>
-	</article>
+	}
 }
 
 func compactNumber(value uint64) string {

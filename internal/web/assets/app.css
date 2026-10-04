@@ -506,7 +506,7 @@ button { cursor: pointer; }
 .ranking-card > header, :is(.insight-findings, .insight-entity-card) > .isotope-data-header { background: color-mix(in oklch, var(--muted) 45%, transparent); }
 /* A ranking header is a band, so its title and View all button center in it. */
 .ranking-card > header { padding-block: 1rem; }
-.ranking-heading small { color: var(--muted-foreground); font-size: .75rem; }
+.ranking-heading p, .isotope-data-header > .ranking-heading > p { margin: 0; color: var(--muted-foreground); font-size: .75rem; }
 /* View all is an ordinary button with a disclosure chevron, like a finding's
    Details button. */
 .ranking-view-all { flex: 0 0 auto; gap: .25rem; white-space: nowrap; }
@@ -2577,7 +2577,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .isotope-data-header { display: flex; min-height: 4rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1rem; }
 .isotope-data-header > div { display: flex; min-width: 0; align-items: center; gap: .5rem; }
 .isotope-data-header h2 { margin: 0; font-size: 1.125rem; font-weight: 600; }
-.isotope-data-header > div > span { color: var(--muted-foreground); font-size: .875rem; }
+.isotope-data-header > div > p { margin: 0; color: var(--muted-foreground); font-size: .875rem; }
 .button.compact { display: inline-flex; height: 2rem; align-items: center; gap: .45rem; padding-inline: .75rem; font-size: .75rem; }
 /* The basis matches the width. Otherwise phones give the icon the sidebar's
    1.25rem basis, and Safari sizes the button too small and wraps its label. */
@@ -2600,7 +2600,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .profile-account-stack { display: grid; width: min(52rem, 100%); gap: 1rem; }
 .profile-settings-card { overflow: hidden; }
 .profile-settings-card .isotope-data-header > div { display: grid; align-items: initial; gap: .2rem; }
-.profile-settings-card .isotope-data-header > div > span { font-size: .75rem; }
+.profile-settings-card .isotope-data-header > div > p { font-size: .75rem; }
 .profile-settings-form { display: grid; }
 .profile-settings-body { display: grid; gap: 1rem; padding: 1.25rem; }
 .profile-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }

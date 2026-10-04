@@ -67,3 +67,13 @@ func TestCardHeaderRendersTitleDescriptionAndActions(t *testing.T) {
 		t.Errorf("icon header: %s", got)
 	}
 }
+
+func TestCardHeaderRendersHeadingAndDescriptionClasses(t *testing.T) {
+	t.Parallel()
+
+	got := renderWithChildren(t, CardHeader(CardHeaderProps{Title: "Devices", Description: "Last 24 hours", HeadingClass: "ranking-heading", DescriptionClass: "desktop-only", Class: "isotope-data-header", Attrs: templ.Attributes{"aria-hidden": "true"}}), "")
+	want := `<header class="isotope-data-header" aria-hidden="true"><div class="ranking-heading"><h2>Devices</h2><p class="desktop-only">Last 24 hours</p></div></header>`
+	if got != want {
+		t.Errorf("classed header:\n got %s\nwant %s", got, want)
+	}
+}
