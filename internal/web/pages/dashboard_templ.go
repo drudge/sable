@@ -4484,7 +4484,11 @@ func QueryChart(view QueryChartView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.HasActivity {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 305, "<div class=\"chart-hover\" data-chart-hover-layer aria-hidden=\"true\" hidden></div><div class=\"chart-tooltip\" data-chart-tooltip aria-hidden=\"true\" hidden></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 305, "<div class=\"chart-hover\" data-chart-hover-layer aria-hidden=\"true\" hidden></div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = components.ChartTooltip(components.ChartTooltipProps{}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

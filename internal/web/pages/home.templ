@@ -282,7 +282,7 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 				}
 			</div>
 			if len(items) > 0 {
-				<div class="chart-tooltip donut-tooltip" data-donut-tooltip aria-hidden="true" hidden></div>
+				@components.ChartTooltip(components.ChartTooltipProps{Class: "donut-tooltip"})
 			}
 		</div>
 	}

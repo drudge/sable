@@ -11,6 +11,8 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // insightChart pictures a finding's evidence under its fact cards, marking
@@ -62,7 +64,7 @@ func insightChart(finding InsightFindingView) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(finding.ID + "-chart")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 12, Col: 120}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 14, Col: 120}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -126,7 +128,7 @@ func insightDayChart(id string, view dayChartView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 26, Col: 12}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 28, Col: 12}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -163,7 +165,7 @@ func insightDayChart(id string, view dayChartView) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.1f", view.AverageEnd))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 31, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 33, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -176,7 +178,7 @@ func insightDayChart(id string, view dayChartView) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.1f", view.AverageY))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 31, Col: 129}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 33, Col: 129}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 			if templ_7745c5c3_Err != nil {
@@ -189,7 +191,7 @@ func insightDayChart(id string, view dayChartView) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%.1f", view.AverageY))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 31, Col: 171}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 33, Col: 171}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 			if templ_7745c5c3_Err != nil {
@@ -241,7 +243,7 @@ func insightHourChart(id string, view hourChartView) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 42, Col: 12}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 44, Col: 12}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -317,7 +319,7 @@ func insightScheduleChart(id string, view scheduleChartView) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 57, Col: 12}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 59, Col: 12}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -330,7 +332,7 @@ func insightScheduleChart(id string, view scheduleChartView) templ.Component {
 		var templ_7745c5c3_Var16 string
 		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Summary)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 58, Col: 90}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 60, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 		if templ_7745c5c3_Err != nil {
@@ -343,7 +345,7 @@ func insightScheduleChart(id string, view scheduleChartView) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Ticks)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 59, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 61, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -388,7 +390,7 @@ func insightChartFrame(id string, summary string, readings []chartReading, focus
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(chartReadingsJSON(readings))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 74, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 76, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 		if templ_7745c5c3_Err != nil {
@@ -401,7 +403,7 @@ func insightChartFrame(id string, summary string, readings []chartReading, focus
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(focus))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 75, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 77, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -414,7 +416,7 @@ func insightChartFrame(id string, summary string, readings []chartReading, focus
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(summary + " Use Left and Right Arrow keys to read each bar.")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 78, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 80, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 		if templ_7745c5c3_Err != nil {
@@ -427,7 +429,7 @@ func insightChartFrame(id string, summary string, readings []chartReading, focus
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-reading")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 79, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 81, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -441,14 +443,18 @@ func insightChartFrame(id string, summary string, readings []chartReading, focus
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"chart-tooltip insight-chart-tooltip\" data-chart-tooltip aria-hidden=\"true\" hidden></div><span class=\"sr-only\" id=\"")
+		templ_7745c5c3_Err = components.ChartTooltip(components.ChartTooltipProps{Class: "insight-chart-tooltip"}).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<span class=\"sr-only\" id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-reading")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 83, Col: 44}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 85, Col: 44}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -510,7 +516,7 @@ func insightChartMarks(marks []chartMark) templ.Component {
 				var templ_7745c5c3_Var27 string
 				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(mark.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 90, Col: 43}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 92, Col: 43}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 				if templ_7745c5c3_Err != nil {
@@ -523,7 +529,7 @@ func insightChartMarks(marks []chartMark) templ.Component {
 				var templ_7745c5c3_Var28 string
 				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(mark.Slot))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 90, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `insight_charts.templ`, Line: 92, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 				if templ_7745c5c3_Err != nil {

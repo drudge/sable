@@ -1265,6 +1265,32 @@
 	  pointerPosition.y = event.clientY;
 	}, {passive: true});
 
+	// A chart tooltip (components.ChartTooltip) holds a label and one row per
+	// series: a swatch, the series name, and its value.
+	const chartTooltipLabel = (text = "") => {
+	  const label = document.createElement("div");
+	  label.className = "chart-tooltip-time";
+	  label.textContent = text;
+	  return label;
+	};
+	const chartTooltipRow = (name = "", value = "") => {
+	  const row = document.createElement("div");
+	  row.className = "chart-tooltip-row";
+	  const swatch = document.createElement("i");
+	  const label = document.createElement("span");
+	  label.textContent = name;
+	  const amount = document.createElement("b");
+	  amount.textContent = value;
+	  row.append(swatch, label, amount);
+	  return {row, swatch, name: label, amount};
+	};
+	// placeChartTooltip keeps a shown tooltip inside its chart's width by
+	// height box. Leaving top out keeps the tooltip's own top.
+	const placeChartTooltip = (tooltip, width, height, left, top) => {
+	  tooltip.style.left = `${Math.max(0, Math.min(left, width - tooltip.offsetWidth))}px`;
+	  if (top !== undefined) tooltip.style.top = `${Math.max(0, Math.min(top, height - tooltip.offsetHeight))}px`;
+	};
+
 	const setupQueryChartHover = (plot) => {
 	  if (!plot || plot.dataset.chartHoverReady === "true") return;
 	  plot.dataset.chartHoverReady = "true";
@@ -1299,18 +1325,11 @@
 		return marker;
 	  });
 
-	  const time = document.createElement("div");
-	  time.className = "chart-tooltip-time";
+	  const time = chartTooltipLabel();
 	  tooltip.append(time);
 	  const amounts = series.map((entry) => {
-		const row = document.createElement("div");
-		row.className = "chart-tooltip-row";
-		const swatch = document.createElement("i");
+		const {row, swatch, amount} = chartTooltipRow(entry.label);
 		swatch.style.background = entry.color;
-		const name = document.createElement("span");
-		name.textContent = entry.label;
-		const amount = document.createElement("b");
-		row.append(swatch, name, amount);
 		tooltip.append(row);
 		return amount;
 	  });
@@ -1347,9 +1366,8 @@
 		const left = ratio * rect.width;
 		const width = tooltip.offsetWidth;
 		const flipped = left + 14 + width > rect.width ? left - 14 - width : left + 14;
-		tooltip.style.left = `${Math.max(0, Math.min(flipped, rect.width - width))}px`;
 		const top = (clientY ?? rect.top + rect.height / 2) - rect.top - tooltip.offsetHeight / 2;
-		tooltip.style.top = `${Math.max(0, Math.min(top, rect.height - tooltip.offsetHeight))}px`;
+		placeChartTooltip(tooltip, rect.width, rect.height, flipped, top);
 	  };
 
 	  const hide = () => {
@@ -1402,17 +1420,12 @@
 	  if (!panel || panel.dataset.donutHoverReady === "true") return;
 	  panel.dataset.donutHoverReady = "true";
 
-	  const tooltip = panel.querySelector("[data-donut-tooltip]");
+	  const tooltip = panel.querySelector("[data-chart-tooltip]");
 	  const segments = [...panel.querySelectorAll("[data-donut-segment]")];
 	  const legends = [...panel.querySelectorAll("[data-donut-legend]")];
 	  if (!tooltip || !segments.length) return;
 
-	  const row = document.createElement("div");
-	  row.className = "chart-tooltip-row";
-	  const swatch = document.createElement("i");
-	  const name = document.createElement("span");
-	  const amount = document.createElement("b");
-	  row.append(swatch, name, amount);
+	  const {row, swatch, name, amount} = chartTooltipRow();
 	  const share = document.createElement("div");
 	  share.className = "chart-tooltip-share";
 	  tooltip.append(row, share);
@@ -1427,10 +1440,7 @@
 
 	  const place = (clientX, clientY) => {
 		const rect = panel.getBoundingClientRect();
-		const left = clientX - rect.left + 14;
-		const top = clientY - rect.top + 14;
-		tooltip.style.left = `${Math.max(0, Math.min(left, rect.width - tooltip.offsetWidth))}px`;
-		tooltip.style.top = `${Math.max(0, Math.min(top, rect.height - tooltip.offsetHeight))}px`;
+		placeChartTooltip(tooltip, rect.width, rect.height, clientX - rect.left + 14, clientY - rect.top + 14);
 	  };
 
 	  const show = (segment, clientX, clientY) => {
@@ -1522,22 +1532,12 @@
 		current = slot;
 		frame.classList.add("is-reading");
 		marks.forEach((mark) => mark.classList.toggle("is-active", mark.dataset.chartSlot === String(slot)));
-		const label = document.createElement("div");
-		label.className = "chart-tooltip-time";
-		label.textContent = reading.label;
 		const rows = (reading.rows || []).map((entry) => {
-		  const row = document.createElement("div");
-		  row.className = "chart-tooltip-row";
-		  const swatch = document.createElement("i");
+		  const {row, swatch} = chartTooltipRow(entry.series, entry.value);
 		  swatch.className = `insight-chart-swatch ${entry.key}`;
-		  const name = document.createElement("span");
-		  name.textContent = entry.series;
-		  const value = document.createElement("b");
-		  value.textContent = entry.value;
-		  row.append(swatch, name, value);
 		  return row;
 		});
-		tooltip.replaceChildren(label, ...rows);
+		tooltip.replaceChildren(chartTooltipLabel(reading.label), ...rows);
 		tooltip.hidden = false;
 		// Beside the bar rather than over it, and on its left near the edge.
 		const box = frame.getBoundingClientRect();
@@ -1545,7 +1545,7 @@
 		const center = plot.left - box.left + ((slot + .5) / readings.length) * plot.width;
 		const width = tooltip.offsetWidth;
 		const left = center + 12 + width > box.width ? center - 12 - width : center + 12;
-		tooltip.style.left = `${Math.max(0, Math.min(left, box.width - width))}px`;
+		placeChartTooltip(tooltip, box.width, box.height, left);
 		if (announce && status) {
 		  status.textContent = [reading.label, ...(reading.rows || []).map((entry) => `${entry.series}: ${entry.value}`)].join(". ");
 		}

@@ -1322,7 +1322,7 @@ templ QueryChart(view QueryChartView) {
 				</div>
 				if view.HasActivity {
 					<div class="chart-hover" data-chart-hover-layer aria-hidden="true" hidden></div>
-					<div class="chart-tooltip" data-chart-tooltip aria-hidden="true" hidden></div>
+					@components.ChartTooltip(components.ChartTooltipProps{})
 				}
 				<span class="sr-only" id="query-chart-keyboard-status" aria-live="polite" aria-atomic="true" data-chart-keyboard-status></span>
 			</div>

@@ -112,6 +112,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.DataTable` for a desktop table: its caption and column headings, with the body rows as children
   - `components.Badge` for a status label (pick a `Tone`) or a count chip (`BadgeCount`)
   - `components.Menu` for a dropdown menu: its trigger, with the panel as children; it closes on an outside click or Escape
+  - `components.ChartTooltip` for a chart's hover reading, filled and placed by `chartTooltipRow` and `placeChartTooltip` in `app.js`
 
   Use the shared `.field-help` class too. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` or `components.Menu` cannot draw, such as a file `<label>`.
 
