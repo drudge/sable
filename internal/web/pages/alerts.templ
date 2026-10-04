@@ -337,13 +337,12 @@ func alertsStateSummary(view AlertsView) string {
 
 // alertsDestinationsCard lists where alerts go.
 templ alertsDestinationsCard(view AlertsView) {
-	<section class="card settings-source-card settings-action-card alerts-destinations-card" id="destinations" data-settings-card>
-		<header>
-			<div><h2>@Icon("send")<span>Destinations</span></h2><p>Where Sable sends alerts. Their URLs and keys stay in the encrypted vault.</p></div>
+	@components.Card(components.CardProps{ID: "destinations", Class: "settings-source-card settings-action-card alerts-destinations-card", Attrs: templ.Attributes{"data-settings-card": true}}) {
+		@components.CardHeader(components.CardHeaderProps{Icon: "send", Title: "Destinations", Description: "Where Sable sends alerts. Their URLs and keys stay in the encrypted vault."}) {
 			if view.CanEdit {
 				@components.Button(components.ButtonProps{Label: "Add Destination", Icon: "plus", Compact: true, Attrs: templ.Attributes{"id": "alert-destination-add", "hx-get": "/ui/settings/alerts/destinations/form", "hx-target": "#alert-destination-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-destination-dialog", "data-replica-primary-action": true}})
 			}
-		</header>
+		}
 		<div class="isotope-card-content">
 			if len(view.Destinations) == 0 {
 				<div class="alerts-empty">@Icon("bell")<h3>No destinations yet</h3><p>Send alerts to ntfy, Pushover, Slack, Discord, a webhook, or your browsers.</p></div>
@@ -358,7 +357,7 @@ templ alertsDestinationsCard(view AlertsView) {
 				<p class="alert-browser-note alert-browser-orphans">{ browserCount(len(view.Browsers)) } turned alerts on, but Browsers is not a destination, so they get nothing. Add Browsers to send to them again.</p>
 			}
 		</div>
-	</section>
+	}
 }
 
 // alertDestinationRow is one destination: what it is, where it sends, which
@@ -435,8 +434,8 @@ func browserCount(count int) string {
 
 // alertsGroupsCard turns whole groups of alerts on or off. It saves on its own.
 templ alertsGroupsCard(view AlertsView) {
-	<section class="card settings-source-card alerts-groups-card" id="alert-types" data-settings-card>
-		<header><h2>@Icon("list-checks")<span>Alert Types</span></h2><p>Choose which alerts Sable sends. Problems go out at high priority.</p></header>
+	@components.Card(components.CardProps{ID: "alert-types", Class: "settings-source-card alerts-groups-card", Attrs: templ.Attributes{"data-settings-card": true}}) {
+		@components.CardHeader(components.CardHeaderProps{Icon: "list-checks", Title: "Alert Types", Description: "Choose which alerts Sable sends. Problems go out at high priority."})
 		<form class="isotope-card-content alert-groups" hx-post="/ui/settings/alerts/groups" hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="find button[type='submit']">
 			if !view.Groups.InsightsOff {
 				@alertInsightKinds(view)
@@ -468,7 +467,7 @@ templ alertsGroupsCard(view AlertsView) {
 				<div class="alert-groups-save">@components.Button(components.ButtonProps{Label: "Save Alert Types", Type: "submit", Attrs: templ.Attributes{"id": "alerts-groups-save", "data-replica-primary-action": true}})</div>
 			}
 		</form>
-	</section>
+	}
 }
 
 // alertInsightKinds is the Insights Findings switch with a switch for each

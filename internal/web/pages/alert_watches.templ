@@ -83,13 +83,12 @@ var (
 // alertsWatchesCard lists the domain watches. Each switches on and off from
 // its row; Add and Edit open the watch dialog.
 templ alertsWatchesCard(view AlertsView) {
-	<section class="card settings-source-card settings-action-card alerts-watches-card" id="watches" data-settings-card>
-		<header>
-			<div><h2>@Icon("eye")<span>Watches</span></h2><p>Alert when a device looks up a domain you pick.</p></div>
+	@components.Card(components.CardProps{ID: "watches", Class: "settings-source-card settings-action-card alerts-watches-card", Attrs: templ.Attributes{"data-settings-card": true}}) {
+		@components.CardHeader(components.CardHeaderProps{Icon: "eye", Title: "Watches", Description: "Alert when a device looks up a domain you pick."}) {
 			if view.CanEdit && !view.WatchLimit {
 				@components.Button(components.ButtonProps{Label: "Add Watch", Icon: "plus", Compact: true, Attrs: templ.Attributes{"id": "alert-watch-add", "hx-get": "/ui/settings/alerts/watches/form", "hx-target": "#alert-watch-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-watch-dialog", "data-replica-primary-action": true}})
 			}
-		</header>
+		}
 		<div class="isotope-card-content">
 			if view.WatchesQueryLogOff {
 				<p class="alert-browser-note alert-watch-note">@Icon("info")<span>The query log is off, so watches cannot see lookups. Turn it on in Logging.</span></p>
@@ -107,7 +106,7 @@ templ alertsWatchesCard(view AlertsView) {
 				<p class="alert-browser-note alert-watch-note">Sable keeps up to 50 watches. Remove one to add another.</p>
 			}
 		</div>
-	</section>
+	}
 }
 
 // alertWatchRow is one watch: what it watches, for which devices, when it

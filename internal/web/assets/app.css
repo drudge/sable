@@ -3708,7 +3708,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 
 /* Restore is not a routine action, so its card says so before it is used. */
 .settings-danger-card { border-color: color-mix(in srgb, var(--destructive) 32%, var(--border)); }
-.settings-danger-card > header > h2 .nav-icon { color: var(--destructive); }
+.settings-danger-card > header h2 .nav-icon { color: var(--destructive); }
 .backup-inventory { display: grid; gap: .3rem; margin: 0 0 .6rem; padding-left: 1.1rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.45; }
 .backup-panel .settings-advanced > small { display: block; color: var(--muted-foreground); font-size: .7rem; line-height: 1.45; }
 .backup-schedule-status { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--muted); padding: .45rem .5rem .45rem .9rem; color: var(--muted-foreground); font-size: .72rem; }
