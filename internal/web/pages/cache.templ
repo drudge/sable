@@ -44,7 +44,7 @@ templ CacheContent(view CachePageView) {
 		</div>
 		@Toast(view.Message, "success")
 		<div class="cache-layout">
-			<section class="card cache-status-card">
+			@components.Card(components.CardProps{Class: "cache-status-card"}) {
 				<div class="cache-card-header">
 					<div class="cache-title">
 						<h2>@Icon("database")<span>Cache Status</span></h2>
@@ -69,16 +69,16 @@ templ CacheContent(view CachePageView) {
 						<div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p>@components.Button(components.ButtonProps{Label: "Flush DNS Cache", Icon: "trash", Destructive: true, Class: "cache-action-button", Attrs: templ.Attributes{"data-dialog-open": "cache-flush-dialog"}})</div>
 					</div>
 				</div>
-			</section>
+			}
 			<aside class="cache-aside">
-				<section class="card cache-guidance">
+				@components.Card(components.CardProps{Class: "cache-guidance"}) {
 					<h2>When should I clear the cache?</h2>
 					<ul>
 						<li><div><strong>DNS records have changed</strong><p>If you've updated DNS records and need them to take effect immediately</p></div></li>
 						<li><div><strong>Troubleshooting DNS issues</strong><p>Clear stale or incorrect cached entries that may be causing problems</p></div></li>
 						<li><div><strong>After configuration changes</strong><p>Ensure your DNS server uses fresh data after making configuration updates</p></div></li>
 					</ul>
-				</section>
+				}
 				<div class="cache-warning"><strong>Note:</strong> After clearing the cache, query response times will temporarily increase as the server rebuilds its cache through new upstream queries.</div>
 			</aside>
 		</div>

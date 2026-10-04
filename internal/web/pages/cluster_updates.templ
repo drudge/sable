@@ -77,9 +77,8 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 		data-instance-id={ view.InstanceID }
 	>
 		if view.Visible() {
-			<section class="card cluster-update-card">
-				<header>
-					<h2>Rolling Updates</h2>
+			@components.Card(components.CardProps{Class: "cluster-update-card"}) {
+				@components.CardHeader(components.CardHeaderProps{Title: "Rolling Updates"}) {
 					if view.DisplayVersion() != "" {
 						<span class={ "status-badge cluster-update-version", templ.KV("available", view.UpdateAvailable()), templ.KV("installing", view.Rollout.Active()), templ.KV("current", view.UpToDate()) }>
 							if view.UpdateAvailable() {
@@ -95,7 +94,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							{ view.DisplayVersion() }
 						</span>
 					}
-				</header>
+				}
 				<div class="cluster-update-content">
 					<p>Update replicas one at a time, then the primary.</p>
 					if view.UnavailableWarningVisible() {
@@ -155,7 +154,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 						</div>
 					}
 				</div>
-			</section>
+			}
 			@updateReleaseNotesDialog(view.Release, clusterUpdateNotesDialogID)
 		}
 	</div>

@@ -371,17 +371,10 @@ templ IntegrationsContent(view IntegrationsPageView) {
 }
 
 templ DynamicDNSCard(view DynamicDNSAppView) {
-	<section class="card integration-card" id="dynamic-dns-card" tabindex="-1">
-		<header>
-			<div class="integration-card-identity">
-				<span class="integration-card-glyph">@Icon("cloud-sync")</span>
-				<div>
-					<h2>Dynamic DNS</h2>
-					<p>Keeps external A and AAAA records pointed at this deployment's public addresses.</p>
-				</div>
-			</div>
+	@components.Card(components.CardProps{ID: "dynamic-dns-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
+		@components.CardHeader(components.CardHeaderProps{Glyph: "cloud-sync", Title: "Dynamic DNS", Description: "Keeps external A and AAAA records pointed at this deployment's public addresses."}) {
 			@DynamicDNSBadge(view, false)
-		</header>
+		}
 		if !view.Available {
 			<div class="integration-card-body"><p class="muted-cell">The publisher is not running on this node.</p></div>
 		} else if !view.Configured {
@@ -414,7 +407,7 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 				@DynamicDNSCardActions(view, false)
 			</div>
 		}
-	</section>
+	}
 }
 
 templ DynamicDNSBadge(view DynamicDNSAppView, outOfBand bool) {
@@ -611,17 +604,10 @@ templ DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) {
 }
 
 templ SSOCard(view SSOAppView) {
-	<section class="card integration-card" id="sso-card" tabindex="-1">
-		<header>
-			<div class="integration-card-identity">
-				<span class="integration-card-glyph">@Icon("key-round")</span>
-				<div>
-					<h2>Single Sign-On</h2>
-					<p>Signs operators in through an OpenID Connect provider and maps their groups to Sable roles.</p>
-				</div>
-			</div>
+	@components.Card(components.CardProps{ID: "sso-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
+		@components.CardHeader(components.CardHeaderProps{Glyph: "key-round", Title: "Single Sign-On", Description: "Signs operators in through an OpenID Connect provider and maps their groups to Sable roles."}) {
 			<span class={ ssoBadgeClass(view) }>{ ssoBadgeLabel(view) }</span>
-		</header>
+		}
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p>
@@ -675,21 +661,14 @@ templ SSOCard(view SSOAppView) {
 				}
 			</div>
 		}
-	</section>
+	}
 }
 
 templ MCPCard(view MCPAppView) {
-	<section class="card integration-card" id="mcp-card" tabindex="-1">
-		<header>
-			<div class="integration-card-identity">
-				<span class="integration-card-glyph">@Icon("mcp-server")</span>
-				<div>
-					<h2>MCP Server</h2>
-					<p>Lets Claude, ChatGPT, and other AI assistants manage records and blocking with an API token.</p>
-				</div>
-			</div>
+	@components.Card(components.CardProps{ID: "mcp-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
+		@components.CardHeader(components.CardHeaderProps{Glyph: "mcp-server", Title: "MCP Server", Description: "Lets Claude, ChatGPT, and other AI assistants manage records and blocking with an API token."}) {
 			<span class={ mcpBadgeClass(view) }>{ mcpBadgeLabel(view) }</span>
-		</header>
+		}
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Give each assistant its own API token. The token's groups decide which zones and lists it can change, and nothing is reachable until you set this up.</p>
@@ -726,7 +705,7 @@ templ MCPCard(view MCPAppView) {
 				</div>
 			</div>
 		}
-	</section>
+	}
 }
 
 // MCPToolSection lists one area's tools like the group permission picker:
@@ -1044,17 +1023,10 @@ templ RemoveSSODialog(view SSOAppView) {
 }
 
 templ UniFiCard(view UniFiAppView) {
-	<section class="card integration-card" id="unifi-card" tabindex="-1">
-		<header>
-			<div class="integration-card-identity">
-				<span class="integration-card-glyph">@Icon("wifi-sync")</span>
-				<div>
-					<h2>UniFi Host Sync</h2>
-					<p>Publishes UniFi reservations and connected clients as A, AAAA, and PTR records.</p>
-				</div>
-			</div>
+	@components.Card(components.CardProps{ID: "unifi-card", Class: "integration-card", Attrs: templ.Attributes{"tabindex": "-1"}}) {
+		@components.CardHeader(components.CardHeaderProps{Glyph: "wifi-sync", Title: "UniFi Host Sync", Description: "Publishes UniFi reservations and connected clients as A, AAAA, and PTR records."}) {
 			<span class={ unifiBadgeClass(view) }>{ unifiBadgeLabel(view) }</span>
-		</header>
+		}
 		if !view.Available {
 			<div class="integration-card-body"><p class="muted-cell">The synchronizer is not running on this node.</p></div>
 		} else if !view.Configured {
@@ -1077,7 +1049,7 @@ templ UniFiCard(view UniFiAppView) {
 				@UniFiCardActions(view, false)
 			</div>
 		}
-	</section>
+	}
 }
 
 // UniFiCardActions is swapped out of band by the status poll so Sync Now can

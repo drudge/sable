@@ -265,7 +265,7 @@ templ SettingsAlertsPanel(view AlertsView) {
 
 // alertsStatusCard says whether alerts go out, and pauses or resumes them.
 templ alertsStatusCard(view AlertsView) {
-	<section class="card alerts-status-card" aria-label="Alert status">
+	@components.Card(components.CardProps{Class: "alerts-status-card", Attrs: templ.Attributes{"aria-label": "Alert status"}}) {
 		<div class={ "alerts-status", string(view.State) }>
 			<span class="alerts-status-icon">@Icon(alertsStateIcon(view.State))</span>
 			<div class="alerts-status-detail">
@@ -282,7 +282,7 @@ templ alertsStatusCard(view AlertsView) {
 				}
 			}
 		</div>
-	</section>
+	}
 }
 
 func alertsStateIcon(state AlertsState) string {
