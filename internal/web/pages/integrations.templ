@@ -530,8 +530,8 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 					</div>
 					@DynamicDNSAddProviderMenu()
 					<div class="field-grid two dynamic-dns-global-settings">
-						<label class="field-control"><span>Check Interval</span><input name="interval" value={ view.Interval } placeholder="5m" required/><small>How often Sable checks for address changes.</small></label>
-						<label class="field-control"><span>Record TTL</span><input type="number" name="ttl" value={ fmt.Sprint(view.TTL) } min="60" max="86400" required data-dynamic-dns-ttl/><small data-dynamic-dns-ttl-hint>Applied to every published record.</small></label>
+						@components.Field(components.FieldProps{ID: "dynamic-dns-interval", Label: "Check Interval", Help: "How often Sable checks for address changes.", Input: templ.Attributes{"name": "interval", "value": view.Interval, "placeholder": "5m", "required": true}})
+						@components.Field(components.FieldProps{ID: "dynamic-dns-ttl", Label: "Record TTL", Help: "Applied to every published record.", HelpAttrs: templ.Attributes{"data-dynamic-dns-ttl-hint": true}, Input: templ.Attributes{"type": "number", "name": "ttl", "value": fmt.Sprint(view.TTL), "min": "60", "max": "86400", "required": true, "data-dynamic-dns-ttl": true}})
 					</div>
 					<template data-dynamic-dns-publisher-template>@DynamicDNSPublisherEditor(DynamicDNSPublisherView{Provider: "__PROVIDER__", Zones: []DynamicDNSZoneView{{PublishIPv4: true}}}, "__PUBLISHER__", true)</template>
 					<details class="settings-advanced"><summary>@Icon("sliders")<span>Advanced address discovery</span>@Icon("chevron-down")</summary><div class="field-grid two"><label class="field-control"><span>IPv4 Discovery URL</span><input type="url" name="ipv4_url" value={ view.IPv4URL } required/></label><label class="field-control"><span>IPv6 Discovery URL</span><input type="url" name="ipv6_url" value={ view.IPv6URL } required/></label></div><small>Each HTTPS endpoint must return only the caller's IP address as plain text.</small></details>
@@ -580,12 +580,18 @@ templ DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, remova
 	</details>
 }
 
+// dynamicDNSNamesField draws a zone's name list. Its ids carry the publisher
+// and zone keys, which the add-zone template fills in.
+func dynamicDNSNamesField(publisherKey, zoneKey string) components.FieldProps {
+	return components.FieldProps{ID: "dynamic-dns-publisher-" + publisherKey + "-zone-" + zoneKey + "-names", Label: "Public DNS Names", Help: "One fully-qualified name per line. Every name must belong to this zone."}
+}
+
 templ DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string, removable bool) {
 	<details class="dynamic-dns-zone" data-dynamic-dns-zone data-zone-index={ zoneKey } open?={ view.Zone == "" }>
 		<summary><div class="dynamic-dns-zone-summary"><strong data-dynamic-dns-zone-label>{ dynamicDNSZoneHeading(view) }</strong><small data-dynamic-dns-zone-overview>{ dynamicDNSZoneOverview(view) }</small></div><span class="dynamic-dns-zone-chevron">@Icon("chevron-down")</span></summary>
 		<div class="dynamic-dns-zone-body">
 			<label class="field-control"><span>DNS Zone</span><input name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_zone" } value={ view.Zone } placeholder="example.com" required/></label>
-			<label class="field-control"><span>Public DNS Names</span><textarea name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_names" } rows="3" spellcheck="false" placeholder="home.example.com&#10;vpn.example.com" required>{ view.Names }</textarea><small>One fully-qualified name per line. Every name must belong to this zone.</small></label>
+			@components.Field(dynamicDNSNamesField(publisherKey, zoneKey)) {<textarea { components.FieldAttrs(dynamicDNSNamesField(publisherKey, zoneKey))... } name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_names" } rows="3" spellcheck="false" placeholder="home.example.com&#10;vpn.example.com" required>{ view.Names }</textarea>}
 			<div class="field-grid two"><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv4" } value="true" checked?={ view.PublishIPv4 }/><span>Publish IPv4 (A)</span></label><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv6" } value="true" checked?={ view.PublishIPv6 }/><span>Publish IPv6 (AAAA)</span><small>The detected outbound IPv6 address must also accept inbound traffic.</small></label></div>
 			<div class="dynamic-dns-zone-footer"><button class="button outline compact destructive" type="button" data-dynamic-dns-remove-zone hidden?={ !removable }>@Icon("trash")<span>Remove Zone</span></button></div>
 		</div>
@@ -1258,7 +1264,7 @@ templ UniFiWizardConnectStep(wizard UniFiWizardView) {
 			@components.ChoiceCard(components.ChoiceCardProps{ID: "unifi-auth-account", Title: "Local Account", Description: "Older controllers", Radio: true, Name: "auth_mode", Value: "account", Checked: wizard.AuthMode == "account", Class: ifThen(wizard.AuthMode == "account", "active", ""), InputAttrs: templ.Attributes{"data-unifi-auth": true}})
 		</div>
 		<div class="field-grid two" data-unifi-auth-panel="api-key" hidden?={ wizard.AuthMode == "account" }>
-			<label class="field-control"><span>API Key</span><input type="password" name="api_key" autocomplete="new-password" placeholder={ ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "UniFi API key") }/><small>Create one in UniFi under Settings → Admins, or Settings → Integrations.</small></label>
+			@components.Field(components.FieldProps{ID: "unifi-api-key", Label: "API Key", Help: "Create one in UniFi under Settings → Admins, or Settings → Integrations.", Input: templ.Attributes{"type": "password", "name": "api_key", "autocomplete": "new-password", "placeholder": ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "UniFi API key")}})
 		</div>
 		<div class="field-grid two" data-unifi-auth-panel="account" hidden?={ wizard.AuthMode != "account" }>
 			<label class="field-control"><span>Username</span><input name="username" value={ wizard.Username } autocomplete="off"/></label>
@@ -1298,7 +1304,7 @@ templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
 		<div class="field-grid two">
 			<label class="field-control checkbox"><input type="checkbox" name="source_reservations" value="true" checked?={ wizard.SyncReservations }/><span>Fixed-IP reservations</span></label>
 			<label class="field-control checkbox"><input type="checkbox" name="source_active" value="true" checked?={ wizard.SyncActive }/><span>Connected clients</span></label>
-			<label class="field-control"><span>Sync Interval</span><input name="interval" value={ wizard.Interval } placeholder="2m" required/><small>Duration of at least 30s; fixed y, mo, w, and d units are supported.</small></label>
+			@components.Field(components.FieldProps{ID: "unifi-interval", Label: "Sync Interval", Help: "Duration of at least 30s; fixed y, mo, w, and d units are supported.", Input: templ.Attributes{"name": "interval", "value": wizard.Interval, "placeholder": "2m", "required": true}})
 		</div>
 		<div class="wizard-heading compact"><span>@Icon("sparkles")</span><div><strong>Insights</strong><small>Point out devices that never use Sable for DNS.</small></div></div>
 		<div class="field-grid two">
