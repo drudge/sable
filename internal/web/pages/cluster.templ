@@ -95,10 +95,7 @@ templ ClusterContent(view ClusterPageView) {
 						@components.CardHeader(components.CardHeaderProps{Icon: "cluster", Title: "Cluster Status", Description: "This server is operating independently"}) {
 							<span class="status-badge">Not configured</span>
 						}
-						<div class="cluster-empty-state">
-							<span class="cluster-empty-icon">@Icon("server")</span>
-							<h3>No Cluster Configured</h3>
-							<p>Create a primary or join this server to an existing Sable primary as a replica.</p>
+						@components.EmptyState(components.EmptyStateProps{Icon: "server", IconBox: true, Title: "No Cluster Configured", Description: "Create a primary or join this server to an existing Sable primary as a replica.", Class: "cluster-empty-state"}) {
 							if view.RestartRequired {
 								<div class="cluster-restart-notice">@Icon("refresh")<span>Restart Sable to activate the saved node identity.</span></div>
 							}
@@ -106,7 +103,7 @@ templ ClusterContent(view ClusterPageView) {
 								@components.Button(components.ButtonProps{Label: "Initialize Primary", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "initialize-cluster-dialog"}})
 								@components.Button(components.ButtonProps{Label: "Join Existing Cluster", Icon: "log-in", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-open": "join-cluster-dialog"}})
 							</div>
-						</div>
+						}
 					}
 				} else {
 					@ClusterLiveStatus(view)

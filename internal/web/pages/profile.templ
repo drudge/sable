@@ -126,7 +126,7 @@ templ ProfileTokens(view ProfilePageView) {
 			@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})
 		}
 		if len(view.Tokens) == 0 {
-			<div class="admin-empty profile-token-empty"><div>@Icon("key")</div><strong>No API tokens yet</strong><span>Create a token for scripts, integrations, and other API clients.</span></div>
+			@components.EmptyState(components.EmptyStateProps{Icon: "key", IconBox: true, Title: "No API tokens yet", Description: "Create a token for scripts, integrations, and other API clients.", Class: "admin-empty profile-token-empty"})
 		} else {
 			<div class="admin-mobile-list profile-token-mobile-list">
 				for _, token := range view.Tokens {

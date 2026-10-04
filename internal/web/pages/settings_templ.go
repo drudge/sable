@@ -3697,20 +3697,12 @@ func SettingsTSIGPanel(view SettingsPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if len(view.TSIGKeys) == 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 335, "<div class=\"tsig-empty\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = Icon("key").Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 336, "<h3>No TSIG keys yet</h3><p>Zones without a key fall back to source-IP and transfer-policy authorization.</p></div>")
+				templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "key", Title: "No TSIG keys yet", Description: "Zones without a key fall back to source-IP and transfer-policy authorization.", Class: "tsig-empty"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 337, "<div class=\"tsig-key-list isotope-source-list\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 335, "<div class=\"tsig-key-list isotope-source-list\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3720,12 +3712,12 @@ func SettingsTSIGPanel(view SettingsPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 338, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 336, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 339, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 337, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3735,7 +3727,7 @@ func SettingsTSIGPanel(view SettingsPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 340, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 338, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3776,12 +3768,12 @@ func AddTSIGKeyDialog(view SettingsPageView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 341, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/settings/tsig/save\" hx-target=\"#settings-content\" hx-swap=\"outerHTML\"><label><span>Key Name</span><input class=\"mono-input\" name=\"tsig_name\" placeholder=\"transfer-key\" autocomplete=\"off\" required><small>A DNS name. Both servers must agree on it exactly.</small></label> <label><span>Algorithm</span><select name=\"tsig_algorithm\" data-styled-select>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 339, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/settings/tsig/save\" hx-target=\"#settings-content\" hx-swap=\"outerHTML\"><label><span>Key Name</span><input class=\"mono-input\" name=\"tsig_name\" placeholder=\"transfer-key\" autocomplete=\"off\" required><small>A DNS name. Both servers must agree on it exactly.</small></label> <label><span>Algorithm</span><select name=\"tsig_algorithm\" data-styled-select>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, algorithm := range view.TSIGAlgorithms {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 342, "<option value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 340, "<option value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3794,7 +3786,7 @@ func AddTSIGKeyDialog(view SettingsPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 343, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 341, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3807,12 +3799,12 @@ func AddTSIGKeyDialog(view SettingsPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 344, "</option>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 342, "</option>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 345, "</select><small>HMAC-SHA256 suits almost everything.</small></label> <label><span>Secret (optional)</span><input class=\"mono-input\" type=\"password\" name=\"tsig_secret\" autocomplete=\"new-password\" placeholder=\"Generate one for me\"><small>Base64, at least 128 bits. Sable shows a generated secret once.</small></label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 343, "</select><small>HMAC-SHA256 suits almost everything.</small></label> <label><span>Secret (optional)</span><input class=\"mono-input\" type=\"password\" name=\"tsig_secret\" autocomplete=\"new-password\" placeholder=\"Generate one for me\"><small>Base64, at least 128 bits. Sable shows a generated secret once.</small></label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3838,7 +3830,7 @@ func AddTSIGKeyDialog(view SettingsPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 346, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 344, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3876,7 +3868,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 			templ_7745c5c3_Var116 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 347, "<article class=\"tsig-key-row\"><span class=\"tsig-key-icon\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 345, "<article class=\"tsig-key-row\"><span class=\"tsig-key-icon\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3884,7 +3876,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 348, "</span><div><strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 346, "</span><div><strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3897,7 +3889,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 349, "</strong> <small>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 347, "</strong> <small>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3910,7 +3902,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 350, " · ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 348, " · ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3923,12 +3915,12 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 351, "</small> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 349, "</small> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if !key.Configured {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 352, "<small class=\"tsig-key-warning\" title=\"Add the key again with its secret, or rotate it to generate a new one.\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 350, "<small class=\"tsig-key-warning\" title=\"Add the key again with its secret, or rotate it to generate a new one.\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3936,12 +3928,12 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 353, "<span>No secret stored</span></small>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 351, "<span>No secret stored</span></small>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 354, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 352, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3949,7 +3941,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 355, "<button class=\"icon-button danger\" type=\"button\" hx-post=\"/ui/settings/tsig/delete\" hx-vals=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 353, "<button class=\"icon-button danger\" type=\"button\" hx-post=\"/ui/settings/tsig/delete\" hx-vals=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3962,7 +3954,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 356, "\" hx-target=\"#settings-content\" hx-swap=\"outerHTML\" hx-confirm=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 354, "\" hx-target=\"#settings-content\" hx-swap=\"outerHTML\" hx-confirm=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3975,7 +3967,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 357, "\" aria-label=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 355, "\" aria-label=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3988,7 +3980,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 356, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3996,7 +3988,7 @@ func SettingsTSIGKeyRow(key SettingsTSIGKeyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "</button></article>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 357, "</button></article>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4058,7 +4050,7 @@ func BackupRestoreWarning(detail string) templ.Component {
 			templ_7745c5c3_Var123 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 360, "<div class=\"warning-box zone-conversion-warning backup-restore-warning\" role=\"alert\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 358, "<div class=\"warning-box zone-conversion-warning backup-restore-warning\" role=\"alert\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4066,7 +4058,7 @@ func BackupRestoreWarning(detail string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 361, "<div><strong>Restoring replaces what is here now</strong><p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 359, "<div><strong>Restoring replaces what is here now</strong><p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4079,7 +4071,7 @@ func BackupRestoreWarning(detail string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 362, "</p></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 360, "</p></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4108,17 +4100,17 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 			templ_7745c5c3_Var125 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 363, "<div class=\"settings-panel-stack backup-panel\" id=\"backup-panel\" data-live-refresh")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 361, "<div class=\"settings-panel-stack backup-panel\" id=\"backup-panel\" data-live-refresh")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if view.Busy() {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 364, " hx-get=\"/ui/backup/progress\" hx-trigger=\"every 400ms\" hx-target=\"this\" hx-swap=\"outerHTML\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 362, " hx-get=\"/ui/backup/progress\" hx-trigger=\"every 400ms\" hx-target=\"this\" hx-swap=\"outerHTML\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 365, ">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 363, ">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4154,7 +4146,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "<div class=\"isotope-card-content\"><div class=\"certificate-manual-note\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 364, "<div class=\"isotope-card-content\"><div class=\"certificate-manual-note\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4162,7 +4154,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "<span>Backups are unavailable on this node. Use <code>sable backup create</code> on the host instead.</span></div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 365, "<span>Backups are unavailable on this node. Use <code>sable backup create</code> on the host instead.</span></div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4186,12 +4178,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 368, "<div class=\"isotope-card-content\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 366, "<div class=\"isotope-card-content\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					if !view.CanCreate {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 369, "<div class=\"certificate-manual-note\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 367, "<div class=\"certificate-manual-note\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4199,12 +4191,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 370, "<span>Your role cannot change the local backup policy.</span></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 368, "<span>Your role cannot change the local backup policy.</span></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 371, "<form class=\"backup-form\" hx-post=\"/ui/backup/schedule\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair data-passphrase-optional>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 369, "<form class=\"backup-form\" hx-post=\"/ui/backup/schedule\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair data-passphrase-optional>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4212,7 +4204,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 372, "<div class=\"field-grid four\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 370, "<div class=\"field-grid four\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4232,7 +4224,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 373, "</div><div class=\"field-grid two\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 371, "</div><div class=\"field-grid two\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4240,12 +4232,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "<label class=\"field-control\"><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" placeholder=\"Repeat a new passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label></div><div class=\"backup-schedule-status\"><div class=\"backup-schedule-timestamps\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 372, "<label class=\"field-control\"><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" placeholder=\"Repeat a new passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label></div><div class=\"backup-schedule-status\"><div class=\"backup-schedule-timestamps\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						if view.ScheduleNextRun != "" {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 375, "<span><strong>Next backup</strong><span class=\"backup-schedule-time-full\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 373, "<span><strong>Next backup</strong><span class=\"backup-schedule-time-full\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4258,7 +4250,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 376, "</span><span class=\"backup-schedule-time-compact\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 374, "</span><span class=\"backup-schedule-time-compact\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4271,13 +4263,13 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "</span></span> ")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 375, "</span></span> ")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
 						if view.ScheduleLastSuccess != "" {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 378, "<span><strong>Last success</strong><span class=\"backup-schedule-time-full\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 376, "<span><strong>Last success</strong><span class=\"backup-schedule-time-full\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4290,7 +4282,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "</span><span class=\"backup-schedule-time-compact\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "</span><span class=\"backup-schedule-time-compact\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4303,13 +4295,13 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 380, "</span></span> ")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 378, "</span></span> ")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
 						if view.ScheduleLastError != "" {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 381, "<span class=\"error\"><strong>Last error</strong>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 379, "<span class=\"error\"><strong>Last error</strong>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4322,12 +4314,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 382, "</span>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 380, "</span>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 383, "</div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 381, "</div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4335,12 +4327,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 384, "</div></form>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 382, "</div></form>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 385, "</div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 383, "</div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4350,7 +4342,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 386, " ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 384, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -4378,7 +4370,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							}()
 						}
 						ctx = templ.InitializeContext(ctx)
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 387, "<div class=\"backup-history-header-actions\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 385, "<div class=\"backup-history-header-actions\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4390,7 +4382,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						}
 						if view.CanCreate {
 							if view.SchedulePassphraseStored {
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 388, "<div class=\"backup-run-split\"><form hx-post=\"/ui/backup/run\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-local-backup-run-stored-form><input type=\"hidden\" name=\"use_stored_passphrase\" value=\"on\">")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 386, "<div class=\"backup-run-split\"><form hx-post=\"/ui/backup/run\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-local-backup-run-stored-form><input type=\"hidden\" name=\"use_stored_passphrase\" value=\"on\">")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -4398,12 +4390,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "</form>")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 387, "</form>")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								if !view.Busy() {
-									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 390, "<details class=\"backup-run-menu\"><summary class=\"button compact\" aria-label=\"More backup options\" title=\"More backup options\">")
+									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 388, "<details class=\"backup-run-menu\"><summary class=\"button compact\" aria-label=\"More backup options\" title=\"More backup options\">")
 									if templ_7745c5c3_Err != nil {
 										return templ_7745c5c3_Err
 									}
@@ -4411,7 +4403,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 									if templ_7745c5c3_Err != nil {
 										return templ_7745c5c3_Err
 									}
-									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 391, "</summary><div><button type=\"button\" data-dialog-open=\"run-local-backup-dialog\" data-run-local-backup>")
+									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 389, "</summary><div><button type=\"button\" data-dialog-open=\"run-local-backup-dialog\" data-run-local-backup>")
 									if templ_7745c5c3_Err != nil {
 										return templ_7745c5c3_Err
 									}
@@ -4419,12 +4411,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 									if templ_7745c5c3_Err != nil {
 										return templ_7745c5c3_Err
 									}
-									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "<span>Use a different passphrase…</span></button></div></details>")
+									templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 390, "<span>Use a different passphrase…</span></button></div></details>")
 									if templ_7745c5c3_Err != nil {
 										return templ_7745c5c3_Err
 									}
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 393, "</div>")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 391, "</div>")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -4435,7 +4427,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 								}
 							}
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 394, "</div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 392, "</div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4445,7 +4437,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, " <div class=\"isotope-card-content\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 393, " <div class=\"isotope-card-content\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -4456,7 +4448,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						}
 					}
 					if !view.CanCreate && !view.CanRestore {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 396, "<div class=\"certificate-manual-note\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 394, "<div class=\"certificate-manual-note\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4464,30 +4456,40 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 397, "<span>Your role cannot download or restore local backups.</span></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 395, "<span>Your role cannot download or restore local backups.</span></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else if len(view.LocalBackups) == 0 {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 398, "<div class=\"backup-local-empty\">")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = Icon("hard-drive").Render(ctx, templ_7745c5c3_Buffer)
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 399, "<strong>No local backups yet</strong><span>Enable the schedule above or place a valid <code>.sablebackup</code> archive in the configured directory.</span></div>")
+						templ_7745c5c3_Var135 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+							templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+							templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+							if !templ_7745c5c3_IsBuffer {
+								defer func() {
+									templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+									if templ_7745c5c3_Err == nil {
+										templ_7745c5c3_Err = templ_7745c5c3_BufErr
+									}
+								}()
+							}
+							ctx = templ.InitializeContext(ctx)
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 396, "<p>Enable the schedule above or place a valid <code>.sablebackup</code> archive in the configured directory.</p>")
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+							return nil
+						})
+						templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "hard-drive", Title: "No local backups yet", Class: "backup-local-empty"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var135), templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 400, "<div class=\"backup-local-list\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 397, "<div class=\"backup-local-list\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						for _, archive := range view.LocalBackups {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 401, "<div class=\"backup-local-row\"><div class=\"backup-local-icon\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 398, "<div class=\"backup-local-row\"><div class=\"backup-local-icon\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4495,81 +4497,81 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 402, "</div><div class=\"backup-local-detail\"><strong>")
-							if templ_7745c5c3_Err != nil {
-								return templ_7745c5c3_Err
-							}
-							var templ_7745c5c3_Var135 string
-							templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Name)
-							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 65}
-							}
-							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var135))
-							if templ_7745c5c3_Err != nil {
-								return templ_7745c5c3_Err
-							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 403, "</strong><span>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 399, "</div><div class=\"backup-local-detail\"><strong>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var136 string
-							templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Created)
+							templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Name)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 99}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 65}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 404, " · ")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 400, "</strong><span>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var137 string
-							templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Size)
+							templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Created)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 119}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 99}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, " · ")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 401, " · ")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var138 string
-							templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Hostname)
+							templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Size)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 143}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 119}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var138))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 406, "</span><span>Sable ")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 402, " · ")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var139 string
-							templ_7745c5c3_Var139, templ_7745c5c3_Err = templ.JoinStringErrs(archive.SableVersion)
+							templ_7745c5c3_Var139, templ_7745c5c3_Err = templ.JoinStringErrs(archive.Hostname)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 186}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 143}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var139))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							var templ_7745c5c3_Var140 string
-							templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs(BackupKindLabel(archive.Scheduled))
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 403, "</span><span>Sable ")
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 787, Col: 224}
+								return templ_7745c5c3_Err
+							}
+							var templ_7745c5c3_Var140 string
+							templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs(archive.SableVersion)
+							if templ_7745c5c3_Err != nil {
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 186}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var140))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 407, "</span></div><div class=\"backup-local-actions\">")
+							var templ_7745c5c3_Var141 string
+							templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(BackupKindLabel(archive.Scheduled))
+							if templ_7745c5c3_Err != nil {
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 789, Col: 224}
+							}
+							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 404, "</span></div><div class=\"backup-local-actions\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4586,33 +4588,33 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 								}
 							}
 							if view.CanCreate {
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 408, "<form hx-post=\"/ui/backup/delete-local\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" hx-confirm=\"")
-								if templ_7745c5c3_Err != nil {
-									return templ_7745c5c3_Err
-								}
-								var templ_7745c5c3_Var141 string
-								templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.ResolveAttributeValue("Delete " + archive.Name + "? This local backup cannot be recovered.")
-								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 796, Col: 219}
-								}
-								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var141)
-								if templ_7745c5c3_Err != nil {
-									return templ_7745c5c3_Err
-								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 409, "\" data-confirm-title=\"Delete local backup?\" data-confirm-action=\"Delete Backup\"><input type=\"hidden\" name=\"name\" value=\"")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 405, "<form hx-post=\"/ui/backup/delete-local\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" hx-confirm=\"")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 								var templ_7745c5c3_Var142 string
-								templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.ResolveAttributeValue(archive.Name)
+								templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.ResolveAttributeValue("Delete " + archive.Name + "? This local backup cannot be recovered.")
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 797, Col: 65}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 798, Col: 219}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var142)
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 410, "\">")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 406, "\" data-confirm-title=\"Delete local backup?\" data-confirm-action=\"Delete Backup\"><input type=\"hidden\" name=\"name\" value=\"")
+								if templ_7745c5c3_Err != nil {
+									return templ_7745c5c3_Err
+								}
+								var templ_7745c5c3_Var143 string
+								templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.ResolveAttributeValue(archive.Name)
+								if templ_7745c5c3_Err != nil {
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 799, Col: 65}
+								}
+								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var143)
+								if templ_7745c5c3_Err != nil {
+									return templ_7745c5c3_Err
+								}
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 407, "\">")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
@@ -4620,63 +4622,63 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 411, "</form>")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 408, "</form>")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 412, "</div></div>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 409, "</div></div>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 413, "</div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 410, "</div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						if view.CanRestore {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 414, "<small class=\"backup-local-restore-note\">Scheduled archives use the passphrase in the encrypted vault when the restore field is blank. Enter the older passphrase after a rotation, or for another local archive.</small>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 411, "<small class=\"backup-local-restore-note\">Scheduled archives use the passphrase in the encrypted vault when the restore field is blank. Enter the older passphrase after a rotation, or for another local archive.</small>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 415, " <small class=\"backup-local-retention-note\">Scheduled rotation keeps at most ")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						var templ_7745c5c3_Var143 string
-						templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(view.ScheduleRetentionCount))
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 808, Col: 124}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var143))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 416, " archives created by this node. Manual and imported archives are not removed automatically.</small>")
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
-						}
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, "</div>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					if view.ScheduleResolvedDirectory != "" {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 418, "<footer class=\"backup-history-footer\"><span>Local path</span><code>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 412, " <small class=\"backup-local-retention-note\">Scheduled rotation keeps at most ")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var144 string
-						templ_7745c5c3_Var144, templ_7745c5c3_Err = templ.JoinStringErrs(view.ScheduleResolvedDirectory)
+						templ_7745c5c3_Var144, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(view.ScheduleRetentionCount))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 812, Col: 105}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 810, Col: 124}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var144))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 419, "</code></footer>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 413, " archives created by this node. Manual and imported archives are not removed automatically.</small>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 414, "</div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					if view.ScheduleResolvedDirectory != "" {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 415, "<footer class=\"backup-history-footer\"><span>Local path</span><code>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var145 string
+						templ_7745c5c3_Var145, templ_7745c5c3_Err = templ.JoinStringErrs(view.ScheduleResolvedDirectory)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 814, Col: 105}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var145))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 416, "</code></footer>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4688,12 +4690,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 420, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 417, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if !view.LocalAvailable {
-				templ_7745c5c3_Var145 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_Var146 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 					templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 					templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 					if !templ_7745c5c3_IsBuffer {
@@ -4705,12 +4707,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 421, "<div class=\"isotope-card-content\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 418, "<div class=\"isotope-card-content\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					if !view.CanCreate {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 422, "<div class=\"certificate-manual-note\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 419, "<div class=\"certificate-manual-note\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4718,7 +4720,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "<span>Your role cannot take backups of this deployment.</span></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 420, "<span>Your role cannot take backups of this deployment.</span></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4728,7 +4730,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 424, "<form class=\"backup-form\" hx-post=\"/ui/backup/download\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair><div class=\"field-grid two\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 421, "<form class=\"backup-form\" hx-post=\"/ui/backup/download\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair><div class=\"field-grid two\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4736,7 +4738,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "<label class=\"field-control\"><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"Repeat the passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label></div><div class=\"backup-actions\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 422, "<label class=\"field-control\"><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"Repeat the passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label></div><div class=\"backup-actions\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4744,12 +4746,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 426, "</div></form>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "</div></form>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 						if view.DownloadToken != "" {
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 427, "<div class=\"backup-download\"><div class=\"backup-download-file\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 424, "<div class=\"backup-download\"><div class=\"backup-download-file\">")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4757,59 +4759,59 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "<div><strong>")
-							if templ_7745c5c3_Err != nil {
-								return templ_7745c5c3_Err
-							}
-							var templ_7745c5c3_Var146 string
-							templ_7745c5c3_Var146, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadName)
-							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 835, Col: 93}
-							}
-							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var146))
-							if templ_7745c5c3_Err != nil {
-								return templ_7745c5c3_Err
-							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 429, "</strong><span>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 425, "<div><strong>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var147 string
-							templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadSize)
+							templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadName)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 835, Col: 129}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 837, Col: 93}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var147))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, " · <span data-backup-expiry data-expires-at=\"")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 426, "</strong><span>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var148 string
-							templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.DownloadExpiresAt))
+							templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadSize)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 835, Col: 212}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 837, Col: 129}
 							}
-							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var148)
+							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 431, "\">")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 427, " · <span data-backup-expiry data-expires-at=\"")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var149 string
-							templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadExpiry)
+							templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.DownloadExpiresAt))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 835, Col: 236}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 837, Col: 212}
 							}
-							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
+							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var149)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 432, "</span></span></div></div>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 428, "\">")
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+							var templ_7745c5c3_Var150 string
+							templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinStringErrs(view.DownloadExpiry)
+							if templ_7745c5c3_Err != nil {
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 837, Col: 236}
+							}
+							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var150))
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 429, "</span></span></div></div>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -4817,12 +4819,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 433, "</div>")
+							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 430, "</div>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 434, " <details class=\"settings-advanced\"><summary>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 431, " <details class=\"settings-advanced\"><summary>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4830,7 +4832,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, "<span>What the archive contains</span>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 432, "<span>What the archive contains</span>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4838,28 +4840,28 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 436, "</summary><ul class=\"backup-inventory\"><li>Configuration, exactly as written</li><li>Zones, records, and their DNSSEC settings</li><li>Users, roles, and API tokens</li><li>DNSSEC signing keys and integration credentials</li><li>DNSSEC trust anchors and TLS material</li><li>Cluster membership and node trust</li></ul><small>Query logs, statistics, sessions, and the DNS cache stay behind. A restored node rebuilds them.</small></details>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 433, "</summary><ul class=\"backup-inventory\"><li>Configuration, exactly as written</li><li>Zones, records, and their DNSSEC settings</li><li>Users, roles, and API tokens</li><li>DNSSEC signing keys and integration credentials</li><li>DNSSEC trust anchors and TLS material</li><li>Cluster membership and node trust</li></ul><small>Query logs, statistics, sessions, and the DNS cache stay behind. A restored node rebuilds them.</small></details>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 437, "</div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 434, "</div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included").Render(templ.WithChildren(ctx, templ_7745c5c3_Var145), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included").Render(templ.WithChildren(ctx, templ_7745c5c3_Var146), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 438, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 435, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if !view.LocalAvailable {
-				templ_7745c5c3_Var150 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_Var151 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 					templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 					templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 					if !templ_7745c5c3_IsBuffer {
@@ -4871,12 +4873,12 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 439, "<div class=\"isotope-card-content\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 436, "<div class=\"isotope-card-content\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					if !view.CanRestore {
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 440, "<div class=\"certificate-manual-note\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 437, "<div class=\"certificate-manual-note\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4884,7 +4886,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 441, "<span>Your role cannot restore backups onto this deployment.</span></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 438, "<span>Your role cannot restore backups onto this deployment.</span></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4898,7 +4900,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 442, " <form class=\"backup-form\" hx-post=\"/ui/backup/restore\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-encoding=\"multipart/form-data\" hx-disable=\"find button[type='submit']\" hx-confirm=\"Restore this backup? Every zone, user, role, API token, and secret on this node is replaced.\" data-confirm-title=\"Restore backup?\" data-confirm-action=\"Restore Backup\" data-backup-restore-form><div class=\"field-control\"><span>Backup File</span><div class=\"file-picker\"><input class=\"sr-only\" id=\"backup-archive-file\" type=\"file\" name=\"archive\" accept=\".sablebackup\" data-file-picker-input data-backup-archive-input required> <label class=\"button outline\" for=\"backup-archive-file\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 439, " <form class=\"backup-form\" hx-post=\"/ui/backup/restore\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-encoding=\"multipart/form-data\" hx-disable=\"find button[type='submit']\" hx-confirm=\"Restore this backup? Every zone, user, role, API token, and secret on this node is replaced.\" data-confirm-title=\"Restore backup?\" data-confirm-action=\"Restore Backup\" data-backup-restore-form><div class=\"field-control\"><span>Backup File</span><div class=\"file-picker\"><input class=\"sr-only\" id=\"backup-archive-file\" type=\"file\" name=\"archive\" accept=\".sablebackup\" data-file-picker-input data-backup-archive-input required> <label class=\"button outline\" for=\"backup-archive-file\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4906,7 +4908,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 443, "<span>Choose File</span></label> <span data-file-picker-name>No file selected</span></div></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 440, "<span>Choose File</span></label> <span data-file-picker-name>No file selected</span></div></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4914,7 +4916,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 444, "<div class=\"field-grid two\"><label class=\"field-control\"><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" required placeholder=\"The passphrase this backup was sealed with\"></label>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 441, "<div class=\"field-grid two\"><label class=\"field-control\"><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" required placeholder=\"The passphrase this backup was sealed with\"></label>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4922,7 +4924,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 445, "</div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 442, "</div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4930,7 +4932,7 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 446, "<div class=\"backup-actions\">")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 443, "<div class=\"backup-actions\">")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4938,24 +4940,24 @@ func SettingsBackupPanel(view SettingsBackupView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 447, "</div></form>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 444, "</div></form>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 448, "</div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 445, "</div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = SettingsDangerCard("upload", "Restore a Backup", "Replace this node's state with the contents of an archive").Render(templ.WithChildren(ctx, templ_7745c5c3_Var150), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = SettingsDangerCard("upload", "Restore a Backup", "Replace this node's state with the contents of an archive").Render(templ.WithChildren(ctx, templ_7745c5c3_Var151), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 449, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 446, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -4981,12 +4983,12 @@ func RunLocalBackupDialog() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var151 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var151 == nil {
-			templ_7745c5c3_Var151 = templ.NopComponent
+		templ_7745c5c3_Var152 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var152 == nil {
+			templ_7745c5c3_Var152 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var152 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var153 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -4998,11 +5000,11 @@ func RunLocalBackupDialog() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 450, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/backup/run\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair data-local-backup-run-form><label><span>Backup Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"At least 12 characters\" data-passphrase><small>Sable cannot recover this. Store it wherever you keep credentials, not beside the archive.</small></label> <label><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"Repeat the passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 447, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/backup/run\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-passphrase-pair data-local-backup-run-form><label><span>Backup Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"At least 12 characters\" data-passphrase><small>Sable cannot recover this. Store it wherever you keep credentials, not beside the archive.</small></label> <label><span>Confirm Passphrase</span><input type=\"password\" name=\"passphrase_confirmation\" autocomplete=\"new-password\" minlength=\"12\" required placeholder=\"Repeat the passphrase\" data-passphrase-confirmation><small class=\"field-note\" data-passphrase-note hidden></small></label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var153 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var154 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -5020,17 +5022,17 @@ func RunLocalBackupDialog() templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var153), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var154), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 451, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 448, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "run-local-backup-dialog", TitleID: "run-local-backup-title", Title: "Backup Now", Description: "Create a durable local backup outside the scheduled rotation set.", Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var152), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "run-local-backup-dialog", TitleID: "run-local-backup-title", Title: "Backup Now", Description: "Create a durable local backup outside the scheduled rotation set.", Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var153), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5056,12 +5058,12 @@ func LocalBackupRestoreDialog() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var154 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var154 == nil {
-			templ_7745c5c3_Var154 = templ.NopComponent
+		templ_7745c5c3_Var155 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var155 == nil {
+			templ_7745c5c3_Var155 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var155 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var156 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -5073,7 +5075,7 @@ func LocalBackupRestoreDialog() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 452, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/backup/restore-local\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-local-backup-restore-form><input type=\"hidden\" name=\"name\" data-local-backup-restore-input>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 449, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/backup/restore-local\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-disable=\"find button[type='submit']\" data-local-backup-restore-form><input type=\"hidden\" name=\"name\" data-local-backup-restore-input>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5081,7 +5083,7 @@ func LocalBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 453, "<label><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" data-local-backup-passphrase><small data-local-backup-passphrase-note></small></label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 450, "<label><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" data-local-backup-passphrase><small data-local-backup-passphrase-note></small></label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5089,7 +5091,7 @@ func LocalBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var156 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var157 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -5107,17 +5109,17 @@ func LocalBackupRestoreDialog() templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var156), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var157), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 454, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 451, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "local-backup-restore-dialog", TitleID: "local-backup-restore-title", Title: "Restore Local Backup", DescriptionContent: localBackupRestoreLead(), Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var155), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "local-backup-restore-dialog", TitleID: "local-backup-restore-title", Title: "Restore Local Backup", DescriptionContent: localBackupRestoreLead(), Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var156), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5143,12 +5145,12 @@ func localBackupRestoreLead() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var157 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var157 == nil {
-			templ_7745c5c3_Var157 = templ.NopComponent
+		templ_7745c5c3_Var158 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var158 == nil {
+			templ_7745c5c3_Var158 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 455, "Stage <strong data-local-backup-restore-name></strong> before a controlled restart.")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 452, "Stage <strong data-local-backup-restore-name></strong> before a controlled restart.")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5174,12 +5176,12 @@ func UploadBackupRestoreDialog() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var158 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var158 == nil {
-			templ_7745c5c3_Var158 = templ.NopComponent
+		templ_7745c5c3_Var159 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var159 == nil {
+			templ_7745c5c3_Var159 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var159 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var160 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -5191,7 +5193,7 @@ func UploadBackupRestoreDialog() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 456, "<form class=\"blocking-dialog-form backup-form\" hx-post=\"/ui/backup/restore\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-encoding=\"multipart/form-data\" hx-disable=\"find button[type='submit']\" data-backup-restore-form data-upload-backup-restore-form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 453, "<form class=\"blocking-dialog-form backup-form\" hx-post=\"/ui/backup/restore\" hx-target=\"#backup-panel\" hx-swap=\"outerHTML\" hx-encoding=\"multipart/form-data\" hx-disable=\"find button[type='submit']\" data-backup-restore-form data-upload-backup-restore-form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5199,7 +5201,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 457, "<div class=\"backup-file-upload\" data-backup-file-upload data-file-dropzone-root data-file-dropzone-state=\"empty\"><label class=\"file-dropzone\" data-file-dropzone><input id=\"restore-backup-archive-file\" type=\"file\" name=\"archive\" accept=\".sablebackup\" data-file-dropzone-input data-file-picker-input data-backup-archive-input required aria-label=\"Choose Sable backup\"> <span class=\"file-dropzone-upload-icon\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 454, "<div class=\"backup-file-upload\" data-backup-file-upload data-file-dropzone-root data-file-dropzone-state=\"empty\"><label class=\"file-dropzone\" data-file-dropzone><input id=\"restore-backup-archive-file\" type=\"file\" name=\"archive\" accept=\".sablebackup\" data-file-dropzone-input data-file-picker-input data-backup-archive-input required aria-label=\"Choose Sable backup\"> <span class=\"file-dropzone-upload-icon\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5207,7 +5209,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 458, "</span> <strong>Drop your Sable backup here</strong> <span>or <span class=\"file-dropzone-browse\">browse files</span></span> <small>.sablebackup archives</small></label><div class=\"file-dropzone-selection\" data-backup-file-selection hidden>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 455, "</span> <strong>Drop your Sable backup here</strong> <span>or <span class=\"file-dropzone-browse\">browse files</span></span> <small>.sablebackup archives</small></label><div class=\"file-dropzone-selection\" data-backup-file-selection hidden>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5215,7 +5217,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "<div><strong data-file-picker-name></strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 456, "<div><strong data-file-picker-name></strong>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5223,7 +5225,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "</div><button class=\"button outline icon-button\" type=\"button\" data-backup-file-remove aria-label=\"Remove selected backup\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 457, "</div><button class=\"button outline icon-button\" type=\"button\" data-backup-file-remove aria-label=\"Remove selected backup\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5231,7 +5233,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "</button></div><p class=\"zone-import-help\" data-file-dropzone-status role=\"status\" aria-live=\"polite\"></p></div><label><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" required placeholder=\"The passphrase this backup was sealed with\"></label>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 458, "</button></div><p class=\"zone-import-help\" data-file-dropzone-status role=\"status\" aria-live=\"polite\"></p></div><label><span>Passphrase</span><input type=\"password\" name=\"passphrase\" autocomplete=\"off\" required placeholder=\"The passphrase this backup was sealed with\"></label>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5243,7 +5245,7 @@ func UploadBackupRestoreDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var160 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var161 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -5261,17 +5263,17 @@ func UploadBackupRestoreDialog() templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var160), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var161), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 459, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "upload-backup-restore-dialog", TitleID: "upload-backup-restore-title", Title: "Restore Backup", Description: "Choose a Sable archive and stage it before a controlled restart.", Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var159), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "upload-backup-restore-dialog", TitleID: "upload-backup-restore-title", Title: "Restore Backup", Description: "Choose a Sable archive and stage it before a controlled restart.", Class: "blocking-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var160), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5323,90 +5325,90 @@ func BackupProgress(job SettingsBackupJobView) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var161 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var161 == nil {
-			templ_7745c5c3_Var161 = templ.NopComponent
+		templ_7745c5c3_Var162 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var162 == nil {
+			templ_7745c5c3_Var162 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "<div class=\"backup-progress\" role=\"status\" aria-live=\"polite\"><div class=\"backup-progress-heading\"><strong>")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var162 string
-		templ_7745c5c3_Var162, templ_7745c5c3_Err = templ.JoinStringErrs(job.Title)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 989, Col: 22}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var162))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "</strong> <span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 460, "<div class=\"backup-progress\" role=\"status\" aria-live=\"polite\"><div class=\"backup-progress-heading\"><strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var163 string
-		templ_7745c5c3_Var163, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d%%", job.Percent))
+		templ_7745c5c3_Var163, templ_7745c5c3_Err = templ.JoinStringErrs(job.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 990, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 991, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var163))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "</span></div><div class=\"backup-progress-track\" role=\"progressbar\" aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 461, "</strong> <span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var164 string
-		templ_7745c5c3_Var164, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(job.Percent))
+		templ_7745c5c3_Var164, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d%%", job.Percent))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 992, Col: 133}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 992, Col: 43}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var164)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var164))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, "\" aria-label=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 462, "</span></div><div class=\"backup-progress-track\" role=\"progressbar\" aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var165 string
-		templ_7745c5c3_Var165, templ_7745c5c3_Err = templ.ResolveAttributeValue(job.Title)
+		templ_7745c5c3_Var165, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(job.Percent))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 992, Col: 158}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 994, Col: 133}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var165)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, "\"><div class=\"backup-progress-fill\" data-progress-fill></div></div><div class=\"backup-progress-meta\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 463, "\" aria-label=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var166 string
-		templ_7745c5c3_Var166, templ_7745c5c3_Err = templ.JoinStringErrs(job.Stage)
+		templ_7745c5c3_Var166, templ_7745c5c3_Err = templ.ResolveAttributeValue(job.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 996, Col: 20}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 994, Col: 158}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var166))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var166)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, "</span> <span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 464, "\"><div class=\"backup-progress-fill\" data-progress-fill></div></div><div class=\"backup-progress-meta\"><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var167 string
-		templ_7745c5c3_Var167, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Step %d of %d", min(job.Step+1, job.Total), job.Total))
+		templ_7745c5c3_Var167, templ_7745c5c3_Err = templ.JoinStringErrs(job.Stage)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 997, Col: 78}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 998, Col: 20}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var167))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, "</span></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 465, "</span> <span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var168 string
+		templ_7745c5c3_Var168, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Step %d of %d", min(job.Step+1, job.Total), job.Total))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 999, Col: 78}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var168))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 466, "</span></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5433,12 +5435,12 @@ func BackupUploadMeter() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var168 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var168 == nil {
-			templ_7745c5c3_Var168 = templ.NopComponent
+		templ_7745c5c3_Var169 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var169 == nil {
+			templ_7745c5c3_Var169 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, "<div class=\"backup-progress backup-upload\" data-backup-upload hidden><div class=\"backup-progress-heading\"><strong>Uploading archive</strong> <span data-backup-upload-percent>0%</span></div><div class=\"backup-progress-track\"><div class=\"backup-progress-fill\" data-backup-upload-fill></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 467, "<div class=\"backup-progress backup-upload\" data-backup-upload hidden><div class=\"backup-progress-heading\"><strong>Uploading archive</strong> <span data-backup-upload-percent>0%</span></div><div class=\"backup-progress-track\"><div class=\"backup-progress-fill\" data-backup-upload-fill></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5464,12 +5466,12 @@ func SettingsCard(icon, title, description string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var169 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var169 == nil {
-			templ_7745c5c3_Var169 = templ.NopComponent
+		templ_7745c5c3_Var170 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var170 == nil {
+			templ_7745c5c3_Var170 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var170 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var171 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -5485,17 +5487,17 @@ func SettingsCard(icon, title, description string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 468, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ_7745c5c3_Var169.Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templ_7745c5c3_Var170.Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card", Attrs: templ.Attributes{"data-settings-card": true}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var170), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card", Attrs: templ.Attributes{"data-settings-card": true}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var171), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5529,12 +5531,12 @@ func SettingsSaveButton(tab string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var171 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var171 == nil {
-			templ_7745c5c3_Var171 = templ.NopComponent
+		templ_7745c5c3_Var172 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var172 == nil {
+			templ_7745c5c3_Var172 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, "<div class=\"settings-panel-save\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 469, "<div class=\"settings-panel-save\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5542,7 +5544,7 @@ func SettingsSaveButton(tab string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 470, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5569,12 +5571,12 @@ func SettingsDangerCard(icon, title, description string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var172 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var172 == nil {
-			templ_7745c5c3_Var172 = templ.NopComponent
+		templ_7745c5c3_Var173 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var173 == nil {
+			templ_7745c5c3_Var173 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var173 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var174 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -5590,17 +5592,17 @@ func SettingsDangerCard(icon, title, description string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 471, " ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templ_7745c5c3_Var172.Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templ_7745c5c3_Var173.Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card settings-danger-card", Attrs: templ.Attributes{"data-settings-card": true}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var173), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card settings-danger-card", Attrs: templ.Attributes{"data-settings-card": true}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var174), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5627,35 +5629,35 @@ func BackupArchivePreview(inline bool) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var174 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var174 == nil {
-			templ_7745c5c3_Var174 = templ.NopComponent
+		templ_7745c5c3_Var175 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var175 == nil {
+			templ_7745c5c3_Var175 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var175 = []any{"backup-archive-preview", templ.KV("inline", inline)}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var175...)
+		var templ_7745c5c3_Var176 = []any{"backup-archive-preview", templ.KV("inline", inline)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var176...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "<div class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 472, "<div class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var176 string
-		templ_7745c5c3_Var176, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var175).String())
+		var templ_7745c5c3_Var177 string
+		templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var176).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var176)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var177)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, "\" data-backup-archive-preview hidden>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "\" data-backup-archive-preview hidden>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if !inline {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "<span class=\"backup-archive-icon\" aria-hidden=\"true\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 474, "<span class=\"backup-archive-icon\" aria-hidden=\"true\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5663,12 +5665,12 @@ func BackupArchivePreview(inline bool) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 475, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "<div><strong data-backup-archive-title></strong> <span data-backup-archive-detail></span></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 476, "<div><strong data-backup-archive-title></strong> <span data-backup-archive-detail></span></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -5706,12 +5708,12 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var177 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var177 == nil {
-			templ_7745c5c3_Var177 = templ.NopComponent
+		templ_7745c5c3_Var178 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var178 == nil {
+			templ_7745c5c3_Var178 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var178 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var179 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -5723,69 +5725,69 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "<div class=\"dialog-body certificate-details-body\"><div class=\"certificate-detail-grid\"><div class=\"certificate-detail\"><span>Issued by</span><strong>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var179 string
-			templ_7745c5c3_Var179, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEIssuer != "", view.ACMEIssuer, "Unknown"))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1080, Col: 125}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var179))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "</strong></div><div class=\"certificate-detail\"><span>Subject</span><strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 477, "<div class=\"dialog-body certificate-details-body\"><div class=\"certificate-detail-grid\"><div class=\"certificate-detail\"><span>Issued by</span><strong>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var180 string
-			templ_7745c5c3_Var180, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMESubject != "", view.ACMESubject, "Not set"))
+			templ_7745c5c3_Var180, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEIssuer != "", view.ACMEIssuer, "Unknown"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1081, Col: 125}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1082, Col: 125}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var180))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "</strong></div><div class=\"certificate-detail\"><span>Issued on</span><strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 478, "</strong></div><div class=\"certificate-detail\"><span>Subject</span><strong>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var181 string
-			templ_7745c5c3_Var181, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEIssuedOn != "", view.ACMEIssuedOn, "Unknown"))
+			templ_7745c5c3_Var181, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMESubject != "", view.ACMESubject, "Not set"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1082, Col: 129}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1083, Col: 125}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var181))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "</strong></div><div class=\"certificate-detail\"><span>Expires</span><strong>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 479, "</strong></div><div class=\"certificate-detail\"><span>Issued on</span><strong>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var182 string
-			templ_7745c5c3_Var182, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEExpires != "", view.ACMEExpires, "Unknown"))
+			templ_7745c5c3_Var182, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEIssuedOn != "", view.ACMEIssuedOn, "Unknown"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1083, Col: 125}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1084, Col: 129}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var182))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "</strong></div></div><div class=\"certificate-detail-section\"><h3>Covered Hosts</h3><p>A client is only protected when the name it connects to appears here.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 480, "</strong></div><div class=\"certificate-detail\"><span>Expires</span><strong>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var183 string
+			templ_7745c5c3_Var183, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEExpires != "", view.ACMEExpires, "Unknown"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1085, Col: 125}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var183))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 481, "</strong></div></div><div class=\"certificate-detail-section\"><h3>Covered Hosts</h3><p>A client is only protected when the name it connects to appears here.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(view.ACMECoveredNames) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, "<ul class=\"certificate-name-list\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 482, "<ul class=\"certificate-name-list\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for _, name := range view.ACMECoveredNames {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "<li>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 483, "<li>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -5793,45 +5795,45 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 487, "<span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 484, "<span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var183 string
-					templ_7745c5c3_Var183, templ_7745c5c3_Err = templ.JoinStringErrs(name)
+					var templ_7745c5c3_Var184 string
+					templ_7745c5c3_Var184, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1091, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1093, Col: 44}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var183))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var184))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 488, "</span></li>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 485, "</span></li>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 489, "</ul>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 486, "</ul>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 490, "<p class=\"certificate-detail-empty\">No certificate is installed yet.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 487, "<p class=\"certificate-detail-empty\">No certificate is installed yet.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 491, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 488, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if len(view.ACMEPendingNames) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 492, "<div class=\"certificate-detail-section\"><h3>Not Covered Yet</h3><p>These names are configured but are not on the installed certificate. Issue a new one to include them.</p><ul class=\"certificate-name-list pending\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 489, "<div class=\"certificate-detail-section\"><h3>Not Covered Yet</h3><p>These names are configured but are not on the installed certificate. Issue a new one to include them.</p><ul class=\"certificate-name-list pending\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for _, name := range view.ACMEPendingNames {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "<li>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 490, "<li>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -5839,79 +5841,48 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 494, "<span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 491, "<span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var184 string
-					templ_7745c5c3_Var184, templ_7745c5c3_Err = templ.JoinStringErrs(name)
+					var templ_7745c5c3_Var185 string
+					templ_7745c5c3_Var185, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1104, Col: 46}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1106, Col: 46}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var184))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 495, "</span></li>")
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var185))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 492, "</span></li>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 496, "</ul></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 493, "</ul></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 497, "<div class=\"certificate-detail-section\"><h3>Identity</h3><div class=\"certificate-detail\"><span>Serial number</span><div class=\"copyable-text certificate-detail-value\"><code id=\"certificate-serial-number\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var185 string
-			templ_7745c5c3_Var185, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMESerialNumber != "", view.ACMESerialNumber, "Unknown"))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1114, Col: 114}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var185))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 498, "</code> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if view.ACMESerialNumber != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 499, "<button type=\"button\" data-copy-target=\"certificate-serial-number\" aria-label=\"Copy serial number\" title=\"Copy serial number\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = CopyIcons().Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 500, "</button>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 501, "</div></div><div class=\"certificate-detail\"><span>SHA-256 fingerprint</span><div class=\"copyable-text certificate-detail-value\"><code id=\"certificate-fingerprint\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 494, "<div class=\"certificate-detail-section\"><h3>Identity</h3><div class=\"certificate-detail\"><span>Serial number</span><div class=\"copyable-text certificate-detail-value\"><code id=\"certificate-serial-number\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var186 string
-			templ_7745c5c3_Var186, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEFingerprint != "", view.ACMEFingerprint, "Unknown"))
+			templ_7745c5c3_Var186, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMESerialNumber != "", view.ACMESerialNumber, "Unknown"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1123, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1116, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var186))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 502, "</code> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 495, "</code> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if view.ACMEFingerprint != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 503, "<button type=\"button\" data-copy-target=\"certificate-fingerprint\" aria-label=\"Copy fingerprint\" title=\"Copy fingerprint\">")
+			if view.ACMESerialNumber != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 496, "<button type=\"button\" data-copy-target=\"certificate-serial-number\" aria-label=\"Copy serial number\" title=\"Copy serial number\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5919,7 +5890,61 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 504, "</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 497, "</button>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 498, "</div></div><div class=\"certificate-detail\"><span>SHA-256 fingerprint</span><div class=\"copyable-text certificate-detail-value\"><code id=\"certificate-fingerprint\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var187 string
+			templ_7745c5c3_Var187, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.ACMEFingerprint != "", view.ACMEFingerprint, "Unknown"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1125, Col: 110}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var187))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 499, "</code> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if view.ACMEFingerprint != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 500, "<button type=\"button\" data-copy-target=\"certificate-fingerprint\" aria-label=\"Copy fingerprint\" title=\"Copy fingerprint\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = CopyIcons().Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 501, "</button>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 502, "</div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if view.ACMELastRenewal != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 503, "<div class=\"certificate-detail\"><span>Last issued or renewed</span><strong>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var188 string
+				templ_7745c5c3_Var188, templ_7745c5c3_Err = templ.JoinStringErrs(view.ACMELastRenewal)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1132, Col: 102}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var188))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 504, "</strong></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -5928,30 +5953,7 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if view.ACMELastRenewal != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 506, "<div class=\"certificate-detail\"><span>Last issued or renewed</span><strong>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var187 string
-				templ_7745c5c3_Var187, templ_7745c5c3_Err = templ.JoinStringErrs(view.ACMELastRenewal)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 1130, Col: 102}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var187))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 507, "</strong></div>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 508, "</div></div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Var188 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var189 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -5965,13 +5967,13 @@ func CertificateDetailsDialog(view SettingsPageView) templ.Component {
 				ctx = templ.InitializeContext(ctx)
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Close").Render(templ.WithChildren(ctx, templ_7745c5c3_Var188), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Close").Render(templ.WithChildren(ctx, templ_7745c5c3_Var189), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "certificate-details-dialog", TitleID: "certificate-details-title", Title: "Certificate Details", Description: "The certificate currently installed for Web, DoH, DoT, and DoQ", Class: "isotope-form-dialog certificate-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var178), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "certificate-details-dialog", TitleID: "certificate-details-title", Title: "Certificate Details", Description: "The certificate currently installed for Web, DoH, DoT, and DoQ", Class: "isotope-form-dialog certificate-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var179), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

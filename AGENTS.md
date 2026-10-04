@@ -106,6 +106,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.Button` for a labeled button, or a link styled as one
   - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
   - `components.Tabs` for a page's tab strip, as tab buttons or, with `Nav`, as links
+  - `components.EmptyState` for what a list or panel shows when it has nothing in it
 
   Use the shared classes too: `.status-badge`, `.count-badge`, and `.field-help`. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
 
@@ -114,7 +115,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - A first load shows a skeleton shaped like the content, like `RankedPanelSkeleton`.
   - A refresh shows `UpdateIndicator`.
   - A button whose request is running is disabled (`hx-disable`) and shows a pending label, such as **Saving…**.
-- **Handle empty and error states.** An empty state says in one line why it's empty, like the Insights "Nothing needs your attention" card. An error says what went wrong and what to do next.
+- **Handle empty and error states.** An empty state says in one line why it's empty, like the Insights "Nothing needs your attention" card; draw it with `components.EmptyState`. An error says what went wrong and what to do next.
 - **Keep motion subtle.** Hover effects and state changes are quick transitions of about 150ms ease, matching the existing rules. Motion should explain a change, not decorate. Under `prefers-reduced-motion`, remove motion that isn't essential.
 - **Balance the layout.** Align to the 4px grid, keep rows from feeling cramped, and keep one clear primary action per area.
 - **Make it responsive.** Check every screen at 1218×787 (laptop) and 390×844 (phone), in light and dark, with no sideways scrolling. Safari lays some things out differently from Chrome, so check it for layout changes.

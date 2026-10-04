@@ -119,7 +119,7 @@ func TestInsightDevicesFilterByWhatTheRowsShow(t *testing.T) {
 		`data-list-tags="named" data-list-text="george&#39;s laptop 3c:22:fb:01:02:03 apple unifi 10.0.0.5 fd00::5 computer" data-list-type="computer"`,
 		`data-list-tags="new unnamed" data-list-text="10.0.0.9" data-list-type="unknown"`,
 		`<template data-option-icon="computer"><svg class="nav-icon icon-laptop"`, `<template data-option-icon="unknown"><svg class="nav-icon icon-monitor-smartphone"`,
-		`<span class="count-badge" data-list-count="2">2 devices</span>`, `<div class="insight-section-empty" hidden data-list-filter-empty>`,
+		`<span class="count-badge" data-list-count="2">2 devices</span>`, `<div class="empty-state insight-section-empty" data-list-filter-empty hidden>`,
 	} {
 		if !strings.Contains(markup, expected) {
 			t.Errorf("devices list is missing %s", expected)
