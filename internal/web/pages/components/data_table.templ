@@ -1,0 +1,43 @@
+package components
+
+import "strings"
+
+// DataTableColumn is one column heading in a DataTable.
+type DataTableColumn struct {
+	Label string
+	// Hidden keeps the label for screen readers only, for a column of row
+	// buttons that needs no visible heading.
+	Hidden bool
+	// Class goes on the heading cell, such as "right-cell" for a number
+	// column.
+	Class string
+}
+
+// DataTableProps describes a desktop table of records. Phones hide it, so a
+// page pairs it with a mobile list of the same rows.
+type DataTableProps struct {
+	// Caption names the table for screen readers.
+	Caption string
+	Columns []DataTableColumn
+	// Class adds classes to the table. Attrs go on the scrolling wrapper,
+	// such as an id for an out-of-band swap or a data hook.
+	Class string
+	Attrs templ.Attributes
+}
+
+// DataTable draws the table's heading row; its children are the body rows.
+templ DataTable(p DataTableProps) {
+	<div class="admin-desktop-table" { p.Attrs... }>
+		<table class={ strings.TrimSpace("isotope-table " + p.Class) }><caption class="sr-only">{ p.Caption }</caption><thead><tr>
+			for _, column := range p.Columns {
+				<th scope="col" if column.Class != "" { class={ column.Class } }>
+					if column.Hidden {
+						<span class="sr-only">{ column.Label }</span>
+					} else {
+						{ column.Label }
+					}
+				</th>
+			}
+		</tr></thead><tbody>{ children... }</tbody></table>
+	</div>
+}

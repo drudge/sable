@@ -1052,7 +1052,7 @@ func TestUniFiMappingTableCountsHostsPerNetwork(t *testing.T) {
 
 	body := serveRequest(server, http.MethodGet, "/integrations").Body.String()
 
-	if !strings.Contains(body, "<th>Hosts</th>") {
+	if !strings.Contains(body, `<th scope="col">Hosts</th>`) {
 		t.Fatal("the mapping table has no host count column")
 	}
 	if !strings.Contains(body, "<td>5</td>") {

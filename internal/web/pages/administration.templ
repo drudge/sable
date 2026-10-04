@@ -105,7 +105,7 @@ templ UsersPanel(view AdministrationPageView) {
 						@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)})</div>@Icon("chevron-right")</div></button>
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Users</caption><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "Users", Columns: []components.DataTableColumn{{Label: "Username"}, {Label: "Display Name"}, {Label: "Status"}, {Label: "Groups"}, {Label: "Last Updated"}, {Label: "Actions"}}}) {
 				for _, user := range view.Users {
 					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td>@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)})
 						if len(user.Identities) > 0 {
@@ -117,7 +117,7 @@ templ UsersPanel(view AdministrationPageView) {
 						}
 					</div></td><td class="muted-cell">{ adminTime(user.UpdatedAt, view.Console.TimeDisplay) }</td><td><button class="icon-button" type="button" data-dialog-open={ adminUserDialogID(user.ID) } aria-label={ "Edit " + user.Username }>@Icon("chevron-right")</button></td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }
@@ -139,7 +139,7 @@ templ GroupsPanel(view AdministrationPageView) {
 					}
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Groups</caption><thead><tr><th>Name</th><th>Members</th><th>Description</th><th>Actions</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "Groups", Columns: []components.DataTableColumn{{Label: "Name"}, {Label: "Members"}, {Label: "Description"}, {Label: "Actions"}}}) {
 				for _, role := range view.Roles {
 					<tr><td><strong>{ role.Name }</strong>
 						if role.BuiltIn {
@@ -151,7 +151,7 @@ templ GroupsPanel(view AdministrationPageView) {
 						}
 					</td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }
@@ -167,7 +167,7 @@ templ PermissionsPanel(view AdministrationPageView) {
 					<article class="admin-mobile-row static"><div><strong>{ permission }</strong><small>{ fmt.Sprint(permissionRoleCount(view.Roles, permission)) } groups</small></div></article>
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Permissions by group and interface</caption><thead><tr><th>Permission</th><th>Web UI Groups</th><th>API Groups</th><th>Resource</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "Permissions by group and interface", Columns: []components.DataTableColumn{{Label: "Permission"}, {Label: "Web UI Groups"}, {Label: "API Groups"}, {Label: "Resource"}}}) {
 				for _, permission := range view.Permissions {
 					<tr><td><strong>{ permission }</strong></td><td><div class="table-badges">
 						for _, role := range permissionRolesForSurface(view.Roles, permission, auth.SurfaceWeb) {
@@ -179,7 +179,7 @@ templ PermissionsPanel(view AdministrationPageView) {
 						}
 					</div></td><td><span class="permission-access">{ permissionResourceLabel(permission) }</span></td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }
@@ -195,7 +195,7 @@ templ SessionsPanel(view AdministrationPageView) {
 					@SessionMobileRow(view, session)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Active sessions</caption><thead><tr><th>Username</th><th>Session</th><th>Created</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "Active sessions", Columns: []components.DataTableColumn{{Label: "Username"}, {Label: "Session"}, {Label: "Created"}, {Label: "Expires"}, {Label: "Actions", Class: "right-cell"}}}) {
 				for _, session := range view.Sessions {
 					<tr><td><strong>{ session.Username }</strong>
 						if session.Current {
@@ -203,7 +203,7 @@ templ SessionsPanel(view AdministrationPageView) {
 						}
 					</td><td><code>[{ session.HashPrefix }]</code></td><td class="muted-cell">{ adminTime(session.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(session.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/sessions/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Sign " + session.Username + " out of this session?" } data-confirm-title="Sign out session?" data-confirm-action="Sign out"><input type="hidden" name="session" value={ session.HashPrefix }/><button class="icon-button" type="submit" disabled?={ session.Current } aria-label={ ifThen(session.Current, "Current session", "Sign out "+session.Username) } title={ ifThen(session.Current, "This is your current session", "Sign out this session") }>@Icon("log-out")</button></form></td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }
@@ -221,7 +221,7 @@ templ TokensPanel(view AdministrationPageView) {
 					@TokenMobileRow(view, token)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">API tokens</caption><thead><tr><th>Username</th><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "API tokens", Columns: []components.DataTableColumn{{Label: "Username"}, {Label: "Name"}, {Label: "Groups"}, {Label: "Created"}, {Label: "Last Used"}, {Label: "Expires"}, {Label: "Actions", Class: "right-cell"}}}) {
 				for _, token := range view.Tokens {
 					<tr><td><strong>{ token.Username }</strong></td><td><code>{ token.Name }</code></td><td><div class="table-badges">
 						for _, group := range token.Groups {
@@ -229,7 +229,7 @@ templ TokensPanel(view AdministrationPageView) {
 						}
 					</div></td><td class="muted-cell">{ adminTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ adminTime(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell"><form hx-post="/ui/administration/tokens/revoke" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Revoke API token " + token.Name + "? Applications using it will immediately lose access." } data-confirm-title="Revoke API token?" data-confirm-action="Revoke Token"><input type="hidden" name="token_id" value={ fmt.Sprint(token.ID) }/><button class="icon-button danger" type="submit" aria-label={ "Revoke API token " + token.Name } title="Revoke API token">@Icon("trash")</button></form></td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }

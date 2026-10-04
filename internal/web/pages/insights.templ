@@ -1012,6 +1012,16 @@ templ insightsMetrics(view InsightsOverviewView) {
 	</div>
 }
 
+// insightContributionColumns heads the block list contribution table. The
+// queries column appears only when the period has query data.
+func insightContributionColumns(hasQueries bool) []components.DataTableColumn {
+	columns := []components.DataTableColumn{{Label: "List"}, {Label: "Domains", Class: "right-cell"}, {Label: "Unique", Class: "right-cell"}, {Label: "Also elsewhere", Class: "right-cell"}, {Label: "Unique share"}, {Label: "Largest overlap"}}
+	if hasQueries {
+		columns = append(columns, components.DataTableColumn{Label: "Queries blocked", Class: "right-cell"})
+	}
+	return columns
+}
+
 templ InsightContribution(view InsightsOverviewView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card insight-contribution", Attrs: templ.Attributes{"aria-labelledby": "insight-contribution-title"}}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Block List Contribution", TitleID: "insight-contribution-title", Description: "Compared from cached list contents", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
@@ -1069,64 +1079,46 @@ templ InsightContribution(view InsightsOverviewView) {
 					</article>
 				}
 			</div>
-			<div class="admin-desktop-table">
-				<table class="isotope-table insight-contribution-table">
-					<caption class="sr-only">Block list contribution</caption>
-					<thead>
-						<tr>
-							<th scope="col">List</th>
-							<th scope="col" class="right-cell">Domains</th>
-							<th scope="col" class="right-cell">Unique</th>
-							<th scope="col" class="right-cell">Also elsewhere</th>
-							<th scope="col">Unique share</th>
-							<th scope="col">Largest overlap</th>
-							if view.Contribution.HasQueries {
-								<th scope="col" class="right-cell">Queries blocked</th>
-							}
-						</tr>
-					</thead>
-					<tbody>
-						for _, list := range view.Contribution.Lists {
-							<tr>
-								<th scope="row"><span class="insight-list-name"><strong>{ list.Name }</strong><code title={ list.Location }>{ list.Location }</code></span></th>
-								if list.Available {
-									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Domains)) }</td>
-									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Unique)) }</td>
-									<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Covered)) }</td>
-									<td>
-										<span class="insight-share-cell">
-											@insightShareBar(list)
-											<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
-										</span>
-									</td>
-									<td class="muted-cell">
-										if list.LargestOverlap != "" {
-											{ list.LargestOverlap } <span class="insight-overlap-share">{ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) }</span>
-										} else {
-											None
-										}
-									</td>
+			@components.DataTable(components.DataTableProps{Caption: "Block list contribution", Class: "insight-contribution-table", Columns: insightContributionColumns(view.Contribution.HasQueries)}) {
+				for _, list := range view.Contribution.Lists {
+					<tr>
+						<th scope="row"><span class="insight-list-name"><strong>{ list.Name }</strong><code title={ list.Location }>{ list.Location }</code></span></th>
+						if list.Available {
+							<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Domains)) }</td>
+							<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Unique)) }</td>
+							<td class="right-cell numeric-cell">{ formatNumber(uint64(list.Covered)) }</td>
+							<td>
+								<span class="insight-share-cell">
+									@insightShareBar(list)
+									<span class="insight-share">{ insights.FormatShare(uint64(list.Unique), uint64(list.Domains)) }</span>
+								</span>
+							</td>
+							<td class="muted-cell">
+								if list.LargestOverlap != "" {
+									{ list.LargestOverlap } <span class="insight-overlap-share">{ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) }</span>
 								} else {
-									<td colspan="5"><small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small></td>
+									None
 								}
-								if view.Contribution.HasQueries {
-									@insightQueriesCell(list.Queries)
-								}
-							</tr>
+							</td>
+						} else {
+							<td colspan="5"><small class="blocklist-health-warning">@Icon("alert-triangle")<span>{ list.Problem }</span></small></td>
 						}
-						if custom := view.Contribution.Custom; custom != nil {
-							<tr class="insight-custom-row">
-								<th scope="row"><span class="insight-list-name"><strong>Custom blocked domains</strong><code>Blocked domains you added</code></span></th>
-								<td class="right-cell numeric-cell">{ formatNumber(uint64(custom.Domains)) }</td>
-								<td colspan="4" class="muted-cell">Not compared with lists</td>
-								if view.Contribution.HasQueries {
-									@insightQueriesCell(custom.Queries)
-								}
-							</tr>
+						if view.Contribution.HasQueries {
+							@insightQueriesCell(list.Queries)
 						}
-					</tbody>
-				</table>
-			</div>
+					</tr>
+				}
+				if custom := view.Contribution.Custom; custom != nil {
+					<tr class="insight-custom-row">
+						<th scope="row"><span class="insight-list-name"><strong>Custom blocked domains</strong><code>Blocked domains you added</code></span></th>
+						<td class="right-cell numeric-cell">{ formatNumber(uint64(custom.Domains)) }</td>
+						<td colspan="4" class="muted-cell">Not compared with lists</td>
+						if view.Contribution.HasQueries {
+							@insightQueriesCell(custom.Queries)
+						}
+					</tr>
+				}
+			}
 			<footer class="insight-card-note">
 				<p><strong>Unique</strong> means no other enabled list contains the domain or one of its parent domains; those columns describe list contents.</p>
 				if view.Contribution.HasQueries {
@@ -1450,43 +1442,27 @@ templ InsightDevices(view InsightsOverviewView) {
 					</button>
 				}
 			</div>
-			<div class="admin-desktop-table" data-list-results>
-				<table class="isotope-table insight-entity-table">
-					<caption class="sr-only">Devices with queries in this period</caption>
-					<thead>
-						<tr>
-							<th scope="col">Device</th>
-							<th scope="col" class="right-cell">Queries</th>
-							<th scope="col" class="right-cell">Blocked</th>
-							<th scope="col" class="right-cell insight-optional-cell">First-time domains</th>
-							<th scope="col" class="insight-optional-cell">First seen</th>
-							<th scope="col">Last seen</th>
-							<th scope="col"><span class="sr-only">Details</span></th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, device := range view.Devices {
-							<tr data-row-opener { insightDeviceFilterAttributes(device)... }>
-								<th scope="row">
-									<span class="insight-entity-heading">
-										@insightTypeTile(device)
-										<span class="insight-entity-cell">
-											<span class="insight-entity-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
-											@insightDeviceSubtitle(device)
-										</span>
-									</span>
-								</th>
-								<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
-								<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
-								<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
-								<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
-								<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
-								<td><button class="icon-button" type="button" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			@components.DataTable(components.DataTableProps{Caption: "Devices with queries in this period", Class: "insight-entity-table", Columns: []components.DataTableColumn{{Label: "Device"}, {Label: "Queries", Class: "right-cell"}, {Label: "Blocked", Class: "right-cell"}, {Label: "First-time domains", Class: "right-cell insight-optional-cell"}, {Label: "First seen", Class: "insight-optional-cell"}, {Label: "Last seen"}, {Label: "Details", Hidden: true}}, Attrs: templ.Attributes{"data-list-results": true}}) {
+				for _, device := range view.Devices {
+					<tr data-row-opener { insightDeviceFilterAttributes(device)... }>
+						<th scope="row">
+							<span class="insight-entity-heading">
+								@insightTypeTile(device)
+								<span class="insight-entity-cell">
+									<span class="insight-entity-name"><strong class={ templ.KV("mono", !device.Named) }>{ device.Label }</strong>@insightDeviceBadges(device, true)</span>
+									@insightDeviceSubtitle(device)
+								</span>
+							</span>
+						</th>
+						<td class="right-cell numeric-cell">{ formatNumber(device.Queries) }</td>
+						<td class="right-cell"><span class="insight-queries-cell"><span class="numeric-cell">{ formatNumber(device.Blocked) }</span> <small>{ percent(device.Blocked, device.Queries) }</small></span></td>
+						<td class="right-cell numeric-cell insight-optional-cell">{ formatNumber(device.NewDomains) }</td>
+						<td class="muted-cell insight-optional-cell">{ insightDeviceTime(device.FirstSeen, view.TimeDisplay) }</td>
+						<td class="muted-cell">{ insightDeviceTime(device.LastSeen, view.TimeDisplay) }</td>
+						<td><button class="icon-button" type="button" { drawerOpener(DeviceDrawerLink(device.Key, view.Range))... } aria-label={ "View details for " + device.Label }>@Icon("chevron-right")</button></td>
+					</tr>
+				}
+			}
 			@components.EmptyState(components.EmptyStateProps{Icon: "search", Title: "No devices match", Class: "insight-section-empty", Attrs: templ.Attributes{"hidden": true, "data-list-filter-empty": true}}) {
 				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
 			}
@@ -1626,43 +1602,27 @@ templ InsightApps(view InsightsOverviewView) {
 					</button>
 				}
 			</div>
-			<div class="admin-desktop-table" data-list-results>
-				<table class="isotope-table insight-entity-table insight-app-table">
-					<caption class="sr-only">Apps used in this period</caption>
-					<thead>
-						<tr>
-							<th scope="col">App</th>
-							<th scope="col" class="right-cell">Devices</th>
-							<th scope="col" class="right-cell">Queries</th>
-							<th scope="col" class="right-cell">Failed</th>
-							<th scope="col" class="right-cell insight-optional-cell">Blocked</th>
-							<th scope="col">Last seen</th>
-							<th scope="col"><span class="sr-only">Details</span></th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, app := range view.Apps {
-							<tr data-row-opener { insightAppFilterAttributes(app)... }>
-								<th scope="row">
-									<span class="insight-entity-heading">
-										@AppIcon(app.ID, app.Category)
-										<span class="insight-entity-cell">
-											<span class="insight-entity-name"><strong>{ app.Name }</strong>@insightAppBadges(app)</span>
-											<small class="insight-app-category">{ app.Category }</small>
-										</span>
-									</span>
-								</th>
-								<td class="right-cell numeric-cell">{ formatNumber(uint64(app.Devices)) }</td>
-								<td class="right-cell numeric-cell">{ formatNumber(app.Queries) }</td>
-								<td class="right-cell">@insightAppFailedCell(app)</td>
-								<td class="right-cell insight-optional-cell">@insightShareCell(app.Blocked, app.Queries, "")</td>
-								<td class="muted-cell">{ insightDeviceTime(app.LastSeen, view.TimeDisplay) }</td>
-								<td><button class="icon-button" type="button" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name }>@Icon("chevron-right")</button></td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			@components.DataTable(components.DataTableProps{Caption: "Apps used in this period", Class: "insight-entity-table insight-app-table", Columns: []components.DataTableColumn{{Label: "App"}, {Label: "Devices", Class: "right-cell"}, {Label: "Queries", Class: "right-cell"}, {Label: "Failed", Class: "right-cell"}, {Label: "Blocked", Class: "right-cell insight-optional-cell"}, {Label: "Last seen"}, {Label: "Details", Hidden: true}}, Attrs: templ.Attributes{"data-list-results": true}}) {
+				for _, app := range view.Apps {
+					<tr data-row-opener { insightAppFilterAttributes(app)... }>
+						<th scope="row">
+							<span class="insight-entity-heading">
+								@AppIcon(app.ID, app.Category)
+								<span class="insight-entity-cell">
+									<span class="insight-entity-name"><strong>{ app.Name }</strong>@insightAppBadges(app)</span>
+									<small class="insight-app-category">{ app.Category }</small>
+								</span>
+							</span>
+						</th>
+						<td class="right-cell numeric-cell">{ formatNumber(uint64(app.Devices)) }</td>
+						<td class="right-cell numeric-cell">{ formatNumber(app.Queries) }</td>
+						<td class="right-cell">@insightAppFailedCell(app)</td>
+						<td class="right-cell insight-optional-cell">@insightShareCell(app.Blocked, app.Queries, "")</td>
+						<td class="muted-cell">{ insightDeviceTime(app.LastSeen, view.TimeDisplay) }</td>
+						<td><button class="icon-button" type="button" { drawerOpener(AppDrawerLink(app.ID, view.Range))... } aria-label={ "View details for " + app.Name }>@Icon("chevron-right")</button></td>
+					</tr>
+				}
+			}
 			@components.EmptyState(components.EmptyStateProps{Icon: "search", Title: "No apps match", Class: "insight-section-empty", Attrs: templ.Attributes{"hidden": true, "data-list-filter-empty": true}}) {
 				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
 			}

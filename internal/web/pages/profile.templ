@@ -133,7 +133,7 @@ templ ProfileTokens(view ProfilePageView) {
 					@ProfileTokenMobileRow(view, token)
 				}
 			</div>
-			<div class="admin-desktop-table"><table class="isotope-table profile-token-table"><caption class="sr-only">Your API tokens</caption><thead><tr><th>Name</th><th>Groups</th><th>Created</th><th>Last Used</th><th>Expires</th><th class="right-cell">Actions</th></tr></thead><tbody>
+			@components.DataTable(components.DataTableProps{Caption: "Your API tokens", Class: "profile-token-table", Columns: []components.DataTableColumn{{Label: "Name"}, {Label: "Groups"}, {Label: "Created"}, {Label: "Last Used"}, {Label: "Expires"}, {Label: "Actions", Class: "right-cell"}}}) {
 				for _, token := range view.Tokens {
 					<tr><td><strong>{ token.Name }</strong></td><td><div class="table-badges">
 						for _, group := range token.Groups {
@@ -141,7 +141,7 @@ templ ProfileTokens(view ProfilePageView) {
 						}
 					</div></td><td class="muted-cell">{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</td><td class="muted-cell">{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay) }</td><td class="right-cell">@ProfileTokenRevoke(token)</td></tr>
 				}
-			</tbody></table></div>
+			}
 		}
 	}
 }
