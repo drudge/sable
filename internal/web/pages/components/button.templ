@@ -1,0 +1,73 @@
+package components
+
+// ButtonVariant picks a button's fill.
+type ButtonVariant int
+
+const (
+	// ButtonPrimary fills the button with the primary color. A view keeps one
+	// primary button per area.
+	ButtonPrimary ButtonVariant = iota
+	// ButtonOutline draws a bordered button on the background.
+	ButtonOutline
+)
+
+// ButtonProps describes a console button: an optional icon and a label.
+type ButtonProps struct {
+	Label string
+	// Icon names an Icon drawn before the label.
+	Icon    string
+	Variant ButtonVariant
+	// Compact draws the smaller button used in card headers and rows.
+	Compact bool
+	// Destructive colors the button for an action that removes something.
+	Destructive bool
+	// Type is the button's type, "button" by default. A form's main action
+	// passes "submit".
+	Type     string
+	Disabled bool
+	// Href draws a link styled as a button instead, for navigation and
+	// downloads.
+	Href templ.SafeURL
+	// Class adds classes after the button's own, and Attrs go on the element,
+	// such as hx-post, data hooks, or download.
+	Class string
+	Attrs templ.Attributes
+}
+
+func (p ButtonProps) class() string {
+	class := "button"
+	if p.Variant == ButtonOutline {
+		class += " outline"
+	}
+	if p.Compact {
+		class += " compact"
+	}
+	if p.Destructive {
+		class += " destructive"
+	}
+	return fieldClass(class, p.Class)
+}
+
+func (p ButtonProps) buttonType() string {
+	if p.Type == "" {
+		return "button"
+	}
+	return p.Type
+}
+
+// Button draws a console button, or a link that looks like one when Href is
+// set.
+templ Button(p ButtonProps) {
+	if p.Href != "" {
+		<a class={ p.class() } href={ p.Href } { p.Attrs... }>@buttonContent(p)</a>
+	} else {
+		<button class={ p.class() } type={ p.buttonType() } disabled?={ p.Disabled } { p.Attrs... }>@buttonContent(p)</button>
+	}
+}
+
+templ buttonContent(p ButtonProps) {
+	if p.Icon != "" {
+		@Icon(p.Icon)
+	}
+	<span>{ p.Label }</span>
+}
