@@ -11,6 +11,9 @@ type FieldProps struct {
 	// Help is one short sentence under the control. Text between backticks
 	// renders as code, such as a duration format.
 	Help string
+	// HelpAttrs go on the help text, such as a hook for script that rewrites
+	// it.
+	HelpAttrs templ.Attributes
 	// Input, when set, makes Field draw an <input> with these attributes and
 	// link it to the label and help. Leave it nil to pass the control as
 	// children and spread FieldAttrs on it.
@@ -69,7 +72,7 @@ templ Field(p FieldProps) {
 		}
 		{ children... }
 		if p.Help != "" {
-			<small id={ helpID(p.ID) }>
+			<small id={ helpID(p.ID) } { p.HelpAttrs... }>
 				for _, part := range helpParts(p.Help) {
 					if part.Code {
 						<code>{ part.Text }</code>

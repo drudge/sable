@@ -109,11 +109,12 @@ once because htmx can process a newly swapped subtree at any time.
   `components.DialogHeader`.
 - Form fields with help text use `components.Field`, and on/off settings use
   `components.SwitchField`. Each takes an `ID` unique on the page, names its
-  control by the label alone, and links the help text with
-  `aria-describedby`. A control passed to `Field` as children spreads
-  `components.FieldAttrs` to get the same links. Help text set between
-  backticks renders as code, such as `` `30d` ``. A radio button or checkbox
-  with a title and description uses `components.ChoiceCard`.
+  control by the label alone, and links the help text with `aria-describedby`.
+  A control passed to `Field` as children spreads `components.FieldAttrs` to
+  get the same links. Help text set between backticks renders as code, such as
+  `` `30d` ``. Script that rewrites the help finds it by a hook passed in
+  `HelpAttrs`. A radio button or checkbox with a title and description uses
+  `components.ChoiceCard`.
 - Local tab strips support arrow-key navigation, update the relevant document
   title, and preserve a meaningful URL when the selected tab is shareable.
 - Dashboard chart range, ranking, and query-log links must describe the same

@@ -99,7 +99,7 @@ templ ProfileAccountSettings(view ProfilePageView) {
  <label class="field-control"><span>Current Password</span><input type="password" name="current_password" autocomplete="current-password" required/></label>
  }
 					<div class="profile-field-grid">
-						<label class="field-control"><span>New Password</span><input type="password" name="new_password" minlength="12" maxlength="1024" autocomplete="new-password" required/><small>Use at least 12 characters.</small></label>
+						@components.Field(components.FieldProps{ID: "profile-new-password", Label: "New Password", Help: "Use at least 12 characters.", Input: templ.Attributes{"type": "password", "name": "new_password", "minlength": "12", "maxlength": "1024", "autocomplete": "new-password", "required": true}})
 						<label class="field-control"><span>Confirm New Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
 					</div>
 					<p role="status" data-passkey-status></p>

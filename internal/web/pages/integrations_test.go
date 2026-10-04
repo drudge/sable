@@ -292,8 +292,14 @@ func TestDynamicDNSSetupUsesProviderMenuAndGlobalPublishingSettings(t *testing.T
 		`data-dynamic-dns-add-provider-menu`,
 		`data-dynamic-dns-add-publisher data-provider="cloudflare"`,
 		`data-dynamic-dns-add-publisher data-provider="route53"`,
-		`name="interval" value="5m"`,
-		`name="ttl" value="600"`,
+		`name="interval" placeholder="5m" required value="5m"`,
+		`name="ttl" required type="number" value="600"`,
+		// The provider limits script rewrites the TTL help, which still
+		// describes the field.
+		`<small id="dynamic-dns-ttl-help" data-dynamic-dns-ttl-hint>`,
+		`aria-describedby="dynamic-dns-ttl-help"`,
+		// The add-zone template fills in both keys of the name list's ids.
+		`aria-describedby="dynamic-dns-publisher-__PUBLISHER__-zone-__ZONE__-names-help"`,
 		`data-dynamic-dns-publishers-empty`,
 	} {
 		if !strings.Contains(html, expected) {
