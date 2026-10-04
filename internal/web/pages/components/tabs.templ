@@ -1,0 +1,88 @@
+package components
+
+import "fmt"
+
+// Tab is one tab in a Tabs strip.
+type Tab struct {
+	// Value names the tab's panel (data-isotope-tab) and its address value.
+	Value string
+	Label string
+	// Icon names an Icon drawn before the label.
+	Icon string
+	// Count is a small badge after the label, such as a number of items.
+	// CountID gives the badge an id, so a fragment can replace it out of band.
+	Count   string
+	CountID string
+	// Href makes the tab a link, for a Nav strip whose tabs are separate pages.
+	Href templ.SafeURL
+}
+
+// TabsProps describes a strip of tabs at the top of a page.
+type TabsProps struct {
+	// Label names the strip for screen readers.
+	Label string
+	// Class adds classes to the strip, and TabClass to every tab.
+	Class    string
+	TabClass string
+	// Active is the Value of the selected tab.
+	Active string
+	Tabs   []Tab
+	// Nav draws a <nav> of links instead of a tablist that switches panels
+	// in place. Each tab then needs an Href.
+	Nav bool
+}
+
+// Tabs draws a page's tab strip. As a tablist, it sits directly inside the
+// page's data-isotope-tabs root, and app.js shows the panel whose
+// data-isotope-panel matches the selected tab.
+templ Tabs(p TabsProps) {
+	if p.Nav {
+		<nav class={ fieldClass("isotope-tab-list", p.Class) } aria-label={ p.Label }>
+			for _, tab := range p.Tabs {
+				<a class={ tabClass(p, tab) } href={ tab.Href } aria-current={ tabCurrent(p, tab) }>
+					@tabContent(tab)
+				</a>
+			}
+		</nav>
+	} else {
+		<div class={ fieldClass("isotope-tab-list", p.Class) } role="tablist" aria-label={ p.Label }>
+			for _, tab := range p.Tabs {
+				<button class={ tabClass(p, tab) } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(p.Active == tab.Value) } tabindex={ tabIndex(p, tab) }>
+					@tabContent(tab)
+				</button>
+			}
+		</div>
+	}
+}
+
+templ tabContent(tab Tab) {
+	if tab.Icon != "" {
+		@Icon(tab.Icon)
+	}
+	<span>{ tab.Label }</span>
+	if tab.Count != "" {
+		<span class="tab-count" if tab.CountID != "" { id={ tab.CountID } }>{ tab.Count }</span>
+	}
+}
+
+func tabClass(p TabsProps, tab Tab) string {
+	class := fieldClass("isotope-tab", p.TabClass)
+	if p.Active == tab.Value {
+		class += " active"
+	}
+	return class
+}
+
+func tabCurrent(p TabsProps, tab Tab) string {
+	if p.Active == tab.Value {
+		return "page"
+	}
+	return "false"
+}
+
+func tabIndex(p TabsProps, tab Tab) string {
+	if p.Active == tab.Value {
+		return "0"
+	}
+	return "-1"
+}

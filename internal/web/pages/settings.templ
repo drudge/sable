@@ -154,11 +154,7 @@ templ SettingsContent(view SettingsPageView) {
 		<header class="page-heading"><h1>Settings</h1><p>Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect.</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
-		<div class="isotope-tab-list settings-tab-list" role="tablist" aria-label="Settings sections">
-			for _, tab := range settingsTabs {
-				@SettingsTab(tab, view.ActiveTab, false)
-			}
-		</div>
+		@components.Tabs(components.TabsProps{Label: "Settings sections", Class: "settings-tab-list", TabClass: "settings-tab", Active: view.ActiveTab, Tabs: tabList(settingsTabs)})
 		<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="general" hidden?={ view.ActiveTab != "general" }>@SettingsGeneralPanel(view)</div>
 		<form id="settings-form" class="isotope-settings-form" hx-post="/ui/settings" hx-target="#settings-content" hx-swap="outerHTML">
 			<div class="settings-tab-panel" role="tabpanel" data-isotope-panel="web-service" hidden?={ view.ActiveTab != "web-service" }>@SettingsWebPanel(view)</div>
@@ -188,10 +184,6 @@ templ SettingsContent(view SettingsPageView) {
 		@ManualCertificateDialogs()
 		@CertificateDetailsDialog(view)
 	</div>
-}
-
-templ SettingsTab(tab tabOption, active string, disabled bool) {
-	<button class={ ifThen(active == tab.Value, "isotope-tab settings-tab active", "isotope-tab settings-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(active == tab.Value) } tabindex={ ifThen(active == tab.Value, "0", "-1") } disabled?={ disabled } title={ ifThen(disabled, tab.Label + " settings are not available yet", "") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
 }
 
 templ SettingsGeneralPanel(view SettingsPageView) {

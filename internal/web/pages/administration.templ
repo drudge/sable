@@ -50,11 +50,7 @@ templ AdministrationContent(view AdministrationPageView) {
 		<header class="page-heading"><h1>Administration</h1><p>Manage users, groups, permissions, sessions, and API tokens</p></header>
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
-		<div class="isotope-tab-list admin-tab-list" role="tablist" aria-label="Administration sections">
-			for _, tab := range administrationTabs {
-				@ControlTab(tab.Value, tab.Label, administrationTabCount(view, tab.Value), view.ActiveTab, false, tab.Icon)
-			}
-		</div>
+		@components.Tabs(components.TabsProps{Label: "Administration sections", Class: "admin-tab-list", Active: view.ActiveTab, Tabs: administrationTabList(view)})
 		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="users" hidden?={ view.ActiveTab != "users" }>@UsersPanel(view)</div>
 		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="groups" hidden?={ view.ActiveTab != "groups" }>@GroupsPanel(view)</div>
 		<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="permissions" hidden?={ view.ActiveTab != "permissions" }>@PermissionsPanel(view)</div>
@@ -74,16 +70,14 @@ templ AdministrationContent(view AdministrationPageView) {
 	</div>
 }
 
-templ ControlTab(value, label string, count int, active string, disabled bool, icon string) {
-	<button class={ ifThen(active == value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ value } data-tab-title={ label } aria-selected={ fmt.Sprint(active == value) } tabindex={ ifThen(active == value, "0", "-1") } disabled?={ disabled }>
-		if icon != "" {
-			@Icon(icon)
-		}
-		<span>{ label }</span>
-		if count >= 0 {
-			<span class="tab-count" id={ "administration-tab-count-" + value }>{ fmt.Sprint(count) }</span>
-		}
-	</button>
+// administrationTabList adds each section's count to its tab. A fragment
+// that changes a count replaces the badge by its id.
+func administrationTabList(view AdministrationPageView) []components.Tab {
+	tabs := make([]components.Tab, 0, len(administrationTabs))
+	for _, tab := range administrationTabs {
+		tabs = append(tabs, components.Tab{Value: tab.Value, Label: tab.Label, Icon: tab.Icon, Count: fmt.Sprint(administrationTabCount(view, tab.Value)), CountID: "administration-tab-count-" + tab.Value})
+	}
+	return tabs
 }
 
 templ UsersPanel(view AdministrationPageView) {

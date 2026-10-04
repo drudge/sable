@@ -1,6 +1,10 @@
 package pages
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
 
 // titleSeparator sits between document title segments. The browser tab reads
 // most specific first, so a selected zone or tab wins the truncation contest
@@ -29,6 +33,15 @@ func tabLabel(options []tabOption, value string) string {
 		return ""
 	}
 	return options[0].Label
+}
+
+// tabList turns a page's tab table into the strip the Tabs component renders.
+func tabList(options []tabOption) []components.Tab {
+	tabs := make([]components.Tab, 0, len(options))
+	for _, option := range options {
+		tabs = append(tabs, components.Tab{Value: option.Value, Label: option.Label, Icon: option.Icon})
+	}
+	return tabs
 }
 
 // documentTitle joins title segments most specific first and drops the empty

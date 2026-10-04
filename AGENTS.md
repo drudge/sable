@@ -105,6 +105,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.Dialog` with `components.DialogFooter`, and `components.ConfirmDialog` for a dialog that asks before one action
   - `components.Button` for a labeled button, or a link styled as one
   - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
+  - `components.Tabs` for a page's tab strip, as tab buttons or, with `Nav`, as links
 
   Use the shared classes too: `.status-badge`, `.count-badge`, and `.field-help`. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
 

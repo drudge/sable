@@ -35,6 +35,19 @@ func profileTabHref(value string) templ.SafeURL {
 	return templ.SafeURL("/profile?tab=" + url.QueryEscape(value))
 }
 
+// profileTabList links each tab to its own request and counts the tokens.
+func profileTabList(view ProfilePageView) []components.Tab {
+	tabs := make([]components.Tab, 0, len(profileTabs))
+	for _, tab := range profileTabs {
+		item := components.Tab{Value: tab.Value, Label: tab.Label, Icon: tab.Icon, Href: profileTabHref(tab.Value)}
+		if tab.Value == "tokens" {
+			item.Count = fmt.Sprint(len(view.Tokens))
+		}
+		tabs = append(tabs, item)
+	}
+	return tabs
+}
+
 templ ProfilePage(view ProfilePageView) {
 	@AppDocument(view.Console, documentTitle(tabLabel(profileTabs, view.ActiveTab), "Profile"), "profile", ProfileContent(view))
 }
@@ -42,17 +55,7 @@ templ ProfilePage(view ProfilePageView) {
 templ ProfileContent(view ProfilePageView) {
 	<div class="profile-page" id="profile-content" data-isotope-tabs data-tab-param="tab">
 		<header class="page-heading"><h1>Profile</h1><p>Manage your account, passkeys, password, and API tokens</p></header>
-		<nav class="isotope-tab-list profile-tabs" aria-label="Profile sections">
-			for _, tab := range profileTabs {
-				<a class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } href={ profileTabHref(tab.Value) } aria-current={ ifThen(view.ActiveTab == tab.Value, "page", "false") }>
-					@Icon(tab.Icon)
-					<span>{ tab.Label }</span>
-					if tab.Value == "tokens" {
-						<span class="tab-count">{ fmt.Sprint(len(view.Tokens)) }</span>
-					}
-				</a>
-			}
-		</nav>
+		@components.Tabs(components.TabsProps{Label: "Profile sections", Class: "profile-tabs", Active: view.ActiveTab, Tabs: profileTabList(view), Nav: true})
 		if view.Message != "" {
 			@Toast(view.Message, "success")
 		}
