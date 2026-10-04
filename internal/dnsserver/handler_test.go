@@ -512,15 +512,21 @@ func TestHandlerAuthenticatesSignedNotifyWithTSIG(t *testing.T) {
 }
 
 func TestHandlerAcceptsSignedDynamicUpdateAndRefusesUnsignedRequest(t *testing.T) {
+	soa := ZoneRecord{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300"}
+	t.Run("primary", func(t *testing.T) {
+		testHandlerAcceptsSignedDynamicUpdate(t, "primary", ZoneRecord{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."}, soa)
+	})
+	t.Run("forwarder", func(t *testing.T) {
+		testHandlerAcceptsSignedDynamicUpdate(t, "forwarder", ZoneRecord{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 192.0.2.53:53"}, soa)
+	})
+}
+
+func testHandlerAcceptsSignedDynamicUpdate(t *testing.T, zoneType string, records ...ZoneRecord) {
 	secret := "MDEyMzQ1Njc4OWFiY2RlZg=="
 	configuration := testRuntimeConfig()
 	configuration.TSIGKeys = []TSIGKey{{Name: "update-key.", Algorithm: dns.HmacSHA256, Secret: secret}}
 	configuration.Zones = []AuthoritativeZone{{
-		Name: "example.test", Type: "primary", TSIGKey: "update-key.", DynamicUpdates: true,
-		Records: []ZoneRecord{
-			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 1 3600 600 1209600 300"},
-			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
-		},
+		Name: "example.test", Type: zoneType, TSIGKey: "update-key.", DynamicUpdates: true, Records: records,
 	}}
 	runtime, err := Compile(configuration)
 	if err != nil {

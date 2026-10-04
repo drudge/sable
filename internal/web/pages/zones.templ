@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/drudge/sable/internal/web/pages/components"
+	zonemodel "github.com/drudge/sable/internal/zone"
 	"github.com/miekg/dns"
 )
 
@@ -1242,14 +1243,14 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 						</select></label>
 					</section>
 				}
-				if zone.Type == "primary" {
+				if zonemodel.AcceptsDynamicUpdates(zone.Type) {
 				<section class="zone-settings-section first">
-					<div><span class="zone-settings-section-icon">@Icon("refresh")</span><span><strong>Dynamic DNS Updates</strong><small>Accept authenticated RFC 2136 record changes for this primary zone.</small></span></div>
+					<div><span class="zone-settings-section-icon">@Icon("refresh")</span><span><strong>Dynamic DNS Updates</strong><small>Accept authenticated RFC 2136 record changes for this { strings.ToLower(zoneTypeLabel(zone.Type)) } zone.</small></span></div>
 					<label class="zone-dynamic-toggle"><span><strong>Allow Dynamic Updates</strong><small>Every update must be signed by the TSIG key configured above. Changes persist transactionally to the zone database, advance the SOA serial, and notify secondary servers.</small></span><span class="switch"><input type="checkbox" name="dynamic_updates" value="true" checked?={ zone.DynamicUpdates }/><span></span></span></label>
 				</section>
 				}
 				if zone.Type != "stub" {
-					<section class={ ifThen(zone.Type == "primary" || zone.Type == "secondary" || zone.CatalogRole == "subscribed", "zone-settings-section", "zone-settings-section first") }>
+					<section class={ ifThen(zonemodel.AcceptsDynamicUpdates(zone.Type) || zone.Type == "secondary" || zone.CatalogRole == "subscribed", "zone-settings-section", "zone-settings-section first") }>
 						<div><span class="zone-settings-section-icon">@Icon("download")</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div>
 						<label><span>Transfer Policy</span><select name="zone_transfer" data-styled-select><option value="deny" selected?={ zone.ZoneTransfer == "" || zone.ZoneTransfer == "deny" }>Deny transfers</option><option value="private" selected?={ zone.ZoneTransfer == "private" }>Private networks only</option><option value="acl" selected?={ zone.ZoneTransfer == "acl" }>Specified networks</option><option value="allow" selected?={ zone.ZoneTransfer == "allow" }>Allow any client</option></select></label>
 						<label><span>Allowed Networks</span><textarea class="mono-input" name="transfer_acl" placeholder={ "192.0.2.10\n2001:db8::/64" }>{ strings.Join(zone.TransferACL, "\n") }</textarea><small>One IP address or CIDR network per line. Used by the specified-networks policy.</small></label>

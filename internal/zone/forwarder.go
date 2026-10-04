@@ -11,6 +11,12 @@ const TypeSecondaryForwarder = "secondary_forwarder"
 
 func IsForwarderType(kind string) bool { return kind == "forwarder" || kind == TypeSecondaryForwarder }
 
+// AcceptsDynamicUpdates reports whether a zone of this type may take RFC 2136
+// updates. Both types hold locally editable records: a Forwarder's records are
+// the overrides it answers before forwarding. A Secondary Forwarder is
+// excluded because its records are replaced by every transfer from its source.
+func AcceptsDynamicUpdates(kind string) bool { return kind == "primary" || kind == "forwarder" }
+
 // PrepareTransferredForwarder translates routing records while retaining the chosen ownership model.
 func PrepareTransferredForwarder(current *Zone, secondary bool) error {
 	var validation *bool
