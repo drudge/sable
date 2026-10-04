@@ -387,7 +387,7 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 		} else if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Choose an external DNS provider and the public names Sable should own. Saved DNS-01 credentials can be reused when they have permission to edit those records.</p>
-				<a class="button" href="/integrations?setup=dynamic-dns" data-replica-primary-action>@Icon("plus")<span>Set Up Dynamic DNS</span></a>
+				@components.Button(components.ButtonProps{Label: "Set Up Dynamic DNS", Icon: "plus", Href: "/integrations?setup=dynamic-dns", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			</div>
 		} else {
 			<div class="integration-card-body">
@@ -489,14 +489,14 @@ templ DynamicDNSCardActions(view DynamicDNSAppView, outOfBand bool) {
 }
 
 templ DynamicDNSCardActionButtons(view DynamicDNSAppView) {
-	<button class="button outline destructive" type="button" data-dialog-open="remove-dynamic-dns-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+	@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "remove-dynamic-dns-dialog", "data-replica-primary-action": true}})
 	<div class="integration-card-actions-primary">
-		<a class="button outline" href="/integrations?setup=dynamic-dns" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
+		@components.Button(components.ButtonProps{Label: "Edit Setup", Icon: "settings-2", Variant: components.ButtonOutline, Href: "/integrations?setup=dynamic-dns", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		if view.Enabled {
-			<form hx-post="/ui/integrations/dynamic-dns/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="false"/><button class="button outline" type="submit" disabled?={ view.Status.Running }>@Icon("pause")<span>Pause</span></button></form>
+			<form hx-post="/ui/integrations/dynamic-dns/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="false"/>@components.Button(components.ButtonProps{Label: "Pause", Icon: "pause", Variant: components.ButtonOutline, Type: "submit", Disabled: view.Status.Running})</form>
 			<form hx-post="/ui/integrations/dynamic-dns/sync" hx-target="#integrations-content" hx-swap="outerHTML"><button class={ "button", templ.KV("is-syncing", view.Status.Running) } type="submit" disabled?={ view.Status.Running || !view.CredentialsConfigured }>@Icon("refresh")<span>{ ifThen(view.Status.Running, "Publishing…", "Publish Now") }</span></button></form>
 		} else {
-			<form hx-post="/ui/integrations/dynamic-dns/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/><button class="button" type="submit" disabled?={ !view.CredentialsConfigured }>@Icon("play")<span>Resume</span></button></form>
+			<form hx-post="/ui/integrations/dynamic-dns/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/>@components.Button(components.ButtonProps{Label: "Resume", Icon: "play", Type: "submit", Disabled: !view.CredentialsConfigured})</form>
 		}
 	</div>
 }
@@ -538,7 +538,7 @@ templ DynamicDNSSetupDialog(view DynamicDNSAppView) {
 					<div class="cluster-dialog-note">@Icon("info")<p><strong>A DNS record does not open your firewall</strong><span>Carrier-grade NAT, port forwarding, and IPv6 firewall rules still determine whether the published service is reachable.</span></p></div>
 				</section>
 			</div>
-			<div class="dialog-footer"><a class="button outline" href="/integrations">Cancel</a><button class="button" type="submit">@Icon("check")<span>Save &amp; Publish</span></button></div>
+			<div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})@components.Button(components.ButtonProps{Label: "Save & Publish", Icon: "check", Type: "submit"})</div>
 		</form>
 	}
 }
@@ -574,7 +574,7 @@ templ DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, remova
 					@DynamicDNSZoneEditor(zone, key, strconv.Itoa(zone.Index), len(view.Zones) > 1)
 				}
 			</div>
-			<div class="dynamic-dns-publisher-footer"><button class="button outline compact dynamic-dns-add-zone" type="button" data-dynamic-dns-add-zone>@Icon("plus")<span>Add Zone</span></button><button class="button outline compact destructive" type="button" data-dynamic-dns-remove-publisher hidden?={ !removable }>@Icon("trash")<span>Remove Provider</span></button></div>
+			<div class="dynamic-dns-publisher-footer">@components.Button(components.ButtonProps{Label: "Add Zone", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Class: "dynamic-dns-add-zone", Attrs: templ.Attributes{"data-dynamic-dns-add-zone": true}})@components.Button(components.ButtonProps{Label: "Remove Provider", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Attrs: templ.Attributes{"data-dynamic-dns-remove-publisher": true, "hidden": !removable}})</div>
 			<template data-dynamic-dns-zone-template>@DynamicDNSZoneEditor(DynamicDNSZoneView{TTL: 600, PublishIPv4: true}, key, "__ZONE__", true)</template>
 		</div>
 	</details>
@@ -593,7 +593,7 @@ templ DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string
 			<label class="field-control"><span>DNS Zone</span><input name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_zone" } value={ view.Zone } placeholder="example.com" required/></label>
 			@components.Field(dynamicDNSNamesField(publisherKey, zoneKey)) {<textarea { components.FieldAttrs(dynamicDNSNamesField(publisherKey, zoneKey))... } name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_names" } rows="3" spellcheck="false" placeholder="home.example.com&#10;vpn.example.com" required>{ view.Names }</textarea>}
 			<div class="field-grid two"><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv4" } value="true" checked?={ view.PublishIPv4 }/><span>Publish IPv4 (A)</span></label><label class="field-control checkbox"><input type="checkbox" name={ "publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv6" } value="true" checked?={ view.PublishIPv6 }/><span>Publish IPv6 (AAAA)</span><small>The detected outbound IPv6 address must also accept inbound traffic.</small></label></div>
-			<div class="dynamic-dns-zone-footer"><button class="button outline compact destructive" type="button" data-dynamic-dns-remove-zone hidden?={ !removable }>@Icon("trash")<span>Remove Zone</span></button></div>
+			<div class="dynamic-dns-zone-footer">@components.Button(components.ButtonProps{Label: "Remove Zone", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Attrs: templ.Attributes{"data-dynamic-dns-remove-zone": true, "hidden": !removable}})</div>
 		</div>
 	</details>
 }
@@ -626,7 +626,7 @@ templ SSOCard(view SSOAppView) {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your identity provider, then decide which of its groups become which Sable roles. Everyone keeps their password until they choose to stop using it.</p>
 				if view.CanManage {
-					<a class="button" href="/integrations?setup=sso" data-replica-primary-action>@Icon("plus")<span>Set Up Single Sign-On</span></a>
+					@components.Button(components.ButtonProps{Label: "Set Up Single Sign-On", Icon: "plus", Href: "/integrations?setup=sso", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 				}
 			</div>
 		} else {
@@ -650,24 +650,24 @@ templ SSOCard(view SSOAppView) {
 				@SSOMappingTable(view)
 				if view.CanManage {
 					<div class="integration-card-actions">
-						<button class="button outline destructive" type="button" data-dialog-open="remove-sso-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+						@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "remove-sso-dialog", "data-replica-primary-action": true}})
 						<div class="integration-card-actions-primary">
-							<a class="button outline" href="/integrations?setup=sso" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
+							@components.Button(components.ButtonProps{Label: "Edit Setup", Icon: "settings-2", Variant: components.ButtonOutline, Href: "/integrations?setup=sso", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 							if view.Enabled {
 								<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 									<input type="hidden" name="enabled" value="false"/>
-									<button class="button outline" type="submit">@Icon("pause")<span>Pause</span></button>
+									@components.Button(components.ButtonProps{Label: "Pause", Icon: "pause", Variant: components.ButtonOutline, Type: "submit"})
 								</form>
 								<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
-									<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
+									@components.Button(components.ButtonProps{Label: "Test Connection", Icon: "refresh", Type: "submit"})
 								</form>
 							} else {
 								<form hx-post="/ui/integrations/sso/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 									<input type="hidden" name="enabled" value="true"/>
-									<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
+									@components.Button(components.ButtonProps{Label: "Resume", Icon: "play", Type: "submit"})
 								</form>
 								<form hx-post="/ui/integrations/sso/check" hx-target="#integrations-content" hx-swap="outerHTML">
-									<button class="button" type="submit">@Icon("refresh")<span>Test Connection</span></button>
+									@components.Button(components.ButtonProps{Label: "Test Connection", Icon: "refresh", Type: "submit"})
 								</form>
 							}
 						</div>
@@ -693,7 +693,7 @@ templ MCPCard(view MCPAppView) {
 		if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Give each assistant its own API token. The token's groups decide which zones and lists it can change, and nothing is reachable until you set this up.</p>
-				<a class="button" href="/integrations?setup=mcp" data-replica-primary-action>@Icon("plus")<span>Set Up MCP Server</span></a>
+				@components.Button(components.ButtonProps{Label: "Set Up MCP Server", Icon: "plus", Href: "/integrations?setup=mcp", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			</div>
 		} else {
 			<div class="integration-card-body mcp-card-body">
@@ -714,13 +714,13 @@ templ MCPCard(view MCPAppView) {
 					<div title={ view.LastUsedBy }><span class="integration-fact-label">Last used</span><span class="integration-fact-value">{ ifThen(view.LastUsed == "", "Never", view.LastUsed) }</span></div>
 				</div>
 				<div class="integration-card-actions">
-					<button class="button outline destructive" type="button" data-dialog-open="remove-mcp-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+					@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "remove-mcp-dialog", "data-replica-primary-action": true}})
 					<div class="integration-card-actions-primary">
-						<a class="button outline" href="/integrations?setup=mcp" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
+						@components.Button(components.ButtonProps{Label: "Edit Setup", Icon: "settings-2", Variant: components.ButtonOutline, Href: "/integrations?setup=mcp", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 						if view.Enabled {
-							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="false"/><button class="button outline" type="submit" data-replica-primary-action>@Icon("pause")<span>Pause</span></button></form>
+							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="false"/>@components.Button(components.ButtonProps{Label: "Pause", Icon: "pause", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})</form>
 						} else {
-							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/><button class="button" type="submit" data-replica-primary-action>@Icon("play")<span>Resume</span></button></form>
+							<form hx-post="/ui/integrations/mcp/enabled" hx-target="#integrations-content" hx-swap="outerHTML"><input type="hidden" name="enabled" value="true"/>@components.Button(components.ButtonProps{Label: "Resume", Icon: "play", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})</form>
 						}
 					</div>
 				</div>
@@ -802,7 +802,7 @@ templ MCPAccessGroup(group MCPGroupView) {
 			@mcpGrantCoverage(group)
 			if group.CanManage {
 				<div class="mcp-group-form" data-mcp-group-update hidden?={ !group.NeedsUpdate }>
-					<button class="button outline" type="button" hx-post="/ui/integrations/mcp/group" hx-include="closest form" hx-target="#mcp-access-group" hx-swap="outerHTML" hx-disable="this">@Icon("refresh")<span>Update Group</span></button>
+					@components.Button(components.ButtonProps{Label: "Update Group", Icon: "refresh", Variant: components.ButtonOutline, Attrs: templ.Attributes{"hx-post": "/ui/integrations/mcp/group", "hx-include": "closest form", "hx-target": "#mcp-access-group", "hx-swap": "outerHTML", "hx-disable": "this"}})
 				</div>
 			}
 		} else if group.CanManage {
@@ -810,7 +810,7 @@ templ MCPAccessGroup(group MCPGroupView) {
 			<div class="mcp-group-form">
 				<label class="field-control"><span>Group Name</span><input name="group_name" value="MCP Server" minlength="2" maxlength="64"/></label>
 				<label class="settings-check"><input type="checkbox" name="join" value="true" checked/><span>Add me to this group</span></label>
-				<button class="button outline" type="button" hx-post="/ui/integrations/mcp/group" hx-include="closest form" hx-target="#mcp-access-group" hx-swap="outerHTML" hx-disable="this">@Icon("plus")<span>Create Group</span></button>
+				@components.Button(components.ButtonProps{Label: "Create Group", Icon: "plus", Variant: components.ButtonOutline, Attrs: templ.Attributes{"hx-post": "/ui/integrations/mcp/group", "hx-include": "closest form", "hx-target": "#mcp-access-group", "hx-swap": "outerHTML", "hx-disable": "this"}})
 			</div>
 		} else {
 			<div class="wizard-heading compact"><span>@Icon("users")</span><div><strong>Group</strong></div></div>
@@ -844,14 +844,14 @@ templ MCPAccessToken(group MCPGroupView, outOfBand bool) {
 					</p>
 				}
 				<div class="mcp-group-form" data-mcp-new-token>
-					<button class="button outline" type="button">@Icon("plus")<span>New Token</span></button>
+					@components.Button(components.ButtonProps{Label: "New Token", Icon: "plus", Variant: components.ButtonOutline})
 				</div>
 			} else {
 				<div class="wizard-heading compact"><span>@Icon("key-round")</span><div><strong>Token</strong><small>Uses { group.Name }. Expires on the server's default schedule.</small></div></div>
 			}
 			<div class="mcp-group-form" data-mcp-token-form hidden?={ len(group.Tokens) > 0 }>
 				<label class="field-control"><span>Token Name</span><input name="token_name" value="MCP Server" minlength="1" maxlength="128"/></label>
-				<button class="button outline" type="button" hx-post="/ui/integrations/mcp/token" hx-include="closest form" hx-target="#mcp-access-token" hx-swap="outerHTML" hx-disable="this">@Icon("key")<span>Create Token</span></button>
+				@components.Button(components.ButtonProps{Label: "Create Token", Icon: "key", Variant: components.ButtonOutline, Attrs: templ.Attributes{"hx-post": "/ui/integrations/mcp/token", "hx-include": "closest form", "hx-target": "#mcp-access-token", "hx-swap": "outerHTML", "hx-disable": "this"}})
 			</div>
 			if group.TokenError != "" {
 				<div class="unifi-status error">@Icon("alert-triangle")<div><span>{ group.TokenError }</span></div></div>
@@ -944,13 +944,13 @@ templ MCPSetupDialog(view MCPAppView) {
 				</section>
 			</section>
 			<div class="dialog-footer wizard-footer">
-				<a class="button outline" href="/integrations">Cancel</a>
+				@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})
 				<div class="wizard-footer-advance">
-					<button class="button outline" type="button" data-dialog-step="tools" data-dialog-save="access" hidden>@Icon("arrow-left")<span>Back</span></button>
-					<button class="button outline" type="button" data-dialog-step="access" data-dialog-save="connect" hidden>@Icon("arrow-left")<span>Back</span></button>
-					<button class="button" type="button" data-dialog-step="access" data-dialog-save="tools">@Icon("arrow-right")<span>Next</span></button>
-					<button class="button" type="button" data-dialog-step="connect" data-dialog-save="access" data-mcp-grant-check hidden>@Icon("arrow-right")<span>Next</span></button>
-					<button class="button" type="submit" data-dialog-save="connect" hidden>@Icon("check")<span>{ ifThen(view.Configured, "Save", "Turn On") }</span></button>
+					@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-step": "tools", "data-dialog-save": "access", "hidden": true}})
+					@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-step": "access", "data-dialog-save": "connect", "hidden": true}})
+					@components.Button(components.ButtonProps{Label: "Next", Icon: "arrow-right", Attrs: templ.Attributes{"data-dialog-step": "access", "data-dialog-save": "tools"}})
+					@components.Button(components.ButtonProps{Label: "Next", Icon: "arrow-right", Attrs: templ.Attributes{"data-dialog-step": "connect", "data-dialog-save": "access", "data-mcp-grant-check": true, "hidden": true}})
+					@components.Button(components.ButtonProps{Label: ifThen(view.Configured, "Save", "Turn On"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"data-dialog-save": "connect", "hidden": true}})
 				</div>
 			</div>
 		</form>
@@ -1060,7 +1060,7 @@ templ UniFiCard(view UniFiAppView) {
 		} else if !view.Configured {
 			<div class="integration-card-body integration-card-empty">
 				<p>Point Sable at your UniFi controller, choose which networks to publish, and map each one to a zone. Sable creates the forward and reverse zones it needs and keeps them current.</p>
-				<a class="button" href="/integrations?setup=unifi" data-replica-primary-action>@Icon("plus")<span>Set Up UniFi Sync</span></a>
+				@components.Button(components.ButtonProps{Label: "Set Up UniFi Sync", Icon: "plus", Href: "/integrations?setup=unifi", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			</div>
 		} else {
 			<div class="integration-card-body">
@@ -1095,13 +1095,13 @@ templ UniFiCardActions(view UniFiAppView, outOfBand bool) {
 }
 
 templ UniFiCardActionButtons(view UniFiAppView) {
-	<button class="button outline destructive" type="button" data-dialog-open="remove-unifi-dialog" data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+	@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "remove-unifi-dialog", "data-replica-primary-action": true}})
 	<div class="integration-card-actions-primary">
-		<a class="button outline" href="/integrations?setup=unifi" data-replica-primary-action>@Icon("settings-2")<span>Edit Setup</span></a>
+		@components.Button(components.ButtonProps{Label: "Edit Setup", Icon: "settings-2", Variant: components.ButtonOutline, Href: "/integrations?setup=unifi", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		if view.Enabled {
 			<form hx-post="/ui/integrations/unifi/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 				<input type="hidden" name="enabled" value="false"/>
-				<button class="button outline" type="submit" disabled?={ view.Status.Running }>@Icon("pause")<span>Pause</span></button>
+				@components.Button(components.ButtonProps{Label: "Pause", Icon: "pause", Variant: components.ButtonOutline, Type: "submit", Disabled: view.Status.Running})
 			</form>
 			<form hx-post="/ui/integrations/unifi/sync" hx-target="#integrations-content" hx-swap="outerHTML">
 				<button class={ "button", templ.KV("is-syncing", view.Status.Running) } type="submit" disabled?={ view.Status.Running }>@Icon("refresh")<span>{ ifThen(view.Status.Running, "Synchronizing…", "Sync Now") }</span></button>
@@ -1109,7 +1109,7 @@ templ UniFiCardActionButtons(view UniFiAppView) {
 		} else {
 			<form hx-post="/ui/integrations/unifi/enabled" hx-target="#integrations-content" hx-swap="outerHTML">
 				<input type="hidden" name="enabled" value="true"/>
-				<button class="button" type="submit">@Icon("play")<span>Resume</span></button>
+				@components.Button(components.ButtonProps{Label: "Resume", Icon: "play", Type: "submit"})
 			</form>
 		}
 	</div>
@@ -1469,15 +1469,15 @@ templ UniFiWizardCarriedPublishing(wizard UniFiWizardView) {
 
 templ UniFiWizardFooter(wizard UniFiWizardView) {
 	<div class="dialog-footer wizard-footer">
-		<a class="button outline" href="/integrations">Cancel</a>
+		@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})
 		<div class="wizard-footer-advance">
 			if unifiPreviousStep(wizard.Step) != "" {
-				<button class="button outline" type="submit" name="wizard_target" value={ unifiPreviousStep(wizard.Step) } formnovalidate>@Icon("arrow-left")<span>Back</span></button>
+				@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": unifiPreviousStep(wizard.Step), "formnovalidate": true}})
 			}
 			if wizard.Step == "review" {
-				<button class="button" type="submit">@Icon("check")<span>Enable Synchronization</span></button>
+				@components.Button(components.ButtonProps{Label: "Enable Synchronization", Icon: "check", Type: "submit"})
 			} else {
-				<button class="button" type="submit">@Icon("arrow-right")<span>{ unifiNextLabel(wizard.Step) }</span></button>
+				@components.Button(components.ButtonProps{Label: unifiNextLabel(wizard.Step), Icon: "arrow-right", Type: "submit"})
 			}
 		</div>
 	</div>
@@ -1881,7 +1881,7 @@ templ SSOWizardProviderStep(wizard SSOWizardView) {
 	<div class="sso-presets">
 		<span>Start from</span>
 		for _, preset := range SSOPresets() {
-			<button class="button outline" type="button" data-sso-preset={ preset.Key }>{ preset.Name }</button>
+			@components.Button(components.ButtonProps{Label: preset.Name, Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-sso-preset": preset.Key}})
 		}
 	</div>
 	<label>
@@ -2024,9 +2024,9 @@ templ SSOWizardFooter(wizard SSOWizardView) {
 	<div class="dialog-footer wizard-footer">
 		<input type="hidden" name="wizard_step" value={ wizard.Step }/>
 		if wizard.Step == SSOStepProvider {
-			<a class="button outline" href="/integrations">Cancel</a>
+			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})
 		} else {
-			<button class="button outline" type="submit" name="wizard_target" value={ ssoPreviousStep(wizard.Step) }>Back</button>
+			@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": ssoPreviousStep(wizard.Step)}})
 		}
 		<button class="button" type="submit">
 			if wizard.Step == SSOStepReview {
