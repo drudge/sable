@@ -746,6 +746,6 @@ templ AlertPreviewPanel(preview AlertPreview) {
 	if preview.Error != "" {
 		<p class="alert-preview-error">{ preview.Error }</p>
 	}
-	<button class="about-copy-button alert-preview-copy" type="button" data-copy-target="alert-destination-preview-text" aria-label="Copy preview" title="Copy preview">@CopyIcons()</button>
+	<button class="about-copy-button alert-preview-copy" type="button" data-copy-target="alert-destination-preview-text" aria-label="Copy preview" title="Copy preview">@components.CopyIcons()</button>
 	<pre><code id="alert-destination-preview-text">{ preview.Text() }</code></pre>
 }

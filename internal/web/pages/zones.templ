@@ -872,7 +872,7 @@ templ ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, 
 }
 
 templ ZoneCopyableText(id, text, className string) {
-	<span class={ "zone-copyable " + className }><code id={ id }>{ text }</code><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button></span>
+	<span class={ "zone-copyable " + className }><code id={ id }>{ text }</code><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@components.CopyIcons()</button></span>
 }
 
 // ZoneTypeOptions lists the zone types the console knows about. Zone Settings

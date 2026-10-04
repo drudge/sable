@@ -581,7 +581,7 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 		if view.TSIGGeneratedSecret != "" {
 			<div class="token-created">
 				<strong>Copy this secret now</strong>
-				<div class="copyable-text token-secret"><span id="generated-tsig-secret">{ view.TSIGGeneratedSecret }</span><button type="button" data-copy-target="generated-tsig-secret" aria-label="Copy TSIG secret" title="Copy TSIG secret">@CopyIcons()</button></div>
+				<div class="copyable-text token-secret"><span id="generated-tsig-secret">{ view.TSIGGeneratedSecret }</span><button type="button" data-copy-target="generated-tsig-secret" aria-label="Copy TSIG secret" title="Copy TSIG secret">@components.CopyIcons()</button></div>
 				<span>Configure the other server with this secret for { TSIGDisplayName(view.TSIGGeneratedKey) }. Sable keeps it encrypted and will not show it again; rotate the key if you lose it.</span>
 			</div>
 		}
@@ -1115,7 +1115,7 @@ templ CertificateDetailsDialog(view SettingsPageView) {
 					<div class="copyable-text certificate-detail-value">
 						<code id="certificate-serial-number">{ ifThen(view.ACMESerialNumber != "", view.ACMESerialNumber, "Unknown") }</code>
 						if view.ACMESerialNumber != "" {
-							<button type="button" data-copy-target="certificate-serial-number" aria-label="Copy serial number" title="Copy serial number">@CopyIcons()</button>
+							<button type="button" data-copy-target="certificate-serial-number" aria-label="Copy serial number" title="Copy serial number">@components.CopyIcons()</button>
 						}
 					</div>
 				</div>
@@ -1124,7 +1124,7 @@ templ CertificateDetailsDialog(view SettingsPageView) {
 					<div class="copyable-text certificate-detail-value">
 						<code id="certificate-fingerprint">{ ifThen(view.ACMEFingerprint != "", view.ACMEFingerprint, "Unknown") }</code>
 						if view.ACMEFingerprint != "" {
-							<button type="button" data-copy-target="certificate-fingerprint" aria-label="Copy fingerprint" title="Copy fingerprint">@CopyIcons()</button>
+							<button type="button" data-copy-target="certificate-fingerprint" aria-label="Copy fingerprint" title="Copy fingerprint">@components.CopyIcons()</button>
 						}
 					</div>
 				</div>

@@ -109,14 +109,18 @@ templ CheckDomainDrawer(view CheckDomainView) {
 				<p>{ view.Explanation }</p>
 			</section>
 			if view.Zone != "" || view.Rule != "" {
-				<dl class="query-detail-grid">
+				@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
 					if view.Zone != "" {
-						<div class="query-detail-fact-wide"><dt>Answered by zone</dt><dd><a class="inline-link" href={ templ.SafeURL("/zones/" + url.PathEscape(view.Zone)) }>{ view.Zone }</a></dd></div>
+						@components.Fact(components.FactProps{Label: "Answered by zone", Wide: true}) {
+							<a class="inline-link" href={ templ.SafeURL("/zones/" + url.PathEscape(view.Zone)) }>{ view.Zone }</a>
+						}
 					}
 					if view.Rule != "" {
-						<div class="query-detail-fact-wide insight-fact-full"><dt>Matching rule</dt><dd><code>{ view.Rule }</code></dd></div>
+						@components.Fact(components.FactProps{Label: "Matching rule", Full: true}) {
+							<code>{ view.Rule }</code>
+						}
 					}
-				</dl>
+				}
 			}
 			if len(view.Lists) > 0 || view.CustomBlocked {
 				<section class="query-detail-answer" aria-labelledby="check-domain-lists">

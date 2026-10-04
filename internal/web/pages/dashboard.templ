@@ -1078,7 +1078,7 @@ templ APITokenResult(token string, expires string, errorMessage string) {
 			<div class="copyable-text token-secret">
 				<span id="created-api-token">{ token }</span>
 				<button type="button" data-copy-target="created-api-token" aria-label="Copy API token" title="Copy API token">
-					@CopyIcons()
+					@components.CopyIcons()
 				</button>
 			</div>
 			if expires == "" {
@@ -1538,7 +1538,7 @@ templ QueryResult(view QueryView) {
 					<h2>{ view.Question }</h2>
 				</div>
 				<button class="button outline copy-response" type="button" data-copy-target="dns-query-json">
-					@CopyIcons()
+					@components.CopyIcons()
 					<span data-copy-label>Copy JSON</span>
 				</button>
 			</div>
@@ -1601,15 +1601,6 @@ templ RCodeIcon(rcode string) {
 	}
 }
 
-templ CopyIcons() {
-	<span class="copy-icon-default">
-		@Icon("copy")
-	</span>
-	<span class="copy-icon-success">
-		@Icon("check")
-	</span>
-}
-
 templ MetadataCard(color string, icon string, label string, value string) {
 	<div class={ "metadata-card " + color }>
 		<div class="metadata-label">
@@ -1624,11 +1615,6 @@ templ CopyableText(id string, text string, kind string) {
 		<span id={ id }>{ text }</span>
 		@CopyButton(id, "Copy to clipboard")
 	</div>
-}
-
-// FactCopyButton sits in the corner of a fact card and copies the card's value.
-templ FactCopyButton(target string, label string) {
-	<button class="fact-copy" type="button" data-copy-target={ target } aria-label={ label } title={ label }>@CopyIcons()</button>
 }
 
 // ScrollFadeHint is the chevron under a box marked data-scroll-fade, shown
@@ -1648,7 +1634,7 @@ templ CopyLinkButton(link string) {
 // names what is copied, such as "Copy hardware address".
 templ CopyButton(target string, label string) {
 	<button type="button" data-copy-target={ target } aria-label={ label } title={ label }>
-		@CopyIcons()
+		@components.CopyIcons()
 	</button>
 }
 

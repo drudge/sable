@@ -3224,7 +3224,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-result .source-blocked, .query-detail-result .source-error { background: rgb(239 68 68 / .12); color: #ef4444; }
 .query-detail-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; margin: 0; }
 .query-detail-grid > div { display: grid; min-width: 0; min-height: 4.25rem; grid-column: span 2; align-content: center; gap: .25rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: .65rem .75rem; }
-.query-detail-grid > .query-detail-fact-wide { grid-column: span 3; }
+.query-detail-grid > .fact-wide { grid-column: span 3; }
+.query-detail-grid > .fact-full { grid-column: 1 / -1; }
+/* A fact tile with a copyable value carries its copy button in the corner,
+   like the Dynamic DNS address cards. The button drops the card's grid
+   placement so it pins to the tile rather than to the label row. */
+.query-detail-grid > .fact-copyable { position: relative; }
+.fact-copyable > dt { padding-right: 1.75rem; }
+.fact-copyable .fact-copy { position: absolute; top: .5rem; right: .5rem; grid-column: auto; grid-row: auto; }
+.fact-copyable code { overflow-wrap: anywhere; }
 .query-detail-grid dt, .query-detail-answer h3, .query-detail-explain h3 { margin: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .query-detail-grid dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: .875rem; font-weight: 500; line-height: 1.35; }
 .query-detail-grid code { font-size: .8rem; }
@@ -4017,7 +4025,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .insight-list-mobile-row .insight-share-bar { width: 100%; }
 .insight-list-mobile-row dd { font-variant-numeric: tabular-nums; }
 .insight-overlap { color: var(--muted-foreground); font-size: .72rem; }
-.query-detail-grid > .insight-fact-full { grid-column: 1 / -1; }
 /* Evidence charts: gray for the context, the finding's own color for what it
    is about, and HTML labels at fixed shares of the width. */
 .insight-chart { --insight-chart-emphasis: #2563eb; }
@@ -4095,13 +4102,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .insight-list-link:focus-visible { outline: none; }
 .insight-list-link .nav-icon { width: 1rem; height: 1rem; }
 button.insight-list-link { border: 0; background: none; padding: 0; cursor: pointer; }
-/* A fact tile with a copyable value carries its copy button in the corner,
-   like the Dynamic DNS address cards. The button drops the card's grid
-   placement so it pins to the tile rather than to the label row. */
-.query-detail-grid > .insight-fact-copyable { position: relative; }
-.insight-fact-copyable > dt { padding-right: 1.75rem; }
-.insight-fact-copyable .fact-copy { position: absolute; top: .5rem; right: .5rem; grid-column: auto; grid-row: auto; }
-.insight-fact-copyable code { overflow-wrap: anywhere; }
 .insight-fact-note { display: block; margin-top: .2rem; color: var(--muted-foreground); font-size: .72rem; font-weight: 400; }
 /* The drawer spaces the children of its sections apart; a list's rows must
    touch so their dividers and hover states meet. */
