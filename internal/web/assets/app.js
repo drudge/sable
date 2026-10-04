@@ -446,6 +446,8 @@
 
 	  const fieldLabel = select.closest("label")?.querySelector("span");
 	  trigger.setAttribute("aria-label", fieldLabel?.textContent?.trim() || select.getAttribute("aria-label") || select.name || "Choose an option");
+	  const selectHelp = select.getAttribute("aria-describedby");
+	  if (selectHelp) trigger.setAttribute("aria-describedby", selectHelp);
 	  const selectedLabel = document.createElement("span");
 	  selectedLabel.className = "styled-select-value";
 	  const chevron = document.createElement("span");
@@ -627,6 +629,8 @@
 	  entry.autocomplete = "off";
 	  entry.spellcheck = false;
 	  entry.setAttribute("aria-label", accessibleLabel);
+	  const timeHelp = input.getAttribute("aria-describedby");
+	  if (timeHelp) entry.setAttribute("aria-describedby", timeHelp);
 	  entry.setAttribute("aria-haspopup", "dialog");
 	  entry.setAttribute("aria-expanded", "false");
 	  entry.setAttribute("aria-controls", pickerID);
