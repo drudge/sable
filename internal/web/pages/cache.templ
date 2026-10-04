@@ -115,7 +115,7 @@ templ CacheBrowserDialog(domains []CacheDomainView) {
 											<span>{ record.Section }</span>
 											<code id={ fmt.Sprintf("cache-record-%d-%d-%d", domainIndex, responseIndex, recordIndex) }>{ record.Value }</code>
 											<small>{ fmt.Sprintf("TTL %ds", record.TTL) }</small>
-							<button type="button" data-copy-target={ fmt.Sprintf("cache-record-%d-%d-%d", domainIndex, responseIndex, recordIndex) } aria-label="Copy cached record" title="Copy cached record">@CopyIcons()</button>
+							<button type="button" data-copy-target={ fmt.Sprintf("cache-record-%d-%d-%d", domainIndex, responseIndex, recordIndex) } aria-label="Copy cached record" title="Copy cached record">@components.CopyIcons()</button>
 										</div>
 									}
 								</div>

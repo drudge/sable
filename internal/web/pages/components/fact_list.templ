@@ -1,0 +1,93 @@
+package components
+
+import "strings"
+
+// FactListProps describes a list of labelled facts, such as the details in a
+// drawer or the numbers on a mobile row.
+type FactListProps struct {
+	// Class sets the list's layout for where it sits, such as
+	// "query-detail-grid" for the tiled facts in a drawer.
+	Class string
+	Attrs templ.Attributes
+}
+
+// FactList draws a <dl> around Fact rows.
+templ FactList(p FactListProps) {
+	<dl if p.Class != "" { class={ p.Class } } { p.Attrs... }>
+		{ children... }
+	</dl>
+}
+
+// FactProps describes one labelled fact in a FactList.
+type FactProps struct {
+	Label string
+	// Value is the fact as text. Leave it empty and pass children when the
+	// value needs markup, such as a link or a code span.
+	Value string
+	// Wide and Full size a tile in a query-detail-grid: Wide takes half the
+	// row rather than a third, and Full takes the whole row.
+	Wide bool
+	Full bool
+	// CopyID shows Value as code with this id and adds a copy button, labelled
+	// CopyLabel, in the tile's corner.
+	CopyID    string
+	CopyLabel string
+	// Class and Attrs go on the row.
+	Class string
+	Attrs templ.Attributes
+	// ValueClass and ValueAttrs go on the value, such as a data hook that
+	// script fills in.
+	ValueClass string
+	ValueAttrs templ.Attributes
+}
+
+// factClass lists a Fact row's classes, or "" for none.
+func factClass(p FactProps) string {
+	var classes []string
+	if p.Full {
+		classes = append(classes, "fact-full")
+	} else if p.Wide {
+		classes = append(classes, "fact-wide")
+	}
+	if p.CopyID != "" {
+		classes = append(classes, "fact-copyable")
+	}
+	if p.Class != "" {
+		classes = append(classes, p.Class)
+	}
+	return strings.Join(classes, " ")
+}
+
+// Fact draws one row of a FactList: the label, then the value and any
+// children.
+templ Fact(p FactProps) {
+	<div if factClass(p) != "" { class={ factClass(p) } } { p.Attrs... }>
+		<dt>{ p.Label }</dt>
+		<dd if p.ValueClass != "" { class={ p.ValueClass } } { p.ValueAttrs... }>
+			if p.CopyID != "" {
+				<code id={ p.CopyID }>{ p.Value }</code>
+				@FactCopyButton(p.CopyID, p.CopyLabel)
+			} else {
+				{ p.Value }
+			}
+			{ children... }
+		</dd>
+	</div>
+}
+
+// FactCopyButton sits in the corner of a fact tile and copies the element
+// with the target id.
+templ FactCopyButton(target string, label string) {
+	<button class="fact-copy" type="button" data-copy-target={ target } aria-label={ label } title={ label }>@CopyIcons()</button>
+}
+
+// CopyIcons is the pair of icons inside a copy button: the copy glyph, and
+// the check shown once the copy succeeds.
+templ CopyIcons() {
+	<span class="copy-icon-default">
+		@Icon("copy")
+	</span>
+	<span class="copy-icon-success">
+		@Icon("check")
+	</span>
+}

@@ -107,6 +107,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
   - `components.Tabs` for a page's tab strip, as tab buttons or, with `Nav`, as links
   - `components.EmptyState` for what a list or panel shows when it has nothing in it
+  - `components.FactList` with `components.Fact` for labelled facts, such as the tiles in a drawer (`Wide`, `Full`, and `CopyID` for a copy button)
 
   Use the shared classes too: `.status-badge`, `.count-badge`, and `.field-help`. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
 

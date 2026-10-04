@@ -94,19 +94,18 @@ templ AboutContent(view AboutPageView) {
 						<span>Installed version</span>
 						<strong>@ReleaseVersion(view.Console.Version)</strong>
 					</div>
-					<dl class="about-build-meta">
-						<div><dt>Go</dt><dd>{ strings.TrimPrefix(view.GoVersion, "go") }</dd></div>
-						<div><dt>Commit</dt><dd><code class="about-commit" title={ view.Commit }>{ view.Commit[:commitPrefixLength] }<span class="about-commit-suffix">{ view.Commit[commitPrefixLength:] }</span></code></dd></div>
-						<div>
-							<dt>Built</dt>
-							<dd class="about-build-timestamp" title={ view.BuiltAt }>
-								<span>{ buildDate }</span>
-								if buildTime != "" {
-									<span>{ buildTime }</span>
-								}
-							</dd>
-						</div>
-					</dl>
+					@components.FactList(components.FactListProps{Class: "about-build-meta"}) {
+						@components.Fact(components.FactProps{Label: "Go", Value: strings.TrimPrefix(view.GoVersion, "go")})
+						@components.Fact(components.FactProps{Label: "Commit"}) {
+							<code class="about-commit" title={ view.Commit }>{ view.Commit[:commitPrefixLength] }<span class="about-commit-suffix">{ view.Commit[commitPrefixLength:] }</span></code>
+						}
+						@components.Fact(components.FactProps{Label: "Built", ValueClass: "about-build-timestamp", ValueAttrs: templ.Attributes{"title": view.BuiltAt}}) {
+							<span>{ buildDate }</span>
+							if buildTime != "" {
+								<span>{ buildTime }</span>
+							}
+						}
+					}
 				</div>
 				@UpdatePanel(view.Update)
 			</div>
@@ -131,7 +130,7 @@ templ AboutContent(view AboutPageView) {
 				<p>Sable exposes lifetime query and runtime metrics in Prometheus text format. Create an API token in <a class="inline-link" href="/administration?tab=tokens">Administration</a> using a group with <code>metrics.read</code>, then add this scrape job to your Prometheus configuration:</p>
 				<div class="about-code-block">
 					<pre id="prometheus-scrape-config">{ view.ScrapeConfig }</pre>
-					<button class="about-copy-button" type="button" data-copy-target="prometheus-scrape-config" aria-label="Copy to clipboard" title="Copy to clipboard">@CopyIcons()</button>
+					<button class="about-copy-button" type="button" data-copy-target="prometheus-scrape-config" aria-label="Copy to clipboard" title="Copy to clipboard">@components.CopyIcons()</button>
 				</div>
 				if view.Console.CanMetrics {
 					<div class="about-metrics-preview">

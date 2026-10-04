@@ -684,7 +684,7 @@ templ MCPCard(view MCPAppView) {
 				<div class="integration-facts mcp-facts">
 					<div class="integration-fact-address" title={ view.Address } aria-label={ "MCP address: " + view.Address }>
 						<span class="integration-fact-label">{ ifThen(view.Clustered, "MCP address (primary)", "MCP address") }</span>
-						@FactCopyButton("mcp-address", "Copy MCP address")
+						@components.FactCopyButton("mcp-address", "Copy MCP address")
 						<span class="integration-fact-value"><code id="mcp-address">{ view.Address }</code></span>
 					</div>
 					<div><span class="integration-fact-label">Sign-in</span><span class="integration-fact-value">{ ifThen(view.SecurityDisabled, "None", "API token") }</span></div>
@@ -889,7 +889,7 @@ templ MCPSetupDialog(view MCPAppView) {
 					<div class="wizard-heading compact"><span>@Icon("globe")</span><div><strong>MCP Address</strong><small>{ mcpAddressHelp(view) }</small></div></div>
 					<div class="about-code-block">
 						<pre id="mcp-setup-address">{ view.Address }</pre>
-						<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@CopyIcons()</button>
+						<button class="about-copy-button" type="button" data-copy-target="mcp-setup-address" aria-label="Copy MCP address" title="Copy MCP address">@components.CopyIcons()</button>
 					</div>
 					if !view.Secure && !view.SecurityDisabled {
 						<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>A token sent to it crosses the network unencrypted. Set up a certificate first unless the assistant runs on this server.</span></div></div>
@@ -940,7 +940,7 @@ templ MCPClientSnippet(label, id, snippet, help string) {
 	<p class="field-help">{ help }</p>
 	<div class="about-code-block">
 		<pre id={ id }>{ snippet }</pre>
-		<button class="about-copy-button" type="button" data-copy-target={ id } aria-label={ "Copy " + label + " setup" } title="Copy">@CopyIcons()</button>
+		<button class="about-copy-button" type="button" data-copy-target={ id } aria-label={ "Copy " + label + " setup" } title="Copy">@components.CopyIcons()</button>
 	</div>
 }
 
@@ -1038,12 +1038,12 @@ templ UniFiCard(view UniFiAppView) {
 			<div class="integration-card-body">
 				@UniFiStatusPanel(view)
 				<div class="unifi-connection cluster-details">
-					<dl>
-						<div><dt>Controller</dt><dd>{ view.ControllerURL }</dd></div>
-						<div><dt>Site</dt><dd>{ view.Site }</dd></div>
-						<div><dt>Interval</dt><dd>{ view.Interval }</dd></div>
-						<div><dt>Publishing</dt><dd>{ unifiSourceLabel(view) }</dd></div>
-					</dl>
+					@components.FactList(components.FactListProps{}) {
+						@components.Fact(components.FactProps{Label: "Controller", Value: view.ControllerURL})
+						@components.Fact(components.FactProps{Label: "Site", Value: view.Site})
+						@components.Fact(components.FactProps{Label: "Interval", Value: view.Interval})
+						@components.Fact(components.FactProps{Label: "Publishing", Value: unifiSourceLabel(view)})
+					}
 				</div>
 				@UniFiMappingTable(view, false)
 				@UniFiCardActions(view, false)
@@ -2182,7 +2182,7 @@ templ DynamicDNSAddressFact(label, id, value string, copyable bool) {
 	<div class="integration-fact-address" title={ value } aria-label={ label + ": " + value }>
 		<span class="integration-fact-label">{ label }</span>
 		if copyable {
-			@FactCopyButton(id, "Copy " + label + " address")
+			@components.FactCopyButton(id, "Copy " + label + " address")
 		}
 		<span class="integration-fact-value">
 			if copyable {

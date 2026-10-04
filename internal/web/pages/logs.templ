@@ -381,13 +381,15 @@ templ QueryDetail(view QueryDetailView) {
 				<span class={ queryDetailSourceClass(entry.Source) } data-query-detail-source>{ ifThen(view.Loaded, logSourceLabel(entry.Source), "—") }</span>
 				<span class={ "rcode " + ifThen(view.Loaded, rcodeClass(entry.Status), "") } data-query-detail-status>{ ifThen(view.Loaded, rcodeDisplay(entry.Status), "—") }</span>
 			</div>
-			<dl class="query-detail-grid">
-				<div class="query-detail-fact-wide"><dt>Timestamp</dt><dd data-query-detail-value="time">{ queryDetailText(entry.OccurredAt) }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Client</dt><dd><code data-query-detail-value="client">{ queryDetailText(entry.ClientIP) }</code></dd></div>
-				<div><dt>Query type</dt><dd data-query-detail-value="type">{ queryDetailText(entry.RecordType) }</dd></div>
-				<div><dt>Protocol</dt><dd data-query-detail-value="protocol">{ queryDetailText(entry.Protocol) }</dd></div>
-				<div><dt>Duration</dt><dd data-query-detail-value="duration">{ queryDetailText(entry.Duration) }</dd></div>
-			</dl>
+			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
+				@components.Fact(components.FactProps{Label: "Timestamp", Value: queryDetailText(entry.OccurredAt), Wide: true, ValueAttrs: templ.Attributes{"data-query-detail-value": "time"}})
+				@components.Fact(components.FactProps{Label: "Client", Wide: true}) {
+					<code data-query-detail-value="client">{ queryDetailText(entry.ClientIP) }</code>
+				}
+				@components.Fact(components.FactProps{Label: "Query type", Value: queryDetailText(entry.RecordType), ValueAttrs: templ.Attributes{"data-query-detail-value": "type"}})
+				@components.Fact(components.FactProps{Label: "Protocol", Value: queryDetailText(entry.Protocol), ValueAttrs: templ.Attributes{"data-query-detail-value": "protocol"}})
+				@components.Fact(components.FactProps{Label: "Duration", Value: queryDetailText(entry.Duration), ValueAttrs: templ.Attributes{"data-query-detail-value": "duration"}})
+			}
 			<section class="query-detail-answer" aria-labelledby="query-detail-answer-title">
 				<h3 id="query-detail-answer-title">Answer</h3>
 				<div data-query-detail-answers>

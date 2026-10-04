@@ -151,7 +151,13 @@ templ ProfileTokenMobileRow(view ProfilePageView, token auth.APIToken) {
 		for _, group := range token.Groups {
 			<span>{ group }</span>
 		}
-	</div><dl><div><dt>Created</dt><dd>{ FormatDateTime(token.CreatedAt, view.Console.TimeDisplay) }</dd></div><div><dt>Last used</dt><dd>{ tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay) }</dd></div><div><dt>Expires</dt><dd>{ profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay) }</dd></div></dl></article>
+	</div>
+	@components.FactList(components.FactListProps{}) {
+		@components.Fact(components.FactProps{Label: "Created", Value: FormatDateTime(token.CreatedAt, view.Console.TimeDisplay)})
+		@components.Fact(components.FactProps{Label: "Last used", Value: tokenLastUsed(token.LastUsedAt, view.Console.TimeDisplay)})
+		@components.Fact(components.FactProps{Label: "Expires", Value: profileTokenExpiration(token.ExpiresAt, view.Console.TimeDisplay)})
+	}
+</article>
 }
 
 templ ProfileTokenRevoke(token auth.APIToken) {

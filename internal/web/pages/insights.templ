@@ -853,21 +853,14 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 			</div>
 		}
 		if len(finding.Facts) > 0 {
-			<dl class="query-detail-grid insight-evidence-facts">
+			@components.FactList(components.FactListProps{Class: "query-detail-grid insight-evidence-facts"}) {
 				for index, card := range insightFactRows(finding.Facts) {
-					<div class={ "query-detail-fact-wide", templ.KV("insight-fact-full", card.Full), templ.KV("insight-fact-copyable", card.Monospace) }>
-						<dt>{ card.Label }</dt>
-						<dd>
-							if card.Monospace {
-								<code id={ fmt.Sprintf("%s-fact-%d", finding.ID, index) }>{ insightFactValue(card.InsightFactView, view.TimeDisplay) }</code>
-								@FactCopyButton(fmt.Sprintf("%s-fact-%d", finding.ID, index), "Copy "+strings.ToLower(card.Label))
-							} else {
-								{ insightFactValue(card.InsightFactView, view.TimeDisplay) }
-							}
-						</dd>
-					</div>
+					@components.Fact(components.FactProps{
+						Label: card.Label, Value: insightFactValue(card.InsightFactView, view.TimeDisplay), Wide: true, Full: card.Full,
+						CopyID: ifThen(card.Monospace, fmt.Sprintf("%s-fact-%d", finding.ID, index), ""), CopyLabel: "Copy " + strings.ToLower(card.Label),
+					})
 				}
-			</dl>
+			}
 		}
 		@insightChart(finding)
 		if len(finding.Clients) > 0 {
@@ -1052,15 +1045,15 @@ templ InsightContribution(view InsightsOverviewView) {
 						</div>
 						if list.Available {
 							@insightShareBar(list)
-							<dl>
-								<div><dt>Domains</dt><dd>{ formatNumber(uint64(list.Domains)) }</dd></div>
-								<div><dt>Unique</dt><dd>{ formatNumber(uint64(list.Unique)) }</dd></div>
-								<div><dt>Elsewhere</dt><dd>{ formatNumber(uint64(list.Covered)) }</dd></div>
+							@components.FactList(components.FactListProps{}) {
+								@components.Fact(components.FactProps{Label: "Domains", Value: formatNumber(uint64(list.Domains))})
+								@components.Fact(components.FactProps{Label: "Unique", Value: formatNumber(uint64(list.Unique))})
+								@components.Fact(components.FactProps{Label: "Elsewhere", Value: formatNumber(uint64(list.Covered))})
 								if view.Contribution.HasQueries {
-									<div><dt>Queries blocked</dt><dd>{ formatNumber(list.Queries.Blocked) }</dd></div>
-									<div><dt>This list alone</dt><dd>{ formatNumber(list.Queries.Sole) }</dd></div>
+									@components.Fact(components.FactProps{Label: "Queries blocked", Value: formatNumber(list.Queries.Blocked)})
+									@components.Fact(components.FactProps{Label: "This list alone", Value: formatNumber(list.Queries.Sole)})
 								}
-							</dl>
+							}
 							if list.LargestOverlap != "" {
 								<small class="insight-overlap">Largest overlap: { list.LargestOverlap } ({ insights.FormatShare(uint64(list.LargestOverlapDomains), uint64(list.Domains)) })</small>
 							}
@@ -1074,13 +1067,13 @@ templ InsightContribution(view InsightsOverviewView) {
 						<div class="data-mobile-heading">
 							<span><strong>Custom blocked domains</strong><small>Blocked domains you added</small></span>
 						</div>
-						<dl>
-							<div><dt>Domains</dt><dd>{ formatNumber(uint64(custom.Domains)) }</dd></div>
+						@components.FactList(components.FactListProps{}) {
+							@components.Fact(components.FactProps{Label: "Domains", Value: formatNumber(uint64(custom.Domains))})
 							if view.Contribution.HasQueries {
-								<div><dt>Queries blocked</dt><dd>{ formatNumber(custom.Queries.Blocked) }</dd></div>
-								<div><dt>Custom alone</dt><dd>{ formatNumber(custom.Queries.Sole) }</dd></div>
+								@components.Fact(components.FactProps{Label: "Queries blocked", Value: formatNumber(custom.Queries.Blocked)})
+								@components.Fact(components.FactProps{Label: "Custom alone", Value: formatNumber(custom.Queries.Sole)})
 							}
-						</dl>
+						}
 					</article>
 				}
 			</div>
@@ -1744,27 +1737,22 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 			if view.Device.NotUsingSable != "" {
 				<div class="tip-box insight-notes" role="note"><p>{ view.Device.NotUsingSable }</p></div>
 			}
-			<dl class="query-detail-grid">
+			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
 				if view.Device.MAC != "" {
-					<div class="query-detail-fact-wide insight-fact-full insight-fact-copyable">
-						<dt>Hardware address</dt>
-						<dd>
-							<code id="insight-device-mac">{ view.Device.MAC }</code>
-							@FactCopyButton("insight-device-mac", "Copy hardware address")
-							if view.Device.PrivateMAC {
-								<small class="insight-fact-note">Private, randomized by the device</small>
-							}
-						</dd>
-					</div>
+					@components.Fact(components.FactProps{Label: "Hardware address", Value: view.Device.MAC, Full: true, CopyID: "insight-device-mac", CopyLabel: "Copy hardware address"}) {
+						if view.Device.PrivateMAC {
+							<small class="insight-fact-note">Private, randomized by the device</small>
+						}
+					}
 				}
 				if view.Device.Vendor != "" {
-					<div class="query-detail-fact-wide insight-fact-full"><dt>Maker</dt><dd>{ view.Device.Vendor }</dd></div>
+					@components.Fact(components.FactProps{Label: "Maker", Value: view.Device.Vendor, Full: true})
 				}
-				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.Device.Queries) }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.Device.Blocked) } ({ percent(view.Device.Blocked, view.Device.Queries) })</dd></div>
-				<div class="query-detail-fact-wide"><dt>First seen</dt><dd>{ insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay) }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Last seen</dt><dd>{ insightDeviceTime(view.Device.LastSeen, view.TimeDisplay) }</dd></div>
-			</dl>
+				@components.Fact(components.FactProps{Label: "Queries in period", Value: formatNumber(view.Device.Queries), Wide: true})
+				@components.Fact(components.FactProps{Label: "Blocked", Value: formatNumber(view.Device.Blocked) + " (" + percent(view.Device.Blocked, view.Device.Queries) + ")", Wide: true})
+				@components.Fact(components.FactProps{Label: "First seen", Value: insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay), Wide: true})
+				@components.Fact(components.FactProps{Label: "Last seen", Value: insightDeviceTime(view.Device.LastSeen, view.TimeDisplay), Wide: true})
+			}
 			@insightDeviceType(view)
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
 				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
@@ -1918,22 +1906,26 @@ templ InsightAppDrawer(view InsightAppDrawerView) {
 		if view.Missing {
 			<div class="query-detail-section-heading"><p>Nothing on the network used this app in the { insightRangePhrase(view.RangeLabel) }.</p></div>
 		} else if view.App.Name != "" {
-			<dl class="query-detail-grid">
-				<div class="query-detail-fact-wide"><dt>Category</dt><dd>{ view.App.Category }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Queries in period</dt><dd>{ formatNumber(view.App.Queries) }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Domains</dt><dd>{ formatNumber(uint64(view.App.Domains)) }</dd></div>
-				<div class="query-detail-fact-wide"><dt>Devices</dt><dd>{ formatNumber(uint64(len(view.Devices) + view.MoreDevices)) }</dd></div>
+			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
+				@components.Fact(components.FactProps{Label: "Category", Value: view.App.Category, Wide: true})
+				@components.Fact(components.FactProps{Label: "Queries in period", Value: formatNumber(view.App.Queries), Wide: true})
+				@components.Fact(components.FactProps{Label: "Domains", Value: formatNumber(uint64(view.App.Domains)), Wide: true})
+				@components.Fact(components.FactProps{Label: "Devices", Value: formatNumber(uint64(len(view.Devices) + view.MoreDevices)), Wide: true})
 				// Blocks and failures each pair a count with when the last one
 				// happened, so the grid stays even.
 				if view.App.Blocked > 0 {
-					<div class="query-detail-fact-wide"><dt>Blocked</dt><dd>{ formatNumber(view.App.Blocked) } <small>{ percent(view.App.Blocked, view.App.Queries) }</small></dd></div>
-					<div class="query-detail-fact-wide"><dt>Last blocked</dt><dd>{ insightDeviceTime(view.App.LastBlocked, view.TimeDisplay) }</dd></div>
+					@components.Fact(components.FactProps{Label: "Blocked", Value: formatNumber(view.App.Blocked), Wide: true}) {
+						<small>{ percent(view.App.Blocked, view.App.Queries) }</small>
+					}
+					@components.Fact(components.FactProps{Label: "Last blocked", Value: insightDeviceTime(view.App.LastBlocked, view.TimeDisplay), Wide: true})
 				}
 				if view.App.Failed > 0 {
-					<div class="query-detail-fact-wide"><dt>Failed</dt><dd>{ formatNumber(view.App.Failed) } <small>{ percent(view.App.Failed, view.App.Queries) }</small></dd></div>
-					<div class="query-detail-fact-wide"><dt>Last failure</dt><dd>{ insightDeviceTime(view.App.LastFailed, view.TimeDisplay) }</dd></div>
+					@components.Fact(components.FactProps{Label: "Failed", Value: formatNumber(view.App.Failed), Wide: true}) {
+						<small>{ percent(view.App.Failed, view.App.Queries) }</small>
+					}
+					@components.Fact(components.FactProps{Label: "Last failure", Value: insightDeviceTime(view.App.LastFailed, view.TimeDisplay), Wide: true})
 				}
-			</dl>
+			}
 			if len(view.Failures) > 0 {
 				<section class="query-detail-answer" aria-labelledby="insight-app-failures">
 					<h3 id="insight-app-failures">Failed lookups</h3>
