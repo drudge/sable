@@ -47,7 +47,7 @@ templ AdministrationPage(view AdministrationPageView) {
 
 templ AdministrationContent(view AdministrationPageView) {
 	<div class="administration-page page-stack isotope-control-page" id="administration-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Administration">
-		<header class="page-heading"><h1>Administration</h1><p>Manage users, groups, permissions, sessions, and API tokens</p></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Administration", Description: "Manage users, groups, permissions, sessions, and API tokens"})
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		@components.Tabs(components.TabsProps{Label: "Administration sections", Class: "admin-tab-list", Active: view.ActiveTab, Tabs: administrationTabList(view)})

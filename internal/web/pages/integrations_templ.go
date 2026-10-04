@@ -386,7 +386,11 @@ func IntegrationsContent(view IntegrationsPageView) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"integrations-page page-stack isotope-control-page\" id=\"integrations-content\"><header class=\"page-heading\"><h1>Integrations</h1><p>Connect Sable to the systems that already know your network, and publish what they know as DNS.</p></header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"integrations-page page-stack isotope-control-page\" id=\"integrations-content\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = components.PageHeader(components.PageHeaderProps{Title: "Integrations", Description: "Connect Sable to the systems that already know your network, and publish what they know as DNS."}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

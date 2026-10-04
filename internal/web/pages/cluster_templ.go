@@ -137,7 +137,11 @@ func ClusterContent(view ClusterPageView) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"cluster-page page-stack\" id=\"cluster-content\"><header class=\"page-heading\"><h1>Cluster</h1><p>Synchronize Sable across independent DNS servers</p></header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"cluster-page page-stack\" id=\"cluster-content\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = components.PageHeader(components.PageHeaderProps{Title: "Cluster", Description: "Synchronize Sable across independent DNS servers"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

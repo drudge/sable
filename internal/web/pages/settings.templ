@@ -151,7 +151,7 @@ templ SettingsPage(view SettingsPageView) {
 
 templ SettingsContent(view SettingsPageView) {
 	<div class="settings-page page-stack isotope-control-page" id="settings-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Settings">
-		<header class="page-heading"><h1>Settings</h1><p>Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect.</p></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Settings", Description: "Configure DNS server settings and behavior. Some settings may require the DNS server to restart to take effect."})
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		@components.Tabs(components.TabsProps{Label: "Settings sections", Class: "settings-tab-list", TabClass: "settings-tab", Active: view.ActiveTab, Tabs: tabList(settingsTabs)})

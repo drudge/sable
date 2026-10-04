@@ -557,17 +557,7 @@ templ InsightsContent(view InsightsOverviewView) {
 		}
 		hx-swap="outerHTML"
 	>
-		<header class="insights-heading" hx-indicator:inherited="#insights-update-indicator">
-			<div class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></div>
-			<div class="insights-range">
-				if view.Settings != nil {
-					@InsightAlertsBell(view.Settings.Alerts)
-					@InsightSettingsButton()
-				}
-				@RangeTabs(insightsRangeControl(view.Range))
-				@RangeSelect(insightsRangeControl(view.Range))
-			</div>
-		</header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Insights", Description: "Understand what's happening on your network", Actions: insightsHeaderActions(view), Class: "insights-heading", Attrs: templ.Attributes{"hx-indicator:inherited": "#insights-update-indicator"}})
 		@components.Tabs(components.TabsProps{Label: "Insights sections", Class: "insights-tab-list", Active: view.ActiveTab, Tabs: insightsTabList(view)})
 		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="overview" hidden?={ view.ActiveTab != "overview" }>
 			if view.Loading {
@@ -2393,3 +2383,16 @@ type InsightReasonView struct {
 	Code string
 }
 
+
+// insightsHeaderActions sit in the Insights page header: the alerts bell,
+// the settings button, and the range picker.
+templ insightsHeaderActions(view InsightsOverviewView) {
+	<div class="insights-range">
+		if view.Settings != nil {
+			@InsightAlertsBell(view.Settings.Alerts)
+			@InsightSettingsButton()
+		}
+		@RangeTabs(insightsRangeControl(view.Range))
+		@RangeSelect(insightsRangeControl(view.Range))
+	</div>
+}

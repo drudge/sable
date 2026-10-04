@@ -334,7 +334,7 @@ templ IntegrationsPage(view IntegrationsPageView) {
 
 templ IntegrationsContent(view IntegrationsPageView) {
 	<div class="integrations-page page-stack isotope-control-page" id="integrations-content">
-		<header class="page-heading"><h1>Integrations</h1><p>Connect Sable to the systems that already know your network, and publish what they know as DNS.</p></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Integrations", Description: "Connect Sable to the systems that already know your network, and publish what they know as DNS."})
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		@DynamicDNSCard(view.DynamicDNS)

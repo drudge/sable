@@ -54,7 +54,7 @@ templ ProfilePage(view ProfilePageView) {
 
 templ ProfileContent(view ProfilePageView) {
 	<div class="profile-page" id="profile-content" data-isotope-tabs data-tab-param="tab">
-		<header class="page-heading"><h1>Profile</h1><p>Manage your account, passkeys, password, and API tokens</p></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Profile", Description: "Manage your account, passkeys, password, and API tokens"})
 		@components.Tabs(components.TabsProps{Label: "Profile sections", Class: "profile-tabs", Active: view.ActiveTab, Tabs: profileTabList(view), Nav: true})
 		if view.Message != "" {
 			@Toast(view.Message, "success")

@@ -819,10 +819,7 @@ templ SableMark(extraClass string) {
 
 templ DNSClientContent(view DNSClientPageView) {
 	<div class="dns-client-page page-stack">
-		<header class="page-heading">
-			<h1>DNS Client</h1>
-			<p>Resolve DNS records and diagnose name resolution issues</p>
-		</header>
+		@components.PageHeader(components.PageHeaderProps{Title: "DNS Client", Description: "Resolve DNS records and diagnose name resolution issues"})
 		<div class="page-columns">
 			<div class="page-main">
 				@components.Card(components.CardProps{Class: "query-composer"}) {

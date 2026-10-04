@@ -103,7 +103,7 @@ templ logsDocument(view LogsPageView) {
 
 templ LogsContent(view LogsPageView) {
 	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Logs">
-		<header class="logs-heading"><div class="page-heading"><h1>Logs</h1><p>View server logs and DNS query history</p></div><a class="icon-button" href="/settings?tab=logging" aria-label="Logging settings" title="Logging settings">@Icon("settings")</a></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Logs", Description: "View server logs and DNS query history", Actions: logsSettingsLink()})
 		@components.Tabs(components.TabsProps{Label: "Log sources", Class: "logs-tab-list", Active: view.ActiveTab, Tabs: tabList(logsTabs)})
 		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
 		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
@@ -719,3 +719,9 @@ func queryPanelLiveURL(view QueryLogsView) string {
 func urlQueryEscape(value string) string { return url.QueryEscape(value) }
 func hasAnswers(answers []string) bool { for _, answer := range answers { if answer != "" { return true } }; return false }
 func formatCount(value int) string { if value < 1_000 { return fmt.Sprint(value) }; whole := fmt.Sprintf("%d", value); for index := len(whole)-3; index > 0; index -= 3 { whole = whole[:index]+","+whole[index:] }; return whole }
+
+// logsSettingsLink sits in the Logs page header and opens the logging
+// settings.
+templ logsSettingsLink() {
+	<a class="icon-button" href="/settings?tab=logging" aria-label="Logging settings" title="Logging settings">@Icon("settings")</a>
+}

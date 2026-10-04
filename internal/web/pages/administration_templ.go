@@ -112,7 +112,11 @@ func AdministrationContent(view AdministrationPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" data-tab-param=\"tab\" data-title-base=\"Administration\"><header class=\"page-heading\"><h1>Administration</h1><p>Manage users, groups, permissions, sessions, and API tokens</p></header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" data-tab-param=\"tab\" data-title-base=\"Administration\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = components.PageHeader(components.PageHeaderProps{Title: "Administration", Description: "Manage users, groups, permissions, sessions, and API tokens"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
