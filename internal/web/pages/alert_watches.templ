@@ -74,6 +74,12 @@ func AlertWatchLink(domain, client, device string) string {
 	return "/settings?" + values.Encode()
 }
 
+// The watch dialog draws these fields around its own textarea and select.
+var (
+	alertWatchDomainsField = components.FieldProps{ID: "alert-watch-domains", Label: "Domains", Help: "One per line. Names under each domain count too."}
+	alertWatchQuietField   = components.FieldProps{ID: "alert-watch-quiet", Label: "Quiet For", Help: "After an alert, the same device stays quiet this long for this watch."}
+)
+
 // alertsWatchesCard lists the domain watches. Each switches on and off from
 // its row; Add and Edit open the watch dialog.
 templ alertsWatchesCard(view AlertsView) {
@@ -154,8 +160,10 @@ templ AlertWatchForm(form AlertWatchFormView) {
 		}
 		<div class="isotope-dialog-body alert-destination-body">
 			<div class="alert-destination-notice" id="alert-watch-notice"></div>
-			<label class="field-control"><span>Name (Optional)</span><input name="name" value={ form.Name } placeholder="Kids' games" maxlength="64" autocomplete="off"/><small>What the alert and the list call it. Leave it blank to use the first domain.</small></label>
-			<label class="field-control"><span>Domains</span><textarea name="domains" rows="3" placeholder={ "roblox.com\ndiscord.com" } autocomplete="off" spellcheck="false" required>{ form.Domains }</textarea><small>One per line. Names under each domain count too.</small></label>
+			@components.Field(components.FieldProps{ID: "alert-watch-name", Label: "Name (Optional)", Help: "What the alert and the list call it. Leave it blank to use the first domain.", Input: templ.Attributes{"name": "name", "value": form.Name, "placeholder": "Kids' games", "maxlength": "64", "autocomplete": "off"}})
+			@components.Field(alertWatchDomainsField) {
+				<textarea name="domains" rows="3" placeholder={ "roblox.com\ndiscord.com" } autocomplete="off" spellcheck="false" required { components.FieldAttrs(alertWatchDomainsField)... }>{ form.Domains }</textarea>
+			}
 			<fieldset class="field-control alert-sends alert-watch-devices">
 				<legend>Devices</legend>
 				<div class="alert-sends-choice">
@@ -191,15 +199,13 @@ templ AlertWatchForm(form AlertWatchFormView) {
 					<label><input type="radio" name="result" value="blocked" checked?={ form.Result == "blocked" }/><span>Only When Blocked</span></label>
 				</div>
 			</fieldset>
-			<label class="field-control">
-				<span>Quiet For</span>
-				<select name="quiet" data-styled-select>
+			@components.Field(alertWatchQuietField) {
+				<select name="quiet" data-styled-select { components.FieldAttrs(alertWatchQuietField)... }>
 					for _, choice := range form.QuietChoices {
 						<option value={ choice.Value } selected?={ choice.Value == form.Quiet }>{ choice.Label }</option>
 					}
 				</select>
-				<small>After an alert, the same device stays quiet this long for this watch.</small>
-			</label>
+			}
 		</div>
 		@components.DialogFooter("Cancel") {
 			<button class="button" type="submit" data-replica-primary-action>Save</button>

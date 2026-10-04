@@ -72,7 +72,7 @@ func TestSettingsGeneralHoldsTheInsightsSwitch(t *testing.T) {
 	}
 	// An operator who may only read settings sees the switch but cannot use it.
 	readOnly := server.get(t, "logs-reader", "/settings?tab=general", false).Body.String()
-	if !strings.Contains(readOnly, `data-insights-off="insights-off-dialog" disabled`) || strings.Contains(readOnly, `id="insights-off-dialog"`) {
+	if !strings.Contains(readOnly, `data-insights-off="insights-off-dialog" data-replica-primary-action disabled`) || strings.Contains(readOnly, `id="insights-off-dialog"`) {
 		t.Error("a read-only operator can turn Insights off")
 	}
 }

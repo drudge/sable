@@ -352,7 +352,7 @@ func TestEditingAnAlertDestinationKeepsSecretsLeftBlank(t *testing.T) {
 	form := server.get(t, "everything", "/ui/settings/alerts/destinations/form?id="+id, true)
 	body := form.Body.String()
 	for _, want := range []string{
-		"Edit Destination", `name="id" value="` + id + `"`, `name="name" value="Phone"`,
+		"Edit Destination", `name="id" value="` + id + `"`, `value="Phone"`,
 		`placeholder="Saved: https://ntfy.sh/••••erts"`, `value="Authorization"`, `placeholder="Saved: ••••cret"`,
 		`value="Priority"`, `placeholder="Saved: ••••"`, `name="sends_all" value="false" checked`, `name="sends" value="cluster" checked`,
 	} {
