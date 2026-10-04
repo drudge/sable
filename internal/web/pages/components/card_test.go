@@ -77,3 +77,12 @@ func TestCardHeaderRendersHeadingAndDescriptionClasses(t *testing.T) {
 		t.Errorf("classed header:\n got %s\nwant %s", got, want)
 	}
 }
+
+func TestCardHeaderRendersGlyph(t *testing.T) {
+	t.Parallel()
+
+	got := renderWithChildren(t, CardHeader(CardHeaderProps{Glyph: "key-round", Title: "Single Sign-On", Description: "Signs operators in"}), `<span class="status-badge">Off</span>`)
+	if !strings.HasPrefix(got, `<header><div class="card-identity"><span class="card-glyph"><svg`) || !strings.HasSuffix(got, `</svg></span><div><h2>Single Sign-On</h2><p>Signs operators in</p></div></div><span class="status-badge">Off</span></header>`) {
+		t.Errorf("glyph header: %s", got)
+	}
+}

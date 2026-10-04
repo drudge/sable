@@ -612,7 +612,7 @@ templ ZoneListView(view ZonesPageView) {
 				<label><span class="sr-only">Zone status</span><select data-zone-status-filter data-styled-select><option value="all">All Status</option><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
 			</div>
 		</div>
-		<section class="card isotope-zone-list" aria-label="Configured zones">
+		@components.Card(components.CardProps{Class: "isotope-zone-list", Attrs: templ.Attributes{"aria-label": "Configured zones"}}) {
 			if len(view.Zones) == 0 {
 				<div class="isotope-zone-empty" data-zone-empty><p>{ ifThen(view.CanCreate, "No zones found. Create your first zone to get started.", "No zones are available to this account.") }</p></div>
 		}
@@ -649,7 +649,7 @@ templ ZoneListView(view ZonesPageView) {
 				}
 			}
 			<div class="isotope-zone-empty zone-filter-empty" hidden data-zone-filter-empty><p>No zones match your search</p></div>
-		</section>
+		}
 	</div>
 }
 
@@ -685,7 +685,7 @@ templ ZoneDetailView(zone ZoneView) {
 			@SearchField("Filter zone records", "Filter records...", "", "zone-search", templ.Attributes{"data-record-search": true})
 			<label class="zone-record-type-filter"><span class="sr-only">Record type</span><select data-record-type-filter data-styled-select><option value="all">All Types</option>@RecordTypeOptions(true)</select></label>
 		</div>
-		<section class="card isotope-record-list" aria-label={ "Records for " + zone.Name }>
+		@components.Card(components.CardProps{Class: "isotope-record-list", Attrs: templ.Attributes{"aria-label": "Records for " + zone.Name}}) {
 			if len(zone.Records) == 0 {
 				<div class="isotope-zone-empty" data-record-empty><p>No records found</p></div>
 			}
@@ -713,7 +713,7 @@ templ ZoneDetailView(zone ZoneView) {
 				}
 			}
 			<div class="isotope-zone-empty zone-filter-empty" hidden data-record-filter-empty><p>No records match your filter</p></div>
-		</section>
+		}
 		if zoneCanEditRecords(zone) && zone.CanRecords {
 			@AddZoneRecordDialog(zone)
 		}

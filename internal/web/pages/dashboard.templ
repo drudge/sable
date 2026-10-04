@@ -825,7 +825,7 @@ templ DNSClientContent(view DNSClientPageView) {
 		</header>
 		<div class="page-columns">
 			<div class="page-main">
-				<section class="card query-composer">
+				@components.Card(components.CardProps{Class: "query-composer"}) {
 					<form id="dns-query-form" hx-post="/ui/query" hx-target="#dns-query-result" hx-swap="innerHTML">
 						<div class="query-primary-row">
 							@SearchField("Domain name", "Domain name", view.QueryName, "", templ.Attributes{"id": "query-name", "name": "name", "data-query-name": true, "required": true})
@@ -891,13 +891,13 @@ templ DNSClientContent(view DNSClientPageView) {
 							<div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-custom-cancel": true}})@components.Button(components.ButtonProps{Label: "Use Server", Disabled: true, Attrs: templ.Attributes{"data-custom-apply": true}})</div>
 						</dialog>
 					</form>
-				</section>
+				}
 				<div id="dns-query-result">
 					@DNSQueryEmpty()
 				</div>
 			</div>
 			<aside class="page-aside">
-				<section class="card guidance-card">
+				@components.Card(components.CardProps{Class: "guidance-card"}) {
 					<div class="guidance-header"><h2>Quick Queries</h2><p data-quick-query-description>Enter a domain, then select a query type</p></div>
 					<div class="quick-query-list">
 						@QuickQuery("Mail Servers", "MX", "mail")
@@ -907,15 +907,15 @@ templ DNSClientContent(view DNSClientPageView) {
 						@QuickQuery("IPv6 Address", "AAAA", "hash")
 						@QuickQuery("DNSSEC Keys", "DNSKEY", "shield-check")
 					</div>
-				</section>
-				<section class="card guidance-card">
+				}
+				@components.Card(components.CardProps{Class: "guidance-card"}) {
 					<div class="guidance-header"><h2>Understanding Results</h2></div>
 					<div class="guidance-list">
 						@GuidanceItem("green", "Answer Section", "Direct answers to your query — the records you asked for")
 						@GuidanceItem("blue", "Authority Section", "Name servers authoritative for the domain")
 						@GuidanceItem("purple", "Additional Section", "Extra records such as name-server addresses")
 					</div>
-				</section>
+				}
 				<div class="tip-box"><strong>Tip:</strong> Use "Recursive Resolver" to see the full resolution path, or query external servers like Cloudflare (1.1.1.1) to compare results.</div>
 			</aside>
 		</div>
@@ -953,11 +953,11 @@ templ GuidanceItem(color string, title string, description string) {
 }
 
 templ DNSQueryEmpty() {
-	<section class="card dns-query-empty">
+	@components.Card(components.CardProps{Class: "dns-query-empty"}) {
 		@Icon("search")
 		<h2>Ready to Query</h2>
 		<p>Enter a domain name above and click Resolve to look up DNS records. Use Quick Queries for common lookups.</p>
-	</section>
+	}
 }
 
 // AuthPage renders the sign-in and first-run setup screens. A non-empty
@@ -1273,7 +1273,7 @@ func nonRangedStatDetail(detail string, scope string) string {
 }
 
 templ QueryChart(view QueryChartView) {
-	<section class="card chart-card" id="query-statistics" data-live-refresh data-range-root hx-get={ templ.SafeURL("/ui/stats/chart?range=" + view.ActiveRange) } hx-trigger={ ifThen(view.ActiveRange == "custom", "none", "every 10s") } hx-swap="outerHTML">
+	@components.Card(components.CardProps{ID: "query-statistics", Class: "chart-card", Attrs: templ.Attributes{"data-live-refresh": true, "data-range-root": true, "hx-get": "/ui/stats/chart?range=" + view.ActiveRange, "hx-trigger": ifThen(view.ActiveRange == "custom", "none", "every 10s"), "hx-swap": "outerHTML"}}) {
 		<div class="card-header chart-header" hx-indicator:inherited="#dashboard-update-indicator">
 			<h2>Query Statistics</h2>
 			if view.ActiveRange == "custom" {
@@ -1335,7 +1335,7 @@ templ QueryChart(view QueryChartView) {
 			<div class="chart-axis"><span>{ view.StartLabel }</span><span>{ view.EndLabel }</span></div>
 		</div>
 		<div class="chart-legend"><span class="blue">total</span><span class="green">noError</span><span class="pink">serverFailure</span><span class="gray">nxDomain</span><span class="teal">refused</span><span class="lime">recursive</span><span class="yellow">cached</span><span class="orange">blocked</span></div>
-	</section>
+	}
 }
 
 templ RangeCalendar() {
@@ -1528,7 +1528,7 @@ templ NavItem(label string, href string, icon string, active bool, disabled bool
 
 templ QueryResult(view QueryView) {
 	if view.Success {
-		<section class="card dns-result-card">
+		@components.Card(components.CardProps{Class: "dns-result-card"}) {
 			<div class="dns-result-header">
 				<div>
 					<div class="result-status">
@@ -1581,9 +1581,11 @@ templ QueryResult(view QueryView) {
 				}
 				<details class="raw-response"><summary>Raw DNS response</summary><pre id="raw-dns-response">{ view.Response }</pre></details>
 			</div>
-		</section>
+		}
 	} else {
-		<section class="card query-failure"><div class="query-error"><strong>Query failed</strong><span>{ view.Error }</span></div></section>
+		@components.Card(components.CardProps{Class: "query-failure"}) {
+			<div class="query-error"><strong>Query failed</strong><span>{ view.Error }</span></div>
+		}
 	}
 }
 

@@ -75,7 +75,7 @@ templ InsightsOffPage(console DashboardView) {
 templ insightsOffDocument(console DashboardView) {
 	<div class="page-stack insights-off-page">
 		<header class="page-heading"><h1>Insights</h1><p>Understand what's happening on your network</p></header>
-		<section class="card">
+		@components.Card(components.CardProps{}) {
 			<div class="cluster-empty-state">
 				<span class="cluster-empty-icon">@Icon("lightbulb")</span>
 				<h3>Insights Is Off</h3>
@@ -86,6 +86,6 @@ templ insightsOffDocument(console DashboardView) {
 					</div>
 				}
 			</div>
-		</section>
+		}
 	</div>
 }

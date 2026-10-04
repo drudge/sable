@@ -104,8 +104,9 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `CopyButton`, `CopyLinkButton`, `ScrollFadeHint`, `Icon`
   - `components.Dialog` with `components.DialogFooter`, and `components.ConfirmDialog` for a dialog that asks before one action
   - `components.Button` for a labeled button, or a link styled as one
+  - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
 
-  Use the shared classes too: `.card`, `.status-badge`, `.count-badge`, and `.field-help`. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
+  Use the shared classes too: `.status-badge`, `.count-badge`, and `.field-help`. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
 
   If a pattern shows up twice, make it a component and use it in both places. Add a parameter to a shared component instead of copying its markup.
 - **Give every control all its states:** hover, visible keyboard focus, pressed, disabled, and loading.

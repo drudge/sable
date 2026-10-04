@@ -31,7 +31,10 @@ templ Card(p CardProps) {
 // CardHeaderProps describes the title row at the top of a card.
 type CardHeaderProps struct {
 	// Icon names an Icon drawn before the title.
-	Icon  string
+	Icon string
+	// Glyph names an Icon drawn large in a tinted tile beside the title and
+	// description, as on the Integrations cards.
+	Glyph string
 	Title string
 	// TitleID is the heading's id, for a card labelled by its title.
 	TitleID string
@@ -53,18 +56,30 @@ type CardHeaderProps struct {
 // card's header actions, which sit at the end of the row.
 templ CardHeader(p CardHeaderProps) {
 	<header if p.Class != "" { class={ p.Class } } { p.Attrs... }>
-		<div if p.HeadingClass != "" { class={ p.HeadingClass } }>
-			<h2 if p.TitleID != "" { id={ p.TitleID } } if p.TitleClass != "" { class={ p.TitleClass } }>
-				if p.Icon != "" {
-					@Icon(p.Icon)<span>{ p.Title }</span>
-				} else {
-					{ p.Title }
-				}
-			</h2>
-			if p.Description != "" {
-				<p if p.DescriptionClass != "" { class={ p.DescriptionClass } }>{ p.Description }</p>
-			}
-		</div>
+		if p.Glyph != "" {
+			<div class="card-identity">
+				<span class="card-glyph">@Icon(p.Glyph)</span>
+				@cardHeading(p)
+			</div>
+		} else {
+			@cardHeading(p)
+		}
 		{ children... }
 	</header>
+}
+
+// cardHeading draws a card header's title and description.
+templ cardHeading(p CardHeaderProps) {
+	<div if p.HeadingClass != "" { class={ p.HeadingClass } }>
+		<h2 if p.TitleID != "" { id={ p.TitleID } } if p.TitleClass != "" { class={ p.TitleClass } }>
+			if p.Icon != "" {
+				@Icon(p.Icon)<span>{ p.Title }</span>
+			} else {
+				{ p.Title }
+			}
+		</h2>
+		if p.Description != "" {
+			<p if p.DescriptionClass != "" { class={ p.DescriptionClass } }>{ p.Description }</p>
+		}
+	</div>
 }
