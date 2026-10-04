@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type ClusterUpdateView struct {
@@ -139,11 +140,11 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 							@updateReleaseNotesButton(view.Release, clusterUpdateNotesDialogID)
 							if view.Rollout.Active() {
 								if view.CanApply {
-									<button class="button outline compact" id="cluster-update-stop" type="button" hx-post="/ui/updates/cluster/stop" hx-target="#cluster-content" hx-swap="outerHTML" hx-confirm="Stop this rollout? An installation or restart already in progress may finish." data-confirm-title="Stop rolling update?" data-confirm-action="Stop rollout">Stop rollout</button>
+									@components.Button(components.ButtonProps{Label: "Stop rollout", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"id": "cluster-update-stop", "hx-post": "/ui/updates/cluster/stop", "hx-target": "#cluster-content", "hx-swap": "outerHTML", "hx-confirm": "Stop this rollout? An installation or restart already in progress may finish.", "data-confirm-title": "Stop rolling update?", "data-confirm-action": "Stop rollout"}})
 								}
 							} else if view.Supported && view.CanApply && view.Version != "" {
 								@clusterUpdateForm(view.Version, "cluster") {
-									<button id="cluster-update-start" class="button compact" type="submit">@Icon("download")<span>Update all</span></button>
+									@components.Button(components.ButtonProps{Label: "Update all", Icon: "download", Compact: true, Type: "submit", Attrs: templ.Attributes{"id": "cluster-update-start"}})
 								}
 							}
 							if view.CheckVisible() {

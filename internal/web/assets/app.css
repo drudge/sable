@@ -1864,7 +1864,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .signin-method-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: 0.65rem 0.85rem; }
 .signin-method-row > div { display: grid; gap: 0.1rem; min-width: 0; }
 .signin-method-row strong { font-size: 0.8125rem; }
-.signin-method-row span { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.45; }
+.signin-method-row > div span { color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.45; }
 /* The subject is an opaque identifier and is usually a UUID. It is clipped to
    one line rather than allowed to set the row's height. */
 .signin-method-subject { overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }

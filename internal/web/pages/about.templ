@@ -135,7 +135,7 @@ templ AboutContent(view AboutPageView) {
 				</div>
 				if view.Console.CanMetrics {
 					<div class="about-metrics-preview">
-						<button class="button outline compact" type="button" hx-get="/metrics" hx-target="#metrics-preview" hx-swap="innerHTML" hx-disable="this">Preview metrics</button>
+						@components.Button(components.ButtonProps{Label: "Preview metrics", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": "/metrics", "hx-target": "#metrics-preview", "hx-swap": "innerHTML", "hx-disable": "this"}})
 						<pre id="metrics-preview" hidden></pre>
 					</div>
 				}
@@ -177,7 +177,7 @@ templ thirdPartyLicensesDialog(all []notices.Notice) {
 			@ScrollFadeHint()
 		</div>
 		<div class="dialog-footer">
-			<button class="button" type="button" data-dialog-close>Done</button>
+			@components.Button(components.ButtonProps{Label: "Done", Attrs: templ.Attributes{"data-dialog-close": true}})
 		</div>
 	}
 }

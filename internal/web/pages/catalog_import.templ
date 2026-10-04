@@ -73,26 +73,17 @@ templ CatalogImportContent(view CatalogImportView) {
 				}
 			</div>
 			<div class="dialog-footer wizard-footer">
-				<button type="button" class="button outline" data-dialog-close="catalog-import-dialog">{ ifThen(catalogImportStep(view) == 3, "Close", "Cancel") }</button>
+				@components.Button(components.ButtonProps{Label: ifThen(catalogImportStep(view) == 3, "Close", "Cancel"), Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": "catalog-import-dialog"}})
 				<div class="wizard-footer-advance">
 					switch catalogImportStep(view) {
 						case 1:
-							<button type="submit" name="step" value="discover" class="button">
-								@Icon("arrow-right")
-								<span>Discover zones</span>
-							</button>
+							@components.Button(components.ButtonProps{Label: "Discover zones", Icon: "arrow-right", Type: "submit", Attrs: templ.Attributes{"name": "step", "value": "discover"}})
 						case 2:
-							<button type="submit" name="step" value="connect" class="button outline" formnovalidate>
-								@Icon("arrow-left")
-								<span>Back</span>
-							</button>
-							<button type="submit" name="step" value="stage" class="button" disabled?={ !catalogImportHasAvailable(view) } data-replica-primary-action>
-								@Icon("download")
-								<span>Import selected zones</span>
-							</button>
+							@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "step", "value": "connect", "formnovalidate": true}})
+							@components.Button(components.ButtonProps{Label: "Import selected zones", Icon: "download", Type: "submit", Disabled: !catalogImportHasAvailable(view), Attrs: templ.Attributes{"name": "step", "value": "stage", "data-replica-primary-action": true}})
 						case 3:
-							<button type="submit" name="step" value="discover" class="button outline">Select more zones</button>
-							<button type="button" class="button" data-dialog-close="catalog-import-dialog">Done</button>
+							@components.Button(components.ButtonProps{Label: "Select more zones", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "step", "value": "discover"}})
+							@components.Button(components.ButtonProps{Label: "Done", Attrs: templ.Attributes{"data-dialog-close": "catalog-import-dialog"}})
 					}
 				</div>
 			</div>
@@ -163,7 +154,7 @@ templ CatalogImportSelection(view CatalogImportView) {
 			<div><strong>{ view.Catalog }</strong><small>Select up to 25 zones. All transfers use { view.Source }.</small></div>
 		</div>
 		if catalogImportHasAvailable(view) {
-			<button type="button" class="button outline" data-catalog-select>Select first 25 available</button>
+			@components.Button(components.ButtonProps{Label: "Select first 25 available", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-catalog-select": true}})
 		}
 		<div class="zone-import-options catalog-import-members">
 			for _, member := range view.Members {

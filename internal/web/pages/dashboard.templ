@@ -835,10 +835,7 @@ templ DNSClientContent(view DNSClientPageView) {
 					<option selected?={ recordType == view.RecordType || (view.RecordType == "" && recordType == "A") }>{ recordType }</option>
 				}
 			</select>
-							<button class="button resolve-button" type="submit">
-								@Icon("search")
-								<span>Resolve</span>
-							</button>
+							@components.Button(components.ButtonProps{Label: "Resolve", Icon: "search", Type: "submit", Class: "resolve-button"})
 						</div>
 						<div class="query-options-row">
 							<input type="hidden" name="local_server" value={ view.Console.QueryServer }/>
@@ -891,7 +888,7 @@ templ DNSClientContent(view DNSClientPageView) {
 								<label><span>IP Address <small>(optional)</small></span><input type="text" placeholder="10.0.7.22" autocomplete="off" data-custom-ip-draft/></label>
 								<div class="custom-server-preview" data-custom-preview hidden><span>Server address</span><code data-custom-preview-value></code></div>
 							</div>
-							<div class="dialog-footer"><button class="button outline" type="button" data-custom-cancel>Cancel</button><button class="button" type="button" data-custom-apply disabled>Use Server</button></div>
+							<div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-custom-cancel": true}})@components.Button(components.ButtonProps{Label: "Use Server", Disabled: true, Attrs: templ.Attributes{"data-custom-apply": true}})</div>
 						</dialog>
 					</form>
 				</section>
@@ -1062,12 +1059,12 @@ templ mitLicenseDialog(thirdParty bool) {
 		</div>
 		<div class="dialog-footer">
 			if thirdParty {
-				<button class="button outline third-party-licenses-button" type="button" data-dialog-switch="third-party-licenses-dialog">Third-Party Licenses</button>
+				@components.Button(components.ButtonProps{Label: "Third-Party Licenses", Variant: components.ButtonOutline, Class: "third-party-licenses-button", Attrs: templ.Attributes{"data-dialog-switch": "third-party-licenses-dialog"}})
 			}
 			<a class="button outline" href="https://github.com/drudge/sable/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
 				<span>View on GitHub</span>@Icon("external-link")
 			</a>
-			<button class="button" type="button" data-dialog-close>Done</button>
+			@components.Button(components.ButtonProps{Label: "Done", Attrs: templ.Attributes{"data-dialog-close": true}})
 		</div>
 	}
 }
@@ -1301,7 +1298,7 @@ templ QueryChart(view QueryChartView) {
 					<label><span>To</span><input class="time-field" id="custom-range-end-time" type="time" step="60" data-range-end-time data-styled-time required/></label>
 				</div>
 				<p class="range-error" role="alert" data-range-error hidden></p>
-				<button class="button range-apply" type="submit" data-range-apply>Apply</button>
+				@components.Button(components.ButtonProps{Label: "Apply", Type: "submit", Class: "range-apply", Attrs: templ.Attributes{"data-range-apply": true}})
 			</form>
 		</div>
 		<div class="chart-wrap">

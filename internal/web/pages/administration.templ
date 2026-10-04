@@ -88,7 +88,7 @@ templ ControlTab(value, label string, count int, active string, disabled bool, i
 
 templ UsersPanel(view AdministrationPageView) {
 	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Users</h2><span class="desktop-only">Total Users: { fmt.Sprint(len(view.Users)) }</span></div><button class="button compact" type="button" data-dialog-open="create-user-dialog">@Icon("plus")<span>Add User</span></button></header>
+		<header class="isotope-data-header"><div><h2>Users</h2><span class="desktop-only">Total Users: { fmt.Sprint(len(view.Users)) }</span></div>@components.Button(components.ButtonProps{Label: "Add User", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-user-dialog"}})</header>
 		if len(view.Users) == 0 {
 			@AdminEmpty("No users found")
 		} else {
@@ -128,7 +128,7 @@ templ UsersPanel(view AdministrationPageView) {
 
 templ GroupsPanel(view AdministrationPageView) {
 	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Groups</h2><span class="desktop-only">Total Groups: { fmt.Sprint(len(view.Roles)) }</span></div><button class="button compact" type="button" data-dialog-open="create-group-dialog">@Icon("plus")<span>Add Group</span></button></header>
+		<header class="isotope-data-header"><div><h2>Groups</h2><span class="desktop-only">Total Groups: { fmt.Sprint(len(view.Roles)) }</span></div>@components.Button(components.ButtonProps{Label: "Add Group", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-group-dialog"}})</header>
 		if len(view.Roles) == 0 {
 			@AdminEmpty("No groups found")
 		} else {
@@ -212,7 +212,7 @@ templ SessionsPanel(view AdministrationPageView) {
 
 templ TokensPanel(view AdministrationPageView) {
 	<section class="card isotope-data-card" id="api-tokens-panel" hx-get="/ui/administration/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
-		<header class="isotope-data-header"><div><h2>API Tokens</h2><span class="desktop-only">Total Tokens: { fmt.Sprint(len(view.Tokens)) }</span></div><button class="button compact" type="button" data-dialog-open="create-token-dialog">@Icon("plus")<span>Create Token</span></button></header>
+		<header class="isotope-data-header"><div><h2>API Tokens</h2><span class="desktop-only">Total Tokens: { fmt.Sprint(len(view.Tokens)) }</span></div>@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})</header>
 		if len(view.Tokens) == 0 {
 			@AdminEmpty("No active API tokens")
 		} else {
@@ -276,7 +276,7 @@ templ CreateTokenDialog(view AdministrationPageView) {
 		for _, role := range tokenRoles(view) {
 			<label data-token-group-row hidden?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }><input type="checkbox" name="groups" value={ role.Name } data-token-group-users={ tokenRoleUserIDs(view, role.Name) } disabled?={ !tokenRoleAssigned(view, view.CurrentUserID, role.Name) }/><span><strong>{ role.Name }</strong><small>{ apiGrantSummary(role) }</small></span></label>
 		}
-	</div></fieldset><p class="field-help">Only groups assigned to the owner are shown. Removing the owner from a group immediately removes that token access.</p></div><div class="api-token-result" id="api-token-result">The token secret will be shown once.</div></div><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-token-close>Cancel</button><button class="button" type="submit" data-token-submit disabled>Create Token</button></footer></form>
+	</div></fieldset><p class="field-help">Only groups assigned to the owner are shown. Removing the owner from a group immediately removes that token access.</p></div><div class="api-token-result" id="api-token-result">The token secret will be shown once.</div></div><footer class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true, "data-token-close": true}})@components.Button(components.ButtonProps{Label: "Create Token", Type: "submit", Disabled: true, Attrs: templ.Attributes{"data-token-submit": true}})</footer></form>
 	}
 }
 
@@ -286,7 +286,7 @@ templ CreateUserDialog(roles []auth.Role, readOnly bool) {
 		<form class="user-dialog-content" hx-post="/ui/administration/users" hx-target="#administration-content" hx-swap="outerHTML" data-create-user-form>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="info"><div class="field-grid two"><label class="field-control"><span>Display Name</span><input name="display_name" maxlength="128" autocomplete="name"/></label><label class="field-control"><span>Username</span><input name="username" minlength="3" maxlength="64" pattern="[a-z0-9._-]+" autocomplete="off" aria-describedby="create-user-username-help create-user-username-error" required data-user-username/><small id="create-user-username-help">3–64 lowercase letters, numbers, dots, underscores, or hyphens.</small><small class="field-error" id="create-user-username-error" data-username-error hidden></small></label></div><label class="field-control"><span>Email</span><input type="email" name="email" maxlength="254" placeholder="name@example.com" autocomplete="email"/></label><div class="field-grid two" data-web-access-passwords hidden><label class="field-control"><span>Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" aria-describedby="create-user-password-help create-user-password-error" disabled data-user-password/></label><label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" disabled data-user-password-confirm/></label><p class="field-help" id="create-user-password-help">A password of at least 12 characters is required because the selected groups grant Web UI access.</p><p class="field-error field-grid-message" id="create-user-password-error" data-password-error hidden></p></div></section>
 			<section class="dialog-tab-panel" role="tabpanel" data-dialog-panel="groups" hidden><div class="form-section-heading"><h3>Group Membership</h3><p>Choose at least one group. Groups determine Web UI and API permissions.</p></div><fieldset class="group-membership-fieldset" data-group-fieldset aria-describedby="create-user-group-status create-user-group-error"><legend class="sr-only">Member of groups</legend>@RoleChecks(roles, nil)</fieldset><div class="group-access-status" id="create-user-group-status" data-group-access-status aria-live="polite"><strong>Select at least one group</strong><span>Password requirements depend on the selected group permissions.</span></div><p class="field-error" id="create-user-group-error" data-group-error hidden>Select at least one group before adding the user.</p></section>
-			<footer class="dialog-footer user-dialog-footer"><div></div><div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" disabled?={ readOnly }>Add User</button></div></footer>
+			<footer class="dialog-footer user-dialog-footer"><div></div><div class="user-footer-actions">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Add User", Type: "submit", Disabled: readOnly})</div></footer>
 		</form>
 	}
 }
@@ -295,7 +295,7 @@ templ CreateGroupDialog(view AdministrationPageView) {
 	@components.Dialog(components.DialogProps{ID: "create-group-dialog", TitleID: "create-group-title", Title: "Add Group", Description: "Create a group with separate Web UI and API permissions", Class: "isotope-form-dialog group-edit-dialog"}) {
 		<form hx-post="/ui/administration/roles" hx-target="#administration-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Name</span><input name="name" minlength="2" maxlength="64" required/></label><label><span>Description</span><input name="description" maxlength="256"/></label>@GroupGrantFields(view, nil)</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Add Group</button>
+				@components.Button(components.ButtonProps{Label: "Add Group", Type: "submit", Disabled: view.Console.ControlPlaneReadOnly})
 			}
 		</form>
 	}
@@ -305,7 +305,7 @@ templ EditGroupDialog(view AdministrationPageView, role auth.Role) {
 	@components.Dialog(components.DialogProps{ID: adminGroupDialogID(role.ID), Title: "Edit Group", Description: role.Name + " permissions and zone access", Class: "isotope-form-dialog group-edit-dialog"}) {
 		<form hx-post="/ui/administration/roles/update" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="role_id" value={ fmt.Sprint(role.ID) }/><div class="isotope-dialog-body">@GroupGrantFields(view, &role)</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Save Group</button>
+				@components.Button(components.ButtonProps{Label: "Save Group", Type: "submit", Disabled: view.Console.ControlPlaneReadOnly})
 			}
 		</form>
 	}
@@ -356,7 +356,7 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 							<label class="field-control"><span>New Password</span><input type="password" name="password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
 							<label class="field-control"><span>Confirm Password</span><input type="password" name="confirm_password" minlength="12" maxlength="1024" autocomplete="new-password" required/></label>
 						</div>
-						<div class="user-panel-action"><button class="button outline" type="submit">Reset Password</button></div>
+						<div class="user-panel-action">@components.Button(components.ButtonProps{Label: "Reset Password", Variant: components.ButtonOutline, Type: "submit"})</div>
 					</form>
 				} else {
 					<div class="group-access-status api-only"><strong>API-only identity</strong><span>This user has no Web UI grants, so no password is required.</span></div>
@@ -374,10 +374,10 @@ templ EditUserDialog(view AdministrationPageView, user auth.ManagedUser) {
 		</div>
 		<footer class="dialog-footer user-dialog-footer">
 			<div class="user-danger-actions">
-				<form hx-post="/ui/administration/users/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete " + user.Username + " and revoke all credentials?" }><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/><button class="button destructive" type="submit" disabled?={ user.ID == view.CurrentUserID }>@Icon("trash")<span>Delete User</span></button></form>
-				<form hx-post="/ui/administration/users/status" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/><input type="hidden" name="disabled" value={ ifThen(user.Disabled, "false", "true") }/><button class="button outline" type="submit" disabled?={ user.ID == view.CurrentUserID && !user.Disabled }>{ ifThen(user.Disabled, "Enable User", "Disable User") }</button></form>
+				<form hx-post="/ui/administration/users/delete" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Delete " + user.Username + " and revoke all credentials?" }><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>@components.Button(components.ButtonProps{Label: "Delete User", Icon: "trash", Destructive: true, Type: "submit", Disabled: user.ID == view.CurrentUserID})</form>
+				<form hx-post="/ui/administration/users/status" hx-target="#administration-content" hx-swap="outerHTML"><input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/><input type="hidden" name="disabled" value={ ifThen(user.Disabled, "false", "true") }/>@components.Button(components.ButtonProps{Label: ifThen(user.Disabled, "Enable User", "Disable User"), Variant: components.ButtonOutline, Type: "submit", Disabled: user.ID == view.CurrentUserID && !user.Disabled})</form>
 			</div>
-			<div class="user-footer-actions"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit" form={ adminUserProfileFormID(user.ID) } data-dialog-save="info" disabled?={ view.Console.ControlPlaneReadOnly }>Save User Info</button><button class="button" type="submit" form={ adminUserGroupsFormID(user.ID) } data-dialog-save="groups" disabled?={ view.Console.ControlPlaneReadOnly } hidden>Save Groups</button></div>
+			<div class="user-footer-actions">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Save User Info", Type: "submit", Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"form": adminUserProfileFormID(user.ID), "data-dialog-save": "info"}})@components.Button(components.ButtonProps{Label: "Save Groups", Type: "submit", Disabled: view.Console.ControlPlaneReadOnly, Attrs: templ.Attributes{"form": adminUserGroupsFormID(user.ID), "data-dialog-save": "groups", "hidden": true}})</div>
 		</footer>
 	}
 }
@@ -491,9 +491,7 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 				<form hx-post="/ui/administration/users/sign-in-method" hx-target="#administration-content" hx-swap="outerHTML">
 					<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
 					<input type="hidden" name="password_login" value={ ifThen(user.PasswordLogin, "false", "true") }/>
-					<button class="button outline" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>
-						{ ifThen(user.PasswordLogin, "Turn off", "Turn on") }
-					</button>
+					@components.Button(components.ButtonProps{Label: ifThen(user.PasswordLogin, "Turn off", "Turn on"), Variant: components.ButtonOutline, Type: "submit", Disabled: view.Console.ControlPlaneReadOnly})
 				</form>
 			</div>
 			for _, identity := range user.Identities {
@@ -506,7 +504,7 @@ templ UserSignInPanel(view AdministrationPageView, user auth.ManagedUser) {
 					<form hx-post="/ui/administration/users/unlink" hx-target="#administration-content" hx-swap="outerHTML" hx-confirm={ "Unlink " + user.Username + " from this identity provider?" }>
 						<input type="hidden" name="user_id" value={ fmt.Sprint(user.ID) }/>
 						<input type="hidden" name="provider" value={ identity.Provider }/>
-						<button class="button outline destructive" type="submit" disabled?={ view.Console.ControlPlaneReadOnly }>Unlink</button>
+						@components.Button(components.ButtonProps{Label: "Unlink", Variant: components.ButtonOutline, Destructive: true, Type: "submit", Disabled: view.Console.ControlPlaneReadOnly})
 					</form>
 				</div>
 			}

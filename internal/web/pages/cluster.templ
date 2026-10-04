@@ -101,15 +101,15 @@ templ ClusterContent(view ClusterPageView) {
 								<div class="cluster-restart-notice">@Icon("refresh")<span>Restart Sable to activate the saved node identity.</span></div>
 							}
 							<div class="cluster-empty-actions">
-								<button class="button" type="button" data-dialog-open="initialize-cluster-dialog">@Icon("plus")<span>Initialize Primary</span></button>
-								<button class="button outline" type="button" data-dialog-open="join-cluster-dialog">@Icon("log-in")<span>Join Existing Cluster</span></button>
+								@components.Button(components.ButtonProps{Label: "Initialize Primary", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "initialize-cluster-dialog"}})
+								@components.Button(components.ButtonProps{Label: "Join Existing Cluster", Icon: "log-in", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-open": "join-cluster-dialog"}})
 							</div>
 						</div>
 					</section>
 				} else {
 					@ClusterLiveStatus(view)
 					if view.LocalRole == "Replica" {
-						<section class="card cluster-danger-card"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post="/ui/cluster/leave" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently." data-confirm-title="Leave cluster?" data-confirm-action="Leave Cluster"><button class="button destructive" type="submit">@Icon("log-out")<span>Leave Cluster</span></button></form></section>
+						<section class="card cluster-danger-card"><div><h2>Leave Cluster</h2><p>Stop synchronizing and return this replica to standalone operation. DNS data and its stable node identity are preserved.</p><small>Remove this member from the primary separately if it is still listed there.</small></div><form hx-post="/ui/cluster/leave" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Leave this cluster? This replica will stop synchronizing and continue serving its current DNS data independently." data-confirm-title="Leave cluster?" data-confirm-action="Leave Cluster">@components.Button(components.ButtonProps{Label: "Leave Cluster", Icon: "log-out", Destructive: true, Type: "submit"})</form></section>
 					} else if view.LocalRole == "Primary" {
 						<section class="card cluster-danger-card">
 							<div>
@@ -125,7 +125,7 @@ templ ClusterContent(view ClusterPageView) {
 									<p>Return this server to standalone operation. Its DNS data and stable node identity are preserved.</p>
 								}
 							</div>
-							<form hx-post="/ui/cluster/delete" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization." data-confirm-title="Delete cluster?" data-confirm-action="Delete Cluster"><button class="button destructive" type="submit">@Icon("trash")<span>Delete Cluster</span></button></form>
+							<form hx-post="/ui/cluster/delete" hx-target="#cluster-content" hx-swap="outerHTML" hx-disable="find button[type='submit']" hx-confirm="Delete this cluster? The primary will return to standalone operation immediately, and enrolled replicas will leave on their next synchronization." data-confirm-title="Delete cluster?" data-confirm-action="Delete Cluster">@components.Button(components.ButtonProps{Label: "Delete Cluster", Icon: "trash", Destructive: true, Type: "submit"})</form>
 						</section>
 					}
 				}
@@ -155,7 +155,7 @@ templ ClusterContent(view ClusterPageView) {
 						}
 					</header>
 					<dl><div><dt>Node ID</dt><dd><code>{ view.NodeID }</code></dd></div><div><dt>Role</dt><dd>{ view.LocalRole }</dd></div><div><dt>Endpoint</dt><dd><code>{ endpointLabel(view.AdvertiseURL) }</code></dd></div><div><dt>Replication</dt><dd>HTTPS + signed requests</dd></div></dl>
-					<button class="button outline" type="button" data-dialog-open="cluster-settings-dialog">@Icon("server-cog")<span>Configure Node</span></button>
+					@components.Button(components.ButtonProps{Label: "Configure Node", Icon: "server-cog", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-open": "cluster-settings-dialog"}})
 				</section>
 			</aside>
 		</div>
@@ -191,7 +191,7 @@ templ ClusterSettingsDialog(view ClusterPageView) {
 				<div class="cluster-dialog-note">@Icon("shield-check")<p><strong>Use the public certificate settings</strong><span>The advertised URL must use the Sable HTTPS endpoint with a certificate trusted by the other nodes.</span></p></div>
 			</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Save &amp; Restart Later</button>
+				@components.Button(components.ButtonProps{Label: "Save & Restart Later", Type: "submit"})
 			}
 		</form>
 	}
@@ -209,7 +209,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>
 				<div class="cluster-header-actions">
 					if view.LocalRole == "Primary" && view.NetworkReady {
-						<button class="button outline compact" type="button" data-dialog-open="enrollment-token-dialog">@Icon("plus")<span>Add Replica</span></button>
+						@components.Button(components.ButtonProps{Label: "Add Replica", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-dialog-open": "enrollment-token-dialog"}})
 					}
 					<div class="cluster-live-indicator"><i></i><span>Live</span></div>
 				</div>
@@ -278,7 +278,7 @@ templ InitializeClusterDialog(view ClusterPageView) {
 		} else if !view.NetworkReady || view.ConfigureNode {
 			@ClusterNodeOnboardingForm(view, "primary")
 		} else {
-			<form hx-post="/ui/cluster/initialize" hx-target="#cluster-content" hx-swap="outerHTML"><input type="hidden" name="workflow" value="primary"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "primary")<div class="cluster-wizard-heading"><span>@Icon("cluster")</span><div><strong>Create the cluster</strong><small>Set the identity and DNS addresses for this primary.</small></div></div><label><span>Cluster Domain</span><input name="domain" placeholder="cluster.example.com" autocomplete="off" required/><small>A stable DNS name that identifies this cluster.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.10\n[2001:db8::10]:53" } required>{ view.DNSServiceAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=primary&amp;configure=https" hx-get="/cluster?onboarding=primary&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button" type="submit">Initialize Primary</button></div></form>
+			<form hx-post="/ui/cluster/initialize" hx-target="#cluster-content" hx-swap="outerHTML"><input type="hidden" name="workflow" value="primary"/><div class="isotope-dialog-body">@ClusterWizardProgress(3, "primary")<div class="cluster-wizard-heading"><span>@Icon("cluster")</span><div><strong>Create the cluster</strong><small>Set the identity and DNS addresses for this primary.</small></div></div><label><span>Cluster Domain</span><input name="domain" placeholder="cluster.example.com" autocomplete="off" required/><small>A stable DNS name that identifies this cluster.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.10\n[2001:db8::10]:53" } required>{ view.DNSServiceAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Href: "/cluster?onboarding=primary&configure=https", Attrs: templ.Attributes{"hx-get": "/cluster?onboarding=primary&configure=https", "hx-select": "#cluster-content", "hx-target": "#cluster-content", "hx-swap": "outerHTML", "hx-push-url": "true"}})@components.Button(components.ButtonProps{Label: "Initialize Primary", Type: "submit"})</div></form>
 		}
 	}
 }
@@ -294,14 +294,14 @@ templ JoinClusterDialog(view ClusterPageView) {
 				if view.Error != "" {
 					<div class="cluster-join-error" role="alert">@Icon("alert-triangle")<div><strong>Could not join the cluster</strong><span>{ view.Error }</span></div></div>
 				}
-				<label><span>Primary URL</span><input name="primary_url" type="url" value={ view.JoinPrimaryURL } placeholder="https://dns-1.example.com:5380" autocomplete="off" required/></label><label><span>Enrollment Token</span><input class="mono-input" name="token" type="password" value={ view.JoinToken } autocomplete="off" required/><small>Short-lived, single-use token created on the primary.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.11\n127.0.0.1:8054" } required>{ view.JoinAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer"><a class="button outline" href="/cluster?onboarding=join&amp;configure=https" hx-get="/cluster?onboarding=join&amp;configure=https" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" hx-push-url="true">Back</a><button class="button cluster-join-submit" type="submit"><span class="cluster-join-submit-idle">@Icon("log-in")<span>Join as Replica</span></span><span class="cluster-join-submit-pending" aria-live="polite">@Icon("refresh")<span>Joining &amp; syncing…</span></span></button></div></form>
+				<label><span>Primary URL</span><input name="primary_url" type="url" value={ view.JoinPrimaryURL } placeholder="https://dns-1.example.com:5380" autocomplete="off" required/></label><label><span>Enrollment Token</span><input class="mono-input" name="token" type="password" value={ view.JoinToken } autocomplete="off" required/><small>Short-lived, single-use token created on the primary.</small></label><label><span>This Node's DNS Service Addresses</span><textarea name="addresses" rows="3" placeholder={ "192.0.2.11\n127.0.0.1:8054" } required>{ view.JoinAddresses }</textarea><small>Enter one IPv4 or IPv6 address per line. Add a port for a nonstandard DNS listener.</small></label></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Href: "/cluster?onboarding=join&configure=https", Attrs: templ.Attributes{"hx-get": "/cluster?onboarding=join&configure=https", "hx-select": "#cluster-content", "hx-target": "#cluster-content", "hx-swap": "outerHTML", "hx-push-url": "true"}})<button class="button cluster-join-submit" type="submit"><span class="cluster-join-submit-idle">@Icon("log-in")<span>Join as Replica</span></span><span class="cluster-join-submit-pending" aria-live="polite">@Icon("refresh")<span>Joining &amp; syncing…</span></span></button></div></form>
 		}
 	}
 }
 
 templ ClusterRestartStep(view ClusterPageView, workflow string) {
 	<div data-sable-restart data-restart-url="/ui/cluster/restart" data-health-url="/api/v1/health" data-continue-url={ fmt.Sprintf("/cluster?onboarding=%s&resume=ready", workflow) } data-csrf-token={ view.Console.CSRFToken }>
-		<div class="isotope-dialog-body">@ClusterWizardProgress(2, workflow)<div class="cluster-restart-step"><span>@Icon("refresh")</span><h3>Restart Sable to continue</h3><p data-restart-status aria-live="polite">The node and HTTPS configuration are saved. Sable can restart cleanly and continue this wizard automatically.</p></div></div><div class="dialog-footer"><a class="button outline" href="/cluster" data-restart-exit>Exit Setup</a><button class="button" type="button" data-sable-restart-button>@Icon("refresh")<span>Restart &amp; Continue</span></button></div>
+		<div class="isotope-dialog-body">@ClusterWizardProgress(2, workflow)<div class="cluster-restart-step"><span>@Icon("refresh")</span><h3>Restart Sable to continue</h3><p data-restart-status aria-live="polite">The node and HTTPS configuration are saved. Sable can restart cleanly and continue this wizard automatically.</p></div></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Exit Setup", Variant: components.ButtonOutline, Href: "/cluster", Attrs: templ.Attributes{"data-restart-exit": true}})@components.Button(components.ButtonProps{Label: "Restart & Continue", Icon: "refresh", Attrs: templ.Attributes{"data-sable-restart-button": true}})</div>
 	</div>
 }
 
@@ -367,7 +367,7 @@ templ ClusterNodeOnboardingForm(view ClusterPageView, workflow string) {
 				</details>
 			</div>
 			<div class="cluster-certificate-panel" data-cluster-certificate-panel="import" hidden?={ view.CertificateSource != "import" }><input type="hidden" name="manual_import_storage_dir" value="data/tls/manual"/><label><span>HTTPS Listen Address</span><input name="import_https_listen" value={ view.HTTPSListen } placeholder="0.0.0.0:5443"/></label><label><span>Certificate Chain (PEM)</span><textarea name="manual_certificate_pem" rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label><label><span>Private Key (PEM)</span><textarea name="manual_private_key_pem" rows="5" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label></div>
-		</div></section></div><div class="dialog-footer"><button class="button outline" type="button" data-dialog-close data-cluster-wizard-cancel>Cancel</button><button class="button outline" type="button" data-cluster-wizard-back hidden>Back</button><button class="button" type="button" data-cluster-wizard-next>Continue</button><button class="button" type="submit" data-cluster-wizard-submit hidden>Save &amp; Continue</button></div></form>
+		</div></section></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true, "data-cluster-wizard-cancel": true}})@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-cluster-wizard-back": true, "hidden": true}})@components.Button(components.ButtonProps{Label: "Continue", Attrs: templ.Attributes{"data-cluster-wizard-next": true}})@components.Button(components.ButtonProps{Label: "Save & Continue", Type: "submit", Attrs: templ.Attributes{"data-cluster-wizard-submit": true, "hidden": true}})</div></form>
 }
 
 templ ClusterACMECredentialFields(view ClusterPageView) {
@@ -382,9 +382,9 @@ templ EnrollmentTokenDialog(view ClusterPageView) {
 			<button class="dialog-close" type="button" hx-get="/cluster" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" data-enrollment-token-dismiss aria-label="Close and clear enrollment token">@Icon("x")</button>
 		}
 		if view.EnrollmentToken == "" {
-			<form hx-post="/ui/cluster/enrollment-tokens" hx-target="#cluster-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Token Lifetime</span><select name="ttl" data-styled-select><option value="5m">5 minutes</option><option value="15m" selected>15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Replica enrollment</strong><span>The joining server receives cluster membership and begins pulling the current generation from this primary.</span></p></div></div><div class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Create Token</button></div></form>
+			<form hx-post="/ui/cluster/enrollment-tokens" hx-target="#cluster-content" hx-swap="outerHTML"><div class="isotope-dialog-body"><label><span>Token Lifetime</span><select name="ttl" data-styled-select><option value="5m">5 minutes</option><option value="15m" selected>15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option></select><small>The token is stored only as a hash and can be used once.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Replica enrollment</strong><span>The joining server receives cluster membership and begins pulling the current generation from this primary.</span></p></div></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Create Token", Type: "submit"})</div></form>
 		} else {
-			<div class="isotope-dialog-body"><label><span>Enrollment Token</span><div class="cluster-token-value"><code id="cluster-enrollment-token">{ view.EnrollmentToken }</code><button class="button outline compact cluster-copy-token" type="button" data-copy-target="cluster-enrollment-token" aria-label="Copy enrollment token" title="Copy enrollment token">@CopyIcons()<span data-copy-label>Copy token</span></button></div><small>Expires { FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeDisplay, true) }. This secret will not be shown again.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class="dialog-footer"><button class="button" type="button" hx-get="/cluster" hx-select="#cluster-content" hx-target="#cluster-content" hx-swap="outerHTML" data-enrollment-token-dismiss>Done</button></div>
+			<div class="isotope-dialog-body"><label><span>Enrollment Token</span><div class="cluster-token-value"><code id="cluster-enrollment-token">{ view.EnrollmentToken }</code><button class="button outline compact cluster-copy-token" type="button" data-copy-target="cluster-enrollment-token" aria-label="Copy enrollment token" title="Copy enrollment token">@CopyIcons()<span data-copy-label>Copy token</span></button></div><small>Expires { FormatShortDateTime(view.EnrollmentExpiresAt, view.Console.TimeDisplay, true) }. This secret will not be shown again.</small></label><div class="cluster-dialog-note">@Icon("info")<p><strong>Next step</strong><span>On the new server choose Join Existing Cluster and paste this complete token with this primary's URL.</span></p></div></div><div class="dialog-footer">@components.Button(components.ButtonProps{Label: "Done", Attrs: templ.Attributes{"hx-get": "/cluster", "hx-select": "#cluster-content", "hx-target": "#cluster-content", "hx-swap": "outerHTML", "data-enrollment-token-dismiss": true}})</div>
 		}
 	}
 }

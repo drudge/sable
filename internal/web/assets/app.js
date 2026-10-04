@@ -3495,7 +3495,7 @@
 		dialog?.querySelector("[data-token-fields]")?.setAttribute("hidden", "");
 		dialog?.querySelector("[data-token-submit]")?.setAttribute("hidden", "");
 		const close = dialog?.querySelector("[data-token-close]");
-		if (close) close.textContent = "Close";
+		if (close) (close.querySelector("span") ?? close).textContent = "Close";
 		dialog?.setAttribute("data-token-created", "true");
 	  }
 	});
@@ -4098,7 +4098,7 @@
 	  dialog.querySelector("[data-token-fields]")?.removeAttribute("hidden");
 	  dialog.querySelector("[data-token-submit]")?.removeAttribute("hidden");
 	  const close = dialog.querySelector("[data-token-close]");
-	  if (close) close.textContent = "Cancel";
+	  if (close) (close.querySelector("span") ?? close).textContent = "Cancel";
 	  const result = dialog.querySelector("#api-token-result");
 	  if (result) result.textContent = "The token secret will be shown once.";
 	  delete dialog.dataset.tokenCreated;
