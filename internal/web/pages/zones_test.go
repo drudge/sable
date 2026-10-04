@@ -175,7 +175,7 @@ func TestPrimaryConversionDialogReviewsSnapshotAndBlocksUnsupportedZones(t *test
 	}
 	zone.ConversionError = "Signed zones need a DNSSEC transition"
 	dialog = renderComponent(t, ConvertPrimaryDialog(zone, "convert-dialog"))
-	if !strings.Contains(dialog, zone.ConversionError) || strings.Contains(dialog, `name="freeze_confirmed"`) || strings.Contains(dialog, `type="submit"`) || !strings.Contains(dialog, ">Close</button>") || strings.Contains(dialog, ">Cancel</button>") {
+	if !strings.Contains(dialog, zone.ConversionError) || strings.Contains(dialog, `name="freeze_confirmed"`) || strings.Contains(dialog, `type="submit"`) || !strings.Contains(dialog, "<span>Close</span></button>") || strings.Contains(dialog, "<span>Cancel</span></button>") {
 		t.Fatal("unsupported conversion is actionable")
 	}
 }
