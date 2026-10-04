@@ -24,7 +24,7 @@ Console changes and dynamic updates validate the complete zone, persist a revisi
 
 ## Boundaries
 
-Only Primary zones can use Sable's managed DNSSEC signing and authenticated dynamic updates. Expiring records are not supported when the zone is signed. Replicated Primary-zone data still receives cluster-scoped writes on the cluster primary.
+Only Primary zones can use Sable's managed DNSSEC signing. Primary and Forwarder zones accept authenticated dynamic updates. Expiring records are not supported when the zone is signed. Replicated Primary-zone data still receives cluster-scoped writes on the cluster primary.
 
 Creating a zone does not configure registrar delegation, open a firewall, or create a DHCP service.
 

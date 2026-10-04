@@ -7,6 +7,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/querylog"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 const dynamicUpdateTimeout = 15 * time.Second
@@ -80,7 +81,7 @@ func (handler *Handler) serveDynamicUpdate(
 		updateRequest.Zone = zoneName
 		zone := runtime.zones[zoneName]
 		switch {
-		case zone == nil || zone.kind != "primary":
+		case zone == nil || !zonemodel.AcceptsDynamicUpdates(zone.kind):
 			result.Rcode = dns.RcodeNotAuth
 		case !zone.dynamic:
 			result.Rcode = dns.RcodeRefused

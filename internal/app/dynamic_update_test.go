@@ -227,6 +227,60 @@ func TestDynamicZoneUpdaterPersistsAuditsAndNotifies(t *testing.T) {
 	}
 }
 
+// A forwarder zone takes updates for its local overrides, but its FWD routing
+// records are not DNS data and no update may remove them.
+func TestDynamicZoneUpdaterChangesForwarderOverridesAndKeepsRoutes(t *testing.T) {
+	t.Parallel()
+	zone := zonemodel.Zone{
+		Name: "example.test", Type: "forwarder", DefaultTTL: 300,
+		TSIGKey: "update-key.", DynamicUpdates: true,
+		Records: []zonemodel.Record{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 2026080901 3600 600 1209600 300"},
+			{Name: "@", Type: "FWD", TTL: 300, Value: "udp 0 192.0.2.53:53"},
+			{Name: "lab", Type: "FWD", TTL: 300, Value: "udp 0 192.0.2.54:53"},
+		},
+	}
+	configuration := &dynamicUpdateTestConfiguration{zones: []zonemodel.Zone{zone}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	updater := newDynamicZoneUpdater(ctx, configuration, &dynamicUpdateTestDNS{notified: make(chan string, 1)},
+		&dynamicUpdateTestAuditor{events: make(chan auth.AuditEvent, 1)}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	insert := new(dns.Msg)
+	insert.SetUpdate("example.test.")
+	insert.Insert([]dns.RR{mustRR(t, "app.example.test. 60 IN A 192.0.2.20")})
+	result := updater.Update(context.Background(), dnsserver.ZoneUpdateRequest{
+		Zone: "example.test", Updates: overTheWire(t, insert).Ns, KeyName: "update-key.",
+	})
+	if result.Rcode != dns.RcodeSuccess || !result.Changed {
+		t.Fatalf("insert Update() = %+v", result)
+	}
+
+	remove := new(dns.Msg)
+	remove.SetUpdate("example.test.")
+	remove.RemoveName([]dns.RR{
+		mustRR(t, "example.test. 0 IN A 192.0.2.1"),
+		mustRR(t, "lab.example.test. 0 IN A 192.0.2.1"),
+	})
+	result = updater.Update(context.Background(), dnsserver.ZoneUpdateRequest{
+		Zone: "example.test", Updates: overTheWire(t, remove).Ns, KeyName: "update-key.",
+	})
+	if result.Rcode != dns.RcodeSuccess {
+		t.Fatalf("remove Update() = %+v", result)
+	}
+
+	updated := configuration.zones[0]
+	if !hasConfiguredRecord(updated, "app", "A", "192.0.2.20") {
+		t.Fatalf("override was not added: %+v", updated.Records)
+	}
+	if !hasConfiguredRecord(updated, "@", "FWD", "") || !hasConfiguredRecord(updated, "lab", "FWD", "") {
+		t.Fatalf("an update removed forwarding routes: %+v", updated.Records)
+	}
+	if serial := zoneSOASerial(t, updated); serial != 2026080902 {
+		t.Fatalf("SOA serial = %d, want 2026080902", serial)
+	}
+}
+
 func TestApplyDynamicZoneUpdateEnforcesCNAMEExclusivity(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
