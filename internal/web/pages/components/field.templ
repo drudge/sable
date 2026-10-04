@@ -1,12 +1,15 @@
 package components
 
+import "strings"
+
 // FieldProps describes a labelled form control with optional help text.
 type FieldProps struct {
 	// ID names the field. The label and help text take ids built from it, so
 	// it must be unique on the page.
 	ID    string
 	Label string
-	// Help is one short sentence under the control.
+	// Help is one short sentence under the control. Text between backticks
+	// renders as code, such as a duration format.
 	Help string
 	// Input, when set, makes Field draw an <input> with these attributes and
 	// link it to the label and help. Leave it nil to pass the control as
@@ -33,6 +36,24 @@ func fieldClass(base, extra string) string {
 	return base + " " + extra
 }
 
+// helpPart is a run of help text, set as code when Code is true.
+type helpPart struct {
+	Text string
+	Code bool
+}
+
+// helpParts splits help text on backticks. Odd runs are code.
+func helpParts(help string) []helpPart {
+	runs := strings.Split(help, "`")
+	parts := make([]helpPart, 0, len(runs))
+	for i, run := range runs {
+		if run != "" {
+			parts = append(parts, helpPart{Text: run, Code: i%2 == 1})
+		}
+	}
+	return parts
+}
+
 func labelID(id string) string { return id + "-label" }
 
 func helpID(id string) string { return id + "-help" }
@@ -48,7 +69,15 @@ templ Field(p FieldProps) {
 		}
 		{ children... }
 		if p.Help != "" {
-			<small id={ helpID(p.ID) }>{ p.Help }</small>
+			<small id={ helpID(p.ID) }>
+				for _, part := range helpParts(p.Help) {
+					if part.Code {
+						<code>{ part.Text }</code>
+					} else {
+						{ part.Text }
+					}
+				}
+			</small>
 		}
 	</label>
 }
