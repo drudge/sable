@@ -85,8 +85,8 @@ templ AboutContent(view AboutPageView) {
 			</div>
 		</header>
 
-		<section class="card about-card">
-			<header><h2 class="about-card-title">@Icon("info")<span>About</span></h2></header>
+		@components.Card(components.CardProps{Class: "about-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Icon: "info", Title: "About", TitleClass: "about-card-title"})
 			<div class="about-card-content">
 				<p>Sable is a modern authoritative and recursive DNS server built for speed, resilience, and straightforward operation. The DNS server, client, administrative API, and reactive web console ship together as one executable.</p>
 				<div class="about-version-row">
@@ -110,10 +110,10 @@ templ AboutContent(view AboutPageView) {
 				</div>
 				@UpdatePanel(view.Update)
 			</div>
-		</section>
+		}
 
-		<section class="card about-card">
-			<header><h2 class="about-card-title">@Icon("life-buoy")<span>Support</span></h2></header>
+		@components.Card(components.CardProps{Class: "about-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Icon: "life-buoy", Title: "Support", TitleClass: "about-card-title"})
 			<div class="about-card-content">
 				<p>Sable is free and open source. Bug reports, performance profiles, documentation improvements, and thoughtful pull requests are welcome.</p>
 				<div class="about-links">
@@ -123,10 +123,10 @@ templ AboutContent(view AboutPageView) {
 					<a href="https://github.com/drudge/sable/discussions" target="_blank" rel="noopener noreferrer"><span>Community</span>@Icon("external-link")</a>
 				</div>
 			</div>
-		</section>
+		}
 
-		<section class="card about-card">
-			<header><h2 class="about-card-title">@Icon("line-chart")<span>Prometheus Metrics</span></h2></header>
+		@components.Card(components.CardProps{Class: "about-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Icon: "line-chart", Title: "Prometheus Metrics", TitleClass: "about-card-title"})
 			<div class="about-card-content">
 				<p>Sable exposes lifetime query and runtime metrics in Prometheus text format. Create an API token in <a class="inline-link" href="/administration?tab=tokens">Administration</a> using a group with <code>metrics.read</code>, then add this scrape job to your Prometheus configuration:</p>
 				<div class="about-code-block">
@@ -140,7 +140,7 @@ templ AboutContent(view AboutPageView) {
 					</div>
 				}
 			</div>
-		</section>
+		}
 
 		<footer class="about-footer">
 			<button class="about-license-button" type="button" data-dialog-open="mit-license-dialog">MIT License</button>

@@ -593,11 +593,10 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 				<span>Configure the other server with this secret for { TSIGDisplayName(view.TSIGGeneratedKey) }. Sable keeps it encrypted and will not show it again; rotate the key if you lose it.</span>
 			</div>
 		}
-		<section class="card settings-source-card settings-action-card">
-			<header>
-				<div><h2>@Icon("key")<span>TSIG Keys</span></h2><p>Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml.</p></div>
+		@components.Card(components.CardProps{Class: "settings-source-card settings-action-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Icon: "key", Title: "TSIG Keys", Description: "Shared secrets that authenticate NOTIFY, AXFR, IXFR, and dynamic updates. Secrets are held in this node's encrypted vault, never in sable.toml."}) {
 				@components.Button(components.ButtonProps{Label: "Add Key", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "add-tsig-key-dialog", "data-replica-primary-action": true}})
-			</header>
+			}
 			<div class="isotope-card-content">
 				if len(view.TSIGKeys) == 0 {
 					<div class="tsig-empty">@Icon("key")<h3>No TSIG keys yet</h3><p>Zones without a key fall back to source-IP and transfer-policy authorization.</p></div>
@@ -609,7 +608,7 @@ templ SettingsTSIGPanel(view SettingsPageView) {
 					</div>
 				}
 			</div>
-		</section>
+		}
 	</div>
 }
 
@@ -754,9 +753,8 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 						}
 					</div>
 				}
-				<section class="card settings-source-card settings-action-card backup-history-card">
-					<header>
-						<div><h2>@Icon("hard-drive")<span>Local Backups</span></h2><p>Encrypted backups stored on this node, ready to download or restore.</p></div>
+				@components.Card(components.CardProps{Class: "settings-source-card settings-action-card backup-history-card"}) {
+					@components.CardHeader(components.CardHeaderProps{Icon: "hard-drive", Title: "Local Backups", Description: "Encrypted backups stored on this node, ready to download or restore."}) {
 						<div class="backup-history-header-actions">
 							if view.CanRestore {
 								@components.Button(components.ButtonProps{Label: "Restore from File…", Icon: "upload", Variant: components.ButtonOutline, Compact: true, Disabled: view.Busy(), Attrs: templ.Attributes{"data-dialog-open": "upload-backup-restore-dialog", "data-upload-backup-restore": true, "data-replica-primary-action": true}})
@@ -780,7 +778,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 								}
 							}
 						</div>
-					</header>
+					}
 					<div class="isotope-card-content">
 						if view.Busy() {
 							@BackupProgress(*view.Job)
@@ -821,7 +819,7 @@ templ SettingsBackupPanel(view SettingsBackupView) {
 					if view.ScheduleResolvedDirectory != "" {
 						<footer class="backup-history-footer"><span>Local path</span><code>{ view.ScheduleResolvedDirectory }</code></footer>
 					}
-				</section>
+				}
 			}
 			if !view.LocalAvailable {
 				@SettingsCard("hard-drive", "Download a Backup", "A sealed archive of everything this node needs to be rebuilt, private keys included") {
@@ -1027,10 +1025,10 @@ templ BackupUploadMeter() {
 // SettingsCard is one card of Settings. Its id comes from its title, so a
 // link such as /settings?tab=blocking#block-list-updates opens it.
 templ SettingsCard(icon, title, description string) {
-	<section class="card settings-source-card" id={ SettingsCardID(title) } data-settings-card>
-		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
+	@components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card", Attrs: templ.Attributes{"data-settings-card": true}}) {
+		@components.CardHeader(components.CardHeaderProps{Icon: icon, Title: title, Description: description})
 		{ children... }
-	</section>
+	}
 }
 // SettingsCardID is the id a Settings card is linked by: its title in lower
 // case, with a hyphen between words. "Block List Updates" is
@@ -1048,10 +1046,10 @@ templ SettingsSaveButton(tab string) { <div class="settings-panel-save">@compone
 // restore card looks different from the download card on purpose: one produces
 // a file, the other replaces every user and secret on the node.
 templ SettingsDangerCard(icon, title, description string) {
-	<section class="card settings-source-card settings-danger-card" id={ SettingsCardID(title) } data-settings-card>
-		<header><h2>@Icon(icon)<span>{ title }</span></h2><p>{ description }</p></header>
+	@components.Card(components.CardProps{ID: SettingsCardID(title), Class: "settings-source-card settings-danger-card", Attrs: templ.Attributes{"data-settings-card": true}}) {
+		@components.CardHeader(components.CardHeaderProps{Icon: icon, Title: title, Description: description})
 		{ children... }
-	</section>
+	}
 }
 
 // BackupArchivePreview is filled in by the browser once a file is chosen. The

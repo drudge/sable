@@ -91,8 +91,10 @@ templ ClusterContent(view ClusterPageView) {
 		<div class="cluster-layout">
 			<div class="cluster-main-column">
 				if !view.Initialized {
-					<section class="card cluster-status-card">
-						<header><div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>This server is operating independently</p></div><span class="status-badge">Not configured</span></header>
+					@components.Card(components.CardProps{Class: "cluster-status-card"}) {
+						@components.CardHeader(components.CardHeaderProps{Icon: "cluster", Title: "Cluster Status", Description: "This server is operating independently"}) {
+							<span class="status-badge">Not configured</span>
+						}
 						<div class="cluster-empty-state">
 							<span class="cluster-empty-icon">@Icon("server")</span>
 							<h3>No Cluster Configured</h3>
@@ -105,7 +107,7 @@ templ ClusterContent(view ClusterPageView) {
 								@components.Button(components.ButtonProps{Label: "Join Existing Cluster", Icon: "log-in", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-open": "join-cluster-dialog"}})
 							</div>
 						</div>
-					</section>
+					}
 				} else {
 					@ClusterLiveStatus(view)
 					if view.LocalRole == "Replica" {
@@ -204,16 +206,15 @@ templ ClusterLiveStatusUpdate(view ClusterPageView) {
 
 templ ClusterLiveStatus(view ClusterPageView) {
 	<div class="cluster-live-status" id="cluster-live-status" data-live-refresh hx-get="/ui/cluster/status" hx-trigger="every 2s" hx-target="this" hx-swap="outerHTML" hx-sync="#cluster-content:drop">
-		<section class="card cluster-status-card">
-			<header>
-				<div><h2>@Icon("cluster")<span>Cluster Status</span></h2><p>{ clusterStatusDescription(view) }</p></div>
+		@components.Card(components.CardProps{Class: "cluster-status-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Icon: "cluster", Title: "Cluster Status", Description: clusterStatusDescription(view)}) {
 				<div class="cluster-header-actions">
 					if view.LocalRole == "Primary" && view.NetworkReady {
 						@components.Button(components.ButtonProps{Label: "Add Replica", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-dialog-open": "enrollment-token-dialog"}})
 					}
 					<div class="cluster-live-indicator"><i></i><span>Live</span></div>
 				</div>
-			</header>
+			}
 			<div class="operational-metric-grid cluster-metrics">
 				@OperationalMetricCard(ifThen(view.LocalRole == "Primary", "crown", "server"), "This Node", view.LocalRole, "Local cluster role", "blue")
 				@OperationalMetricCard("layers", "Generation", fmt.Sprint(view.Generation), "Current configuration revision", "purple")
@@ -221,9 +222,11 @@ templ ClusterLiveStatus(view ClusterPageView) {
 				@OperationalMetricCard("refresh", "In Sync", fmt.Sprintf("%d / %d", view.Synchronized, len(view.Nodes)), "Nodes at current generation", "cyan")
 			</div>
 			<footer class="cluster-identity"><div><span>Cluster domain</span><strong>{ view.ClusterDomain }</strong></div><div><span>Cluster ID</span><code>{ view.ClusterID }</code></div></footer>
-		</section>
-		<section class="card cluster-nodes-card">
-			<header><div><h2>Node Sync Status</h2><p>Connection health and configuration generation by node</p></div><span class="status-badge cluster-updated-badge">@Icon("clock")<span data-stat-key="cluster-updated">Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span></header>
+		}
+		@components.Card(components.CardProps{Class: "cluster-nodes-card"}) {
+			@components.CardHeader(components.CardHeaderProps{Title: "Node Sync Status", Description: "Connection health and configuration generation by node"}) {
+				<span class="status-badge cluster-updated-badge">@Icon("clock")<span data-stat-key="cluster-updated">Updated { FormatShortDateTime(view.ObservedAt, view.Console.TimeDisplay, true) }</span></span>
+			}
 			<div class="cluster-node-list">
 				for _, node := range view.Nodes {
 					<article class="cluster-node-row" data-row-opener>
@@ -267,7 +270,7 @@ templ ClusterLiveStatus(view ClusterPageView) {
 					</article>
 				}
 			</div>
-		</section>
+		}
 	</div>
 }
 

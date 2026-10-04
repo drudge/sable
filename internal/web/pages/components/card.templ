@@ -1,0 +1,64 @@
+package components
+
+// CardProps describes a console card: the bordered, rounded panel that holds
+// one area of a page.
+type CardProps struct {
+	// ID is the card's id, used by links, htmx targets, and tests.
+	ID string
+	// Article draws an <article> rather than a <section>, for a card that
+	// stands on its own, such as a ranking on Home.
+	Article bool
+	// Class adds classes after "card", and Attrs go on the element, such as
+	// htmx attributes, aria-label, or data hooks.
+	Class string
+	Attrs templ.Attributes
+}
+
+// Card draws a card around its children. A card with a title starts with
+// CardHeader.
+templ Card(p CardProps) {
+	if p.Article {
+		<article class={ fieldClass("card", p.Class) } if p.ID != "" { id={ p.ID } } { p.Attrs... }>
+			{ children... }
+		</article>
+	} else {
+		<section class={ fieldClass("card", p.Class) } if p.ID != "" { id={ p.ID } } { p.Attrs... }>
+			{ children... }
+		</section>
+	}
+}
+
+// CardHeaderProps describes the title row at the top of a card.
+type CardHeaderProps struct {
+	// Icon names an Icon drawn before the title.
+	Icon  string
+	Title string
+	// TitleID is the heading's id, for a card labelled by its title.
+	TitleID string
+	// TitleClass adds classes to the heading.
+	TitleClass string
+	// Description is one short line under the title.
+	Description string
+	// Class adds classes to the header.
+	Class string
+}
+
+// CardHeader draws a card's title and description. Its children are the
+// card's header actions, which sit at the end of the row.
+templ CardHeader(p CardHeaderProps) {
+	<header if p.Class != "" { class={ p.Class } }>
+		<div>
+			<h2 if p.TitleID != "" { id={ p.TitleID } } if p.TitleClass != "" { class={ p.TitleClass } }>
+				if p.Icon != "" {
+					@Icon(p.Icon)<span>{ p.Title }</span>
+				} else {
+					{ p.Title }
+				}
+			</h2>
+			if p.Description != "" {
+				<p>{ p.Description }</p>
+			}
+		</div>
+		{ children... }
+	</header>
+}
