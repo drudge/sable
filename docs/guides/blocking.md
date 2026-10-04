@@ -30,6 +30,14 @@ When a needed service breaks, identify the exact blocked host in the query log. 
 
 Retest the client. DNS and application caches can delay the visible effect; distinguish a cached negative answer from a new blocked request. Do not allow a broad parent domain unless that whole subtree is intended to bypass the rule.
 
+## Blocked ads come back on iPhones
+
+On iOS 27 and iPadOS 27, **Connectivity Assist** (formerly Wi-Fi Assist) can retry a request that failed on Wi-Fi over cellular data. A blocked request counts as failed, so the retry goes out through the carrier's DNS and gets around Sable. The query log still shows the block, because the device asked Sable first.
+
+Turn it off for the networks Sable serves: open **Settings → Wi-Fi**, tap the info button next to the network, and turn off **Connectivity Assist**. To turn it off everywhere, use the switch at the bottom of **Settings → Wi-Fi**. Apple describes the feature in [About Connectivity Assist](https://support.apple.com/en-us/127686).
+
+Changing the blocking response type does not help. NXDOMAIN, zero-address, and custom-address answers all make the request fail, and a custom address pointed at a server that drops connections looks like slow Wi-Fi, which is what Connectivity Assist exists to rescue.
+
 ## Pause or bypass deliberately
 
 **Pause Blocking** is a temporary diagnostic control. Resume promptly after the test; the in-memory pause resets on restart. For a persistent client exception, use `blocking.bypass_clients` with an IP or CIDR, and remember that a router proxy may hide the individual client address.
