@@ -319,8 +319,8 @@ func validateZone(field string, current Zone, tsigKeys map[string]struct{}, zone
 			result = append(result, fmt.Errorf("%s references unknown TSIG key %q", field, current.TSIGKey))
 		}
 	}
-	if current.DynamicUpdates && (current.Type != "primary" || current.TSIGKey == "") {
-		result = append(result, fmt.Errorf("%s dynamic updates require a primary zone and TSIG key", field))
+	if current.DynamicUpdates && (!AcceptsDynamicUpdates(current.Type) || current.TSIGKey == "") {
+		result = append(result, fmt.Errorf("%s dynamic updates require a primary or forwarder zone and TSIG key", field))
 	}
 	if current.DNSSECValidationDisabled && !IsForwarderType(current.Type) && current.Type != "stub" {
 		result = append(result, fmt.Errorf("%s DNSSEC validation can only be disabled for forwarder or stub zones", field))

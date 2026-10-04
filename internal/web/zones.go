@@ -677,7 +677,7 @@ func (server *Server) updateZoneSettings(writer http.ResponseWriter, request *ht
 		}
 		zone.DefaultTTL = defaultTTL
 		zone.TSIGKey = strings.TrimSpace(request.FormValue("tsig_key"))
-		zone.DynamicUpdates = zone.Type == "primary" && request.FormValue("dynamic_updates") == "true"
+		zone.DynamicUpdates = zonemodel.AcceptsDynamicUpdates(zone.Type) && request.FormValue("dynamic_updates") == "true"
 		if request.Form.Has("zone_transfer") {
 			zone.ZoneTransfer = strings.ToLower(strings.TrimSpace(request.FormValue("zone_transfer")))
 		}

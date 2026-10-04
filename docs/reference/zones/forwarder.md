@@ -19,7 +19,7 @@ The current console picker offers UDP, TCP, and TLS. The underlying parser also 
 
 Matching local records take precedence for any supported answer type, including A, AAAA, TXT, MX, and CNAME. A local CNAME can lead to another local answer. Names or record types without a matching local answer use the selected forwarding pool. For example, a local TXT override answers TXT queries while an A query for the same owner can still be forwarded. A narrower suffix can choose a more-specific route. Never forward the namespace back to a server that depends on Sable for the same answers.
 
-DNSSEC validation is enabled by default and can be disabled only for the zone subtree when the private trust model requires it. Forwarder zones are not signed authoritative Primary zones and do not accept RFC 2136 updates.
+DNSSEC validation is enabled by default and can be disabled only for the zone subtree when the private trust model requires it. Forwarder zones are not signed authoritative Primary zones. They can accept TSIG-authenticated RFC 2136 updates to their local overrides; see [Automate DNS updates](../../guides/dynamic-updates.md#forwarder-zones). Secondary Forwarders cannot.
 
 ## Secondary Forwarder synchronization
 

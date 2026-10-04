@@ -1,19 +1,39 @@
 # Automate DNS updates
 
-RFC 2136 lets a trusted DHCP service or automation client update a Primary zone using DNS messages. Sable requires TSIG authentication and applies updates through its normal validation and activation path.
+RFC 2136 lets a trusted DHCP service or automation client update a Primary or Forwarder zone using DNS messages. Sable requires TSIG authentication and applies updates through its normal validation and activation path.
 
 ## Before you begin
 
-Use a Primary zone, a configured TSIG key, and an updater that supports RFC 2136. On a cluster, address the writable primary. Keep the key narrowly distributed: it is permission to change the zone, not merely to read it.
+Use a Primary or Forwarder zone, a configured TSIG key, and an updater that supports RFC 2136. On a cluster, address the writable primary. Keep the key narrowly distributed: it is permission to change the zone, not merely to read it.
 
 ## Enable the update path
 
 1. Create or import the shared key under **Settings → TSIG**.
 2. Select that key in the zone settings.
-3. Enable dynamic updates for the Primary zone.
+3. Enable dynamic updates on the zone settings **Transfers & Updates** tab.
 4. Configure the updater with the exact server, zone, key name, algorithm, and secret.
 
-Sable rejects dynamic updates for Secondary, Stub, Forwarder, Alias, and Catalog zones. It also rejects changes that violate the zone's invariants, such as conflicting CNAME data.
+Sable rejects dynamic updates for Secondary, Secondary Forwarder, Stub, Alias, and Catalog zones. It also rejects changes that violate the zone's invariants, such as conflicting CNAME data.
+
+## Forwarder zones
+
+On a Forwarder zone, updates change the local override records that Sable answers before it forwards. An update never adds, changes, or removes FWD routing records, even when it deletes every record at a name. Names and record types without an override keep forwarding.
+
+## Kubernetes ExternalDNS
+
+ExternalDNS's `rfc2136` provider works with either zone type. Allow zone transfers from the cluster's network, because ExternalDNS lists records by AXFR to find the ones it owns.
+
+```text
+--provider=rfc2136
+--rfc2136-host=192.0.2.53
+--rfc2136-port=53
+--rfc2136-zone=k8s.example.
+--rfc2136-tsig-keyname=update-key
+--rfc2136-tsig-secret-alg=hmac-sha256
+--rfc2136-axfr
+```
+
+Pass the secret through the `EXTERNAL_DNS_RFC2136_TSIG_SECRET` environment variable, loaded from a Kubernetes Secret, rather than as a flag.
 
 ## Send a controlled test
 

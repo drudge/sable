@@ -78,7 +78,7 @@ func (updater *dynamicZoneUpdater) Update(ctx context.Context, request dnsserver
 	var notifyTargets []string
 	err := updater.configuration.UpdateZones(ctx, func(zones *[]zonemodel.Zone) error {
 		zone := findConfiguredZone(*zones, request.Zone)
-		if zone == nil || zone.Disabled || zone.Type != "primary" {
+		if zone == nil || zone.Disabled || !zonemodel.AcceptsDynamicUpdates(zone.Type) {
 			return updateRcodeError{rcode: dns.RcodeNotAuth}
 		}
 		if !zone.DynamicUpdates || zone.TSIGKey == "" || !strings.EqualFold(dns.Fqdn(zone.TSIGKey), dns.Fqdn(request.KeyName)) {

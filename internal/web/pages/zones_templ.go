@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/drudge/sable/internal/web/pages/components"
+	zonemodel "github.com/drudge/sable/internal/zone"
 	"github.com/miekg/dns"
 )
 
@@ -772,7 +773,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(len(view.Zones)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 593, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 594, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -848,7 +849,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.CanCreate, "No zones found. Create your first zone to get started.", "No zones are available to this account."))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 616, Col: 180}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 617, Col: 180}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -885,7 +886,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(zone.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 619, Col: 147}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 620, Col: 147}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -898,7 +899,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(zone.Type))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 619, Col: 193}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 620, Col: 193}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 			if templ_7745c5c3_Err != nil {
@@ -911,7 +912,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zone.Disabled, "disabled", "active"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 619, Col: 258}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 620, Col: 258}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 			if templ_7745c5c3_Err != nil {
@@ -924,7 +925,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 620, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 621, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -937,7 +938,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 621, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 622, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -955,7 +956,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 623, Col: 124}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 624, Col: 124}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
@@ -976,7 +977,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 623, Col: 242}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 624, Col: 242}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -989,7 +990,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(zone.CatalogZone)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 623, Col: 276}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 624, Col: 276}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -1029,7 +1030,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(zoneTypeDisplay(zone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 625, Col: 119}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 626, Col: 119}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -1064,7 +1065,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Disabled, "Disabled", "Active"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 625, Col: 256}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 626, Col: 256}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -1099,7 +1100,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(zoneTypeDisplay(zone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 626, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 627, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -1134,7 +1135,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var27 string
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Disabled, "Disabled", "Active"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 626, Col: 261}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 627, Col: 261}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 			if templ_7745c5c3_Err != nil {
@@ -1155,7 +1156,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var28 templ.SafeURL
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.Name))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 629, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 630, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 			if templ_7745c5c3_Err != nil {
@@ -1168,7 +1169,7 @@ func ZoneListView(view ZonesPageView) templ.Component {
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue("Open " + zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 629, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 630, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
@@ -1287,7 +1288,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(zone.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 660, Col: 19}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 661, Col: 19}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 		if templ_7745c5c3_Err != nil {
@@ -1305,7 +1306,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 662, Col: 120}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 663, Col: 120}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -1326,7 +1327,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.CatalogManager != "", "Managed by catalog", "Member of catalog"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 662, Col: 238}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 663, Col: 238}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -1339,7 +1340,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var34 templ.SafeURL
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.CatalogZone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 662, Col: 284}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 663, Col: 284}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 			if templ_7745c5c3_Err != nil {
@@ -1352,7 +1353,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(zone.CatalogZone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 662, Col: 305}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 663, Col: 305}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
@@ -1392,7 +1393,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(zoneTypeDisplay(zone))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 664, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 665, Col: 94}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -1427,7 +1428,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Disabled, "Disabled", "Active"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 664, Col: 231}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 665, Col: 231}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 		if templ_7745c5c3_Err != nil {
@@ -1462,7 +1463,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.DNSSEC, "DNSSEC: Signed", "DNSSEC: Unsigned"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 664, Col: 380}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 665, Col: 380}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
@@ -1475,7 +1476,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(len(zone.Records)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 666, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 667, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 		if templ_7745c5c3_Err != nil {
@@ -1488,7 +1489,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(len(zone.Records) == 1, "record", "records"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 666, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 667, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 		if templ_7745c5c3_Err != nil {
@@ -1506,7 +1507,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var47 templ.SafeURL
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.AliasZone))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 668, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 669, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -1519,7 +1520,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(zone.AliasZone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 668, Col: 111}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 669, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
@@ -1537,7 +1538,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var49 templ.SafeURL
 		templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.Name))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 673, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 674, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 		if templ_7745c5c3_Err != nil {
@@ -1567,7 +1568,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 676, Col: 135}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 677, Col: 135}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 			if templ_7745c5c3_Err != nil {
@@ -1623,7 +1624,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue("Records for " + zone.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 687, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 688, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 		if templ_7745c5c3_Err != nil {
@@ -1665,7 +1666,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var54 string
 			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 692, Col: 281}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 693, Col: 281}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 			if templ_7745c5c3_Err != nil {
@@ -1678,7 +1679,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var55 string
 			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(record.Type))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 692, Col: 331}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 693, Col: 331}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 			if templ_7745c5c3_Err != nil {
@@ -1691,7 +1692,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var56 string
 			templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(record.Type)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 693, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 694, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 			if templ_7745c5c3_Err != nil {
@@ -1720,7 +1721,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var57 string
 			templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(record.TTL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 698, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 699, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 			if templ_7745c5c3_Err != nil {
@@ -1756,7 +1757,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var60 string
 				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordSourceTitle(zone, record.SourceLabel))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 700, Col: 144}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 701, Col: 144}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 				if templ_7745c5c3_Err != nil {
@@ -1769,7 +1770,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var61 string
 				templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(record.SourceLabel)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 700, Col: 167}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 701, Col: 167}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 				if templ_7745c5c3_Err != nil {
@@ -1793,7 +1794,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var62 string
 				templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneElementID("record", index))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 705, Col: 104}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 706, Col: 104}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 				if templ_7745c5c3_Err != nil {
@@ -1806,7 +1807,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var63 string
 				templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordEditPath(zone, record))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 705, Col: 157}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 706, Col: 157}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 				if templ_7745c5c3_Err != nil {
@@ -1819,7 +1820,7 @@ func ZoneDetailView(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var64 string
 				templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordOpenLabel(zone, record))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 705, Col: 206}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 706, Col: 206}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 				if templ_7745c5c3_Err != nil {
@@ -1952,7 +1953,7 @@ func ZoneHistoryDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var67 string
 			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-list")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 742, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 743, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 			if templ_7745c5c3_Err != nil {
@@ -2018,7 +2019,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var69 string
 			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(zone.HistoryError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 756, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 757, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 			if templ_7745c5c3_Err != nil {
@@ -2042,7 +2043,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var70 string
 			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 761, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 762, Col: 108}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var70)
 			if templ_7745c5c3_Err != nil {
@@ -2055,7 +2056,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var71 string
 			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.ResolveAttributeValue("#" + zoneHistoryRevisionID(id, revision.Number))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 761, Col: 196}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 762, Col: 196}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var71)
 			if templ_7745c5c3_Err != nil {
@@ -2090,7 +2091,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var74 string
 			templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(revision.Number))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 762, Col: 150}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 763, Col: 150}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 			if templ_7745c5c3_Err != nil {
@@ -2125,7 +2126,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var77 string
 			templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(revision.KindLabel)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 762, Col: 234}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 763, Col: 234}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 			if templ_7745c5c3_Err != nil {
@@ -2148,7 +2149,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var78 string
 			templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(revision.OccurredAt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 766, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 767, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 			if templ_7745c5c3_Err != nil {
@@ -2169,7 +2170,7 @@ func ZoneHistoryEntries(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var79 string
 			templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneHistoryRevisionID(id, revision.Number))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 767, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 768, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 			if templ_7745c5c3_Err != nil {
@@ -2212,7 +2213,7 @@ func zoneHistoryLead(name string) templ.Component {
 		var templ_7745c5c3_Var81 string
 		templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 773, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 774, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var81))
 		if templ_7745c5c3_Err != nil {
@@ -2271,7 +2272,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 			var templ_7745c5c3_Var83 string
 			templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.JoinStringErrs(view.Error)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 794, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 795, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var83))
 			if templ_7745c5c3_Err != nil {
@@ -2289,7 +2290,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 			var templ_7745c5c3_Var84 string
 			templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(view.Summary)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 797, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 798, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 			if templ_7745c5c3_Err != nil {
@@ -2307,7 +2308,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 				var templ_7745c5c3_Var85 string
 				templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.ResolveAttributeValue("Restore revision " + fmt.Sprint(view.Revision) + "? Sable will preserve the zone identity, advance its SOA serial, and save the restored state as a new revision.")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 799, Col: 292}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 800, Col: 292}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var85)
 				if templ_7745c5c3_Err != nil {
@@ -2320,7 +2321,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 				var templ_7745c5c3_Var86 string
 				templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.ZoneName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 800, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 801, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var86)
 				if templ_7745c5c3_Err != nil {
@@ -2333,7 +2334,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 				var templ_7745c5c3_Var87 string
 				templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(view.Revision))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 800, Col: 133}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 801, Col: 133}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 				if templ_7745c5c3_Err != nil {
@@ -2364,7 +2365,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 				var templ_7745c5c3_Var88 string
 				templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(view.Notice)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 805, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 806, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 				if templ_7745c5c3_Err != nil {
@@ -2410,7 +2411,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 					var templ_7745c5c3_Var91 string
 					templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(zoneHistoryChangeSymbol(change.Kind))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 810, Col: 127}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 811, Col: 127}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 					if templ_7745c5c3_Err != nil {
@@ -2423,7 +2424,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 					var templ_7745c5c3_Var92 string
 					templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(change.Label)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 810, Col: 163}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 811, Col: 163}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 					if templ_7745c5c3_Err != nil {
@@ -2441,7 +2442,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 						var templ_7745c5c3_Var93 string
 						templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(change.Before)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 812, Col: 49}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 813, Col: 49}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 						if templ_7745c5c3_Err != nil {
@@ -2460,7 +2461,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 						var templ_7745c5c3_Var94 string
 						templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.JoinStringErrs(change.After)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 815, Col: 47}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 816, Col: 47}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var94))
 						if templ_7745c5c3_Err != nil {
@@ -2493,7 +2494,7 @@ func ZoneRevisionDiff(view ZoneRevisionDiffView) templ.Component {
 				var templ_7745c5c3_Var95 string
 				templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(view.HiddenChanges))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 822, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 823, Col: 66}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 				if templ_7745c5c3_Err != nil {
@@ -2587,7 +2588,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 		var templ_7745c5c3_Var101 string
 		templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.ResolveAttributeValue("Actions for " + zone.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 831, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 832, Col: 131}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var101)
 		if templ_7745c5c3_Err != nil {
@@ -2613,7 +2614,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var102 string
 			templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.ResolveAttributeValue(settingsID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 834, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 835, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var102)
 			if templ_7745c5c3_Err != nil {
@@ -2640,7 +2641,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var103 string
 			templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.ResolveAttributeValue(historyID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 837, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 838, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var103)
 			if templ_7745c5c3_Err != nil {
@@ -2653,7 +2654,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var104 string
 			templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(zoneHistoryURL(zone.Name, historyID)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 837, Col: 117}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 838, Col: 117}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var104)
 			if templ_7745c5c3_Err != nil {
@@ -2666,7 +2667,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var105 string
 			templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.ResolveAttributeValue("#" + historyID + "-list")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 837, Col: 157}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 838, Col: 157}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var105)
 			if templ_7745c5c3_Err != nil {
@@ -2692,7 +2693,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var106 string
 			templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.ResolveAttributeValue(historyID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 839, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 840, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var106)
 			if templ_7745c5c3_Err != nil {
@@ -2733,7 +2734,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var107 string
 			templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.ResolveAttributeValue(dnssecID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 845, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 846, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var107)
 			if templ_7745c5c3_Err != nil {
@@ -2777,7 +2778,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var108 templ.SafeURL
 			templ_7745c5c3_Var108, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/api/v1/zones/export?zone=" + url.QueryEscape(zone.Name)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 851, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 852, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var108))
 			if templ_7745c5c3_Err != nil {
@@ -2804,7 +2805,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var109 string
 			templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 854, Col: 134}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 855, Col: 134}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var109)
 			if templ_7745c5c3_Err != nil {
@@ -2831,7 +2832,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var110 string
 			templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.ResolveAttributeValue(settingsID + "-convert")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 857, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 858, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var110)
 			if templ_7745c5c3_Err != nil {
@@ -2852,7 +2853,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var111 string
 			templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 857, Col: 221}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 858, Col: 221}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
 			if templ_7745c5c3_Err != nil {
@@ -2871,7 +2872,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var112 string
 			templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.ResolveAttributeValue(cloneID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 860, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 861, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var112)
 			if templ_7745c5c3_Err != nil {
@@ -2902,7 +2903,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var113 string
 			templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 864, Col: 134}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 865, Col: 134}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 			if templ_7745c5c3_Err != nil {
@@ -2915,7 +2916,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var114 string
 			templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zone.Disabled, "enable", "disable"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 864, Col: 223}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 865, Col: 223}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var114)
 			if templ_7745c5c3_Err != nil {
@@ -2936,7 +2937,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var115 string
 			templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Disabled, "Enable Zone", "Disable Zone"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 864, Col: 323}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 865, Col: 323}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 			if templ_7745c5c3_Err != nil {
@@ -2955,7 +2956,7 @@ func ZoneActionMenu(zone ZoneView, className, historyID, settingsID, dnssecID, c
 			var templ_7745c5c3_Var116 string
 			templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.ResolveAttributeValue(deleteID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 867, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 868, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var116)
 			if templ_7745c5c3_Err != nil {
@@ -3028,7 +3029,7 @@ func ZoneCopyableText(id, text, className string) templ.Component {
 		var templ_7745c5c3_Var120 string
 		templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 874, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 875, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var120)
 		if templ_7745c5c3_Err != nil {
@@ -3041,7 +3042,7 @@ func ZoneCopyableText(id, text, className string) templ.Component {
 		var templ_7745c5c3_Var121 string
 		templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.JoinStringErrs(text)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 874, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 875, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var121))
 		if templ_7745c5c3_Err != nil {
@@ -3054,7 +3055,7 @@ func ZoneCopyableText(id, text, className string) templ.Component {
 		var templ_7745c5c3_Var122 string
 		templ_7745c5c3_Var122, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 874, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 875, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var122)
 		if templ_7745c5c3_Err != nil {
@@ -3230,7 +3231,7 @@ func TSIGKeySelect(keys []string, selected string) templ.Component {
 			var templ_7745c5c3_Var125 string
 			templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.ResolveAttributeValue(key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 897, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 898, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var125)
 			if templ_7745c5c3_Err != nil {
@@ -3253,7 +3254,7 @@ func TSIGKeySelect(keys []string, selected string) templ.Component {
 			var templ_7745c5c3_Var126 string
 			templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.JoinStringErrs(TSIGDisplayName(key))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 897, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 898, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var126))
 			if templ_7745c5c3_Err != nil {
@@ -3272,7 +3273,7 @@ func TSIGKeySelect(keys []string, selected string) templ.Component {
 			var templ_7745c5c3_Var127 string
 			templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.ResolveAttributeValue(selected)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 900, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 901, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var127)
 			if templ_7745c5c3_Err != nil {
@@ -3285,7 +3286,7 @@ func TSIGKeySelect(keys []string, selected string) templ.Component {
 			var templ_7745c5c3_Var128 string
 			templ_7745c5c3_Var128, templ_7745c5c3_Err = templ.JoinStringErrs(TSIGDisplayName(selected))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 900, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 901, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var128))
 			if templ_7745c5c3_Err != nil {
@@ -3360,7 +3361,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 			var templ_7745c5c3_Var131 string
 			templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.53\nprimary.example.net:53")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 912, Col: 146}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 913, Col: 146}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var131)
 			if templ_7745c5c3_Err != nil {
@@ -3378,7 +3379,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 				var templ_7745c5c3_Var132 string
 				templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.ResolveAttributeValue(source)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 918, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 919, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var132)
 				if templ_7745c5c3_Err != nil {
@@ -3391,7 +3392,7 @@ func CreateZoneDialog(aliasSources []string, tsigKeys []string) templ.Component 
 				var templ_7745c5c3_Var133 string
 				templ_7745c5c3_Var133, templ_7745c5c3_Err = templ.JoinStringErrs(source)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 918, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 919, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var133))
 				if templ_7745c5c3_Err != nil {
@@ -3482,7 +3483,7 @@ func AddZoneRecordDialog(zone ZoneView) templ.Component {
 			var templ_7745c5c3_Var137 string
 			templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 940, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 941, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var137)
 			if templ_7745c5c3_Err != nil {
@@ -3508,7 +3509,7 @@ func AddZoneRecordDialog(zone ZoneView) templ.Component {
 				var templ_7745c5c3_Var138 string
 				templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.ResolveAttributeValue(recordType)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 945, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 946, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var138)
 				if templ_7745c5c3_Err != nil {
@@ -3632,7 +3633,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var143 string
 			templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.ResolveAttributeValue(recordType)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 964, Col: 142}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 965, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var143)
 			if templ_7745c5c3_Err != nil {
@@ -3645,7 +3646,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var144 string
 			templ_7745c5c3_Var144, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordDescription(recordType))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 964, Col: 204}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 965, Col: 204}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var144)
 			if templ_7745c5c3_Err != nil {
@@ -3658,7 +3659,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var145 string
 			templ_7745c5c3_Var145, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(index == 0, "true", "false"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 964, Col: 257}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 965, Col: 257}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var145)
 			if templ_7745c5c3_Err != nil {
@@ -3671,7 +3672,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var146 string
 			templ_7745c5c3_Var146, templ_7745c5c3_Err = templ.JoinStringErrs(recordType)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 964, Col: 272}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 965, Col: 272}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var146))
 			if templ_7745c5c3_Err != nil {
@@ -3694,7 +3695,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var147 string
 			templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.ResolveAttributeValue(recordType)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 969, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 970, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var147)
 			if templ_7745c5c3_Err != nil {
@@ -3707,7 +3708,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var148 string
 			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordDescription(recordType))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 969, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 970, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var148)
 			if templ_7745c5c3_Err != nil {
@@ -3720,7 +3721,7 @@ func RecordTypePicker() templ.Component {
 			var templ_7745c5c3_Var149 string
 			templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(recordType)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 969, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 970, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
 			if templ_7745c5c3_Err != nil {
@@ -3738,7 +3739,7 @@ func RecordTypePicker() templ.Component {
 		var templ_7745c5c3_Var150 string
 		templ_7745c5c3_Var150, templ_7745c5c3_Err = templ.JoinStringErrs(zoneRecordDescription("A"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 972, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 973, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var150))
 		if templ_7745c5c3_Err != nil {
@@ -3781,7 +3782,7 @@ func RecordTypeOptions(includeAll bool) templ.Component {
 			var templ_7745c5c3_Var152 string
 			templ_7745c5c3_Var152, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.ToLower(recordType))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 978, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var152)
 			if templ_7745c5c3_Err != nil {
@@ -3794,7 +3795,7 @@ func RecordTypeOptions(includeAll bool) templ.Component {
 			var templ_7745c5c3_Var153 string
 			templ_7745c5c3_Var153, templ_7745c5c3_Err = templ.JoinStringErrs(recordType)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 978, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 979, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var153))
 			if templ_7745c5c3_Err != nil {
@@ -3849,7 +3850,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var156 string
 			templ_7745c5c3_Var156, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 991, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 992, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var156)
 			if templ_7745c5c3_Err != nil {
@@ -3862,7 +3863,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var157 string
 			templ_7745c5c3_Var157, templ_7745c5c3_Err = templ.ResolveAttributeValue(record.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 991, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 992, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var157)
 			if templ_7745c5c3_Err != nil {
@@ -3875,7 +3876,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var158 string
 			templ_7745c5c3_Var158, templ_7745c5c3_Err = templ.ResolveAttributeValue(record.Type)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 991, Col: 165}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 992, Col: 165}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var158)
 			if templ_7745c5c3_Err != nil {
@@ -3888,7 +3889,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var159 string
 			templ_7745c5c3_Var159, templ_7745c5c3_Err = templ.ResolveAttributeValue(record.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 991, Col: 223}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 992, Col: 223}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var159)
 			if templ_7745c5c3_Err != nil {
@@ -3901,7 +3902,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var160 string
 			templ_7745c5c3_Var160, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(record.TTL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 991, Col: 289}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 992, Col: 289}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var160)
 			if templ_7745c5c3_Err != nil {
@@ -3924,7 +3925,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var161 string
 			templ_7745c5c3_Var161, templ_7745c5c3_Err = templ.JoinStringErrs(record.Type)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 994, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 995, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var161))
 			if templ_7745c5c3_Err != nil {
@@ -3937,7 +3938,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var162 string
 			templ_7745c5c3_Var162, templ_7745c5c3_Err = templ.JoinStringErrs(zoneRecordDescription(record.Type))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 994, Col: 131}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 995, Col: 131}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var162))
 			if templ_7745c5c3_Err != nil {
@@ -3975,7 +3976,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 			var templ_7745c5c3_Var163 string
 			templ_7745c5c3_Var163, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordOwner(zone, record))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1001, Col: 128}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1002, Col: 128}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var163)
 			if templ_7745c5c3_Err != nil {
@@ -4023,7 +4024,7 @@ func EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) templ
 				var templ_7745c5c3_Var164 string
 				templ_7745c5c3_Var164, templ_7745c5c3_Err = templ.JoinStringErrs(zoneRecordReadOnlyNote(zone, record))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1008, Col: 97}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1009, Col: 97}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var164))
 				if templ_7745c5c3_Err != nil {
@@ -4113,7 +4114,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var166 string
 		templ_7745c5c3_Var166, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ttl")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1027, Col: 119}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 119}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var166)
 		if templ_7745c5c3_Err != nil {
@@ -4126,7 +4127,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var167 string
 		templ_7745c5c3_Var167, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(ttl))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1027, Col: 184}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 184}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var167)
 		if templ_7745c5c3_Err != nil {
@@ -4139,7 +4140,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var168 string
 		templ_7745c5c3_Var168, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "expiry_ttl")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1027, Col: 302}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 302}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var168)
 		if templ_7745c5c3_Err != nil {
@@ -4152,7 +4153,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var169 string
 		templ_7745c5c3_Var169, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(expiryTTL))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1027, Col: 373}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 373}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var169)
 		if templ_7745c5c3_Err != nil {
@@ -4175,7 +4176,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var170 string
 		templ_7745c5c3_Var170, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "comments")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 131}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1029, Col: 131}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var170)
 		if templ_7745c5c3_Err != nil {
@@ -4188,7 +4189,7 @@ func RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string
 		var templ_7745c5c3_Var171 string
 		templ_7745c5c3_Var171, templ_7745c5c3_Err = templ.ResolveAttributeValue(comments)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1028, Col: 150}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1029, Col: 150}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var171)
 		if templ_7745c5c3_Err != nil {
@@ -4242,7 +4243,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var173 string
 			templ_7745c5c3_Var173, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1036, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1037, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var173)
 			if templ_7745c5c3_Err != nil {
@@ -4255,7 +4256,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var174 string
 			templ_7745c5c3_Var174, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "value"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1036, Col: 165}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1037, Col: 165}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var174)
 			if templ_7745c5c3_Err != nil {
@@ -4283,7 +4284,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var175 string
 			templ_7745c5c3_Var175, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1038, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1039, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var175)
 			if templ_7745c5c3_Err != nil {
@@ -4296,7 +4297,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var176 string
 			templ_7745c5c3_Var176, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "value"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1038, Col: 165}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1039, Col: 165}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var176)
 			if templ_7745c5c3_Err != nil {
@@ -4324,7 +4325,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var177 string
 			templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1040, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1041, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var177)
 			if templ_7745c5c3_Err != nil {
@@ -4337,7 +4338,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var178 string
 			templ_7745c5c3_Var178, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "value"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1040, Col: 164}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1041, Col: 164}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var178)
 			if templ_7745c5c3_Err != nil {
@@ -4365,7 +4366,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var179 string
 			templ_7745c5c3_Var179, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1042, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1043, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var179)
 			if templ_7745c5c3_Err != nil {
@@ -4378,7 +4379,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var180 string
 			templ_7745c5c3_Var180, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "value"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1042, Col: 164}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1043, Col: 164}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var180)
 			if templ_7745c5c3_Err != nil {
@@ -4401,7 +4402,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var181 string
 			templ_7745c5c3_Var181, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "glue_addresses")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1043, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1044, Col: 137}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var181)
 			if templ_7745c5c3_Err != nil {
@@ -4414,7 +4415,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var182 string
 			templ_7745c5c3_Var182, templ_7745c5c3_Err = templ.ResolveAttributeValue(glue)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1043, Col: 152}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1044, Col: 152}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var182)
 			if templ_7745c5c3_Err != nil {
@@ -4442,7 +4443,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var183 string
 			templ_7745c5c3_Var183, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1045, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1046, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var183)
 			if templ_7745c5c3_Err != nil {
@@ -4455,7 +4456,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var184 string
 			templ_7745c5c3_Var184, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "value"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1045, Col: 164}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1046, Col: 164}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var184)
 			if templ_7745c5c3_Err != nil {
@@ -4483,7 +4484,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var185 string
 			templ_7745c5c3_Var185, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "exchange")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1047, Col: 141}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1048, Col: 141}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var185)
 			if templ_7745c5c3_Err != nil {
@@ -4496,7 +4497,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var186 string
 			templ_7745c5c3_Var186, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "exchange"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1047, Col: 204}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1048, Col: 204}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var186)
 			if templ_7745c5c3_Err != nil {
@@ -4519,7 +4520,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var187 string
 			templ_7745c5c3_Var187, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "preference")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1047, Col: 406}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1048, Col: 406}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var187)
 			if templ_7745c5c3_Err != nil {
@@ -4532,7 +4533,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var188 string
 			templ_7745c5c3_Var188, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "preference") == "", "10", zoneRecordParsedField(recordType, value, "preference")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1047, Col: 567}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1048, Col: 567}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var188)
 			if templ_7745c5c3_Err != nil {
@@ -4560,7 +4561,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var189 string
 			templ_7745c5c3_Var189, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "text")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1049, Col: 112}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1050, Col: 112}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var189)
 			if templ_7745c5c3_Err != nil {
@@ -4583,7 +4584,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var190 string
 			templ_7745c5c3_Var190, templ_7745c5c3_Err = templ.JoinStringErrs(zoneRecordParsedField(recordType, value, "text"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1049, Col: 247}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1050, Col: 247}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var190))
 			if templ_7745c5c3_Err != nil {
@@ -4601,7 +4602,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var191 string
 			templ_7745c5c3_Var191, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "target")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1051, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var191)
 			if templ_7745c5c3_Err != nil {
@@ -4614,7 +4615,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var192 string
 			templ_7745c5c3_Var192, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "target"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1051, Col: 166}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 166}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var192)
 			if templ_7745c5c3_Err != nil {
@@ -4637,7 +4638,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var193 string
 			templ_7745c5c3_Var193, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "priority")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 146}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 146}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var193)
 			if templ_7745c5c3_Err != nil {
@@ -4650,7 +4651,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var194 string
 			templ_7745c5c3_Var194, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "priority") == "", "0", zoneRecordParsedField(recordType, value, "priority")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 302}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 302}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var194)
 			if templ_7745c5c3_Err != nil {
@@ -4673,7 +4674,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var195 string
 			templ_7745c5c3_Var195, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "weight")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 448}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 448}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var195)
 			if templ_7745c5c3_Err != nil {
@@ -4686,7 +4687,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var196 string
 			templ_7745c5c3_Var196, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "weight") == "", "0", zoneRecordParsedField(recordType, value, "weight")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 600}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 600}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var196)
 			if templ_7745c5c3_Err != nil {
@@ -4709,7 +4710,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var197 string
 			templ_7745c5c3_Var197, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "port")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 742}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 742}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var197)
 			if templ_7745c5c3_Err != nil {
@@ -4722,7 +4723,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var198 string
 			templ_7745c5c3_Var198, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "port"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1052, Col: 821}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1053, Col: 821}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var198)
 			if templ_7745c5c3_Err != nil {
@@ -4750,7 +4751,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var199 string
 			templ_7745c5c3_Var199, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ca_domain")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1054, Col: 141}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1055, Col: 141}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var199)
 			if templ_7745c5c3_Err != nil {
@@ -4763,7 +4764,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var200 string
 			templ_7745c5c3_Var200, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "ca_domain"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1054, Col: 205}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1055, Col: 205}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var200)
 			if templ_7745c5c3_Err != nil {
@@ -4786,7 +4787,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var201 string
 			templ_7745c5c3_Var201, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "tag")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1054, Col: 381}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1055, Col: 381}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var201)
 			if templ_7745c5c3_Err != nil {
@@ -4839,7 +4840,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var202 string
 			templ_7745c5c3_Var202, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "flags")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1054, Col: 939}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1055, Col: 939}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var202)
 			if templ_7745c5c3_Err != nil {
@@ -4852,7 +4853,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var203 string
 			templ_7745c5c3_Var203, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "flags") == "", "0", zoneRecordParsedField(recordType, value, "flags")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1054, Col: 1087}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1055, Col: 1087}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var203)
 			if templ_7745c5c3_Err != nil {
@@ -4880,7 +4881,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var204 string
 			templ_7745c5c3_Var204, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "key_tag")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1056, Col: 144}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1057, Col: 144}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var204)
 			if templ_7745c5c3_Err != nil {
@@ -4893,7 +4894,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var205 string
 			templ_7745c5c3_Var205, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "key_tag"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1056, Col: 226}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1057, Col: 226}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var205)
 			if templ_7745c5c3_Err != nil {
@@ -4932,7 +4933,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var206 string
 			templ_7745c5c3_Var206, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "digest")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1057, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1058, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var206)
 			if templ_7745c5c3_Err != nil {
@@ -4945,7 +4946,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var207 string
 			templ_7745c5c3_Var207, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "digest"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1057, Col: 161}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1058, Col: 161}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var207)
 			if templ_7745c5c3_Err != nil {
@@ -4973,7 +4974,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var208 string
 			templ_7745c5c3_Var208, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "algorithm")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1059, Col: 133}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1060, Col: 133}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var208)
 			if templ_7745c5c3_Err != nil {
@@ -5046,7 +5047,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var209 string
 			templ_7745c5c3_Var209, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fingerprint_type")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1059, Col: 900}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1060, Col: 900}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var209)
 			if templ_7745c5c3_Err != nil {
@@ -5089,7 +5090,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var210 string
 			templ_7745c5c3_Var210, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fingerprint")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1060, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1061, Col: 110}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var210)
 			if templ_7745c5c3_Err != nil {
@@ -5102,7 +5103,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var211 string
 			templ_7745c5c3_Var211, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "fingerprint"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1060, Col: 176}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1061, Col: 176}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var211)
 			if templ_7745c5c3_Err != nil {
@@ -5130,7 +5131,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var212 string
 			templ_7745c5c3_Var212, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "certificate_usage")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1062, Col: 151}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1063, Col: 151}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var212)
 			if templ_7745c5c3_Err != nil {
@@ -5193,7 +5194,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var213 string
 			templ_7745c5c3_Var213, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "selector")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1062, Col: 845}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1063, Col: 845}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var213)
 			if templ_7745c5c3_Err != nil {
@@ -5236,7 +5237,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var214 string
 			templ_7745c5c3_Var214, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "matching_type")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1062, Col: 1294}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1063, Col: 1294}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var214)
 			if templ_7745c5c3_Err != nil {
@@ -5289,7 +5290,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var215 string
 			templ_7745c5c3_Var215, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "certificate")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1063, Col: 143}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1064, Col: 143}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var215)
 			if templ_7745c5c3_Err != nil {
@@ -5312,7 +5313,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var216 string
 			templ_7745c5c3_Var216, templ_7745c5c3_Err = templ.JoinStringErrs(zoneRecordParsedField(recordType, value, "certificate"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1063, Col: 290}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1064, Col: 290}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var216))
 			if templ_7745c5c3_Err != nil {
@@ -5330,7 +5331,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var217 string
 			templ_7745c5c3_Var217, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "svc_target")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1065, Col: 143}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 143}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var217)
 			if templ_7745c5c3_Err != nil {
@@ -5343,7 +5344,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var218 string
 			templ_7745c5c3_Var218, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "svc_target"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1065, Col: 208}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 208}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var218)
 			if templ_7745c5c3_Err != nil {
@@ -5366,7 +5367,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var219 string
 			templ_7745c5c3_Var219, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "svc_priority")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1065, Col: 431}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 431}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var219)
 			if templ_7745c5c3_Err != nil {
@@ -5379,7 +5380,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var220 string
 			templ_7745c5c3_Var220, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "svc_priority") == "", "1", zoneRecordParsedField(recordType, value, "svc_priority")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1065, Col: 595}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 595}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var220)
 			if templ_7745c5c3_Err != nil {
@@ -5402,7 +5403,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var221 string
 			templ_7745c5c3_Var221, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "svc_params")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 126}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1067, Col: 126}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var221)
 			if templ_7745c5c3_Err != nil {
@@ -5415,7 +5416,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var222 string
 			templ_7745c5c3_Var222, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "svc_params"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1066, Col: 191}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1067, Col: 191}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var222)
 			if templ_7745c5c3_Err != nil {
@@ -5443,7 +5444,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var223 string
 			templ_7745c5c3_Var223, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "uri")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1068, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var223)
 			if templ_7745c5c3_Err != nil {
@@ -5456,7 +5457,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var224 string
 			templ_7745c5c3_Var224, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "uri"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1068, Col: 152}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 152}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var224)
 			if templ_7745c5c3_Err != nil {
@@ -5479,7 +5480,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var225 string
 			templ_7745c5c3_Var225, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "uri_priority")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 148}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1070, Col: 148}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var225)
 			if templ_7745c5c3_Err != nil {
@@ -5492,7 +5493,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var226 string
 			templ_7745c5c3_Var226, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "uri_priority") == "", "0", zoneRecordParsedField(recordType, value, "uri_priority")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 312}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1070, Col: 312}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var226)
 			if templ_7745c5c3_Err != nil {
@@ -5515,7 +5516,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var227 string
 			templ_7745c5c3_Var227, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "uri_weight")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 462}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1070, Col: 462}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var227)
 			if templ_7745c5c3_Err != nil {
@@ -5528,7 +5529,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var228 string
 			templ_7745c5c3_Var228, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "uri_weight") == "", "0", zoneRecordParsedField(recordType, value, "uri_weight")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1069, Col: 622}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1070, Col: 622}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var228)
 			if templ_7745c5c3_Err != nil {
@@ -5556,7 +5557,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var229 string
 			templ_7745c5c3_Var229, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_order")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 145}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 145}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var229)
 			if templ_7745c5c3_Err != nil {
@@ -5569,7 +5570,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var230 string
 			templ_7745c5c3_Var230, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "naptr_order") == "", "0", zoneRecordParsedField(recordType, value, "naptr_order")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 307}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 307}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var230)
 			if templ_7745c5c3_Err != nil {
@@ -5592,7 +5593,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var231 string
 			templ_7745c5c3_Var231, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_preference")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 467}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 467}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var231)
 			if templ_7745c5c3_Err != nil {
@@ -5605,7 +5606,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var232 string
 			templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "naptr_preference") == "", "0", zoneRecordParsedField(recordType, value, "naptr_preference")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 639}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 639}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var232)
 			if templ_7745c5c3_Err != nil {
@@ -5628,7 +5629,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var233 string
 			templ_7745c5c3_Var233, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_flags")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 794}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 794}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var233)
 			if templ_7745c5c3_Err != nil {
@@ -5641,7 +5642,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var234 string
 			templ_7745c5c3_Var234, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "naptr_flags"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 860}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 860}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var234)
 			if templ_7745c5c3_Err != nil {
@@ -5664,7 +5665,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var235 string
 			templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_services")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 1037}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 1037}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var235)
 			if templ_7745c5c3_Err != nil {
@@ -5677,7 +5678,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var236 string
 			templ_7745c5c3_Var236, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "naptr_services"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1071, Col: 1106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 1106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var236)
 			if templ_7745c5c3_Err != nil {
@@ -5700,7 +5701,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var237 string
 			templ_7745c5c3_Var237, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_regexp")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 151}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1073, Col: 151}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var237)
 			if templ_7745c5c3_Err != nil {
@@ -5713,7 +5714,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var238 string
 			templ_7745c5c3_Var238, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "naptr_regexp"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 218}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1073, Col: 218}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var238)
 			if templ_7745c5c3_Err != nil {
@@ -5736,7 +5737,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var239 string
 			templ_7745c5c3_Var239, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "naptr_replacement")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 418}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1073, Col: 418}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var239)
 			if templ_7745c5c3_Err != nil {
@@ -5749,7 +5750,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var240 string
 			templ_7745c5c3_Var240, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "naptr_replacement"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1072, Col: 490}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1073, Col: 490}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var240)
 			if templ_7745c5c3_Err != nil {
@@ -5777,7 +5778,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var241 string
 			templ_7745c5c3_Var241, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "primary_ns")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1074, Col: 152}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 152}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var241)
 			if templ_7745c5c3_Err != nil {
@@ -5790,7 +5791,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var242 string
 			templ_7745c5c3_Var242, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "primary_ns"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1074, Col: 217}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 217}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var242)
 			if templ_7745c5c3_Err != nil {
@@ -5813,7 +5814,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var243 string
 			templ_7745c5c3_Var243, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "responsible")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1074, Col: 424}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 424}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var243)
 			if templ_7745c5c3_Err != nil {
@@ -5826,7 +5827,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var244 string
 			templ_7745c5c3_Var244, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "responsible"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1074, Col: 490}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 490}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var244)
 			if templ_7745c5c3_Err != nil {
@@ -5849,7 +5850,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var245 string
 			templ_7745c5c3_Var245, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "serial")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 142}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var245)
 			if templ_7745c5c3_Err != nil {
@@ -5862,7 +5863,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var246 string
 			templ_7745c5c3_Var246, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "serial"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 228}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 228}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var246)
 			if templ_7745c5c3_Err != nil {
@@ -5885,7 +5886,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var247 string
 			templ_7745c5c3_Var247, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "refresh")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 376}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 376}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var247)
 			if templ_7745c5c3_Err != nil {
@@ -5898,7 +5899,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var248 string
 			templ_7745c5c3_Var248, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "refresh"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 463}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 463}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var248)
 			if templ_7745c5c3_Err != nil {
@@ -5921,7 +5922,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var249 string
 			templ_7745c5c3_Var249, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "retry")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 607}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 607}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var249)
 			if templ_7745c5c3_Err != nil {
@@ -5934,7 +5935,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var250 string
 			templ_7745c5c3_Var250, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "retry"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1075, Col: 692}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 692}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var250)
 			if templ_7745c5c3_Err != nil {
@@ -5957,7 +5958,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var251 string
 			templ_7745c5c3_Var251, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "expire")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 142}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1077, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var251)
 			if templ_7745c5c3_Err != nil {
@@ -5970,7 +5971,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var252 string
 			templ_7745c5c3_Var252, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "expire"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 228}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1077, Col: 228}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var252)
 			if templ_7745c5c3_Err != nil {
@@ -5993,7 +5994,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var253 string
 			templ_7745c5c3_Var253, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "minimum")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 380}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1077, Col: 380}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var253)
 			if templ_7745c5c3_Err != nil {
@@ -6006,7 +6007,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var254 string
 			templ_7745c5c3_Var254, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "minimum"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1076, Col: 467}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1077, Col: 467}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var254)
 			if templ_7745c5c3_Err != nil {
@@ -6034,7 +6035,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var255 string
 			templ_7745c5c3_Var255, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fwd_address")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1078, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1079, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var255)
 			if templ_7745c5c3_Err != nil {
@@ -6047,7 +6048,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var256 string
 			templ_7745c5c3_Var256, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneRecordParsedField(recordType, value, "fwd_address"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1078, Col: 182}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1079, Col: 182}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var256)
 			if templ_7745c5c3_Err != nil {
@@ -6070,7 +6071,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var257 string
 			templ_7745c5c3_Var257, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fwd_protocol")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1079, Col: 135}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1080, Col: 135}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var257)
 			if templ_7745c5c3_Err != nil {
@@ -6123,7 +6124,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var258 string
 			templ_7745c5c3_Var258, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "fwd_priority")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1079, Col: 718}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1080, Col: 718}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var258)
 			if templ_7745c5c3_Err != nil {
@@ -6136,7 +6137,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var259 string
 			templ_7745c5c3_Var259, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1079, Col: 882}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1080, Col: 882}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var259)
 			if templ_7745c5c3_Err != nil {
@@ -6164,7 +6165,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var260 string
 			templ_7745c5c3_Var260, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "value")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1081, Col: 98}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1082, Col: 98}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var260)
 			if templ_7745c5c3_Err != nil {
@@ -6177,7 +6178,7 @@ func ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) tem
 			var templ_7745c5c3_Var261 string
 			templ_7745c5c3_Var261, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1081, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1082, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var261)
 			if templ_7745c5c3_Err != nil {
@@ -6230,7 +6231,7 @@ func DNSSECAlgorithmSelect(name, selected string, disabled bool) templ.Component
 		var templ_7745c5c3_Var263 string
 		templ_7745c5c3_Var263, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1086, Col: 20}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1087, Col: 20}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var263)
 		if templ_7745c5c3_Err != nil {
@@ -6352,7 +6353,7 @@ func DSDigestSelect(name, selected string, disabled bool) templ.Component {
 		var templ_7745c5c3_Var265 string
 		templ_7745c5c3_Var265, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1090, Col: 20}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1091, Col: 20}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var265)
 		if templ_7745c5c3_Err != nil {
@@ -6492,7 +6493,7 @@ func ZoneValidationDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var269 string
 			templ_7745c5c3_Var269, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1104, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1105, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var269)
 			if templ_7745c5c3_Err != nil {
@@ -6588,7 +6589,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var273 string
 			templ_7745c5c3_Var273, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1121, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1122, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var273)
 			if templ_7745c5c3_Err != nil {
@@ -6641,7 +6642,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var274 string
 			templ_7745c5c3_Var274, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.ZSKLifetime)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1128, Col: 106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1129, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var274)
 			if templ_7745c5c3_Err != nil {
@@ -6654,7 +6655,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var275 string
 			templ_7745c5c3_Var275, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.KSKLifetime)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1129, Col: 106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1130, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var275)
 			if templ_7745c5c3_Err != nil {
@@ -6667,7 +6668,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var276 string
 			templ_7745c5c3_Var276, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.KeyPrepublish)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1130, Col: 119}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1131, Col: 119}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var276)
 			if templ_7745c5c3_Err != nil {
@@ -6680,7 +6681,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var277 string
 			templ_7745c5c3_Var277, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.KeyRetireAfter)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1131, Col: 118}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1132, Col: 118}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var277)
 			if templ_7745c5c3_Err != nil {
@@ -6723,7 +6724,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var278 string
 			templ_7745c5c3_Var278, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(zone.NSEC3Iterations))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1135, Col: 141}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1136, Col: 141}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var278)
 			if templ_7745c5c3_Err != nil {
@@ -6746,7 +6747,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var279 string
 			templ_7745c5c3_Var279, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.NSEC3Salt)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1136, Col: 126}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1137, Col: 126}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var279)
 			if templ_7745c5c3_Err != nil {
@@ -6782,7 +6783,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var280 string
 				templ_7745c5c3_Var280, templ_7745c5c3_Err = templ.JoinStringErrs(zone.DNSSECExpires)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1140, Col: 180}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1141, Col: 180}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var280))
 				if templ_7745c5c3_Err != nil {
@@ -6800,7 +6801,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var281 string
 					templ_7745c5c3_Var281, templ_7745c5c3_Err = templ.JoinStringErrs(key.Role)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1144, Col: 40}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1145, Col: 40}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var281))
 					if templ_7745c5c3_Err != nil {
@@ -6813,7 +6814,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var282 string
 					templ_7745c5c3_Var282, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(key.KeyTag))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1144, Col: 90}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1145, Col: 90}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var282))
 					if templ_7745c5c3_Err != nil {
@@ -6848,7 +6849,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var285 string
 					templ_7745c5c3_Var285, templ_7745c5c3_Err = templ.JoinStringErrs(key.State)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1144, Col: 171}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1145, Col: 171}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var285))
 					if templ_7745c5c3_Err != nil {
@@ -6866,7 +6867,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 						var templ_7745c5c3_Var286 string
 						templ_7745c5c3_Var286, templ_7745c5c3_Err = templ.JoinStringErrs(key.Timing)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1146, Col: 28}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1147, Col: 28}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var286))
 						if templ_7745c5c3_Err != nil {
@@ -6893,7 +6894,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 						var templ_7745c5c3_Var287 templ.SafeURL
 						templ_7745c5c3_Var287, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name) + "&key_tag=" + fmt.Sprint(key.KeyTag)))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1150, Col: 182}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1151, Col: 182}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var287))
 						if templ_7745c5c3_Err != nil {
@@ -6919,7 +6920,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 							var templ_7745c5c3_Var288 string
 							templ_7745c5c3_Var288, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(key.KeyTag))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1152, Col: 93}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1153, Col: 93}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var288)
 							if templ_7745c5c3_Err != nil {
@@ -6971,7 +6972,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var289 string
 				templ_7745c5c3_Var289, templ_7745c5c3_Err = templ.JoinStringErrs(zone.DNSSECNextAction)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1161, Col: 94}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1162, Col: 94}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var289))
 				if templ_7745c5c3_Err != nil {
@@ -6997,7 +6998,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var290 string
 				templ_7745c5c3_Var290, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(zone.DNSSECKeyTag))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1164, Col: 169}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1165, Col: 169}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var290))
 				if templ_7745c5c3_Err != nil {
@@ -7010,7 +7011,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var291 string
 				templ_7745c5c3_Var291, templ_7745c5c3_Err = templ.JoinStringErrs(zone.DNSSECExpires)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1164, Col: 213}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1165, Col: 213}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var291))
 				if templ_7745c5c3_Err != nil {
@@ -7039,7 +7040,7 @@ func ZoneSigningDNSSECDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var292 templ.SafeURL
 				templ_7745c5c3_Var292, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1167, Col: 139}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1168, Col: 139}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var292))
 				if templ_7745c5c3_Err != nil {
@@ -7139,7 +7140,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var296 string
 			templ_7745c5c3_Var296, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1183, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1184, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var296)
 			if templ_7745c5c3_Err != nil {
@@ -7152,7 +7153,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var297 string
 			templ_7745c5c3_Var297, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1185, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1186, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var297)
 			if templ_7745c5c3_Err != nil {
@@ -7173,7 +7174,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 			var templ_7745c5c3_Var298 string
 			templ_7745c5c3_Var298, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(zone.DefaultTTL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1187, Col: 145}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1188, Col: 145}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var298)
 			if templ_7745c5c3_Err != nil {
@@ -7199,7 +7200,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var299 string
 				templ_7745c5c3_Var299, templ_7745c5c3_Err = templ.JoinStringErrs(zone.CatalogManager)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1190, Col: 157}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1191, Col: 157}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var299))
 				if templ_7745c5c3_Err != nil {
@@ -7226,7 +7227,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var300 string
 				templ_7745c5c3_Var300, templ_7745c5c3_Err = templ.JoinStringErrs(zoneCatalogRoleHeading(zone))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1195, Col: 118}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1196, Col: 118}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var300))
 				if templ_7745c5c3_Err != nil {
@@ -7239,7 +7240,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var301 string
 				templ_7745c5c3_Var301, templ_7745c5c3_Err = templ.JoinStringErrs(zoneCatalogRoleDescription(zone))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1195, Col: 170}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1196, Col: 170}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var301))
 				if templ_7745c5c3_Err != nil {
@@ -7257,7 +7258,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var302 string
 					templ_7745c5c3_Var302, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.CatalogMembers, "\n"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1197, Col: 127}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1198, Col: 127}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var302))
 					if templ_7745c5c3_Err != nil {
@@ -7270,7 +7271,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var303 string
 					templ_7745c5c3_Var303, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d zone(s) in this catalog.", len(zone.CatalogMembers)))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1197, Col: 217}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1198, Col: 217}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var303))
 					if templ_7745c5c3_Err != nil {
@@ -7323,7 +7324,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 						var templ_7745c5c3_Var304 string
 						templ_7745c5c3_Var304, templ_7745c5c3_Err = templ.ResolveAttributeValue(target)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1210, Col: 31}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1211, Col: 31}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var304)
 						if templ_7745c5c3_Err != nil {
@@ -7346,7 +7347,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 						var templ_7745c5c3_Var305 string
 						templ_7745c5c3_Var305, templ_7745c5c3_Err = templ.JoinStringErrs(target)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1210, Col: 83}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1211, Col: 83}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var305))
 						if templ_7745c5c3_Err != nil {
@@ -7364,7 +7365,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var306 string
 					templ_7745c5c3_Var306, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.CatalogGroup)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1213, Col: 115}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1214, Col: 115}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var306)
 					if templ_7745c5c3_Err != nil {
@@ -7397,7 +7398,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var307 string
 					templ_7745c5c3_Var307, templ_7745c5c3_Err = templ.ResolveAttributeValue(source)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1222, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1223, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var307)
 					if templ_7745c5c3_Err != nil {
@@ -7420,7 +7421,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					var templ_7745c5c3_Var308 string
 					templ_7745c5c3_Var308, templ_7745c5c3_Err = templ.JoinStringErrs(source)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1222, Col: 80}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1223, Col: 80}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var308))
 					if templ_7745c5c3_Err != nil {
@@ -7472,7 +7473,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var309 string
 				templ_7745c5c3_Var309, templ_7745c5c3_Err = templ.JoinStringErrs(zoneTypeLabel(zone.Type))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1235, Col: 179}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1236, Col: 179}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var309))
 				if templ_7745c5c3_Err != nil {
@@ -7485,7 +7486,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var310 string
 				templ_7745c5c3_Var310, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.53\nprimary.example.net:53")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1236, Col: 144}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1237, Col: 144}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var310)
 				if templ_7745c5c3_Err != nil {
@@ -7498,7 +7499,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				var templ_7745c5c3_Var311 string
 				templ_7745c5c3_Var311, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.PrimaryServers, "\n"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1236, Col: 197}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1237, Col: 197}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var311))
 				if templ_7745c5c3_Err != nil {
@@ -7549,7 +7550,7 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			if zone.Type == "primary" {
+			if zonemodel.AcceptsDynamicUpdates(zone.Type) {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 719, "<section class=\"zone-settings-section first\"><div><span class=\"zone-settings-section-icon\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -7558,41 +7559,54 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 720, "</span><span><strong>Dynamic DNS Updates</strong><small>Accept authenticated RFC 2136 record changes for this primary zone.</small></span></div><label class=\"zone-dynamic-toggle\"><span><strong>Allow Dynamic Updates</strong><small>Every update must be signed by the TSIG key configured above. Changes persist transactionally to the zone database, advance the SOA serial, and notify secondary servers.</small></span><span class=\"switch\"><input type=\"checkbox\" name=\"dynamic_updates\" value=\"true\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 720, "</span><span><strong>Dynamic DNS Updates</strong><small>Accept authenticated RFC 2136 record changes for this ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var312 string
+				templ_7745c5c3_Var312, templ_7745c5c3_Err = templ.JoinStringErrs(strings.ToLower(zoneTypeLabel(zone.Type)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1248, Col: 220}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var312))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 721, " zone.</small></span></div><label class=\"zone-dynamic-toggle\"><span><strong>Allow Dynamic Updates</strong><small>Every update must be signed by the TSIG key configured above. Changes persist transactionally to the zone database, advance the SOA serial, and notify secondary servers.</small></span><span class=\"switch\"><input type=\"checkbox\" name=\"dynamic_updates\" value=\"true\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.DynamicUpdates {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 721, " checked")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 722, " checked")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 722, "><span></span></span></label></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 723, "><span></span></span></label></section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if zone.Type != "stub" {
-				var templ_7745c5c3_Var312 = []any{ifThen(zone.Type == "primary" || zone.Type == "secondary" || zone.CatalogRole == "subscribed", "zone-settings-section", "zone-settings-section first")}
-				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var312...)
+				var templ_7745c5c3_Var313 = []any{ifThen(zonemodel.AcceptsDynamicUpdates(zone.Type) || zone.Type == "secondary" || zone.CatalogRole == "subscribed", "zone-settings-section", "zone-settings-section first")}
+				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var313...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 723, "<section class=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 724, "<section class=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var313 string
-				templ_7745c5c3_Var313, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var312).String())
+				var templ_7745c5c3_Var314 string
+				templ_7745c5c3_Var314, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var313).String())
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1, Col: 0}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var313)
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var314)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 724, "\"><div><span class=\"zone-settings-section-icon\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 725, "\"><div><span class=\"zone-settings-section-icon\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7600,73 +7614,73 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 725, "</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div><label><span>Transfer Policy</span><select name=\"zone_transfer\" data-styled-select><option value=\"deny\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 726, "</span><span><strong>Zone Transfer</strong><small>Control who may transfer this zone using AXFR or IXFR.</small></span></div><label><span>Transfer Policy</span><select name=\"zone_transfer\" data-styled-select><option value=\"deny\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.ZoneTransfer == "" || zone.ZoneTransfer == "deny" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 726, " selected")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 727, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 727, ">Deny transfers</option><option value=\"private\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 728, ">Deny transfers</option><option value=\"private\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.ZoneTransfer == "private" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 728, " selected")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 729, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 729, ">Private networks only</option><option value=\"acl\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 730, ">Private networks only</option><option value=\"acl\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.ZoneTransfer == "acl" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 730, " selected")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 731, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 731, ">Specified networks</option><option value=\"allow\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 732, ">Specified networks</option><option value=\"allow\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.ZoneTransfer == "allow" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 732, " selected")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 733, " selected")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 733, ">Allow any client</option></select></label> <label><span>Allowed Networks</span><textarea class=\"mono-input\" name=\"transfer_acl\" placeholder=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var314 string
-				templ_7745c5c3_Var314, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.10\n2001:db8::/64")
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1255, Col: 132}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var314)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 734, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 734, ">Allow any client</option></select></label> <label><span>Allowed Networks</span><textarea class=\"mono-input\" name=\"transfer_acl\" placeholder=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var315 string
-				templ_7745c5c3_Var315, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.TransferACL, "\n"))
+				templ_7745c5c3_Var315, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.10\n2001:db8::/64")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1255, Col: 173}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1256, Col: 132}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var315))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var315)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 735, "</textarea><small>One IP address or CIDR network per line. Used by the specified-networks policy.</small></label></section><section class=\"zone-settings-section\"><div><span class=\"zone-settings-section-icon\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 735, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var316 string
+				templ_7745c5c3_Var316, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.TransferACL, "\n"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1256, Col: 173}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var316))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 736, "</textarea><small>One IP address or CIDR network per line. Used by the specified-networks policy.</small></label></section><section class=\"zone-settings-section\"><div><span class=\"zone-settings-section-icon\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -7674,42 +7688,42 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 736, "</span><span><strong>Notify</strong><small>Notify secondary name servers after this zone changes.</small></span></div><label><span>Secondary Servers</span><textarea class=\"mono-input\" name=\"notify\" placeholder=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var316 string
-				templ_7745c5c3_Var316, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.53\nsecondary.example.net:53")
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1259, Col: 138}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var316)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 737, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 737, "</span><span><strong>Notify</strong><small>Notify secondary name servers after this zone changes.</small></span></div><label><span>Secondary Servers</span><textarea class=\"mono-input\" name=\"notify\" placeholder=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var317 string
-				templ_7745c5c3_Var317, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.Notify, "\n"))
+				templ_7745c5c3_Var317, templ_7745c5c3_Err = templ.ResolveAttributeValue("192.0.2.53\nsecondary.example.net:53")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1259, Col: 174}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1260, Col: 138}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var317))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var317)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 738, "</textarea><small>One DNS server per line. Port 53 is used when no port is provided.</small></label></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 738, "\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var318 string
+				templ_7745c5c3_Var318, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.Notify, "\n"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1260, Col: 174}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var318))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 739, "</textarea><small>One DNS server per line. Port 53 is used when no port is provided.</small></label></section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 739, "</section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 740, "</section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var318 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var319 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -7721,17 +7735,17 @@ func ZoneSettingsDialog(zone ZoneView, id string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 740, "<button class=\"button\" type=\"submit\">Save Settings</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 741, "<button class=\"button\" type=\"submit\">Save Settings</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var318), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var319), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 741, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 742, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -7761,12 +7775,12 @@ func CloneZoneDialog(zone ZoneView, id string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var319 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var319 == nil {
-			templ_7745c5c3_Var319 = templ.NopComponent
+		templ_7745c5c3_Var320 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var320 == nil {
+			templ_7745c5c3_Var320 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var320 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var321 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -7778,24 +7792,24 @@ func CloneZoneDialog(zone ZoneView, id string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 742, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/zones/clone\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 743, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/zones/clone\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var321 string
-			templ_7745c5c3_Var321, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
+			var templ_7745c5c3_Var322 string
+			templ_7745c5c3_Var322, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1273, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1274, Col: 53}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var321)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 743, "\"> <label><span>New Zone Name</span><input class=\"mono-input\" name=\"name\" placeholder=\"clone.example.com\" autocomplete=\"off\" required></label>")
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var322)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var322 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 744, "\"> <label><span>New Zone Name</span><input class=\"mono-input\" name=\"name\" placeholder=\"clone.example.com\" autocomplete=\"off\" required></label>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Var323 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -7807,23 +7821,23 @@ func CloneZoneDialog(zone ZoneView, id string) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 744, "<button class=\"button\" type=\"submit\">Clone Zone</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 745, "<button class=\"button\" type=\"submit\">Clone Zone</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var322), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var323), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 745, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 746, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: "Clone Zone", DescriptionContent: zoneDialogLead("Copy all records and settings from ", zone.Name, "."), Class: "isotope-zone-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var320), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: "Clone Zone", DescriptionContent: zoneDialogLead("Copy all records and settings from ", zone.Name, "."), Class: "isotope-zone-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var321), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7847,12 +7861,12 @@ func DeleteZoneDialog(zone ZoneView, id string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var323 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var323 == nil {
-			templ_7745c5c3_Var323 = templ.NopComponent
+		templ_7745c5c3_Var324 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var324 == nil {
+			templ_7745c5c3_Var324 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var324 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var325 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -7864,26 +7878,26 @@ func DeleteZoneDialog(zone ZoneView, id string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 746, "<form hx-post=\"/ui/zones/delete\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 747, "<form hx-post=\"/ui/zones/delete\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var325 string
-			templ_7745c5c3_Var325, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
+			var templ_7745c5c3_Var326 string
+			templ_7745c5c3_Var326, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1284, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1285, Col: 132}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var325)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var326)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 747, "\"><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button destructive\" type=\"submit\">Delete Zone</button></footer></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 748, "\"><footer class=\"dialog-footer\"><button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button><button class=\"button destructive\" type=\"submit\">Delete Zone</button></footer></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: "Delete Zone?", Description: "Are you sure you want to delete “" + zone.Name + "”? This will permanently delete all records in this zone. This action cannot be undone.", Class: "isotope-zone-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var324), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: "Delete Zone?", Description: "Are you sure you want to delete “" + zone.Name + "”? This will permanently delete all records in this zone. This action cannot be undone.", Class: "isotope-zone-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var325), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7907,12 +7921,12 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var326 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var326 == nil {
-			templ_7745c5c3_Var326 = templ.NopComponent
+		templ_7745c5c3_Var327 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var327 == nil {
+			templ_7745c5c3_Var327 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 748, "<div class=\"zone-import-input\" data-zone-import-source><div class=\"zone-import-modes\" role=\"group\" aria-label=\"Import source\"><button type=\"button\" data-zone-import-mode=\"file\" aria-pressed=\"true\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 749, "<div class=\"zone-import-input\" data-zone-import-source><div class=\"zone-import-modes\" role=\"group\" aria-label=\"Import source\"><button type=\"button\" data-zone-import-mode=\"file\" aria-pressed=\"true\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7920,7 +7934,7 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 749, "Upload file</button> <button type=\"button\" data-zone-import-mode=\"text\" aria-pressed=\"false\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 750, "Upload file</button> <button type=\"button\" data-zone-import-mode=\"text\" aria-pressed=\"false\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7928,7 +7942,7 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 750, "Paste or enter text</button></div><div data-file-dropzone-root data-file-dropzone-state=\"empty\" data-zone-import-panel=\"file\"><label class=\"file-dropzone\" data-file-dropzone><input type=\"file\" name=\"file\" accept=\".zone,.txt,.db,text/plain,text/dns\" data-file-dropzone-input data-zone-file aria-label=\"Choose zone file\"> <span class=\"file-dropzone-upload-icon\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 751, "Paste or enter text</button></div><div data-file-dropzone-root data-file-dropzone-state=\"empty\" data-zone-import-panel=\"file\"><label class=\"file-dropzone\" data-file-dropzone><input type=\"file\" name=\"file\" accept=\".zone,.txt,.db,text/plain,text/dns\" data-file-dropzone-input data-zone-file aria-label=\"Choose zone file\"> <span class=\"file-dropzone-upload-icon\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7936,7 +7950,7 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 751, "</span> <strong>Drop your zone file here</strong> <span>or <span class=\"file-dropzone-browse\">browse files</span></span> <small>BIND or Technitium · .zone, .txt, .db</small></label><div class=\"file-dropzone-selection\" data-zone-file-selection hidden>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 752, "</span> <strong>Drop your zone file here</strong> <span>or <span class=\"file-dropzone-browse\">browse files</span></span> <small>BIND or Technitium · .zone, .txt, .db</small></label><div class=\"file-dropzone-selection\" data-zone-file-selection hidden>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7944,7 +7958,7 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 752, "<div><strong data-zone-file-name></strong><small data-zone-file-size></small></div><button class=\"button outline icon-button\" type=\"button\" data-zone-file-remove aria-label=\"Remove selected file\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 753, "<div><strong data-zone-file-name></strong><small data-zone-file-size></small></div><button class=\"button outline icon-button\" type=\"button\" data-zone-file-remove aria-label=\"Remove selected file\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -7952,46 +7966,46 @@ func ZoneImportSource(id string, placeholder string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 753, "</button></div></div><div class=\"zone-import-editor\" data-zone-import-panel=\"text\" hidden><div class=\"zone-import-editor-heading\"><label for=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var327 string
-		templ_7745c5c3_Var327, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-text")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1309, Col: 68}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var327)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 754, "\">Zone file contents</label><button class=\"button outline\" type=\"button\" data-zone-clipboard>Paste from clipboard</button></div><textarea id=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 754, "</button></div></div><div class=\"zone-import-editor\" data-zone-import-panel=\"text\" hidden><div class=\"zone-import-editor-heading\"><label for=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var328 string
 		templ_7745c5c3_Var328, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-text")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1310, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1310, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var328)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 755, "\" name=\"zone_text\" data-zone-import-text placeholder=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 755, "\">Zone file contents</label><button class=\"button outline\" type=\"button\" data-zone-clipboard>Paste from clipboard</button></div><textarea id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var329 string
-		templ_7745c5c3_Var329, templ_7745c5c3_Err = templ.ResolveAttributeValue(placeholder)
+		templ_7745c5c3_Var329, templ_7745c5c3_Err = templ.ResolveAttributeValue(id + "-text")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1310, Col: 97}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1311, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var329)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 756, "\" spellcheck=\"false\" disabled></textarea><p class=\"zone-import-help\">Paste your zone file or type records in BIND format.</p></div><p class=\"zone-import-help\" data-file-dropzone-status data-zone-import-status role=\"status\" aria-live=\"polite\"></p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 756, "\" name=\"zone_text\" data-zone-import-text placeholder=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var330 string
+		templ_7745c5c3_Var330, templ_7745c5c3_Err = templ.ResolveAttributeValue(placeholder)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1311, Col: 97}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var330)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 757, "\" spellcheck=\"false\" disabled></textarea><p class=\"zone-import-help\">Paste your zone file or type records in BIND format.</p></div><p class=\"zone-import-help\" data-file-dropzone-status data-zone-import-status role=\"status\" aria-live=\"polite\"></p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8015,12 +8029,12 @@ func ImportNewZoneDialog() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var330 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var330 == nil {
-			templ_7745c5c3_Var330 = templ.NopComponent
+		templ_7745c5c3_Var331 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var331 == nil {
+			templ_7745c5c3_Var331 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var331 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var332 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -8032,7 +8046,7 @@ func ImportNewZoneDialog() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 757, "<form class=\"blocking-dialog-form zone-import-form\" hx-post=\"/ui/zones/import-new\" hx-encoding=\"multipart/form-data\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 758, "<form class=\"blocking-dialog-form zone-import-form\" hx-post=\"/ui/zones/import-new\" hx-encoding=\"multipart/form-data\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -8040,11 +8054,11 @@ func ImportNewZoneDialog() templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 758, "<label><span>Zone name <small>Optional</small></span><input class=\"mono-input\" name=\"zone\" placeholder=\"example.com\" autocomplete=\"off\" data-zone-import-name aria-describedby=\"import-new-zone-help\"></label><p class=\"zone-import-help\" id=\"import-new-zone-help\" data-zone-name-help aria-live=\"polite\">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 759, "<label><span>Zone name <small>Optional</small></span><input class=\"mono-input\" name=\"zone\" placeholder=\"example.com\" autocomplete=\"off\" data-zone-import-name aria-describedby=\"import-new-zone-help\"></label><p class=\"zone-import-help\" id=\"import-new-zone-help\" data-zone-name-help aria-live=\"polite\">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Var332 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var333 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -8056,23 +8070,23 @@ func ImportNewZoneDialog() templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 759, "<button class=\"button\" type=\"submit\" data-zone-import-submit disabled>Import Zone</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 760, "<button class=\"button\" type=\"submit\" data-zone-import-submit disabled>Import Zone</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var332), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var333), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 760, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 761, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "import-new-zone-dialog", TitleID: "import-new-zone-title", Title: "Import Zone", Description: "Create a primary zone from a BIND or Technitium zone file.", Class: "isotope-zone-import-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var331), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "import-new-zone-dialog", TitleID: "import-new-zone-title", Title: "Import Zone", Description: "Create a primary zone from a BIND or Technitium zone file.", Class: "isotope-zone-import-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var332), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8097,43 +8111,43 @@ func zoneDialogLead(before, name, after string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var333 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var333 == nil {
-			templ_7745c5c3_Var333 = templ.NopComponent
+		templ_7745c5c3_Var334 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var334 == nil {
+			templ_7745c5c3_Var334 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var334 string
-		templ_7745c5c3_Var334, templ_7745c5c3_Err = templ.JoinStringErrs(before)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1333, Col: 9}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var334))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 761, "<code>")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
 		var templ_7745c5c3_Var335 string
-		templ_7745c5c3_Var335, templ_7745c5c3_Err = templ.JoinStringErrs(name)
+		templ_7745c5c3_Var335, templ_7745c5c3_Err = templ.JoinStringErrs(before)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1333, Col: 23}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1334, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var335))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 762, "</code>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 762, "<code>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var336 string
-		templ_7745c5c3_Var336, templ_7745c5c3_Err = templ.JoinStringErrs(after)
+		templ_7745c5c3_Var336, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1333, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1334, Col: 23}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var336))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 763, "</code>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var337 string
+		templ_7745c5c3_Var337, templ_7745c5c3_Err = templ.JoinStringErrs(after)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1334, Col: 39}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var337))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8158,25 +8172,25 @@ func zoneConversionLead(name string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var337 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var337 == nil {
-			templ_7745c5c3_Var337 = templ.NopComponent
+		templ_7745c5c3_Var338 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var338 == nil {
+			templ_7745c5c3_Var338 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 763, "Make Sable the writable source for <strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 764, "Make Sable the writable source for <strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var338 string
-		templ_7745c5c3_Var338, templ_7745c5c3_Err = templ.JoinStringErrs(name)
+		var templ_7745c5c3_Var339 string
+		templ_7745c5c3_Var339, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1338, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1339, Col: 50}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var338))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var339))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 764, "</strong>.")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 765, "</strong>.")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8200,12 +8214,12 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var339 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var339 == nil {
-			templ_7745c5c3_Var339 = templ.NopComponent
+		templ_7745c5c3_Var340 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var340 == nil {
+			templ_7745c5c3_Var340 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var340 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var341 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -8217,78 +8231,78 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 765, "<form class=\"blocking-dialog-form zone-conversion-form\" hx-post=\"/ui/zones/convert-primary\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var341 string
-			templ_7745c5c3_Var341, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1344, Col: 53}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var341)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 766, "\"> <input type=\"hidden\" name=\"confirmation\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 766, "<form class=\"blocking-dialog-form zone-conversion-form\" hx-post=\"/ui/zones/convert-primary\" hx-target=\"#zones-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"zone\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var342 string
-			templ_7745c5c3_Var342, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.ConversionFingerprint)
+			templ_7745c5c3_Var342, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1345, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1345, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var342)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 767, "\"><div class=\"integration-facts zone-conversion-facts\"><div class=\"zone-conversion-source\"><span class=\"integration-fact-label\">Current source</span><span class=\"integration-fact-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 767, "\"> <input type=\"hidden\" name=\"confirmation\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var343 string
-			templ_7745c5c3_Var343, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.PrimaryServers, ", "))
+			templ_7745c5c3_Var343, templ_7745c5c3_Err = templ.ResolveAttributeValue(zone.ConversionFingerprint)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1347, Col: 173}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1346, Col: 78}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var343))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var343)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 768, "</span></div><div><span class=\"integration-fact-label\">SOA serial</span><span class=\"integration-fact-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 768, "\"><div class=\"integration-facts zone-conversion-facts\"><div class=\"zone-conversion-source\"><span class=\"integration-fact-label\">Current source</span><span class=\"integration-fact-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var344 string
-			templ_7745c5c3_Var344, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(zone.ConversionSerial))
+			templ_7745c5c3_Var344, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(zone.PrimaryServers, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1348, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1348, Col: 173}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var344))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 769, "</span></div><div><span class=\"integration-fact-label\">Records</span><span class=\"integration-fact-value\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 769, "</span></div><div><span class=\"integration-fact-label\">SOA serial</span><span class=\"integration-fact-value\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var345 string
-			templ_7745c5c3_Var345, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(len(zone.Records)))
+			templ_7745c5c3_Var345, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(zone.ConversionSerial))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1349, Col: 125}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1349, Col: 132}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var345))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 770, "</span></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 770, "</span></div><div><span class=\"integration-fact-label\">Records</span><span class=\"integration-fact-value\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var346 string
+			templ_7745c5c3_Var346, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(len(zone.Records)))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1350, Col: 125}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var346))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 771, "</span></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if zone.ConversionError != "" {
 				if strings.Contains(zone.ConversionError, "DNSSEC") || strings.Contains(zone.ConversionError, "signed zones") {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 771, "<div class=\"warning-box zone-conversion-warning\" role=\"alert\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 772, "<div class=\"warning-box zone-conversion-warning\" role=\"alert\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -8296,20 +8310,20 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 772, "<div><strong>DNSSEC transition required</strong><p>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 773, "<div><strong>DNSSEC transition required</strong><p>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var346 string
-					templ_7745c5c3_Var346, templ_7745c5c3_Err = templ.JoinStringErrs(zone.ConversionError)
+					var templ_7745c5c3_Var347 string
+					templ_7745c5c3_Var347, templ_7745c5c3_Err = templ.JoinStringErrs(zone.ConversionError)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1353, Col: 159}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1354, Col: 159}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var346))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var347))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 773, "</p></div></div><details class=\"dnssec-migration-details\"><summary>How to migrate this zone</summary>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 774, "</p></div></div><details class=\"dnssec-migration-details\"><summary>How to migrate this zone</summary>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -8317,12 +8331,12 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 774, "</details>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 775, "</details>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				} else if strings.Contains(zone.ConversionError, "belongs to a Sable catalog") {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 775, "<div class=\"cluster-dialog-note zone-conversion-info\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 776, "<div class=\"cluster-dialog-note zone-conversion-info\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -8330,67 +8344,67 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 776, "<p><strong>Managed by a Sable catalog</strong><span>Catalog: <a href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 777, "<p><strong>Managed by a Sable catalog</strong><span>Catalog: <a href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var347 templ.SafeURL
-					templ_7745c5c3_Var347, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.CatalogZone))
+					var templ_7745c5c3_Var348 templ.SafeURL
+					templ_7745c5c3_Var348, templ_7745c5c3_Err = templ.JoinURLErrs(zoneHref(zone.CatalogZone))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1356, Col: 165}
-					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var347))
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 777, "\">")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					var templ_7745c5c3_Var348 string
-					templ_7745c5c3_Var348, templ_7745c5c3_Err = templ.JoinStringErrs(zone.CatalogZone)
-					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1356, Col: 186}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1357, Col: 165}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var348))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 778, "</a></span><span>This zone can’t be converted while the catalog manages it. Conversion does not detach zones from catalogs.</span><span>Import from Catalog can create independent Secondaries, but it skips zones that already exist in Sable. It won’t replace or detach this managed zone.</span></p></div>")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				} else {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 779, "<p class=\"zone-conversion-notice\" role=\"alert\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 778, "\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var349 string
-					templ_7745c5c3_Var349, templ_7745c5c3_Err = templ.JoinStringErrs(zone.ConversionError)
+					templ_7745c5c3_Var349, templ_7745c5c3_Err = templ.JoinStringErrs(zone.CatalogZone)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1358, Col: 70}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1357, Col: 186}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var349))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 780, "</p>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 779, "</a></span><span>This zone can’t be converted while the catalog manages it. Conversion does not detach zones from catalogs.</span><span>Import from Catalog can create independent Secondaries, but it skips zones that already exist in Sable. It won’t replace or detach this managed zone.</span></p></div>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				} else {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 780, "<p class=\"zone-conversion-notice\" role=\"alert\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var350 string
+					templ_7745c5c3_Var350, templ_7745c5c3_Err = templ.JoinStringErrs(zone.ConversionError)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1359, Col: 70}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var350))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 781, "</p>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 781, "<p class=\"zone-import-help\">Records, permissions, and history stay in place. The serial advances and synchronization from the current source stops.</p><label><span>Final synchronization</span><select name=\"final_sync\" data-styled-select>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 782, "<p class=\"zone-import-help\">Records, permissions, and history stay in place. The serial advances and synchronization from the current source stops.</p><label><span>Final synchronization</span><select name=\"final_sync\" data-styled-select>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if zone.CanTransfer {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 782, "<option value=\"true\" selected>Synchronize, then convert</option> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 783, "<option value=\"true\" selected>Synchronize, then convert</option> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 783, "<option value=\"false\">Use the stored snapshot</option></select></label><p class=\"zone-import-help\">If synchronization fails, the zone stays Secondary. A stored snapshot may contain stale or expired data.</p><div class=\"zone-import-options\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 784, "<option value=\"false\">Use the stored snapshot</option></select></label><p class=\"zone-import-help\">If synchronization fails, the zone stays Secondary. A stored snapshot may contain stale or expired data.</p><div class=\"zone-import-options\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -8398,22 +8412,22 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 784, "</div><p class=\"zone-import-help\">Before moving clients, verify Sable and its replicas. SOA and NS targets remain unchanged; review them before retiring the source.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 785, "</div><p class=\"zone-import-help\">Before moving clients, verify Sable and its replicas. SOA and NS targets remain unchanged; review them before retiring the source.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 785, "<footer class=\"dialog-footer\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 786, "<footer class=\"dialog-footer\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if zone.ConversionError != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 786, "<button class=\"button outline\" type=\"button\" data-dialog-close>Close</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 787, "<button class=\"button outline\" type=\"button\" data-dialog-close>Close</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 787, "<button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button> <button class=\"button\" type=\"submit\" data-replica-primary-action>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 788, "<button class=\"button outline\" type=\"button\" data-dialog-close>Cancel</button> <button class=\"button\" type=\"submit\" data-replica-primary-action>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -8421,31 +8435,31 @@ func ConvertPrimaryDialog(zone ZoneView, id string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 788, "<span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 789, "<span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var350 string
-				templ_7745c5c3_Var350, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary"))
+				var templ_7745c5c3_Var351 string
+				templ_7745c5c3_Var351, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1379, Col: 188}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `zones.templ`, Line: 1380, Col: 188}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var350))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var351))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 789, "</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 790, "</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 790, "</footer></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 791, "</footer></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary Zone"), DescriptionContent: zoneConversionLead(zone.Name), Class: "isotope-zone-dialog zone-conversion-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var340), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: id, Title: ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary Zone"), DescriptionContent: zoneConversionLead(zone.Name), Class: "isotope-zone-dialog zone-conversion-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var341), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -8470,12 +8484,12 @@ func DNSSECMigrationSteps() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var351 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var351 == nil {
-			templ_7745c5c3_Var351 = templ.NopComponent
+		templ_7745c5c3_Var352 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var352 == nil {
+			templ_7745c5c3_Var352 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 791, "<div class=\"dnssec-migration-steps\"><ol><li>If a parent DS record exists, remove it and wait for cached DS records to expire while Technitium continues signing. Update any private trust anchors too.</li><li>Disable DNSSEC for the source zone in Technitium, then resync the Sable Secondary to fetch the unsigned zone. If the import was blocked, retry importing after the source is unsigned.</li><li>Pause source edits and automatic writers, then convert to Primary or import as Primary.</li><li>Enable DNSSEC in Sable if required. Verify signing on all new authorities and allow old delegation and DNSKEY caches to expire before publishing Sable’s new DS record or trust anchor.</li></ol><p class=\"zone-import-help\">This path temporarily suspends DNSSEC validation. Migration with uninterrupted DNSSEC requires coordinated key handling that this flow does not support.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 792, "<div class=\"dnssec-migration-steps\"><ol><li>If a parent DS record exists, remove it and wait for cached DS records to expire while Technitium continues signing. Update any private trust anchors too.</li><li>Disable DNSSEC for the source zone in Technitium, then resync the Sable Secondary to fetch the unsigned zone. If the import was blocked, retry importing after the source is unsigned.</li><li>Pause source edits and automatic writers, then convert to Primary or import as Primary.</li><li>Enable DNSSEC in Sable if required. Verify signing on all new authorities and allow old delegation and DNSKEY caches to expire before publishing Sable’s new DS record or trust anchor.</li></ol><p class=\"zone-import-help\">This path temporarily suspends DNSSEC validation. Migration with uninterrupted DNSSEC requires coordinated key handling that this flow does not support.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
