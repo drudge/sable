@@ -590,21 +590,7 @@ templ ZonesContent(view ZonesPageView) {
 
 templ ZoneListView(view ZonesPageView) {
 	<div class="isotope-zone-stack">
-		<header class="isotope-zone-heading">
-			<div><h1>Zones</h1><p>{ fmt.Sprint(len(view.Zones)) } zones configured</p></div>
-			if view.CanCreate {
-				<div class="zone-heading-actions">
-					<details class="pause-menu zone-import-menu">
-						<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import</span>@Icon("chevron-down")</summary>
-						<div>
-							<button type="button" aria-label="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("file-text")<span><strong>From file or text</strong><small>Upload a zone file or paste records</small></span></button>
-							<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>
-						</div>
-					</details>
-					@components.Button(components.ButtonProps{Label: "Add Zone", Icon: "plus", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Add zone", "title": "Add zone", "data-dialog-open": "create-zone-dialog", "data-replica-primary-action": true}})
-				</div>
-			}
-		</header>
+		@components.PageHeader(components.PageHeaderProps{Title: "Zones", Description: fmt.Sprint(len(view.Zones)) + " zones configured", Actions: zoneListActions(view), Class: "isotope-zone-heading"})
 		<div class="zone-filter-bar">
 			@SearchField("Search zones", "Search zones...", "", "zone-search", templ.Attributes{"data-zone-search": true})
 			<div class="zone-filter-selects">
@@ -1395,4 +1381,21 @@ templ DNSSECMigrationSteps() {
  </ol>
  <p class="zone-import-help">This path temporarily suspends DNSSEC validation. Migration with uninterrupted DNSSEC requires coordinated key handling that this flow does not support.</p>
  </div>
+}
+
+// zoneListActions sit in the Zones page header: the import menu and Add
+// Zone, for an account that can create zones.
+templ zoneListActions(view ZonesPageView) {
+	if view.CanCreate {
+		<div class="zone-heading-actions">
+			<details class="pause-menu zone-import-menu">
+				<summary class="button outline zone-import-trigger" aria-label="Import options">@Icon("upload")<span>Import</span>@Icon("chevron-down")</summary>
+				<div>
+					<button type="button" aria-label="Import zone" data-dialog-open="import-new-zone-dialog" data-replica-primary-action>@Icon("file-text")<span><strong>From file or text</strong><small>Upload a zone file or paste records</small></span></button>
+					<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>
+				</div>
+			</details>
+			@components.Button(components.ButtonProps{Label: "Add Zone", Icon: "plus", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Add zone", "title": "Add zone", "data-dialog-open": "create-zone-dialog", "data-replica-primary-action": true}})
+		</div>
+	}
 }

@@ -106,7 +106,11 @@ func ProfileContent(view ProfilePageView) templ.Component {
 			templ_7745c5c3_Var2 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"profile-page\" id=\"profile-content\" data-isotope-tabs data-tab-param=\"tab\"><header class=\"page-heading\"><h1>Profile</h1><p>Manage your account, passkeys, password, and API tokens</p></header>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"profile-page\" id=\"profile-content\" data-isotope-tabs data-tab-param=\"tab\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = components.PageHeader(components.PageHeaderProps{Title: "Profile", Description: "Manage your account, passkeys, password, and API tokens"}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

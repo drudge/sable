@@ -1,0 +1,32 @@
+package components
+
+import "strings"
+
+// PageHeaderProps describes the title block at the top of a console page.
+type PageHeaderProps struct {
+	Title       string
+	Description string
+	// Actions sit at the end of the header, such as a settings link or the
+	// buttons that add to the page.
+	Actions templ.Component
+	// Class adds classes for a page's own header layout. Attrs go on the
+	// header element.
+	Class string
+	Attrs templ.Attributes
+}
+
+// PageHeader draws a page's h1 and one-line description, with any actions
+// beside them.
+templ PageHeader(p PageHeaderProps) {
+	<header class={ strings.TrimSpace("page-header " + p.Class) } { p.Attrs... }>
+		<div class="page-heading">
+			<h1>{ p.Title }</h1>
+			if p.Description != "" {
+				<p>{ p.Description }</p>
+			}
+		</div>
+		if p.Actions != nil {
+			@p.Actions
+		}
+	</header>
+}

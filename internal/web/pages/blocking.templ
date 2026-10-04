@@ -103,7 +103,7 @@ templ BlockingContent(view BlockingPageView) {
 			hx-swap-oob="outerHTML"
 		}
 	>
-		<header class="page-heading"><h1>DNS Blocking</h1><p>Block unwanted domains using block lists and custom rules</p></header>
+		@components.PageHeader(components.PageHeaderProps{Title: "DNS Blocking", Description: "Block unwanted domains using block lists and custom rules"})
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		<template data-block-list-error-toast>

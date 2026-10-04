@@ -38,10 +38,7 @@ templ CachePage(view CachePageView) {
 
 templ CacheContent(view CachePageView) {
 	<div class="cache-page page-stack" id="cache-content">
-		<div class="page-heading">
-			<h1>DNS Cache</h1>
-			<p>Manage cached DNS records for faster query responses</p>
-		</div>
+		@components.PageHeader(components.PageHeaderProps{Title: "DNS Cache", Description: "Manage cached DNS records for faster query responses"})
 		@Toast(view.Message, "success")
 		<div class="cache-layout">
 			@components.Card(components.CardProps{Class: "cache-status-card"}) {
