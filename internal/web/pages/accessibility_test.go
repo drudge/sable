@@ -109,7 +109,7 @@ func TestAdministrationMobileUserShowsSSOStatusAndGroupPills(t *testing.T) {
 			t.Errorf("mobile administration user does not include %q", expected)
 		}
 	}
-	if strings.Index(page, `class="status-badge sso-badge"`) > strings.Index(page, `class="status-badge active"`) {
+	if strings.Index(page, `class="status-badge sso-badge"`) > strings.Index(page, `class="status-badge success"`) {
 		t.Error("mobile SSO badge should appear before the account status")
 	}
 }

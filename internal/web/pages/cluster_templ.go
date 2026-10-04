@@ -446,7 +446,7 @@ func ClusterContent(view ClusterPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				} else if view.NetworkReady {
-					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "Ready", Tone: components.BadgeActive}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "Ready", Tone: components.BadgeSuccess}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

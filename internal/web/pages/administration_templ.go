@@ -415,7 +415,7 @@ func UsersPanel(view AdministrationPageView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -480,7 +480,7 @@ func UsersPanel(view AdministrationPageView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

@@ -463,7 +463,7 @@ func TestInsightsDevicesGroupAddressesAndReportNewOnes(t *testing.T) {
 		`hx-get="/ui/insights/device?key=mac%3A3c%3A22%3Afb%3A01%3A02%3A03&amp;range=day"`,
 		// 10.0.0.50 first appeared today while tracking was already running,
 		// and nothing ties it to hardware, so it is a new address.
-		"New address on the network", `<span class="status-badge active">New</span>`,
+		"New address on the network", `<span class="status-badge success">New</span>`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("devices tab is missing %q", expected)

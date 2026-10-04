@@ -8,18 +8,15 @@ type BadgeTone int
 const (
 	// BadgeNeutral is the gray badge for a plain fact, such as "Not set up".
 	BadgeNeutral BadgeTone = iota
-	// BadgeSuccess is green, for something working: "On", "Configured".
+	// BadgeSuccess is green, for something working or live: "On",
+	// "Configured", "Active", "Ready".
 	BadgeSuccess
-	// BadgeActive is the darker green used for a user, node, or item that is
-	// live: "Active", "Ready", "New".
-	BadgeActive
 	// BadgeWarning is amber, for something that needs a look: "Paused",
 	// "Restart required".
 	BadgeWarning
-	// BadgeDanger is red, for something broken: "Needs attention".
+	// BadgeDanger is red, for something broken or shut off: "Needs
+	// attention", "Disabled".
 	BadgeDanger
-	// BadgeDisabled is the red used for a disabled account.
-	BadgeDisabled
 	// BadgeCurrent is blue, for the item the reader is on: "This node",
 	// "Current".
 	BadgeCurrent
@@ -48,14 +45,10 @@ func badgeClass(p BadgeProps) string {
 	switch p.Tone {
 	case BadgeSuccess:
 		base = "status-badge success"
-	case BadgeActive:
-		base = "status-badge active"
 	case BadgeWarning:
 		base = "status-badge warning"
 	case BadgeDanger:
 		base = "status-badge danger"
-	case BadgeDisabled:
-		base = "status-badge disabled"
 	case BadgeCurrent:
 		base = "current-badge"
 	case BadgeCount:

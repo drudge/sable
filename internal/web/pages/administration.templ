@@ -102,12 +102,12 @@ templ UsersPanel(view AdministrationPageView) {
 						if len(user.Identities) > 0 {
 							@components.Badge(components.BadgeProps{Label: "SSO", Title: userIdentitySummary(user), Class: "sso-badge"})
 						}
-						@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)})</div>@Icon("chevron-right")</div></button>
+						@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)})</div>@Icon("chevron-right")</div></button>
 				}
 			</div>
 			<div class="admin-desktop-table"><table class="isotope-table"><caption class="sr-only">Users</caption><thead><tr><th>Username</th><th>Display Name</th><th>Status</th><th>Groups</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>
 				for _, user := range view.Users {
-					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td>@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDisabled, components.BadgeActive)})
+					<tr data-dialog-open={ adminUserDialogID(user.ID) }><td><code>{ user.Username }</code></td><td>{ administrationUserName(user) }</td><td>@components.Badge(components.BadgeProps{Label: ifThen(user.Disabled, "Disabled", ifThen(userHasWebAccess(view, user), "Active", "API only")), Tone: ifThen(user.Disabled, components.BadgeDanger, components.BadgeSuccess)})
 						if len(user.Identities) > 0 {
 							@components.Badge(components.BadgeProps{Label: "SSO", Title: userIdentitySummary(user), Class: "sso-badge"})
 						}

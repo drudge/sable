@@ -2211,8 +2211,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .admin-row-copy { display: grid; min-width: 0; flex: 1; gap: .2rem; }
 .admin-row-copy > strong { display: flex; align-items: center; gap: .45rem; font-size: .82rem; }
 .admin-row-copy > span { overflow: hidden; color: var(--muted-foreground); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
-.status-badge.active { background: rgb(34 197 94 / .13); color: #16a34a; }
-.status-badge.disabled { background: rgb(239 68 68 / .13); color: #ef4444; }
+.status-badge.success { background: rgb(34 197 94 / .13); color: #16a34a; }
+.dark .status-badge.success { color: #22c55e; }
+.status-badge.danger { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
 .current-badge { background: rgb(59 130 246 / .13); color: #3b82f6; }
 .built-in-badge { margin-left: .2rem; }
 .user-count { flex: 0 0 auto; color: var(--muted-foreground); font-size: .72rem; }
@@ -3435,8 +3436,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 
 /* Apps */
 .wizard-progress { grid-template-columns: auto minmax(1rem, 1fr) auto minmax(1rem, 1fr) auto minmax(1rem, 1fr) auto; }
-.status-badge.success { background: rgb(34 197 94 / .13); color: #22c55e; }
-.status-badge.danger { background: color-mix(in srgb, var(--destructive) 14%, transparent); color: var(--destructive); }
 .integration-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
 .integration-card > header > .status-badge { flex: 0 0 auto; white-space: nowrap; }
 .card-identity { display: flex; min-width: 0; align-items: flex-start; gap: .85rem; }

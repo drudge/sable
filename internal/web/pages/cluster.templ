@@ -151,7 +151,7 @@ templ ClusterContent(view ClusterPageView) {
 						if view.RestartRequired {
 							@components.Badge(components.BadgeProps{Label: "Restart required", Tone: components.BadgeWarning})
 						} else if view.NetworkReady {
-							@components.Badge(components.BadgeProps{Label: "Ready", Tone: components.BadgeActive})
+							@components.Badge(components.BadgeProps{Label: "Ready", Tone: components.BadgeSuccess})
 						}
 					}
 					@components.FactList(components.FactListProps{}) {

@@ -1601,7 +1601,7 @@ func insightAppFailingTitle(app InsightAppRowView) string {
 
 templ insightAppBadges(app InsightAppRowView) {
 	if app.New {
-		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive})
+		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeSuccess})
 	}
 	if app.FailingNow {
 		@components.Badge(components.BadgeProps{Label: "Failing", Tone: components.BadgeWarning, Title: insightAppFailingTitle(app)})
@@ -1693,7 +1693,7 @@ templ InsightApps(view InsightsOverviewView) {
 // source beside the title instead, so it leaves that badge out.
 templ insightDeviceBadges(device InsightDeviceView, nameSource bool) {
 	if device.New {
-		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeActive})
+		@components.Badge(components.BadgeProps{Label: "New", Tone: components.BadgeSuccess})
 	}
 	if nameSource && device.NameSource != "" {
 		@components.Badge(components.BadgeProps{Label: device.NameSource})
@@ -2188,7 +2188,7 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 		<div class="insight-type-summary">
 			if view.Device.TypeLabel != "" {
 				<strong>{ view.Device.TypeLabel }</strong>
-				@components.Badge(components.BadgeProps{Label: insightConfidenceText(view.Device.TypeConfidence), Tone: ifThen(view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high", components.BadgeActive, components.BadgeNeutral)})
+				@components.Badge(components.BadgeProps{Label: insightConfidenceText(view.Device.TypeConfidence), Tone: ifThen(view.Device.TypeConfidence == "set" || view.Device.TypeConfidence == "high", components.BadgeSuccess, components.BadgeNeutral)})
 			} else {
 				<strong class="insight-type-unknown">Sable can't tell yet</strong>
 			}

@@ -40,7 +40,7 @@ func TestClusterNodeStatusUsesAvatarIndicators(t *testing.T) {
 	if removeIndex == -1 || promoteIndex == -1 || removeIndex > promoteIndex {
 		t.Fatalf("cluster replica actions should render Remove Replica before Promote to Primary: %s", markup)
 	}
-	if strings.Contains(markup, `status-badge active">Online`) {
+	if strings.Contains(markup, `status-badge success">Online`) {
 		t.Fatalf("cluster content still renders Online as a text badge: %s", markup)
 	}
 	if strings.Contains(markup, `class="cluster-observed"`) || strings.Contains(markup, `class="count-badge"`) {
