@@ -1254,8 +1254,8 @@ templ UniFiWizardConnectStep(wizard UniFiWizardView) {
 		</div>
 		<div class="wizard-heading compact"><span>@Icon("key")</span><div><strong>Authentication</strong><small>Credentials are encrypted in Sable's secret vault.</small></div></div>
 		<div class="unifi-auth-modes" data-unifi-auth-root>
-			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode != "account") }><input type="radio" name="auth_mode" value="api-key" checked?={ wizard.AuthMode != "account" } data-unifi-auth/><span><strong>API Key</strong><small>Recommended</small></span></label>
-			<label class={ "choice-tile", templ.KV("active", wizard.AuthMode == "account") }><input type="radio" name="auth_mode" value="account" checked?={ wizard.AuthMode == "account" } data-unifi-auth/><span><strong>Local Account</strong><small>Older controllers</small></span></label>
+			@components.ChoiceCard(components.ChoiceCardProps{ID: "unifi-auth-api-key", Title: "API Key", Description: "Recommended", Radio: true, Name: "auth_mode", Value: "api-key", Checked: wizard.AuthMode != "account", Class: ifThen(wizard.AuthMode != "account", "active", ""), InputAttrs: templ.Attributes{"data-unifi-auth": true}})
+			@components.ChoiceCard(components.ChoiceCardProps{ID: "unifi-auth-account", Title: "Local Account", Description: "Older controllers", Radio: true, Name: "auth_mode", Value: "account", Checked: wizard.AuthMode == "account", Class: ifThen(wizard.AuthMode == "account", "active", ""), InputAttrs: templ.Attributes{"data-unifi-auth": true}})
 		</div>
 		<div class="field-grid two" data-unifi-auth-panel="api-key" hidden?={ wizard.AuthMode == "account" }>
 			<label class="field-control"><span>API Key</span><input type="password" name="api_key" autocomplete="new-password" placeholder={ ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "UniFi API key") }/><small>Create one in UniFi under Settings → Admins, or Settings → Integrations.</small></label>
