@@ -227,7 +227,7 @@ templ BlockingTab(tab tabOption, active string) { <button type="button" role="ta
 templ BlockingGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
 
 templ AddBlockListDialog(existing []BlockListSourceView) {
-	@components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog"}) {
+	@components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog", Attrs: templ.Attributes{"data-catalog-tabs": true}}) {
 		<div class="catalog-tabs" role="tablist" aria-label="Block list categories">
 			for _, category := range []string{"popular", "ads", "malware", "privacy", "social", "custom"} {
 				<button type="button" role="tab" id={ "catalog-tab-" + category } class={ ifThen(category == "popular", "active", "") } aria-selected={ fmt.Sprint(category == "popular") } aria-controls={ "catalog-panel-" + category } tabindex={ ifThen(category == "popular", "0", "-1") } data-catalog-tab={ category }>{ strings.ToUpper(category[:1]) + category[1:] }</button>

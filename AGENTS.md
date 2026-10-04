@@ -105,7 +105,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.Dialog` with `components.DialogFooter`, and `components.ConfirmDialog` for a dialog that asks before one action
   - `components.Button` for a labeled button, or a link styled as one
   - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
-  - `components.Tabs` for a page's tab strip, as tab buttons or, with `Nav`, as links
+  - `components.Tabs` for a page's tab strip, as tab buttons or, with `Nav`, as links; in `app.js`, every tab set runs on `setupTabSet`, which takes an `onSelect` for what else a choice changes
   - `components.EmptyState` for what a list or panel shows when it has nothing in it
   - `components.FactList` with `components.Fact` for labelled facts, such as the tiles in a drawer (`Wide`, `Full`, and `CopyID` for a copy button)
   - `components.PageHeader` for a page's title and description, with any `Actions` beside them
