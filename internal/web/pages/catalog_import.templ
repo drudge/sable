@@ -148,12 +148,12 @@ templ CatalogImportSelection(view CatalogImportView) {
 		<fieldset class="catalog-import-type">
 			<legend>Import zones as</legend>
 			<div class="field-grid two">
-				<label class="choice-tile"><input type="radio" name="import_type" value="secondary" checked?={ view.ImportType != "primary" }/><span><strong>Secondary</strong><small>Keep synchronizing from the source.</small></span></label>
-				<label class="choice-tile"><input type="radio" name="import_type" value="primary" checked?={ view.ImportType == "primary" }/><span><strong>Primary</strong><small>Make Sable the writable source now.</small></span></label>
+				@components.ChoiceCard(components.ChoiceCardProps{ID: "catalog-import-secondary", Title: "Secondary", Description: "Keep synchronizing from the source.", Radio: true, Name: "import_type", Value: "secondary", Checked: view.ImportType != "primary"})
+				@components.ChoiceCard(components.ChoiceCardProps{ID: "catalog-import-primary", Title: "Primary", Description: "Make Sable the writable source now.", Radio: true, Name: "import_type", Value: "primary", Checked: view.ImportType == "primary"})
 			</div>
 			<div class="catalog-import-primary-confirmation">
 				<p class="zone-import-help">Sable fetches the latest zone and advances its SOA serial. Upstream refresh stops. Existing SOA and NS targets remain; review them before retiring the source. Signed zones are blocked, with no zone created.</p>
-				<div class="zone-import-options"><label class="zone-import-option"><input type="checkbox" name="freeze_confirmed" value="true"/><span><strong>Source writes are paused</strong><small>I have paused source edits and automatic update writers for all selected zones.</small></span></label></div>
+				<div class="zone-import-options">@components.ChoiceCard(components.ChoiceCardProps{ID: "catalog-import-freeze", Title: "Source writes are paused", Description: "I have paused source edits and automatic update writers for all selected zones.", Style: components.ChoiceRow, Name: "freeze_confirmed", Value: "true"})</div>
 			</div>
 		</fieldset>
 		<div class="wizard-heading compact">

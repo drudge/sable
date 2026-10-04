@@ -1,0 +1,79 @@
+package components
+
+// ChoiceStyle picks how a ChoiceCard looks.
+type ChoiceStyle int
+
+const (
+	// ChoiceTile is a bordered card that sits beside its siblings, such as
+	// one of two ways to sign in.
+	ChoiceTile ChoiceStyle = iota
+	// ChoiceRow is a row in a .zone-import-options list, such as a
+	// confirmation the form needs before it goes ahead.
+	ChoiceRow
+)
+
+// ChoiceCardProps describes a radio button or checkbox drawn with a title and
+// an optional description.
+type ChoiceCardProps struct {
+	// ID names the card. The title and description take ids built from it.
+	ID          string
+	Title       string
+	Description string
+	Style       ChoiceStyle
+	// Radio draws a radio button instead of a checkbox.
+	Radio    bool
+	Name     string
+	Value    string
+	Checked  bool
+	Disabled bool
+	Required bool
+	// Class adds classes after the card's own, and Attrs go on the card.
+	Class string
+	Attrs templ.Attributes
+	// InputAttrs go on the input, such as data hooks.
+	InputAttrs templ.Attributes
+}
+
+func (p ChoiceCardProps) class() string {
+	if p.Style == ChoiceRow {
+		return fieldClass("zone-import-option", p.Class)
+	}
+	return fieldClass("choice-tile", p.Class)
+}
+
+func (p ChoiceCardProps) inputType() string {
+	if p.Radio {
+		return "radio"
+	}
+	return "checkbox"
+}
+
+// ChoiceCard is a radio button or checkbox with a title and description. The
+// title names the input and the description describes it.
+templ ChoiceCard(p ChoiceCardProps) {
+	<label class={ p.class() } { p.Attrs... }>
+		<input
+			type={ p.inputType() }
+			if p.Name != "" {
+				name={ p.Name }
+			}
+			if p.Value != "" {
+				value={ p.Value }
+			}
+			checked?={ p.Checked }
+			{ p.InputAttrs... }
+			disabled?={ p.Disabled }
+			required?={ p.Required }
+			aria-labelledby={ labelID(p.ID) }
+			if p.Description != "" {
+				aria-describedby={ helpID(p.ID) }
+			}
+		/>
+		<span>
+			<strong id={ labelID(p.ID) }>{ p.Title }</strong>
+			if p.Description != "" {
+				<small id={ helpID(p.ID) }>{ p.Description }</small>
+			}
+		</span>
+	</label>
+}
