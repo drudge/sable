@@ -389,21 +389,15 @@ templ DynamicDNSCard(view DynamicDNSAppView) {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>No provider credentials are stored</strong><span>Edit the setup and save credentials before publication can run.</span></div></div>
 				}
 				@DynamicDNSFacts(view, false)
-				<div class="admin-desktop-table">
-					<table class="isotope-table">
-						<caption class="sr-only">Dynamic DNS records</caption>
-						<thead><tr><th>Provider</th><th>Name</th><th>Types</th><th>TTL</th></tr></thead>
-						<tbody>
-							for _, publisher := range view.Publishers {
-								for _, zone := range publisher.Zones {
-									for _, name := range dynamicDNSNames(zone.Names) {
-										<tr><td>{ dynamicDNSProviderLabel(publisher.Provider) }</td><td><code>{ name }</code></td><td>{ dynamicDNSZoneTypeLabel(zone) }</td><td>{ fmt.Sprint(zone.TTL) }</td></tr>
-									}
-								}
+				@components.DataTable(components.DataTableProps{Caption: "Dynamic DNS records", Columns: []components.DataTableColumn{{Label: "Provider"}, {Label: "Name"}, {Label: "Types"}, {Label: "TTL"}}}) {
+					for _, publisher := range view.Publishers {
+						for _, zone := range publisher.Zones {
+							for _, name := range dynamicDNSNames(zone.Names) {
+								<tr><td>{ dynamicDNSProviderLabel(publisher.Provider) }</td><td><code>{ name }</code></td><td>{ dynamicDNSZoneTypeLabel(zone) }</td><td>{ fmt.Sprint(zone.TTL) }</td></tr>
 							}
-						</tbody>
-					</table>
-				</div>
+						}
+					}
+				}
 				@DynamicDNSCardActions(view, false)
 			</div>
 		}
@@ -990,20 +984,14 @@ templ SSOMappingTable(view SSOAppView) {
 	if len(view.Mappings) == 0 && view.DefaultRoles == "" {
 		<p class="muted-cell">No group grants a role yet, so nobody can sign in through the provider.</p>
 	} else {
-		<div class="admin-desktop-table">
-			<table class="isotope-table">
-				<caption class="sr-only">Single sign-on group mappings</caption>
-				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
-				<tbody>
-					for _, mapping := range view.Mappings {
-						<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
-					}
-					if view.DefaultRoles != "" {
-						<tr><td class="muted-cell">Everyone who signs in</td><td>{ view.DefaultRoles }</td></tr>
-					}
-				</tbody>
-			</table>
-		</div>
+		@components.DataTable(components.DataTableProps{Caption: "Single sign-on group mappings", Columns: []components.DataTableColumn{{Label: "Provider Group"}, {Label: "Sable Role"}}}) {
+			for _, mapping := range view.Mappings {
+				<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
+			}
+			if view.DefaultRoles != "" {
+				<tr><td class="muted-cell">Everyone who signs in</td><td>{ view.DefaultRoles }</td></tr>
+			}
+		}
 	}
 }
 
@@ -1138,39 +1126,33 @@ templ UniFiStatusPanel(view UniFiAppView) {
 // UniFiMappingTable is swapped out of band by the status poll so the per-network
 // host counts land at the same time as the rest of the run state.
 templ UniFiMappingTable(view UniFiAppView, outOfBand bool) {
-	if outOfBand {
-		<div id="unifi-mapping-table" class="admin-desktop-table" hx-swap-oob="true">
-			@UniFiMappingRows(view)
-		</div>
-	} else {
-		<div id="unifi-mapping-table" class="admin-desktop-table">
-			@UniFiMappingRows(view)
-		</div>
+	@components.DataTable(components.DataTableProps{Caption: "UniFi network to DNS zone mappings", Class: "unifi-mapping-table", Columns: []components.DataTableColumn{{Label: "UniFi Network"}, {Label: "Zone"}, {Label: "Hosts"}, {Label: "Example Name"}, {Label: "TTL"}, {Label: "Reverse"}, {Label: "State"}}, Attrs: unifiMappingTableAttrs(outOfBand)}) {
+		for _, mapping := range view.Mappings {
+			<tr>
+				<td><strong>{ mapping.Name }</strong></td>
+				<td><a href={ templ.SafeURL("/zones/" + mapping.Zone) }>{ mapping.Zone }</a></td>
+				if mapping.HostsKnown {
+					<td>{ fmt.Sprint(mapping.Hosts) }</td>
+				} else {
+					<td class="muted-cell" title="Counted after the first synchronization">—</td>
+				}
+				<td><code class="muted-cell">{ mapping.Preview }</code></td>
+				<td>{ fmt.Sprint(mapping.TTL) }</td>
+				<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
+				<td>@components.Badge(components.BadgeProps{Label: ifThen(mapping.Enabled, "Active", "Paused"), Tone: ifThen(mapping.Enabled, components.BadgeSuccess, components.BadgeNeutral)})</td>
+			</tr>
+		}
 	}
 }
 
-templ UniFiMappingRows(view UniFiAppView) {
-	<table class="isotope-table unifi-mapping-table">
-		<caption class="sr-only">UniFi network to DNS zone mappings</caption>
-		<thead><tr><th>UniFi Network</th><th>Zone</th><th>Hosts</th><th>Example Name</th><th>TTL</th><th>Reverse</th><th>State</th></tr></thead>
-		<tbody>
-			for _, mapping := range view.Mappings {
-				<tr>
-					<td><strong>{ mapping.Name }</strong></td>
-					<td><a href={ templ.SafeURL("/zones/" + mapping.Zone) }>{ mapping.Zone }</a></td>
-					if mapping.HostsKnown {
-						<td>{ fmt.Sprint(mapping.Hosts) }</td>
-					} else {
-						<td class="muted-cell" title="Counted after the first synchronization">—</td>
-					}
-					<td><code class="muted-cell">{ mapping.Preview }</code></td>
-					<td>{ fmt.Sprint(mapping.TTL) }</td>
-					<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
-					<td>@components.Badge(components.BadgeProps{Label: ifThen(mapping.Enabled, "Active", "Paused"), Tone: ifThen(mapping.Enabled, components.BadgeSuccess, components.BadgeNeutral)})</td>
-				</tr>
-			}
-		</tbody>
-	</table>
+// unifiMappingTableAttrs gives the mapping table its id, and marks it for an
+// out-of-band swap when the status poll sends it.
+func unifiMappingTableAttrs(outOfBand bool) templ.Attributes {
+	attrs := templ.Attributes{"id": "unifi-mapping-table"}
+	if outOfBand {
+		attrs["hx-swap-oob"] = "true"
+	}
+	return attrs
 }
 
 templ UniFiWizardDialog(view UniFiAppView) {
@@ -1255,22 +1237,16 @@ templ UniFiWizardNetworksStep(wizard UniFiWizardView) {
 	@UniFiWizardCarriedConnection(wizard)
 	<section class="wizard-panel compact">
 		<div class="wizard-heading compact"><span>@Icon("hash")</span><div><strong>Networks</strong><small>Choose the UniFi networks whose hosts should appear in DNS.</small></div></div>
-		<div class="admin-desktop-table">
-			<table class="isotope-table unifi-network-table">
-				<caption class="sr-only">UniFi networks available for synchronization</caption>
-				<thead><tr><th>Sync</th><th>Network</th><th>Subnet</th><th class="right-cell">Hosts</th></tr></thead>
-				<tbody>
-					for index, network := range wizard.Networks {
-						<tr>
-							<td><input id={ unifiNetworkFieldID(index) } type="checkbox" name="network" value={ network.ID } checked?={ network.Selected }/></td>
-							<td><label for={ unifiNetworkFieldID(index) }>{ network.Name }</label></td>
-							<td><code class="muted-cell">{ ifThen(network.Subnet != "", network.Subnet, "—") }</code></td>
-							<td class="right-cell">{ fmt.Sprint(network.Hosts) }</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</div>
+		@components.DataTable(components.DataTableProps{Caption: "UniFi networks available for synchronization", Class: "unifi-network-table", Columns: []components.DataTableColumn{{Label: "Sync"}, {Label: "Network"}, {Label: "Subnet"}, {Label: "Hosts", Class: "right-cell"}}}) {
+			for index, network := range wizard.Networks {
+				<tr>
+					<td><input id={ unifiNetworkFieldID(index) } type="checkbox" name="network" value={ network.ID } checked?={ network.Selected }/></td>
+					<td><label for={ unifiNetworkFieldID(index) }>{ network.Name }</label></td>
+					<td><code class="muted-cell">{ ifThen(network.Subnet != "", network.Subnet, "—") }</code></td>
+					<td class="right-cell">{ fmt.Sprint(network.Hosts) }</td>
+				</tr>
+			}
+		}
 		<input type="hidden" name="sources_present" value="true"/>
 		<div class="wizard-heading compact"><span>@Icon("timer")</span><div><strong>What To Publish</strong><small>A reservation always wins when both describe the same device.</small></div></div>
 		<div class="field-grid two">
@@ -1394,17 +1370,11 @@ templ UniFiPlanRecords(title string, records []UniFiPlanRecordView) {
 	if len(records) > 0 {
 		<details class="unifi-plan-records" open?={ len(records) <= 12 }>
 			<summary>{ fmt.Sprintf("%s (%d)", title, len(records)) }</summary>
-			<div class="admin-desktop-table">
-				<table class="isotope-table">
-					<caption class="sr-only">{ title } DNS records</caption>
-					<thead><tr><th>Name</th><th>Type</th><th>Value</th></tr></thead>
-					<tbody>
-						for _, record := range records {
-							<tr><td><code>{ record.Name }</code></td><td>{ record.Type }</td><td><code>{ record.Value }</code></td></tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			@components.DataTable(components.DataTableProps{Caption: title + " DNS records", Columns: []components.DataTableColumn{{Label: "Name"}, {Label: "Type"}, {Label: "Value"}}}) {
+				for _, record := range records {
+					<tr><td><code>{ record.Name }</code></td><td>{ record.Type }</td><td><code>{ record.Value }</code></td></tr>
+				}
+			}
 		</details>
 	}
 }
@@ -1971,20 +1941,14 @@ templ SSOWizardReviewStep(wizard SSOWizardView) {
 			<div><strong>Nobody can sign in yet</strong><span>No group grants a role and there is no default role, so every sign-in is refused.</span></div>
 		</div>
 	} else {
-		<div class="admin-desktop-table">
-			<table class="isotope-table">
-				<caption class="sr-only">Single sign-on group mappings to review</caption>
-				<thead><tr><th>Provider Group</th><th>Sable Role</th></tr></thead>
-				<tbody>
-					for _, mapping := range wizard.Mappings {
-						<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
-					}
-					if wizard.DefaultRoles != "" {
-						<tr><td class="muted-cell">Everyone who signs in</td><td>{ wizard.DefaultRoles }</td></tr>
-					}
-				</tbody>
-			</table>
-		</div>
+		@components.DataTable(components.DataTableProps{Caption: "Single sign-on group mappings to review", Columns: []components.DataTableColumn{{Label: "Provider Group"}, {Label: "Sable Role"}}}) {
+			for _, mapping := range wizard.Mappings {
+				<tr><td><code>{ mapping.Group }</code></td><td>{ mapping.Role }</td></tr>
+			}
+			if wizard.DefaultRoles != "" {
+				<tr><td class="muted-cell">Everyone who signs in</td><td>{ wizard.DefaultRoles }</td></tr>
+			}
+		}
 	}
 	<p class="muted-cell sso-review-note">{ ssoWizardProvisionSummary(wizard) }. Nobody loses their password; each person switches to SSO only from the administration page.</p>
 	@SSOWizardCarriedProvider(wizard)

@@ -109,6 +109,7 @@ Every screen should look finished: polished, responsive, and consistent with the
   - `components.EmptyState` for what a list or panel shows when it has nothing in it
   - `components.FactList` with `components.Fact` for labelled facts, such as the tiles in a drawer (`Wide`, `Full`, and `CopyID` for a copy button)
   - `components.PageHeader` for a page's title and description, with any `Actions` beside them
+  - `components.DataTable` for a desktop table: its caption and column headings, with the body rows as children
   - `components.Badge` for a status label (pick a `Tone`) or a count chip (`BadgeCount`)
 
   Use the shared `.field-help` class too. Put `.button` (with `outline`, `compact`, and `destructive`) only on an element `components.Button` cannot draw, such as a `<summary>` or a file `<label>`.
