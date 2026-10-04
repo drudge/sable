@@ -39,15 +39,21 @@ type CardHeaderProps struct {
 	TitleClass string
 	// Description is one short line under the title.
 	Description string
-	// Class adds classes to the header.
+	// DescriptionClass adds classes to the description, such as desktop-only.
+	DescriptionClass string
+	// HeadingClass adds classes to the block that holds the title and
+	// description.
+	HeadingClass string
+	// Class adds classes to the header, and Attrs go on it.
 	Class string
+	Attrs templ.Attributes
 }
 
 // CardHeader draws a card's title and description. Its children are the
 // card's header actions, which sit at the end of the row.
 templ CardHeader(p CardHeaderProps) {
-	<header if p.Class != "" { class={ p.Class } }>
-		<div>
+	<header if p.Class != "" { class={ p.Class } } { p.Attrs... }>
+		<div if p.HeadingClass != "" { class={ p.HeadingClass } }>
 			<h2 if p.TitleID != "" { id={ p.TitleID } } if p.TitleClass != "" { class={ p.TitleClass } }>
 				if p.Icon != "" {
 					@Icon(p.Icon)<span>{ p.Title }</span>
@@ -56,7 +62,7 @@ templ CardHeader(p CardHeaderProps) {
 				}
 			</h2>
 			if p.Description != "" {
-				<p>{ p.Description }</p>
+				<p if p.DescriptionClass != "" { class={ p.DescriptionClass } }>{ p.Description }</p>
 			}
 		</div>
 		{ children... }

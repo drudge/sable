@@ -87,8 +87,10 @@ templ ControlTab(value, label string, count int, active string, disabled bool, i
 }
 
 templ UsersPanel(view AdministrationPageView) {
-	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Users</h2><span class="desktop-only">Total Users: { fmt.Sprint(len(view.Users)) }</span></div>@components.Button(components.ButtonProps{Label: "Add User", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-user-dialog"}})</header>
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Users", Description: "Total Users: " + fmt.Sprint(len(view.Users)), DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
+			@components.Button(components.ButtonProps{Label: "Add User", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-user-dialog"}})
+		}
 		if len(view.Users) == 0 {
 			@AdminEmpty("No users found")
 		} else {
@@ -123,12 +125,14 @@ templ UsersPanel(view AdministrationPageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ GroupsPanel(view AdministrationPageView) {
-	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Groups</h2><span class="desktop-only">Total Groups: { fmt.Sprint(len(view.Roles)) }</span></div>@components.Button(components.ButtonProps{Label: "Add Group", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-group-dialog"}})</header>
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Groups", Description: "Total Groups: " + fmt.Sprint(len(view.Roles)), DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
+			@components.Button(components.ButtonProps{Label: "Add Group", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-group-dialog"}})
+		}
 		if len(view.Roles) == 0 {
 			@AdminEmpty("No groups found")
 		} else {
@@ -155,12 +159,12 @@ templ GroupsPanel(view AdministrationPageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ PermissionsPanel(view AdministrationPageView) {
-	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Permissions</h2><span class="desktop-only">Total Sections: { fmt.Sprint(len(view.Permissions)) }</span></div></header>
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Permissions", Description: "Total Sections: " + fmt.Sprint(len(view.Permissions)), DescriptionClass: "desktop-only", Class: "isotope-data-header"})
 		if len(view.Permissions) == 0 {
 			@AdminEmpty("No permissions found")
 		} else {
@@ -183,12 +187,12 @@ templ PermissionsPanel(view AdministrationPageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ SessionsPanel(view AdministrationPageView) {
-	<section class="card isotope-data-card">
-		<header class="isotope-data-header"><div><h2>Active Sessions</h2><span class="desktop-only">Total Sessions: { fmt.Sprint(len(view.Sessions)) }</span></div></header>
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Active Sessions", Description: "Total Sessions: " + fmt.Sprint(len(view.Sessions)), DescriptionClass: "desktop-only", Class: "isotope-data-header"})
 		if len(view.Sessions) == 0 {
 			@AdminEmpty("No active sessions")
 		} else {
@@ -207,12 +211,14 @@ templ SessionsPanel(view AdministrationPageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ TokensPanel(view AdministrationPageView) {
-	<section class="card isotope-data-card" id="api-tokens-panel" hx-get="/ui/administration/tokens" hx-trigger="apiTokensChanged from:body" hx-target="this" hx-swap="outerHTML">
-		<header class="isotope-data-header"><div><h2>API Tokens</h2><span class="desktop-only">Total Tokens: { fmt.Sprint(len(view.Tokens)) }</span></div>@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})</header>
+	@components.Card(components.CardProps{ID: "api-tokens-panel", Class: "isotope-data-card", Attrs: templ.Attributes{"hx-get": "/ui/administration/tokens", "hx-trigger": "apiTokensChanged from:body", "hx-target": "this", "hx-swap": "outerHTML"}}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "API Tokens", Description: "Total Tokens: " + fmt.Sprint(len(view.Tokens)), DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
+			@components.Button(components.ButtonProps{Label: "Create Token", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "create-token-dialog"}})
+		}
 		if len(view.Tokens) == 0 {
 			@AdminEmpty("No active API tokens")
 		} else {
@@ -231,7 +237,7 @@ templ TokensPanel(view AdministrationPageView) {
 				}
 			</tbody></table></div>
 		}
-	</section>
+	}
 }
 
 templ TokensPanelFragment(view AdministrationPageView) {
