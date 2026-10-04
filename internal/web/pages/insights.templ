@@ -9,6 +9,7 @@ import (
 
 	"github.com/drudge/sable/internal/insights"
 	"github.com/drudge/sable/internal/querylog"
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type InsightsPageView struct {
@@ -519,13 +520,13 @@ templ insightMissingFooter(view InsightsOverviewView, missing InsightLinkedMissi
 			if missing.CanShowAgain {
 				<form hx-post="/ui/insights/feedback/remove" hx-swap="none">
 					<input type="hidden" name="id" value={ missing.Hidden.FindingID }/>
-					<button class="button" type="submit" data-replica-primary-action>@Icon("eye")<span>Show Again</span></button>
+					@components.Button(components.ButtonProps{Label: "Show Again", Icon: "eye", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 				</form>
 			}
 		} else {
-			<a class="button outline" href={ templ.SafeURL(insightsOverviewPath(view.Range)) }>Open Insights</a>
+			@components.Button(components.ButtonProps{Label: "Open Insights", Variant: components.ButtonOutline, Href: templ.SafeURL(insightsOverviewPath(view.Range))})
 			if missing.WiderLink != "" {
-				<a class="button" href={ templ.SafeURL(missing.WiderLink) }>Try { missing.WiderLabel }</a>
+				@components.Button(components.ButtonProps{Label: "Try " + missing.WiderLabel, Href: templ.SafeURL(missing.WiderLink)})
 			}
 		}
 	</div>
@@ -827,7 +828,7 @@ templ InsightFindings(view InsightsOverviewView) {
 							if view.CanHideFindings {
 								<form hx-post="/ui/insights/feedback/remove" hx-swap="none">
 									<input type="hidden" name="id" value={ hidden.FindingID }/>
-									<button class="button outline compact" type="submit" data-replica-primary-action>Show Again</button>
+									@components.Button(components.ButtonProps{Label: "Show Again", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 								</form>
 							}
 						</li>
@@ -1003,20 +1004,13 @@ templ insightEvidenceFooter(finding InsightFindingView, view InsightsOverviewVie
 			@CopyLinkButton(finding.Link)
 		}
 		if finding.DeviceKey != "" && view.CanLogs {
-			<button class="button outline" type="button" { drawerOpener(DeviceDrawerLink(finding.DeviceKey, view.Range))... }>
-				<span>Device Details</span>
-			</button>
+			@components.Button(components.ButtonProps{Label: "Device Details", Variant: components.ButtonOutline, Attrs: drawerOpener(DeviceDrawerLink(finding.DeviceKey, view.Range))})
 		}
 		if finding.Destination != "" && view.canFollow(finding) {
-			<a class="button outline" href={ templ.SafeURL(finding.Destination) }>
-				<span>{ finding.DestinationLabel }</span>
-			</a>
+			@components.Button(components.ButtonProps{Label: finding.DestinationLabel, Variant: components.ButtonOutline, Href: templ.SafeURL(finding.Destination)})
 		}
 		if finding.Query != nil && view.CanLogs {
-			<a class="button" href={ templ.SafeURL(insightQueryURL(*finding.Query, view.LogWindowQuery)) }>
-				@Icon("logs")
-				<span>View Query Logs</span>
-			</a>
+			@components.Button(components.ButtonProps{Label: "View Query Logs", Icon: "logs", Href: templ.SafeURL(insightQueryURL(*finding.Query, view.LogWindowQuery))})
 		}
 	</div>
 }
@@ -1059,7 +1053,7 @@ templ InsightContribution(view InsightsOverviewView) {
 				@Icon("list")
 				<strong>No block lists configured</strong>
 				<p>Add a block list to see how much each one contributes.</p>
-				<a class="button outline compact" href="/blocked?tab=lists">Block Lists</a>
+				@components.Button(components.ButtonProps{Label: "Block Lists", Variant: components.ButtonOutline, Compact: true, Href: "/blocked?tab=lists"})
 			</div>
 		} else {
 			<div class="admin-mobile-list insight-list-mobile">
@@ -1535,7 +1529,7 @@ templ InsightDevices(view InsightsOverviewView) {
 			<div class="insight-section-empty" hidden data-list-filter-empty>
 				@Icon("search")
 				<strong>No devices match</strong>
-				<button class="button outline compact" type="button" data-list-filter-clear>Clear Filters</button>
+				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
 			</div>
 			<footer class="insight-card-note">
 				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
@@ -1722,7 +1716,7 @@ templ InsightApps(view InsightsOverviewView) {
 			<div class="insight-section-empty" hidden data-list-filter-empty>
 				@Icon("search")
 				<strong>No apps match</strong>
-				<button class="button outline compact" type="button" data-list-filter-clear>Clear Filters</button>
+				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
 			</div>
 			<footer class="insight-card-note">
 				<p>Sable knows each app by the domains it owns and counts every lookup of them, however quiet the app. <strong>Failed</strong> counts lookups Sable refused or could not answer, such as a device outside the networks allowed to use it, and an app is <strong>Failing</strong> while at least 1% of its lookups in the last hour failed, and at least 5 of them.</p>
@@ -1858,10 +1852,7 @@ templ insightDeviceFooter(view InsightDeviceDrawerView) {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(InsightDevicePath(view.Device.Key, view.Range))
 			if len(view.Device.Addresses) == 1 {
-				<a class="button" href={ templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery)) }>
-					@Icon("logs")
-					<span>View Query Logs</span>
-				</a>
+				@components.Button(components.ButtonProps{Label: "View Query Logs", Icon: "logs", Href: templ.SafeURL(insightQueryURL(InsightQueryView{ClientIP: view.Device.Addresses[0].Address}, view.LogWindowQuery))})
 			}
 		</div>
 	}
@@ -2282,7 +2273,7 @@ templ insightDeviceType(view InsightDeviceDrawerView) {
 						<template data-option-icon={ option[0] }>@Icon(insightTypeIcon(option[0]))</template>
 					}
 				</label>
-				<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" data-type-cancel>Cancel</button>
+				@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": insightDeviceURL(view.Device.Key, view.Range), "hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-indicator": "#insight-device-content", "data-type-cancel": true}})
 				<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
 			</form>
 		}
@@ -2401,7 +2392,7 @@ templ insightDeviceNameEditor(view InsightDeviceDrawerView) {
 			if view.Device.OperatorNamed {
 				<button class="button outline compact destructive insight-action" type="button" hx-post="/ui/insights/devices/name" hx-vals={ `{"remove":"1"}` } hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-name-editor button" data-replica-primary-action>@insightActionLabel("Remove Name", "Removing…")</button>
 			}
-			<button class="button outline compact" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" data-name-cancel>Cancel</button>
+			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": insightDeviceURL(view.Device.Key, view.Range), "hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-indicator": "#insight-device-content", "data-name-cancel": true}})
 			<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
 		</div>
 	</form>

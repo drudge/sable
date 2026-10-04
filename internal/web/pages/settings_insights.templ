@@ -31,7 +31,7 @@ templ SettingsInsights(view SettingsInsightsView) {
 					<div class="settings-insights-data">
 						<p><strong>Device data:</strong> { view.Data }</p>
 						if view.CanEdit {
-							<button class="button outline destructive" type="button" data-dialog-open="insights-delete-dialog" data-replica-primary-action>@Icon("trash")<span>Delete Insights Data</span></button>
+							@components.Button(components.ButtonProps{Label: "Delete Insights Data", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "insights-delete-dialog", "data-replica-primary-action": true}})
 						}
 					</div>
 				}
@@ -82,7 +82,7 @@ templ insightsOffDocument(console DashboardView) {
 				<p>Sable is not recording which devices use it, so there is nothing to show.</p>
 				if console.CanSettings {
 					<div class="cluster-empty-actions">
-						<a class="button" href="/settings?tab=general#settings-insights">@Icon("settings-2")<span>Open Settings</span></a>
+						@components.Button(components.ButtonProps{Label: "Open Settings", Icon: "settings-2", Href: "/settings?tab=general#settings-insights"})
 					</div>
 				}
 			</div>
