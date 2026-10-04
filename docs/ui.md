@@ -13,7 +13,8 @@ New screens and components must preserve Isotope's:
 - status tokens for state colors: `--success`, `--warning`, `--danger`, and
   `--info`, with `--success-strong` and `--warning-strong` for text on a
   light tint;
-- 4px spacing scale and established page/card density;
+- 4px spacing scale (`--space-1` through `--space-12`, named for the number
+  of 4px steps) and established page/card density;
 - typography hierarchy and monospace treatment of DNS data;
 - Lucide icon language, colored metric cards, and bordered depth model;
 - light, dark, and system theme behavior;

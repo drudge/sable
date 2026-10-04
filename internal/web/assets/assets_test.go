@@ -255,7 +255,7 @@ func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := string(manifest["app.css"].content)
-	if !strings.Contains(stylesheet, ".nav-item + .nav-item { margin-top: .25rem; }") {
+	if !strings.Contains(stylesheet, ".nav-item + .nav-item { margin-top: var(--space-1); }") {
 		t.Fatal("adjacent sidebar navigation items do not have visual separation")
 	}
 }
@@ -265,15 +265,15 @@ func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
 
 	stylesheet := string(manifest["app.css"].content)
 	for _, expected := range []string{
-		".sidebar-header { padding: 0.5rem 0.375rem 0.25rem; }",
-		".nav-group { padding: 0.25rem 0; }",
-		".nav-label { height: 2rem; padding: 0.75rem 0.5rem 0.25rem;",
+		".sidebar-header { padding: var(--space-2) 0.375rem var(--space-1); }",
+		".nav-group { padding: var(--space-1) 0; }",
+		".nav-label { height: 2rem; padding: var(--space-3) var(--space-2) var(--space-1);",
 	} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("sidebar sections are spaced out again, which scrolls About out of a laptop-height window: missing %q", expected)
 		}
 	}
-	if !strings.Contains(stylesheet, ".sidebar-collapsed .nav-group { padding: 0.5rem 0; }") {
+	if !strings.Contains(stylesheet, ".sidebar-collapsed .nav-group { padding: var(--space-2) 0; }") {
 		t.Error("the collapsed sidebar rail runs its groups together once their labels are hidden")
 	}
 }
@@ -390,7 +390,7 @@ func TestCustomControlTriggersMatchTextFields(t *testing.T) {
 		if !found {
 			t.Fatalf("application stylesheet has an incomplete %s rule", strings.TrimSpace(selector))
 		}
-		for _, expected := range []string{"height: 2.25rem", "border-radius: calc(var(--radius) - 2px)", "background: transparent", "padding: 0 .75rem", "font-size: .875rem"} {
+		for _, expected := range []string{"height: 2.25rem", "border-radius: calc(var(--radius) - 2px)", "background: transparent", "padding: 0 var(--space-3)", "font-size: .875rem"} {
 			if !strings.Contains(rule, expected) {
 				t.Errorf("%s does not match text fields: missing %q", strings.TrimSpace(selector), expected)
 			}
