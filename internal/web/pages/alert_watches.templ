@@ -87,7 +87,7 @@ templ alertsWatchesCard(view AlertsView) {
 		<header>
 			<div><h2>@Icon("eye")<span>Watches</span></h2><p>Alert when a device looks up a domain you pick.</p></div>
 			if view.CanEdit && !view.WatchLimit {
-				<button class="button compact" id="alert-watch-add" type="button" hx-get="/ui/settings/alerts/watches/form" hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" data-replica-primary-action>@Icon("plus")<span>Add Watch</span></button>
+				@components.Button(components.ButtonProps{Label: "Add Watch", Icon: "plus", Compact: true, Attrs: templ.Attributes{"id": "alert-watch-add", "hx-get": "/ui/settings/alerts/watches/form", "hx-target": "#alert-watch-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-watch-dialog", "data-replica-primary-action": true}})
 			}
 		</header>
 		<div class="isotope-card-content">
@@ -129,8 +129,8 @@ templ alertWatchRow(watch AlertWatchView, canEdit bool) {
 				<input id={ "alert-watch-enabled-" + watch.ID } type="checkbox" role="switch" name="enabled" value="true" checked?={ watch.Enabled } disabled?={ !canEdit } hx-post="/ui/settings/alerts/watches/enabled" hx-trigger="change" hx-vals={ fmt.Sprintf(`{"id":%q}`, watch.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action/>
 			</label>
 			if canEdit {
-				<button class="button outline compact" id={ "alert-watch-edit-" + watch.ID } type="button" hx-get={ "/ui/settings/alerts/watches/form?id=" + watch.ID } hx-target="#alert-watch-content" hx-swap="innerHTML" data-dialog-load="alert-watch-dialog" aria-label={ "Edit " + watch.Label } data-replica-primary-action>@Icon("pencil")<span>Edit</span></button>
-				<button class="button outline compact destructive" id={ "alert-watch-remove-" + watch.ID } type="button" hx-post="/ui/settings/alerts/watches/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, watch.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ "Remove " + watch.Label + "? Sable stops watching its domains." } data-confirm-title="Remove watch?" data-confirm-action="Remove" aria-label={ "Remove " + watch.Label } data-alert-watch-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+				@components.Button(components.ButtonProps{Label: "Edit", Icon: "pencil", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"id": "alert-watch-edit-" + watch.ID, "hx-get": "/ui/settings/alerts/watches/form?id=" + watch.ID, "hx-target": "#alert-watch-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-watch-dialog", "aria-label": "Edit " + watch.Label, "data-replica-primary-action": true}})
+				@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Attrs: templ.Attributes{"id": "alert-watch-remove-" + watch.ID, "hx-post": "/ui/settings/alerts/watches/remove", "hx-vals": fmt.Sprintf(`{"id":%q}`, watch.ID), "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "hx-confirm": "Remove " + watch.Label + "? Sable stops watching its domains.", "data-confirm-title": "Remove watch?", "data-confirm-action": "Remove", "aria-label": "Remove " + watch.Label, "data-alert-watch-remove": true, "data-replica-primary-action": true}})
 			}
 		</div>
 	</article>
@@ -208,7 +208,7 @@ templ AlertWatchForm(form AlertWatchFormView) {
 			}
 		</div>
 		@components.DialogFooter("Cancel") {
-			<button class="button" type="submit" data-replica-primary-action>Save</button>
+			@components.Button(components.ButtonProps{Label: "Save", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		}
 	</form>
 }

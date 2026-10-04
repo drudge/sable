@@ -276,9 +276,9 @@ templ alertsStatusCard(view AlertsView) {
 			// resumed; with nothing able to send, there is nothing to pause.
 			if view.CanEdit && view.State != AlertsOff {
 				if view.State == AlertsPaused {
-					<button class="button outline" id="alerts-pause" type="button" hx-post="/ui/settings/alerts/paused" hx-vals='{"paused":"false"}' hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action>@Icon("play")<span>Resume</span></button>
+					@components.Button(components.ButtonProps{Label: "Resume", Icon: "play", Variant: components.ButtonOutline, Attrs: templ.Attributes{"id": "alerts-pause", "hx-post": "/ui/settings/alerts/paused", "hx-vals": `{"paused":"false"}`, "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "data-replica-primary-action": true}})
 				} else {
-					<button class="button outline" id="alerts-pause" type="button" hx-post="/ui/settings/alerts/paused" hx-vals='{"paused":"true"}' hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" data-replica-primary-action>@Icon("pause")<span>Pause</span></button>
+					@components.Button(components.ButtonProps{Label: "Pause", Icon: "pause", Variant: components.ButtonOutline, Attrs: templ.Attributes{"id": "alerts-pause", "hx-post": "/ui/settings/alerts/paused", "hx-vals": `{"paused":"true"}`, "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "data-replica-primary-action": true}})
 				}
 			}
 		</div>
@@ -341,7 +341,7 @@ templ alertsDestinationsCard(view AlertsView) {
 		<header>
 			<div><h2>@Icon("send")<span>Destinations</span></h2><p>Where Sable sends alerts. Their URLs and keys stay in the encrypted vault.</p></div>
 			if view.CanEdit {
-				<button class="button compact" id="alert-destination-add" type="button" hx-get="/ui/settings/alerts/destinations/form" hx-target="#alert-destination-content" hx-swap="innerHTML" data-dialog-load="alert-destination-dialog" data-replica-primary-action>@Icon("plus")<span>Add Destination</span></button>
+				@components.Button(components.ButtonProps{Label: "Add Destination", Icon: "plus", Compact: true, Attrs: templ.Attributes{"id": "alert-destination-add", "hx-get": "/ui/settings/alerts/destinations/form", "hx-target": "#alert-destination-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-destination-dialog", "data-replica-primary-action": true}})
 			}
 		</header>
 		<div class="isotope-card-content">
@@ -405,9 +405,9 @@ templ alertDestinationRow(destination AlertDestinationView, view AlertsView) {
 		</div>
 		if view.CanEdit {
 			<div class="alert-destination-actions">
-				<button class="button outline compact" id={ "alert-destination-test-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/test" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Send Test to " + destination.Label } data-replica-primary-action>@Icon("send")<span>Send Test</span></button>
-				<button class="button outline compact" id={ "alert-destination-edit-" + destination.ID } type="button" hx-get={ "/ui/settings/alerts/destinations/form?id=" + destination.ID } hx-target="#alert-destination-content" hx-swap="innerHTML" data-dialog-load="alert-destination-dialog" aria-label={ "Edit " + destination.Label } data-replica-primary-action>@Icon("pencil")<span>Edit</span></button>
-				<button class="button outline compact destructive" id={ "alert-destination-remove-" + destination.ID } type="button" hx-post="/ui/settings/alerts/destinations/remove" hx-vals={ fmt.Sprintf(`{"id":%q}`, destination.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" hx-confirm={ alertRemoveConfirmation(destination) } data-confirm-title="Remove destination?" data-confirm-action="Remove" aria-label={ "Remove " + destination.Label } data-alert-destination-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+				@components.Button(components.ButtonProps{Label: "Send Test", Icon: "send", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"id": "alert-destination-test-" + destination.ID, "hx-post": "/ui/settings/alerts/destinations/test", "hx-vals": fmt.Sprintf(`{"id":%q}`, destination.ID), "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "aria-label": "Send Test to " + destination.Label, "data-replica-primary-action": true}})
+				@components.Button(components.ButtonProps{Label: "Edit", Icon: "pencil", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"id": "alert-destination-edit-" + destination.ID, "hx-get": "/ui/settings/alerts/destinations/form?id=" + destination.ID, "hx-target": "#alert-destination-content", "hx-swap": "innerHTML", "data-dialog-load": "alert-destination-dialog", "aria-label": "Edit " + destination.Label, "data-replica-primary-action": true}})
+				@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Attrs: templ.Attributes{"id": "alert-destination-remove-" + destination.ID, "hx-post": "/ui/settings/alerts/destinations/remove", "hx-vals": fmt.Sprintf(`{"id":%q}`, destination.ID), "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "hx-confirm": alertRemoveConfirmation(destination), "data-confirm-title": "Remove destination?", "data-confirm-action": "Remove", "aria-label": "Remove " + destination.Label, "data-alert-destination-remove": true, "data-replica-primary-action": true}})
 			</div>
 		}
 		if destination.Format == "browser" && view.Push {
@@ -465,7 +465,7 @@ templ alertsGroupsCard(view AlertsView) {
 				</div>
 			</div>
 			if view.CanEdit {
-				<div class="alert-groups-save"><button class="button" id="alerts-groups-save" type="submit" data-replica-primary-action>Save Alert Types</button></div>
+				<div class="alert-groups-save">@components.Button(components.ButtonProps{Label: "Save Alert Types", Type: "submit", Attrs: templ.Attributes{"id": "alerts-groups-save", "data-replica-primary-action": true}})</div>
 			}
 		</form>
 	</section>
@@ -536,7 +536,7 @@ templ alertBrowsersPanel(view AlertsView) {
 					<small data-push-when="unsupported" hidden>This browser cannot show notifications from websites.</small>
 					<small class="alert-push-error" data-push-error hidden></small>
 				</div>
-				<button class="button compact" type="button" data-push-enable data-push-when="ready" data-replica-primary-action>Turn On in This Browser</button>
+				@components.Button(components.ButtonProps{Label: "Turn On in This Browser", Compact: true, Attrs: templ.Attributes{"data-push-enable": true, "data-push-when": "ready", "data-replica-primary-action": true}})
 			</div>
 			<form class="alert-push-form" hx-post="/ui/settings/alerts/browsers" hx-target="#alerts-panel" hx-swap="outerHTML" data-push-form>
 				<input type="hidden" name="push_subscription" data-push-subscription/>
@@ -553,7 +553,7 @@ templ alertBrowsersPanel(view AlertsView) {
 							<small>{ browser.Added }</small>
 						</div>
 						if view.CanEdit {
-							<button class="button outline compact destructive" id={ "alert-browser-remove-" + browser.ID } type="button" hx-post="/ui/settings/alerts/browsers/remove" hx-vals={ fmt.Sprintf(`{"browser":%q}`, browser.ID) } hx-target="#alerts-panel" hx-swap="outerHTML" hx-disable="#alerts-panel button" aria-label={ "Remove " + browser.Label } data-alert-browser-remove data-replica-primary-action>@Icon("trash")<span>Remove</span></button>
+							@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Compact: true, Destructive: true, Attrs: templ.Attributes{"id": "alert-browser-remove-" + browser.ID, "hx-post": "/ui/settings/alerts/browsers/remove", "hx-vals": fmt.Sprintf(`{"browser":%q}`, browser.ID), "hx-target": "#alerts-panel", "hx-swap": "outerHTML", "hx-disable": "#alerts-panel button", "aria-label": "Remove " + browser.Label, "data-alert-browser-remove": true, "data-replica-primary-action": true}})
 						}
 					</div>
 				}
@@ -704,7 +704,7 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 								@alertHeaderRow(header)
 							}
 						</div>
-						<button class="button outline compact alert-header-add" type="button" data-alert-header-add>@Icon("plus")<span>Add Header</span></button>
+						@components.Button(components.ButtonProps{Label: "Add Header", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Class: "alert-header-add", Attrs: templ.Attributes{"data-alert-header-add": true}})
 						<small>Sent with every alert. Use <code>Authorization</code> to reach a protected ntfy topic, or <code>Priority</code> to change how loud it is. A saved value stays unless you type a new one.</small>
 						<template data-alert-header-template>@alertHeaderRow(AlertHeaderView{})</template>
 					</div>
@@ -713,9 +713,9 @@ templ AlertDestinationForm(form AlertDestinationFormView) {
 		</div>
 		<div class="alert-preview" id="alert-destination-preview" popover role="dialog" aria-label="Preview of a sample alert" data-alert-preview-popover></div>
 		@components.DialogFooter("") {
-			<button class="button outline alert-preview-button" type="button" hx-post="/ui/settings/alerts/destinations/preview" hx-target="#alert-destination-preview" hx-swap="innerHTML" aria-haspopup="dialog" aria-expanded="false" aria-controls="alert-destination-preview" data-alert-preview>@Icon("code")<span>Preview</span></button>
-			<button class="button outline" type="button" data-dialog-close>Cancel</button>
-			<button class="button" type="submit" data-replica-primary-action>Save</button>
+			@components.Button(components.ButtonProps{Label: "Preview", Icon: "code", Variant: components.ButtonOutline, Class: "alert-preview-button", Attrs: templ.Attributes{"hx-post": "/ui/settings/alerts/destinations/preview", "hx-target": "#alert-destination-preview", "hx-swap": "innerHTML", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-controls": "alert-destination-preview", "data-alert-preview": true}})
+			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})
+			@components.Button(components.ButtonProps{Label: "Save", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		}
 	</form>
 }

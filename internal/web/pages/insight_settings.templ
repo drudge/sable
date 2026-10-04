@@ -106,7 +106,7 @@ templ insightAlertsBellFace(state string) {
 // InsightSettingsButton opens Insights settings: what Insights does with each
 // kind of finding, and the limits that make one.
 templ InsightSettingsButton() {
-	<button class="button outline compact insight-settings-open" id="insight-settings-open" type="button" data-dialog-open="insight-settings-dialog">@Icon("sliders")<span>Settings</span></button>
+	@components.Button(components.ButtonProps{Label: "Settings", Icon: "sliders", Variant: components.ButtonOutline, Compact: true, Class: "insight-settings-open", Attrs: templ.Attributes{"id": "insight-settings-open", "data-dialog-open": "insight-settings-dialog"}})
 }
 
 // InsightSettingsDialog holds Insights settings. Saving swaps the form in
@@ -143,11 +143,11 @@ templ InsightSettings(view InsightSettingsView) {
 		</div>
 		<div class="dialog-footer insight-settings-footer">
 			if view.CanEdit {
-				<button class="button outline insight-settings-reset" type="button" hx-post="/ui/insights/settings/reset" hx-target="#insight-settings" hx-swap="outerHTML" hx-confirm="Every kind of finding goes back to its default choice and limits." data-confirm-title="Reset Insights settings?" data-confirm-action="Reset" data-confirm-tone="neutral">@Icon("rotate-ccw")<span>Reset to Defaults</span></button>
-				<button class="button outline" type="button" data-dialog-close>Cancel</button>
-				<button class="button" type="submit" id="insight-settings-save">Save</button>
+				@components.Button(components.ButtonProps{Label: "Reset to Defaults", Icon: "rotate-ccw", Variant: components.ButtonOutline, Class: "insight-settings-reset", Attrs: templ.Attributes{"hx-post": "/ui/insights/settings/reset", "hx-target": "#insight-settings", "hx-swap": "outerHTML", "hx-confirm": "Every kind of finding goes back to its default choice and limits.", "data-confirm-title": "Reset Insights settings?", "data-confirm-action": "Reset", "data-confirm-tone": "neutral"}})
+				@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})
+				@components.Button(components.ButtonProps{Label: "Save", Type: "submit", Attrs: templ.Attributes{"id": "insight-settings-save"}})
 			} else {
-				<button class="button outline" type="button" data-dialog-close>Close</button>
+				@components.Button(components.ButtonProps{Label: "Close", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})
 			}
 		</div>
 	</form>

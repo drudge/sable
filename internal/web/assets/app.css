@@ -3228,6 +3228,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-answer > div { display: grid; gap: .4rem; }
 .query-detail-answer code { overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: .4rem; background: color-mix(in oklch, var(--muted) 55%, transparent); padding: .55rem .65rem; font-size: .75rem; }
 .query-detail-answer span { color: var(--muted-foreground); font-size: .875rem; }
+/* A button label keeps the button's own type, not the drawer's label styles. */
+:is(.query-detail-header, .query-detail-answer) .button span { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .query-detail-explain { display: grid; gap: .9rem; border-top: 1px solid var(--border); padding-top: 1.25rem; }
 .query-detail-section-heading { display: grid; gap: .35rem; }
 .query-detail-section-heading p, .query-detail-explain-legacy { margin: 0; color: var(--muted-foreground); font-size: .8rem; line-height: 1.45; }
@@ -4181,7 +4183,6 @@ svg.app-icon { display: block; border-radius: .5rem; }
 .check-domain-result p { margin: 0; line-height: 1.5; }
 .query-detail-answer > .check-domain-lists { display: flex; flex-wrap: wrap; gap: .5rem; }
 .check-domain-lists > .button { width: auto; gap: .45rem; }
-.query-detail-answer .check-domain-lists .button span { color: inherit; font-size: inherit; }
 .check-domain-lists .nav-icon { width: 1rem; height: 1rem; }
 .query-detail-why { display: inline-flex; align-items: center; gap: .4rem; margin-top: .75rem; font-size: .875rem; }
 .query-detail-why[hidden] { display: none; }

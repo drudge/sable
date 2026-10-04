@@ -74,7 +74,7 @@ func TestInsightsBellLeadsToAlertsAndSettingsOpensSettings(t *testing.T) {
 	for _, expected := range []string{
 		`id="insight-settings-dialog"`, `aria-labelledby="insight-settings-title"`, `id="insight-settings"`,
 		`id="insight-alerts-bell" href="/settings?tab=alerts" aria-label="Insights alerts off" title="Nothing is set up to receive them yet."`,
-		`id="insight-settings-open" type="button" data-dialog-open="insight-settings-dialog"`,
+		`type="button" data-dialog-open="insight-settings-dialog" id="insight-settings-open"`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("Insights page is missing %q", expected)
