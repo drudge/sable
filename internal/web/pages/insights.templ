@@ -437,6 +437,18 @@ var insightsTabOptions = []tabOption{
 	{"blocking", "Blocking", "shield"},
 }
 
+// insightsTabList leaves out Devices and Apps for an account that cannot read
+// the query logs they come from.
+func insightsTabList(view InsightsOverviewView) []components.Tab {
+	var tabs []components.Tab
+	for _, tab := range tabList(insightsTabOptions) {
+		if (tab.Value != "devices" && tab.Value != "apps") || view.CanLogs {
+			tabs = append(tabs, tab)
+		}
+	}
+	return tabs
+}
+
 templ InsightsPage(view InsightsPageView) {
 	@AppDocument(view.Console, documentTitle(tabLabel(insightsTabOptions, view.Overview.ActiveTab), "Insights"), "insights", insightsDocument(view.Overview))
 }
@@ -564,13 +576,7 @@ templ InsightsContent(view InsightsOverviewView) {
 				@RangeSelect(insightsRangeControl(view.Range))
 			</div>
 		</header>
-		<div class="isotope-tab-list insights-tab-list" role="tablist" aria-label="Insights sections">
-			for _, tab := range insightsTabOptions {
-				if (tab.Value != "devices" && tab.Value != "apps") || view.CanLogs {
-					<button class={ ifThen(view.ActiveTab == tab.Value, "isotope-tab active", "isotope-tab") } type="button" role="tab" data-isotope-tab={ tab.Value } data-tab-title={ tab.Label } aria-selected={ fmt.Sprint(view.ActiveTab == tab.Value) } tabindex={ ifThen(view.ActiveTab == tab.Value, "0", "-1") }>@Icon(tab.Icon)<span>{ tab.Label }</span></button>
-				}
-			}
-		</div>
+		@components.Tabs(components.TabsProps{Label: "Insights sections", Class: "insights-tab-list", Active: view.ActiveTab, Tabs: insightsTabList(view)})
 		<div class="insights-tab-panel" role="tabpanel" data-isotope-panel="overview" hidden?={ view.ActiveTab != "overview" }>
 			if view.Loading {
 				@insightsSkeleton(view)
