@@ -121,7 +121,7 @@ templ BlockingContent(view BlockingPageView) {
 					</div>
 					<div class="blocking-panel isotope-list-panel" id="blocking-panel-lists" role="tabpanel" aria-labelledby="blocking-tab-lists" data-blocking-panel="lists" hidden?={ view.ActiveTab != "lists" }>
 						<div class="blocking-list-toolbar">
-							<button class="button" type="button" data-dialog-open="add-block-list-dialog" data-replica-primary-action>@Icon("plus")<span>Add Block List</span></button>
+							@components.Button(components.ButtonProps{Label: "Add Block List", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "add-block-list-dialog", "data-replica-primary-action": true}})
 						</div>
 						<div class="blocking-source-list isotope-source-list">
 							if len(view.Lists) == 0 {
@@ -160,7 +160,7 @@ templ BlockingStatus(view BlockingPageView) {
 		</div>
 		<footer class="blocking-quick-actions">
 			if !view.PausedUntil.IsZero() {
-				<button class="button outline" hx-post="/ui/blocking/resume" hx-target="#blocking-content" hx-swap="outerHTML" data-blocking-resume>@Icon("play")<span>Resume Blocking</span></button>
+				@components.Button(components.ButtonProps{Label: "Resume Blocking", Icon: "play", Variant: components.ButtonOutline, Attrs: templ.Attributes{"hx-post": "/ui/blocking/resume", "hx-target": "#blocking-content", "hx-swap": "outerHTML", "data-blocking-resume": true}})
 			} else {
 				<details class="pause-menu" data-blocking-pause-menu><summary class="button outline" data-replica-primary-action>@Icon("clock")<span>Pause Blocking</span></summary><div><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"5"}' hx-target="#blocking-content" hx-swap="outerHTML">5 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"15"}' hx-target="#blocking-content" hx-swap="outerHTML">15 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"30"}' hx-target="#blocking-content" hx-swap="outerHTML">30 minutes</button><button hx-post="/ui/blocking/pause" hx-vals='{"minutes":"60"}' hx-target="#blocking-content" hx-swap="outerHTML">1 hour</button></div></details>
 			}
@@ -193,14 +193,14 @@ templ BlockListRow(list BlockListSourceView) {
 templ DomainPanel(value string, domains []string, active string, allowed bool) {
 	<div class="blocking-panel isotope-domain-panel" id={ "blocking-panel-" + value } role="tabpanel" aria-labelledby={ "blocking-tab-" + value } data-blocking-panel={ value } hidden?={ active != value }>
 		<div class="domain-list-toolbar">
-			<button class="button domain-list-add" type="button" data-dialog-open={ ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog") } data-replica-primary-action>@Icon("plus")<span>Add Domain</span></button>
+			@components.Button(components.ButtonProps{Label: "Add Domain", Icon: "plus", Class: "domain-list-add", Attrs: templ.Attributes{"data-dialog-open": ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog"), "data-replica-primary-action": true}})
 			<form class="domain-import-form domain-list-import" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
 			if len(domains) > 0 {
-				<a class="button outline domain-list-export" href={ templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")) } download={ ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt") }>@Icon("download")<span>Export</span></a>
+				@components.Button(components.ButtonProps{Label: "Export", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")), Class: "domain-list-export", Attrs: templ.Attributes{"download": ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt")}})
 			} else {
 				<span class="button outline disabled domain-list-export" aria-disabled="true">@Icon("download")<span>Export</span></span>
 			}
-			<button class="button destructive domain-list-clear" type="button" data-dialog-open={ ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog") } data-replica-primary-action disabled?={ len(domains) == 0 }>@Icon("trash")<span>Clear All</span></button>
+			@components.Button(components.ButtonProps{Label: "Clear All", Icon: "trash", Destructive: true, Disabled: len(domains) == 0, Class: "domain-list-clear", Attrs: templ.Attributes{"data-dialog-open": ifThen(allowed, "flush-allowed-dialog", "flush-blocked-dialog"), "data-replica-primary-action": true}})
 		</div>
 		@SearchField("Search " + domainPolicyKind(allowed) + " domains", "Search " + domainPolicyKind(allowed) + " domains...", "", "blocking-search", templ.Attributes{"data-domain-search": value})
 		<div class="blocked-domain-list">
@@ -256,7 +256,7 @@ templ BlockListAddLabel() {
 templ CatalogRow(item BlockListCatalogItem, added bool) {
 	<article class="catalog-row"><div><strong>{ item.Name }</strong><p title={ item.Description }>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(item.URL) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
 		if added {
-			<button class="button outline catalog-added" type="button" disabled aria-label={ item.Name + " already added" }>@Icon("check")<span>Added</span></button>
+			@components.Button(components.ButtonProps{Label: "Added", Icon: "check", Variant: components.ButtonOutline, Disabled: true, Class: "catalog-added", Attrs: templ.Attributes{"aria-label": item.Name + " already added"}})
 		} else {
 			<button class="button block-list-add-button" type="button" aria-label={ "Add " + item.Name } data-block-list-add hx-post="/ui/blocking/lists/add" hx-vals={ fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL) } hx-target="#blocking-content" hx-swap="outerHTML" hx-sync="#add-block-list-dialog:drop" hx-disable="#add-block-list-dialog .block-list-add-button, #add-block-list-dialog input[type='url']">@BlockListAddLabel()</button>
 		}
@@ -267,7 +267,7 @@ templ DomainDialog(id, title, endpoint, action, description string) {
 	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: description, Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Domain</span><input name="domain" placeholder="telemetry.example" autocomplete="off" required/></label>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">{ action }</button>
+				@components.Button(components.ButtonProps{Label: action, Type: "submit"})
 			}
 		</form>
 	}
@@ -276,7 +276,7 @@ templ DomainDialog(id, title, endpoint, action, description string) {
 templ FlushDomainDialog(id, title, endpoint string, count int) {
 	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: "This removes all " + formatNumber(uint64(count)) + " custom entries. Block-list subscriptions are not affected.", Class: "blocking-dialog", NoClose: true}) {
 		@components.DialogFooter("Cancel") {
-			<button class="button destructive" type="button" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML">Clear Domains</button>
+			@components.Button(components.ButtonProps{Label: "Clear Domains", Destructive: true, Attrs: templ.Attributes{"hx-post": endpoint, "hx-target": "#blocking-content", "hx-swap": "outerHTML"}})
 		}
 	}
 }

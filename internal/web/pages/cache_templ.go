@@ -142,23 +142,23 @@ func CacheContent(view CachePageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>How DNS Caching Works</span></summary><p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p></details><div class=\"cache-actions\"><div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class=\"button outline cache-action-button\" type=\"button\" data-dialog-open=\"cache-browser-dialog\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<span>How DNS Caching Works</span></summary><p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p></details><div class=\"cache-actions\"><div><h3>Browse Cache</h3><p>View cached domains and live response counts</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("folder").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Open Cache Browser", Icon: "folder", Variant: components.ButtonOutline, Class: "cache-action-button", Attrs: templ.Attributes{"data-dialog-open": "cache-browser-dialog"}}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<span>Open Cache Browser</span></button></div><div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p><button class=\"button destructive cache-action-button\" type=\"button\" data-dialog-open=\"cache-flush-dialog\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("trash").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Flush DNS Cache", Icon: "trash", Destructive: true, Class: "cache-action-button", Attrs: templ.Attributes{"data-dialog-open": "cache-flush-dialog"}}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<span>Flush DNS Cache</span></button></div></div></div></section><aside class=\"cache-aside\"><section class=\"card cache-guidance\"><h2>When should I clear the cache?</h2><ul><li><div><strong>DNS records have changed</strong><p>If you've updated DNS records and need them to take effect immediately</p></div></li><li><div><strong>Troubleshooting DNS issues</strong><p>Clear stale or incorrect cached entries that may be causing problems</p></div></li><li><div><strong>After configuration changes</strong><p>Ensure your DNS server uses fresh data after making configuration updates</p></div></li></ul></section><div class=\"cache-warning\"><strong>Note:</strong> After clearing the cache, query response times will temporarily increase as the server rebuilds its cache through new upstream queries.</div></aside></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div></div></div></section><aside class=\"cache-aside\"><section class=\"card cache-guidance\"><h2>When should I clear the cache?</h2><ul><li><div><strong>DNS records have changed</strong><p>If you've updated DNS records and need them to take effect immediately</p></div></li><li><div><strong>Troubleshooting DNS issues</strong><p>Clear stale or incorrect cached entries that may be causing problems</p></div></li><li><div><strong>After configuration changes</strong><p>Ensure your DNS server uses fresh data after making configuration updates</p></div></li></ul></section><div class=\"cache-warning\"><strong>Note:</strong> After clearing the cache, query response times will temporarily increase as the server rebuilds its cache through new upstream queries.</div></aside></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

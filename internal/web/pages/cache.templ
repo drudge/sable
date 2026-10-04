@@ -65,8 +65,8 @@ templ CacheContent(view CachePageView) {
 						<p>When your DNS server resolves a domain name, it stores the result in cache for faster future lookups. This improves response times and reduces load on upstream servers. Cached records automatically expire based on their TTL (Time To Live) values.</p>
 					</details>
 					<div class="cache-actions">
-						<div><h3>Browse Cache</h3><p>View cached domains and live response counts</p><button class="button outline cache-action-button" type="button" data-dialog-open="cache-browser-dialog">@Icon("folder")<span>Open Cache Browser</span></button></div>
-						<div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p><button class="button destructive cache-action-button" type="button" data-dialog-open="cache-flush-dialog">@Icon("trash")<span>Flush DNS Cache</span></button></div>
+						<div><h3>Browse Cache</h3><p>View cached domains and live response counts</p>@components.Button(components.ButtonProps{Label: "Open Cache Browser", Icon: "folder", Variant: components.ButtonOutline, Class: "cache-action-button", Attrs: templ.Attributes{"data-dialog-open": "cache-browser-dialog"}})</div>
+						<div><h3>Clear Cache</h3><p>Remove all cached records and force fresh lookups</p>@components.Button(components.ButtonProps{Label: "Flush DNS Cache", Icon: "trash", Destructive: true, Class: "cache-action-button", Attrs: templ.Attributes{"data-dialog-open": "cache-flush-dialog"}})</div>
 					</div>
 				</div>
 			</section>

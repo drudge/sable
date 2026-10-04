@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 type LogsPageView struct {
@@ -200,8 +202,8 @@ templ QueryLogsPanel(view QueryLogsView) {
 								</div>
 								<p class="range-error" role="alert" data-range-error hidden></p>
 								<div class="range-picker-actions">
-									<button class="button outline" type="button" data-range-clear>Any time</button>
-									<button class="button range-apply" type="button" data-range-apply>Apply</button>
+									@components.Button(components.ButtonProps{Label: "Any time", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-range-clear": true}})
+									@components.Button(components.ButtonProps{Label: "Apply", Class: "range-apply", Attrs: templ.Attributes{"data-range-apply": true}})
 								</div>
 							</div>
 						</div>
@@ -211,8 +213,8 @@ templ QueryLogsPanel(view QueryLogsView) {
 				if view.Exact {
 					<input type="hidden" name="match" value="exact"/>
 				}
-				<div class="query-filter-actions"><button class="button" type="submit">@Icon("search")<span>Search</span></button>if len(tokens) > 0 {
-					<a class="button outline" href="/logs?tab=queries">@Icon("refresh")<span>Clear</span></a>
+				<div class="query-filter-actions">@components.Button(components.ButtonProps{Label: "Search", Icon: "search", Type: "submit"})if len(tokens) > 0 {
+					@components.Button(components.ButtonProps{Label: "Clear", Icon: "refresh", Variant: components.ButtonOutline, Href: "/logs?tab=queries"})
 				}</div>
 			</form>
 		</div>
@@ -436,7 +438,7 @@ templ queryMissing(view QueryDetailView) {
 templ queryMissingFooter(view QueryDetailView) {
 	if view.Name != "" {
 		<div class="query-detail-policy-actions insight-drawer-actions">
-			<a class="button" href={ templ.SafeURL(queryDomainSearchURL(view.Name)) }>@Icon("search")<span>Search Query Logs</span></a>
+			@components.Button(components.ButtonProps{Label: "Search Query Logs", Icon: "search", Href: templ.SafeURL(queryDomainSearchURL(view.Name))})
 		</div>
 	}
 }
@@ -473,11 +475,11 @@ templ queryDetailFooter(view QueryDetailView) {
 		// The page's script points these at the open query.
 		@queryCopyLinkButton(ifThen(view.Loaded, QueryPath(view.Entry.ID, view.Entry.Name), ""))
 		if view.CanWatch {
-			<a class="button outline" href={ templ.SafeURL(queryWatchURL(view.Entry)) } data-query-detail-watch aria-label={ "Watch " + view.Entry.Name }>@Icon("eye")<span>Watch</span></a>
+			@components.Button(components.ButtonProps{Label: "Watch", Icon: "eye", Variant: components.ButtonOutline, Href: templ.SafeURL(queryWatchURL(view.Entry)), Attrs: templ.Attributes{"data-query-detail-watch": true, "aria-label": "Watch " + view.Entry.Name}})
 		}
 		if view.CanBlocking {
-			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/><button class="button outline destructive" type="submit">@Icon("shield-x")<span>Block</span></button></form>
-			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/><button class="button" type="submit">@Icon("shield-check")<span>Allow</span></button></form>
+			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/>@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})</form>
+			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/>@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit"})</form>
 		}
 	</div>
 }

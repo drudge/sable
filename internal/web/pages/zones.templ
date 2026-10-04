@@ -601,7 +601,7 @@ templ ZoneListView(view ZonesPageView) {
 							<button type="button" hx-get="/zones/import-catalog" hx-target="#zones-content" hx-swap="outerHTML" data-replica-primary-action>@Icon("layers")<span><strong>From catalog</strong><small>Import zones from another DNS server</small></span></button>
 						</div>
 					</details>
-					<button class="button zone-primary-action" type="button" aria-label="Add zone" title="Add zone" data-dialog-open="create-zone-dialog" data-replica-primary-action>@Icon("plus")<span>Add Zone</span></button>
+					@components.Button(components.ButtonProps{Label: "Add Zone", Icon: "plus", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Add zone", "title": "Add zone", "data-dialog-open": "create-zone-dialog", "data-replica-primary-action": true}})
 				</div>
 			}
 		</header>
@@ -674,10 +674,10 @@ templ ZoneDetailView(zone ZoneView) {
 				<a class="icon-button" href={ zoneHref(zone.Name) } aria-label="Refresh records" title="Refresh records">@Icon("refresh")</a>
 				@ZoneActionMenu(zone, "detail-menu", "zone-history-dialog", "settings-selected-zone-dialog", "dnssec-selected-zone-dialog", "clone-selected-zone-dialog", "delete-selected-zone-dialog")
 				if zoneCanResync(zone) && zone.CanTransfer {
-					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><button class="button outline zone-primary-action" type="submit" aria-label="Resynchronize zone" title="Resynchronize zone">@Icon("refresh")<span>Resync</span></button></form>
+					<form hx-post="/ui/zones/resync" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/>@components.Button(components.ButtonProps{Label: "Resync", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Resynchronize zone", "title": "Resynchronize zone"}})</form>
 				}
 				if zoneCanEditRecords(zone) && zone.CanRecords {
-					<button class="button zone-primary-action" type="button" aria-label="Add DNS record" title="Add DNS record" data-dialog-open="add-zone-record-dialog" data-replica-primary-action>@Icon("plus")<span>Add Record</span></button>
+					@components.Button(components.ButtonProps{Label: "Add Record", Icon: "plus", Class: "zone-primary-action", Attrs: templ.Attributes{"aria-label": "Add DNS record", "title": "Add DNS record", "data-dialog-open": "add-zone-record-dialog", "data-replica-primary-action": true}})
 				}
 			</div>
 		</header>
@@ -798,7 +798,7 @@ templ ZoneRevisionDiff(view ZoneRevisionDiffView) {
 			<p class="zone-history-summary">{ view.Summary }</p>
 			if view.CanRollback {
 				<form class="zone-history-rollback" hx-post="/ui/zones/rollback" hx-target="#zones-content" hx-swap="outerHTML" hx-confirm={ "Restore revision " + fmt.Sprint(view.Revision) + "? Sable will preserve the zone identity, advance its SOA serial, and save the restored state as a new revision." } data-confirm-title="Restore this revision?" data-confirm-action="Restore Revision">
-					<input type="hidden" name="zone" value={ view.ZoneName }/><input type="hidden" name="revision" value={ fmt.Sprint(view.Revision) }/><button class="button outline compact" type="submit" data-replica-primary-action>@Icon("rotate-ccw")<span>Restore revision</span></button>
+					<input type="hidden" name="zone" value={ view.ZoneName }/><input type="hidden" name="revision" value={ fmt.Sprint(view.Revision) }/>@components.Button(components.ButtonProps{Label: "Restore revision", Icon: "rotate-ccw", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 				</form>
 			}
 		</div>
@@ -929,7 +929,7 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 				<label class="zone-dynamic-toggle"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked disabled/><span></span></span></label>
 			</section>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Create Zone</button>
+				@components.Button(components.ButtonProps{Label: "Create Zone", Type: "submit"})
 			}
 		</form>
 	}
@@ -950,7 +950,7 @@ templ AddZoneRecordDialog(zone ZoneView) {
 				@RecordAdvancedOptions("", zone.DefaultTTL, 0, "", false)
 			</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Add Record</button>
+				@components.Button(components.ButtonProps{Label: "Add Record", Type: "submit"})
 			}
 		</form>
 	}
@@ -1007,14 +1007,14 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 			if zoneRecordReadOnly(zone, record) {
 				<footer class="dialog-footer edit-record-footer record-readonly-footer">
 					<span class="record-readonly-note">@Icon("info")<span>{ zoneRecordReadOnlyNote(zone, record) }</span></span>
-					<button class="button" type="button" data-dialog-close>Close</button>
+					@components.Button(components.ButtonProps{Label: "Close", Attrs: templ.Attributes{"data-dialog-close": true}})
 				</footer>
 			} else {
 				<footer class="dialog-footer edit-record-footer">
 					if record.Type != "SOA" {
-						<button class="button destructive edit-record-delete" type="submit" formaction="/ui/zones/records/delete">@Icon("trash")<span>Delete Record</span></button>
+						@components.Button(components.ButtonProps{Label: "Delete Record", Icon: "trash", Destructive: true, Type: "submit", Class: "edit-record-delete", Attrs: templ.Attributes{"formaction": "/ui/zones/records/delete"}})
 					}
-					<button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button" type="submit">Update Record</button>
+					@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Update Record", Type: "submit"})
 				</footer>
 			}
 		</form>
@@ -1110,7 +1110,7 @@ templ ZoneValidationDNSSECDialog(zone ZoneView, id string) {
 			</label>
 			<div class="zone-dnssec-note">Sable answers this zone from its upstream servers rather than signing it, so there are no keys to manage here.</div>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Save DNSSEC</button>
+				@components.Button(components.ButtonProps{Label: "Save DNSSEC", Type: "submit"})
 			}
 		</form>
 	}
@@ -1148,16 +1148,16 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 								}
 								if key.DS != "" {
 									<div class="zone-dnssec-copy"><span>DS Record (SHA-256)</span>@ZoneCopyableText(id + "-ds-" + fmt.Sprint(index), key.DS, "dnssec-record-copy")</div>
-									<div class="zone-dnssec-actions"><a class="button outline" href={ templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name) + "&key_tag=" + fmt.Sprint(key.KeyTag)) }>@Icon("download")<span>Download DS</span></a>
+									<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Download DS", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name) + "&key_tag=" + fmt.Sprint(key.KeyTag))})
 										if (key.State == "active" && zone.DNSSECParentDSKeyTag != key.KeyTag) || key.State == "ready" {
-											<button class="button" type="submit" name="key_tag" value={ fmt.Sprint(key.KeyTag) } formaction="/ui/zones/dnssec/confirm-ds" formmethod="post">@Icon("check")<span>Confirm Parent DS</span></button>
+											@components.Button(components.ButtonProps{Label: "Confirm Parent DS", Icon: "check", Type: "submit", Attrs: templ.Attributes{"name": "key_tag", "value": fmt.Sprint(key.KeyTag), "formaction": "/ui/zones/dnssec/confirm-ds", "formmethod": "post"}})
 										}
 									</div>
 								}
 							</section>
 						}
 					</div>
-					<div class="zone-dnssec-actions"><button class="button outline" type="submit" name="role" value="zsk" formaction="/ui/zones/dnssec/rollover" formmethod="post">@Icon("refresh")<span>Roll ZSK</span></button><button class="button outline" type="submit" name="role" value="ksk" formaction="/ui/zones/dnssec/rollover" formmethod="post">@Icon("refresh")<span>Roll KSK</span></button></div>
+					<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Roll ZSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "zsk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post"}})@components.Button(components.ButtonProps{Label: "Roll KSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "ksk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post"}})</div>
 				</section>
 				<div class="zone-dnssec-warning"><strong>Next action</strong><span>{ zone.DNSSECNextAction }</span></div>
 			} else if zone.DNSSECDS != "" {
@@ -1165,13 +1165,13 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 					<header><span class="zone-settings-section-icon signed">@Icon("shield-check")</span><span><strong>Zone Signed</strong><small>Key tag { fmt.Sprint(zone.DNSSECKeyTag) } · signatures expire { zone.DNSSECExpires }</small></span></header>
 					<div class="zone-dnssec-copy"><span>DS Record (SHA-256)</span>@ZoneCopyableText(id + "-ds", zone.DNSSECDS, "dnssec-record-copy")</div>
 					<div class="zone-dnssec-copy"><span>DNSKEY Record</span>@ZoneCopyableText(id + "-dnskey", zone.DNSSECDNSKEY, "dnssec-record-copy")</div>
-					<div class="zone-dnssec-actions"><a class="button outline" href={ templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name)) }>@Icon("download")<span>Download DS Record</span></a></div>
+					<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Download DS Record", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name))})</div>
 				</section>
 			} else {
 				<div class="zone-dnssec-note">Separate KSK and ZSK material will be generated when you save. Publish the KSK DS at the parent only after confirming the signed zone is serving correctly.</div>
 			}
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Save DNSSEC</button>
+				@components.Button(components.ButtonProps{Label: "Save DNSSEC", Type: "submit"})
 			}
 		</form>
 	}
@@ -1262,7 +1262,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 				}
 			</section>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Save Settings</button>
+				@components.Button(components.ButtonProps{Label: "Save Settings", Type: "submit"})
 			}
 		</form>
 	}
@@ -1274,7 +1274,7 @@ templ CloneZoneDialog(zone ZoneView, id string) {
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<label><span>New Zone Name</span><input class="mono-input" name="name" placeholder="clone.example.com" autocomplete="off" required/></label>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit">Clone Zone</button>
+				@components.Button(components.ButtonProps{Label: "Clone Zone", Type: "submit"})
 			}
 		</form>
 	}
@@ -1282,7 +1282,7 @@ templ CloneZoneDialog(zone ZoneView, id string) {
 
 templ DeleteZoneDialog(zone ZoneView, id string) {
 	@components.Dialog(components.DialogProps{ID: id, Title: "Delete Zone?", Description: "Are you sure you want to delete “" + zone.Name + "”? This will permanently delete all records in this zone. This action cannot be undone.", Class: "isotope-zone-dialog"}) {
-		<form hx-post="/ui/zones/delete" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><footer class="dialog-footer"><button class="button outline" type="button" data-dialog-close>Cancel</button><button class="button destructive" type="submit">Delete Zone</button></footer></form>
+		<form hx-post="/ui/zones/delete" hx-target="#zones-content" hx-swap="outerHTML"><input type="hidden" name="zone" value={ zone.Name }/><footer class="dialog-footer">@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Delete Zone", Destructive: true, Type: "submit"})</footer></form>
 	}
 }
 
@@ -1307,7 +1307,7 @@ templ ZoneImportSource(id string, placeholder string) {
 			</div>
 		</div>
 		<div class="zone-import-editor" data-zone-import-panel="text" hidden>
-			<div class="zone-import-editor-heading"><label for={ id + "-text" }>Zone file contents</label><button class="button outline" type="button" data-zone-clipboard>Paste from clipboard</button></div>
+			<div class="zone-import-editor-heading"><label for={ id + "-text" }>Zone file contents</label>@components.Button(components.ButtonProps{Label: "Paste from clipboard", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-zone-clipboard": true}})</div>
 			<textarea id={ id + "-text" } name="zone_text" data-zone-import-text placeholder={ placeholder } spellcheck="false" disabled></textarea>
 			<p class="zone-import-help">Paste your zone file or type records in BIND format.</p>
 		</div>
@@ -1322,7 +1322,7 @@ templ ImportNewZoneDialog() {
 			<label><span>Zone name <small>Optional</small></span><input class="mono-input" name="zone" placeholder="example.com" autocomplete="off" data-zone-import-name aria-describedby="import-new-zone-help"/></label>
 			<p class="zone-import-help" id="import-new-zone-help" data-zone-name-help aria-live="polite">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>
 			@components.DialogFooter("Cancel") {
-				<button class="button" type="submit" data-zone-import-submit disabled>Import Zone</button>
+				@components.Button(components.ButtonProps{Label: "Import Zone", Type: "submit", Disabled: true, Attrs: templ.Attributes{"data-zone-import-submit": true}})
 			}
 		</form>
 	}
@@ -1374,10 +1374,10 @@ templ ConvertPrimaryDialog(zone ZoneView, id string) {
    }
    <footer class="dialog-footer">
  if zone.ConversionError != "" {
- <button class="button outline" type="button" data-dialog-close>Close</button>
+ @components.Button(components.ButtonProps{Label: "Close", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})
  } else {
- <button class="button outline" type="button" data-dialog-close>Cancel</button>
- <button class="button" type="submit" data-replica-primary-action>@Icon("crown")<span>{ ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary") }</span></button>
+ @components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})
+ @components.Button(components.ButtonProps{Label: ifThen(zone.Type == "secondary_forwarder", "Convert to independent Forwarder", "Convert to Primary"), Icon: "crown", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
  }
  </footer>
   </form>

@@ -3,6 +3,8 @@ package pages
 import (
 	"net/url"
 	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
 )
 
 // CheckDomainRoute is where the Check a domain panel lives. Each domain's
@@ -95,7 +97,7 @@ templ CheckDomainDrawer(view CheckDomainView) {
 		// Checking another domain gives the panel that domain's address.
 		<form class="check-domain-form" data-drawer-navigate="domain" role="search">
 			@SearchField("Domain to check", "ads.example.com", ifThen(view.Checked, view.Domain, view.Input), "", templ.Attributes{"name": "domain", "id": "check-domain-input", "autocapitalize": "off", "spellcheck": "false", "data-drawer-focus": true})
-			<button class="button" type="submit">Check</button>
+			@components.Button(components.ButtonProps{Label: "Check", Type: "submit"})
 		</form>
 		@Toast(view.Message, "success")
 		if view.Error != "" {
@@ -124,7 +126,7 @@ templ CheckDomainDrawer(view CheckDomainView) {
 							<button class="button outline compact" type="button" { drawerOpener(BlockListDrawerLink(list))... } aria-label={ "View details for " + list }>@Icon("list")<span>{ list }</span></button>
 						}
 						if view.CustomBlocked {
-							<a class="button outline compact" href="/blocked?tab=domains">@Icon("shield-x")<span>Custom blocked domains</span></a>
+							@components.Button(components.ButtonProps{Label: "Custom blocked domains", Icon: "shield-x", Variant: components.ButtonOutline, Compact: true, Href: "/blocked?tab=domains"})
 						}
 					</div>
 				</section>
@@ -156,9 +158,9 @@ templ checkDomainRuleButton(domain, action string) {
 		<input type="hidden" name="domain" value={ domain }/>
 		<input type="hidden" name="action" value={ action }/>
 		if action == "block" {
-			<button class="button outline destructive" type="submit" data-replica-primary-action>@Icon("shield-x")<span>Block</span></button>
+			@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		} else {
-			<button class="button" type="submit" data-replica-primary-action>@Icon("shield-check")<span>Allow</span></button>
+			@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 		}
 	</form>
 }
