@@ -307,35 +307,72 @@ func (store *Store) summarizeRollupDimension(
 ) (rollupSummary, error) {
 	summary := rollupSummary{ranks: map[string]uint64{}}
 	since, until = since.UTC(), until.UTC()
-	coverage, covered, err := store.queryLogRollupStart(ctx)
+	fullStart, fullEnd, err := store.rollupSummaryRange(ctx, since, until, dimension)
 	if err != nil {
 		return summary, err
 	}
-	if covered && dimension.since != nil {
-		began, found, err := dimension.since(ctx)
-		if err != nil {
-			return summary, err
-		}
-		covered = found
-		coverage = maxTime(coverage, began.UTC().Truncate(time.Minute))
-	}
-
-	// With no usable rollups the whole window is one raw range and the rollup
-	// range is empty.
-	fullStart, fullEnd := until, until
-	if covered {
-		fullStart = ceilMinute(maxTime(since, coverage.Add(time.Minute)))
-		fullEnd = until.Truncate(time.Minute)
-		if !fullStart.Before(fullEnd) {
-			fullStart, fullEnd = until, until
-		}
-	}
-
 	spans, err := store.rollupSpans(ctx, fullStart, fullEnd, dayRollupTier.size)
 	if err != nil {
 		return summary, err
 	}
+	statement, arguments := store.rollupSummaryStatement(since, until, fullStart, fullEnd, spans, dimension, limit, filter)
 
+	rows, err := store.database.QueryContext(ctx, statement, arguments...)
+	if err != nil {
+		return summary, fmt.Errorf("summarize query log %s: %w", dimension.name, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var value sql.NullString
+		var hits, distinct, total uint64
+		if err := rows.Scan(&value, &hits, &distinct, &total); err != nil {
+			return summary, fmt.Errorf("scan query log %s summary: %w", dimension.name, err)
+		}
+		summary.distinct, summary.total = distinct, total
+		summary.ranks[value.String] += hits
+	}
+	if err := rows.Err(); err != nil {
+		return summary, fmt.Errorf("iterate query log %s summary: %w", dimension.name, err)
+	}
+	return summary, nil
+}
+
+// rollupSummaryRange returns the whole minutes of [since, until] the rollups
+// cover for a dimension. With no usable rollups the range is empty at until, so
+// the whole window is read from the raw log.
+func (store *Store) rollupSummaryRange(ctx context.Context, since, until time.Time, dimension rollupDimension) (time.Time, time.Time, error) {
+	coverage, covered, err := store.queryLogRollupStart(ctx)
+	if err != nil {
+		return until, until, err
+	}
+	if covered && dimension.since != nil {
+		began, found, err := dimension.since(ctx)
+		if err != nil {
+			return until, until, err
+		}
+		covered = found
+		coverage = maxTime(coverage, began.UTC().Truncate(time.Minute))
+	}
+	if !covered {
+		return until, until, nil
+	}
+	fullStart := ceilMinute(maxTime(since, coverage.Add(time.Minute)))
+	fullEnd := until.Truncate(time.Minute)
+	if !fullStart.Before(fullEnd) {
+		return until, until, nil
+	}
+	return fullStart, fullEnd, nil
+}
+
+// rollupSummaryStatement builds the query that adds the raw edges of the window
+// to the rollup spans in [fullStart, fullEnd) and ranks the combined values.
+func (store *Store) rollupSummaryStatement(
+	since, until, fullStart, fullEnd time.Time,
+	spans []rollupSpan,
+	dimension rollupDimension,
+	limit int,
+	filter *rollupValueFilter,
+) (string, []any) {
 	builder := store.newSQLBuilder()
 	var statement strings.Builder
 	// The raw edges are read by time even when a filter names clients or
@@ -383,25 +420,7 @@ WITH boundary AS (
 SELECT value, hits, distinct_values, total_hits
 FROM ranked
 WHERE position <= ` + builder.Bind(max(1, limit)))
-
-	rows, err := store.database.QueryContext(ctx, statement.String(), builder.Args()...)
-	if err != nil {
-		return summary, fmt.Errorf("summarize query log %s: %w", dimension.name, err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var value sql.NullString
-		var hits, distinct, total uint64
-		if err := rows.Scan(&value, &hits, &distinct, &total); err != nil {
-			return summary, fmt.Errorf("scan query log %s summary: %w", dimension.name, err)
-		}
-		summary.distinct, summary.total = distinct, total
-		summary.ranks[value.String] += hits
-	}
-	if err := rows.Err(); err != nil {
-		return summary, fmt.Errorf("iterate query log %s summary: %w", dimension.name, err)
-	}
-	return summary, nil
+	return statement.String(), builder.Args()
 }
 
 // rollupValueCondition matches a column against exact names and the strict

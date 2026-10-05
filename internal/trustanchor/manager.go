@@ -252,17 +252,40 @@ func (manager *Manager) observe(now time.Time, response *dns.Msg) (Snapshot, err
 			observed[keyIdentity(key)] = key
 		}
 	}
-	bootstrapMatches := matchingTrustKeys(rrset, mustParseAnchors(manager.opts.Bootstrap))
-	bootstrapIDs := make(map[string]struct{}, len(bootstrapMatches))
-	for _, key := range bootstrapMatches {
-		bootstrapIDs[keyIdentity(key)] = struct{}{}
-	}
-
 	existing := make(map[string]*Anchor, len(current.Anchors))
 	for index := range current.Anchors {
 		anchor := &current.Anchors[index]
 		existing[anchor.KeyID] = anchor
 	}
+	manager.advanceAnchors(&current, now, observed, existing, revocations, authenticated)
+	if authenticated {
+		manager.addAnchors(&current, now, rrset, observed, existing, signerIDs)
+	}
+
+	slices.SortFunc(current.Anchors, func(left, right Anchor) int { return strings.Compare(left.KeyID, right.KeyID) })
+	ttl := minimumDNSKEYTTL(rrset)
+	validity := signatureValidity(signatures, now)
+	current.Status.Initialized = true
+	current.Status.LastSuccess = now
+	current.Status.LastError = ""
+	current.Status.OriginalTTLSeconds = ttl
+	current.Status.SignatureValiditySeconds = int64(validity.Seconds())
+	current.Status.NextRefresh = now.Add(manager.refreshInterval(time.Duration(ttl)*time.Second, validity))
+	countStates(&current)
+	return current, nil
+}
+
+// advanceAnchors moves each known anchor through the RFC 5011 states for one
+// observation and drops add-pending anchors that can no longer become valid.
+// existing indexes current.Anchors by key ID.
+func (manager *Manager) advanceAnchors(
+	current *Snapshot,
+	now time.Time,
+	observed map[string]*dns.DNSKEY,
+	existing map[string]*Anchor,
+	revocations map[string]struct{},
+	authenticated bool,
+) {
 	for keyID := range revocations {
 		anchor := existing[keyID]
 		if anchor == nil || anchor.State == StateRevoked || anchor.State == StateRemoved {
@@ -313,40 +336,42 @@ func (manager *Manager) observe(now time.Time, response *dns.Msg) (Snapshot, err
 		_, remove := discard[anchor.KeyID]
 		return remove
 	})
+}
 
-	if authenticated {
-		originalTTL := minimumDNSKEYTTL(rrset)
-		for keyID, key := range observed {
-			if key.Flags&revokeFlag != 0 {
-				continue
-			}
-			if _, found := existing[keyID]; found {
-				continue
-			}
-			anchor := Anchor{Owner: manager.opts.Owner, KeyID: keyID, DNSKEY: anchorValue(key), FirstSeen: now, LastSeen: now}
-			if _, bootstrap := bootstrapIDs[keyID]; bootstrap {
-				anchor.State = StateValid
-			} else {
-				anchor.State = StateAddPending
-				holdDown := max(manager.opts.AddHoldDown, time.Duration(originalTTL)*time.Second)
-				anchor.HoldDownUntil = now.Add(holdDown)
-				anchor.SourceKeyIDs = append([]string(nil), signerIDs...)
-			}
-			current.Anchors = append(current.Anchors, anchor)
-		}
+// addAnchors starts tracking the observed keys that no anchor covered before
+// this observation. A key the bootstrap anchors already trust is valid at
+// once; any other key waits out the add hold-down.
+func (manager *Manager) addAnchors(
+	current *Snapshot,
+	now time.Time,
+	rrset []*dns.DNSKEY,
+	observed map[string]*dns.DNSKEY,
+	existing map[string]*Anchor,
+	signerIDs []string,
+) {
+	bootstrapIDs := make(map[string]struct{})
+	for _, key := range matchingTrustKeys(rrset, mustParseAnchors(manager.opts.Bootstrap)) {
+		bootstrapIDs[keyIdentity(key)] = struct{}{}
 	}
-
-	slices.SortFunc(current.Anchors, func(left, right Anchor) int { return strings.Compare(left.KeyID, right.KeyID) })
-	ttl := minimumDNSKEYTTL(rrset)
-	validity := signatureValidity(signatures, now)
-	current.Status.Initialized = true
-	current.Status.LastSuccess = now
-	current.Status.LastError = ""
-	current.Status.OriginalTTLSeconds = ttl
-	current.Status.SignatureValiditySeconds = int64(validity.Seconds())
-	current.Status.NextRefresh = now.Add(manager.refreshInterval(time.Duration(ttl)*time.Second, validity))
-	countStates(&current)
-	return current, nil
+	originalTTL := minimumDNSKEYTTL(rrset)
+	for keyID, key := range observed {
+		if key.Flags&revokeFlag != 0 {
+			continue
+		}
+		if _, found := existing[keyID]; found {
+			continue
+		}
+		anchor := Anchor{Owner: manager.opts.Owner, KeyID: keyID, DNSKEY: anchorValue(key), FirstSeen: now, LastSeen: now}
+		if _, bootstrap := bootstrapIDs[keyID]; bootstrap {
+			anchor.State = StateValid
+		} else {
+			anchor.State = StateAddPending
+			holdDown := max(manager.opts.AddHoldDown, time.Duration(originalTTL)*time.Second)
+			anchor.HoldDownUntil = now.Add(holdDown)
+			anchor.SourceKeyIDs = append([]string(nil), signerIDs...)
+		}
+		current.Anchors = append(current.Anchors, anchor)
+	}
 }
 
 func (manager *Manager) currentTrustRecords(snapshot Snapshot) ([]dns.RR, error) {
