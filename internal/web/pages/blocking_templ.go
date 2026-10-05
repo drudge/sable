@@ -1786,7 +1786,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var73), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog", Attrs: templ.Attributes{"data-catalog-tabs": true}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var73), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

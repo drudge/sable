@@ -2182,14 +2182,13 @@
 	  return enabled[(index + offset + enabled.length) % enabled.length];
 	};
 
-	const setupIsotopeTabs = (root) => {
-	  if (!root || root.dataset.isotopeTabsReady === "true") return;
-	  root.dataset.isotopeTabsReady = "true";
-	  const tabs = [...root.querySelectorAll(":scope > [role=tablist] [data-isotope-tab]")];
-	  const panels = [...root.querySelectorAll(":scope > [data-isotope-panel], :scope > form > [data-isotope-panel]")];
-	  connectTabSet(root, tabs, panels, "isotopeTab", "isotopePanel");
-	  const select = (value, updateURL = true) => {
-		const selected = tabs.find((tab) => tab.dataset.isotopeTab === value && !tab.disabled);
+	// Every tab set runs on this one engine: it links tabs to panels, follows
+	// the arrow keys, and leaves what else a selection changes to onSelect. A
+	// guard can hold a selection back, as the MCP grant check does.
+	const setupTabSet = (root, tabs, panels, tabValue, panelValue, {guard = (tab, proceed) => proceed(), onSelect} = {}) => {
+	  connectTabSet(root, tabs, panels, tabValue, panelValue);
+	  const select = (value, {chosen = false, focus = false} = {}) => {
+		const selected = tabs.find((tab) => tab.dataset[tabValue] === value && !tab.disabled);
 		if (!selected) return;
 		tabs.forEach((tab) => {
 		  const active = tab === selected;
@@ -2197,28 +2196,65 @@
 		  tab.setAttribute("aria-selected", String(active));
 		  tab.tabIndex = active ? 0 : -1;
 		});
-		panels.forEach((panel) => { panel.hidden = panel.dataset.isotopePanel !== value; });
-		root.dataset.activeTab = value;
-		applyTabTitle(root, selected.dataset.tabTitle);
-		if (updateURL) {
+		panels.forEach((panel) => { panel.hidden = panel.dataset[panelValue] !== value; });
+		onSelect?.(value, selected, chosen);
+		if (focus) selected.focus();
+	  };
+	  tabs.forEach((tab) => {
+		tab.addEventListener("click", () => guard(tab, () => select(tab.dataset[tabValue], {chosen: true})));
+		tab.addEventListener("keydown", (event) => {
+		  const next = tabFromKey(tabs, tab, event);
+		  if (!next) return;
+		  event.preventDefault();
+		  guard(next, () => select(next.dataset[tabValue], {chosen: true, focus: true}));
+		});
+	  });
+	  return select;
+	};
+
+	const setupIsotopeTabs = (root) => {
+	  if (!root || root.dataset.isotopeTabsReady === "true") return;
+	  root.dataset.isotopeTabsReady = "true";
+	  const tabs = [...root.querySelectorAll(":scope > [role=tablist] [data-isotope-tab]")];
+	  const panels = [...root.querySelectorAll(":scope > [data-isotope-panel], :scope > form > [data-isotope-panel]")];
+	  const select = setupTabSet(root, tabs, panels, "isotopeTab", "isotopePanel", {
+		onSelect: (value, selected, chosen) => {
+		  root.dataset.activeTab = value;
+		  applyTabTitle(root, selected.dataset.tabTitle);
+		  if (!chosen) return;
 		  const url = new URL(window.location.href);
 		  const parameter = root.dataset.tabParam || "tab";
 		  if (value === tabs.find((tab) => !tab.disabled)?.dataset.isotopeTab) url.searchParams.delete(parameter);
 		  else url.searchParams.set(parameter, value);
 		  window.history.replaceState(window.history.state, "", url);
-		}
-	  };
-	  tabs.forEach((tab) => {
-		tab.addEventListener("click", () => select(tab.dataset.isotopeTab));
-		tab.addEventListener("keydown", (event) => {
-		  const next = tabFromKey(tabs, tab, event);
-		  if (!next) return;
-		  event.preventDefault();
-		  next.focus();
-		  select(next.dataset.isotopeTab);
-		});
+		},
 	  });
-	  select(root.dataset.activeTab || tabs.find((tab) => !tab.disabled)?.dataset.isotopeTab, false);
+	  select(root.dataset.activeTab || tabs.find((tab) => !tab.disabled)?.dataset.isotopeTab);
+	};
+
+	// Blocking's tabs stand for sidebar destinations, so a choice also moves the
+	// sidebar highlight and the address.
+	const setupBlockingTabs = (root) => {
+	  if (!root || root.dataset.blockingTabsReady === "true") return;
+	  root.dataset.blockingTabsReady = "true";
+	  const tabs = [...root.querySelectorAll("[data-blocking-tab]")];
+	  const panels = [...root.querySelectorAll("[data-blocking-panel]")];
+	  setupTabSet(root, tabs, panels, "blockingTab", "blockingPanel", {
+		onSelect: (value, selected) => {
+		  document.querySelectorAll('.sidebar a[href^="/blocked?tab="]').forEach((link) => {
+			const allowedNavigation = link.getAttribute("href").includes("tab=allowed");
+			link.classList.toggle("active", allowedNavigation === (value === "allowed"));
+		  });
+		  window.history.replaceState(null, "", value === "lists" ? "/blocked" : `/blocked?tab=${value}`);
+		  applyTabTitle(root, selected.dataset.tabTitle);
+		},
+	  });
+	};
+
+	const setupCatalogTabs = (root) => {
+	  if (!root || root.dataset.catalogTabsReady === "true") return;
+	  root.dataset.catalogTabsReady = "true";
+	  setupTabSet(root, [...root.querySelectorAll("[data-catalog-tab]")], [...root.querySelectorAll("[data-catalog-panel]")], "catalogTab", "catalogPanel");
 	};
 
 	const setupDNSProviderFields = (root) => {
@@ -2754,32 +2790,15 @@
 	  const own = (element) => element.closest("[data-dialog-tabs]") === root;
 	  const tabs = [...root.querySelectorAll("[data-dialog-tab]")].filter(own);
 	  const panels = [...root.querySelectorAll("[data-dialog-panel]")].filter(own);
-	  connectTabSet(root, tabs, panels, "dialogTab", "dialogPanel");
-	  const select = (value, focus = false) => {
-		const selected = tabs.find((tab) => tab.dataset.dialogTab === value);
-		if (!selected) return;
-		tabs.forEach((tab) => {
-		  const active = tab === selected;
-		  tab.classList.toggle("active", active);
-		  tab.setAttribute("aria-selected", String(active));
-		  tab.tabIndex = active ? 0 : -1;
-		});
-		panels.forEach((panel) => { panel.hidden = panel.dataset.dialogPanel !== value; });
-		root.querySelectorAll("[data-dialog-save]").forEach((button) => { button.hidden = button.dataset.dialogSave !== value; });
-		panels.find((panel) => panel.dataset.dialogPanel === value)?.dispatchEvent(new Event("dialogTabShown", {bubbles: true}));
-		if (focus) selected.focus();
-	  };
-	  tabs.forEach((tab) => {
-		tab.addEventListener("click", () => mcpGrantGuard(tab, () => select(tab.dataset.dialogTab)));
-		tab.addEventListener("keydown", (event) => {
-		  const next = tabFromKey(tabs, tab, event);
-		  if (!next) return;
-		  event.preventDefault();
-		  mcpGrantGuard(next, () => select(next.dataset.dialogTab, true));
-		});
+	  const select = setupTabSet(root, tabs, panels, "dialogTab", "dialogPanel", {
+		guard: (tab, proceed) => mcpGrantGuard(tab, proceed),
+		onSelect: (value) => {
+		  root.querySelectorAll("[data-dialog-save]").forEach((button) => { button.hidden = button.dataset.dialogSave !== value; });
+		  panels.find((panel) => panel.dataset.dialogPanel === value)?.dispatchEvent(new Event("dialogTabShown", {bubbles: true}));
+		},
 	  });
 	  root.sableResetDialogTabs = () => select(tabs[0]?.dataset.dialogTab);
-	  root.sableSelectDialogTab = select;
+	  root.sableSelectDialogTab = (value, focus = false) => select(value, {focus});
 	  root.querySelectorAll("form").forEach((form) => {
 		form.addEventListener("invalid", (event) => {
 		  const panel = event.target.closest?.("[data-dialog-panel]");
@@ -3297,6 +3316,10 @@
 	  root.querySelectorAll?.("[data-dnssec-denial]").forEach(syncDNSSECDenial);
 	  if (root.matches?.("[data-isotope-tabs]")) setupIsotopeTabs(root);
 	  root.querySelectorAll?.("[data-isotope-tabs]").forEach(setupIsotopeTabs);
+	  if (root.matches?.("[data-blocking-root]")) setupBlockingTabs(root);
+	  root.querySelectorAll?.("[data-blocking-root]").forEach(setupBlockingTabs);
+	  if (root.matches?.("[data-catalog-tabs]")) setupCatalogTabs(root);
+	  root.querySelectorAll?.("[data-catalog-tabs]").forEach(setupCatalogTabs);
 	  if (root.matches?.("[data-certificate-settings]")) setupCertificateSettings(root);
 	  root.querySelectorAll?.("[data-certificate-settings]").forEach(setupCertificateSettings);
 	  if (root.matches?.("[data-acme-provider-root]")) setupDNSProviderFields(root);
@@ -5084,46 +5107,9 @@
 		return;
 	  }
 
-	  const blockingTab = event.target.closest("[data-blocking-tab]");
-	  if (blockingTab) {
-		const root = blockingTab.closest("[data-blocking-root]");
-		const selected = blockingTab.dataset.blockingTab;
-		root?.querySelectorAll("[data-blocking-tab]").forEach((tab) => {
-		  const active = tab.dataset.blockingTab === selected;
-		  tab.classList.toggle("active", active);
-		  tab.setAttribute("aria-selected", String(active));
-		  tab.tabIndex = active ? 0 : -1;
-		});
-		root?.querySelectorAll("[data-blocking-panel]").forEach((panel) => {
-		  panel.hidden = panel.dataset.blockingPanel !== selected;
-		});
-		document.querySelectorAll('.sidebar a[href^="/blocked?tab="]').forEach((link) => {
-		  const allowedNavigation = link.getAttribute("href").includes("tab=allowed");
-		  link.classList.toggle("active", allowedNavigation === (selected === "allowed"));
-		});
-		const nextURL = selected === "lists" ? "/blocked" : `/blocked?tab=${selected}`;
-		window.history.replaceState(null, "", nextURL);
-		applyTabTitle(root, blockingTab.dataset.tabTitle);
-		return;
-	  }
-
 	  const recordType = event.target.closest("[data-record-type-choice]");
 	  if (recordType) {
 		selectRecordType(recordType.closest("form"), recordType.dataset.recordTypeChoice);
-		return;
-	  }
-
-	  const catalogTab = event.target.closest("[data-catalog-tab]");
-	  if (catalogTab) {
-		const dialog = catalogTab.closest("dialog");
-		const selected = catalogTab.dataset.catalogTab;
-		dialog?.querySelectorAll("[data-catalog-tab]").forEach((tab) => {
-		  const active = tab.dataset.catalogTab === selected;
-		  tab.classList.toggle("active", active);
-		  tab.setAttribute("aria-selected", String(active));
-		  tab.tabIndex = active ? 0 : -1;
-		});
-		dialog?.querySelectorAll("[data-catalog-panel]").forEach((panel) => { panel.hidden = panel.dataset.catalogPanel !== selected; });
 		return;
 	  }
 
@@ -5176,17 +5162,6 @@
 	  event.stopPropagation();
 	  cancel.click();
 	}, true);
-
-	document.addEventListener("keydown", (event) => {
-	  const tab = event.target.closest?.("[data-blocking-tab], [data-catalog-tab]");
-	  if (!tab) return;
-	  const tabs = [...tab.closest("[role=tablist]")?.querySelectorAll("[role=tab]") || []];
-	  const next = tabFromKey(tabs, tab, event);
-	  if (!next) return;
-	  event.preventDefault();
-	  next.focus();
-	  next.click();
-	});
 
 	// Warn as soon as the two passphrase fields disagree. Finding out after the
 	// archive has been built and sealed is a slow way to learn about a typo.
