@@ -2,7 +2,8 @@ package web
 
 import (
 	"context"
-	"net/netip"
+	"fmt"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -11,10 +12,14 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/config"
-	"github.com/drudge/sable/internal/dnsname"
-	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
+
+	"net/netip"
+
+	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/insights/devices"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -361,4 +366,262 @@ func distributionItems(counts map[string]uint64, limit int) []pages.Distribution
 		offset += percentage
 	}
 	return items
+}
+
+func (server *Server) dashboard(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Path != "/" {
+		http.NotFound(writer, request)
+		return
+	}
+	if err := pages.Dashboard(server.dashboardView(request)).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dashboard", "error", err)
+	}
+}
+
+func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
+	view := server.consoleView(request)
+	view.StatsScope = dashboardStatsScope(request)
+	now := time.Now()
+	selected := dashboardChartRangeFromRequest(request)
+	if selected.Name == "custom" {
+		view.Chart = server.history.customView(request.Context(), selected.Start, selected.End, server.stats.Stats(), view.TimeDisplay)
+	} else {
+		view.Chart = server.history.view(request.Context(), selected.Name, now, server.stats.Stats(), view.TimeDisplay)
+	}
+	if !view.CanLogs {
+		return view
+	}
+	if clients, err := server.dashboardClientCount(request.Context()); err != nil {
+		server.logger.Warn("count dashboard clients", "error", err)
+	} else {
+		view.Stats.Clients = clients
+	}
+	view.Stats.Dropped = server.queryLog.Stats().Dropped
+	// The rankings open on whatever range the chart opens on, so the panels and
+	// the plot above them always answer for the same window.
+	if selected.Name == "custom" {
+		view.Insights = loadingDashboardInsights(insightWindow{
+			Range: "custom", Start: selected.Start, End: selected.End, Label: chartRangeLabel("custom"),
+		})
+	} else if window, valid := chartInsightWindow(view.Chart.ActiveRange, now); valid {
+		view.Insights = loadingDashboardInsights(window)
+	}
+	return view
+}
+
+// queryInsightReader is the optional query log capability the rankings need.
+// A store that cannot aggregate simply leaves the panels empty rather than
+// falling back to a sample whose totals nothing else on the page agrees with.
+type queryInsightReader interface {
+	QueryLogInsights(context.Context, time.Time, time.Time) (querylog.Insights, error)
+}
+
+func (server *Server) dashboardInsightsView(request *http.Request, window insightWindow) pages.DashboardInsightsView {
+	reader, ok := server.queries.(queryInsightReader)
+	if !ok {
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
+	}
+	insights, countedWindow, err := server.insightCache.load(request.Context(), window, reader.QueryLogInsights)
+	if err != nil {
+		server.logger.Warn("build dashboard insights", "error", err)
+		return pages.DashboardInsightsView{RangeLabel: window.Label, LogWindowQuery: window.logWindowQuery(), PollRange: window.pollRange()}
+	}
+	view := dashboardInsights(
+		insights,
+		countedWindow,
+		server.givenClientNames(request.Context(), countedWindow.Start),
+		server.config.Current().Config.Resolver.Hosts,
+		server.zones.Current().Zones,
+	)
+	// Whatever the given names, host overrides, and local zones could not name
+	// is asked of the resolver, which is the only path that sees a reverse
+	// zone this server merely forwards.
+	server.nameRankedClients(view.TopClients)
+	return view
+}
+
+func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Request) {
+	view := server.lifetimeStatsView(request)
+	now := time.Now()
+	chart := server.history.view(request.Context(), "hour", now, server.stats.Stats(), requestTimeDisplay(request))
+	scope := dashboardStatsScope(request)
+	values := view
+	if scope == pages.StatsScopeRange {
+		values = chart.Stats
+	}
+	window, _ := chartInsightWindow(chart.ActiveRange, now)
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: view, Scope: scope,
+		RangeName: chart.ActiveRange, RangeLabel: chart.RangeLabel,
+		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
+		CanLogs: server.canReadLogs(request), LogWindowQuery: window.logWindowQuery(),
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render runtime statistics", "error", err)
+	}
+}
+
+func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
+	view := statsView(server.history.totals(time.Now(), server.stats.Stats()))
+	// The client and dropped counts come from the query log rather than the
+	// resolver counters, so the refreshed cards have to repeat the read the
+	// dashboard performs or those two would drop to zero every poll.
+	if server.canReadLogs(request) {
+		view.Dropped = server.queryLog.Stats().Dropped
+		if clients, err := server.dashboardClientCount(request.Context()); err != nil {
+			server.logger.Warn("count dashboard clients", "error", err)
+		} else {
+			view.Clients = clients
+		}
+	}
+	return view
+}
+
+func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.Request) {
+	server.rememberDashboardStatsScope(writer, request)
+	rangeName := request.URL.Query().Get("range")
+	display := requestTimeDisplay(request)
+	location := display.Location
+	if location == nil {
+		location = time.Local
+	}
+	// The rankings are recounted only when a range control asked for the
+	// chart, never on the ten-second refresh: aggregating a week of the query
+	// log is worth doing on a click and wasteful on a poll.
+	withInsights := request.URL.Query().Get("insights") == "1" && server.canReadLogs(request)
+	if rangeName == "custom" {
+		start, startErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("start"), location)
+		end, endErr := time.ParseInLocation("2006-01-02T15:04", request.URL.Query().Get("end"), location)
+		if startErr != nil || endErr != nil || !start.Before(end) {
+			http.Error(writer, "custom range must contain valid start and end times", http.StatusBadRequest)
+			return
+		}
+		server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: "custom", Start: start, End: end})
+		view := server.history.customView(request.Context(), start, end, server.stats.Stats(), display)
+		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
+			server.logger.Error("render custom query statistics", "error", err)
+			return
+		}
+		window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
+		server.renderChartStats(writer, request, view, window.logWindowQuery())
+		if withInsights {
+			server.renderInsights(writer, request, window)
+		}
+		return
+	}
+	if _, valid := chartDuration(rangeName); !valid {
+		http.Error(writer, "range must be hour, day, week, month, or year", http.StatusBadRequest)
+		return
+	}
+	server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: rangeName})
+	now := time.Now()
+	view := server.history.view(request.Context(), rangeName, now, server.stats.Stats(), display)
+	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render query statistics", "error", err)
+		return
+	}
+	window, valid := chartInsightWindow(rangeName, now)
+	server.renderChartStats(writer, request, view, window.logWindowQuery())
+	if valid && withInsights {
+		server.renderInsights(writer, request, window)
+	}
+}
+
+// renderChartStats updates the headline metrics alongside an htmx chart swap.
+// The chart remains the regular response target; this sibling is applied out
+// of band so every range control changes the whole dashboard consistently.
+func (server *Server) renderChartStats(writer http.ResponseWriter, request *http.Request, view pages.QueryChartView, logWindowQuery string) {
+	lifetime := server.lifetimeStatsView(request)
+	scope := dashboardStatsScope(request)
+	values := lifetime
+	if scope == pages.StatsScopeRange {
+		values = view.Stats
+	}
+	overview := pages.StatsOverviewView{
+		Values: values, Lifetime: lifetime, Scope: scope,
+		RangeName: view.ActiveRange, RangeLabel: view.RangeLabel,
+		CustomStart: view.CustomStart, CustomEnd: view.CustomEnd,
+		CanLogs: server.canReadLogs(request), LogWindowQuery: logWindowQuery,
+		OutOfBand: true,
+	}
+	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render chart statistics overview", "error", err)
+	}
+}
+
+// dashboardInsightsPanel loads rankings independently from the initial page.
+// Short ranges continue polling; wider and custom ranges use the same endpoint
+// once after the operator selects them.
+func (server *Server) dashboardInsightsPanel(writer http.ResponseWriter, request *http.Request) {
+	window, valid := requestedInsightWindow(request)
+	if !valid {
+		http.Error(writer, "range must be hour, day, week, month, year, or a valid custom window", http.StatusBadRequest)
+		return
+	}
+	if !server.canReadLogs(request) {
+		http.Error(writer, "forbidden", http.StatusForbidden)
+		return
+	}
+	view := server.dashboardInsightsView(request, window)
+	if err := pages.DashboardInsights(view, false).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dashboard insights", "error", err)
+	}
+}
+
+// renderInsights appends the rankings as an out-of-band swap so one range click
+// updates the chart and the panels below it together.
+func (server *Server) renderInsights(writer http.ResponseWriter, request *http.Request, window insightWindow) {
+	insights := loadingDashboardInsights(window)
+	if err := pages.DashboardInsights(insights, true).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render dashboard insights", "error", err)
+	}
+}
+
+func requestedInsightWindow(request *http.Request) (insightWindow, bool) {
+	rangeName := request.URL.Query().Get("range")
+	if rangeName != "custom" {
+		return chartInsightWindow(rangeName, time.Now())
+	}
+	start, startErr := time.Parse(time.RFC3339Nano, request.URL.Query().Get("start"))
+	end, endErr := time.Parse(time.RFC3339Nano, request.URL.Query().Get("end"))
+	if startErr != nil || endErr != nil || !start.Before(end) {
+		return insightWindow{}, false
+	}
+	return insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}, true
+}
+
+func statsView(stats dnsserver.Stats) pages.StatsView {
+	return pages.StatsView{
+		Queries:              stats.Queries,
+		NoError:              stats.NoError,
+		ServerFailures:       stats.ServerFailures,
+		NXDomain:             stats.NXDomain,
+		Refused:              stats.Refused,
+		Recursive:            stats.CacheHits + stats.CacheMisses,
+		Blocked:              stats.Blocked,
+		Failures:             stats.Failures,
+		UpstreamErrors:       stats.UpstreamErrors,
+		CacheHits:            stats.CacheHits,
+		CacheMisses:          stats.CacheMisses,
+		CacheEntries:         stats.CacheEntries,
+		CacheHitRatio:        cacheHitRatio(stats.CacheHits, stats.CacheMisses),
+		RoutedQueries:        stats.RoutedQueries,
+		LocalAnswers:         stats.LocalAnswers,
+		AuthoritativeAnswers: stats.AuthoritativeAnswers,
+		DNSSECSecure:         stats.DNSSECSecure,
+		DNSSECInsecure:       stats.DNSSECInsecure,
+		DNSSECBogus:          stats.DNSSECBogus,
+		LocalHosts:           stats.LocalHosts,
+		BlockedDomains:       stats.BlockedDomains,
+		BlockLists:           stats.BlockLists,
+		Uptime:               time.Since(stats.StartedAt).Round(time.Second).String(),
+	}
+}
+
+func cacheHitRatio(hits, misses uint64) string {
+	total := hits + misses
+	if total == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f%%", float64(hits)*100/float64(total))
 }
