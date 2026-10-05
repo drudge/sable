@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -115,24 +116,18 @@ WHERE source = `+store.placeholder(1)+` AND occurred_at >= `+store.placeholder(2
 		return rollups[left].value < rollups[right].value
 	})
 
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin blocked client backfill: %w", err)
-	}
-	defer func() { _ = transaction.Rollback() }()
-	for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-		if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-			return err
+	return store.withTx(ctx, "blocked client backfill", func(transaction *sql.Tx) error {
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				return err
+			}
 		}
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-		start.UTC().Format(time.RFC3339Nano), blockedClientRollupSinceKey,
-	); err != nil {
-		return fmt.Errorf("move %s: %w", blockedClientRollupSinceKey, err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit blocked client backfill: %w", err)
-	}
-	return nil
+		if _, err := transaction.ExecContext(ctx,
+			"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
+			start.UTC().Format(time.RFC3339Nano), blockedClientRollupSinceKey,
+		); err != nil {
+			return fmt.Errorf("move %s: %w", blockedClientRollupSinceKey, err)
+		}
+		return nil
+	})
 }

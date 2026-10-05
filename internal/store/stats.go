@@ -99,35 +99,27 @@ func (store *Store) RecordQueryStats(ctx context.Context, buckets []QueryStatsBu
 	if len(buckets) == 0 {
 		return store.replaceQueryStatsTotals(ctx, totals)
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query statistics write: %w", err)
-	}
-	statement, err := transaction.PrepareContext(ctx, store.queryStatsInsert())
-	if err != nil {
-		_ = transaction.Rollback()
-		return fmt.Errorf("prepare query statistics insert: %w", err)
-	}
-	defer statement.Close()
-	for _, bucket := range buckets {
-		if _, err := statement.ExecContext(
-			ctx,
-			bucket.Start.UTC().Unix(),
-			bucket.Queries, bucket.NoError, bucket.ServerFailures, bucket.NXDomain,
-			bucket.Refused, bucket.Blocked, bucket.CacheHits, bucket.CacheMisses,
-		); err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("insert query statistics bucket: %w", err)
+	return store.withTx(ctx, "query statistics write", func(transaction *sql.Tx) error {
+		statement, err := transaction.PrepareContext(ctx, store.queryStatsInsert())
+		if err != nil {
+			return fmt.Errorf("prepare query statistics insert: %w", err)
 		}
-	}
-	if _, err := transaction.ExecContext(ctx, store.queryStatsTotalsUpsert(), queryStatsTotalValues(totals)...); err != nil {
-		_ = transaction.Rollback()
-		return fmt.Errorf("write query statistics totals: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query statistics write: %w", err)
-	}
-	return nil
+		defer statement.Close()
+		for _, bucket := range buckets {
+			if _, err := statement.ExecContext(
+				ctx,
+				bucket.Start.UTC().Unix(),
+				bucket.Queries, bucket.NoError, bucket.ServerFailures, bucket.NXDomain,
+				bucket.Refused, bucket.Blocked, bucket.CacheHits, bucket.CacheMisses,
+			); err != nil {
+				return fmt.Errorf("insert query statistics bucket: %w", err)
+			}
+		}
+		if _, err := transaction.ExecContext(ctx, store.queryStatsTotalsUpsert(), queryStatsTotalValues(totals)...); err != nil {
+			return fmt.Errorf("write query statistics totals: %w", err)
+		}
+		return nil
+	})
 }
 
 func (store *Store) replaceQueryStatsTotals(ctx context.Context, totals QueryStatsTotals) error {

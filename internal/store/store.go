@@ -165,69 +165,57 @@ func (store *Store) WriteQueryEvents(ctx context.Context, events []querylog.Even
 }
 
 func (store *Store) writeQueryEvents(ctx context.Context, events []querylog.Event) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query log batch: %w", err)
-	}
-	statement, err := transaction.PrepareContext(ctx, store.queryLogInsert())
-	if err != nil {
-		_ = transaction.Rollback()
-		return fmt.Errorf("prepare query log insert: %w", err)
-	}
-	defer statement.Close()
-	var first, last int64
-	for index, event := range events {
-		decision, err := json.Marshal(event.Decision)
+	return store.withTx(ctx, "query log batch", func(transaction *sql.Tx) error {
+		statement, err := transaction.PrepareContext(ctx, store.queryLogInsert())
 		if err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("encode query decision: %w", err)
+			return fmt.Errorf("prepare query log insert: %w", err)
 		}
-		result, err := statement.ExecContext(
-			ctx,
-			event.OccurredAt.UTC(),
-			event.ClientIP,
-			queryLogClientKey(event.ClientIP),
-			event.Name,
-			queryLogDomainKey(event.Name),
-			event.RecordType,
-			event.Class,
-			event.ResponseCode,
-			event.Source,
-			event.Protocol,
-			event.Answer,
-			string(decision),
-			event.Duration.Microseconds(),
-		)
-		if err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("insert query log event: %w", err)
-		}
-		if store.driver == "sqlite" {
-			if last, err = result.LastInsertId(); err != nil {
-				_ = transaction.Rollback()
-				return fmt.Errorf("read query log event ID: %w", err)
+		defer statement.Close()
+		var first, last int64
+		for index, event := range events {
+			decision, err := json.Marshal(event.Decision)
+			if err != nil {
+				return fmt.Errorf("encode query decision: %w", err)
 			}
-			if index == 0 {
-				first = last
+			result, err := statement.ExecContext(
+				ctx,
+				event.OccurredAt.UTC(),
+				event.ClientIP,
+				queryLogClientKey(event.ClientIP),
+				event.Name,
+				queryLogDomainKey(event.Name),
+				event.RecordType,
+				event.Class,
+				event.ResponseCode,
+				event.Source,
+				event.Protocol,
+				event.Answer,
+				string(decision),
+				event.Duration.Microseconds(),
+			)
+			if err != nil {
+				return fmt.Errorf("insert query log event: %w", err)
+			}
+			if store.driver == "sqlite" {
+				if last, err = result.LastInsertId(); err != nil {
+					return fmt.Errorf("read query log event ID: %w", err)
+				}
+				if index == 0 {
+					first = last
+				}
 			}
 		}
-	}
-	if err := store.indexQueryLogBatch(ctx, transaction, first, last); err != nil {
-		_ = transaction.Rollback()
-		return err
-	}
-	if err := store.writeQueryLogRollups(ctx, transaction, events); err != nil {
-		_ = transaction.Rollback()
-		return err
-	}
-	if err := store.writeClientSightings(ctx, transaction, events); err != nil {
-		_ = transaction.Rollback()
-		return err
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query log batch: %w", err)
-	}
-	return nil
+		if err := store.indexQueryLogBatch(ctx, transaction, first, last); err != nil {
+			return err
+		}
+		if err := store.writeQueryLogRollups(ctx, transaction, events); err != nil {
+			return err
+		}
+		if err := store.writeClientSightings(ctx, transaction, events); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // PruneQueryEvents removes query log history from before the cutoff: the raw

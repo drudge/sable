@@ -79,35 +79,32 @@ WHERE LOWER(profiles.email) = `+store.placeholder(2),
 // to a different account is refused rather than moved: silently repointing it
 // would transfer one person's sessions, tokens, and grants to another.
 func (store *Store) LinkIdentity(ctx context.Context, provider, subject, issuer string, userID int64, now time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin identity link: %w", err)
-	}
-	defer transaction.Rollback()
-	var existing int64
-	err = transaction.QueryRowContext(ctx,
-		"SELECT user_id FROM sable_user_identities WHERE provider = "+store.placeholder(1)+" AND subject = "+store.placeholder(2),
-		provider, subject).Scan(&existing)
-	switch {
-	case err == nil && existing != userID:
-		return fmt.Errorf("identity %s/%s is already linked to another account", provider, subject)
-	case err == nil:
-		if _, err := transaction.ExecContext(ctx,
-			"UPDATE sable_user_identities SET issuer = "+store.placeholder(1)+", last_login_at = "+store.placeholder(2)+
-				" WHERE provider = "+store.placeholder(3)+" AND subject = "+store.placeholder(4),
-			issuer, now.UTC(), provider, subject); err != nil {
-			return fmt.Errorf("refresh identity link: %w", err)
-		}
-	case errors.Is(err, sql.ErrNoRows):
-		if _, err := transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "identity link", func(transaction *sql.Tx) error {
+		var existing int64
+		err := transaction.QueryRowContext(ctx,
+			"SELECT user_id FROM sable_user_identities WHERE provider = "+store.placeholder(1)+" AND subject = "+store.placeholder(2),
+			provider, subject).Scan(&existing)
+		switch {
+		case err == nil && existing != userID:
+			return fmt.Errorf("identity %s/%s is already linked to another account", provider, subject)
+		case err == nil:
+			if _, err := transaction.ExecContext(ctx,
+				"UPDATE sable_user_identities SET issuer = "+store.placeholder(1)+", last_login_at = "+store.placeholder(2)+
+					" WHERE provider = "+store.placeholder(3)+" AND subject = "+store.placeholder(4),
+				issuer, now.UTC(), provider, subject); err != nil {
+				return fmt.Errorf("refresh identity link: %w", err)
+			}
+		case errors.Is(err, sql.ErrNoRows):
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at, last_login_at)
 VALUES (`+store.placeholders(6)+`)`, provider, subject, userID, issuer, now.UTC(), now.UTC()); err != nil {
-			return fmt.Errorf("link identity: %w", err)
+				return fmt.Errorf("link identity: %w", err)
+			}
+		default:
+			return fmt.Errorf("inspect identity link: %w", err)
 		}
-	default:
-		return fmt.Errorf("inspect identity link: %w", err)
-	}
-	return transaction.Commit()
+		return nil
+	})
 }
 
 // TouchIdentity records that a linked identity signed in, which is what the
@@ -126,42 +123,39 @@ func (store *Store) TouchIdentity(ctx context.Context, provider, subject string,
 // last way in: an account with no password and no identity can never sign in
 // again, and recovering it needs a database edit.
 func (store *Store) UnlinkIdentity(ctx context.Context, userID int64, provider string) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin identity unlink: %w", err)
-	}
-	defer transaction.Rollback()
-	if err := store.lockSignInMethods(ctx, transaction); err != nil {
-		return err
-	}
-	var passwordLogin bool
-	if err := transaction.QueryRowContext(ctx,
-		"SELECT password_login FROM sable_user_profiles WHERE user_id = "+store.placeholder(1), userID,
-	).Scan(&passwordLogin); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return auth.ErrNotFound
+	return store.withTx(ctx, "identity unlink", func(transaction *sql.Tx) error {
+		if err := store.lockSignInMethods(ctx, transaction); err != nil {
+			return err
 		}
-		return fmt.Errorf("inspect account sign-in methods: %w", err)
-	}
-	var remaining int
-	if err := transaction.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+" AND provider <> "+store.placeholder(2),
-		userID, provider).Scan(&remaining); err != nil {
-		return fmt.Errorf("count remaining identities: %w", err)
-	}
-	var passkeys int
-	if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), userID).Scan(&passkeys); err != nil {
-		return err
-	}
-	if !passwordLogin && remaining == 0 && passkeys == 0 {
-		return errors.New("this account signs in only through that provider; turn password sign-in back on first")
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"DELETE FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+" AND provider = "+store.placeholder(2),
-		userID, provider); err != nil {
-		return fmt.Errorf("unlink identity: %w", err)
-	}
-	return transaction.Commit()
+		var passwordLogin bool
+		if err := transaction.QueryRowContext(ctx,
+			"SELECT password_login FROM sable_user_profiles WHERE user_id = "+store.placeholder(1), userID,
+		).Scan(&passwordLogin); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return auth.ErrNotFound
+			}
+			return fmt.Errorf("inspect account sign-in methods: %w", err)
+		}
+		var remaining int
+		if err := transaction.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+" AND provider <> "+store.placeholder(2),
+			userID, provider).Scan(&remaining); err != nil {
+			return fmt.Errorf("count remaining identities: %w", err)
+		}
+		var passkeys int
+		if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), userID).Scan(&passkeys); err != nil {
+			return err
+		}
+		if !passwordLogin && remaining == 0 && passkeys == 0 {
+			return errors.New("this account signs in only through that provider; turn password sign-in back on first")
+		}
+		if _, err := transaction.ExecContext(ctx,
+			"DELETE FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+" AND provider = "+store.placeholder(2),
+			userID, provider); err != nil {
+			return fmt.Errorf("unlink identity: %w", err)
+		}
+		return nil
+	})
 }
 
 // IdentitiesForUser lists the providers one account is linked to.
@@ -237,35 +231,33 @@ func (store *Store) CreateFederatedUser(
 	provider, subject, issuer string,
 	now time.Time,
 ) (auth.ManagedUser, error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("begin federated user creation: %w", err)
-	}
-	defer transaction.Rollback()
 	var user auth.ManagedUser
-	if err := transaction.QueryRowContext(ctx, `
+	err := store.withTx(ctx, "federated user creation", func(transaction *sql.Tx) error {
+		if err := transaction.QueryRowContext(ctx, `
 INSERT INTO sable_users (username, password_hash, created_at)
 VALUES (`+store.placeholders(3)+`) RETURNING id`, username, "", now.UTC()).Scan(&user.ID); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("create federated user %q: %w", username, err)
-	}
-	if displayName == "" {
-		displayName = username
-	}
-	if _, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("create federated user %q: %w", username, err)
+		}
+		if displayName == "" {
+			displayName = username
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, password_login, updated_at)
 VALUES (`+store.placeholders(6)+`)`, user.ID, displayName, email, false, false, now.UTC()); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("create profile for %q: %w", username, err)
-	}
-	if err := store.replaceUserRoles(ctx, transaction, user.ID, roles); err != nil {
-		return auth.ManagedUser{}, err
-	}
-	if _, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("create profile for %q: %w", username, err)
+		}
+		if err := store.replaceUserRoles(ctx, transaction, user.ID, roles); err != nil {
+			return err
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at, last_login_at)
 VALUES (`+store.placeholders(6)+`)`, provider, subject, user.ID, issuer, now.UTC(), now.UTC()); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("link identity for %q: %w", username, err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("commit federated user creation: %w", err)
+			return fmt.Errorf("link identity for %q: %w", username, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return auth.ManagedUser{}, err
 	}
 	user.Username, user.DisplayName, user.Email = username, displayName, email
 	user.Roles = append([]string(nil), roles...)
@@ -277,38 +269,35 @@ VALUES (`+store.placeholders(6)+`)`, provider, subject, user.ID, issuer, now.UTC
 // it off is refused unless the account has an identity to sign in with, so
 // nobody can strip their own last way in.
 func (store *Store) SetPasswordLogin(ctx context.Context, userID int64, allowed bool, now time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin sign-in method update: %w", err)
-	}
-	defer transaction.Rollback()
-	if err := store.lockSignInMethods(ctx, transaction); err != nil {
-		return err
-	}
-	if !allowed {
-		var identities int
-		if err := transaction.QueryRowContext(ctx,
-			"SELECT (SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+") + (SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(2)+")", userID, userID,
-		).Scan(&identities); err != nil {
-			return fmt.Errorf("count linked identities: %w", err)
-		}
-		if identities == 0 {
-			return errors.New("add a passkey or link an identity provider before turning off password sign-in")
-		}
-		if err := store.ensurePasswordAdministratorRemains(ctx, transaction, userID); err != nil {
+	return store.withTx(ctx, "sign-in method update", func(transaction *sql.Tx) error {
+		if err := store.lockSignInMethods(ctx, transaction); err != nil {
 			return err
 		}
-	}
-	result, err := transaction.ExecContext(ctx,
-		"UPDATE sable_user_profiles SET password_login = "+store.placeholder(1)+", updated_at = "+store.placeholder(2)+
-			" WHERE user_id = "+store.placeholder(3), allowed, now.UTC(), userID)
-	if err != nil {
-		return fmt.Errorf("update sign-in method: %w", err)
-	}
-	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
-		return auth.ErrNotFound
-	}
-	return transaction.Commit()
+		if !allowed {
+			var identities int
+			if err := transaction.QueryRowContext(ctx,
+				"SELECT (SELECT COUNT(*) FROM sable_user_identities WHERE user_id = "+store.placeholder(1)+") + (SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(2)+")", userID, userID,
+			).Scan(&identities); err != nil {
+				return fmt.Errorf("count linked identities: %w", err)
+			}
+			if identities == 0 {
+				return errors.New("add a passkey or link an identity provider before turning off password sign-in")
+			}
+			if err := store.ensurePasswordAdministratorRemains(ctx, transaction, userID); err != nil {
+				return err
+			}
+		}
+		result, err := transaction.ExecContext(ctx,
+			"UPDATE sable_user_profiles SET password_login = "+store.placeholder(1)+", updated_at = "+store.placeholder(2)+
+				" WHERE user_id = "+store.placeholder(3), allowed, now.UTC(), userID)
+		if err != nil {
+			return fmt.Errorf("update sign-in method: %w", err)
+		}
+		if affected, err := result.RowsAffected(); err == nil && affected == 0 {
+			return auth.ErrNotFound
+		}
+		return nil
+	})
 }
 
 // ensurePasswordAdministratorRemains keeps one administrator able to sign in
@@ -341,11 +330,51 @@ WHERE roles.name = 'Administrator' AND (
 // or removed; a per-zone role somebody set up in the console is outside that
 // set and survives untouched.
 func (store *Store) ReconcileManagedRoles(ctx context.Context, userID int64, managed, granted []string, now time.Time) ([]string, error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
+	var desired []string
+	err := store.withTx(ctx, "role reconcile", func(transaction *sql.Tx) error {
+		current, err := store.userRoleNames(ctx, transaction, userID)
+		if err != nil {
+			return err
+		}
+		desired = make([]string, 0, len(current)+len(granted))
+		for _, role := range current {
+			// A role the provider manages is kept only if it is still granted;
+			// a role outside the managed set is always kept.
+			if !slices.Contains(managed, role) || slices.Contains(granted, role) {
+				desired = append(desired, role)
+			}
+		}
+		for _, role := range granted {
+			if !slices.Contains(desired, role) {
+				desired = append(desired, role)
+			}
+		}
+		slices.Sort(desired)
+		slices.Sort(current)
+		if slices.Equal(current, desired) {
+			desired = current
+			return nil
+		}
+		if err := store.replaceUserRoles(ctx, transaction, userID, desired); err != nil {
+			return err
+		}
+		if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
+			return err
+		}
+		if _, err := transaction.ExecContext(ctx,
+			"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2),
+			now.UTC(), userID); err != nil {
+			return fmt.Errorf("update role timestamp: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin role reconcile: %w", err)
+		return nil, err
 	}
-	defer transaction.Rollback()
+	return desired, nil
+}
+
+func (store *Store) userRoleNames(ctx context.Context, transaction *sql.Tx, userID int64) ([]string, error) {
 	rows, err := transaction.QueryContext(ctx, `
 SELECT roles.name FROM sable_user_roles AS assignments
 JOIN sable_roles AS roles ON roles.id = assignments.role_id
@@ -353,54 +382,19 @@ WHERE assignments.user_id = `+store.placeholder(1), userID)
 	if err != nil {
 		return nil, fmt.Errorf("read current roles: %w", err)
 	}
+	defer rows.Close()
 	current := make([]string, 0)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("scan current role: %w", err)
 		}
 		current = append(current, name)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		return nil, fmt.Errorf("iterate current roles: %w", err)
 	}
-	rows.Close()
-
-	desired := make([]string, 0, len(current)+len(granted))
-	for _, role := range current {
-		// A role the provider manages is kept only if it is still granted;
-		// a role outside the managed set is always kept.
-		if !slices.Contains(managed, role) || slices.Contains(granted, role) {
-			desired = append(desired, role)
-		}
-	}
-	for _, role := range granted {
-		if !slices.Contains(desired, role) {
-			desired = append(desired, role)
-		}
-	}
-	slices.Sort(desired)
-	slices.Sort(current)
-	if slices.Equal(current, desired) {
-		return current, nil
-	}
-	if err := store.replaceUserRoles(ctx, transaction, userID, desired); err != nil {
-		return nil, err
-	}
-	if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
-		return nil, err
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2),
-		now.UTC(), userID); err != nil {
-		return nil, fmt.Errorf("update role timestamp: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return nil, fmt.Errorf("commit role reconcile: %w", err)
-	}
-	return desired, nil
+	return current, nil
 }
 
 // UpdateFederatedProfile refreshes the display name and email a provider

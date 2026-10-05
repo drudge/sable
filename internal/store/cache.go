@@ -59,32 +59,25 @@ FROM sable_dns_cache`)
 }
 
 func (store *Store) ReplaceCachedResponses(ctx context.Context, entries []CachedResponse) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin DNS cache persistence: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dns_cache"); err != nil {
-		_ = transaction.Rollback()
-		return fmt.Errorf("clear persisted DNS cache: %w", err)
-	}
-	statement := `INSERT INTO sable_dns_cache
+	return store.withTx(ctx, "DNS cache persistence", func(transaction *sql.Tx) error {
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dns_cache"); err != nil {
+			return fmt.Errorf("clear persisted DNS cache: %w", err)
+		}
+		statement := `INSERT INTO sable_dns_cache
 (request_wire, response_wire, stored_at, expires_at, stale_until)
 VALUES (` + store.placeholder(1) + `, ` + store.placeholder(2) + `, ` + store.placeholder(3) + `, ` + store.placeholder(4) + `, ` + store.placeholder(5) + `)`
-	for _, entry := range entries {
-		var staleUntil any
-		if !entry.StaleUntil.IsZero() {
-			staleUntil = entry.StaleUntil.UTC()
+		for _, entry := range entries {
+			var staleUntil any
+			if !entry.StaleUntil.IsZero() {
+				staleUntil = entry.StaleUntil.UTC()
+			}
+			if _, err := transaction.ExecContext(
+				ctx, statement, entry.RequestWire, entry.ResponseWire,
+				entry.StoredAt.UTC(), entry.ExpiresAt.UTC(), staleUntil,
+			); err != nil {
+				return fmt.Errorf("persist DNS cache entry: %w", err)
+			}
 		}
-		if _, err := transaction.ExecContext(
-			ctx, statement, entry.RequestWire, entry.ResponseWire,
-			entry.StoredAt.UTC(), entry.ExpiresAt.UTC(), staleUntil,
-		); err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("persist DNS cache entry: %w", err)
-		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit DNS cache persistence: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
