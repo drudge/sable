@@ -414,17 +414,21 @@ templ DynamicDNSBadge(view DynamicDNSAppView, outOfBand bool) {
 
 templ DynamicDNSFacts(view DynamicDNSAppView, outOfBand bool) {
 	if outOfBand {
-		<div id="dynamic-dns-facts" class="integration-facts" hx-swap-oob="true">@DynamicDNSFactValues(view)</div>
+		@components.FactList(components.FactListProps{Class: "integration-facts", Attrs: templ.Attributes{"id": "dynamic-dns-facts", "hx-swap-oob": "true"}}) {
+			@DynamicDNSFactValues(view)
+		}
 	} else {
-		<div id="dynamic-dns-facts" class="integration-facts">@DynamicDNSFactValues(view)</div>
+		@components.FactList(components.FactListProps{Class: "integration-facts", Attrs: templ.Attributes{"id": "dynamic-dns-facts"}}) {
+			@DynamicDNSFactValues(view)
+		}
 	}
 }
 
 templ DynamicDNSFactValues(view DynamicDNSAppView) {
-	<div><span class="integration-fact-label">Providers</span><span class="integration-fact-value">{ dynamicDNSProvidersLabel(view) }</span></div>
+	@components.Fact(components.FactProps{Label: "Providers", Value: dynamicDNSProvidersLabel(view)})
 	@DynamicDNSAddressFact("IPv4", "dynamic-dns-ipv4", dynamicDNSIPv4(view), view.Status.IPv4 != "")
 	@DynamicDNSAddressFact("IPv6", "dynamic-dns-ipv6", dynamicDNSIPv6(view), dynamicDNSIPv6(view) == view.Status.IPv6 && view.Status.IPv6 != "")
-	<div><span class="integration-fact-label">Last published</span><span class="integration-fact-value">{ ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never") }</span></div>
+	@components.Fact(components.FactProps{Label: "Last published", Value: ifThen(view.Status.LastPublished != "", view.Status.LastPublished, "Never")})
 }
 
 templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
@@ -620,12 +624,12 @@ templ SSOCard(view SSOAppView) {
 				if !view.SecretStored {
 					<div class="unifi-status error">@Icon("alert-triangle")<div><strong>No client secret is stored</strong><span>Sign-in cannot complete until the provider's client secret is saved.</span></div></div>
 				}
-				<div class="integration-facts">
-					<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ view.Label }</span></div>
-					<div><span class="integration-fact-label">Issuer</span><span class="integration-fact-value" title={ view.Issuer }>{ ssoIssuerHost(view.Issuer) }</span></div>
-					<div><span class="integration-fact-label">Linked accounts</span><span class="integration-fact-value">{ strconv.Itoa(view.Users) }</span></div>
-					<div><span class="integration-fact-label">Last sign-in</span><span class="integration-fact-value">{ ssoLastSignIn(view) }</span></div>
-				</div>
+				@components.FactList(components.FactListProps{Class: "integration-facts"}) {
+					@components.Fact(components.FactProps{Label: "Provider", Value: view.Label})
+					@components.Fact(components.FactProps{Label: "Issuer", Value: ssoIssuerHost(view.Issuer), ValueAttrs: templ.Attributes{"title": view.Issuer}})
+					@components.Fact(components.FactProps{Label: "Linked accounts", Value: strconv.Itoa(view.Users)})
+					@components.Fact(components.FactProps{Label: "Last sign-in", Value: ssoLastSignIn(view)})
+				}
 				@SSOMappingTable(view)
 				if view.CanManage {
 					<div class="integration-card-actions">
@@ -674,17 +678,13 @@ templ MCPCard(view MCPAppView) {
 				} else if !view.Secure {
 					<div class="unifi-status warning">@Icon("alert-triangle")<div><strong>This address is not HTTPS</strong><span>Tokens would cross the network unencrypted. Set up a certificate unless the assistant runs on this server.</span></div></div>
 				}
-				<div class="integration-facts mcp-facts">
-					<div class="integration-fact-address" title={ view.Address } aria-label={ "MCP address: " + view.Address }>
-						<span class="integration-fact-label">{ ifThen(view.Clustered, "MCP address (primary)", "MCP address") }</span>
-						@components.FactCopyButton("mcp-address", "Copy MCP address")
-						<span class="integration-fact-value"><code id="mcp-address">{ view.Address }</code></span>
-					</div>
-					<div><span class="integration-fact-label">Sign-in</span><span class="integration-fact-value">{ ifThen(view.SecurityDisabled, "None", "API token") }</span></div>
-					<div><span class="integration-fact-label">Tools</span><span class="integration-fact-value">{ strconv.Itoa(view.Tools) }</span></div>
-					<div><span class="integration-fact-label">Calls today</span><span class="integration-fact-value">{ strconv.Itoa(view.CallsToday) }</span></div>
-					<div title={ view.LastUsedBy }><span class="integration-fact-label">Last used</span><span class="integration-fact-value">{ ifThen(view.LastUsed == "", "Never", view.LastUsed) }</span></div>
-				</div>
+				@components.FactList(components.FactListProps{Class: "integration-facts mcp-facts"}) {
+					@components.Fact(components.FactProps{Label: ifThen(view.Clustered, "MCP address (primary)", "MCP address"), Value: view.Address, CopyID: "mcp-address", CopyLabel: "Copy MCP address", Class: "integration-fact-address", Attrs: templ.Attributes{"title": view.Address}})
+					@components.Fact(components.FactProps{Label: "Sign-in", Value: ifThen(view.SecurityDisabled, "None", "API token")})
+					@components.Fact(components.FactProps{Label: "Tools", Value: strconv.Itoa(view.Tools)})
+					@components.Fact(components.FactProps{Label: "Calls today", Value: strconv.Itoa(view.CallsToday)})
+					@components.Fact(components.FactProps{Label: "Last used", Value: ifThen(view.LastUsed == "", "Never", view.LastUsed), Attrs: templ.Attributes{"title": view.LastUsedBy}})
+				}
 				<div class="integration-card-actions">
 					@components.Button(components.ButtonProps{Label: "Remove", Icon: "trash", Variant: components.ButtonOutline, Destructive: true, Attrs: templ.Attributes{"data-dialog-open": "remove-mcp-dialog", "data-replica-primary-action": true}})
 					<div class="integration-card-actions-primary">
@@ -1092,12 +1092,12 @@ templ UniFiStatusPanel(view UniFiAppView) {
 		if view.Status.LastError != "" {
 			<div class="unifi-status error">@Icon("alert-triangle")<div><strong>Last synchronization failed</strong><span>{ view.Status.LastError }</span></div></div>
 		}
-		<div class="integration-facts">
-			<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Hosts) }</span></div>
-			<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Added) }</span></div>
-			<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Updated) }</span></div>
-			<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(view.Status.Removed) }</span></div>
-		</div>
+		@components.FactList(components.FactListProps{Class: "integration-facts"}) {
+			@components.Fact(components.FactProps{Label: "Hosts", Value: fmt.Sprint(view.Status.Hosts)})
+			@components.Fact(components.FactProps{Label: "Added", Value: fmt.Sprint(view.Status.Added)})
+			@components.Fact(components.FactProps{Label: "Updated", Value: fmt.Sprint(view.Status.Updated)})
+			@components.Fact(components.FactProps{Label: "Removed", Value: fmt.Sprint(view.Status.Removed)})
+		}
 		if view.Status.Running {
 			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
 		}
@@ -1339,12 +1339,12 @@ templ UniFiWizardReviewStep(wizard UniFiWizardView) {
 }
 
 templ unifiReviewPlan(wizard UniFiWizardView) {
-	<div class="integration-facts">
-		<div><span class="integration-fact-label">Hosts</span><span class="integration-fact-value">{ fmt.Sprint(wizard.Plan.Hosts) }</span></div>
-		<div><span class="integration-fact-label">Added</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Added)) }</span></div>
-		<div><span class="integration-fact-label">Updated</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Updated)) }</span></div>
-		<div><span class="integration-fact-label">Removed</span><span class="integration-fact-value">{ fmt.Sprint(len(wizard.Plan.Removed)) }</span></div>
-	</div>
+	@components.FactList(components.FactListProps{Class: "integration-facts"}) {
+		@components.Fact(components.FactProps{Label: "Hosts", Value: fmt.Sprint(wizard.Plan.Hosts)})
+		@components.Fact(components.FactProps{Label: "Added", Value: fmt.Sprint(len(wizard.Plan.Added))})
+		@components.Fact(components.FactProps{Label: "Updated", Value: fmt.Sprint(len(wizard.Plan.Updated))})
+		@components.Fact(components.FactProps{Label: "Removed", Value: fmt.Sprint(len(wizard.Plan.Removed))})
+	}
 	if len(wizard.Plan.CreatedZones) > 0 {
 		<div class="cluster-dialog-note compact">@Icon("plus")<p><strong>Zones Sable will create</strong><span>{ strings.Join(wizard.Plan.CreatedZones, ", ") }</span></p></div>
 	}
@@ -1922,12 +1922,12 @@ templ SSOWizardRolesStep(wizard SSOWizardView) {
 }
 
 templ SSOWizardReviewStep(wizard SSOWizardView) {
-	<div class="integration-facts">
-		<div><span class="integration-fact-label">Provider</span><span class="integration-fact-value">{ wizard.Label }</span></div>
-		<div><span class="integration-fact-label">Issuer</span><span class="integration-fact-value" title={ wizard.Issuer }>{ ssoIssuerHost(wizard.Issuer) }</span></div>
-		<div><span class="integration-fact-label">Client ID</span><span class="integration-fact-value" title={ wizard.ClientID }>{ wizard.ClientID }</span></div>
-		<div><span class="integration-fact-label">Groups claim</span><span class="integration-fact-value">{ wizard.GroupsClaim }</span></div>
-	</div>
+	@components.FactList(components.FactListProps{Class: "integration-facts"}) {
+		@components.Fact(components.FactProps{Label: "Provider", Value: wizard.Label})
+		@components.Fact(components.FactProps{Label: "Issuer", Value: ssoIssuerHost(wizard.Issuer), ValueAttrs: templ.Attributes{"title": wizard.Issuer}})
+		@components.Fact(components.FactProps{Label: "Client ID", Value: wizard.ClientID, ValueAttrs: templ.Attributes{"title": wizard.ClientID}})
+		@components.Fact(components.FactProps{Label: "Groups claim", Value: wizard.GroupsClaim})
+	}
 	if len(wizard.Mappings) == 0 && wizard.DefaultRoles == "" {
 		<div class="unifi-status error">
 			@Icon("alert-triangle")
@@ -2136,17 +2136,11 @@ func ssoIssuerHost(issuer string) string {
 }
 
 templ DynamicDNSAddressFact(label, id, value string, copyable bool) {
-	<div class="integration-fact-address" title={ value } aria-label={ label + ": " + value }>
-		<span class="integration-fact-label">{ label }</span>
-		if copyable {
-			@components.FactCopyButton(id, "Copy " + label + " address")
+	if copyable {
+		@components.Fact(components.FactProps{Label: label, Value: value, CopyID: id, CopyLabel: "Copy " + label + " address", Class: "integration-fact-address", Attrs: templ.Attributes{"title": value}})
+	} else {
+		@components.Fact(components.FactProps{Label: label, Class: "integration-fact-address", Attrs: templ.Attributes{"title": value}}) {
+			<code>{ value }</code>
 		}
-		<span class="integration-fact-value">
-			if copyable {
-				<code id={ id }>{ value }</code>
-			} else {
-				<code>{ value }</code>
-			}
-		</span>
-	</div>
+	}
 }

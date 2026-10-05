@@ -679,7 +679,7 @@ func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
 	if strings.Contains(after, ">Never<") || !strings.Contains(after, "deploy with claude-code, list_zones") {
 		t.Fatalf("card after a call does not show the use")
 	}
-	if !strings.Contains(after, `Calls today</span><span class="integration-fact-value">1<`) {
+	if !strings.Contains(after, `Calls today</dt><dd>1<`) {
 		t.Fatal("card does not count the call")
 	}
 	// Concurrent calls must each be counted, not overwrite one another.
@@ -690,7 +690,7 @@ func TestMCPCardShowsToolsAndLastUse(t *testing.T) {
 		})
 	}
 	wait.Wait()
-	if !strings.Contains(card(), `Calls today</span><span class="integration-fact-value">6<`) {
+	if !strings.Contains(card(), `Calls today</dt><dd>6<`) {
 		t.Fatal("concurrent calls were not all counted")
 	}
 }

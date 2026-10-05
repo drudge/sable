@@ -168,7 +168,7 @@ func renderComponent(t *testing.T, component interface {
 func TestPrimaryConversionDialogReviewsSnapshotAndBlocksUnsupportedZones(t *testing.T) {
 	zone := ZoneView{Name: "secondary.test", Type: "secondary", CanSettings: true, CanRecords: true, CanTransfer: true, PrimaryServers: []string{"192.0.2.53:53"}, ConversionSerial: 42, ConversionFingerprint: "review-token", Records: []ZoneRecordView{{}, {}}}
 	dialog := renderComponent(t, ConvertPrimaryDialog(zone, "convert-dialog"))
-	for _, expected := range []string{"192.0.2.53:53", "42", `<span class="integration-fact-label">Records</span><span class="integration-fact-value">2</span>`, `name="confirmation" value="review-token"`, `name="freeze_confirmed"`, `value="true" selected`, "Use the stored snapshot", "stale or expired", `data-replica-primary-action`} {
+	for _, expected := range []string{"192.0.2.53:53", "42", `<dt>Records</dt><dd>2</dd>`, `name="confirmation" value="review-token"`, `name="freeze_confirmed"`, `value="true" selected`, "Use the stored snapshot", "stale or expired", `data-replica-primary-action`} {
 		if !strings.Contains(dialog, expected) {
 			t.Fatalf("dialog missing %q: %s", expected, dialog)
 		}
