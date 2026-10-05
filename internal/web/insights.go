@@ -290,13 +290,45 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	}
 
 	analyzers, blockingData, deviceData := server.insightAnalyzers(console, window)
+	given := server.overviewFindings(request, console, window, snapshot.Config, analyzers, deviceData, &view)
+	view.CheckedSummary = insightsCheckedSummary(console, window)
+
+	// The page's own sections show the material the analyzers examined; the
+	// sources kept it, so nothing is loaded twice.
+	if console.CanLogs {
+		server.overviewActivity(request, window, snapshot.Config, blockingData, deviceData, given, &view)
+	}
+	if console.CanBlocking {
+		contribution, err := blockingData.Contribution(request.Context())
+		if err != nil || contribution == nil {
+			view.ListsUnavailable = true
+		} else {
+			queries, _ := blockingData.SourceQueries(request.Context(), insights.Window{})
+			view.Contribution = insightsContributionView(*contribution, blocking, queries)
+		}
+	}
+	return view
+}
+
+// overviewFindings runs the analyzers and fills the Overview's findings, the
+// ones the operator hid, and the finding a link asked for. It returns the
+// devices' given names, which only operators who can read the query log see.
+func (server *Server) overviewFindings(
+	request *http.Request,
+	console pages.DashboardView,
+	window insightWindow,
+	configuration config.Config,
+	analyzers []insights.Analyzer,
+	deviceData *deviceSources,
+	view *pages.InsightsOverviewView,
+) devices.GivenNames {
 	findings := insights.Collect(request.Context(), insights.Window{Start: window.Start, End: window.End}, analyzers,
 		func(analyzer insights.Analyzer, err error) {
 			server.logger.Warn("analyze insights", "analyzer", fmt.Sprintf("%T", analyzer), "error", err)
 		})
 	// Kinds an operator turned off never reach the page, whichever analyzer
 	// made them.
-	findings = insightModesOf(snapshot.Config.Insights.Findings).shown(findings)
+	findings = insightModesOf(configuration.Insights.Findings).shown(findings)
 	feedbackStore, canRemember := server.queries.(insightFeedbackStore)
 	view.CanHideFindings = canRemember && console.CanWriteSettings
 	var hidden []insights.Finding
@@ -317,7 +349,7 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 	if console.CanLogs {
 		given = server.givenClientNames(request.Context(), window.Start)
 	}
-	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, snapshot.Config, window.Range)
+	view.Findings = server.insightFindingViews(findings[:min(len(findings), maximumOverviewFindings)], given, configuration, window.Range)
 	view.Headline = insightHeadline(findings, view.Findings)
 	// A link can open a finding further down than the Overview lists, and
 	// one the page cannot show says why.
@@ -325,65 +357,63 @@ func (server *Server) insightsOverview(request *http.Request, console pages.Dash
 		index := slices.IndexFunc(findings, func(finding insights.Finding) bool { return insights.LinkID(finding.ID) == linked })
 		switch {
 		case index >= maximumOverviewFindings:
-			extra := server.insightFindingViews(findings[index:index+1], given, snapshot.Config, window.Range)[0]
+			extra := server.insightFindingViews(findings[index:index+1], given, configuration, window.Range)[0]
 			extra.ID = "insight-finding-linked"
 			view.LinkedFinding = &extra
 		case index < 0:
 			view.LinkedMissing = insightLinkedMissing(linked, window.Range, view.HiddenFindings, view.CanHideFindings)
 		}
 	}
-	view.CheckedSummary = insightsCheckedSummary(console, window)
+	return given
+}
 
-	// The page's own sections show the material the analyzers examined; the
-	// sources kept it, so nothing is loaded twice.
-	if console.CanLogs {
-		activity, err := blockingData.loadActivity(request.Context())
-		if err != nil || activity == nil {
-			view.ActivityUnavailable = true
-		} else {
-			view.LogWindowQuery = blockingData.counted.logWindowQuery()
-			view.Activity = &pages.InsightsActivityView{
-				Queries: activity.Queries, Blocked: activity.Blocked,
-				BlockedDomains: activity.BlockedDomains, BlockedClients: activity.BlockedClients,
-			}
-			hosts, zones := snapshot.Config.Resolver.Hosts, server.zones.Current().Zones
-			view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, given, hosts, zones), insightsRankLimit)
-			view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
-			server.nameRankedClients(view.TopClients)
+// overviewActivity fills the Overview's query, device, and app sections from
+// the data the analyzers already loaded.
+func (server *Server) overviewActivity(
+	request *http.Request,
+	window insightWindow,
+	configuration config.Config,
+	blockingData *blockingSources,
+	deviceData *deviceSources,
+	given devices.GivenNames,
+	view *pages.InsightsOverviewView,
+) {
+	activity, err := blockingData.loadActivity(request.Context())
+	if err != nil || activity == nil {
+		view.ActivityUnavailable = true
+	} else {
+		view.LogWindowQuery = blockingData.counted.logWindowQuery()
+		view.Activity = &pages.InsightsActivityView{
+			Queries: activity.Queries, Blocked: activity.Blocked,
+			BlockedDomains: activity.BlockedDomains, BlockedClients: activity.BlockedClients,
 		}
-		var report deviceReport
-		if deviceData == nil {
-			view.DevicesUnavailable = true
-		} else if loaded, err := deviceData.load(request.Context()); err != nil {
-			view.DevicesUnavailable = true
-		} else {
-			report = loaded
-			view.Devices = insightDeviceViews(report)
-			if deviceData.coverage != nil {
-				view.Devices = withSilentDevices(view.Devices, deviceData.coverage.silent(request.Context()), report)
-			}
-			view.DeviceSummary = insightDeviceSummary(view.Devices)
-			view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
-		}
-		view.DeviceFilter, view.DeviceTypeOptions = insightDeviceFilter(request), devices.TypeLabels()
-		var apps querylog.AppActivity
-		if view.TopApps, view.Apps, apps, err = server.insightApps(request.Context(), window, report); err != nil {
-			server.logger.Warn("count insights apps", "error", err)
-			view.AppsUnavailable = true
-		}
-		view.AppsSince, view.AppsFailedSince = apps.Since, apps.FailedSince
-		view.AppFilter = insightAppFilter(request)
+		hosts, zones := configuration.Resolver.Hosts, server.zones.Current().Zones
+		view.TopClients = rankedStats(activity.TopClients, dashboardClientNames(activity.TopClients, given, hosts, zones), insightsRankLimit)
+		view.TopDomains = rankedStats(activity.TopDomains, nil, insightsRankLimit)
+		server.nameRankedClients(view.TopClients)
 	}
-	if console.CanBlocking {
-		contribution, err := blockingData.Contribution(request.Context())
-		if err != nil || contribution == nil {
-			view.ListsUnavailable = true
-		} else {
-			queries, _ := blockingData.SourceQueries(request.Context(), insights.Window{})
-			view.Contribution = insightsContributionView(*contribution, blocking, queries)
+	var report deviceReport
+	if deviceData == nil {
+		view.DevicesUnavailable = true
+	} else if loaded, err := deviceData.load(request.Context()); err != nil {
+		view.DevicesUnavailable = true
+	} else {
+		report = loaded
+		view.Devices = insightDeviceViews(report)
+		if deviceData.coverage != nil {
+			view.Devices = withSilentDevices(view.Devices, deviceData.coverage.silent(request.Context()), report)
 		}
+		view.DeviceSummary = insightDeviceSummary(view.Devices)
+		view.BusiestDevices = busiestDeviceRanking(view.Devices, window.Range)
 	}
-	return view
+	view.DeviceFilter, view.DeviceTypeOptions = insightDeviceFilter(request), devices.TypeLabels()
+	var apps querylog.AppActivity
+	if view.TopApps, view.Apps, apps, err = server.insightApps(request.Context(), window, report); err != nil {
+		server.logger.Warn("count insights apps", "error", err)
+		view.AppsUnavailable = true
+	}
+	view.AppsSince, view.AppsFailedSince = apps.Since, apps.FailedSince
+	view.AppFilter = insightAppFilter(request)
 }
 
 // insightsLongerRanges is the next longer range to look for a finding in.

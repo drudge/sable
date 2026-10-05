@@ -9,6 +9,7 @@ import (
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/version"
 )
 
@@ -34,46 +35,85 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 	dnsStats := server.stats.Stats()
 	queryLogStats := server.queryLog.Stats()
 	blockListStatus := server.blockLists.Status()
+	cluster := server.clusterPrometheusState()
+
+	var output strings.Builder
+	release := version.Current()
+	fmt.Fprintf(
+		&output,
+		"# HELP sable_build_info Sable build information.\n# TYPE sable_build_info gauge\nsable_build_info{version=\"%s\",commit=\"%s\",go_version=\"%s\"} 1\n",
+		prometheusLabel(release.Release), prometheusLabel(release.Commit), prometheusLabel(release.Go),
+	)
+	fmt.Fprintln(&output, "# HELP sable_uptime_seconds Seconds since the DNS handler started.")
+	fmt.Fprintln(&output, "# TYPE sable_uptime_seconds gauge")
+	fmt.Fprintf(&output, "sable_uptime_seconds %.3f\n", time.Since(dnsStats.StartedAt).Seconds())
+	for _, metric := range prometheusMetrics(dnsStats, queryLogStats, blockListStatus, cluster) {
+		fmt.Fprintf(&output, "# HELP %s %s\n", metric.name, metric.help)
+		fmt.Fprintf(&output, "# TYPE %s %s\n", metric.name, metric.metricType)
+		fmt.Fprintf(&output, "%s %d\n", metric.name, metric.value)
+	}
+	writeDNSLatencyMetrics(&output, dnsStats.Latency)
+	writeClusterNodeMetrics(&output, cluster.nodes)
+	writeBlockListSourceMetrics(&output, blockListStatus.Sources)
+
+	writer.Header().Set("Content-Type", prometheusContentType)
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(output.String()))
+}
+
+// clusterPrometheusState is this node's view of the cluster as metric values.
+// It is all zero when clustering is off.
+type clusterPrometheusState struct {
+	initialized  uint64
+	members      uint64
+	connected    uint64
+	synchronized uint64
+	generation   uint64
+	primary      uint64
+	nodes        []clusterPrometheusNode
+}
+
+func (server *Server) clusterPrometheusState() clusterPrometheusState {
+	var cluster clusterPrometheusState
+	if server.cluster == nil {
+		return cluster
+	}
+	state := server.cluster.Snapshot()
+	if state.Initialized {
+		cluster.initialized = 1
+	}
+	cluster.members = uint64(len(state.Nodes))
+	cluster.connected = uint64(state.Connected)
+	cluster.synchronized = uint64(state.Synchronized)
+	cluster.generation = state.Generation
+	if state.PrimaryID == state.NodeID && state.PrimaryID != "" {
+		cluster.primary = 1
+	}
+	cluster.nodes = make([]clusterPrometheusNode, 0, len(state.Nodes))
+	for _, node := range state.Nodes {
+		connected := uint64(0)
+		if node.State == "online" {
+			connected = 1
+		}
+		synchronized := uint64(0)
+		if node.SyncState == "current" {
+			synchronized = 1
+		}
+		cluster.nodes = append(cluster.nodes, clusterPrometheusNode{
+			id: node.ID, name: node.Name, role: node.Role,
+			connected: connected, synchronized: synchronized, lag: node.Lag,
+		})
+	}
+	return cluster
+}
+
+// prometheusMetrics lists the unlabeled counters and gauges in exposition order.
+func prometheusMetrics(dnsStats dnsserver.Stats, queryLogStats querylog.Stats, blockListStatus blockcompiler.UpdateStatus, cluster clusterPrometheusState) []prometheusMetric {
 	trustAnchorUpdates := uint64(0)
 	if dnsStats.DNSSECTrustAnchorUpdates {
 		trustAnchorUpdates = 1
 	}
-	clusterInitialized := uint64(0)
-	clusterNodes := uint64(0)
-	clusterConnected := uint64(0)
-	clusterSynchronized := uint64(0)
-	clusterGeneration := uint64(0)
-	clusterPrimary := uint64(0)
-	var clusterStateNodes []clusterPrometheusNode
-	if server.cluster != nil {
-		state := server.cluster.Snapshot()
-		if state.Initialized {
-			clusterInitialized = 1
-		}
-		clusterNodes = uint64(len(state.Nodes))
-		clusterConnected = uint64(state.Connected)
-		clusterSynchronized = uint64(state.Synchronized)
-		clusterGeneration = state.Generation
-		if state.PrimaryID == state.NodeID && state.PrimaryID != "" {
-			clusterPrimary = 1
-		}
-		clusterStateNodes = make([]clusterPrometheusNode, 0, len(state.Nodes))
-		for _, node := range state.Nodes {
-			connected := uint64(0)
-			if node.State == "online" {
-				connected = 1
-			}
-			synchronized := uint64(0)
-			if node.SyncState == "current" {
-				synchronized = 1
-			}
-			clusterStateNodes = append(clusterStateNodes, clusterPrometheusNode{
-				id: node.ID, name: node.Name, role: node.Role,
-				connected: connected, synchronized: synchronized, lag: node.Lag,
-			})
-		}
-	}
-	metrics := []prometheusMetric{
+	return []prometheusMetric{
 		{name: "sable_dns_queries_total", help: "DNS queries received.", metricType: "counter", value: dnsStats.Queries},
 		{name: "sable_dns_blocked_total", help: "DNS queries blocked by policy.", metricType: "counter", value: dnsStats.Blocked},
 		{name: "sable_dns_local_answers_total", help: "DNS queries answered by local host overrides.", metricType: "counter", value: dnsStats.LocalAnswers},
@@ -105,48 +145,36 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		{name: "sable_query_log_persisted_total", help: "Query events persisted.", metricType: "counter", value: queryLogStats.Persisted},
 		{name: "sable_query_log_dropped_total", help: "Query events dropped.", metricType: "counter", value: queryLogStats.Dropped},
 		{name: "sable_query_log_write_errors_total", help: "Query-log persistence errors.", metricType: "counter", value: queryLogStats.WriteErrors},
-		{name: "sable_cluster_initialized", help: "Whether this node has initialized cluster state.", metricType: "gauge", value: clusterInitialized},
-		{name: "sable_cluster_nodes", help: "Nodes in the current cluster membership view.", metricType: "gauge", value: clusterNodes},
-		{name: "sable_cluster_nodes_connected", help: "Cluster nodes currently connected.", metricType: "gauge", value: clusterConnected},
-		{name: "sable_cluster_nodes_synchronized", help: "Cluster nodes synchronized to the current generation.", metricType: "gauge", value: clusterSynchronized},
-		{name: "sable_cluster_generation", help: "Current cluster configuration generation observed by this node.", metricType: "gauge", value: clusterGeneration},
-		{name: "sable_cluster_is_primary", help: "Whether this node is the writable cluster primary.", metricType: "gauge", value: clusterPrimary},
+		{name: "sable_cluster_initialized", help: "Whether this node has initialized cluster state.", metricType: "gauge", value: cluster.initialized},
+		{name: "sable_cluster_nodes", help: "Nodes in the current cluster membership view.", metricType: "gauge", value: cluster.members},
+		{name: "sable_cluster_nodes_connected", help: "Cluster nodes currently connected.", metricType: "gauge", value: cluster.connected},
+		{name: "sable_cluster_nodes_synchronized", help: "Cluster nodes synchronized to the current generation.", metricType: "gauge", value: cluster.synchronized},
+		{name: "sable_cluster_generation", help: "Current cluster configuration generation observed by this node.", metricType: "gauge", value: cluster.generation},
+		{name: "sable_cluster_is_primary", help: "Whether this node is the writable cluster primary.", metricType: "gauge", value: cluster.primary},
 		{name: "sable_block_list_sources_degraded", help: "Remote block lists whose most recent download attempt failed.", metricType: "gauge", value: uint64(blockListStatus.Degraded)},
 	}
+}
 
-	var output strings.Builder
-	release := version.Current()
-	fmt.Fprintf(
-		&output,
-		"# HELP sable_build_info Sable build information.\n# TYPE sable_build_info gauge\nsable_build_info{version=\"%s\",commit=\"%s\",go_version=\"%s\"} 1\n",
-		prometheusLabel(release.Release), prometheusLabel(release.Commit), prometheusLabel(release.Go),
-	)
-	fmt.Fprintln(&output, "# HELP sable_uptime_seconds Seconds since the DNS handler started.")
-	fmt.Fprintln(&output, "# TYPE sable_uptime_seconds gauge")
-	fmt.Fprintf(&output, "sable_uptime_seconds %.3f\n", time.Since(dnsStats.StartedAt).Seconds())
-	for _, metric := range metrics {
-		fmt.Fprintf(&output, "# HELP %s %s\n", metric.name, metric.help)
-		fmt.Fprintf(&output, "# TYPE %s %s\n", metric.name, metric.metricType)
-		fmt.Fprintf(&output, "%s %d\n", metric.name, metric.value)
-	}
-	writeDNSLatencyMetrics(&output, dnsStats.Latency)
+func writeClusterNodeMetrics(output *strings.Builder, nodes []clusterPrometheusNode) {
 	for _, metric := range []struct{ name, help string }{
 		{"sable_cluster_node_connected", "Whether the cluster node is currently connected."},
 		{"sable_cluster_node_synchronized", "Whether the cluster node is synchronized to the current generation."},
 		{"sable_cluster_node_replication_lag_generations", "Cluster generations not yet applied by the node."},
 	} {
-		fmt.Fprintf(&output, "# HELP %s %s\n# TYPE %s gauge\n", metric.name, metric.help, metric.name)
-		for _, node := range clusterStateNodes {
+		fmt.Fprintf(output, "# HELP %s %s\n# TYPE %s gauge\n", metric.name, metric.help, metric.name)
+		for _, node := range nodes {
 			value := node.lag
 			if metric.name == "sable_cluster_node_connected" {
 				value = node.connected
 			} else if metric.name == "sable_cluster_node_synchronized" {
 				value = node.synchronized
 			}
-			fmt.Fprintf(&output, "%s{node_id=\"%s\",node=\"%s\",role=\"%s\"} %d\n", metric.name, prometheusLabel(node.id), prometheusLabel(node.name), prometheusLabel(node.role), value)
+			fmt.Fprintf(output, "%s{node_id=\"%s\",node=\"%s\",role=\"%s\"} %d\n", metric.name, prometheusLabel(node.id), prometheusLabel(node.name), prometheusLabel(node.role), value)
 		}
 	}
+}
 
+func writeBlockListSourceMetrics(output *strings.Builder, sources []blockcompiler.SourceHealth) {
 	for _, metric := range []struct{ name, help, metricType string }{
 		{"sable_block_list_source_healthy", "Whether the most recent download attempt for the block list succeeded.", "gauge"},
 		{"sable_block_list_source_consecutive_failures", "Consecutive failed download attempts for the block list.", "gauge"},
@@ -154,19 +182,15 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 		{"sable_block_list_source_failures_total", "Failed block-list download attempts.", "counter"},
 		{"sable_block_list_source_last_success_timestamp_seconds", "Unix time of the last successful download, or 0 if it has never succeeded.", "gauge"},
 	} {
-		fmt.Fprintf(&output, "# HELP %s %s\n# TYPE %s %s\n", metric.name, metric.help, metric.name, metric.metricType)
-		for _, source := range blockListStatus.Sources {
+		fmt.Fprintf(output, "# HELP %s %s\n# TYPE %s %s\n", metric.name, metric.help, metric.name, metric.metricType)
+		for _, source := range sources {
 			fmt.Fprintf(
-				&output, "%s{list=\"%s\",url=\"%s\"} %d\n",
+				output, "%s{list=\"%s\",url=\"%s\"} %d\n",
 				metric.name, prometheusLabel(source.Name), prometheusLabel(source.URL),
 				blockListSourceMetricValue(metric.name, source),
 			)
 		}
 	}
-
-	writer.Header().Set("Content-Type", prometheusContentType)
-	writer.WriteHeader(http.StatusOK)
-	_, _ = writer.Write([]byte(output.String()))
 }
 
 func writeDNSLatencyMetrics(output *strings.Builder, histograms []dnsserver.DNSLatencyHistogram) {
