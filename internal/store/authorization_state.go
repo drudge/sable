@@ -186,6 +186,9 @@ ORDER BY role_id, permission, surface, resource_type, resource_id`)
 	if err := rows.Close(); err != nil {
 		return AuthorizationState{}, fmt.Errorf("close authorization memberships: %w", err)
 	}
+	if err := rows.Err(); err != nil {
+		return AuthorizationState{}, fmt.Errorf("iterate authorization memberships: %w", err)
+	}
 
 	rows, err = store.database.QueryContext(ctx, `
 SELECT user_id, provider, subject, issuer, linked_at
@@ -212,7 +215,7 @@ FROM sable_user_identities ORDER BY user_id, provider`)
 		return AuthorizationState{}, fmt.Errorf("close authorization identities: %w", err)
 	}
 	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization memberships: %w", err)
+		return AuthorizationState{}, fmt.Errorf("iterate authorization identities: %w", err)
 	}
 
 	for index := range state.Users {
