@@ -19,9 +19,7 @@ func (server *Server) clusterNodePanel(writer http.ResponseWriter, request *http
 	if request.URL.Query().Get("part") == "details" && !view.Missing {
 		component = pages.ClusterNodeDetails(view)
 	}
-	if err := component.Render(request.Context(), writer); err != nil {
-		server.logger.Error("render cluster node panel", "error", err)
-	}
+	server.render(writer, request, component)
 }
 
 // clusterNodeDrawerView finds a node by the name or ID in its address and

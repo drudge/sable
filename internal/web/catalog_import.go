@@ -50,9 +50,7 @@ func (server *Server) importCatalog(writer http.ResponseWriter, request *http.Re
 	if request.Header.Get("HX-Request") == "true" {
 		component = pages.ZonesContent(zonesView)
 	}
-	if err := component.Render(request.Context(), writer); err != nil {
-		server.logger.Error("render catalog import", "error", err)
-	}
+	server.render(writer, request, component)
 }
 
 func (server *Server) prepareCatalogImport(request *http.Request, view *pages.CatalogImportView) error {

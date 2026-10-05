@@ -38,9 +38,7 @@ type blockingPauser interface {
 
 func (server *Server) blockingPage(writer http.ResponseWriter, request *http.Request) {
 	view := server.blockingView(request, "", "", request.URL.Query().Get("tab"))
-	if err := pages.BlockingPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render blocking page", "error", err)
-	}
+	server.render(writer, request, pages.BlockingPage(view))
 }
 
 func (server *Server) blockingView(request *http.Request, message, errorMessage, activeTab string) pages.BlockingPageView {
@@ -138,25 +136,25 @@ func (server *Server) updateBlocking(writer http.ResponseWriter, request *http.R
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
-		_ = pages.BlockingContent(server.blockingView(request, "", "Invalid blocking form.", activeTab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "Invalid blocking form.", activeTab)))
 		return
 	}
 	editor, ok := server.config.(blockingEditor)
 	if !ok {
 		server.logBlockingOperation(request, errors.New("configuration source is read-only"), "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusNotImplemented)
-		_ = pages.BlockingContent(server.blockingView(request, "", "This configuration source is read-only.", activeTab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "This configuration source is read-only.", activeTab)))
 		return
 	}
 	if err := editor.UpdateBlocking(request.Context(), mutate); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), activeTab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), activeTab)))
 		return
 	}
 	server.logBlockingOperation(request, nil, "duration", time.Since(started))
 	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), success)
-	_ = pages.BlockingContent(server.blockingView(request, success, "", activeTab)).Render(request.Context(), writer)
+	server.render(writer, request, pages.BlockingContent(server.blockingView(request, success, "", activeTab)))
 }
 
 func writeBlockingErrorStatus(writer http.ResponseWriter, request *http.Request, status int) {
@@ -226,16 +224,16 @@ func (server *Server) addAllowedDomain(writer http.ResponseWriter, request *http
 func (server *Server) addQueryPolicyDomain(writer http.ResponseWriter, request *http.Request) {
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err)
-		_ = pages.Toast("Invalid domain action.", "error").Render(request.Context(), writer)
+		server.render(writer, request, pages.Toast("Invalid domain action.", "error"))
 		return
 	}
 	allowed := request.FormValue("action") == "allow"
 	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), request.FormValue("domain"), allowed)
 	if err != nil {
-		_ = pages.Toast(err.Error(), "error").Render(request.Context(), writer)
+		server.render(writer, request, pages.Toast(err.Error(), "error"))
 		return
 	}
-	_ = pages.Toast(sentence(result.Message)+".", "success").Render(request.Context(), writer)
+	server.render(writer, request, pages.Toast(sentence(result.Message)+".", "success"))
 }
 
 func (server *Server) addPolicyDomain(writer http.ResponseWriter, request *http.Request, allowed bool) {
@@ -279,10 +277,10 @@ func (server *Server) changePolicyDomain(
 func (server *Server) renderPolicyChange(writer http.ResponseWriter, request *http.Request, tab, message string, err error) {
 	if err != nil {
 		writeBlockingErrorStatus(writer, request, serviceStatus(err))
-		_ = pages.BlockingContent(server.blockingView(request, "", sentence(err.Error()), tab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", sentence(err.Error()), tab)))
 		return
 	}
-	_ = pages.BlockingContent(server.blockingView(request, message, "", tab)).Render(request.Context(), writer)
+	server.render(writer, request, pages.BlockingContent(server.blockingView(request, message, "", tab)))
 }
 
 func policyTab(allowed bool) string {
@@ -330,7 +328,7 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 	if err := request.ParseMultipartForm(maximumDomainImportBytes); err != nil {
 		server.logBlockingOperation(request, err, "kind", kind)
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
-		_ = pages.BlockingContent(server.blockingView(request, "", "Choose a text or hosts file smaller than 4 MiB.", tab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "Choose a text or hosts file smaller than 4 MiB.", tab)))
 		return
 	}
 	if request.MultipartForm != nil {
@@ -340,7 +338,7 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 	if err != nil {
 		server.logBlockingOperation(request, err, "kind", kind)
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
-		_ = pages.BlockingContent(server.blockingView(request, "", "Choose a domain file to import.", tab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "Choose a domain file to import.", tab)))
 		return
 	}
 	defer file.Close()
@@ -348,13 +346,13 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 	if err != nil {
 		server.logBlockingOperation(request, err, "kind", kind)
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), tab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), tab)))
 		return
 	}
 	if len(domains) == 0 {
 		server.logBlockingOperation(request, errors.New("domain file contains no valid domains"), "kind", kind, "invalid", invalid)
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", "The selected file does not contain any valid domains.", tab)).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "The selected file does not contain any valid domains.", tab)))
 		return
 	}
 	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), domains, invalid, allowed)
@@ -439,7 +437,7 @@ func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Req
 	if err := request.ParseForm(); err != nil {
 		server.logBlockingOperation(request, err)
 		writeBlockingErrorStatus(writer, request, http.StatusBadRequest)
-		_ = pages.BlockingContent(server.blockingView(request, "", "Invalid block-list form.", "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "Invalid block-list form.", "lists")))
 		return
 	}
 	name := strings.TrimSpace(request.FormValue("name"))
@@ -451,7 +449,7 @@ func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Req
 	if err := blockcompiler.ValidateURL(remoteURL); err != nil {
 		server.logBlockingOperation(request, err, "url", remoteURL)
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")))
 		return
 	}
 	if name == "" {
@@ -461,7 +459,7 @@ func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Req
 		if strings.EqualFold(list.Name, name) || list.URL == remoteURL {
 			server.logBlockingOperation(request, errors.New("block list is already configured"), "name", name, "url", remoteURL)
 			writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-			_ = pages.BlockingContent(server.blockingView(request, "", "This block list is already added.", "lists")).Render(request.Context(), writer)
+			server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "This block list is already added.", "lists")))
 			return
 		}
 	}
@@ -469,7 +467,7 @@ func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Req
 	if err := server.blockLists.Download(request.Context(), blockcompiler.RemoteSource{Name: name, URL: remoteURL, Path: path}); err != nil {
 		server.logBlockingOperation(request, err, "name", name, "url", remoteURL)
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")))
 		return
 	}
 	server.updateBlocking(writer, request, "lists", "Block list added and compiled", func(policy *config.Blocking) error {
@@ -508,12 +506,12 @@ func (server *Server) updateBlockLists(writer http.ResponseWriter, request *http
 	if err := server.refreshRemoteBlockLists(request.Context()); err != nil {
 		server.logBlockingOperation(request, err, "sources", sources, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")))
 		return
 	}
 	server.logBlockingOperation(request, nil, "sources", sources, "domains", server.stats.Stats().BlockedDomains, "duration", time.Since(started))
 	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), fmt.Sprintf("refreshed %d remote block lists", sources))
-	_ = pages.BlockingContent(server.blockingView(request, "Block lists downloaded and compiled", "", "lists")).Render(request.Context(), writer)
+	server.render(writer, request, pages.BlockingContent(server.blockingView(request, "Block lists downloaded and compiled", "", "lists")))
 }
 
 func (server *Server) toggleBlocking(writer http.ResponseWriter, request *http.Request) {
@@ -535,7 +533,7 @@ func (server *Server) pauseBlocking(writer http.ResponseWriter, request *http.Re
 		validationErr := errors.New("pause duration must be between 1 minute and 24 hours")
 		server.logBlockingOperation(request, validationErr, "minutes", minutes, "duration", time.Since(started))
 		writeBlockingErrorStatus(writer, request, http.StatusUnprocessableEntity)
-		_ = pages.BlockingContent(server.blockingView(request, "", "Pause duration must be between 1 minute and 24 hours.", "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "Pause duration must be between 1 minute and 24 hours.", "lists")))
 		return
 	}
 	pauser, ok := server.stats.(blockingPauser)
@@ -547,7 +545,7 @@ func (server *Server) pauseBlocking(writer http.ResponseWriter, request *http.Re
 	pausedUntil := pauser.PauseBlocking(time.Duration(minutes) * time.Minute)
 	server.logBlockingOperation(request, nil, "minutes", minutes, "paused_until", pausedUntil, "duration", time.Since(started))
 	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), fmt.Sprintf("blocking paused for %d minutes", minutes))
-	_ = pages.BlockingContent(server.blockingView(request, fmt.Sprintf("Blocking paused for %d minutes", minutes), "", "lists")).Render(request.Context(), writer)
+	server.render(writer, request, pages.BlockingContent(server.blockingView(request, fmt.Sprintf("Blocking paused for %d minutes", minutes), "", "lists")))
 }
 
 func (server *Server) resumeBlocking(writer http.ResponseWriter, request *http.Request) {
@@ -556,13 +554,13 @@ func (server *Server) resumeBlocking(writer http.ResponseWriter, request *http.R
 		err := errors.New("blocking pause is unavailable")
 		server.logBlockingOperation(request, err)
 		writeBlockingErrorStatus(writer, request, http.StatusNotImplemented)
-		_ = pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")).Render(request.Context(), writer)
+		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", err.Error(), "lists")))
 		return
 	}
 	pauser.ResumeBlocking()
 	server.logBlockingOperation(request, nil)
 	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), "blocking resumed")
-	_ = pages.BlockingContent(server.blockingView(request, "Blocking resumed", "", "lists")).Render(request.Context(), writer)
+	server.render(writer, request, pages.BlockingContent(server.blockingView(request, "Blocking resumed", "", "lists")))
 }
 
 // refreshRemoteBlockLists downloads every healthy source and reschedules the

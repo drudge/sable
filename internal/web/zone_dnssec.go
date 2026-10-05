@@ -298,20 +298,21 @@ func (server *Server) zoneDNSSECStatus(writer http.ResponseWriter, request *http
 	name := normalizeZoneName(request.URL.Query().Get("zone"))
 	zone := findZone(server.zones.Current().Zones, name)
 	if zone == nil {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "zone was not found"})
+		apiError(writer, http.StatusNotFound, "zone was not found")
 		return
 	}
 	if !server.authorizeZoneRequest(request, auth.PermissionZonesRead, *zone) {
-		writeJSON(writer, http.StatusForbidden, map[string]string{"error": "permission denied"})
+		apiError(writer, http.StatusForbidden, "permission denied")
 		return
 	}
 	if !zone.DNSSEC || server.dnssec == nil {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "zone is not managed by Sable DNSSEC"})
+		apiError(writer, http.StatusNotFound, "zone is not managed by Sable DNSSEC")
 		return
 	}
 	status, err := server.dnssec.KeyStatus(request.Context(), *zone)
 	if err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		server.logger.Error("read zone DNSSEC status", "zone", zone.Name, "error", err)
+		apiError(writer, http.StatusInternalServerError, "DNSSEC status is unavailable")
 		return
 	}
 	writeJSON(writer, http.StatusOK, status)

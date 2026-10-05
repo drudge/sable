@@ -120,7 +120,7 @@ func (server *Server) passkeyRequest(writer http.ResponseWriter, request *http.R
 	return true
 }
 func passkeyError(writer http.ResponseWriter, status int, message string) {
-	writeJSON(writer, status, map[string]string{"error": message})
+	apiError(writer, status, message)
 }
 
 func (server *Server) beginPasskeyRegistration(writer http.ResponseWriter, request *http.Request) {

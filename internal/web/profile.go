@@ -19,9 +19,7 @@ func (server *Server) profilePage(writer http.ResponseWriter, request *http.Requ
 		http.Error(writer, "Unable to load your profile.", http.StatusInternalServerError)
 		return
 	}
-	if err := pages.ProfilePage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render profile", "error", err)
-	}
+	server.render(writer, request, pages.ProfilePage(view))
 }
 
 func (server *Server) updateOwnProfile(writer http.ResponseWriter, request *http.Request) {
@@ -61,7 +59,7 @@ func (server *Server) profileTokens(writer http.ResponseWriter, request *http.Re
 		http.Error(writer, "Unable to load API tokens.", http.StatusInternalServerError)
 		return
 	}
-	_ = pages.ProfileTokens(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.ProfileTokens(view))
 }
 
 func (server *Server) revokeOwnAPIToken(writer http.ResponseWriter, request *http.Request) {
@@ -120,9 +118,7 @@ func (server *Server) renderProfilePage(writer http.ResponseWriter, request *htt
 	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.WriteHeader(status)
-	if err := pages.ProfilePage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render profile", "error", err)
-	}
+	server.render(writer, request, pages.ProfilePage(view))
 }
 
 func (server *Server) renderProfileContent(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
@@ -132,7 +128,7 @@ func (server *Server) renderProfileContent(writer http.ResponseWriter, request *
 		return
 	}
 	writeFragmentStatus(writer, status)
-	_ = pages.ProfileContent(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.ProfileContent(view))
 }
 
 func (server *Server) profileView(request *http.Request, message, errorMessage string) (pages.ProfilePageView, error) {

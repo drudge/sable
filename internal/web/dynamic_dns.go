@@ -502,18 +502,12 @@ func (server *Server) removeDynamicDNS(writer http.ResponseWriter, request *http
 
 func (server *Server) dynamicDNSStatusPanel(writer http.ResponseWriter, request *http.Request) {
 	view := server.integrationsView(request, "", "").DynamicDNS
-	if err := pages.DynamicDNSStatusPanel(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dynamic DNS status", "error", err)
+	if !server.render(writer, request, pages.DynamicDNSStatusPanel(view)) {
 		return
 	}
-	if err := pages.DynamicDNSCardActions(view, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dynamic DNS actions", "error", err)
-	}
-	if err := pages.DynamicDNSFacts(view, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dynamic DNS facts", "error", err)
+	server.render(writer, request, pages.DynamicDNSCardActions(view, true))
+	if !server.render(writer, request, pages.DynamicDNSFacts(view, true)) {
 		return
 	}
-	if err := pages.DynamicDNSBadge(view, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dynamic DNS badge", "error", err)
-	}
+	server.render(writer, request, pages.DynamicDNSBadge(view, true))
 }

@@ -217,9 +217,7 @@ func (server *Server) checkSSO(writer http.ResponseWriter, request *http.Request
 	view := server.integrationsView(request, "", "")
 	view.SSO = server.ssoView(request, &status)
 	writer.WriteHeader(http.StatusOK)
-	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render integrations content", "error", err)
-	}
+	server.render(writer, request, pages.IntegrationsContent(view))
 }
 
 // setSSOEnabled switches the provider on or off without touching anything else.
@@ -346,9 +344,7 @@ func (server *Server) renderSSOWizard(writer http.ResponseWriter, request *http.
 	view := server.integrationsView(request, "", "")
 	view.SSO.Wizard = wizard
 	writeFragmentStatus(writer, status)
-	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render integrations content", "error", err)
-	}
+	server.render(writer, request, pages.IntegrationsContent(view))
 }
 
 // ssoWizardFromRequest rebuilds the operator's answers from the posted form,

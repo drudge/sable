@@ -68,19 +68,19 @@ func (server *Server) zoneRevisionDiff(writer http.ResponseWriter, request *http
 	current := findZone(server.zones.Current().Zones, name)
 	if current == nil || !server.authorizeZoneRequest(request, auth.PermissionZonesRead, *current) {
 		writeFragmentStatus(writer, http.StatusForbidden)
-		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "This zone revision is not available."}).Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "This zone revision is not available."}))
 		return
 	}
 	revisionNumber, err := strconv.ParseUint(request.URL.Query().Get("revision"), 10, 64)
 	if err != nil || revisionNumber == 0 {
 		writeFragmentStatus(writer, http.StatusBadRequest)
-		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "The revision number is invalid."}).Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "The revision number is invalid."}))
 		return
 	}
 	history, ok := server.zones.(zoneRevisionStore)
 	if !ok {
 		writeFragmentStatus(writer, http.StatusNotImplemented)
-		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "Change history is unavailable."}).Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "Change history is unavailable."}))
 		return
 	}
 	target, err := history.ZoneRevision(request.Context(), name, revisionNumber)
@@ -91,12 +91,12 @@ func (server *Server) zoneRevisionDiff(writer http.ResponseWriter, request *http
 			status, message = http.StatusNotFound, "This revision is no longer retained."
 		}
 		writeFragmentStatus(writer, status)
-		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: message}).Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: message}))
 		return
 	}
 	if !server.canReadZoneRevision(request, target.Zone.ID) {
 		writeFragmentStatus(writer, http.StatusForbidden)
-		_ = pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "This zone revision is not available."}).Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneRevisionDiff(pages.ZoneRevisionDiffView{Error: "This zone revision is not available."}))
 		return
 	}
 	view := pages.ZoneRevisionDiffView{ZoneName: name, Revision: revisionNumber}
@@ -121,7 +121,7 @@ func (server *Server) zoneRevisionDiff(writer http.ResponseWriter, request *http
 	}
 	view.CanRollback = revisionNumber != current.Revision && target.ChangeKind != "deleted" &&
 		(target.Zone.ID == "" || target.Zone.ID == current.ID) && server.canRollbackZone(request, *current)
-	_ = pages.ZoneRevisionDiff(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.ZoneRevisionDiff(view))
 }
 
 func (server *Server) canRollbackZone(request *http.Request, current zonemodel.Zone) bool {
@@ -418,12 +418,10 @@ func (server *Server) zoneHistoryList(writer http.ResponseWriter, request *http.
 	current := findZone(server.zones.Current().Zones, name)
 	if current == nil || !zoneHistoryDialogID.MatchString(dialogID) || !server.authorizeZoneRequest(request, auth.PermissionZonesRead, *current) {
 		writeFragmentStatus(writer, http.StatusNotFound)
-		_ = pages.ZoneHistoryEntries(pages.ZoneView{HistoryError: "This zone's history is not available."}, "zone-history").Render(request.Context(), writer)
+		server.render(writer, request, pages.ZoneHistoryEntries(pages.ZoneView{HistoryError: "This zone's history is not available."}, "zone-history"))
 		return
 	}
 	view := pages.ZoneView{Name: current.Name, Revision: current.Revision}
 	server.loadZoneHistory(request, &view, requestTimeDisplay(request))
-	if err := pages.ZoneHistoryEntries(view, dialogID).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render zone history", "zone", name, "error", err)
-	}
+	server.render(writer, request, pages.ZoneHistoryEntries(view, dialogID))
 }

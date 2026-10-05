@@ -152,15 +152,11 @@ func (server *Server) saveMCPGroup(writer http.ResponseWriter, request *http.Req
 	respond := func(view pages.MCPGroupView, ok bool, message string) {
 		view.Result, view.ResultOK = message, ok
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := pages.MCPAccessGroup(view).Render(request.Context(), writer); err != nil {
-			server.logger.Error("render MCP group", "error", err)
-		}
+		server.render(writer, request, pages.MCPAccessGroup(view))
 		// A new group opens the token section. An update leaves it alone,
 		// so a token just shown stays on screen.
 		if created {
-			if err := pages.MCPAccessToken(view, true).Render(request.Context(), writer); err != nil {
-				server.logger.Error("render MCP token section", "error", err)
-			}
+			server.render(writer, request, pages.MCPAccessToken(view, true))
 		}
 	}
 	fail := func(message string) { respond(server.mcpGroupView(request, tools, remembered), false, message) }
@@ -291,7 +287,5 @@ func (server *Server) createMCPToken(writer http.ResponseWriter, request *http.R
 		server.logger.Info("MCP token created", "group", view.Name, "client", requestClientIP(request))
 	}
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pages.MCPAccessToken(view, false).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render MCP token", "error", err)
-	}
+	server.render(writer, request, pages.MCPAccessToken(view, false))
 }

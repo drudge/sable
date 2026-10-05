@@ -351,12 +351,12 @@ func (server *Server) reloadBlockingUI(writer http.ResponseWriter, request *http
 	if err := server.reload(request.Context()); err != nil {
 		server.logBlockingOperation(request, err, "duration", time.Since(started))
 		writer.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.ActionResult("Policy reload rejected: "+err.Error(), true).Render(request.Context(), writer)
+		server.render(writer, request, pages.ActionResult("Policy reload rejected: "+err.Error(), true))
 		return
 	}
 	server.logBlockingOperation(request, nil, "duration", time.Since(started))
 	server.recordControlPlaneAudit(request, blockingMutationAction(request.URL.Path), "blocking policy reloaded")
-	_ = pages.ActionResult("Blocking policy reloaded", false).Render(request.Context(), writer)
+	server.render(writer, request, pages.ActionResult("Blocking policy reloaded", false))
 }
 
 func (server *Server) reloadConfiguration(writer http.ResponseWriter, request *http.Request) {

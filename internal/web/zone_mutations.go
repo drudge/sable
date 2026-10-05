@@ -142,7 +142,7 @@ func (server *Server) renderZoneMutation(
 ) {
 	if tokenRequest(request.URL.Path) {
 		if errorMessage != "" {
-			writeJSON(writer, status, map[string]string{"error": errorMessage})
+			apiError(writer, status, errorMessage)
 		} else {
 			writeJSON(writer, status, map[string]any{"message": message, "zone": findZone(server.zones.Current().Zones, selected)})
 		}
@@ -156,9 +156,7 @@ func (server *Server) renderZoneMutation(
 		writer.Header().Set("HX-Push-Url", pushURL)
 	}
 	writeFragmentStatus(writer, status)
-	if err := pages.ZonesContent(server.zonesView(request, message, errorMessage, selected)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render zone mutation fragment", "error", err)
-	}
+	server.render(writer, request, pages.ZonesContent(server.zonesView(request, message, errorMessage, selected)))
 }
 
 func (server *Server) addZone(writer http.ResponseWriter, request *http.Request) {

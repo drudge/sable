@@ -47,9 +47,7 @@ func (server *Server) zonesPage(writer http.ResponseWriter, request *http.Reques
 		selected = request.URL.Query().Get("zone")
 	}
 	view := server.zonesView(request, "", "", selected)
-	if err := pages.ZonesPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render zones page", "error", err)
-	}
+	server.render(writer, request, pages.ZonesPage(view))
 }
 
 // catalogConsumerFormType is the value the create dialog submits for a catalog

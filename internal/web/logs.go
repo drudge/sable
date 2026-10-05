@@ -54,15 +54,11 @@ func (server *Server) logsPage(writer http.ResponseWriter, request *http.Request
 	view.Runtime = server.runtimeLogsView(request)
 	view.Queries = server.queryLogsView(request)
 	view.Queries.CanBlocking = view.Console.CanBlocking
-	if err := pages.LogsPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render logs page", "error", err)
-	}
+	server.render(writer, request, pages.LogsPage(view))
 }
 
 func (server *Server) runtimeLogsPanel(writer http.ResponseWriter, request *http.Request) {
-	if err := pages.RuntimeLogsPanel(server.runtimeLogsView(request)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render runtime logs", "error", err)
-	}
+	server.render(writer, request, pages.RuntimeLogsPanel(server.runtimeLogsView(request)))
 }
 
 func (server *Server) runtimeLogsView(request *http.Request) pages.RuntimeLogsView {
@@ -195,9 +191,7 @@ func (server *Server) queryDetailPanel(writer http.ResponseWriter, request *http
 		server.logger.Error("read query", "error", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
-	if err := pages.QueryDetail(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render query details", "error", err)
-	}
+	server.render(writer, request, pages.QueryDetail(view))
 }
 
 func (server *Server) queryDetailView(request *http.Request) (pages.QueryDetailView, error) {
@@ -229,9 +223,7 @@ func (server *Server) queryLogsPanel(writer http.ResponseWriter, request *http.R
 	if view.Error != "" {
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
-	if err := pages.QueryLogsPanel(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render query logs", "error", err)
-	}
+	server.render(writer, request, pages.QueryLogsPanel(view))
 }
 
 func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
@@ -407,14 +399,14 @@ func (server *Server) runtimeLogsAPI(writer http.ResponseWriter, request *http.R
 		})
 		if err != nil {
 			server.logger.Error("read server log history", "error", err)
-			writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "server log history unavailable"})
+			apiError(writer, http.StatusInternalServerError, "server log history unavailable")
 			return
 		}
 		writeJSON(writer, http.StatusOK, result)
 		return
 	}
 	if server.runtimeLogs == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "runtime log capture unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "runtime log capture unavailable")
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.runtimeLogs.Entries(serverlog.Filter{
@@ -547,9 +539,7 @@ func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.R
 		http.Error(writer, "query log unavailable", http.StatusInternalServerError)
 		return
 	}
-	if err := pages.RecentQueryLog(queryLogEntryViews(entries, requestTimeDisplay(request))).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render recent query log", "error", err)
-	}
+	server.render(writer, request, pages.RecentQueryLog(queryLogEntryViews(entries, requestTimeDisplay(request))))
 }
 
 func (server *Server) canReadLogs(request *http.Request) bool {
@@ -565,14 +555,14 @@ func (server *Server) queryLogAPI(writer http.ResponseWriter, request *http.Requ
 	if rawLimit := request.URL.Query().Get("limit"); rawLimit != "" {
 		parsed, err := strconv.Atoi(rawLimit)
 		if err != nil || parsed <= 0 {
-			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			apiError(writer, http.StatusBadRequest, "limit must be a positive integer")
 			return
 		}
 		limit = parsed
 	}
 	entries, err := server.queries.RecentQueryEvents(request.Context(), limit)
 	if err != nil {
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "query log unavailable"})
+		apiError(writer, http.StatusInternalServerError, "query log unavailable")
 		return
 	}
 	writeJSON(writer, http.StatusOK, queryLogAPIEntries(entries))
