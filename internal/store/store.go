@@ -289,52 +289,16 @@ func (store *Store) RecentQueryEvents(ctx context.Context, limit int) ([]querylo
 		return []querylog.Entry{}, nil
 	}
 	limit = min(limit, maximumRecentQueryEvents)
-	placeholder := "?"
-	if store.driver == "postgres" {
-		placeholder = "$1"
-	}
 	rows, err := store.database.QueryContext(ctx, `
 SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
 FROM sable_query_log
 ORDER BY id DESC
-LIMIT `+placeholder, limit)
+LIMIT `+store.placeholder(1), limit)
 	if err != nil {
 		return nil, fmt.Errorf("read recent query events: %w", err)
 	}
 	defer rows.Close()
-	entries := make([]querylog.Entry, 0, limit)
-	for rows.Next() {
-		var entry querylog.Entry
-		var source string
-		var decision string
-		var durationMicroseconds int64
-		if err := rows.Scan(
-			&entry.ID,
-			&entry.OccurredAt,
-			&entry.ClientIP,
-			&entry.Name,
-			&entry.RecordType,
-			&entry.Class,
-			&entry.ResponseCode,
-			&source,
-			&entry.Protocol,
-			&entry.Answer,
-			&decision,
-			&durationMicroseconds,
-		); err != nil {
-			return nil, fmt.Errorf("scan recent query event: %w", err)
-		}
-		entry.Source = querylog.Source(source)
-		if err := json.Unmarshal([]byte(decision), &entry.Decision); err != nil {
-			return nil, fmt.Errorf("decode recent query decision: %w", err)
-		}
-		entry.Duration = time.Duration(durationMicroseconds) * time.Microsecond
-		entries = append(entries, entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate recent query events: %w", err)
-	}
-	return entries, nil
+	return scanQueryEvents(rows, limit)
 }
 
 func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (querylog.Page, error) {

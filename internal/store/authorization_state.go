@@ -463,12 +463,10 @@ VALUES (`+store.placeholders(7)+`)`, token.ID, token.TokenHash, token.UserID, to
 			}
 		}
 		if state.Initialized {
-			if _, err := transaction.ExecContext(ctx, `
-INSERT INTO sable_metadata (key, value) VALUES (`+store.placeholders(2)+`)
-ON CONFLICT(key) DO UPDATE SET value = excluded.value`, "security_initialized", "true"); err != nil {
+			if err := store.setMeta(ctx, transaction, "security_initialized", "true"); err != nil {
 				return fmt.Errorf("replace authorization setup state: %w", err)
 			}
-		} else if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_metadata WHERE key = "+store.placeholder(1), "security_initialized"); err != nil {
+		} else if err := store.deleteMeta(ctx, transaction, "security_initialized"); err != nil {
 			return fmt.Errorf("replace authorization setup state: %w", err)
 		}
 		if store.driver == "postgres" {

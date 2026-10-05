@@ -132,9 +132,7 @@ ON CONFLICT (target, finding_id) DO UPDATE SET notified_at = excluded.notified_a
 			return fmt.Errorf("record notified insight: %w", err)
 		}
 	}
-	if _, err := store.database.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		insightTargetKey(target), at.UTC().Format(time.RFC3339Nano)); err != nil {
+	if _, err := store.setMetaIfAbsent(ctx, store.database, insightTargetKey(target), metaTime(at)); err != nil {
 		return fmt.Errorf("record insight target: %w", err)
 	}
 	return nil

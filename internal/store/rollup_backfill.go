@@ -66,10 +66,7 @@ func (store *Store) BackfillBlockedClientRollups(ctx context.Context) (bool, err
 			filled, end = true, start
 		}
 	}
-	if _, err := store.database.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		blockedClientBackfilledKey, time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
+	if _, err := store.setMetaIfAbsent(ctx, store.database, blockedClientBackfilledKey, metaTime(time.Now())); err != nil {
 		return filled, fmt.Errorf("record %s: %w", blockedClientBackfilledKey, err)
 	}
 	return filled, nil
@@ -122,10 +119,7 @@ WHERE source = `+store.placeholder(1)+` AND occurred_at >= `+store.placeholder(2
 				return err
 			}
 		}
-		if _, err := transaction.ExecContext(ctx,
-			"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-			start.UTC().Format(time.RFC3339Nano), blockedClientRollupSinceKey,
-		); err != nil {
+		if err := store.updateMeta(ctx, transaction, blockedClientRollupSinceKey, metaTime(start)); err != nil {
 			return fmt.Errorf("move %s: %w", blockedClientRollupSinceKey, err)
 		}
 		return nil

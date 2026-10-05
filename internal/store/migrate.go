@@ -336,18 +336,29 @@ SELECT EXISTS (
 }
 
 func (store *Store) tableHasColumn(ctx context.Context, table, column string) (bool, error) {
+	found, _, err := store.tableColumn(ctx, table, column)
+	return found, err
+}
+
+// tableColumn reports whether table has column and, if so, whether the
+// column accepts NULL.
+func (store *Store) tableColumn(ctx context.Context, table, column string) (found, nullable bool, err error) {
 	if store.driver == "postgres" {
-		var exists bool
+		var isNullable string
 		err := store.database.QueryRowContext(ctx, `
-SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2
-)`, table, column).Scan(&exists)
-		return exists, err
+SELECT is_nullable FROM information_schema.columns
+WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`, table, column).Scan(&isNullable)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, false, nil
+		}
+		if err != nil {
+			return false, false, fmt.Errorf("inspect %s columns: %w", table, err)
+		}
+		return true, isNullable == "YES", nil
 	}
 	rows, err := store.database.QueryContext(ctx, "PRAGMA table_info("+table+")")
 	if err != nil {
-		return false, fmt.Errorf("inspect %s columns: %w", table, err)
+		return false, false, fmt.Errorf("inspect %s columns: %w", table, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -355,11 +366,14 @@ SELECT EXISTS (
 		var name, columnType string
 		var defaultValue any
 		if err := rows.Scan(&columnID, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, fmt.Errorf("scan %s column: %w", table, err)
+			return false, false, fmt.Errorf("scan %s column: %w", table, err)
 		}
 		if name == column {
-			return true, nil
+			return true, notNull == 0, nil
 		}
 	}
-	return false, rows.Err()
+	if err := rows.Err(); err != nil {
+		return false, false, fmt.Errorf("iterate %s columns: %w", table, err)
+	}
+	return false, false, nil
 }
