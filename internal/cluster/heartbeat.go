@@ -129,40 +129,59 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		return SyncConfiguration{}, err
 	}
 	now := time.Now()
-	memberIndex := slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID })
 	localIsPrimary := service.manifest.PrimaryID == service.nodeID
 	if heartbeat.AdvertiseURL != "" && localIsPrimary {
-		name, advertiseURL, trustAnchor, version, addresses, err := validateHeartbeatIdentity(heartbeat)
-		if err != nil {
+		if err := service.recordMemberIdentityLocked(heartbeat, now); err != nil {
 			return SyncConfiguration{}, err
 		}
-		for _, node := range service.manifest.Nodes {
-			if node.ID != heartbeat.NodeID && node.AdvertiseURL == advertiseURL {
-				return SyncConfiguration{}, errors.New("another cluster member uses this advertised URL")
-			}
-		}
-		current := service.manifest.Nodes[memberIndex]
-		if current.Name != name || current.AdvertiseURL != advertiseURL || current.TrustAnchor != trustAnchor || current.Version != version || !slices.Equal(current.Addresses, addresses) {
-			candidate := cloneManifest(service.manifest)
-			candidate.Generation++
-			candidate.UpdatedAt = now
-			candidate.Nodes[memberIndex].Name = name
-			candidate.Nodes[memberIndex].AdvertiseURL = advertiseURL
-			candidate.Nodes[memberIndex].TrustAnchor = trustAnchor
-			candidate.Nodes[memberIndex].Version = version
-			candidate.Nodes[memberIndex].Addresses = addresses
-			if err := writeManifest(service.directory, candidate); err != nil {
-				return SyncConfiguration{}, err
-			}
-			service.manifest = candidate
-			service.clientsMu.Lock()
-			clear(service.memberClients)
-			service.clientsMu.Unlock()
+	}
+	if err := service.observeHeartbeatLocked(heartbeat, now, localIsPrimary); err != nil {
+		return SyncConfiguration{}, err
+	}
+	return service.syncConfigurationLocked(heartbeat.NodeID, heartbeat.StateDigest, now, localIsPrimary)
+}
+
+// recordMemberIdentityLocked publishes a new manifest generation when a
+// member reports a changed name, address, trust anchor, or version.
+func (service *Service) recordMemberIdentityLocked(heartbeat Heartbeat, now time.Time) error {
+	name, advertiseURL, trustAnchor, version, addresses, err := validateHeartbeatIdentity(heartbeat)
+	if err != nil {
+		return err
+	}
+	for _, node := range service.manifest.Nodes {
+		if node.ID != heartbeat.NodeID && node.AdvertiseURL == advertiseURL {
+			return errors.New("another cluster member uses this advertised URL")
 		}
 	}
+	memberIndex := slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID })
+	current := service.manifest.Nodes[memberIndex]
+	if current.Name == name && current.AdvertiseURL == advertiseURL && current.TrustAnchor == trustAnchor && current.Version == version && slices.Equal(current.Addresses, addresses) {
+		return nil
+	}
+	candidate := cloneManifest(service.manifest)
+	candidate.Generation++
+	candidate.UpdatedAt = now
+	candidate.Nodes[memberIndex].Name = name
+	candidate.Nodes[memberIndex].AdvertiseURL = advertiseURL
+	candidate.Nodes[memberIndex].TrustAnchor = trustAnchor
+	candidate.Nodes[memberIndex].Version = version
+	candidate.Nodes[memberIndex].Addresses = addresses
+	if err := writeManifest(service.directory, candidate); err != nil {
+		return err
+	}
+	service.manifest = candidate
+	service.clientsMu.Lock()
+	clear(service.memberClients)
+	service.clientsMu.Unlock()
+	return nil
+}
+
+// observeHeartbeatLocked records a member's heartbeat, along with the alerts
+// and lookups it reported when this node is the primary.
+func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Time, localIsPrimary bool) error {
 	previous, previouslyObserved := service.telemetry[heartbeat.NodeID]
 	if previouslyObserved && !heartbeat.SentAt.After(previous.heartbeat.SentAt) {
-		return SyncConfiguration{}, errors.New("synchronization heartbeat is stale or replayed")
+		return errors.New("synchronization heartbeat is stale or replayed")
 	}
 	if heartbeat.Alerts != nil && localIsPrimary {
 		service.recordReportedAlerts(heartbeat.NodeID, heartbeat.Alerts, now)
@@ -186,8 +205,14 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 			"sync_state", syncState,
 		)
 	}
+	return nil
+}
+
+// syncConfigurationLocked builds the configuration a member receives, with the
+// state snapshot only when its state is behind.
+func (service *Service) syncConfigurationLocked(nodeID, stateDigest string, now time.Time, localIsPrimary bool) (SyncConfiguration, error) {
 	var stateSnapshot []byte
-	if heartbeat.StateDigest != service.manifest.StateDigest {
+	if stateDigest != service.manifest.StateDigest {
 		var err error
 		stateSnapshot, err = readStateSnapshot(service.directory, service.manifest.StateDigest)
 		if err != nil {
@@ -199,7 +224,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		configuration.AlertProtocol = alertProtocolVersion
 		configuration.LookupProtocol = lookupProtocolVersion
 		if service.clientIdentities.Read != nil {
-			configuration.ClientIdentities = service.identityShare.due(heartbeat.NodeID, now)
+			configuration.ClientIdentities = service.identityShare.due(nodeID, now)
 		}
 		if service.attachedNetworks.Own != nil {
 			configuration.AttachedNetworks = encodeAttachedNetworks(service.attachedNetworks.Own())
@@ -302,22 +327,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	if service.updatePrimaryID != primary.ID {
 		updateStatus = nil
 	}
-	heartbeat := Heartbeat{
-		Update: updateStatus,
-		NodeID: service.nodeID, Name: service.nodeName, AdvertiseURL: service.advertiseURL,
-		TrustAnchor: string(service.localTrustAnchorPEM), Version: service.version,
-		Addresses:         effectiveDNSAddresses(service.manifest.Nodes[slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == service.nodeID })].Addresses, service.dnsListeners),
-		AppliedGeneration: service.manifest.Generation,
-		StateDigest:       service.manifest.StateDigest,
-		UpSince:           service.startedAt, SentAt: time.Now(),
-	}
-	var alertRevision, lookupRevision uint64
-	if found && service.alertPrimaryID == primary.ID {
-		heartbeat.Alerts, alertRevision = service.alertReport.pending(primary.ID, heartbeat.SentAt)
-	}
-	if found && service.lookupPrimaryID == primary.ID {
-		heartbeat.Lookups, lookupRevision = service.lookupReport.pending(primary.ID, heartbeat.SentAt)
-	}
+	heartbeat, alertRevision, lookupRevision := service.primaryHeartbeatLocked(updateStatus, primary, found)
 	statusKey := service.manifest.StatusKey
 	service.mu.RUnlock()
 	if primaryURL == "" {
@@ -326,27 +336,9 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	if !found {
 		return errors.New("cluster primary is not present in the member manifest")
 	}
-	client, err := service.httpClientForMember(primary)
+	response, err := service.sendPrimaryHeartbeat(ctx, primary, primaryURL, statusKey, heartbeat)
 	if err != nil {
 		return err
-	}
-	endpoint, err := url.Parse(strings.TrimRight(primaryURL, "/") + syncPath)
-	if err != nil {
-		return fmt.Errorf("parse cluster primary URL: %w", err)
-	}
-	contents, err := json.Marshal(heartbeat)
-	if err != nil {
-		return fmt.Errorf("encode cluster synchronization heartbeat: %w", err)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(contents))
-	if err != nil {
-		return fmt.Errorf("create cluster synchronization request: %w", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Sable-Cluster-Signature", heartbeatSignature(statusKey, heartbeat))
-	response, err := client.Do(request)
-	if err != nil {
-		return fmt.Errorf("synchronize with cluster primary: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusGone {
@@ -377,6 +369,62 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
 		service.receiveAttachedNetworks(primary.Name, configuration.AttachedNetworks)
 	}
+	return service.adoptSyncConfiguration(ctx, primary, configuration)
+}
+
+// primaryHeartbeatLocked builds this replica's heartbeat for the primary,
+// carrying any alerts and lookups still waiting to reach it.
+func (service *Service) primaryHeartbeatLocked(updateStatus *NodeUpdateStatus, primary member, found bool) (Heartbeat, uint64, uint64) {
+	heartbeat := Heartbeat{
+		Update: updateStatus,
+		NodeID: service.nodeID, Name: service.nodeName, AdvertiseURL: service.advertiseURL,
+		TrustAnchor: string(service.localTrustAnchorPEM), Version: service.version,
+		Addresses:         effectiveDNSAddresses(service.manifest.Nodes[slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == service.nodeID })].Addresses, service.dnsListeners),
+		AppliedGeneration: service.manifest.Generation,
+		StateDigest:       service.manifest.StateDigest,
+		UpSince:           service.startedAt, SentAt: time.Now(),
+	}
+	var alertRevision, lookupRevision uint64
+	if found && service.alertPrimaryID == primary.ID {
+		heartbeat.Alerts, alertRevision = service.alertReport.pending(primary.ID, heartbeat.SentAt)
+	}
+	if found && service.lookupPrimaryID == primary.ID {
+		heartbeat.Lookups, lookupRevision = service.lookupReport.pending(primary.ID, heartbeat.SentAt)
+	}
+	return heartbeat, alertRevision, lookupRevision
+}
+
+// sendPrimaryHeartbeat posts a signed heartbeat to the primary. The caller
+// closes the response body.
+func (service *Service) sendPrimaryHeartbeat(ctx context.Context, primary member, primaryURL, statusKey string, heartbeat Heartbeat) (*http.Response, error) {
+	client, err := service.httpClientForMember(primary)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := url.Parse(strings.TrimRight(primaryURL, "/") + syncPath)
+	if err != nil {
+		return nil, fmt.Errorf("parse cluster primary URL: %w", err)
+	}
+	contents, err := json.Marshal(heartbeat)
+	if err != nil {
+		return nil, fmt.Errorf("encode cluster synchronization heartbeat: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(contents))
+	if err != nil {
+		return nil, fmt.Errorf("create cluster synchronization request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Sable-Cluster-Signature", heartbeatSignature(statusKey, heartbeat))
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("synchronize with cluster primary: %w", err)
+	}
+	return response, nil
+}
+
+// adoptSyncConfiguration applies the primary's state and manifest when they
+// are newer than this replica's, and records which primary protocols it may use.
+func (service *Service) adoptSyncConfiguration(ctx context.Context, primary member, configuration SyncConfiguration) error {
 	candidate := manifestFromJoinConfiguration(JoinConfiguration(configuration))
 	if candidate.ClusterID == "" || !manifestContainsNode(candidate, service.nodeID) {
 		return errors.New("cluster primary returned an invalid member manifest")
@@ -415,19 +463,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	}
 	firstSuccessfulSync := service.lastSuccessfulSync.IsZero()
 	service.lastSuccessfulSync = time.Now()
-	service.pendingUpdate = configuration.UpdateCommand
-	service.updatePrimaryID = ""
-	if configuration.UpdateProtocol == updateProtocolVersion && configuration.PrimaryID == primary.ID {
-		service.updatePrimaryID = primary.ID
-	}
-	service.alertPrimaryID = ""
-	if configuration.AlertProtocol == alertProtocolVersion && configuration.PrimaryID == primary.ID {
-		service.alertPrimaryID = primary.ID
-	}
-	service.lookupPrimaryID = ""
-	if configuration.LookupProtocol == lookupProtocolVersion && configuration.PrimaryID == primary.ID {
-		service.lookupPrimaryID = primary.ID
-	}
+	service.acceptPrimaryProtocolsLocked(primary.ID, configuration)
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{
 			NodeID: candidate.PrimaryID, AppliedGeneration: candidate.Generation,
@@ -454,6 +490,24 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		}
 	}
 	return nil
+}
+
+// acceptPrimaryProtocolsLocked keeps the primary's pending update command and
+// notes which update, alert, and lookup protocols it speaks.
+func (service *Service) acceptPrimaryProtocolsLocked(primaryID string, configuration SyncConfiguration) {
+	service.pendingUpdate = configuration.UpdateCommand
+	service.updatePrimaryID = ""
+	if configuration.UpdateProtocol == updateProtocolVersion && configuration.PrimaryID == primaryID {
+		service.updatePrimaryID = primaryID
+	}
+	service.alertPrimaryID = ""
+	if configuration.AlertProtocol == alertProtocolVersion && configuration.PrimaryID == primaryID {
+		service.alertPrimaryID = primaryID
+	}
+	service.lookupPrimaryID = ""
+	if configuration.LookupProtocol == lookupProtocolVersion && configuration.PrimaryID == primaryID {
+		service.lookupPrimaryID = primaryID
+	}
 }
 
 func validateHeartbeatIdentity(heartbeat Heartbeat) (string, string, string, string, []string, error) {
