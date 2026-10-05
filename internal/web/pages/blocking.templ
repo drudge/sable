@@ -216,7 +216,7 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 			for _, domain := range domains {
 				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list?" } data-confirm-title={ "Remove " + domainPolicyKind(allowed) + " domain?" } data-confirm-action="Remove Domain" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
 			}
-			<div class="blocking-filter-empty" data-domain-empty={ value } hidden>No domains match your search.</div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No domains match your search.", Class: "blocking-filter-empty", Attrs: templ.Attributes{"data-domain-empty": value, "hidden": true}})
 		</div>
 		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { plural(len(domains), "domain", "domains") } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
 	</div>

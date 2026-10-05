@@ -600,7 +600,7 @@ templ ZoneListView(view ZonesPageView) {
 		</div>
 		@components.Card(components.CardProps{Class: "isotope-zone-list", Attrs: templ.Attributes{"aria-label": "Configured zones"}}) {
 			if len(view.Zones) == 0 {
-				<div class="isotope-zone-empty" data-zone-empty><p>{ ifThen(view.CanCreate, "No zones found. Create your first zone to get started.", "No zones are available to this account.") }</p></div>
+				@components.EmptyState(components.EmptyStateProps{Description: ifThen(view.CanCreate, "No zones found. Create your first zone to get started.", "No zones are available to this account."), Class: "isotope-zone-empty", Attrs: templ.Attributes{"data-zone-empty": true}})
 		}
 			for index, zone := range view.Zones {
 				<div class={ ifThen(zone.Disabled, "isotope-zone-row disabled", "isotope-zone-row") } data-zone-row data-zone-name={ strings.ToLower(zone.Name) } data-zone-type={ strings.ToLower(zone.Type) } data-zone-status={ ifThen(zone.Disabled, "disabled", "active") }>
@@ -634,7 +634,7 @@ templ ZoneListView(view ZonesPageView) {
 					@ZoneHistoryDialog(zone, zoneElementID("history", index))
 				}
 			}
-			<div class="isotope-zone-empty zone-filter-empty" hidden data-zone-filter-empty><p>No zones match your search</p></div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No zones match your search", Class: "isotope-zone-empty zone-filter-empty", Attrs: templ.Attributes{"hidden": true, "data-zone-filter-empty": true}})
 		}
 	</div>
 }
@@ -673,7 +673,7 @@ templ ZoneDetailView(zone ZoneView) {
 		</div>
 		@components.Card(components.CardProps{Class: "isotope-record-list", Attrs: templ.Attributes{"aria-label": "Records for " + zone.Name}}) {
 			if len(zone.Records) == 0 {
-				<div class="isotope-zone-empty" data-record-empty><p>No records found</p></div>
+				@components.EmptyState(components.EmptyStateProps{Description: "No records found", Class: "isotope-zone-empty", Attrs: templ.Attributes{"data-record-empty": true}})
 			}
 			for index, record := range zone.Records {
 				<div class={ ifThen(record.Disabled, "isotope-record-row disabled", ifThen(record.Type == "SOA", "isotope-record-row managed", "isotope-record-row")) } data-record-row data-record-dialog-row data-record-name={ strings.ToLower(zoneRecordOwner(zone, record) + " " + record.Value) } data-record-type={ strings.ToLower(record.Type) }>
@@ -698,7 +698,7 @@ templ ZoneDetailView(zone ZoneView) {
 					@EditZoneRecordDialog(zone, record, zoneElementID("record", index))
 				}
 			}
-			<div class="isotope-zone-empty zone-filter-empty" hidden data-record-filter-empty><p>No records match your filter</p></div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No records match your filter", Class: "isotope-zone-empty zone-filter-empty", Attrs: templ.Attributes{"hidden": true, "data-record-filter-empty": true}})
 		}
 		if zoneCanEditRecords(zone) && zone.CanRecords {
 			@AddZoneRecordDialog(zone)
@@ -728,7 +728,9 @@ templ ZoneHistoryDialog(zone ZoneView, id string) {
 	@components.Dialog(components.DialogProps{ID: id, Title: "Change Center", DescriptionContent: zoneHistoryLead(zone.Name), Class: "zone-history-dialog"}) {
 		<div class="zone-history-list" id={ id + "-list" }>
 			if zone.HistoryLazy {
-				<div class="zone-history-empty"><span class="zone-history-loading">Loading history…</span></div>
+				@components.EmptyState(components.EmptyStateProps{Class: "zone-history-empty"}) {
+					<span class="zone-history-loading">Loading history…</span>
+				}
 			} else {
 				@ZoneHistoryEntries(zone, id)
 			}
@@ -740,9 +742,9 @@ templ ZoneHistoryDialog(zone ZoneView, id string) {
 // loads it on demand from zoneHistoryURL.
 templ ZoneHistoryEntries(zone ZoneView, id string) {
 	if zone.HistoryError != "" {
-		<div class="zone-history-empty">{ zone.HistoryError }</div>
+		@components.EmptyState(components.EmptyStateProps{Description: zone.HistoryError, Class: "zone-history-empty"})
 	} else if len(zone.History) == 0 {
-		<div class="zone-history-empty">No revisions have been recorded for this zone.</div>
+		@components.EmptyState(components.EmptyStateProps{Description: "No revisions have been recorded for this zone.", Class: "zone-history-empty"})
 	}
 	for _, revision := range zone.History {
 		<details class="zone-history-entry" hx-get={ templ.SafeURL(zoneHistoryDiffURL(zone.Name, revision.Number)) } hx-trigger="toggle once" hx-target={ "#" + zoneHistoryRevisionID(id, revision.Number) } hx-swap="innerHTML">

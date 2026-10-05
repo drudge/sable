@@ -91,7 +91,7 @@ templ CacheBrowserDialog(domains []CacheDomainView) {
 			<div class="cache-domain-list">
 				<div class="cache-domain-list-header"><strong>Cached Domains</strong><span>{ fmt.Sprint(len(domains)) }</span></div>
 				if len(domains) == 0 {
-					<div class="cache-domain-empty">No cached domains yet. DNS responses will appear here after they are resolved.</div>
+					@components.EmptyState(components.EmptyStateProps{Description: "No cached domains yet. DNS responses will appear here after they are resolved.", Class: "cache-domain-empty"})
 				}
 				for domainIndex, domain := range domains {
 					<details class="cache-domain-entry" data-cache-domain={ domain.Name }>
@@ -120,7 +120,7 @@ templ CacheBrowserDialog(domains []CacheDomainView) {
 						</div>
 					</details>
 				}
-				<div class="cache-domain-empty" data-cache-empty hidden>No cached domains match your search.</div>
+				@components.EmptyState(components.EmptyStateProps{Description: "No cached domains match your search.", Class: "cache-domain-empty", Attrs: templ.Attributes{"data-cache-empty": true, "hidden": true}})
 			</div>
 		</div>
 	}

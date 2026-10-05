@@ -1164,7 +1164,7 @@ func rcodeDisplay(rcode string) string {
 
 templ RecentQueryLog(entries []QueryLogEntryView) {
 	if len(entries) == 0 {
-		<div class="query-log-empty">No persisted queries yet.</div>
+		@components.EmptyState(components.EmptyStateProps{Description: "No persisted queries yet.", Class: "query-log-empty"})
 	} else {
 		<div class="table-scroll">
 			<table class="query-log-table">
