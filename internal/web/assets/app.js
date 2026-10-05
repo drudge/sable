@@ -192,6 +192,48 @@
 	  mutationLaunchers.forEach(markReplicaPrimaryOnly);
 	};
 
+	// A popover is a panel that opens from its triggers. The root holds them all
+	// and carries data-open while the panel shows. Only one popover is open at a
+	// time, except that one opened inside another (a styled select in the range
+	// picker) leaves its ancestor open. A press outside the panel and triggers
+	// closes it, and so does Escape when the popover asks for that. onOpen runs
+	// once the panel shows, and onClose before it hides.
+	const createPopover = (root, panel, triggers, {focusTarget = triggers[0], escape = false, onOpen, onClose} = {}) => {
+	  const close = ({restoreFocus = false} = {}) => {
+	    onClose?.();
+	    panel.hidden = true;
+	    triggers.forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+	    root.removeAttribute("data-open");
+	    if (restoreFocus) (typeof focusTarget === "function" ? focusTarget() : focusTarget)?.focus();
+	  };
+	  const open = () => {
+	    document.querySelectorAll('[data-open="true"]').forEach((other) => {
+	      if (other !== root && !other.contains(root)) other.sableClosePopover?.();
+	    });
+	    panel.hidden = false;
+	    triggers.forEach((trigger) => trigger.setAttribute("aria-expanded", "true"));
+	    root.dataset.open = "true";
+	    onOpen?.();
+	  };
+	  root.sableClosePopover = close;
+	  root.sablePopoverParts = [panel, ...triggers];
+	  root.sablePopoverEscape = escape;
+	  return {open, close, toggle: () => (panel.hidden ? open() : close({restoreFocus: true}))};
+	};
+	document.addEventListener("pointerdown", (event) => {
+	  document.querySelectorAll('[data-open="true"]').forEach((root) => {
+	    const parts = root.sablePopoverParts || [root];
+	    if (event.target instanceof Node && parts.some((part) => part.contains(event.target))) return;
+	    root.sableClosePopover?.();
+	  });
+	});
+	document.addEventListener("keydown", (event) => {
+	  if (event.key !== "Escape" || event.defaultPrevented) return;
+	  document.querySelectorAll('[data-open="true"]').forEach((root) => {
+	    if (root.sablePopoverEscape) root.sableClosePopover?.({restoreFocus: true});
+	  });
+	});
+
 	const setupResolverCombobox = (root) => {
 	  if (!root || root.dataset.resolverReady === "true") return;
 	  const trigger = root.querySelector("[data-resolver-trigger]");
@@ -218,14 +260,7 @@
 	  const focusableRows = () => [...root.querySelectorAll("[data-resolver-option], [data-resolver-custom-edit]")]
 		.filter((row) => !row.hidden && !row.closest("[data-resolver-group]")?.hidden);
 
-	  const closePopover = ({restoreFocus = false} = {}) => {
-		popover.hidden = true;
-		trigger.setAttribute("aria-expanded", "false");
-		root.removeAttribute("data-open");
-		if (restoreFocus) trigger.focus();
-	  };
 	  root.dataset.resolverReady = "true";
-	  root.sableClosePopover = closePopover;
 
 	  const filterOptions = () => {
 		const query = search.value.trim().toLowerCase();
@@ -244,18 +279,12 @@
 		empty.hidden = root.querySelectorAll("[data-resolver-group]:not([hidden])").length > 0;
 	  };
 
-	  const openPopover = () => {
-		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
-		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
-		});
-		popover.hidden = false;
-		trigger.setAttribute("aria-expanded", "true");
-		root.dataset.open = "true";
+	  const {close: closePopover, toggle} = createPopover(root, popover, [trigger], {onOpen: () => {
 		search.value = "";
 		syncSearchClear(search);
 		filterOptions();
 		search.focus();
-	  };
+	  }});
 
 	  const choose = (option) => {
 		selectedValue.value = option.dataset.resolverOption;
@@ -304,9 +333,7 @@
 		dialog.close();
 	  };
 
-	  trigger.addEventListener("click", () => {
-		if (popover.hidden) openPopover(); else closePopover({restoreFocus: true});
-	  });
+	  trigger.addEventListener("click", toggle);
 	  search.addEventListener("input", filterOptions);
 	  search.addEventListener("keydown", (event) => {
 		if (event.key === "ArrowDown") {
@@ -488,37 +515,33 @@
 		window.visualViewport?.removeEventListener("resize", repositionPopover);
 		window.visualViewport?.removeEventListener("scroll", repositionPopover);
 	  };
-	  const closePopover = ({restoreFocus = false} = {}) => {
-		if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
-		popover.hidden = true;
-		trigger.setAttribute("aria-expanded", "false");
-		root.removeAttribute("data-open");
-		stopPositioning();
-		if (restoreFocus) trigger.focus();
-	  };
-	  root.sableClosePopover = closePopover;
 	  const selectedButton = () => optionButtons.find((button) => button.dataset.value === select.value && !button.disabled);
 	  const focusOption = (button) => {
 		if (!button) return;
 		button.focus();
 		button.scrollIntoView({block: "nearest"});
 	  };
+	  let openDirection = 1;
+	  const {open, close: closePopover} = createPopover(root, popover, [trigger], {
+		onOpen: () => {
+		  if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
+		  positionFloatingPopover(root, trigger, popover);
+		  document.addEventListener("scroll", repositionPopover, true);
+		  window.addEventListener("resize", repositionPopover);
+		  window.visualViewport?.addEventListener("resize", repositionPopover);
+		  window.visualViewport?.addEventListener("scroll", repositionPopover);
+		  const available = optionButtons.filter((button) => !button.disabled);
+		  focusOption(selectedButton() || available[openDirection < 0 ? available.length - 1 : 0]);
+		},
+		onClose: () => {
+		  if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
+		  stopPositioning();
+		},
+	  });
 	  const openPopover = (direction = 1) => {
 		if (trigger.disabled) return;
-		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
-		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
-		});
-		popover.hidden = false;
-		if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
-		trigger.setAttribute("aria-expanded", "true");
-		root.dataset.open = "true";
-		positionFloatingPopover(root, trigger, popover);
-		document.addEventListener("scroll", repositionPopover, true);
-		window.addEventListener("resize", repositionPopover);
-		window.visualViewport?.addEventListener("resize", repositionPopover);
-		window.visualViewport?.addEventListener("scroll", repositionPopover);
-		const available = optionButtons.filter((button) => !button.disabled);
-		focusOption(selectedButton() || available[direction < 0 ? available.length - 1 : 0]);
+		openDirection = direction;
+		open();
 	  };
 	  const syncSelection = () => {
 		const selected = select.selectedOptions[0];
@@ -862,27 +885,15 @@
 		  selectTimeSegment(activeSegment);
 		}
 	  };
-	  const closePicker = ({restoreFocus = false} = {}) => {
-		popover.hidden = true;
-		entry.setAttribute("aria-expanded", "false");
-		toggle.setAttribute("aria-expanded", "false");
-		root.removeAttribute("data-open");
-		if (restoreFocus) entry.focus();
-	  };
-	  root.sableClosePopover = closePicker;
-	  const openPicker = () => {
-		if (entry.disabled) return;
-		document.querySelectorAll('[data-open="true"]').forEach((otherRoot) => {
-		  if (otherRoot !== root) otherRoot.sableClosePopover?.();
-		});
-		popover.hidden = false;
-		entry.setAttribute("aria-expanded", "true");
-		toggle.setAttribute("aria-expanded", "true");
-		root.dataset.open = "true";
+	  const {open, close: closePicker} = createPopover(root, popover, [entry, toggle], {onOpen: () => {
 		positionAnchoredPopover(root, trigger, popover);
 		const selected = [...popover.querySelectorAll('[aria-selected="true"]')];
 		selected.forEach((button) => button.scrollIntoView({block: "center"}));
 		(selected[0] || allButtons()[0])?.focus();
+	  }});
+	  const openPicker = () => {
+		if (entry.disabled) return;
+		open();
 	  };
 
 	  toggle.addEventListener("click", () => {
@@ -1133,29 +1144,23 @@
 		if (focusValue) grid.querySelector(`[data-range-date="${CSS.escape(focusValue)}"]`)?.focus();
 	  };
 
-	  const open = () => {
-		popover.hidden = false;
-		triggers.forEach((trigger) => {
-		  trigger.classList.add("picker-open");
-		  trigger.setAttribute("aria-expanded", "true");
-		  if (trigger.hasAttribute("aria-pressed")) trigger.setAttribute("aria-pressed", "true");
-		});
-		renderCalendar();
-	  };
-
-	  const close = ({restoreFocus = false} = {}) => {
-		popover.hidden = true;
-		triggers.forEach((trigger) => {
+	  const {close, toggle} = createPopover(root, popover, triggers, {
+		escape: true,
+		focusTarget: () => triggers.find((trigger) => trigger.offsetParent !== null),
+		onOpen: () => {
+		  triggers.forEach((trigger) => {
+			trigger.classList.add("picker-open");
+			if (trigger.hasAttribute("aria-pressed")) trigger.setAttribute("aria-pressed", "true");
+		  });
+		  renderCalendar();
+		},
+		onClose: () => triggers.forEach((trigger) => {
 		  trigger.classList.remove("picker-open");
-		  trigger.setAttribute("aria-expanded", "false");
 		  if (!rangeWasApplied && trigger.hasAttribute("aria-pressed")) trigger.setAttribute("aria-pressed", "false");
-		});
-		if (restoreFocus) triggers.find((trigger) => trigger.offsetParent !== null)?.focus();
-	  };
+		}),
+	  });
 
-	  triggers.forEach((trigger) => trigger.addEventListener("click", () => {
-		if (popover.hidden) open(); else close({restoreFocus: true});
-	  }));
+	  triggers.forEach((trigger) => trigger.addEventListener("click", toggle));
 	  previous.addEventListener("click", () => {
 		cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1, 12);
 		renderCalendar();
@@ -1236,25 +1241,8 @@
 		  close({restoreFocus: true});
 		});
 	  }
-	  // Live refreshes swap these panels out constantly, so dismissal lives on a
-	  // single document listener rather than one more per rendered picker.
-	  popover.sableCloseRangePicker = close;
-	  popover.sableRangeTriggers = triggers;
 	  if (form) syncValues();
 	};
-
-	const openRangePickers = () => [...document.querySelectorAll("[data-range-popover]")].filter((popover) => !popover.hidden);
-	document.addEventListener("pointerdown", (event) => {
-	  openRangePickers().forEach((popover) => {
-		if (popover.contains(event.target)) return;
-		if (popover.sableRangeTriggers?.some((trigger) => trigger.contains(event.target))) return;
-		popover.sableCloseRangePicker?.();
-	  });
-	});
-	document.addEventListener("keydown", (event) => {
-	  if (event.key !== "Escape" || event.defaultPrevented) return;
-	  openRangePickers().forEach((popover) => popover.sableCloseRangePicker?.({restoreFocus: true}));
-	});
 
 	// The live refresh swaps the chart out from under the pointer, so the last
 	// known pointer position is what lets a fresh plot redraw the reading the
@@ -2011,6 +1999,9 @@
 	  const close = () => {
 		if (menu.matches(":popover-open")) menu.hidePopover();
 	  };
+	  // The menu shows through the native popover API, so it sets data-open from
+	  // its toggle event below, but it closes on an outside press like the rest.
+	  root.sableClosePopover = close;
 	  const open = (last = false) => {
 		menu.showPopover();
 		position();
@@ -2051,11 +2042,6 @@
 	window.addEventListener("resize", () => {
 	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
 		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
-	  });
-	});
-	document.addEventListener("pointerdown", (event) => {
-	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
-		if (!root.contains(event.target)) root.querySelector('[role="menu"]').hidePopover();
 	  });
 	});
 
@@ -3245,13 +3231,6 @@
 	  }));
 	});
 	interactiveRemovalObserver.observe(document, {childList: true, subtree: true});
-	const closeInteractivePopovers = (event) => {
-	  document.querySelectorAll('[data-open="true"]').forEach((root) => {
-		if (event.target instanceof Node && root.contains(event.target)) return;
-		root.sableClosePopover?.();
-	  });
-	};
-	document.addEventListener("pointerdown", closeInteractivePopovers);
 
 	// A rolling update restarts the server this page talks to, yet the page
 	// keeps running the console it loaded. Once a rollout the page watched is
@@ -3719,30 +3698,16 @@
 	    if (event.detail?.ctx?.target?.id === "cache-content") syncCacheExplainer();
 	  });
 
-	  const closeAccountMenus = (except = null, restoreFocus = false) => {
-		document.querySelectorAll("[data-account-menu]").forEach((menu) => {
-		  if (menu === except) return;
-		  menu.querySelector("[data-account-popover]")?.setAttribute("hidden", "");
-		  const trigger = menu.querySelector("[data-account-trigger]");
-		  trigger?.setAttribute("aria-expanded", "false");
-		  if (restoreFocus && menu.contains(document.activeElement)) trigger?.focus();
-		});
-	  };
 	  document.querySelectorAll("[data-account-menu]").forEach((menu) => {
 		const trigger = menu.querySelector("[data-account-trigger]");
 		const popover = menu.querySelector("[data-account-popover]");
 		if (!trigger || !popover) return;
-		trigger.addEventListener("click", (event) => {
-		  event.stopPropagation();
-		  const opening = popover.hasAttribute("hidden");
-		  closeAccountMenus(opening ? menu : null);
-		  popover.toggleAttribute("hidden", !opening);
-		  trigger.setAttribute("aria-expanded", String(opening));
-		});
+		const {open, close, toggle} = createPopover(menu, popover, [trigger], {escape: true});
+		trigger.addEventListener("click", toggle);
 		trigger.addEventListener("keydown", (event) => {
 		  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
 		  event.preventDefault();
-		  if (popover.hidden) trigger.click();
+		  if (popover.hidden) open();
 		  const controls = [...popover.querySelectorAll('a[href], button:not([disabled]):not([tabindex="-1"])')];
 		  (event.key === "ArrowDown" ? controls[0] : controls.at(-1))?.focus();
 		});
@@ -3756,13 +3721,8 @@
 		  controls[(index + controls.length) % controls.length]?.focus();
 		});
 		menu.addEventListener("focusout", () => window.setTimeout(() => {
-		  if (!menu.contains(document.activeElement)) closeAccountMenus();
+		  if (!menu.contains(document.activeElement)) close();
 		}));
-		popover.addEventListener("click", (event) => event.stopPropagation());
-	  });
-	  document.addEventListener("click", () => closeAccountMenus());
-	  document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape") closeAccountMenus(null, true);
 	  });
 
 	// The collapsed sidebar hides nav labels, so hover and focus get a floating
