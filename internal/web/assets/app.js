@@ -3279,71 +3279,52 @@
 	  window.location.reload();
 	};
 
-	const initializeSwappedContent = (root) => {
-	  if (root.matches?.("#cluster-updates")) followRollout(root);
-	  root.querySelectorAll?.("#cluster-updates").forEach(followRollout);
-	  if (!root) return;
-	  setupReplicaReadOnly(root);
-	  if (root.matches?.("[data-resolver-combobox]")) setupResolverCombobox(root);
-	  root.querySelectorAll?.("[data-resolver-combobox]").forEach(setupResolverCombobox);
+	// Each entry sets up one behaviour on every element its selector matches,
+	// whether that is the swapped root itself or something inside it. Order
+	// matters where one setup reads what another leaves behind.
+	const swappedContentSetups = [
+	  ["#cluster-updates", followRollout],
+	  ["[data-resolver-combobox]", setupResolverCombobox],
 	  // Range pickers populate their year choices before their native selects are
 	  // promoted into styled comboboxes.
-	  if (root.matches?.("[data-range-popover]")) setupRangePicker(root);
-	  root.querySelectorAll?.("[data-range-popover]").forEach(setupRangePicker);
-	  if (root.matches?.("select[data-styled-select]")) setupStyledSelect(root);
-	  root.querySelectorAll?.("select[data-styled-select]").forEach(setupStyledSelect);
-	  if (root.matches?.("dialog")) setupDialogAccessibility(root);
-	  root.querySelectorAll?.("dialog").forEach(setupDialogAccessibility);
-	  if (root.matches?.(".table-scroll, .admin-desktop-table")) setupScrollableRegion(root);
-	  root.querySelectorAll?.(".table-scroll, .admin-desktop-table").forEach(setupScrollableRegion);
-	  if (root.matches?.("[data-top-stats-dialog]")) updateTopStatsDialog(root);
-	  root.querySelectorAll?.("[data-top-stats-dialog]").forEach((dialog) => updateTopStatsDialog(dialog));
-	  if (root.matches?.("[data-list-filter-root]")) applyListFilter(root);
-	  root.querySelectorAll?.("[data-list-filter-root]").forEach((list) => applyListFilter(list));
-	  if (root.matches?.('input[type="time"][data-styled-time]')) setupStyledTime(root);
-	  root.querySelectorAll?.('input[type="time"][data-styled-time]').forEach(setupStyledTime);
-	  if (root.matches?.("[data-chart-plot]")) setupQueryChartHover(root);
-	  root.querySelectorAll?.("[data-chart-plot]").forEach(setupQueryChartHover);
-	  if (root.matches?.("[data-donut]")) setupDonutChart(root);
-	  root.querySelectorAll?.("[data-donut]").forEach(setupDonutChart);
-	  if (root.matches?.("[data-insight-chart]")) setupInsightChart(root);
-	  root.querySelectorAll?.("[data-insight-chart]").forEach(setupInsightChart);
-	  if (root.matches?.("[data-toast]")) setupToast(root);
-	  root.querySelectorAll?.("[data-toast]").forEach(setupToast);
-	  if (root.matches?.("[data-update-scope]")) setupUpdateScope(root);
-	  root.querySelectorAll?.("[data-update-scope]").forEach(setupUpdateScope);
-	  if (root.matches?.("[data-dnssec-denial]")) syncDNSSECDenial(root);
-	  root.querySelectorAll?.("[data-dnssec-denial]").forEach(syncDNSSECDenial);
-	  if (root.matches?.("[data-isotope-tabs]")) setupIsotopeTabs(root);
-	  root.querySelectorAll?.("[data-isotope-tabs]").forEach(setupIsotopeTabs);
-	  if (root.matches?.("[data-blocking-root]")) setupBlockingTabs(root);
-	  root.querySelectorAll?.("[data-blocking-root]").forEach(setupBlockingTabs);
-	  if (root.matches?.("[data-catalog-tabs]")) setupCatalogTabs(root);
-	  root.querySelectorAll?.("[data-catalog-tabs]").forEach(setupCatalogTabs);
-	  if (root.matches?.("[data-certificate-settings]")) setupCertificateSettings(root);
-	  root.querySelectorAll?.("[data-certificate-settings]").forEach(setupCertificateSettings);
-	  if (root.matches?.("[data-acme-provider-root]")) setupDNSProviderFields(root);
-	  root.querySelectorAll?.("[data-acme-provider-root]").forEach(setupDNSProviderFields);
-	  if (root.matches?.("[data-dynamic-dns-editor]")) setupDynamicDNSPublishers(root);
-	  root.querySelectorAll?.("[data-dynamic-dns-editor]").forEach(setupDynamicDNSPublishers);
-	  if (root.matches?.("[data-cluster-onboarding]")) setupClusterOnboarding(root);
-	  root.querySelectorAll?.("[data-cluster-onboarding]").forEach(setupClusterOnboarding);
-	  if (root.matches?.("[data-sable-restart]")) setupManagedRestart(root);
-	  root.querySelectorAll?.("[data-sable-restart]").forEach(setupManagedRestart);
-	  if (root.matches?.("[data-dialog-tabs]")) setupDialogTabs(root);
-	  root.querySelectorAll?.("[data-dialog-tabs]").forEach(setupDialogTabs);
-	  if (root.matches?.("[data-cluster-tls-accordion]")) setupClusterTLSAccordion(root);
-	  root.querySelectorAll?.("[data-cluster-tls-accordion]").forEach(setupClusterTLSAccordion);
-	  if (root.matches?.("[data-create-user-form]")) setupCreateUserForm(root);
-	  root.querySelectorAll?.("[data-create-user-form]").forEach(setupCreateUserForm);
-	  if (root.matches?.("[data-unifi-auth-root]")) setupUniFiAuthModes(root);
-	  root.querySelectorAll?.("[data-unifi-auth-root]").forEach(setupUniFiAuthModes);
-	  if (root.matches?.("[data-unifi-zone-rows]")) setupUniFiZoneRows(root);
-	  root.querySelectorAll?.("[data-unifi-zone-rows]").forEach(setupUniFiZoneRows);
-	  if (root.matches?.("[data-log-live-panel]")) setupLogLivePanel(root);
-	  root.querySelectorAll?.("[data-log-live-panel]").forEach(setupLogLivePanel);
-	  if (root.matches?.('[role="progressbar"]')) syncProgressFill(root);
-	  root.querySelectorAll?.('[role="progressbar"]').forEach(syncProgressFill);
+	  ["[data-range-popover]", setupRangePicker],
+	  ["select[data-styled-select]", setupStyledSelect],
+	  ["dialog", setupDialogAccessibility],
+	  [".table-scroll, .admin-desktop-table", setupScrollableRegion],
+	  ["[data-top-stats-dialog]", updateTopStatsDialog],
+	  ["[data-list-filter-root]", applyListFilter],
+	  ['input[type="time"][data-styled-time]', setupStyledTime],
+	  ["[data-chart-plot]", setupQueryChartHover],
+	  ["[data-donut]", setupDonutChart],
+	  ["[data-insight-chart]", setupInsightChart],
+	  ["[data-toast]", setupToast],
+	  ["[data-update-scope]", setupUpdateScope],
+	  ["[data-dnssec-denial]", syncDNSSECDenial],
+	  ["[data-isotope-tabs]", setupIsotopeTabs],
+	  ["[data-blocking-root]", setupBlockingTabs],
+	  ["[data-catalog-tabs]", setupCatalogTabs],
+	  ["[data-certificate-settings]", setupCertificateSettings],
+	  ["[data-acme-provider-root]", setupDNSProviderFields],
+	  ["[data-dynamic-dns-editor]", setupDynamicDNSPublishers],
+	  ["[data-cluster-onboarding]", setupClusterOnboarding],
+	  ["[data-sable-restart]", setupManagedRestart],
+	  ["[data-dialog-tabs]", setupDialogTabs],
+	  ["[data-cluster-tls-accordion]", setupClusterTLSAccordion],
+	  ["[data-create-user-form]", setupCreateUserForm],
+	  ["[data-unifi-auth-root]", setupUniFiAuthModes],
+	  ["[data-unifi-zone-rows]", setupUniFiZoneRows],
+	  ["[data-log-live-panel]", setupLogLivePanel],
+	  ['[role="progressbar"]', syncProgressFill],
+	];
+	const initializeSwappedContent = (root) => {
+	  if (!root) return;
+	  setupReplicaReadOnly(root);
+	  for (const [selector, setup] of swappedContentSetups) {
+	    if (root.matches?.(selector)) setup(root);
+	    // Pass only the element: forEach's index and array would land in a
+	    // setup's optional second argument, such as applyListFilter's changed.
+	    root.querySelectorAll?.(selector).forEach((element) => setup(element));
+	  }
 	};
 	const CONTROL_HOLD_MS = 10000;
 	const INTERACTIVE_CONTENT = 'a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"], dialog[open]';
