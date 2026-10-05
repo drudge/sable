@@ -110,6 +110,6 @@ Read the [cluster guide](../clustering.md) before using mutation endpoints. Requ
 
 Check HTTP status and content type before parsing a response. Not every error is JSON: zone downloads can return plain-text errors. Do not retry a mutation blindly after a timeout; first inspect whether it took effect. Treat `401` as an authentication problem and `403` as an authorization problem, rather than repeatedly retrying a denied action.
 
-The [route registration](../../internal/web/server.go) is the authoritative inventory for a specific source revision. Check your installed release before relying on endpoints added after it; this page is not a promise of a broader 1.0 compatibility policy.
+The [route table](../../internal/web/routes.go) is the authoritative inventory for a specific source revision. Check your installed release before relying on endpoints added after it; this page is not a promise of a broader 1.0 compatibility policy.
 
 Catalog discovery and bulk import are currently console workflows under **Zones → Import from Catalog**; there is no public JSON catalog-import API.

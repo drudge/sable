@@ -2,9 +2,7 @@ package web
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,9 +11,13 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/web/pages"
+
+	"encoding/csv"
+	"io"
 )
 
 type queryEventPager interface {
@@ -536,4 +538,221 @@ func queryLogText(entries []querylog.Entry) string {
 		lines = append(lines, strings.Join(queryLogCSVRow(entry), "\t"))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (server *Server) recentQueryLog(writer http.ResponseWriter, request *http.Request) {
+	entries, err := server.queries.RecentQueryEvents(request.Context(), defaultRecentQueryLimit)
+	if err != nil {
+		server.logger.Error("read recent query log", "error", err)
+		http.Error(writer, "query log unavailable", http.StatusInternalServerError)
+		return
+	}
+	if err := pages.RecentQueryLog(queryLogEntryViews(entries, requestTimeDisplay(request))).Render(request.Context(), writer); err != nil {
+		server.logger.Error("render recent query log", "error", err)
+	}
+}
+
+func (server *Server) canReadLogs(request *http.Request) bool {
+	principal, ok := request.Context().Value(principalContextKey{}).(auth.Principal)
+	if !ok {
+		return !server.securityEnabled
+	}
+	return auth.HasPermission(principal, auth.PermissionLogsRead)
+}
+
+func (server *Server) queryLogAPI(writer http.ResponseWriter, request *http.Request) {
+	limit := defaultRecentQueryLimit
+	if rawLimit := request.URL.Query().Get("limit"); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed <= 0 {
+			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		limit = parsed
+	}
+	entries, err := server.queries.RecentQueryEvents(request.Context(), limit)
+	if err != nil {
+		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "query log unavailable"})
+		return
+	}
+	writeJSON(writer, http.StatusOK, queryLogAPIEntries(entries))
+}
+
+func queryLogStatus(enabled bool, stats querylog.Stats) string {
+	if !enabled {
+		return "Disabled"
+	}
+	if stats.Dropped == 0 {
+		return fmt.Sprintf("Active · %d persisted", stats.Persisted)
+	}
+	return fmt.Sprintf("Active · %d dropped", stats.Dropped)
+}
+
+func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []pages.QueryLogEntryView {
+	views := make([]pages.QueryLogEntryView, 0, len(entries))
+	for _, entry := range entries {
+		recordType := dns.TypeToString[entry.RecordType]
+		if recordType == "" {
+			recordType = strconv.Itoa(int(entry.RecordType))
+		}
+		status := dns.RcodeToString[entry.ResponseCode]
+		if status == "" {
+			status = strconv.Itoa(entry.ResponseCode)
+		}
+		views = append(views, pages.QueryLogEntryView{
+			ID:         entry.ID,
+			OccurredAt: pages.FormatClock(entry.OccurredAt, display, true),
+			ClientIP:   entry.ClientIP,
+			Name:       entry.Name,
+			RecordType: recordType,
+			Status:     status,
+			Source:     string(entry.Source),
+			Protocol:   entry.Protocol,
+			Answers:    strings.Split(entry.Answer, "\n"),
+			Duration:   entry.Duration.Round(time.Microsecond).String(),
+			Decision:   queryDecisionView(entry.Decision),
+		})
+	}
+	return views
+}
+
+func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
+	view := pages.QueryDecisionView{
+		Available: decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
+	}
+	switch decision.Policy {
+	case querylog.PolicyNotEvaluated:
+		view.Policy = "Policy not evaluated"
+		view.PolicyDetail = "Authoritative and local answers take precedence."
+	case querylog.PolicyDisabled:
+		view.Policy = "Blocking disabled"
+	case querylog.PolicyPaused:
+		view.Policy = "Blocking paused"
+	case querylog.PolicyClientBypass:
+		view.Policy = "Client bypassed blocking"
+	case querylog.PolicyAllowed:
+		view.Policy = "Allowed by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+	case querylog.PolicyBlocked:
+		view.Policy = "Blocked by policy"
+		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
+			view.PolicyDetail += " from " + sources
+		}
+	case querylog.PolicyNoMatch:
+		view.Policy = "No blocking rule matched"
+	}
+	switch decision.Cache {
+	case querylog.CacheHit:
+		view.Cache = "Cache hit"
+	case querylog.CacheMiss:
+		view.Cache = "Cache miss"
+	case querylog.CacheStale:
+		view.Cache = "Served stale cache"
+	}
+	switch decision.Resolver {
+	case querylog.ResolverAuthoritative:
+		view.Resolver = "Answered by an authoritative zone"
+		view.Summary = "Sable answered from an authoritative zone it serves."
+	case querylog.ResolverLocal:
+		view.Resolver = "Answered by a local host override"
+		view.Summary = "Sable answered from a local host override."
+	case querylog.ResolverBlocked:
+		view.Resolver = "Synthesized a blocking response"
+		view.Summary = "Sable blocked this query before resolution."
+	case querylog.ResolverCache:
+		view.Resolver = "Returned a cached response"
+		view.Summary = "Sable answered this query from its cache."
+	case querylog.ResolverForwarded:
+		view.Resolver = "Forwarded upstream"
+		view.Summary = "Sable forwarded this query to its configured upstream resolvers."
+		if decision.Route != "" {
+			view.ResolverDetail = "Conditional route: " + decision.Route
+			view.Summary = "Sable matched a conditional route and forwarded the query."
+		} else {
+			view.ResolverDetail = "Default forwarders"
+		}
+	case querylog.ResolverRecursive:
+		view.Resolver = "Resolved recursively"
+		view.Summary = "Sable resolved this query recursively."
+	case querylog.ResolverError:
+		view.Resolver = "Resolution failed"
+		view.Summary = "Sable could not complete resolution."
+	case querylog.ResolverNotAllowed:
+		view.Resolver = "Refused: recursion not allowed"
+		view.Summary = "Sable refused this lookup because this address isn't allowed to use recursion. Settings → Recursion sets who is."
+		view.PolicyDetail = "Sable refused the lookup before checking blocking."
+	case querylog.ResolverLocallyServed:
+		view.Resolver = "Answered as a local-only name"
+		view.Summary = "This name is reserved for local networks, so Sable said it doesn't exist instead of asking the internet."
+	}
+	switch decision.DNSSEC {
+	case querylog.DNSSECSecure:
+		view.DNSSEC = "DNSSEC secure"
+	case querylog.DNSSECInsecure:
+		view.DNSSEC = "DNSSEC insecure"
+	case querylog.DNSSECBogus:
+		view.DNSSEC = "DNSSEC bogus"
+	case querylog.DNSSECIndeterminate:
+		view.DNSSEC = "DNSSEC not validated"
+	}
+	return view
+}
+
+// joinSourceNames lists block sources in a sentence: "A", "A and B", or
+// "A, B, and C".
+func joinSourceNames(sources []string) string {
+	switch len(sources) {
+	case 0:
+		return ""
+	case 1:
+		return sources[0]
+	case 2:
+		return sources[0] + " and " + sources[1]
+	default:
+		return strings.Join(sources[:len(sources)-1], ", ") + ", and " + sources[len(sources)-1]
+	}
+}
+
+func matchedDecisionRule(rule string) string {
+	if rule == "" {
+		return ""
+	}
+	return "Matched " + rule
+}
+
+type queryLogAPIEntry struct {
+	ID           int64             `json:"id"`
+	OccurredAt   time.Time         `json:"occurred_at"`
+	ClientIP     string            `json:"client_ip"`
+	Name         string            `json:"name"`
+	RecordType   uint16            `json:"record_type"`
+	Class        uint16            `json:"class"`
+	ResponseCode int               `json:"response_code"`
+	Source       querylog.Source   `json:"source"`
+	Protocol     string            `json:"protocol"`
+	Answer       string            `json:"answer"`
+	DurationUS   int64             `json:"duration_us"`
+	Decision     querylog.Decision `json:"decision"`
+}
+
+func queryLogAPIEntries(entries []querylog.Entry) []queryLogAPIEntry {
+	result := make([]queryLogAPIEntry, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, queryLogAPIEntry{
+			ID:           entry.ID,
+			OccurredAt:   entry.OccurredAt,
+			ClientIP:     entry.ClientIP,
+			Name:         entry.Name,
+			RecordType:   entry.RecordType,
+			Class:        entry.Class,
+			ResponseCode: entry.ResponseCode,
+			Source:       entry.Source,
+			Protocol:     entry.Protocol,
+			Answer:       entry.Answer,
+			DurationUS:   entry.Duration.Microseconds(),
+			Decision:     entry.Decision,
+		})
+	}
+	return result
 }
