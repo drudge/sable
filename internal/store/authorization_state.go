@@ -78,209 +78,203 @@ func (store *Store) ExportAuthorizationState(ctx context.Context) (Authorization
 		return AuthorizationState{}, err
 	}
 	state := AuthorizationState{Initialized: initialized, Users: []AuthorizationUser{}, Roles: []AuthorizationRole{}, Tokens: []AuthorizationToken{}}
-	rows, err := store.database.QueryContext(ctx, `
+	// Grants, memberships and identities attach to the users and roles read
+	// before them, so the order matters.
+	for _, export := range []func(context.Context, *AuthorizationState) error{
+		store.exportAuthorizationUsers,
+		store.exportAuthorizationRoles,
+		store.exportAuthorizationGrants,
+		store.exportAuthorizationMemberships,
+		store.exportAuthorizationIdentities,
+		store.exportAuthorizationPasskeys,
+		store.exportAPITokens,
+		store.exportAPITokenGroups,
+	} {
+		if err := export(ctx, &state); err != nil {
+			return AuthorizationState{}, err
+		}
+	}
+	return state, nil
+}
+
+// exportRows runs one export query, scanning each row into dest and then
+// calling row. Database failures are wrapped as "export <plural>", "scan
+// <singular>", "close <plural>" and "iterate <plural>"; an error from row is
+// returned as it is.
+func (store *Store) exportRows(ctx context.Context, plural, singular, query string, dest []any, row func() error) error {
+	rows, err := store.database.QueryContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("export %s: %w", plural, err)
+	}
+	for rows.Next() {
+		if err := rows.Scan(dest...); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan %s: %w", singular, err)
+		}
+		if err := row(); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", plural, err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate %s: %w", plural, err)
+	}
+	return nil
+}
+
+func (store *Store) exportAuthorizationUsers(ctx context.Context, state *AuthorizationState) error {
+	var user AuthorizationUser
+	return store.exportRows(ctx, "authorization users", "authorization user", `
 SELECT users.id, users.username, users.password_hash, users.created_at,
        profiles.display_name, profiles.email, profiles.disabled, profiles.password_login, profiles.updated_at
 FROM sable_users AS users
 JOIN sable_user_profiles AS profiles ON profiles.user_id = users.id
-ORDER BY users.id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export authorization users: %w", err)
-	}
-	for rows.Next() {
-		var user AuthorizationUser
-		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.DisplayName,
-			&user.Email, &user.Disabled, &user.PasswordLogin, &user.UpdatedAt); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan authorization user: %w", err)
-		}
-		user.CreatedAt = user.CreatedAt.UTC()
-		user.UpdatedAt = user.UpdatedAt.UTC()
-		user.RoleIDs = []int64{}
-		user.Identities = []AuthorizationIdentity{}
-		state.Users = append(state.Users, user)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close authorization users: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization users: %w", err)
-	}
+ORDER BY users.id`,
+		[]any{&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.DisplayName,
+			&user.Email, &user.Disabled, &user.PasswordLogin, &user.UpdatedAt},
+		func() error {
+			exported := user
+			exported.CreatedAt = exported.CreatedAt.UTC()
+			exported.UpdatedAt = exported.UpdatedAt.UTC()
+			exported.RoleIDs = []int64{}
+			exported.Identities = []AuthorizationIdentity{}
+			state.Users = append(state.Users, exported)
+			return nil
+		})
+}
 
-	rows, err = store.database.QueryContext(ctx, `
+func (store *Store) exportAuthorizationRoles(ctx context.Context, state *AuthorizationState) error {
+	var role AuthorizationRole
+	return store.exportRows(ctx, "authorization roles", "authorization role", `
 SELECT id, name, description, built_in, created_at
-FROM sable_roles ORDER BY id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export authorization roles: %w", err)
-	}
-	for rows.Next() {
-		var role AuthorizationRole
-		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.BuiltIn, &role.CreatedAt); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan authorization role: %w", err)
-		}
-		role.CreatedAt = role.CreatedAt.UTC()
-		role.Grants = []auth.Grant{}
-		state.Roles = append(state.Roles, role)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close authorization roles: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization roles: %w", err)
-	}
+FROM sable_roles ORDER BY id`,
+		[]any{&role.ID, &role.Name, &role.Description, &role.BuiltIn, &role.CreatedAt},
+		func() error {
+			exported := role
+			exported.CreatedAt = exported.CreatedAt.UTC()
+			exported.Grants = []auth.Grant{}
+			state.Roles = append(state.Roles, exported)
+			return nil
+		})
+}
 
+func (store *Store) exportAuthorizationGrants(ctx context.Context, state *AuthorizationState) error {
 	roleIndex := make(map[int64]int, len(state.Roles))
 	for index := range state.Roles {
 		roleIndex[state.Roles[index].ID] = index
 	}
-	rows, err = store.database.QueryContext(ctx, `
+	var roleID int64
+	var grant auth.Grant
+	return store.exportRows(ctx, "authorization grants", "authorization grant", `
 SELECT role_id, permission, surface, resource_type, resource_id
 FROM sable_role_grants
-ORDER BY role_id, permission, surface, resource_type, resource_id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export authorization grants: %w", err)
-	}
-	for rows.Next() {
-		var roleID int64
-		var grant auth.Grant
-		if err := rows.Scan(&roleID, &grant.Permission, &grant.Surface, &grant.ResourceType, &grant.ResourceID); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan authorization grant: %w", err)
-		}
-		index, found := roleIndex[roleID]
-		if !found {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("authorization grant references missing role %d", roleID)
-		}
-		state.Roles[index].Grants = append(state.Roles[index].Grants, grant)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close authorization grants: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization grants: %w", err)
-	}
+ORDER BY role_id, permission, surface, resource_type, resource_id`,
+		[]any{&roleID, &grant.Permission, &grant.Surface, &grant.ResourceType, &grant.ResourceID},
+		func() error {
+			index, found := roleIndex[roleID]
+			if !found {
+				return fmt.Errorf("authorization grant references missing role %d", roleID)
+			}
+			state.Roles[index].Grants = append(state.Roles[index].Grants, grant)
+			return nil
+		})
+}
 
+func authorizationUserIndex(state *AuthorizationState) map[int64]int {
 	userIndex := make(map[int64]int, len(state.Users))
 	for index := range state.Users {
 		userIndex[state.Users[index].ID] = index
 	}
-	rows, err = store.database.QueryContext(ctx, `SELECT user_id, role_id FROM sable_user_roles ORDER BY user_id, role_id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export authorization memberships: %w", err)
-	}
-	for rows.Next() {
-		var userID, roleID int64
-		if err := rows.Scan(&userID, &roleID); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan authorization membership: %w", err)
-		}
-		index, found := userIndex[userID]
-		if !found {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("authorization membership references missing user %d", userID)
-		}
-		state.Users[index].RoleIDs = append(state.Users[index].RoleIDs, roleID)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close authorization memberships: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization memberships: %w", err)
-	}
+	return userIndex
+}
 
-	rows, err = store.database.QueryContext(ctx, `
+func (store *Store) exportAuthorizationMemberships(ctx context.Context, state *AuthorizationState) error {
+	userIndex := authorizationUserIndex(state)
+	var userID, roleID int64
+	return store.exportRows(ctx, "authorization memberships", "authorization membership",
+		`SELECT user_id, role_id FROM sable_user_roles ORDER BY user_id, role_id`,
+		[]any{&userID, &roleID},
+		func() error {
+			index, found := userIndex[userID]
+			if !found {
+				return fmt.Errorf("authorization membership references missing user %d", userID)
+			}
+			state.Users[index].RoleIDs = append(state.Users[index].RoleIDs, roleID)
+			return nil
+		})
+}
+
+func (store *Store) exportAuthorizationIdentities(ctx context.Context, state *AuthorizationState) error {
+	userIndex := authorizationUserIndex(state)
+	var userID int64
+	var identity AuthorizationIdentity
+	return store.exportRows(ctx, "authorization identities", "authorization identity", `
 SELECT user_id, provider, subject, issuer, linked_at
-FROM sable_user_identities ORDER BY user_id, provider`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export authorization identities: %w", err)
-	}
-	for rows.Next() {
-		var userID int64
-		var identity AuthorizationIdentity
-		if err := rows.Scan(&userID, &identity.Provider, &identity.Subject, &identity.Issuer, &identity.LinkedAt); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan authorization identity: %w", err)
-		}
-		index, found := userIndex[userID]
-		if !found {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("authorization identity references missing user %d", userID)
-		}
-		identity.LinkedAt = identity.LinkedAt.UTC()
-		state.Users[index].Identities = append(state.Users[index].Identities, identity)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close authorization identities: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate authorization identities: %w", err)
-	}
+FROM sable_user_identities ORDER BY user_id, provider`,
+		[]any{&userID, &identity.Provider, &identity.Subject, &identity.Issuer, &identity.LinkedAt},
+		func() error {
+			index, found := userIndex[userID]
+			if !found {
+				return fmt.Errorf("authorization identity references missing user %d", userID)
+			}
+			exported := identity
+			exported.LinkedAt = exported.LinkedAt.UTC()
+			state.Users[index].Identities = append(state.Users[index].Identities, exported)
+			return nil
+		})
+}
 
+func (store *Store) exportAuthorizationPasskeys(ctx context.Context, state *AuthorizationState) error {
 	for index := range state.Users {
 		keys, err := store.PasskeysForUser(ctx, state.Users[index].ID)
 		if err != nil {
-			return AuthorizationState{}, err
+			return err
 		}
 		state.Users[index].Passkeys = keys
 	}
-	rows, err = store.database.QueryContext(ctx, `
-SELECT id, token_hash, user_id, name, created_at, expires_at
-FROM sable_api_tokens ORDER BY id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export API tokens: %w", err)
-	}
-	for rows.Next() {
-		var token AuthorizationToken
-		var expiresAt sql.NullTime
-		if err := rows.Scan(&token.ID, &token.TokenHash, &token.UserID, &token.Name, &token.CreatedAt, &expiresAt); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan API token: %w", err)
-		}
-		token.CreatedAt = token.CreatedAt.UTC()
-		if expiresAt.Valid {
-			expires := expiresAt.Time.UTC()
-			token.ExpiresAt = &expires
-		}
-		token.RoleIDs = []int64{}
-		state.Tokens = append(state.Tokens, token)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close API tokens: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate API tokens: %w", err)
-	}
+	return nil
+}
 
+func (store *Store) exportAPITokens(ctx context.Context, state *AuthorizationState) error {
+	var token AuthorizationToken
+	var expiresAt sql.NullTime
+	return store.exportRows(ctx, "API tokens", "API token", `
+SELECT id, token_hash, user_id, name, created_at, expires_at
+FROM sable_api_tokens ORDER BY id`,
+		[]any{&token.ID, &token.TokenHash, &token.UserID, &token.Name, &token.CreatedAt, &expiresAt},
+		func() error {
+			exported := token
+			exported.CreatedAt = exported.CreatedAt.UTC()
+			if expiresAt.Valid {
+				expires := expiresAt.Time.UTC()
+				exported.ExpiresAt = &expires
+			}
+			exported.RoleIDs = []int64{}
+			state.Tokens = append(state.Tokens, exported)
+			return nil
+		})
+}
+
+func (store *Store) exportAPITokenGroups(ctx context.Context, state *AuthorizationState) error {
 	tokenIndex := make(map[int64]int, len(state.Tokens))
 	for index := range state.Tokens {
 		tokenIndex[state.Tokens[index].ID] = index
 	}
-	rows, err = store.database.QueryContext(ctx, `SELECT token_id, role_id FROM sable_api_token_roles ORDER BY token_id, role_id`)
-	if err != nil {
-		return AuthorizationState{}, fmt.Errorf("export API token groups: %w", err)
-	}
-	for rows.Next() {
-		var tokenID, roleID int64
-		if err := rows.Scan(&tokenID, &roleID); err != nil {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("scan API token group: %w", err)
-		}
-		index, found := tokenIndex[tokenID]
-		if !found {
-			rows.Close()
-			return AuthorizationState{}, fmt.Errorf("API token group references missing token %d", tokenID)
-		}
-		state.Tokens[index].RoleIDs = append(state.Tokens[index].RoleIDs, roleID)
-	}
-	if err := rows.Close(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("close API token groups: %w", err)
-	}
-	if err := rows.Err(); err != nil {
-		return AuthorizationState{}, fmt.Errorf("iterate API token groups: %w", err)
-	}
-	return state, nil
+	var tokenID, roleID int64
+	return store.exportRows(ctx, "API token groups", "API token group",
+		`SELECT token_id, role_id FROM sable_api_token_roles ORDER BY token_id, role_id`,
+		[]any{&tokenID, &roleID},
+		func() error {
+			index, found := tokenIndex[tokenID]
+			if !found {
+				return fmt.Errorf("API token group references missing token %d", tokenID)
+			}
+			state.Tokens[index].RoleIDs = append(state.Tokens[index].RoleIDs, roleID)
+			return nil
+		})
 }
 
 // ReplaceAuthorizationState atomically reconciles durable authorization data
@@ -295,256 +289,355 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 		if err != nil {
 			return err
 		}
-
-		passwords := map[int64]string{}
-		rows, err := transaction.QueryContext(ctx, `SELECT id, password_hash FROM sable_users`)
+		passwords, err := localPasswordHashes(ctx, transaction)
 		if err != nil {
-			return fmt.Errorf("read existing authorization users: %w", err)
-		}
-		for rows.Next() {
-			var id int64
-			var passwordHash string
-			if err := rows.Scan(&id, &passwordHash); err != nil {
-				rows.Close()
-				return err
-			}
-			passwords[id] = passwordHash
-		}
-		if err := rows.Close(); err != nil {
 			return err
 		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-
-		lastUsed := map[int64]struct {
-			hash string
-			at   sql.NullTime
-		}{}
-		rows, err = transaction.QueryContext(ctx, `SELECT id, token_hash, last_used_at FROM sable_api_tokens`)
+		activity, err := localAPITokenActivity(ctx, transaction)
 		if err != nil {
-			return fmt.Errorf("read existing API token activity: %w", err)
-		}
-		for rows.Next() {
-			var id int64
-			var hash string
-			var at sql.NullTime
-			if err := rows.Scan(&id, &hash, &at); err != nil {
-				rows.Close()
-				return err
-			}
-			lastUsed[id] = struct {
-				hash string
-				at   sql.NullTime
-			}{hash: hash, at: at}
-		}
-		if err := rows.Close(); err != nil {
 			return err
 		}
-		if err := rows.Err(); err != nil {
+		if err := clearReplicatedAuthorization(ctx, transaction); err != nil {
 			return err
 		}
+		if err := store.replaceAuthorizationUsers(ctx, transaction, state.Users, passwords); err != nil {
+			return err
+		}
+		if err := store.replaceAuthorizationRoles(ctx, transaction, state.Roles); err != nil {
+			return err
+		}
+		if err := store.replaceAuthorizationLinks(ctx, transaction, state.Users, localPasskeys); err != nil {
+			return err
+		}
+		if err := store.replaceAPITokens(ctx, transaction, state.Tokens, activity); err != nil {
+			return err
+		}
+		return store.finishAuthorizationReplacement(ctx, transaction, state.Initialized)
+	})
+}
 
-		for _, statement := range []string{
-			"DELETE FROM sable_api_token_roles",
-			"DELETE FROM sable_api_tokens",
-			"DELETE FROM sable_user_identities",
-			"DELETE FROM sable_passkeys",
-			"DELETE FROM sable_user_roles",
-			"DELETE FROM sable_role_grants",
-			"DELETE FROM sable_roles",
-			// The incoming built-in roles may come from another Sable version,
-			// so the next start writes this build's again, as it always did.
-			"DELETE FROM sable_metadata WHERE key = '" + builtInRolesKey + "'",
-		} {
-			if _, err := transaction.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("clear replicated authorization state: %w", err)
+// localPasswordHashes reads each local user's password hash, so a user whose
+// hash changes on the primary loses their local sessions.
+func localPasswordHashes(ctx context.Context, transaction *sql.Tx) (map[int64]string, error) {
+	passwords := map[int64]string{}
+	rows, err := transaction.QueryContext(ctx, `SELECT id, password_hash FROM sable_users`)
+	if err != nil {
+		return nil, fmt.Errorf("read existing authorization users: %w", err)
+	}
+	for rows.Next() {
+		var id int64
+		var passwordHash string
+		if err := rows.Scan(&id, &passwordHash); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		passwords[id] = passwordHash
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return passwords, nil
+}
+
+// apiTokenActivity is when a local API token was last used, kept across a
+// replacement while the token's hash is unchanged.
+type apiTokenActivity struct {
+	hash string
+	at   sql.NullTime
+}
+
+func localAPITokenActivity(ctx context.Context, transaction *sql.Tx) (map[int64]apiTokenActivity, error) {
+	activity := map[int64]apiTokenActivity{}
+	rows, err := transaction.QueryContext(ctx, `SELECT id, token_hash, last_used_at FROM sable_api_tokens`)
+	if err != nil {
+		return nil, fmt.Errorf("read existing API token activity: %w", err)
+	}
+	for rows.Next() {
+		var id int64
+		var token apiTokenActivity
+		if err := rows.Scan(&id, &token.hash, &token.at); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		activity[id] = token
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return activity, nil
+}
+
+func clearReplicatedAuthorization(ctx context.Context, transaction *sql.Tx) error {
+	for _, statement := range []string{
+		"DELETE FROM sable_api_token_roles",
+		"DELETE FROM sable_api_tokens",
+		"DELETE FROM sable_user_identities",
+		"DELETE FROM sable_passkeys",
+		"DELETE FROM sable_user_roles",
+		"DELETE FROM sable_role_grants",
+		"DELETE FROM sable_roles",
+		// The incoming built-in roles may come from another Sable version,
+		// so the next start writes this build's again, as it always did.
+		"DELETE FROM sable_metadata WHERE key = '" + builtInRolesKey + "'",
+	} {
+		if _, err := transaction.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("clear replicated authorization state: %w", err)
+		}
+	}
+	return nil
+}
+
+// replaceAuthorizationUsers removes local users the primary no longer has and
+// writes the rest under the primary's IDs. Users are updated in place rather
+// than deleted so their local sessions survive unless the password changed.
+func (store *Store) replaceAuthorizationUsers(ctx context.Context, transaction *sql.Tx, users []AuthorizationUser, passwords map[int64]string) error {
+	incomingUsers := make(map[int64]AuthorizationUser, len(users))
+	for _, user := range users {
+		incomingUsers[user.ID] = user
+	}
+	for id := range passwords {
+		if _, found := incomingUsers[id]; !found {
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), id); err != nil {
+				return fmt.Errorf("remove obsolete authorization user: %w", err)
 			}
 		}
-
-		incomingUsers := make(map[int64]AuthorizationUser, len(state.Users))
-		for _, user := range state.Users {
-			incomingUsers[user.ID] = user
-		}
-		for id := range passwords {
-			if _, found := incomingUsers[id]; !found {
-				if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), id); err != nil {
-					return fmt.Errorf("remove obsolete authorization user: %w", err)
-				}
-			}
-		}
-		// Free usernames before applying the primary's stable ID mapping.
-		// The staging prefix exceeds Sable's maximum username length, so it cannot
-		// collide with a valid replicated identity while unique names are remapped.
-		if _, err := transaction.ExecContext(ctx, `UPDATE sable_users SET username = '__sable_cluster_replication_staging_username_that_exceeds_sixty_four_characters__' || id`); err != nil {
-			return fmt.Errorf("stage authorization usernames: %w", err)
-		}
-		for _, user := range state.Users {
-			_, err := transaction.ExecContext(ctx, `
+	}
+	// Free usernames before applying the primary's stable ID mapping.
+	// The staging prefix exceeds Sable's maximum username length, so it cannot
+	// collide with a valid replicated identity while unique names are remapped.
+	if _, err := transaction.ExecContext(ctx, `UPDATE sable_users SET username = '__sable_cluster_replication_staging_username_that_exceeds_sixty_four_characters__' || id`); err != nil {
+		return fmt.Errorf("stage authorization usernames: %w", err)
+	}
+	for _, user := range users {
+		_, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_users (id, username, password_hash, created_at)
 VALUES (`+store.placeholders(4)+`)
 ON CONFLICT(id) DO UPDATE SET username = excluded.username, password_hash = excluded.password_hash, created_at = excluded.created_at`,
-				user.ID, user.Username, user.PasswordHash, user.CreatedAt.UTC())
-			if err != nil {
-				return fmt.Errorf("replace authorization user %q: %w", user.Username, err)
-			}
-			_, err = transaction.ExecContext(ctx, `
+			user.ID, user.Username, user.PasswordHash, user.CreatedAt.UTC())
+		if err != nil {
+			return fmt.Errorf("replace authorization user %q: %w", user.Username, err)
+		}
+		_, err = transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, password_login, updated_at)
 VALUES (`+store.placeholders(6)+`)
 ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, email = excluded.email,
 disabled = excluded.disabled, password_login = excluded.password_login, updated_at = excluded.updated_at`,
-				user.ID, user.DisplayName, user.Email, user.Disabled, user.PasswordLogin, user.UpdatedAt.UTC())
-			if err != nil {
-				return fmt.Errorf("replace authorization profile %q: %w", user.Username, err)
-			}
-			if previous, found := passwords[user.ID]; found && previous != user.PasswordHash {
-				if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), user.ID); err != nil {
-					return fmt.Errorf("revoke sessions after credential replacement: %w", err)
-				}
+			user.ID, user.DisplayName, user.Email, user.Disabled, user.PasswordLogin, user.UpdatedAt.UTC())
+		if err != nil {
+			return fmt.Errorf("replace authorization profile %q: %w", user.Username, err)
+		}
+		if previous, found := passwords[user.ID]; found && previous != user.PasswordHash {
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), user.ID); err != nil {
+				return fmt.Errorf("revoke sessions after credential replacement: %w", err)
 			}
 		}
+	}
+	return nil
+}
 
-		for _, role := range state.Roles {
-			if _, err := transaction.ExecContext(ctx, `
+func (store *Store) replaceAuthorizationRoles(ctx context.Context, transaction *sql.Tx, roles []AuthorizationRole) error {
+	for _, role := range roles {
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_roles (id, name, description, built_in, created_at)
 VALUES (`+store.placeholders(5)+`)`, role.ID, role.Name, role.Description, role.BuiltIn, role.CreatedAt.UTC()); err != nil {
-				return fmt.Errorf("replace authorization role %q: %w", role.Name, err)
-			}
-			for _, grant := range role.Grants {
-				if _, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("replace authorization role %q: %w", role.Name, err)
+		}
+		for _, grant := range role.Grants {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
 VALUES (`+store.placeholders(5)+`)`, role.ID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
-					return fmt.Errorf("replace grant for role %q: %w", role.Name, err)
-				}
+				return fmt.Errorf("replace grant for role %q: %w", role.Name, err)
 			}
 		}
-		for _, user := range state.Users {
-			for _, roleID := range user.RoleIDs {
-				if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_user_roles (user_id, role_id) VALUES (`+store.placeholders(2)+`)`, user.ID, roleID); err != nil {
-					return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
-				}
+	}
+	return nil
+}
+
+// replaceAuthorizationLinks writes each user's role memberships, passkeys and
+// identity links. Passkeys keep their local sign-in activity.
+func (store *Store) replaceAuthorizationLinks(ctx context.Context, transaction *sql.Tx, users []AuthorizationUser, localPasskeys map[string]auth.Passkey) error {
+	for _, user := range users {
+		for _, roleID := range user.RoleIDs {
+			if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_user_roles (user_id, role_id) VALUES (`+store.placeholders(2)+`)`, user.ID, roleID); err != nil {
+				return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
 			}
-			for _, key := range user.Passkeys {
-				key = preservePasskeyActivity(key, localPasskeys[key.ID])
-				data, err := json.Marshal(key)
-				if err != nil {
-					return err
-				}
-				if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, user.ID, string(data)); err != nil {
-					return err
-				}
+		}
+		for _, key := range user.Passkeys {
+			key = preservePasskeyActivity(key, localPasskeys[key.ID])
+			data, err := json.Marshal(key)
+			if err != nil {
+				return err
 			}
-			for _, identity := range user.Identities {
-				if _, err := transaction.ExecContext(ctx, `
+			if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, user.ID, string(data)); err != nil {
+				return err
+			}
+		}
+		for _, identity := range user.Identities {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at)
 VALUES (`+store.placeholders(5)+`)`, identity.Provider, identity.Subject, user.ID, identity.Issuer, identity.LinkedAt.UTC()); err != nil {
-					return fmt.Errorf("replace identity link for user %q: %w", user.Username, err)
-				}
+				return fmt.Errorf("replace identity link for user %q: %w", user.Username, err)
 			}
 		}
-		for _, token := range state.Tokens {
-			var expiration any
-			if token.ExpiresAt != nil {
-				expiration = token.ExpiresAt.UTC()
-			}
-			var activity any
-			if existing, found := lastUsed[token.ID]; found && existing.hash == token.TokenHash && existing.at.Valid {
-				activity = existing.at.Time.UTC()
-			}
-			if _, err := transaction.ExecContext(ctx, `
+	}
+	return nil
+}
+
+func (store *Store) replaceAPITokens(ctx context.Context, transaction *sql.Tx, tokens []AuthorizationToken, activity map[int64]apiTokenActivity) error {
+	for _, token := range tokens {
+		var expiration any
+		if token.ExpiresAt != nil {
+			expiration = token.ExpiresAt.UTC()
+		}
+		var lastUsed any
+		if existing, found := activity[token.ID]; found && existing.hash == token.TokenHash && existing.at.Valid {
+			lastUsed = existing.at.Time.UTC()
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_api_tokens (id, token_hash, user_id, name, created_at, expires_at, last_used_at)
-VALUES (`+store.placeholders(7)+`)`, token.ID, token.TokenHash, token.UserID, token.Name, token.CreatedAt.UTC(), expiration, activity); err != nil {
-				return fmt.Errorf("replace API token %q: %w", token.Name, err)
-			}
-			for _, roleID := range token.RoleIDs {
-				if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_api_token_roles (token_id, role_id) VALUES (`+store.placeholders(2)+`)`, token.ID, roleID); err != nil {
-					return fmt.Errorf("replace API token group for %q: %w", token.Name, err)
-				}
+VALUES (`+store.placeholders(7)+`)`, token.ID, token.TokenHash, token.UserID, token.Name, token.CreatedAt.UTC(), expiration, lastUsed); err != nil {
+			return fmt.Errorf("replace API token %q: %w", token.Name, err)
+		}
+		for _, roleID := range token.RoleIDs {
+			if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_api_token_roles (token_id, role_id) VALUES (`+store.placeholders(2)+`)`, token.ID, roleID); err != nil {
+				return fmt.Errorf("replace API token group for %q: %w", token.Name, err)
 			}
 		}
-		if state.Initialized {
-			if err := store.setMeta(ctx, transaction, "security_initialized", "true"); err != nil {
-				return fmt.Errorf("replace authorization setup state: %w", err)
-			}
-		} else if err := store.deleteMeta(ctx, transaction, "security_initialized"); err != nil {
+	}
+	return nil
+}
+
+// finishAuthorizationReplacement records whether setup is done and, on
+// Postgres, moves the identity sequences past the IDs just written.
+func (store *Store) finishAuthorizationReplacement(ctx context.Context, transaction *sql.Tx, initialized bool) error {
+	if initialized {
+		if err := store.setMeta(ctx, transaction, "security_initialized", "true"); err != nil {
 			return fmt.Errorf("replace authorization setup state: %w", err)
 		}
-		if store.driver == "postgres" {
-			for _, table := range []string{"sable_users", "sable_roles", "sable_api_tokens"} {
-				if _, err := transaction.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('`+table+`', 'id'), COALESCE(MAX(id), 1), COUNT(*) > 0) FROM `+table); err != nil {
-					return fmt.Errorf("advance %s identity sequence: %w", table, err)
-				}
+	} else if err := store.deleteMeta(ctx, transaction, "security_initialized"); err != nil {
+		return fmt.Errorf("replace authorization setup state: %w", err)
+	}
+	if store.driver == "postgres" {
+		for _, table := range []string{"sable_users", "sable_roles", "sable_api_tokens"} {
+			if _, err := transaction.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('`+table+`', 'id'), COALESCE(MAX(id), 1), COUNT(*) > 0) FROM `+table); err != nil {
+				return fmt.Errorf("advance %s identity sequence: %w", table, err)
 			}
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 func validateAuthorizationState(state AuthorizationState) error {
-	userIDs := make(map[int64]struct{}, len(state.Users))
-	usernames := make(map[string]struct{}, len(state.Users))
-	subjects := make(map[string]struct{}, len(state.Users))
+	userIDs, err := validateAuthorizationUsers(state.Users)
+	if err != nil {
+		return err
+	}
+	roleIDs, err := validateAuthorizationRoles(state.Roles)
+	if err != nil {
+		return err
+	}
+	if err := validateAuthorizationMemberships(state.Users, roleIDs); err != nil {
+		return err
+	}
+	if err := validateAuthorizationTokens(state.Tokens, userIDs, roleIDs); err != nil {
+		return err
+	}
+	if state.Initialized && len(state.Users) == 0 {
+		return errors.New("initialized replicated authorization state has no users")
+	}
+	return nil
+}
+
+// validateAuthorizationUsers checks each user and their sign-in methods, and
+// returns the user IDs for the checks that reference them.
+func validateAuthorizationUsers(users []AuthorizationUser) (map[int64]struct{}, error) {
+	userIDs := make(map[int64]struct{}, len(users))
+	usernames := make(map[string]struct{}, len(users))
+	subjects := make(map[string]struct{}, len(users))
 	passkeyIDs := make(map[string]bool)
-	for _, user := range state.Users {
+	for _, user := range users {
 		if user.ID <= 0 || strings.TrimSpace(user.Username) == "" {
-			return errors.New("replicated authorization state contains an invalid user")
+			return nil, errors.New("replicated authorization state contains an invalid user")
 		}
 		// An account needs at least one way in. A password hash was the only
 		// possibility before single sign-on; now a federated account has an
 		// empty hash and is reached through its linked provider instead.
 		if strings.TrimSpace(user.PasswordHash) == "" && len(user.Identities) == 0 && len(user.Passkeys) == 0 {
-			return fmt.Errorf("replicated authorization user %q has neither a password nor a linked identity", user.Username)
+			return nil, fmt.Errorf("replicated authorization user %q has neither a password nor a linked identity", user.Username)
 		}
 		if _, found := userIDs[user.ID]; found {
-			return fmt.Errorf("replicated authorization state contains duplicate user ID %d", user.ID)
+			return nil, fmt.Errorf("replicated authorization state contains duplicate user ID %d", user.ID)
 		}
 		if _, found := usernames[user.Username]; found {
-			return fmt.Errorf("replicated authorization state contains duplicate username %q", user.Username)
+			return nil, fmt.Errorf("replicated authorization state contains duplicate username %q", user.Username)
 		}
-		for _, key := range user.Passkeys {
-			if key.UserID != user.ID || key.ID == "" || key.ID != base64.RawURLEncoding.EncodeToString(key.Credential.ID) || len(key.Credential.PublicKey) == 0 || len(key.UserHandle) == 0 || len(key.UserHandle) > 64 || key.RPID == "" || passkeyIDs[key.ID] {
-				return errors.New("replicated authorization state contains an invalid or duplicate passkey")
-			}
-			passkeyIDs[key.ID] = true
-		}
-		for _, identity := range user.Identities {
-			if strings.TrimSpace(identity.Provider) == "" || strings.TrimSpace(identity.Subject) == "" {
-				return fmt.Errorf("replicated authorization user %q has an incomplete identity link", user.Username)
-			}
-			// The table's primary key would reject this on insert, but a
-			// duplicate subject across two accounts means the snapshot itself
-			// disagrees about who owns it, and that is worth naming.
-			key := identity.Provider + "\x00" + identity.Subject
-			if _, found := subjects[key]; found {
-				return fmt.Errorf("replicated authorization state links %s/%s to more than one account",
-					identity.Provider, identity.Subject)
-			}
-			subjects[key] = struct{}{}
+		if err := validateAuthorizationSignIns(user, passkeyIDs, subjects); err != nil {
+			return nil, err
 		}
 		userIDs[user.ID] = struct{}{}
 		usernames[user.Username] = struct{}{}
 	}
-	roleIDs := make(map[int64]struct{}, len(state.Roles))
-	roleNames := make(map[string]struct{}, len(state.Roles))
-	for _, role := range state.Roles {
+	return userIDs, nil
+}
+
+// validateAuthorizationSignIns checks one user's passkeys and identity links,
+// recording each in the sets shared across users so duplicates are caught.
+func validateAuthorizationSignIns(user AuthorizationUser, passkeyIDs map[string]bool, subjects map[string]struct{}) error {
+	for _, key := range user.Passkeys {
+		if key.UserID != user.ID || key.ID == "" || key.ID != base64.RawURLEncoding.EncodeToString(key.Credential.ID) || len(key.Credential.PublicKey) == 0 || len(key.UserHandle) == 0 || len(key.UserHandle) > 64 || key.RPID == "" || passkeyIDs[key.ID] {
+			return errors.New("replicated authorization state contains an invalid or duplicate passkey")
+		}
+		passkeyIDs[key.ID] = true
+	}
+	for _, identity := range user.Identities {
+		if strings.TrimSpace(identity.Provider) == "" || strings.TrimSpace(identity.Subject) == "" {
+			return fmt.Errorf("replicated authorization user %q has an incomplete identity link", user.Username)
+		}
+		// The table's primary key would reject this on insert, but a
+		// duplicate subject across two accounts means the snapshot itself
+		// disagrees about who owns it, and that is worth naming.
+		key := identity.Provider + "\x00" + identity.Subject
+		if _, found := subjects[key]; found {
+			return fmt.Errorf("replicated authorization state links %s/%s to more than one account",
+				identity.Provider, identity.Subject)
+		}
+		subjects[key] = struct{}{}
+	}
+	return nil
+}
+
+func validateAuthorizationRoles(roles []AuthorizationRole) (map[int64]struct{}, error) {
+	roleIDs := make(map[int64]struct{}, len(roles))
+	roleNames := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
 		if role.ID <= 0 || strings.TrimSpace(role.Name) == "" {
-			return errors.New("replicated authorization state contains an invalid role")
+			return nil, errors.New("replicated authorization state contains an invalid role")
 		}
 		if _, found := roleIDs[role.ID]; found {
-			return fmt.Errorf("replicated authorization state contains duplicate role ID %d", role.ID)
+			return nil, fmt.Errorf("replicated authorization state contains duplicate role ID %d", role.ID)
 		}
 		if _, found := roleNames[role.Name]; found {
-			return fmt.Errorf("replicated authorization state contains duplicate role name %q", role.Name)
+			return nil, fmt.Errorf("replicated authorization state contains duplicate role name %q", role.Name)
 		}
 		roleIDs[role.ID] = struct{}{}
 		roleNames[role.Name] = struct{}{}
 		for _, grant := range role.Grants {
 			if grant.Permission == "" || (grant.Surface != auth.SurfaceWeb && grant.Surface != auth.SurfaceAPI) {
-				return fmt.Errorf("replicated authorization role %q contains an invalid grant", role.Name)
+				return nil, fmt.Errorf("replicated authorization role %q contains an invalid grant", role.Name)
 			}
 		}
 	}
-	for _, user := range state.Users {
+	return roleIDs, nil
+}
+
+func validateAuthorizationMemberships(users []AuthorizationUser, roleIDs map[int64]struct{}) error {
+	for _, user := range users {
 		if len(user.RoleIDs) == 0 {
 			return fmt.Errorf("replicated authorization user %q has no roles", user.Username)
 		}
@@ -557,9 +650,13 @@ func validateAuthorizationState(state AuthorizationState) error {
 			return fmt.Errorf("replicated authorization user %q has unsorted roles", user.Username)
 		}
 	}
-	tokenIDs := make(map[int64]struct{}, len(state.Tokens))
-	tokenHashes := make(map[string]struct{}, len(state.Tokens))
-	for _, token := range state.Tokens {
+	return nil
+}
+
+func validateAuthorizationTokens(tokens []AuthorizationToken, userIDs, roleIDs map[int64]struct{}) error {
+	tokenIDs := make(map[int64]struct{}, len(tokens))
+	tokenHashes := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
 		if token.ID <= 0 || token.TokenHash == "" || token.Name == "" {
 			return errors.New("replicated authorization state contains an invalid API token")
 		}
@@ -582,9 +679,6 @@ func validateAuthorizationState(state AuthorizationState) error {
 		}
 		tokenIDs[token.ID] = struct{}{}
 		tokenHashes[token.TokenHash] = struct{}{}
-	}
-	if state.Initialized && len(state.Users) == 0 {
-		return errors.New("initialized replicated authorization state has no users")
 	}
 	return nil
 }
