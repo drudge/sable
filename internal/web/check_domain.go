@@ -91,9 +91,7 @@ func (check domainCheck) Explanation(at func(time.Time) string) string {
 // for one.
 func (server *Server) checkDomainPanel(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	if err := pages.CheckDomainDrawer(server.checkDomainView(request)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render check domain panel", "error", err)
-	}
+	server.render(writer, request, pages.CheckDomainDrawer(server.checkDomainView(request)))
 }
 
 func (server *Server) checkDomainView(request *http.Request) pages.CheckDomainView {
@@ -168,11 +166,8 @@ func (server *Server) checkDomainRule(writer http.ResponseWriter, request *http.
 	page := server.blockingView(request, "", "", tab)
 	page.OutOfBand = true
 	writeFragmentStatus(writer, status)
-	if err := pages.CheckDomainDrawer(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render check domain panel", "error", err)
+	if !server.render(writer, request, pages.CheckDomainDrawer(view)) {
 		return
 	}
-	if err := pages.BlockingContent(page).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render blocking page", "error", err)
-	}
+	server.render(writer, request, pages.BlockingContent(page))
 }

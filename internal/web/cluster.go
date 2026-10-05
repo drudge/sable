@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -41,9 +40,7 @@ type clusterController interface {
 func (server *Server) SetClusterController(controller clusterController) { server.cluster = controller }
 
 func (server *Server) clusterPage(writer http.ResponseWriter, request *http.Request) {
-	if err := pages.ClusterPage(server.clusterView(request, "", "")).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render cluster page", "error", err)
-	}
+	server.render(writer, request, pages.ClusterPage(server.clusterView(request, "", "")))
 }
 
 func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *http.Request) {
@@ -56,15 +53,11 @@ func (server *Server) clusterLiveStatus(writer http.ResponseWriter, request *htt
 		view = server.clusterView(request, "", "")
 		writer.Header().Set("HX-Retarget", "#cluster-content")
 		writer.Header().Set("HX-Reswap", "outerHTML")
-		if err := pages.ClusterContent(view).Render(request.Context(), writer); err != nil {
-			server.logger.Error("render unconfigured cluster state", "error", err)
-		}
+		server.render(writer, request, pages.ClusterContent(view))
 		return
 	}
 	view.Update = server.clusterUpdateView(request)
-	if err := pages.ClusterLiveStatusUpdate(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render live cluster status", "error", err)
-	}
+	server.render(writer, request, pages.ClusterLiveStatusUpdate(view))
 }
 
 func (server *Server) initializeCluster(writer http.ResponseWriter, request *http.Request) {
@@ -378,9 +371,7 @@ func (server *Server) createClusterEnrollmentToken(writer http.ResponseWriter, r
 	server.recordControlPlaneAudit(request, "cluster.enrollment-token.create", fmt.Sprintf("created cluster enrollment token expiring %s", token.ExpiresAt.Format(time.RFC3339)))
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(http.StatusCreated)
-	if err := pages.ClusterContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render cluster enrollment token", "error", err)
-	}
+	server.render(writer, request, pages.ClusterContent(view))
 }
 
 func (server *Server) joinCluster(writer http.ResponseWriter, request *http.Request) {
@@ -451,7 +442,7 @@ func (server *Server) removeClusterNode(writer http.ResponseWriter, request *htt
 func (server *Server) clusterAPI(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.cluster.Snapshot())
@@ -460,7 +451,7 @@ func (server *Server) clusterAPI(writer http.ResponseWriter, _ *http.Request) {
 func (server *Server) clusterNodeAPI(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	for _, node := range server.cluster.Snapshot().Nodes {
@@ -469,34 +460,32 @@ func (server *Server) clusterNodeAPI(writer http.ResponseWriter, request *http.R
 			return
 		}
 	}
-	writeJSON(writer, http.StatusNotFound, map[string]string{"error": "cluster node was not found"})
+	apiError(writer, http.StatusNotFound, "cluster node was not found")
 }
 
 func (server *Server) initializeClusterAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	if server.clusterRestartRequired(request) {
-		writeJSON(writer, http.StatusConflict, map[string]string{"error": "restart Sable to activate the saved node identity before initializing a cluster"})
+		apiError(writer, http.StatusConflict, "restart Sable to activate the saved node identity before initializing a cluster")
 		return
 	}
 	if !server.cluster.Snapshot().NetworkReady {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": "configure an HTTPS advertised URL before initializing a cluster"})
+		apiError(writer, http.StatusUnprocessableEntity, "configure an HTTPS advertised URL before initializing a cluster")
 		return
 	}
 	var input struct {
 		Domain    string   `json:"domain"`
 		Addresses []string `json:"addresses"`
 	}
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid cluster request"})
+	if err := decodeJSON(request, &input); err != nil {
+		apiError(writer, http.StatusBadRequest, "invalid cluster request")
 		return
 	}
 	if err := server.cluster.Initialize(request.Context(), input.Domain, input.Addresses); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusCreated, server.cluster.Snapshot())
@@ -504,11 +493,11 @@ func (server *Server) initializeClusterAPI(writer http.ResponseWriter, request *
 
 func (server *Server) deleteClusterAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	if err := server.cluster.Delete(request.Context()); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.cluster.Snapshot())
@@ -516,11 +505,11 @@ func (server *Server) deleteClusterAPI(writer http.ResponseWriter, request *http
 
 func (server *Server) leaveClusterAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	if err := server.cluster.Leave(request.Context()); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.cluster.Snapshot())
@@ -531,21 +520,21 @@ func (server *Server) createClusterEnrollmentTokenAPI(writer http.ResponseWriter
 		TTL string `json:"ttl"`
 	}
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
-	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid enrollment token request"})
+	if err := decodeJSON(request, &input); err != nil {
+		apiError(writer, http.StatusBadRequest, "invalid enrollment token request")
 		return
 	}
 	ttl, err := durationfmt.Parse(firstNonEmpty(strings.TrimSpace(input.TTL), "15m"))
 	if err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": "ttl must be a duration such as 15m or 1d"})
+		apiError(writer, http.StatusUnprocessableEntity, "ttl must be a duration such as 15m or 1d")
 		return
 	}
 	token, err := server.cluster.CreateEnrollmentToken(request.Context(), ttl)
 	if err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusCreated, token)
@@ -553,20 +542,18 @@ func (server *Server) createClusterEnrollmentTokenAPI(writer http.ResponseWriter
 
 func (server *Server) enrollClusterNodeAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	var input cluster.JoinRequest
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid cluster enrollment request"})
+	if err := decodeJSON(request, &input); err != nil {
+		apiError(writer, http.StatusBadRequest, "invalid cluster enrollment request")
 		return
 	}
 	configuration, err := server.cluster.Enroll(request.Context(), input)
 	if err != nil {
 		server.logger.Warn("enroll cluster replica", "node_id", input.NodeID, "client", requestClientIP(request), "error", err)
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	server.logger.Info("cluster replica enrolled", "node_id", input.NodeID, "client", requestClientIP(request))
@@ -575,24 +562,22 @@ func (server *Server) enrollClusterNodeAPI(writer http.ResponseWriter, request *
 
 func (server *Server) clusterSyncAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	// A replica's lookups make a heartbeat larger than a form.
 	var heartbeat cluster.Heartbeat
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&heartbeat); err != nil {
-		writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "invalid cluster synchronization request"})
+	if err := decodeJSON(request, &heartbeat); err != nil {
+		apiError(writer, http.StatusBadRequest, "invalid cluster synchronization request")
 		return
 	}
 	configuration, err := server.cluster.Synchronize(request.Context(), heartbeat, request.Header.Get("X-Sable-Cluster-Signature"))
 	if err != nil {
 		if errors.Is(err, cluster.ErrNodeRemoved) {
-			writeJSON(writer, http.StatusGone, map[string]string{"error": err.Error()})
+			apiError(writer, http.StatusGone, err.Error())
 			return
 		}
-		writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnauthorized, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, configuration)
@@ -600,11 +585,11 @@ func (server *Server) clusterSyncAPI(writer http.ResponseWriter, request *http.R
 
 func (server *Server) promoteClusterNodeAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	if err := server.cluster.Promote(request.Context(), strings.TrimSpace(request.PathValue("node"))); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.cluster.Snapshot())
@@ -612,11 +597,11 @@ func (server *Server) promoteClusterNodeAPI(writer http.ResponseWriter, request 
 
 func (server *Server) removeClusterNodeAPI(writer http.ResponseWriter, request *http.Request) {
 	if server.cluster == nil {
-		writeJSON(writer, http.StatusServiceUnavailable, map[string]string{"error": "cluster service is unavailable"})
+		apiError(writer, http.StatusServiceUnavailable, "cluster service is unavailable")
 		return
 	}
 	if err := server.cluster.Remove(request.Context(), strings.TrimSpace(request.PathValue("node"))); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, server.cluster.Snapshot())
@@ -632,9 +617,7 @@ func (server *Server) clusterAvailable(writer http.ResponseWriter, request *http
 
 func (server *Server) renderClusterMutation(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
 	writeFragmentStatus(writer, status)
-	if err := pages.ClusterContent(server.clusterView(request, message, errorMessage)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render cluster mutation", "error", err)
-	}
+	server.render(writer, request, pages.ClusterContent(server.clusterView(request, message, errorMessage)))
 }
 
 // A rejected cluster action remains a rendered UI round-trip. htmx 4 can swap

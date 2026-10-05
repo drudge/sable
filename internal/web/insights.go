@@ -166,9 +166,7 @@ func (server *Server) insightsPage(writer http.ResponseWriter, request *http.Req
 		CanLogs: console.CanLogs, CanBlocking: console.CanBlocking,
 		Settings: server.insightSettingsPageView(console),
 	}}
-	if err := pages.InsightsPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render insights page", "error", err)
-	}
+	server.render(writer, request, pages.InsightsPage(view))
 }
 
 // warmInsights starts every slow read Insights needs for a window at once, so
@@ -226,9 +224,7 @@ func (server *Server) insightsOverviewPanel(writer http.ResponseWriter, request 
 	if request.Header.Get("HX-Request") == "true" && !insightsDrawerOpen(request) {
 		writer.Header().Set("HX-Replace-Url", insightsPageURL(window, view.ActiveTab, view.DeviceFilter, view.AppFilter))
 	}
-	if err := pages.InsightsContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render insights overview", "error", err)
-	}
+	server.render(writer, request, pages.InsightsContent(view))
 }
 
 // insightsRange is the range a request shows: the one it names, which is

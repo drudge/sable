@@ -68,7 +68,7 @@ type mcpError struct {
 
 func (server *Server) mcp(writer http.ResponseWriter, request *http.Request) {
 	if !server.config.Current().Config.MCP.Enabled {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": mcpDisabledMessage})
+		apiError(writer, http.StatusNotFound, mcpDisabledMessage)
 		return
 	}
 	// MCP clients are programs, not web pages. Refusing cross-site browser
@@ -471,5 +471,5 @@ func (server *Server) httpsIdentity(ctx context.Context, configuration config.Co
 // a client to end.
 func mcpMethodNotAllowed(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
-	writeJSON(writer, http.StatusMethodNotAllowed, map[string]string{"error": "Sable's MCP endpoint accepts GET and POST only"})
+	apiError(writer, http.StatusMethodNotAllowed, "Sable's MCP endpoint accepts GET and POST only")
 }

@@ -283,7 +283,5 @@ func insightSettingsProblem(invalid map[string]string) string {
 }
 
 func (server *Server) renderInsightSettings(writer http.ResponseWriter, request *http.Request, view pages.InsightSettingsView) {
-	if err := pages.InsightSettings(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render insights settings", "error", err)
-	}
+	server.render(writer, request, pages.InsightSettings(view))
 }

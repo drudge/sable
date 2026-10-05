@@ -29,9 +29,7 @@ type certificateGenerator interface {
 
 func (server *Server) settingsPage(writer http.ResponseWriter, request *http.Request) {
 	view := server.settingsView(request, "", "")
-	if err := pages.SettingsPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render settings page", "error", err)
-	}
+	server.render(writer, request, pages.SettingsPage(view))
 }
 
 func (server *Server) updateSettings(writer http.ResponseWriter, request *http.Request) {
@@ -451,10 +449,10 @@ func (server *Server) renderSettingsMutation(writer http.ResponseWriter, request
 func (server *Server) renderSettingsView(writer http.ResponseWriter, request *http.Request, status int, view pages.SettingsPageView) {
 	writeFragmentStatus(writer, status)
 	if request.Header.Get("HX-Request") == "true" {
-		_ = pages.SettingsContent(view).Render(request.Context(), writer)
+		server.render(writer, request, pages.SettingsContent(view))
 		return
 	}
-	_ = pages.SettingsPage(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.SettingsPage(view))
 }
 
 func (server *Server) settingsView(request *http.Request, message, errorMessage string) pages.SettingsPageView {

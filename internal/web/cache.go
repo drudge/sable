@@ -13,25 +13,19 @@ import (
 
 func (server *Server) cachePage(writer http.ResponseWriter, request *http.Request) {
 	view := server.consoleView(request)
-	if err := pages.CachePage(server.cacheView(request.Context(), view, "")).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render DNS cache", "error", err)
-	}
+	server.render(writer, request, pages.CachePage(server.cacheView(request.Context(), view, "")))
 }
 
 func (server *Server) cacheStatus(writer http.ResponseWriter, request *http.Request) {
 	view := server.consoleView(request)
-	if err := pages.CacheContent(server.cacheView(request.Context(), view, "")).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render DNS cache status", "error", err)
-	}
+	server.render(writer, request, pages.CacheContent(server.cacheView(request.Context(), view, "")))
 }
 
 func (server *Server) flushCache(writer http.ResponseWriter, request *http.Request) {
 	removed := server.stats.PurgeCache()
 	view := server.consoleView(request)
 	message := fmt.Sprintf("Cleared %d cached DNS records", removed)
-	if err := pages.CacheContent(server.cacheView(request.Context(), view, message)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render cleared DNS cache", "error", err)
-	}
+	server.render(writer, request, pages.CacheContent(server.cacheView(request.Context(), view, message)))
 }
 
 func (server *Server) cacheView(ctx context.Context, console pages.DashboardView, message string) pages.CachePageView {
@@ -81,5 +75,5 @@ func (server *Server) purgeCache(writer http.ResponseWriter, _ *http.Request) {
 
 func (server *Server) purgeCacheUI(writer http.ResponseWriter, request *http.Request) {
 	removed := server.stats.PurgeCache()
-	_ = pages.ActionResult(fmt.Sprintf("Purged %d cache entries", removed), false).Render(request.Context(), writer)
+	server.render(writer, request, pages.ActionResult(fmt.Sprintf("Purged %d cache entries", removed), false))
 }

@@ -298,9 +298,7 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 }
 
 func (server *Server) renderDeviceDrawerView(writer http.ResponseWriter, request *http.Request, view pages.InsightDeviceDrawerView) {
-	if err := pages.InsightDeviceDrawer(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render insights device", "error", err)
-	}
+	server.render(writer, request, pages.InsightDeviceDrawer(view))
 }
 
 // nameInsightsDevice gives a device the operator's own name, or clears it.

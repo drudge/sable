@@ -373,9 +373,7 @@ func (server *Server) dashboard(writer http.ResponseWriter, request *http.Reques
 		http.NotFound(writer, request)
 		return
 	}
-	if err := pages.Dashboard(server.dashboardView(request)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dashboard", "error", err)
-	}
+	server.render(writer, request, pages.Dashboard(server.dashboardView(request)))
 }
 
 func (server *Server) dashboardView(request *http.Request) pages.DashboardView {
@@ -456,9 +454,7 @@ func (server *Server) runtimeStats(writer http.ResponseWriter, request *http.Req
 		CustomStart: chart.CustomStart, CustomEnd: chart.CustomEnd,
 		CanLogs: server.canReadLogs(request), LogWindowQuery: window.logWindowQuery(),
 	}
-	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render runtime statistics", "error", err)
-	}
+	server.render(writer, request, pages.Stats(overview))
 }
 
 func (server *Server) lifetimeStatsView(request *http.Request) pages.StatsView {
@@ -498,8 +494,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 		}
 		server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: "custom", Start: start, End: end})
 		view := server.history.customView(request.Context(), start, end, server.stats.Stats(), display)
-		if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
-			server.logger.Error("render custom query statistics", "error", err)
+		if !server.render(writer, request, pages.QueryChart(view)) {
 			return
 		}
 		window := insightWindow{Range: "custom", Start: start, End: end, Label: chartRangeLabel("custom")}
@@ -516,8 +511,7 @@ func (server *Server) queryStatistics(writer http.ResponseWriter, request *http.
 	server.rememberDashboardChartRange(writer, request, dashboardChartRange{Name: rangeName})
 	now := time.Now()
 	view := server.history.view(request.Context(), rangeName, now, server.stats.Stats(), display)
-	if err := pages.QueryChart(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render query statistics", "error", err)
+	if !server.render(writer, request, pages.QueryChart(view)) {
 		return
 	}
 	window, valid := chartInsightWindow(rangeName, now)
@@ -544,9 +538,7 @@ func (server *Server) renderChartStats(writer http.ResponseWriter, request *http
 		CanLogs: server.canReadLogs(request), LogWindowQuery: logWindowQuery,
 		OutOfBand: true,
 	}
-	if err := pages.Stats(overview).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render chart statistics overview", "error", err)
-	}
+	server.render(writer, request, pages.Stats(overview))
 }
 
 // dashboardInsightsPanel loads rankings independently from the initial page.
@@ -563,18 +555,14 @@ func (server *Server) dashboardInsightsPanel(writer http.ResponseWriter, request
 		return
 	}
 	view := server.dashboardInsightsView(request, window)
-	if err := pages.DashboardInsights(view, false).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dashboard insights", "error", err)
-	}
+	server.render(writer, request, pages.DashboardInsights(view, false))
 }
 
 // renderInsights appends the rankings as an out-of-band swap so one range click
 // updates the chart and the panels below it together.
 func (server *Server) renderInsights(writer http.ResponseWriter, request *http.Request, window insightWindow) {
 	insights := loadingDashboardInsights(window)
-	if err := pages.DashboardInsights(insights, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render dashboard insights", "error", err)
-	}
+	server.render(writer, request, pages.DashboardInsights(insights, true))
 }
 
 func requestedInsightWindow(request *http.Request) (insightWindow, bool) {

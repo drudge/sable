@@ -313,9 +313,7 @@ func (server *Server) alertDestinationFormPanel(writer http.ResponseWriter, requ
 	}
 	_, push := server.alertPushStore()
 	writeFragmentStatus(writer, http.StatusOK)
-	if err := pages.AlertDestinationForm(alertDestinationFormView(configuration, destination, push)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert destination form", "error", err)
-	}
+	server.render(writer, request, pages.AlertDestinationForm(alertDestinationFormView(configuration, destination, push)))
 }
 
 // draftAlertDestination reads the dialog's form, filling in the secrets saved
@@ -649,9 +647,7 @@ func (server *Server) previewAlertDestination(writer http.ResponseWriter, reques
 		preview = alertPreview(draft, server.alertLinks(snapshot))
 	}
 	writeFragmentStatus(writer, http.StatusOK)
-	if err := pages.AlertPreviewPanel(preview).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert preview", "error", err)
-	}
+	server.render(writer, request, pages.AlertPreviewPanel(preview))
 }
 
 // alertPreview lays a sample alert out the way a draft would send it, with
@@ -799,7 +795,7 @@ func (server *Server) alertBrowserPushKey(writer http.ResponseWriter, request *h
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	if _, available := server.alertPushStore(); !available {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "Browser alerts are not available on this server."})
+		apiError(writer, http.StatusNotFound, "Browser alerts are not available on this server.")
 		return
 	}
 	key, err := server.pushKeys.PushKey(request.Context())
@@ -809,7 +805,7 @@ func (server *Server) alertBrowserPushKey(writer http.ResponseWriter, request *h
 	}
 	if err != nil {
 		server.logger.Error("read push key", "error", err)
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "Sable could not read its push key."})
+		apiError(writer, http.StatusInternalServerError, "Sable could not read its push key.")
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]string{"key": public})
@@ -918,9 +914,7 @@ func (server *Server) renderAlertsPanel(writer http.ResponseWriter, request *htt
 	view := server.alertsView(request.Context(), console)
 	view.Message, view.Error = message, problem
 	writeFragmentStatus(writer, status)
-	if err := pages.SettingsAlertsPanel(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alerts", "error", err)
-	}
+	server.render(writer, request, pages.SettingsAlertsPanel(view))
 }
 
 // renderAlertDestinationProblem says in the open dialog why a destination was
@@ -929,9 +923,7 @@ func (server *Server) renderAlertDestinationProblem(writer http.ResponseWriter, 
 	writer.Header().Set("HX-Retarget", "#alert-destination-notice")
 	writer.Header().Set("HX-Reswap", "innerHTML")
 	writeFragmentStatus(writer, status)
-	if err := pages.ToastSticky(problem, "error").Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert destination problem", "error", err)
-	}
+	server.render(writer, request, pages.ToastSticky(problem, "error"))
 }
 
 // alertPushStore is where browsers that turn alerts on are kept, and whether

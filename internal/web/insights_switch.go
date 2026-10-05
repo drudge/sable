@@ -45,9 +45,7 @@ func (server *Server) whileInsightsOn(next http.HandlerFunc) http.HandlerFunc {
 			server.authenticationFailure(writer, request, http.StatusForbidden, "")
 			return
 		}
-		if err := pages.InsightsOffPage(console).Render(request.Context(), writer); err != nil {
-			server.logger.Error("render insights off page", "error", err)
-		}
+		server.render(writer, request, pages.InsightsOffPage(console))
 	}
 }
 
@@ -165,9 +163,7 @@ func (server *Server) deleteInsightData(writer http.ResponseWriter, request *htt
 func (server *Server) renderSettingsInsights(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, status int, message, errorMessage string) {
 	writer.WriteHeader(status)
 	view := server.settingsInsightsView(request.Context(), console, message, errorMessage)
-	if err := pages.SettingsInsights(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render Insights settings", "error", err)
-	}
+	server.render(writer, request, pages.SettingsInsights(view))
 }
 
 // forgetInsightCaches drops the device counts Insights keeps, so nothing

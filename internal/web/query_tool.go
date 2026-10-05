@@ -57,15 +57,13 @@ func (server *Server) dnsClientPage(writer http.ResponseWriter, request *http.Re
 			}
 		}
 	}
-	if err := pages.DNSClientPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render DNS client", "error", err)
-	}
+	server.render(writer, request, pages.DNSClientPage(view))
 }
 
 func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
 	resolver := request.FormValue("resolver")
@@ -110,7 +108,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	}
 	if err != nil {
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
 	queryRequest := dnsclient.Request{
@@ -128,7 +126,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	result, err := dnsclient.Query(request.Context(), queryRequest)
 	if err != nil {
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
 	question := dns.Fqdn(queryRequest.Name)
@@ -164,7 +162,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 		Response:   result.Response.String(),
 	}
 	view.JSON = queryResultJSON(view)
-	_ = pages.QueryResult(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.QueryResult(view))
 }
 
 // localDoHServer turns the console hostname the operator is already using into
