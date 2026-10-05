@@ -192,6 +192,16 @@ func ServiceClueIDs() []string {
 // keeps only the reasons that support it, so the console can show exactly
 // why Sable thinks so.
 func Classify(device Device, used []services.Service) Guess {
+	if guess, stated := statedType(device, used); stated {
+		return guess
+	}
+	return gatherTypeEvidence(device, used).guess()
+}
+
+// statedType returns the type someone has already said a device is: the
+// operator in Sable, the UniFi controller for its own hardware, or the
+// operator in UniFi, in that order of precedence.
+func statedType(device Device, used []services.Service) (Guess, bool) {
 	if kind := cmp.Or(device.Type, device.NetworkType); kind != "" {
 		reason := insights.Reason{Text: "You set this type"}
 		if device.Type == "" {
@@ -202,7 +212,7 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: kind, Confidence: ConfidenceSet, Reasons: []insights.Reason{reason},
 			Detected: Classify(detected, used).Type,
-		}
+		}, true
 	}
 	// What the UniFi controller says its own hardware is, such as a switch or
 	// a UNAS, is a fact, not a guess.
@@ -210,7 +220,7 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: device.UniFiType, Confidence: ConfidenceHigh, Detected: device.UniFiType,
 			Reasons: []insights.Reason{{Text: "UniFi says it is " + withArticle(label)}},
-		}
+		}, true
 	}
 	// A type the operator chose in UniFi is theirs, though Sable's own
 	// setting still outranks it.
@@ -218,38 +228,50 @@ func Classify(device Device, used []services.Service) Guess {
 		return Guess{
 			Type: device.UniFiGuess, Confidence: ConfidenceHigh, Detected: device.UniFiGuess,
 			Reasons: []insights.Reason{{Text: "You set it as " + withArticle(label) + " in UniFi"}},
+		}, true
+	}
+	return Guess{}, false
+}
+
+// typeEvidence is the case for each device type: its total clue weight, the
+// kinds of source that pointed to it, and the reasons to show for it.
+type typeEvidence map[string]*typeCase
+
+type typeCase struct {
+	score   int
+	sources map[string]bool
+	reasons []insights.Reason
+}
+
+func (evidence typeEvidence) add(source string, clues []clue, reason insights.Reason) {
+	for _, clue := range clues {
+		entry := evidence[clue.kind]
+		if entry == nil {
+			entry = &typeCase{sources: map[string]bool{}}
+			evidence[clue.kind] = entry
+		}
+		entry.score += clue.weight
+		entry.sources[source] = true
+		if !slices.Contains(entry.reasons, reason) {
+			entry.reasons = append(entry.reasons, reason)
 		}
 	}
-	type evidence struct {
-		score   int
-		sources map[string]bool
-		reasons []insights.Reason
-	}
-	byType := make(map[string]*evidence)
-	add := func(source string, clues []clue, reason insights.Reason) {
-		for _, clue := range clues {
-			entry := byType[clue.kind]
-			if entry == nil {
-				entry = &evidence{sources: map[string]bool{}}
-				byType[clue.kind] = entry
-			}
-			entry.score += clue.weight
-			entry.sources[source] = true
-			if !slices.Contains(entry.reasons, reason) {
-				entry.reasons = append(entry.reasons, reason)
-			}
-		}
-	}
+}
+
+// gatherTypeEvidence weighs every clue to a device's type: UniFi's
+// fingerprint, running Sable, its maker, its name, and the services it uses.
+func gatherTypeEvidence(device Device, used []services.Service) typeEvidence {
+	evidence := make(typeEvidence)
 	// UniFi's fingerprinting counts for as much as it is sure of.
 	if weight := unifiGuessWeight(device.UniFiConfidence); TypeLabel(device.UniFiGuess) != "" && weight > 0 {
-		add("unifi", []clue{{device.UniFiGuess, weight}}, insights.Reason{Text: "UniFi thinks it is " + withArticle(TypeLabel(device.UniFiGuess))})
+		evidence.add("unifi", []clue{{device.UniFiGuess, weight}}, insights.Reason{Text: "UniFi thinks it is " + withArticle(TypeLabel(device.UniFiGuess))})
 	}
 	// Sable knows the machines it runs on, though one may be a laptop as well.
 	if device.Server != "" {
-		add("sable", []clue{{"server", 5}}, insights.Reason{Text: "Runs Sable"})
+		evidence.add("sable", []clue{{"server", 5}}, insights.Reason{Text: "Runs Sable"})
 	}
 	if device.Vendor != "" {
-		add("maker", makerClues[device.Vendor], insights.Reason{Text: "Made by " + device.Vendor})
+		evidence.add("maker", makerClues[device.Vendor], insights.Reason{Text: "Made by " + device.Vendor})
 	}
 	// A name the operator gave is theirs, but it still describes the device.
 	if device.Name != "" {
@@ -257,7 +279,7 @@ func Classify(device Device, used []services.Service) Guess {
 		for _, word := range nameWords(device.Name) {
 			if clues, found := nameClues[word]; found && !seen[word] {
 				seen[word] = true
-				add("name", clues, insights.Reason{Text: "Named", Code: device.Name})
+				evidence.add("name", clues, insights.Reason{Text: "Named", Code: device.Name})
 			}
 		}
 	}
@@ -267,24 +289,29 @@ func Classify(device Device, used []services.Service) Guess {
 		if !found {
 			continue
 		}
-		add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
+		evidence.add("services", clues, insights.Reason{Text: "Talks to " + service.Name})
 		if !moduleMakers[device.Vendor] {
 			continue
 		}
 		for _, pointer := range clues {
 			if !moduleBacked[pointer.kind] {
 				moduleBacked[pointer.kind] = true
-				add("maker", []clue{{pointer.kind, moduleServiceWeight}}, insights.Reason{Text: "Made by " + device.Vendor})
+				evidence.add("maker", []clue{{pointer.kind, moduleServiceWeight}}, insights.Reason{Text: "Made by " + device.Vendor})
 			}
 		}
 	}
+	return evidence
+}
 
-	ranked := make([]string, 0, len(byType))
-	for kind := range byType {
+// guess picks the best-supported type, and how sure the evidence lets Sable
+// be of it. A weak or contested lead is no guess at all.
+func (evidence typeEvidence) guess() Guess {
+	ranked := make([]string, 0, len(evidence))
+	for kind := range evidence {
 		ranked = append(ranked, kind)
 	}
 	slices.SortFunc(ranked, func(left, right string) int {
-		if order := cmp.Compare(byType[right].score, byType[left].score); order != 0 {
+		if order := cmp.Compare(evidence[right].score, evidence[left].score); order != 0 {
 			return order
 		}
 		return cmp.Compare(left, right)
@@ -292,10 +319,10 @@ func Classify(device Device, used []services.Service) Guess {
 	if len(ranked) == 0 {
 		return Guess{}
 	}
-	best := byType[ranked[0]]
+	best := evidence[ranked[0]]
 	runnerUp := 0
 	if len(ranked) > 1 {
-		runnerUp = byType[ranked[1]].score
+		runnerUp = evidence[ranked[1]].score
 	}
 	confidence := ConfidenceLow
 	switch {
