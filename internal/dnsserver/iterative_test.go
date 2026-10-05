@@ -43,7 +43,7 @@ func TestIterativeResolverMinimizesQNameAndFollowsReferrals(t *testing.T) {
 			request := new(dns.Msg)
 			request.SetQuestion("www.example.com.", dns.TypeA)
 			request.RecursionDesired = true
-			response, err := handler.resolveNetwork(request, runtime, nil)
+			response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +60,7 @@ func TestIterativeResolverMinimizesQNameAndFollowsReferrals(t *testing.T) {
 			}
 			second := new(dns.Msg)
 			second.SetQuestion("mail.example.com.", dns.TypeA)
-			if _, err := handler.resolveNetwork(second, runtime, nil); err != nil {
+			if _, err := handler.resolveNetworkWithinTimeout(second, runtime, nil); err != nil {
 				t.Fatal(err)
 			}
 			if got := questions[len(questions)-1]; got != "mail.example.com./A@udp://192.0.2.3:53" || len(questions) != len(want)+1 {
@@ -111,7 +111,7 @@ func TestIterativeResolverMinimizesPastWildcardAnswersWithTheirOwnNameServers(t 
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("tenant-cd.edge.tenants.eu.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil {
 		t.Fatalf("resolve: %v (asked %v)", err, questions)
 	}
@@ -157,7 +157,7 @@ func TestIterativeResolverAsksTheFullNameWithMinimizationOff(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("www.example.com.", dns.TypeA)
-	if _, err := handler.resolveNetwork(request, runtime, nil); err != nil {
+	if _, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
@@ -199,7 +199,7 @@ func TestIterativeResolverRemembersNamesInsideAZone(t *testing.T) {
 		questions = nil
 		request := new(dns.Msg)
 		request.SetQuestion(name, dns.TypeA)
-		if _, err := handler.resolveNetwork(request, runtime, nil); err != nil {
+		if _, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -290,7 +290,7 @@ func TestIterativeResolverListsEachAliasOnce(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("tenant-cd.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestIterativeResolverRejectsOutOfBailiwickGlue(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("www.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +376,7 @@ func TestIterativeResolverFollowsCNAMEWithinCachedDelegation(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("alias.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestIterativeResolverRetriesDroppedPacket(t *testing.T) {
 	// packet fails the whole resolution.
 	request := new(dns.Msg)
 	request.SetQuestion("www.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil {
 		t.Fatalf("resolveNetwork with one dropped packet: %v", err)
 	}
@@ -566,7 +566,7 @@ func BenchmarkIterativeResolverCachedDelegation(b *testing.B) {
 	request.SetQuestion("www.example.com.", dns.TypeA)
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := handler.resolveNetwork(request, runtime, nil); err != nil {
+		if _, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -664,12 +664,12 @@ func TestRecursiveLookupFinishesForARetry(t *testing.T) {
 	request := new(dns.Msg)
 	request.SetQuestion("com.", dns.TypeA)
 
-	if _, _, err := handler.resolveUpstream(request, runtime, nil); err == nil {
+	if _, _, err := handler.resolveUpstreamWithinTimeout(request, runtime, nil); err == nil {
 		t.Fatal("the first client got an answer before the authority gave one")
 	}
 	retry := make(chan *dns.Msg, 1)
 	go func() {
-		response, _, err := handler.resolveRecursiveWaiting(context.Background(), request, runtime, 5*time.Second)
+		response, _, err := handler.resolveRecursive(context.Background(), request, runtime, 5*time.Second)
 		if err != nil {
 			t.Error(err)
 		}
@@ -743,7 +743,7 @@ func TestIterativeResolverLooksUpNameServerAddressesInParallel(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("www.example.com.", dns.TypeA)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil || len(response.Answer) != 1 {
 		t.Fatalf("resolveNetwork = %v, %v", response, err)
 	}
@@ -843,7 +843,7 @@ func TestIterativeResolverRemembersAZoneItsParentServes(t *testing.T) {
 	for _, name := range []string{"www.example.co.uk.", "www.other.co.uk."} {
 		request := new(dns.Msg)
 		request.SetQuestion(name, dns.TypeA)
-		if response, err := handler.resolveNetwork(request, runtime, nil); err != nil || len(response.Answer) != 1 {
+		if response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err != nil || len(response.Answer) != 1 {
 			t.Fatalf("resolveNetwork(%s) = %v, %v", name, response, err)
 		}
 	}
@@ -893,7 +893,7 @@ func TestIterativeResolverDropsRecordsOutsideTheZone(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("82.94.19.96.in-addr.arpa.", dns.TypePTR)
-	response, err := handler.resolveNetwork(request, runtime, nil)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil || len(response.Answer) != 1 {
 		t.Fatalf("resolveNetwork = %v, %v", response, err)
 	}
@@ -901,7 +901,7 @@ func TestIterativeResolverDropsRecordsOutsideTheZone(t *testing.T) {
 		t.Fatalf("authority %v, additional %v; want only the zone's own name servers", response.Ns, response.Extra)
 	}
 	request.SetQuestion("244.94.19.96.in-addr.arpa.", dns.TypePTR)
-	response, err = handler.resolveNetwork(request, runtime, nil)
+	response, err = handler.resolveNetworkWithinTimeout(request, runtime, nil)
 	if err != nil || response.Rcode != dns.RcodeNameError || len(response.Ns) != 0 {
 		t.Fatalf("NXDOMAIN = %v, %v; want it without the SOA for in-addr.arpa", response, err)
 	}

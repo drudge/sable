@@ -44,7 +44,7 @@ func TestIterativeDSUsesParentAuthority(t *testing.T) {
 				}
 				request := new(dns.Msg)
 				request.SetQuestion(name, dns.TypeDS)
-				response, err := handler.resolveNetwork(request, runtime, nil)
+				response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -119,7 +119,7 @@ func TestIterativeDNSSECValidatesWithCachedChildDelegations(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("www.secure.demo.", dns.TypeA)
-	response, state, err := handler.resolveUpstream(request, runtime, nil)
+	response, state, err := handler.resolveUpstreamWithinTimeout(request, runtime, nil)
 	if err != nil || state != validationSecure {
 		t.Fatalf("resolution state=%v error=%v", state, err)
 	}

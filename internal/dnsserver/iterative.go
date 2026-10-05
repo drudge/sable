@@ -295,13 +295,7 @@ func normalizeRootHints(configured []string) ([]string, error) {
 	return slices.Compact(result), nil
 }
 
-func (handler *Handler) resolveNetwork(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), runtime.timeout)
-	defer cancel()
-	return handler.resolveNetworkContext(ctx, request, runtime, forwarders)
-}
-
-func (handler *Handler) resolveNetworkContext(
+func (handler *Handler) resolveNetwork(
 	ctx context.Context,
 	request *dns.Msg,
 	runtime *Runtime,
@@ -891,12 +885,12 @@ func recursiveFinishBudget(runtime *Runtime) time.Duration {
 	return max(4*runtime.timeout, 8*time.Second)
 }
 
-// resolveRecursiveWaiting resolves and validates a recursive request, waiting
+// resolveRecursive resolves and validates a recursive request, waiting
 // no longer than wait. The lookup itself runs on apart from the wait, up to
 // recursiveFinishBudget, and a second client asking the same question
 // meanwhile waits on the same lookup. A lookup that every client stopped
 // waiting for caches its own answer when it finishes.
-func (handler *Handler) resolveRecursiveWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
+func (handler *Handler) resolveRecursive(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
 	// Clients share a lookup whenever they would send the same question
 	// upstream, which with validation on ignores their DO and CD bits.
 	upstreamRequest := request

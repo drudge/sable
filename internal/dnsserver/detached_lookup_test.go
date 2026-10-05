@@ -93,7 +93,7 @@ func TestFinishedRecursiveLookupAnswersALateRetry(t *testing.T) {
 	request := new(dns.Msg)
 	request.SetQuestion("com.", dns.TypeA)
 	for range 2 {
-		response, _, err := handler.resolveRecursiveWaiting(context.Background(), request, runtime, time.Second)
+		response, _, err := handler.resolveRecursive(context.Background(), request, runtime, time.Second)
 		if err != nil || response == nil || len(response.Answer) != 1 {
 			t.Fatalf("lookup = %v, %v", response, err)
 		}
