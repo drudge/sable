@@ -205,7 +205,7 @@ func TestDynamicDNSCardShowsCopyableAddressesWithFullAddressTitles(t *testing.T)
 		"Sep 5, 2026 1:12 PM",
 		`title="203.0.113.42"`,
 		`title="2001:db8:1234:5678:90ab:cdef:1234:5678"`,
-		`aria-label="IPv6: 2001:db8:1234:5678:90ab:cdef:1234:5678"`,
+		`<dt>IPv6</dt>`,
 		`id="dynamic-dns-ipv4"`,
 		`data-copy-target="dynamic-dns-ipv4"`,
 		`aria-label="Copy IPv4 address"`,
@@ -217,7 +217,7 @@ func TestDynamicDNSCardShowsCopyableAddressesWithFullAddressTitles(t *testing.T)
 			t.Errorf("Dynamic DNS card does not contain %q", expected)
 		}
 	}
-	if strings.Contains(html, `<span class="integration-fact-label">Interval</span>`) {
+	if strings.Contains(html, `<dt>Interval</dt>`) {
 		t.Error("Dynamic DNS card still presents the polling interval as a status fact")
 	}
 	if published, ipv6 := strings.Index(html, "Last published"), strings.Index(html, ">IPv6<"); published < ipv6 {
@@ -225,7 +225,7 @@ func TestDynamicDNSCardShowsCopyableAddressesWithFullAddressTitles(t *testing.T)
 	}
 
 	view.Status.LastPublished = ""
-	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<span class="integration-fact-value">Never</span>`) {
+	if html := render(t, DynamicDNSCard(view)); !strings.Contains(html, `<dd>Never</dd>`) {
 		t.Error("Dynamic DNS card does not use the Never fallback before its first publication")
 	}
 

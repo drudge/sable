@@ -1807,9 +1807,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .third-party-license-loading { color: var(--muted-foreground); font-size: .78rem; }
 .auth-form { display: grid; gap: var(--space-4); }
 .auth-form button { width: 100%; margin-top: var(--space-1); }
-.integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-3); }
+.integration-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-3); margin: 0; }
 .integration-facts > div { display: grid; gap: 0.15rem; border-radius: calc(var(--radius) - 2px); background: var(--muted); padding: 0.6rem var(--space-3); }
-.integration-fact-label { color: var(--muted-foreground); font-size: 0.75rem; }
+.integration-facts dt { color: var(--muted-foreground); font-size: 0.75rem; }
 /* The address is long, so it takes its own row above the short facts, which
    sit four across on a wide card and two by two on a narrow one. */
 .mcp-card-body { container-type: inline-size; }
@@ -1862,11 +1862,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .mcp-client-tabs .field-help { margin: 0; }
 .mcp-client-tabs .dialog-tab { white-space: nowrap; }
 @media (max-width: 480px) { .mcp-client-tabs .dialog-tab-list.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.integration-fact-value { overflow: hidden; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.integration-facts dd { overflow: hidden; margin: 0; font-size: 0.9375rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+/* An address puts its copy button beside the label and the address on its
+   own line underneath, so its value lays its code and button into the tile. */
 .integration-fact-address { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
-.integration-fact-address .integration-fact-label { grid-column: 1; grid-row: 1; }
-.integration-fact-address .integration-fact-value { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
-.integration-fact-address code { display: block; overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.integration-fact-address dd { display: contents; }
+.integration-facts .integration-fact-address > dt { grid-column: 1; grid-row: 1; padding-right: 0; }
+.integration-fact-address code { display: block; overflow: hidden; min-width: 0; grid-column: 1 / -1; grid-row: 2; text-overflow: ellipsis; white-space: nowrap; }
+.integration-facts .integration-fact-address .fact-copy { position: static; grid-column: 2; grid-row: 1; }
 .fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: 0; color: var(--muted-foreground); }
 .fact-copy:hover { background: color-mix(in oklch, var(--foreground) 9%, transparent); color: var(--foreground); }
 .fact-copy:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
@@ -3888,7 +3891,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 
 .zone-conversion-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .zone-conversion-facts .zone-conversion-source { grid-column: 1 / -1; }
-.zone-conversion-facts .zone-conversion-source .integration-fact-value { white-space: normal; overflow-wrap: anywhere; }
+.zone-conversion-facts .zone-conversion-source dd { white-space: normal; overflow-wrap: anywhere; }
 .zone-conversion-warning { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .7rem; align-items: start; }
 .zone-conversion-warning > .nav-icon { width: 1rem; height: 1rem; margin-top: .1rem; }
 .zone-conversion-warning > div { display: grid; gap: .4rem; }

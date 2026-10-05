@@ -1331,11 +1331,11 @@ templ ConvertPrimaryDialog(zone ZoneView, id string) {
   <form class="blocking-dialog-form zone-conversion-form" hx-post="/ui/zones/convert-primary" hx-target="#zones-content" hx-swap="outerHTML">
    <input type="hidden" name="zone" value={ zone.Name }/>
    <input type="hidden" name="confirmation" value={ zone.ConversionFingerprint }/>
-   <div class="integration-facts zone-conversion-facts">
- <div class="zone-conversion-source"><span class="integration-fact-label">Current source</span><span class="integration-fact-value">{ strings.Join(zone.PrimaryServers, ", ") }</span></div>
- <div><span class="integration-fact-label">SOA serial</span><span class="integration-fact-value">{ fmt.Sprint(zone.ConversionSerial) }</span></div>
- <div><span class="integration-fact-label">Records</span><span class="integration-fact-value">{ fmt.Sprint(len(zone.Records)) }</span></div>
- </div>
+   @components.FactList(components.FactListProps{Class: "integration-facts zone-conversion-facts"}) {
+    @components.Fact(components.FactProps{Label: "Current source", Value: strings.Join(zone.PrimaryServers, ", "), Class: "zone-conversion-source"})
+    @components.Fact(components.FactProps{Label: "SOA serial", Value: fmt.Sprint(zone.ConversionSerial)})
+    @components.Fact(components.FactProps{Label: "Records", Value: fmt.Sprint(len(zone.Records))})
+   }
    if zone.ConversionError != "" {
     if strings.Contains(zone.ConversionError, "DNSSEC") || strings.Contains(zone.ConversionError, "signed zones") {
  <div class="warning-box zone-conversion-warning" role="alert">@Icon("alert-triangle")<div><strong>DNSSEC transition required</strong><p>{ zone.ConversionError }</p></div></div>
