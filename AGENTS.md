@@ -88,7 +88,7 @@ Check UI work in the demo, not in a custom seed.
 The console is server-rendered templ with vendored htmx 4 and small, dependency-free helpers in `app.js`. There is no Node runtime, bundler, or frontend framework. [docs/ui.md](docs/ui.md) and [docs/accessibility.md](docs/accessibility.md) are the contracts; read them before UI work.
 
 - The Content Security Policy is `script-src 'self'` and `style-src 'self'`. That rules out inline `<script>`, `<style>`, `style=""` attributes, and `eval`. Behavior goes in `app.js` and styles in `app.css`. Script may still set `element.style`.
-- htmx can process a swapped fragment at any time, so every `app.js` helper must be safe to run more than once. Content can also arrive without an htmx swap, so watch the page for added elements rather than only listening for htmx events.
+- htmx can process a swapped fragment at any time, so every `app.js` helper must be safe to run more than once. Content can also arrive without an htmx swap, so watch the page for added elements rather than only listening for htmx events. A helper that sets up elements by selector goes in `swappedContentSetups`, which runs it on the page and on every fragment that arrives.
 - `internal/web/assets/assets_test.go` pins some exact CSS and JS text. When you change one of those rules on purpose, update the test with it.
 
 ### Design quality
